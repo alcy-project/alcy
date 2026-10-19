@@ -1318,6 +1318,11 @@ void Lowerer::run() {
   // with no `comp` parameters are seeded here; a specialization is
   // reserved on demand like any other instantiation.
   for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
+    // A summary's module carries signatures and no bodies; the
+    // package's own artifact holds the code (ADR-0078).
+    if (pkg.tree.modules[m]->is_summary) {
+      continue;
+    }
     const analyzer::CheckedModule& checked = pkg.modules[m];
     for (const auto& sig : checked.functions) {
       if (!sig.item.is_valid() || !sig.is_comp ||
@@ -1342,6 +1347,11 @@ void Lowerer::run() {
   // sites still reach codegen. A generic impl contributes one
   // signature per instantiation, keyed by its self type.
   for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
+    // A summary's module carries signatures and no bodies; the
+    // package's own artifact holds the code (ADR-0078).
+    if (pkg.tree.modules[m]->is_summary) {
+      continue;
+    }
     const analyzer::CheckedModule& checked = pkg.modules[m];
     for (const auto& method : checked.methods) {
       if (!method.item.is_valid() || !comp_positions(method.item).empty() ||

@@ -97,6 +97,9 @@ struct ModuleNode {
   // the subset whose public surface is in scope without a `use`; the
   // rest are ordinary modules that happen to be toolchain sources.
   bool is_staged = false;
+  // A module whose items a summary spelled (ADR-0078): the surface
+  // carries signatures and shapes, and nothing in it lowers.
+  bool is_summary = false;
 };
 
 // What a trace row for a module reads: the path the tree gave it, or the

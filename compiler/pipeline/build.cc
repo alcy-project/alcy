@@ -933,6 +933,30 @@ base::Result<std::string, diag::Reported> build_package(
       }
     }
     lowering::LoweredPackage& lowered = *cached;
+    // A library's surface is what a dependent resolves against, so the
+    // build leaves it beside the artifact, before optimization, where
+    // the summary's indices still name the tables it was collected from
+    // (ADR-0078).
+    if (target.is_lib && !lowered.summary.empty()) {
+      base::Result<path::Path, path::PathError> output_path =
+          path::Path::from_native(planned_target.path);
+      if (output_path.is_err()) {
+        failed = true;
+        break;
+      }
+      const path::Path sidecar =
+          std::move(output_path)
+              .unwrap()
+              .parent()
+              .join(std::string(target.name) + ".summary");
+      const std::vector<u8> bytes = serialize_package_ir(ctx, lowered, true);
+      const std::span<const u8> view(bytes.data(), bytes.size());
+      if (write_output(ctx, "summary", std::string(sidecar.as_view()), view)
+              .is_err()) {
+        failed = true;
+        break;
+      }
+    }
     if (optimize_package(ctx, lowered, profile.optimize).is_err() ||
         ctx.bag.has_errors()) {
       failed = true;

@@ -110,6 +110,17 @@ replaced. The foundations are in `roadmap.md`.
   does: `exe-closure-capture-drop` walks a bound closure and a `fn()`
   parameter that both capture a heap string under the sanitizer, and
   the witness in `exe-method-infer` can hold a `String` again.
+- [ ] The symbol a summary call names: `lower_summary_call` declares an
+  external qualified by the package (`dep::double`) under the C calling
+  convention, which no artifact defines, so a dependent's build stops at
+  the linker where its check resolved. Multi-object linking wants the
+  mangled symbol the dependency's own build writes, and the external
+  linkage its runtime needs.
+- [ ] A summary carries no struct field names: a signature over a
+  nominal is left out of the surface a dependent spells, because a
+  literal or a field read would need names the `SUMMARY` section does
+  not carry. A names table beside the rows is what lets nominals cross
+  the boundary, and with them the associated functions and methods.
 - [ ] One nominal as several type nodes: the checker can intern a
   second type node over a declaration's own struct or enum shape (a
   `String` node beside the declaration's), and `types_equal` compares

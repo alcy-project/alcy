@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -11,6 +12,7 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "ir/deserialize.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
@@ -30,6 +32,12 @@ struct LoadedDependency {
   std::string_view suite;
   std::vector<analyzer::ModuleInput> modules;
   std::vector<source::FileId> files;
+  // A package resolved from a summary carries the artifact (ADR-0078);
+  // its syntax is spelled after the tree's own sources are parsed, when
+  // the arena can still hand out nodes.
+  std::optional<ir::LoadedIr> artifact;
+  // The module names above borrow these.
+  std::vector<std::string> module_names;
 };
 
 // The identity a package's manifest name gives: the name a `use`

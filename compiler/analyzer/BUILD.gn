@@ -12,6 +12,8 @@ source_set("analyzer") {
     "fmt.h",
     "resolve.cc",
     "resolve.h",
+    "summary.cc",
+    "summary.h",
     "types.cc",
     "types.h",
     "types_expr.cc",

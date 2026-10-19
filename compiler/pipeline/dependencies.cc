@@ -4,19 +4,26 @@
 #include "pipeline/dependencies.h"
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "analyzer/summary.h"
+#include "base/hash.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "fpag/io/io_util.h"
 #include "i18n/messages.h"
+#include "ir/deserialize.h"
+#include "ir/summary.h"
+#include "ir/write_input.h"
 #include "path/path.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/modules.h"
@@ -155,6 +162,96 @@ bool load_path_edge(PipelineContext& ctx,
 // `loaded` holds the directories already staged, so a
 // dependency two packages share stages once, behind the one
 // root both edges reach.
+namespace {
+
+// Reads the summary a library build leaves beside its object and spells
+// its surface, answering false when there is none, when the sources it
+// names have outgrown it, or when it carries nothing a dependent can use
+// yet (ADR-0078).
+bool load_summary_dependency(const path::Path& dir,
+                             const pkg::PackageManifest& manifest,
+                             LoadedDependency& out) {
+  if (manifest.lib == nullptr) {
+    return false;
+  }
+  // A library with no name of its own answers to the package's.
+  const std::string_view lib_name =
+      manifest.lib->name.empty() ? manifest.name : manifest.lib->name;
+  const std::string file_name = std::string(lib_name) + ".summary";
+  const path::Path sidecar = dir.join(path::DEFAULT_OUT_DIR).join(file_name);
+  const std::string sidecar_path(sidecar.as_view());
+  if (!io::is_file(sidecar_path)) {
+    return false;
+  }
+  const std::string bytes = io::read_file(sidecar_path);
+  const std::span<const u8> view(reinterpret_cast<const u8*>(bytes.data()),
+                                 bytes.size());
+  base::Result<ir::LoadedIr, ir::IrLoadError> loaded = ir::deserialize(view);
+  if (loaded.is_err()) {
+    return false;
+  }
+  ir::LoadedIr artifact = std::move(loaded).unwrap();
+  // The artifact's identity names every file its own build read: when
+  // they are all here, recompute the digest and refuse a summary the
+  // sources have outgrown. A package shipped without its sources is
+  // answered from the summary alone.
+  bool verified = true;
+  std::vector<base::Digest128> hashes = artifact.file_hashes;
+  for (usize i = 0; i < artifact.file_names.size(); ++i) {
+    if (!io::is_file(artifact.file_names[i])) {
+      verified = false;
+      break;
+    }
+    const std::string source = io::read_file(artifact.file_names[i]);
+    const std::span<const u8> source_bytes(
+        reinterpret_cast<const u8*>(source.data()), source.size());
+    if (i < hashes.size()) {
+      hashes[i] = base::hash128(source_bytes);
+    }
+  }
+  if (verified) {
+    std::vector<std::string_view> names;
+    names.reserve(artifact.file_names.size());
+    for (const std::string& name : artifact.file_names) {
+      names.push_back(name);
+    }
+    const ir::FileTable table{.names = names, .hashes = hashes};
+    if (ir::identity_digest(table, artifact.width, artifact.compiler_version) !=
+        artifact.identity) {
+      return false;
+    }
+  }
+  // The module names the dependent will spell, in row order: the same
+  // slash form a `use` writes, without the duplicate separators a
+  // dotted path spells.
+  out.module_names.clear();
+  out.modules.clear();
+  for (const ir::SummaryEntry& row : artifact.summary) {
+    std::string slash =
+        analyzer::summary_module_name(artifact.strings->get(row.path));
+    bool seen = false;
+    for (const std::string& name : out.module_names) {
+      if (name == slash) {
+        seen = true;
+        break;
+      }
+    }
+    if (seen) {
+      continue;
+    }
+    out.module_names.push_back(std::move(slash));
+    out.modules.push_back(
+        analyzer::ModuleInput{out.module_names.back(), source::UNKNOWN_FILE});
+  }
+  if (out.module_names.empty()) {
+    return false;
+  }
+  out.artifact = std::move(artifact);
+  return true;
+}
+
+}  // namespace
+
 bool load_dependency(PipelineContext& ctx,
                      const path::Path& dir,
                      std::string_view spec,
@@ -216,23 +313,26 @@ bool load_dependency(PipelineContext& ctx,
     return false;
   }
 
-  base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
-      pipeline::discover_sources(dir.as_view(), ctx.sources, ctx.bag);
-  if (discovered.is_err()) {
-    return false;
-  }
-  pipeline::DiscoveredSources found = std::move(discovered).unwrap();
-  base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> selection =
-      select_modules(ctx, manifest, dir, found.files);
-  if (selection.is_err() || ctx.bag.has_errors()) {
-    return false;
-  }
-
   LoadedDependency dependency;
   dependency.manifest = manifest;
   dependency.suite = suite;
-  dependency.modules = std::move(selection).unwrap();
-  dependency.files = std::move(found.files);
+  // A fresh summary answers for the package's sources; a package the
+  // build left one for is not read at all.
+  if (!load_summary_dependency(dir, manifest, dependency)) {
+    base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
+        pipeline::discover_sources(dir.as_view(), ctx.sources, ctx.bag);
+    if (discovered.is_err()) {
+      return false;
+    }
+    pipeline::DiscoveredSources found = std::move(discovered).unwrap();
+    base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> selection =
+        select_modules(ctx, manifest, dir, found.files);
+    if (selection.is_err() || ctx.bag.has_errors()) {
+      return false;
+    }
+    dependency.modules = std::move(selection).unwrap();
+    dependency.files = std::move(found.files);
+  }
   staged.push_back(std::move(dependency));
   loaded.push_back(dir);
 

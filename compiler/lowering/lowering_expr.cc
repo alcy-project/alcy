@@ -1325,6 +1325,11 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_intrinsic_call(
         expr, sig, fn_instance_args(target->module, target->index));
   }
+  if (target->module < pkg.tree.modules.size() &&
+      pkg.tree.modules[target->module]->is_summary) {
+    return lower_summary_call(expr, sig,
+                              pkg.tree.modules[target->module]->path);
+  }
   if (sig.is_extern) {
     return lower_extern_call(expr, sig);
   }
@@ -1505,6 +1510,55 @@ ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
   // The caller's `&mut` return is a reference; the runtime pointer
   // needs its pointee label for later element offsets.
   return emit(ir::Opcode::TypeCast, ref_ty, {to_operand(result, ptr_ty)});
+}
+
+// A call into a package a summary answers for: the callee's code lives
+// in the dependency's own artifact, so the call names a symbol the
+// linker resolves, and only the surface's own types - primitives and
+// references over them - pass this way (ADR-0078).
+Val Lowerer::lower_summary_call(ast::ExprIdx expr,
+                                const analyzer::CheckedModule::FnSig& sig,
+                                std::string_view package) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != sig.params.size()) {
+    internal(node.span, "summary call arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  std::string qualified(package);
+  qualified.append("::");
+  qualified.append(sig.name);
+  // The name outlives the call: it is copied into the interner the
+  // declaration and its symbol both borrow.
+  const str::StringPoolId interned = intern_copied(qualified);
+  if (interned == str::INVALID_STRING_POOL_ID) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::ExternalFunctionIdx ext =
+      declare_external(strings.get(interned), sig.ret, sig.params);
+  if (!ext.is_valid()) {
+    return Val{size_one, error_type(), false, false};
+  }
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(builder.operand(ir::Operand::from_external_function(
+      ext, builder.primitive(ir::TypeTag::Function))));
+  for (usize i = 0; i < call.args.size(); ++i) {
+    Val arg = lower_moved(call.args[i], &sig.params[i]);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    ops.push_back(arg.op);
+  }
+  const ir::RegisterIdx result = sig.ret == builder.primitive(ir::TypeTag::Void)
+                                     ? ir::RegisterIdx(base::INVALID_IDX)
+                                     : emit(ir::Opcode::Call, sig.ret, ops);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  if (!result.is_valid()) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(result, sig.ret), sig.ret, false, false};
 }
 
 // An `extern "C"` call: the declaration names the symbol the linker

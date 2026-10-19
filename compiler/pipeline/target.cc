@@ -19,6 +19,8 @@
 #endif
 
 #include "analyzer/resolve.h"
+#include "analyzer/summary.h"
+#include "ast/ast.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -418,9 +420,35 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   // them behind is the arena-copied name the clash checks above
   // already hold.
   for (const LoadedDependency& dependency : dependencies) {
+    // A package a summary answers for spells its surface once, after the
+    // tree's own sources were parsed, and each of its modules takes the
+    // items the surface holds for it (ADR-0078).
+    std::optional<analyzer::SummarySurface> surface;
+    if (dependency.artifact.has_value()) {
+      surface = analyzer::spell_summary_surface(
+          *dependency.artifact, package_identity(dependency.manifest.name),
+          ctx.ast, ctx.strings);
+    }
     for (const analyzer::ModuleInput& input : dependency.modules) {
-      sources.dependency_modules.push_back(
-          parsed_module(sources.parsed, input));
+      if (input.id != source::UNKNOWN_FILE) {
+        sources.dependency_modules.push_back(
+            parsed_module(sources.parsed, input));
+        continue;
+      }
+      std::span<const ast::ItemIdx> items;
+      if (surface.has_value()) {
+        for (const analyzer::SummarySurface::Module& module :
+             surface->modules) {
+          if (analyzer::summary_module_name(module.path) == input.name) {
+            items = module.items;
+            break;
+          }
+        }
+      }
+      // The resolver reads no path for a dependency's modules, so an
+      // empty one stands for the module a summary spelled.
+      sources.dependency_modules.push_back(analyzer::ParsedModule{
+          input, path::Path::from_native(std::string_view{}).unwrap(), items});
     }
   }
   // The spans hold into `dependency_modules`, which holds every

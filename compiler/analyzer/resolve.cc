@@ -289,6 +289,14 @@ class Resolver {
                                 u32 dependency,
                                 std::string_view slash_name,
                                 const ParsedModule& input) {
+    if (slash_name.empty()) {
+      // A summary's root module: the items sit on the fileless root the
+      // package was staged behind.
+      const u32 root = root_module;
+      modules[root]->items = input.items;
+      modules[root]->is_summary = input.input.id == source::UNKNOWN_FILE;
+      return;
+    }
     u32 parent = root_module;
     std::string prefix(std::string(modules[root_module]->path));
     usize start = 0;
@@ -305,6 +313,10 @@ class Resolver {
         child = add_module(
             child_path, leaf ? input.input.id : source::UNKNOWN_FILE,
             leaf ? input.items : std::span<const ast::ItemIdx>{}, parent);
+        if (leaf && input.input.id == source::UNKNOWN_FILE) {
+          // A summary spelled this module's items; nothing in it lowers.
+          modules[child]->is_summary = true;
+        }
         if (out_of_arena) {
           return;
         }

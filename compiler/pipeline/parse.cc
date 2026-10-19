@@ -256,7 +256,10 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
   }
   for (const analyzer::DependencyPackage& dependency : dependencies) {
     for (const analyzer::ParsedModule& input : dependency.modules) {
-      files.push_back(input.input.id);
+      // A module a summary spelled has no file to parse.
+      if (input.input.id != source::UNKNOWN_FILE) {
+        files.push_back(input.input.id);
+      }
     }
   }
   base::Result<ParsedFiles, diag::Reported> parsed = parse_files(ctx, files);
@@ -280,6 +283,11 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     std::vector<analyzer::ParsedModule> parsed;
     parsed.reserve(dependency.modules.size());
     for (const analyzer::ParsedModule& input : dependency.modules) {
+      if (input.input.id == source::UNKNOWN_FILE) {
+        // A module a summary spelled: its items are already syntax.
+        parsed.push_back(input);
+        continue;
+      }
       parsed.push_back(parsed_module(sources, input.input));
     }
     parsed_dependencies.push_back(analyzer::DependencyPackage{

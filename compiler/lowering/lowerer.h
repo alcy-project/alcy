@@ -433,6 +433,12 @@ class Lowerer {
                            const std::vector<ir::TypeIdx>& type_args);
   // An `extern "C"` call: the declaration names the symbol, arguments
   // pass by value, and the gate was checked at the call site.
+  // A call into a package a summary answers for: its code lives in the
+  // dependency's own artifact, which the linker resolves under the
+  // name the surface is qualified with (ADR-0078).
+  Val lower_summary_call(ast::ExprIdx expr,
+                         const analyzer::CheckedModule::FnSig& sig,
+                         std::string_view package);
   Val lower_extern_call(ast::ExprIdx expr,
                         const analyzer::CheckedModule::FnSig& sig);
   ir::TypeIdx usize_type();

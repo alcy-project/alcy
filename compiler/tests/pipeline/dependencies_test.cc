@@ -13,11 +13,16 @@
 #include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
+#include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "path/path.h"
+#include "pipeline/build.h"
 #include "pipeline/check.h"
+#include "pipeline/emit_mode.h"
+#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -867,6 +872,80 @@ TEST_CASE("Suites reject a member resolving back into its suite") {
   CHECK(ctx.bag.has_errors());
   CHECK(reports(ctx.bag, "Dependency cycle through '" +
                              dir.join("proj/vendor/tools") + "'"));
+}
+
+TEST_CASE("A dependency a summary answers for is not read") {
+  // A library's build leaves its surface beside the artifact; a
+  // dependent checks against it, and the library's own sources can be
+  // gone when it does (ADR-0078).
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_dep_test_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al", "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  // Build the library once, so the summary is written.
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildProfile{}, LinkOptions{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join("dep/out/dep.summary")));
+  }
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::double\n\nfn main() -> i32 {\n"
+        "  ret double(21) - 42\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  // The library's source is what a dependent would otherwise read.
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    const base::Result<CheckOutcome, diag::Reported> checked =
+        check_proj(ctx, dir);
+    CHECK(checked.is_ok());
+    CHECK_FALSE(ctx.bag.has_errors());
+  }
+  // The signature came from the summary: a second argument is refused.
+  CHECK(dir.write_file(
+      "proj/main.al",
+      "use dep::double\n\nfn main() -> i32 {\n  ret double(21, 1) - 42\n}\n"));
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    const base::Result<CheckOutcome, diag::Reported> checked =
+        check_proj(ctx, dir);
+    const bool refused = checked.is_err() || ctx.bag.has_errors();
+    CHECK(refused);
+  }
 }
 
 }  // namespace pipeline

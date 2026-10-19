@@ -80,7 +80,22 @@ refuses a row whose function index or kind is out of range, which the
 unit tests pin. The cache hit path rebuilds the surface from the
 stored artifact, so a second build sees the same rows.
 
-**Next:** the analyzer registers concrete signatures, nominal shapes
-and spec implementations from a summary and skips the dependency's
-bodies; then the generic boundary; then export-list trimming, which
-decides what a summary may show a dependent that does not import it.
+**Landed: a dependency resolves against the summary.** A library's
+build writes its summary beside the artifact (`out/<name>.summary`, the
+same binary form), and a path dependency loads it in place of its
+sources when it is there and fresh: the recorded identity is recomputed
+over the files it names while they are all present, and a package
+shipped without its sources is answered from the summary alone. The
+surface is spelled into the syntax arena - free functions over
+primitives, references, tuples, arrays, slices, and function views for
+now - and the checker registers it the way it registers source, export
+trimming included. A call into the package lowers to an external symbol
+qualified by the package, so `alcy check` resolves it and a build stops
+at the linker until that symbol is named.
+
+**Next:** the symbol a summary call names, and the linkage the runtime
+needs, which is the multi-object linking slice; the names a nominal's
+fields carry, so a literal and a field read can cross the boundary;
+associated functions, methods, and spec implementations; the generic
+boundary; and the export-list question of what a summary may show a
+dependent that does not import it.
