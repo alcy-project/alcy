@@ -827,7 +827,14 @@ replaced. The foundations are in `roadmap.md`.
   signature takes both `types` and `rows` by value (the recursive calls
   at `:3167`, `:3221`, `:3282` move what they can), so specialize the
   matrix in place or share it, and measure the per-call work before
-  adding a cache.
+  adding a cache. The matrix is not it either: the cells summed over
+  every call (rows times columns) stay under a million at both depths,
+  so the walk holds a small matrix and spends its time per cell. Read
+  the body (`types_expr.cc:3053` to `:3300`) for the call each cell
+  makes - the specialization probably asks the type layer a question
+  (`types_equal`, `type_origin`, or a nominal lookup) that is not
+  constant time on a deeply nested type, and that is where a nest turns
+  into seconds.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
