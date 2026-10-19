@@ -901,6 +901,14 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds - about seventy microseconds per entry, since the
+  whole run enters `check_expr` fewer than ten thousand times at every
+  depth. Every count measured (resolution under four hundred, cover walk
+  seventy, `bind_pattern` seven hundred, `unify` five thousand,
+  `check_expr` under ten thousand) is flat while the time grows 1.85
+  times per level, so the per-call cost inside `check_expr_inner` grows
+  with the nesting. Bucket the interval between entries by
+  `ast.exprs[expr].kind` next and open the kind whose bucket grows.
   costs milliseconds. One call on a deeply nested head type must be
   doing work proportional to the nesting. The candidates inside the
   enum case are `enum_variants(head)` (`types_expr.cc:3175`) and the
