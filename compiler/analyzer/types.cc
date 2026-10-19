@@ -3300,6 +3300,10 @@ void Checker::process_module(u32 module) {
     }
     return false;
   };
+  const auto contains_name = [](const std::vector<std::string_view>& names,
+                                std::string_view name) {
+    return std::ranges::find(names, name) != names.end();
+  };
   const auto duplicate_value = [this](const ast::Ident& name) {
     const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
         diag::Severity::Error, diag::Stage::Analyzer,
@@ -3320,6 +3324,32 @@ void Checker::process_module(u32 module) {
               find_nominal(module, node.payload.get<ast::ItemEnum>().name.name);
         }
         if (entry != nullptr) {
+          // A duplicate member name belongs to the declaration, not to
+          // an instantiation, so the check runs before a generic form
+          // interns per use: two fields under one name would leave a
+          // literal looking for both and an access reaching the first,
+          // and a second variant would resolve to whichever entry a
+          // lookup reached first.
+          std::vector<std::string_view> members;
+          if (node.kind == ast::ItemKind::Struct) {
+            for (const ast::ItemStructField& field :
+                 node.payload.get<ast::ItemStruct>().fields) {
+              if (contains_name(members, field.name.name)) {
+                duplicate_value(field.name);
+                continue;
+              }
+              members.push_back(field.name.name);
+            }
+          } else {
+            for (const ast::ItemEnumVariant& variant :
+                 node.payload.get<ast::ItemEnum>().variants) {
+              if (contains_name(members, variant.name.name)) {
+                duplicate_value(variant.name);
+                continue;
+              }
+              members.push_back(variant.name.name);
+            }
+          }
           // Generic declarations intern per instantiation on use; the
           // bare declaration has no type of its own.
           if (!nominal_params(*entry).empty()) {
@@ -3328,21 +3358,11 @@ void Checker::process_module(u32 module) {
           const ir::TypeIdx resolved = intern_nominal(*entry);
           modules[module].types.push_back({entry->name, resolved});
           if (node.kind == ast::ItemKind::Struct) {
-            std::vector<std::string_view> fields;
-            for (const ast::ItemStructField& field :
-                 node.payload.get<ast::ItemStruct>().fields) {
-              fields.push_back(field.name.name);
-            }
             modules[module].structs.push_back(
-                {entry->item, resolved, std::move(fields)});
-          } else if (node.kind == ast::ItemKind::Enum) {
-            std::vector<std::string_view> variants;
-            for (const ast::ItemEnumVariant& variant :
-                 node.payload.get<ast::ItemEnum>().variants) {
-              variants.push_back(variant.name.name);
-            }
+                {entry->item, resolved, std::move(members)});
+          } else {
             modules[module].enums.push_back(
-                {entry->item, entry->name, resolved, std::move(variants)});
+                {entry->item, entry->name, resolved, std::move(members)});
           }
         }
       } break;
