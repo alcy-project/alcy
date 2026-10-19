@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "codegen/backend.h"
+#include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "doctest/doctest.h"
@@ -23,6 +25,7 @@
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/profile.h"
+#include "pipeline/spawn.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -912,6 +915,31 @@ TEST_CASE("A dependency a summary answers for is not read") {
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join("dep/out/dep.summary")));
   }
+#if !BUILD_FLAG(IS_OS_ASMJS)
+  // The object a dependent links comes from the same build.
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildProfile{}, LinkOptions{}, EmitMode::Object);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join("dep/out/dep.o")));
+  }
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
   const bool app_written = write_package(
       dir, "proj",
       "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
@@ -946,6 +974,44 @@ TEST_CASE("A dependency a summary answers for is not read") {
     const bool refused = checked.is_err() || ctx.bag.has_errors();
     CHECK(refused);
   }
+  // Put the right call back: the dependent links the library's object,
+  // named by the symbol the summary carried (ADR-0078).
+  CHECK(dir.write_file(
+      "proj/main.al",
+      "use dep::double\n\nfn main() -> i32 {\n  ret double(21) - 42\n}\n"));
+#if !BUILD_FLAG(IS_OS_ASMJS)
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildProfile{}, LinkOptions{}, EmitMode::Executable);
+    CHECK(built.is_ok());
+    CHECK(!ctx.bag.has_errors());
+    const std::string exe =
+        dir.join("proj/out/app" + std::string(exe_suffix()));
+    CHECK(io::is_file(exe));
+    // The linked program runs the dependency's code.
+    base::Result<i32, SpawnError> ran = run_command({exe});
+    CHECK(ran.is_ok());
+    if (ran.is_ok()) {
+      CHECK(std::move(ran).unwrap() == 0);
+    }
+  }
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
 }
 
 }  // namespace pipeline

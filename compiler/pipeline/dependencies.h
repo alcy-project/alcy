@@ -36,8 +36,11 @@ struct LoadedDependency {
   // its syntax is spelled after the tree's own sources are parsed, when
   // the arena can still hand out nodes.
   std::optional<ir::LoadedIr> artifact;
-  // The module names above borrow these.
-  std::vector<std::string> module_names;
+  // The module names above, and the object the link needs when the
+  // summary answered for the sources: both borrow the run's interner,
+  // so they outlive the tree that names them.
+  std::vector<std::string_view> module_names;
+  std::string_view object;
 };
 
 // The identity a package's manifest name gives: the name a `use`

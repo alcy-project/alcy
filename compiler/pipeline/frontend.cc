@@ -79,7 +79,7 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PipelineContext& ctx,
     source::FileId root,
     const StdSelection& selection) {
-  const analyzer::ModuleInput single_input{"", root};
+  const analyzer::ModuleInput single_input{"", root, false, {}};
   const std::span<const analyzer::ModuleInput> prelude = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "std-stage",
                                              "frontend");

@@ -81,6 +81,13 @@ struct PackagePolicy {
   std::span<const std::string_view> implement;
 };
 
+// One item a summary spelled, with the symbol its code is written
+// under: a dependent calls it by that name (ADR-0078).
+struct SummarySymbol {
+  str::StringPoolId name = str::INVALID_STRING_POOL_ID;
+  str::StringPoolId symbol = str::INVALID_STRING_POOL_ID;
+};
+
 struct ModuleNode {
   // Dotted path from the root ("foo::bar"); "" for the root itself.
   std::string path;
@@ -100,6 +107,9 @@ struct ModuleNode {
   // A module whose items a summary spelled (ADR-0078): the surface
   // carries signatures and shapes, and nothing in it lowers.
   bool is_summary = false;
+  // The symbols the summary's items link by, for the calls that leave
+  // the package.
+  std::span<const SummarySymbol> summary_symbols;
 };
 
 // What a trace row for a module reads: the path the tree gave it, or the
@@ -219,6 +229,11 @@ struct ModuleInput {
   // std_prelude for a staged `prelude.al`, never from a user's module
   // name.
   bool is_facade = false;
+  // A module a summary spelled carries the symbols its items link by.
+  // The default keeps every module input's aggregate initializer
+  // whole, which the missing-field warning wants.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const SummarySymbol> summary_symbols = {};
 };
 
 // One module input and the syntax the parser made of its file. Lexing,
@@ -257,6 +272,11 @@ struct DependencyPackage {
   std::string_view identity;
   std::span<const std::string_view> exports;
   std::span<const ParsedModule> modules;
+  // The object to link when the package was resolved from a summary;
+  // empty for a package read from source. The default keeps the
+  // aggregate initializers of every staging site whole.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::string_view object = {};
 };
 
 // Names the embedded member carrying `name` - a public item of it,

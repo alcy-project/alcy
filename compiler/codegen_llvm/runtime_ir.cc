@@ -94,17 +94,21 @@ class RuntimeBuilder {
     if (!freestanding_) {
       // The entry wrapper stores `argc` and `argv` here, so the
       // globals exist whether or not a count is asked for.
+      // The two globals are discardable for the same reason the entry
+      // points are: every object carries them, and one copy answers.
       llvm::GlobalVariable* argc =
           module_.getOrInsertGlobal("alcy_argc", builder_.getInt32Ty());
       if (!argc->hasInitializer()) {
         argc->setInitializer(llvm::ConstantInt::get(builder_.getInt32Ty(), 0));
       }
+      argc->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
       llvm::GlobalVariable* argv =
           module_.getOrInsertGlobal("alcy_argv", builder_.getPtrTy());
       if (!argv->hasInitializer()) {
         argv->setInitializer(
             llvm::ConstantPointerNull::get(builder_.getPtrTy()));
       }
+      argv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
     }
     if (declared("alcy_arg_count")) {
       build_arg_count();

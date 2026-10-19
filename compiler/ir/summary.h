@@ -35,6 +35,9 @@ struct SummaryEntry {
   str::StringPoolId name = str::INVALID_STRING_POOL_ID;
   // The module path, dotted from the package root; empty for the root.
   str::StringPoolId path = str::EMPTY_STRING_ID;
+  // The symbol the item's code is written under, so a dependent calls
+  // it by the name the library's own artifact exports.
+  str::StringPoolId symbol = str::INVALID_STRING_POOL_ID;
   SummaryKind kind = SummaryKind::Free;
   bool needs_body = false;
 };

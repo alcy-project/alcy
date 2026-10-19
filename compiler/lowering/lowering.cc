@@ -1669,10 +1669,11 @@ std::vector<ir::SummaryEntry> collect_summary(
     if (!is_own_module(pkg.tree, entry.mod) || !ast.items[entry.item].is_pub) {
       continue;
     }
-    summary.push_back(
-        ir::SummaryEntry{entry.idx, entry.name_id,
-                         strings.intern(pkg.tree.modules[entry.mod]->path),
-                         summary_kind_of(entry.kind), false});
+    summary.push_back(ir::SummaryEntry{
+        .function = entry.idx,
+        .name = entry.name_id,
+        .path = strings.intern(pkg.tree.modules[entry.mod]->path),
+        .kind = summary_kind_of(entry.kind)});
   }
   for (u32 mod = 0; mod < pkg.tree.modules.size(); ++mod) {
     if (!is_own_module(pkg.tree, mod)) {
@@ -1697,9 +1698,11 @@ std::vector<ir::SummaryEntry> collect_summary(
             generic ? ir::TypeIdx(base::INVALID_IDX)
                     : nominal_type_of(pkg, mod, item, is_struct);
         summary.push_back(ir::SummaryEntry{
-            ir::FunctionIdx(type.idx), strings.intern(name), path,
-            is_struct ? ir::SummaryKind::Struct : ir::SummaryKind::Enum,
-            generic || !type.is_valid()});
+            .function = ir::FunctionIdx(type.idx),
+            .name = strings.intern(name),
+            .path = path,
+            .kind = is_struct ? ir::SummaryKind::Struct : ir::SummaryKind::Enum,
+            .needs_body = generic || !type.is_valid()});
         continue;
       }
       if (node.kind == ast::ItemKind::Fn) {
@@ -1707,9 +1710,12 @@ std::vector<ir::SummaryEntry> collect_summary(
         if (fn.generic.empty() || !fn.body.is_valid()) {
           continue;
         }
-        summary.push_back(ir::SummaryEntry{ir::FunctionIdx(base::INVALID_IDX),
-                                           strings.intern(fn.name.name), path,
-                                           ir::SummaryKind::Free, true});
+        summary.push_back(
+            ir::SummaryEntry{.function = ir::FunctionIdx(base::INVALID_IDX),
+                             .name = strings.intern(fn.name.name),
+                             .path = path,
+                             .kind = ir::SummaryKind::Free,
+                             .needs_body = true});
         continue;
       }
       if (node.kind != ast::ItemKind::Impl) {
@@ -1725,12 +1731,13 @@ std::vector<ir::SummaryEntry> collect_summary(
         if (impl.params.empty() && fn.generic.empty()) {
           continue;
         }
-        summary.push_back(ir::SummaryEntry{ir::FunctionIdx(base::INVALID_IDX),
-                                           strings.intern(fn.name.name), path,
-                                           takes_receiver(ast, fn)
-                                               ? ir::SummaryKind::Method
-                                               : ir::SummaryKind::Assoc,
-                                           true});
+        summary.push_back(ir::SummaryEntry{
+            .function = ir::FunctionIdx(base::INVALID_IDX),
+            .name = strings.intern(fn.name.name),
+            .path = path,
+            .kind = takes_receiver(ast, fn) ? ir::SummaryKind::Method
+                                            : ir::SummaryKind::Assoc,
+            .needs_body = true});
       }
     }
   }

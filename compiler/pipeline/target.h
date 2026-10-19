@@ -35,6 +35,9 @@ struct PackageTarget {
   // the suite's `out/`, or the package's own `out/` (ADR-0057). Set by
   // resolve_package_targets.
   std::optional<path::Path> output_dir;
+  // The objects a link needs beside this package's own: the
+  // dependencies a summary answered for (ADR-0078).
+  std::vector<std::string> linked_objects;
 };
 
 // Emits the missing-entry-point diagnostic when a binary target

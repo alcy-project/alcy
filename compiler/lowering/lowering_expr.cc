@@ -1327,8 +1327,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   }
   if (target->module < pkg.tree.modules.size() &&
       pkg.tree.modules[target->module]->is_summary) {
-    return lower_summary_call(expr, sig,
-                              pkg.tree.modules[target->module]->path);
+    return lower_summary_call(expr, sig, target->module);
   }
   if (sig.is_extern) {
     return lower_extern_call(expr, sig);
@@ -1516,32 +1515,43 @@ ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
 // in the dependency's own artifact, so the call names a symbol the
 // linker resolves, and only the surface's own types - primitives and
 // references over them - pass this way (ADR-0078).
+
 Val Lowerer::lower_summary_call(ast::ExprIdx expr,
                                 const analyzer::CheckedModule::FnSig& sig,
-                                std::string_view package) {
+                                u32 module) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
   if (call.args.size() != sig.params.size()) {
     internal(node.span, "summary call arity");
     return Val{size_one, error_type(), false, false};
   }
-  std::string qualified(package);
-  qualified.append("::");
-  qualified.append(sig.name);
-  // The name outlives the call: it is copied into the interner the
-  // declaration and its symbol both borrow.
-  const str::StringPoolId interned = intern_copied(qualified);
-  if (interned == str::INVALID_STRING_POOL_ID) {
+  // The symbol the dependency's build wrote for this item, which the
+  // summary carried with it.
+  std::string_view symbol;
+  if (module < pkg.tree.modules.size()) {
+    for (const analyzer::SummarySymbol& entry :
+         pkg.tree.modules[module]->summary_symbols) {
+      if (strings.get(entry.name) == sig.name) {
+        symbol = strings.get(entry.symbol);
+        break;
+      }
+    }
+  }
+  if (symbol.empty()) {
+    internal(node.span, "summary call without a symbol");
     return Val{size_one, error_type(), false, false};
   }
-  const ir::ExternalFunctionIdx ext =
-      declare_external(strings.get(interned), sig.ret, sig.params);
-  if (!ext.is_valid()) {
+  // The declaration names the symbol as it stands; the parameter shapes
+  // are the external table's, which unwrap to the plain value the
+  // callee's own artifact takes.
+  const ir::ExternalFunctionIdx callee =
+      declare_external(symbol, sig.ret, sig.params);
+  if (!callee.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_external_function(
-      ext, builder.primitive(ir::TypeTag::Function))));
+      callee, builder.primitive(ir::TypeTag::Function))));
   for (usize i = 0; i < call.args.size(); ++i) {
     Val arg = lower_moved(call.args[i], &sig.params[i]);
     if (failed) {

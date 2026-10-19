@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "fpag/base/numeric.h"
 #include "ir/deserialize.h"
@@ -30,6 +31,8 @@ struct SummarySurface {
     // The module's items, and everything they point at, live in the
     // arena the surface was spelled into.
     std::span<const ast::ItemIdx> items;
+    // The symbol each item links by, parallel to `items`.
+    std::span<const SummarySymbol> symbols;
   };
   std::vector<Module> modules;
 };

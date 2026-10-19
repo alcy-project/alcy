@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "diag/span.h"
 #include "fpag/str/string_pool_id.h"
@@ -217,6 +218,7 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   };
   const ir::Storage& storage = *summary.storage;
   std::unordered_map<std::string, std::vector<ast::ItemIdx>> items_by_module;
+  std::unordered_map<std::string, std::vector<SummarySymbol>> symbols_by_module;
   std::vector<std::string> order;
   for (const ir::SummaryEntry& row : summary.summary) {
     // What a dependent cannot use yet - a nominal, an associated
@@ -228,6 +230,9 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     }
     const std::string_view name = named(row.name, "");
     const std::string_view path = named(row.path, "");
+    // A row without a symbol is one the writer could not name; the
+    // source name is the closest a surface can spell.
+    const std::string_view symbol = named(row.symbol, name);
     ast::ItemIdx item = ast::ItemIdx::invalid();
     if (!spell_function(storage, ast, name, row.function, item)) {
       continue;
@@ -237,6 +242,8 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
       order.emplace_back(path);
     }
     items.push_back(item);
+    symbols_by_module[std::string(path)].push_back(
+        SummarySymbol{strings.intern(name), strings.intern(symbol)});
     if (ast.exhausted()) {
       return surface;
     }
@@ -245,8 +252,10 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   // nothing here outlives the call.
   for (const std::string& path : order) {
     const std::vector<ast::ItemIdx>& items = items_by_module[path];
+    const std::vector<SummarySymbol>& symbols = symbols_by_module[path];
     surface.modules.push_back(
-        SummarySurface::Module{path, ast::copy_to_arena(ast.spans, items)});
+        SummarySurface::Module{path, ast::copy_to_arena(ast.spans, items),
+                               ast::copy_to_arena(ast.spans, symbols)});
   }
   return surface;
 }

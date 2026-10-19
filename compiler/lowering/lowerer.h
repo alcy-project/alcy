@@ -434,11 +434,11 @@ class Lowerer {
   // An `extern "C"` call: the declaration names the symbol, arguments
   // pass by value, and the gate was checked at the call site.
   // A call into a package a summary answers for: its code lives in the
-  // dependency's own artifact, which the linker resolves under the
-  // name the surface is qualified with (ADR-0078).
+  // dependency's own artifact, so the call names the symbol the
+  // dependency's build wrote for it (ADR-0078).
   Val lower_summary_call(ast::ExprIdx expr,
                          const analyzer::CheckedModule::FnSig& sig,
-                         std::string_view package);
+                         u32 module);
   Val lower_extern_call(ast::ExprIdx expr,
                         const analyzer::CheckedModule::FnSig& sig);
   ir::TypeIdx usize_type();

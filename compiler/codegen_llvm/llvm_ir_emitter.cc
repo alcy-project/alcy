@@ -347,6 +347,11 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
 void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
                                   const ir::Function& function) {
   check_state();
+  // A function with no blocks is a declaration: the artifact the link
+  // brings defines it.
+  if (function.blocks.empty()) {
+    return;
+  }
 
   for (const ir::BlockIdx block_idx : function.blocks) {
     values_.add_block(block_idx, llvm::BasicBlock::Create(module_->getContext(),

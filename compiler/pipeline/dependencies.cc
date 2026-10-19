@@ -168,7 +168,8 @@ namespace {
 // its surface, answering false when there is none, when the sources it
 // names have outgrown it, or when it carries nothing a dependent can use
 // yet (ADR-0078).
-bool load_summary_dependency(const path::Path& dir,
+bool load_summary_dependency(PipelineContext& ctx,
+                             const path::Path& dir,
                              const pkg::PackageManifest& manifest,
                              LoadedDependency& out) {
   if (manifest.lib == nullptr) {
@@ -230,7 +231,7 @@ bool load_summary_dependency(const path::Path& dir,
     std::string slash =
         analyzer::summary_module_name(artifact.strings->get(row.path));
     bool seen = false;
-    for (const std::string& name : out.module_names) {
+    for (const std::string_view name : out.module_names) {
       if (name == slash) {
         seen = true;
         break;
@@ -239,14 +240,31 @@ bool load_summary_dependency(const path::Path& dir,
     if (seen) {
       continue;
     }
-    out.module_names.push_back(std::move(slash));
-    out.modules.push_back(
-        analyzer::ModuleInput{out.module_names.back(), source::UNKNOWN_FILE});
+    // The name outlives the tree: it is copied into the interner the
+    // module inputs borrow.
+    const std::optional<str::StringPoolId> name_id =
+        ctx.strings.intern_copied(slash);
+    if (!name_id.has_value()) {
+      return false;
+    }
+    out.module_names.push_back(ctx.strings.get(*name_id));
+    out.modules.push_back(analyzer::ModuleInput{
+        out.module_names.back(), source::UNKNOWN_FILE, false, {}});
   }
   if (out.module_names.empty()) {
     return false;
   }
   out.artifact = std::move(artifact);
+  // The object the same build wrote, for the link a build performs; the
+  // path is copied into the interner so the target that links it can
+  // name it.
+  const path::Path object_path =
+      dir.join(path::DEFAULT_OUT_DIR).join(std::string(lib_name) + ".o");
+  const std::optional<str::StringPoolId> object_id =
+      ctx.strings.intern_copied(object_path.as_view());
+  if (object_id.has_value()) {
+    out.object = ctx.strings.get(*object_id);
+  }
   return true;
 }
 
@@ -318,7 +336,7 @@ bool load_dependency(PipelineContext& ctx,
   dependency.suite = suite;
   // A fresh summary answers for the package's sources; a package the
   // build left one for is not read at all.
-  if (!load_summary_dependency(dir, manifest, dependency)) {
+  if (!load_summary_dependency(ctx, dir, manifest, dependency)) {
     base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
         pipeline::discover_sources(dir.as_view(), ctx.sources, ctx.bag);
     if (discovered.is_err()) {

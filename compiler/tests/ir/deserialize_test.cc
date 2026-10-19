@@ -307,15 +307,20 @@ TEST_CASE("A summary section reads back the package's surface") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::array<SummaryEntry, 3> summary{
-      SummaryEntry{FunctionIdx(0), strings.intern("main"), strings.intern(""),
-                   SummaryKind::Free,
-                   /*needs_body=*/false},
-      SummaryEntry{FunctionIdx(base::INVALID_IDX), strings.intern("make"),
-                   strings.intern("string"), SummaryKind::Free,
-                   /*needs_body=*/true},
-      SummaryEntry{FunctionIdx(3), strings.intern("String"),
-                   strings.intern("string"), SummaryKind::Struct,
-                   /*needs_body=*/false},
+      SummaryEntry{.function = FunctionIdx(0),
+                   .name = strings.intern("main"),
+                   .path = strings.intern(""),
+                   .symbol = strings.intern("_A1f0:main"),
+                   .kind = SummaryKind::Free},
+      SummaryEntry{.function = FunctionIdx(base::INVALID_IDX),
+                   .name = strings.intern("make"),
+                   .path = strings.intern("string"),
+                   .kind = SummaryKind::Free,
+                   .needs_body = true},
+      SummaryEntry{.function = FunctionIdx(3),
+                   .name = strings.intern("String"),
+                   .path = strings.intern("string"),
+                   .kind = SummaryKind::Struct},
   };
   const std::vector<u8> bytes =
       test::composite_bytes(strings, storage, /*hashes=*/{}, summary);
@@ -342,6 +347,7 @@ TEST_CASE("A summary section reads back the package's surface") {
   CHECK(package.summary[0].function.idx == 0);
   CHECK(package.strings->get(package.summary[0].name) == "main");
   CHECK(package.strings->get(package.summary[0].path).empty());
+  CHECK(package.strings->get(package.summary[0].symbol) == "_A1f0:main");
   CHECK(package.summary[0].kind == SummaryKind::Free);
   CHECK_FALSE(package.summary[0].needs_body);
   CHECK_FALSE(package.summary[1].function.is_valid());
@@ -365,9 +371,10 @@ TEST_CASE("A corrupt summary is refused") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::array<SummaryEntry, 1> summary{
-      SummaryEntry{FunctionIdx(0), strings.intern("main"), strings.intern(""),
-                   SummaryKind::Free,
-                   /*needs_body=*/false},
+      SummaryEntry{.function = FunctionIdx(0),
+                   .name = strings.intern("main"),
+                   .path = strings.intern(""),
+                   .kind = SummaryKind::Free},
   };
   const std::vector<u8> bytes =
       test::composite_bytes(strings, storage, /*hashes=*/{}, summary);

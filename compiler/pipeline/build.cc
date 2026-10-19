@@ -27,6 +27,7 @@
 #include "fpag/io/temp_dir.h"
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
+#include "ir/function.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
 #include "ir/summary.h"
@@ -53,6 +54,7 @@
 #include "pkg/manifest.h"
 #include "pkg/profile.h"
 #include "source/source.h"
+#include "symbol/mangle.h"
 
 namespace pipeline {
 
@@ -521,6 +523,36 @@ struct IrWriteInput {
   }
 };
 
+// The symbol one summary row's code is written under: the same encoding
+// the emitter gives the function, so a dependent links by it (ADR-0078).
+std::string linkable_symbol(PipelineContext& ctx,
+                            lowering::LoweredPackage& package,
+                            const ir::SummaryEntry& row) {
+  const ir::FunctionMeta& meta =
+      package.storage->functions()[row.function].meta;
+  if (meta.kind == ir::SymbolKind::Foreign) {
+    return std::string(ctx.strings.get(meta.name));
+  }
+  symbol::Signature signature;
+  signature.path = std::string(ctx.strings.get(meta.path));
+  signature.name = std::string(ctx.strings.get(meta.name));
+  switch (meta.kind) {
+    case ir::SymbolKind::Free:
+      signature.kind = symbol::Signature::Kind::Free;
+      break;
+    case ir::SymbolKind::Assoc:
+      signature.kind = symbol::Signature::Kind::Assoc;
+      break;
+    case ir::SymbolKind::Method:
+      signature.kind = symbol::Signature::Kind::Method;
+      break;
+    case ir::SymbolKind::Foreign: break;
+  }
+  // Every row with code is concrete, so it carries no instantiation
+  // arguments to encode.
+  return symbol::mangle(signature, *package.storage, ctx.strings);
+}
+
 // The binary form of a lowered package, for the cache to store and for
 // `--emit=ir-bc` to write: one serialization serves both.
 std::vector<u8> serialize_package_ir(PipelineContext& ctx,
@@ -531,7 +563,20 @@ std::vector<u8> serialize_package_ir(PipelineContext& ctx,
   const std::span<const ir::SummaryEntry> summary =
       is_lib ? std::span<const ir::SummaryEntry>(package.summary)
              : std::span<const ir::SummaryEntry>();
-  IrWriteInput write_input(ctx, package, summary);
+  // Each row with code names the symbol a dependent links against.
+  std::vector<ir::SummaryEntry> rows(summary.begin(), summary.end());
+  for (ir::SummaryEntry& row : rows) {
+    if (!row.function.is_valid()) {
+      continue;
+    }
+    const std::string symbol = linkable_symbol(ctx, package, row);
+    const std::optional<str::StringPoolId> id =
+        ctx.strings.intern_copied(symbol);
+    if (id.has_value()) {
+      row.symbol = *id;
+    }
+  }
+  IrWriteInput write_input(ctx, package, rows);
   return ir::serialize(write_input.input);
 }
 
@@ -661,7 +706,8 @@ base::Result<std::string, diag::Reported> emit_output(
     LinkOptions link,
     EmitMode mode,
     const std::string& output_path,
-    bool is_lib) {
+    bool is_lib,
+    std::span<const std::string> linked_objects) {
   // One path, so its parent is made once and every mode agrees about it.
   // The linker creates no directories of its own, which left
   // `alcy build -o out/app` failing where the same `-o` for an object
@@ -723,7 +769,9 @@ base::Result<std::string, diag::Reported> emit_output(
     if (objects.is_err()) {
       return base::make_err(diag::Reported{});
     }
-    const std::vector<std::string> paths = std::move(objects).unwrap();
+    std::vector<std::string> paths = std::move(objects).unwrap();
+    // The dependencies a summary answered for bring their own objects.
+    paths.insert(paths.end(), linked_objects.begin(), linked_objects.end());
     return link_executable(ctx, link, paths, output_path);
   }();
   if (written.is_err()) {
@@ -797,7 +845,7 @@ base::Result<std::string, diag::Reported> build_single_root(
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
   return emit_output(ctx, lowered, profile, link, mode, std::string(output),
-                     false);
+                     false, {});
 }
 
 base::Result<std::string, diag::Reported> build_package(
@@ -964,7 +1012,7 @@ base::Result<std::string, diag::Reported> build_package(
     }
     base::Result<std::string, diag::Reported> written =
         emit_output(ctx, lowered, profile, link, planned_target.mode,
-                    planned_target.path, target.is_lib);
+                    planned_target.path, target.is_lib, target.linked_objects);
     if (written.is_err() || ctx.bag.has_errors()) {
       failed = true;
       break;

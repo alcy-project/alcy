@@ -295,6 +295,7 @@ class Resolver {
       const u32 root = root_module;
       modules[root]->items = input.items;
       modules[root]->is_summary = input.input.id == source::UNKNOWN_FILE;
+      modules[root]->summary_symbols = input.input.summary_symbols;
       return;
     }
     u32 parent = root_module;
@@ -314,8 +315,10 @@ class Resolver {
             child_path, leaf ? input.input.id : source::UNKNOWN_FILE,
             leaf ? input.items : std::span<const ast::ItemIdx>{}, parent);
         if (leaf && input.input.id == source::UNKNOWN_FILE) {
-          // A summary spelled this module's items; nothing in it lowers.
+          // A summary spelled this module's items; nothing in it lowers,
+          // and its symbols are what a call out of the package links by.
           modules[child]->is_summary = true;
+          modules[child]->summary_symbols = input.input.summary_symbols;
         }
         if (out_of_arena) {
           return;

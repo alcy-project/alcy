@@ -89,13 +89,14 @@ shipped without its sources is answered from the summary alone. The
 surface is spelled into the syntax arena - free functions over
 primitives, references, tuples, arrays, slices, and function views for
 now - and the checker registers it the way it registers source, export
-trimming included. A call into the package lowers to an external symbol
-qualified by the package, so `alcy check` resolves it and a build stops
-at the linker until that symbol is named.
+trimming included. Each row carries the symbol its code is written
+under, so a call into the package names what the library's own artifact
+exports, the dependent's build links that artifact, and the program runs
+with the library's sources gone. The runtime's entry points and the two
+argument globals are discardable definitions, so two objects in one
+image keep one copy of each.
 
-**Next:** the symbol a summary call names, and the linkage the runtime
-needs, which is the multi-object linking slice; the names a nominal's
-fields carry, so a literal and a field read can cross the boundary;
-associated functions, methods, and spec implementations; the generic
-boundary; and the export-list question of what a summary may show a
-dependent that does not import it.
+**Next:** the names a nominal's fields carry, so a literal and a field
+read can cross the boundary; associated functions, methods, and spec
+implementations; the generic boundary; and the export-list question of
+what a summary may show a dependent that does not import it.

@@ -271,6 +271,7 @@ class Serializer {
     for (const SummaryEntry& entry : summary_) {
       collect_pool_id(entry.name, offsets);
       collect_pool_id(entry.path, offsets);
+      collect_pool_id(entry.symbol, offsets);
     }
     std::sort(offsets.begin(), offsets.end());
     offsets.erase(std::unique(offsets.begin(), offsets.end()), offsets.end());
@@ -600,6 +601,7 @@ class Serializer {
       out.put_u32(entry.function.idx);
       out.put_u32(string_index(entry.name));
       out.put_u32(string_index(entry.path));
+      out.put_u32(string_index(entry.symbol));
       out.put_u8(static_cast<u8>(entry.kind));
       out.put_u8(static_cast<u8>(entry.needs_body ? 1u : 0u));
       out.zeros(2);

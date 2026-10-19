@@ -112,7 +112,10 @@ base::Result<std::string, diag::Reported> emit_output(
     LinkOptions link,
     EmitMode mode,
     const std::string& output_path,
-    bool is_lib);
+    bool is_lib,
+    // Objects a link beside this package's own: the dependencies a
+    // summary answered for (ADR-0078).
+    std::span<const std::string> linked_objects = {});
 
 base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,

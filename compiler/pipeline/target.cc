@@ -436,19 +436,24 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
         continue;
       }
       std::span<const ast::ItemIdx> items;
+      std::span<const analyzer::SummarySymbol> symbols;
       if (surface.has_value()) {
         for (const analyzer::SummarySurface::Module& module :
              surface->modules) {
           if (analyzer::summary_module_name(module.path) == input.name) {
             items = module.items;
+            symbols = module.symbols;
             break;
           }
         }
       }
       // The resolver reads no path for a dependency's modules, so an
       // empty one stands for the module a summary spelled.
+      analyzer::ModuleInput spelled = input;
+      spelled.summary_symbols = symbols;
       sources.dependency_modules.push_back(analyzer::ParsedModule{
-          input, path::Path::from_native(std::string_view{}).unwrap(), items});
+          spelled, path::Path::from_native(std::string_view{}).unwrap(),
+          items});
     }
   }
   // The spans hold into `dependency_modules`, which holds every
@@ -464,7 +469,8 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
             dependency.manifest.modules.exports,
             dependency.manifest.modules.export_count),
         std::span<const analyzer::ParsedModule>(
-            sources.dependency_modules.data() + begin, end - begin)});
+            sources.dependency_modules.data() + begin, end - begin),
+        dependency.object});
     begin = end;
   }
   // The root's policy names the package itself and no suite; a sealed
@@ -597,6 +603,13 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   PackageTarget target;
   target.tree = std::move(tree).unwrap();
   target.file_count = sources.file_count;
+  // A dependency a summary answered for contributes its own object to
+  // the link (ADR-0078).
+  for (const analyzer::DependencyPackage& dependency : sources.dependencies) {
+    if (!dependency.object.empty()) {
+      target.linked_objects.emplace_back(dependency.object);
+    }
+  }
   // A target that names nothing is the package, which is what makes a
   // one-file manifest readable.
   target.name = target_name.empty() ? manifest.name : target_name;
