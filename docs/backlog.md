@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The loader frames are an artifact: with
+  `LD_BIND_NOW=1` the run takes 135 ms and 1,939 ms at twenty and
+  twenty-four levels against 143 ms and 1,903 ms, and `LD_DEBUG=statistics`
+  reports a startup of 75,033 cycles with 176 relocations, a few
+  hundredths of a millisecond. Lazy binding and the loader are not the
+  cost, and the `ld-linux` frames were the symbolizer failing to place
+  the compiler's own addresses. The seconds are in the compiler and no
+  instrumented function owns them, so the profile has to be made to name
+  them: build the release with `-g` and repeat, or resolve the addresses
+  against the binary's load base before reading anything into a frame.
   costs milliseconds. `perf script` on the twenty-level nest shows the
   samples landing in the dynamic linker, `ld-linux-x86-64.so.2`, frame
   after frame, with almost nothing in the compiler itself. That is either
