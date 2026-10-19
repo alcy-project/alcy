@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. `variant_payloads` is out, and the experiment also
+  shows why a careless bisect misleads: with it returning an empty vector
+  the counts rise to 4,568,739,870, 13,379,543,278, and 48,601,115,830 -
+  slower than the 1.86/7.09/27.98 billion baseline - because every payload
+  arity now mismatches and the diagnostics and recovery paths run. The
+  doubling is unchanged (about 1.8 times per level), so the helper is not
+  the cost, and a target whose removal changes behaviour is a poor
+  target. Prefer the ones whose removal is inert: `unify` (already
+  counted at five thousand calls) and `generic_instance_for`, or measure
+  them rather than disabling them.
   costs milliseconds. The first attempt at bisecting
   `variant_payloads` (`types.cc:7609`) inserted the early return on the
   signature line - a mistake repeated from the earlier attempt - so it
