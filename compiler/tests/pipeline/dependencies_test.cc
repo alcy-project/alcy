@@ -890,8 +890,12 @@ TEST_CASE("A dependency a summary answers for is not read") {
       "[lib]\npath = \"lib.al\"\n",
       {{"lib.al",
         "pub struct Pair {\n  pub left: i32,\n  pub right: i32,\n}\n\n"
+        "pub struct Line {\n  pub a: Pair,\n  pub b: Pair,\n}\n\n"
         "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n\n"
-        "pub fn sum(a: i32, b: i32) -> i32 {\n  ret a + b\n}\n"}});
+        "pub fn sum(p: Pair) -> i32 {\n  ret p.left + p.right\n}\n\n"
+        "pub fn make(a: i32, b: i32) -> Pair {\n"
+        "  ret Pair { left: a, right: b }\n}\n\n"
+        "pub fn left_of(p: &Pair) -> i32 {\n  ret p.left\n}\n"}});
   CHECK(written);
   if (!written) {
     return;
@@ -951,10 +955,11 @@ TEST_CASE("A dependency a summary answers for is not read") {
       "dep = { path = \"../dep\" }\n\n"
       "[[bin]]\npath = \"main.al\"\n",
       {{"main.al",
-        "use dep::Pair\nuse dep::double\nuse dep::sum\n\n"
-        "fn main() -> i32 {\n"
-        "  p := Pair { left: 20, right: 1 }\n"
-        "  ret double(sum(p.left, p.right) - 21)\n}\n"}});
+        "use dep::Line\nuse dep::Pair\nuse dep::double\nuse dep::left_of\n"
+        "use dep::make\nuse dep::sum\n\nfn main() -> i32 {\n"
+        "  p := make(20, 1)\n"
+        "  l := Line { a: p, b: p }\n"
+        "  ret double(sum(l.a) + left_of(&l.a) - 41)\n}\n"}});
   CHECK(app_written);
   if (!app_written) {
     return;
@@ -982,11 +987,13 @@ TEST_CASE("A dependency a summary answers for is not read") {
   // Put the right call back: the dependent links the library's object,
   // named by the symbol the summary carried, and it spells the
   // library's struct from the surface (ADR-0078).
-  CHECK(dir.write_file("proj/main.al",
-                       "use dep::Pair\nuse dep::double\nuse dep::sum\n\n"
-                       "fn main() -> i32 {\n"
-                       "  p := Pair { left: 20, right: 1 }\n"
-                       "  ret double(sum(p.left, p.right) - 21)\n}\n"));
+  CHECK(dir.write_file(
+      "proj/main.al",
+      "use dep::Line\nuse dep::Pair\nuse dep::double\nuse dep::left_of\n"
+      "use dep::make\nuse dep::sum\n\nfn main() -> i32 {\n"
+      "  p := make(20, 1)\n"
+      "  l := Line { a: p, b: p }\n"
+      "  ret double(sum(l.a) + left_of(&l.a) - 41)\n}\n"));
 #if !BUILD_FLAG(IS_OS_ASMJS)
   {
     PipelineContext ctx{i18n::Language::EnUs};

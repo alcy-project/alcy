@@ -96,17 +96,16 @@ with the library's sources gone. The runtime's entry points and the two
 argument globals are discardable definitions, so two objects in one
 image keep one copy of each.
 
-**Landed: a nominal crosses as a declaration.** A struct row carries
-the fields its declaration has - name and visibility, in declaration
-order - and the surface spells a nominal row into the declaration its
-module holds, so a dependent names the type, constructs a literal, and
-reads a field with only the summary in hand. A call whose arguments are
-those field reads crosses too. A signature that names a nominal is
-still left out, for two reasons: the artifact holds more than one type
-node over one declaration, and the external table a summary call is
-declared in passes an aggregate as a pointer where the library's own
-function takes the caller's shape (see `A summary call passes what the
-callee takes` in the backlog).
+**Landed: a nominal crosses whole.** A struct row carries the fields
+its declaration has - name and visibility, in declaration order - and
+the surface spells a nominal row into the declaration its module holds,
+so a dependent names the type, constructs a literal, and reads a field
+with only the summary in hand. A signature that names a nominal spells
+too: the row spells the declaration a copy repeats when the shapes
+match, and a call crosses it as the value the callee takes. A nominal
+parameter, a nominal return, a nested nominal field, and a reference to
+a nominal all resolve, link against the library's object, and run with
+the library's sources gone.
 
 **The export list trims a summary the way it trims source.** An
 unexported module is refused on both paths, an exported surface
@@ -115,9 +114,7 @@ library, its sources present and then gone). The trim is the resolver's
 `PackageRoot.exports`, so a summary never shows a dependent more than
 the source it stands in for.
 
-**Next:** a nominal-typed parameter, which waits on the calling
-convention a summary call crosses under - `A summary call passes what
-the callee takes` in the backlog records both the convention and the
-`core/string.al` borrow error a declaration route runs into; then
-associated functions, methods, and spec implementations; and the
-generic boundary.
+**Next:** associated functions, methods, and spec implementations,
+whose receivers are nominals and whose call shapes the work above
+settled; and the generic boundary, where a declaration has no body to
+instantiate and the summary has to say so.

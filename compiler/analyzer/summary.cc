@@ -336,9 +336,7 @@ std::optional<ast::TypeIdx> spell_nominal_path(const SpellContext& ctx,
 // when the syntax cannot carry it. A nominal is spelled as the path its
 // declaration is reachable by - `package::` and the module it sits in -
 // and a raw pointer or constant has no spelling a dependent can use.
-ast::TypeIdx spell_type(const SpellContext& ctx,
-                        ir::TypeIdx type,
-                        bool allow_copies) {
+ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
   const ir::Storage& storage = ctx.storage;
   ast::AstArena& ast = ctx.ast;
   if (!type.is_valid() || type.idx >= storage.types().size()) {
@@ -375,7 +373,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx,
     case ir::TypeTag::Ref:
     case ir::TypeTag::MutRef: {
       const ir::RefType& shape = storage.ref_types()[node.as_ref()];
-      const ast::TypeIdx inner = spell_type(ctx, shape.pointee, allow_copies);
+      const ast::TypeIdx inner = spell_type(ctx, shape.pointee);
       if (!inner.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -386,7 +384,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx,
     }
     case ir::TypeTag::Slice: {
       const ir::SliceType& shape = storage.slice_types()[node.as_slice()];
-      const ast::TypeIdx element = spell_type(ctx, shape.element, allow_copies);
+      const ast::TypeIdx element = spell_type(ctx, shape.element);
       if (!element.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -396,7 +394,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx,
     }
     case ir::TypeTag::Array: {
       const ir::ArrayType& shape = storage.array_types()[node.as_array()];
-      const ast::TypeIdx element = spell_type(ctx, shape.element, allow_copies);
+      const ast::TypeIdx element = spell_type(ctx, shape.element);
       if (!element.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -411,7 +409,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx,
       std::vector<ast::TypeIdx> elements;
       elements.reserve(shape.elements.size());
       for (ir::TypeIdx element : shape.elements) {
-        const ast::TypeIdx spelled = spell_type(ctx, element, allow_copies);
+        const ast::TypeIdx spelled = spell_type(ctx, element);
         if (!spelled.is_valid()) {
           return ast::TypeIdx::invalid();
         }
@@ -427,13 +425,13 @@ ast::TypeIdx spell_type(const SpellContext& ctx,
       std::vector<ast::TypeIdx> params;
       params.reserve(shape.params.size());
       for (ir::TypeIdx param : shape.params) {
-        const ast::TypeIdx spelled = spell_type(ctx, param, allow_copies);
+        const ast::TypeIdx spelled = spell_type(ctx, param);
         if (!spelled.is_valid()) {
           return ast::TypeIdx::invalid();
         }
         params.push_back(spelled);
       }
-      const ast::TypeIdx ret = spell_type(ctx, shape.ret, allow_copies);
+      const ast::TypeIdx ret = spell_type(ctx, shape.ret);
       if (!ret.is_valid()) {
         return ast::TypeIdx::invalid();
       }
@@ -449,17 +447,12 @@ ast::TypeIdx spell_type(const SpellContext& ctx,
         return spell_nominal_path(ctx, site->second)
             .value_or(ast::TypeIdx::invalid());
       }
-      // A declaration's shape may name a copy of another declaration
-      // rather than the declaration itself, as a field holds one; the
-      // row whose shape it repeats is the one to spell, and it has to be
-      // the only one, because two rows whose shapes both match leave the
-      // choice to the walk, which does not make it. A signature takes a
-      // value instead, and spelling it as another row's declaration
-      // would pass what the caller has where the callee takes something
-      // else, so only a declaration reads through a copy.
-      if (!allow_copies) {
-        return ast::TypeIdx::invalid();
-      }
+      // A reference may name a copy of a declaration rather than the
+      // declaration itself, as a field or a parameter holds one; the row
+      // whose shape it repeats is the one to spell, and it has to be the
+      // only one, because two rows whose shapes both match leave the
+      // choice to the walk, which does not make it. Identical shapes lay
+      // out alike, so what the caller holds is what the callee takes.
       const std::optional<u32> name = shape_name(storage, type);
       if (!name.has_value()) {
         return ast::TypeIdx::invalid();
@@ -512,7 +505,7 @@ bool spell_function(const SpellContext& ctx,
   std::vector<ast::ItemFnParam> params;
   params.reserve(meta.param_types.size());
   for (ir::TypeIdx param : meta.param_types) {
-    const ast::TypeIdx spelled = spell_type(ctx, param, false);
+    const ast::TypeIdx spelled = spell_type(ctx, param);
     if (!spelled.is_valid()) {
       return false;
     }
@@ -522,7 +515,7 @@ bool spell_function(const SpellContext& ctx,
     params.push_back(
         ast::ItemFnParam{.pattern = pattern_index, .type = spelled});
   }
-  const ast::TypeIdx ret = spell_type(ctx, meta.return_type, false);
+  const ast::TypeIdx ret = spell_type(ctx, meta.return_type);
   if (!ret.is_valid()) {
     return false;
   }
@@ -566,7 +559,7 @@ bool spell_declaration(const SpellContext& ctx,
     std::vector<ast::ItemStructField> fields;
     fields.reserve(shape.fields.size());
     for (usize i = 0; i < shape.fields.size(); ++i) {
-      const ast::TypeIdx spelled = spell_type(ctx, shape.fields[i], true);
+      const ast::TypeIdx spelled = spell_type(ctx, shape.fields[i]);
       if (!spelled.is_valid()) {
         return false;
       }
@@ -605,7 +598,7 @@ bool spell_declaration(const SpellContext& ctx,
     std::vector<ast::TypeIdx> payload;
     payload.reserve(variant.fields.size());
     for (ir::TypeIdx field : variant.fields) {
-      const ast::TypeIdx spelled = spell_type(ctx, field, true);
+      const ast::TypeIdx spelled = spell_type(ctx, field);
       if (!spelled.is_valid()) {
         return false;
       }
