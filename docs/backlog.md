@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The row builder is a lambda, not a method
+  (`unguarded_rows` at `types_expr.cc:2800`, called at `:2885`,
+  `:2914`, and `:2934`), and it runs fewer than fifty times - at most
+  three per match - over a two-arm match, so it is not the cost either.
+  With the expression walk, the cover walk, `bind_pattern`,
+  `instantiate_fn`, the resolution, and the row builder all measured
+  at milliseconds or less against a 136 ms run, the one-at-a-time
+  instrumenting has reached its limit. Build a release with debug
+  symbols (`-g`) and profile that directly, so the frame that owns the
+  seconds is named instead of guessed.
   costs milliseconds. `instantiate_fn` is next and is also innocent:
   its cumulative interval is about 1.3 ms over its two hundred calls at
   twenty levels and 1.1 ms at twenty-four, so the instances and their
