@@ -963,7 +963,18 @@ replaced. The foundations are in `roadmap.md`.
   by the same factor as the run, the pattern typing is calling unify
   once per pair of nested nodes and that is the bug; if it stays flat,
   the remaining seconds are elsewhere and the driver around the cover
-  walk is next.
+  walk is next. It stays flat: `unify` (`types.cc:4164`) is called
+  between five and six thousand times at twenty, twenty-two, and
+  twenty-four levels alike, so it is a constant cost from the standard
+  library's own bodies and not the growth. Every instrumented function
+  so far is flat - the cover walk at seventy calls, `bind_pattern` at
+  seven hundred, `unify` at five thousand - while the run grows about
+  1.85 times per level, so the growth is in a region not yet timed:
+  most likely the scrutinee's own typing, the nested constructor chain
+  that the resolution cache was supposed to make linear. Time that
+  directly next - the `check_expr` on the match scrutinee and the
+  entries it makes - because a flat `unify` there means the cache is
+  not hitting for this shape.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
