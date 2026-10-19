@@ -983,7 +983,17 @@ replaced. The foundations are in `roadmap.md`.
   `check_expr`'s own entry, `type_origin`, `types_equal`, or
   `instantiate_generic`. Count `check_expr` per depth next; if its
   entry count explodes while every callee is flat, the cost is in the
-  walk's dispatch or its type recording, not in the work.
+  walk's dispatch or its type recording, not in the work. It does not
+  explode either: `check_expr` is entered fewer than ten thousand times
+  at twenty, twenty-two, and twenty-four levels alike. Every count in
+  the run is flat while the time grows, and no single interval was ever
+  more than tens of microseconds, so the growth is the per-call cost of
+  `check_expr` itself accumulating - it is entered the same number of
+  times but each entry costs more as the nesting deepens. The recording
+  at the end of the wrapper (`modules[module].expr_types.push_back`,
+  `types_expr.cc:3482`) is a candidate: a vector that grows with every
+  call makes the run quadratic on its own. Time the wrapper's tail and
+  the `modules[module]` lookup per depth before looking further.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
