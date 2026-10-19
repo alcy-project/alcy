@@ -847,7 +847,16 @@ replaced. The foundations are in `roadmap.md`.
   identifier (`:2960`), and never recurses into the type. So the scan
   is cheap and the seconds are in the specialization below `:3100` -
   the next read - or in the or-split copy (`:3077`), which duplicates a
-  row per alternative.
+  row per alternative. The specialization takes the head type
+  (`types_expr.cc:3135`), copies `rest` (`:3136`), and branches on the
+  head's tag (`:3138`): `I1` recurses once per value (`:3143`) and a
+  nominal presumably once per variant, each with its payload columns
+  appended. That branching is the nesting: one `Option<...>` level
+  turns into as many recursive calls as the type has variants, so the
+  cost follows the type structure, and the backlog's note that a chain
+  without `|` hangs the same way fits. The call count stays under ten
+  thousand only because wildcard rows return early. Read the nominal
+  case past `:3145` next.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
