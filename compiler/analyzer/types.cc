@@ -7175,6 +7175,7 @@ bool Checker::resolve_value_path(u32 module,
                                  ast::ExprIdx expr,
                                  ast::PathIdx path,
                                  std::span<const ast::TypeIdx> type_args,
+                                 std::span<const ast::ExprIdx> call_args,
                                  PathValue& out) {
   const ast::Path& node = ast.paths[path];
   if (node.segments.empty()) {
@@ -7493,6 +7494,28 @@ bool Checker::resolve_value_path(u32 module,
           out.kind = PathValue::Kind::AssocFunction;
           out.method = method;
           return true;
+        }
+      } else if (!call_args.empty()) {
+        // A call's arguments bind an associated function's own
+        // parameters the way they bind a method's: the declaration
+        // pins what its parameter types spell, and an argument fills
+        // what stays open. An attempt that fails reports why, so the
+        // unresolved-name report below would only repeat it.
+        const u32 before = bag.error_count();
+        // The turbofish that reached here named the owner: only one
+        // turbofish is parsed per path, and the branch above takes the
+        // member's own. Passing the owner's arguments on would pin the
+        // member's first generics to them.
+        const CheckedModule::MethodInfo* method = instantiate_generic_method(
+            module, self, member, /*type_args=*/{}, call_args, node.span);
+        if (method != nullptr &&
+            method->receiver == CheckedModule::ReceiverKind::None) {
+          out.kind = PathValue::Kind::AssocFunction;
+          out.method = method;
+          return true;
+        }
+        if (bag.error_count() > before) {
+          return false;
         }
       }
       if (const CheckedModule::MethodInfo* method =

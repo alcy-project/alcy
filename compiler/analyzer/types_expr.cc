@@ -736,7 +736,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
                                      const ir::TypeIdx* expected,
                                      diag::Span span) {
   PathValue resolved;
-  if (!resolve_value_path(module, expr, path, type_args, resolved)) {
+  if (!resolve_value_path(module, expr, path, type_args, {}, resolved)) {
     return error_type();
   }
   switch (resolved.kind) {
@@ -1504,7 +1504,8 @@ ir::TypeIdx Checker::check_call(u32 module,
   PathValue resolved;
   if (!resolve_value_path(
           module, callee, path,
-          ast.exprs[callee].payload.get<ast::ExprPath>().type_args, resolved)) {
+          ast.exprs[callee].payload.get<ast::ExprPath>().type_args, args,
+          resolved)) {
     for (ast::ExprIdx arg : args) {
       check_expr(module, arg, nullptr);
     }
@@ -3664,7 +3665,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
       PathValue resolved;
       if (!resolve_value_path(module, place, path,
-                              node.payload.get<ast::ExprPath>().type_args,
+                              node.payload.get<ast::ExprPath>().type_args, {},
                               resolved)) {
         return error_type();
       }

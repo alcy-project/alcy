@@ -1020,13 +1020,17 @@ class Checker {
     ast::ItemIdx generic_item = ast::ItemIdx::invalid();
     u32 variant = 0;
   };
-  // `type_args` carries a turbofish from the enclosing expression path.
+  // `type_args` carries a turbofish from the enclosing expression path,
+  // and `call_args` the arguments when the path is a call's callee, so a
+  // generic associated function infers the parameters its declaration
+  // does not pin on its own. Both are empty for a path read as a value.
   // `expr` is the expression the path was written at; a value-parameter
   // resolution records its splice for lowering under that expression.
   bool resolve_value_path(u32 module,
                           ast::ExprIdx expr,
                           ast::PathIdx path,
                           std::span<const ast::TypeIdx> type_args,
+                          std::span<const ast::ExprIdx> call_args,
                           PathValue& out);
   bool resolve_variant_path(u32 module, ast::PathIdx path, PathValue& out);
   std::vector<ir::TypeIdx> variant_payloads(const PathValue& resolved,

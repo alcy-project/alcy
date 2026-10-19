@@ -346,6 +346,15 @@ replaced. The foundations are in `roadmap.md`.
   branch reached the generic-function lookup. Both do now, with the
   reachability check a qualified name owes (`ok-qualified-generic-call`,
   `err-qualified-generic-private`).
+- [x] An associated call bound the owner's turbofish to the member: the
+  two-segment branch passed the whole path's arguments on, so
+  `Holder::<i32>::map_to(true)` pinned the member's first generic to
+  `i32` and refused the argument, and an owner with two parameters
+  reported a mismatch against the member's one written slot. A call's
+  arguments bind the member's own parameters now, the way a method
+  call's do, and the owner's turbofish stays the owner's
+  (`ok-assoc-fn-infer` pins the numeric and the differently-typed
+  call).
 - [x] An associated function's turbofish names its own arguments: the
   parser records which segment the turbofish followed and the resolver
   reads it, so `P::id::<i32>(x)` instantiates the member while
