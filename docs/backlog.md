@@ -502,7 +502,20 @@ replaced. The foundations are in `roadmap.md`.
   statement is not a declaration - it has to be a container that is
   itself checked repeatedly, a loop body or condition, or a comp
   region. Print the statement kind (and its statement index) at
-  `check_stmt` when the initializer chain is present. The key must carry
+  `check_stmt` when the initializer chain is present. Reading the
+  reproducer rather than guessing its shape settles it: the body is
+  `o := wrap(wrap(...))` with sixteen nested calls, so the hot `kind`
+  10 nodes are `Call`s, not casts, and the chain is a call chain over
+  the base `E::A`. The mechanism is then plain: checking the outer
+  call resolves the generic and instantiates `wrap`, and to work out
+  its type argument it checks its own argument - the next call in,
+  which resolves and instantiates in turn, and so on down the sixteen.
+  The cost of one resolution is one resolution per level below it, so
+  T(k) = 1 + sum of T(i) for i below k, which doubles per level and
+  matches the measured `resolve_generic_fn` counts exactly. The fix is
+  to remember a call's resolution per expression and instance - the
+  same fix the counts pointed to - because resolving it again returns
+  the same signature. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
