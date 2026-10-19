@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The scope scans are real and they are fifteen
+  mutation sites: `scopes.emplace_back()` and `scopes.pop_back()` at
+  `types.cc:4640/4644`, `7735/7782`, and `7927/7939`, and at
+  `types_expr.cc:1313/1341`, `2724/2769`, `3399/3441`, `3939`, and
+  `4047/4080`. Replace `lookup_local` and `scope_of` with a map from
+  name to the innermost binding, kept in step with those sites: a scope
+  records what it shadowed so a pop restores it, which is the usual
+  stack-of-overwritten-entries shape. Then measure with
+  `perf stat -e instructions`; a quadratic term should drop while the
+  doubling stays, confirming the two are separate.
   costs milliseconds. The scope scans are real: `lookup_local`
   (`types.cc:4227`) and `scope_of` (`:4238`) each walk every scope and
   every local in it, so a name lookup costs the whole binding stack, and
