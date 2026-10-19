@@ -879,7 +879,17 @@ replaced. The foundations are in `roadmap.md`.
   doubling has to be rows that are not all-wildcards accumulating as
   the levels go down. Measure `rows.size()` and the number of cells at
   each level of the nest rather than per call, to see whether the row
-  count grows with depth.
+  count grows with depth. It does not do so the way the shape
+  suggested: a counter that buckets the calls by column count saw only
+  columns one and zero, each small on its first entry and neither
+  reaching a thousand calls, so the specialization consumes the payload
+  column rather than adding one per level - the `Some(x)` at the bottom
+  closes the pattern. The recursion is therefore over one column that
+  is peeled a level at a time, which is linear in the type, and the
+  seconds are not in the row count either. That points back at the
+  work inside each call on a deeply nested type: `enum_variants`
+  (`:3175`), the `EnumType` copy (`:3176`), and `type_origin` or a
+  nominal lookup per call, each of which may walk the whole nesting.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
