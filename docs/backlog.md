@@ -901,6 +901,17 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. `perf script` on the twenty-level nest shows the
+  samples landing in the dynamic linker, `ld-linux-x86-64.so.2`, frame
+  after frame, with almost nothing in the compiler itself. That is either
+  the real answer - the cost is in lazy symbol binding or a loader path
+  that a deep input somehow repeats - or an artifact of profiling the
+  sanitized debug build, whose runtime makes loader-like calls of its
+  own. Separate the two before chasing it: build the release with debug
+  symbols and profile that, then check whether the loader still owns the
+  samples. The release already shows the same growth (26 ms at twelve
+  levels to 1,202 ms at twenty), so if it is an artifact the release
+  profile will name a compiler frame instead.
   costs milliseconds. The row builder is a lambda, not a method
   (`unguarded_rows` at `types_expr.cc:2800`, called at `:2885`,
   `:2914`, and `:2934`), and it runs fewer than fifty times - at most
