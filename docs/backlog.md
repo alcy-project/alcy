@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. There is a documented loop for this and it was
+  not being used: `compiler/docs/performance.md` describes
+  `tools/perf.py` and says the deciding number is retired
+  instructions (`perf stat -e instructions`), which is the same on
+  every run, while wall clock only answers whether a change helped. It
+  also records that the compiler already carries a `perf_symbols` GN
+  argument for names. The next step is to stop timing with a steady
+  clock and run the loop the guide gives: `tools/perf.py scale` on the
+  nested pattern shape, watch instructions per level grow faster than
+  the input, then `tools/perf.py ab` once a change is made.
   costs milliseconds. The profile does name a place, once sorted by
   symbol: three addresses within a few dozen bytes of each other,
   `0x5212ce9`, `0x5212f0d`, and `0x5212dec`, hold about 38 percent of
