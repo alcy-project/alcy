@@ -901,6 +901,18 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. Confirmed at `types.cc:2335`: inside
+  `infer_from_payload_args` the argument is typed with
+  `check_expr(module, args[i], nullptr)` just to learn its type, and then
+  the caller types the same argument again against the payload
+  (`types_expr.cc:1665`). That is two walks per level and the doubling.
+  The sound fix is to cache the inference, not the argument's type:
+  `infer_from_payload_args`'s inputs are the call expression and the
+  instance, both fixed for a given request, so remembering its returned
+  instance per call expression and instantiation is safe - the same
+  shape as `Checker::call_resolutions_`. Do that, then measure with
+  `perf stat -e instructions` and expect the twenty-level file near a
+  hundred and fifty million.
   costs milliseconds. The code is `types_expr.cc:1622` onward: a
   generic enum's constructor infers its instance from the argument
   (`infer_from_payload_args`, `:1635`), and then types the same argument
