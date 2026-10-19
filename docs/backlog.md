@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The tables do not explode: peak memory is 58.5,
+  59.0, and 58.8 MiB at twenty, twenty-two, and twenty-four levels on
+  the shallow-pattern file, flat while the time goes 119 ms to 1.15 s,
+  and the deep-pattern file is flat at 58.0 MiB too. So the growth
+  allocates nothing and touches no growing table, which leaves one shape:
+  a loop of constant size inside a function whose own count is flat,
+  run far more times than the program has nodes. Count loop iterations
+  rather than calls next - `unify`'s per-level recursion and the
+  constructor path's element loop are the first two - with a counter
+  that adds no behaviour.
   costs milliseconds. The instantiation is flat too: `instantiate_generic`
   (`types.cc:2357`) reaches a hundred and not two hundred at both
   depths. Every operation now has a flat count while the instructions
