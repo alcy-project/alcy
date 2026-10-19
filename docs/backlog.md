@@ -5,7 +5,15 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
-- [ ] A deeply nested generic type costs explosive compile time. A
+- [x] A deeply nested generic type costs explosive compile time. A
+  Resolved in 29933019: a generic call resolution is cached per call
+  expression and instance (`Checker::call_resolutions_`,
+  `compiler/analyzer/checker.h`), so resolving one level no longer
+  re-resolves every level below it. The nest is linear now: at depths
+  12/16/20 the debug build went from 231/1,082/15,900 ms to 20/27/91 ms
+  and the release build from 85/1,202 ms to 29/94 ms. Regression case:
+  `exe/cases/exe-nested-generic-depth/`. The analysis below is kept for
+  the record.
   value of a type like `Option<Option<...<E>...>>` nested twenty
   levels deep is checked in about a second and twenty-eight levels
   past a minute, where `alcy check` had to be killed. Nothing in the
