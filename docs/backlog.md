@@ -901,6 +901,15 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The documented symbol recipe is
+  `--build-subdir=opt --gn-arg=perf_symbols=true` (`compiler/docs/build.md:26`,
+  `performance.md:72`), and `out/opt/args.gn` does record
+  `perf_symbols = true` - but `nm -C out/opt/alcy` still lists nothing, so a
+  strip comes from somewhere other than the `perf_symbols` branch in
+  `build/config/compiler/BUILD.gn:251`. Grep the link configuration for
+  every `--strip` site and make the build keep the table, then profile
+  `nm20` to name the frame; that is still the shortest path to the
+  doubling.
   costs milliseconds. Handoff for the tuple-variant branch
   (`types_expr.cc` around the `PathValue::Kind::TupleVariant` case, which
   moved with the rebase - grep it, do not trust a remembered line): the
