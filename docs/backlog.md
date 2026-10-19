@@ -901,6 +901,14 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. A caution for the next instrument: `resolve_variant_path`
+  (`types.cc:7539`) begins with a line that appears three times in the
+  file (`if (node.segments.empty())`), so a bare body line is not a
+  unique anchor - take the signature and the first body line together,
+  or the edit refuses and nothing is measured. `generic_instance_for`
+  is still unmeasured. Both are the last two calls left in the tuple
+  case, and if both turn out flat the exponential is a loop that grows
+  with the nesting rather than a call.
   costs milliseconds. `bind_pattern` is called about seven hundred times at
   both twenty and twenty-four levels - a flat count - yet disabling it
   removes the doubling, so a single call must do work exponential in the
