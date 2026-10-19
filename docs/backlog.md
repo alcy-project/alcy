@@ -1430,12 +1430,15 @@ replaced. The foundations are in `roadmap.md`.
   does: `exe-closure-capture-drop` walks a bound closure and a `fn()`
   parameter that both capture a heap string under the sanitizer, and
   the witness in `exe-method-infer` can hold a `String` again.
-- [ ] The symbol a summary call names: `lower_summary_call` declares an
-  external qualified by the package (`dep::double`) under the C calling
-  convention, which no artifact defines, so a dependent's build stops at
-  the linker where its check resolved. Multi-object linking wants the
-  mangled symbol the dependency's own build writes, and the external
-  linkage its runtime needs.
+- [x] The symbol a summary call names, and the linkage that needs: each
+  summary row carries the mangled symbol the library's own build writes
+  (the emitter's encoding, computed where the artifact is written), the
+  dependent's call declares it in the external table, and the target
+  links the dependency's object. The runtime's entry points were already
+  `linkonce_odr`; the two argument globals are discardable now too, so
+  two objects in one image keep one copy. A package whose library has a
+  summary resolves, links, and runs with the library's sources gone
+  (`dependencies_test` builds both and runs the binary).
 - [ ] A summary carries no struct field names: a signature over a
   nominal is left out of the surface a dependent spells, because a
   literal or a field read would need names the `SUMMARY` section does
