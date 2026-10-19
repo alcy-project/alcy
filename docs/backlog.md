@@ -898,7 +898,16 @@ replaced. The foundations are in `roadmap.md`.
   call grows with the nesting. Time the calls next, not count them:
   accumulate the interval between consecutive entries with a steady
   clock, bucketed by column count, and the bucket that eats the time
-  names the operation.
+  names the operation. The calls are few: no column count reaches five
+  hundred entries, so the walk makes only tens of calls over the whole
+  nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. One call on a deeply nested head type must be
+  doing work proportional to the nesting. The candidates inside the
+  enum case are `enum_variants(head)` (`types_expr.cc:3175`) and the
+  `EnumType` lookup (`:3176`); `tag_of` and `as_enum` are constant time,
+  so a lookup that resolves or instantiates the head is what is left -
+  the same shape as the call-resolution cost already fixed, and the
+  same remedy applies if so.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
