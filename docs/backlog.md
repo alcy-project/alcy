@@ -856,7 +856,20 @@ replaced. The foundations are in `roadmap.md`.
   cost follows the type structure, and the backlog's note that a chain
   without `|` hangs the same way fits. The call count stays under ten
   thousand only because wildcard rows return early. Read the nominal
-  case past `:3145` next.
+  case past `:3145` next. The enum case is the doubling:
+  `case ir::TypeTag::Enum` (`types_expr.cc:3173`) walks every variant
+  (`:3181`), appends that variant's payload columns, specializes the
+  rows for it, and calls itself once per variant (`:3221`). An
+  `Option<...>` level has two variants, so every level turns one call
+  into two and the walk doubles per level of the type; the wildcard-row
+  early return only trims the branches that cannot matter, which is why
+  the raw call count stays under ten thousand while the work still
+  grows steeply. `Never`, enum, and `I1` together with the wildcard
+  rule are the standard matrix algorithm, and the fix is to stop
+  re-deriving a specialization both a Some arm and a wildcard arm
+  already agree on - either compare the specialized row sets against a
+  cached answer keyed on the type list and the row matrix, or rule out
+  the redundant variant first.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
