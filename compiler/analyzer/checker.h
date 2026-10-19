@@ -150,6 +150,15 @@ class Checker {
   // wrapped where it is driven, in `check_package`.
   debug::Profiler* profiler = nullptr;
   ir::StorageBuilder builder;
+  // A generic call resolves to one signature per call expression and
+  // instantiation. Resolving it again is what makes a nest of calls
+  // double in cost, so the answer is kept.
+  struct CallResolution {
+    u32 expr = 0;
+    u32 inst = 0;
+    const CheckedModule::FnSig* sig = nullptr;
+  };
+  std::vector<CallResolution> call_resolutions_;
   // The compilation's one interner; a second one here would mint storage ids
   // that lowering and codegen could not resolve.
   ir::SymbolTable& interner;

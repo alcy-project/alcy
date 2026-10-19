@@ -1512,8 +1512,21 @@ ir::TypeIdx Checker::check_call(u32 module,
   }
   if (resolved.kind == PathValue::Kind::GenericFn) {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    const CheckedModule::FnSig* fn = resolve_generic_fn(
-        module, resolved.generic_item, call.args, call.type_args, span);
+    const CheckedModule::FnSig* fn = nullptr;
+    for (usize i = call_resolutions_.size(); i > 0; --i) {
+      const CallResolution& entry = call_resolutions_[i - 1];
+      if (entry.expr == expr.idx && entry.inst == cur_inst) {
+        fn = entry.sig;
+        break;
+      }
+    }
+    if (fn == nullptr) {
+      fn = resolve_generic_fn(module, resolved.generic_item, call.args,
+                              call.type_args, span);
+      if (fn != nullptr) {
+        call_resolutions_.push_back(CallResolution{expr.idx, cur_inst, fn});
+      }
+    }
     if (fn == nullptr) {
       for (ast::ExprIdx arg : call.args) {
         check_expr(module, arg, nullptr);
