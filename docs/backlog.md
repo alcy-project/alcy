@@ -815,6 +815,11 @@ replaced. The foundations are in `roadmap.md`.
   with no `|` anywhere - `Some(Some(... E::A ...))` and a wildcard
   arm - hangs the same way, so the cost is not the or-pattern
   expansion. Reproduce with `alcy check` on a generated file.
+  Confirmed on the release build with `Option::Some(...(E::A | E::B)...)`
+  over `Option::Some(...(E::A)...)` and a wildcard arm: a 657-byte file
+  at twenty levels takes 160 ms and a 769-byte one at twenty-four takes
+  1,901 ms, so the factor per level is about 1.85 in a small input - the
+  cost is the cover walk, not the parse. Start from the same shape.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
