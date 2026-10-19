@@ -901,6 +901,14 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The documented metric settles the shape exactly:
+  `perf stat -e instructions` on the 657-byte file reports 1,861,195,838
+  retired instructions at twenty levels, 7,086,514,185 at twenty-two,
+  and 27,978,134,924 at twenty-four - a factor of about 1.95 per level,
+  the clean doubling the wall clock only suggested. Two billion
+  instructions for a few hundred bytes is the whole bug in one number,
+  and the metric is stable, so a fix can be shown with
+  `tools/perf.py ab` instead of argued from timings.
   costs milliseconds. There is a documented loop for this and it was
   not being used: `compiler/docs/performance.md` describes
   `tools/perf.py` and says the deciding number is retired
