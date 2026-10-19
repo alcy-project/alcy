@@ -901,6 +901,18 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The decisive test is a shallow pattern against the
+  same deep type - `match Option::Some(...(E::A)...) { _ => 1 }` - and it
+  is exponential by itself: 1,113,833,814, 4,108,012,025, and
+  16,078,527,379 instructions at twenty, twenty-two, and twenty-four
+  levels, a factor of about 1.95 per level. So the growth is in typing
+  the `Option::Some(...)` constructor chain, not in the pattern walk at
+  all, and `bind_pattern`'s apparent role was the scopes-empty behaviour
+  change already noted. This is the same family as the resolution cost
+  that was fixed (`Checker::call_resolutions_`) on a different path: the
+  constructor chain does not reach `resolve_generic_fn` (its count stayed
+  under four hundred), so the cache does not cover it. Find what the
+  constructor path re-derives per level and cache that the same way.
   costs milliseconds. The scope scans are real and they are fifteen
   mutation sites: `scopes.emplace_back()` and `scopes.pop_back()` at
   `types.cc:4640/4644`, `7735/7782`, and `7927/7939`, and at
