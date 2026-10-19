@@ -16,6 +16,23 @@
 
 namespace source {
 
+namespace {
+
+// A UTF-8 byte order mark is an encoding signature, not text: a source
+// that opens with one is the same program without it. Every reader gets
+// the bytes after the three-byte sign, so a leading token starts at
+// offset zero and the line and column arithmetic agrees with what an
+// editor shows.
+std::string_view without_bom(std::string_view bytes) {
+  if (bytes.size() >= 3 && static_cast<u8>(bytes[0]) == 0xEF &&
+      static_cast<u8>(bytes[1]) == 0xBB && static_cast<u8>(bytes[2]) == 0xBF) {
+    return bytes.substr(3);
+  }
+  return bytes;
+}
+
+}  // namespace
+
 base::Result<FileId, SourceError> SourceManager::load(std::string_view path) {
   const auto known = by_name_.find(path);
   if (known != by_name_.end()) {
@@ -76,14 +93,15 @@ std::optional<std::string_view> SourceManager::bytes(FileId id) const {
   }
   const Entry& entry = entries_[id];
   if (entry.virtual_index != NO_VIRTUAL) {
-    return std::string_view{virtuals_[entry.virtual_index]};
+    return without_bom(std::string_view{virtuals_[entry.virtual_index]});
   }
   if (!entry.mapping.is_mapped()) {
     // A loaded file of zero bytes maps nothing; it is still known.
     return std::string_view{};
   }
-  return std::string_view{reinterpret_cast<const char*>(entry.mapping.data()),
-                          entry.mapping.size()};
+  return without_bom(
+      std::string_view{reinterpret_cast<const char*>(entry.mapping.data()),
+                       entry.mapping.size()});
 }
 
 std::optional<std::string_view> SourceManager::name(FileId id) const {

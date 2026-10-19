@@ -36,6 +36,27 @@ TEST_CASE("A virtual source is readable and named") {
   CHECK(sources.file_count() == 1);
 }
 
+TEST_CASE("A leading byte order mark is not part of the source") {
+  SourceManager sources;
+  // The sign says how the bytes are encoded, not what the program is, so
+  // the view starts after it and offsets and columns stay the editor's.
+  // The literal is split so a hex escape never swallows the next letter.
+  const FileId id = sources.add_virtual("bom.al",
+                                        "\xEF\xBB\xBF"
+                                        "fn main() {}\n");
+  CHECK(sources.bytes(id).value_or("") == "fn main() {}\n");
+  // Only the opening is a signature; one later is ordinary text and
+  // stays for the lexer to reject.
+  const FileId mid = sources.add_virtual("mid.al",
+                                         "fn"
+                                         "\xEF\xBB\xBF"
+                                         "x() {}\n");
+  CHECK(sources.bytes(mid).value_or("") ==
+        "fn"
+        "\xEF\xBB\xBF"
+        "x() {}\n");
+}
+
 TEST_CASE("A virtual source owns its bytes") {
   SourceManager sources;
   {

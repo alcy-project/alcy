@@ -8,6 +8,10 @@ are rejected with guidance diagnostics.
 
 ## Lexical notes
 
+- A source file may open with a UTF-8 byte order mark (`EF BB BF`). It
+  is an encoding signature rather than text, so it is ignored: the file
+  is the same program with or without it. The same code point anywhere
+  else is an invalid character.
 - `..`, `..=`, `..<` are single tokens and open a range; either
   endpoint may be absent, and an absent one is unbounded (`1..`,
   `..<3`, `..`). A range that names an end says how it is bound:
