@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. With the documented metric in hand the bisect is
+  cheap: disable one suspected pass, rebuild, and read the instruction
+  count. The first experiment is the cover walk - return true from
+  `patterns_cover` (its signature spans `types_expr.cc:3053`-3054, so
+  the early return goes after the opening brace, not on the parameter
+  line) and measure. If the count falls to linear, the cover walk is
+  the doubling despite its seventy calls; if it does not move, the walk
+  is out for good and the next pass is disabled. Do it with the release
+  build and `perf stat -e instructions`, and revert the hack either
+  way.
   costs milliseconds. The documented metric settles the shape exactly:
   `perf stat -e instructions` on the 657-byte file reports 1,861,195,838
   retired instructions at twenty levels, 7,086,514,185 at twenty-two,
