@@ -472,7 +472,17 @@ replaced. The foundations are in `roadmap.md`.
   stack in the checker (push the expression at the head of
   `check_expr`, pop on the way out) and print it when one hot expression
   is entered the second and third time. The guess-and-read loop has run
-  its course; only the true stack will name the caller. The key must carry
+  its course; only the true stack will name the caller. It does. The
+  second entry of the hot `Path` (expression four) arrives under a
+  chain of sixteen `Cast`s (`36, 34, 32, ..., 8, 6`, all kind 10), so
+  the top-level expression is one sixteen-link cast chain and the path
+  is its base; every level of the chain re-walks the level below it.
+  The chain's own root is checked thousands of times while the
+  statement that owns it is not, so one statement check walks its
+  value expression ten or more times. That is the loop left to find:
+  read `check_stmt` (`types_expr.cc:4229`) and its statement-value
+  helper for a path that checks the statement's expression more than
+  once. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
