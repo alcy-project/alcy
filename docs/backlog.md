@@ -5,6 +5,19 @@ replaced. The foundations are in `roadmap.md`.
 
 ## Open
 
+- [x] A nested enum payload laid its inner type out twice per level.
+  `enum_payload_area` measured each field for the payload's alignment
+  and then called `fields_layout`, which measured every field again, so
+  `alcy check` doubled per `Option` level: a chain nested twenty-four
+  deep cost 13.9B instructions against 102M for an empty `main`, and
+  the check is linear now. `fields_layout` already returns the
+  strictest alignment beside the size, so one call per variant is
+  enough. Regression case: `e2e/cases/ok-nested-enum-layout/`.
+- [x] A struct field and an enum variant could repeat a name.
+  The declaration site scans its members before a generic form interns
+  per use, so `enum E<T>` is covered, and reports the second
+  declaration. Cases: `e2e/cases/err-duplicate-field/` and
+  `e2e/cases/err-duplicate-variant/`.
 - [x] A deeply nested generic type costs explosive compile time. A
   Resolved in 29933019: a generic call resolution is cached per call
   expression and instance (`Checker::call_resolutions_`,
@@ -545,7 +558,7 @@ replaced. The foundations are in `roadmap.md`.
   reads the same wrong type - moving it ahead of the spec-call target
   changes nothing - so the analyzer recorded an integer for the range
   expression, and `check_index` then took the element path. The index
-  is only mis-typed when the index expression is a method call's
+  is only mistyped when the index expression is a method call's
   receiver, so the next step is the receiver check in
   `check_method_call`, which looks up the method before the index
   expression is typed. The analyzer does record the call: `record_call`
