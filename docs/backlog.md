@@ -463,7 +463,16 @@ replaced. The foundations are in `roadmap.md`.
   `:1022`, which is the code to read for a per-placeholder pass. Note
   the recognizers: `is_core_fmt` (`:715`) and `is_io_print` (`:724`)
   cover `write`/`format` and `print`/`println`, so a `println` of the
-  wrapper reaches this path. The key must carry
+  wrapper reaches this path. They are clean too: `check_fmt_write`
+  types each value argument once, in one loop over the arguments
+  (`types_expr.cc:1038`), and `verify_fmt_literal` (`:1045`) reads the
+  types it collected rather than re-checking the arguments. Fifteen
+  candidates are now read away down to the statement level, so the
+  remaining instrument has to show the exact nest: keep a real parent
+  stack in the checker (push the expression at the head of
+  `check_expr`, pop on the way out) and print it when one hot expression
+  is entered the second and third time. The guess-and-read loop has run
+  its course; only the true stack will name the caller. The key must carry
   the expected type as well as the expression and the instance: a
   memo that ignores it skips the unification the expected type asks
   for and would accept a mismatch, and one that caches only the
