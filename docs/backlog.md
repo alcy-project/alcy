@@ -869,7 +869,17 @@ replaced. The foundations are in `roadmap.md`.
   re-deriving a specialization both a Some arm and a wildcard arm
   already agree on - either compare the specialized row sets against a
   cached answer keyed on the type list and the row matrix, or rule out
-  the redundant variant first.
+  the redundant variant first. The construction is written out at
+  `:3189`: a wildcard row is copied into every variant as `arity`
+  wildcards (`:3192`), a row naming another variant is dropped
+  (`:3201`), and a matching row contributes its fields. In the
+  reproducer that means the wildcard arm sits in both variants, and a
+  variant whose only row is the wildcard returns on the all-wildcard
+  scan (`:3090`) without recursing. That reads as linear, so the
+  doubling has to be rows that are not all-wildcards accumulating as
+  the levels go down. Measure `rows.size()` and the number of cells at
+  each level of the nest rather than per call, to see whether the row
+  count grows with depth.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
