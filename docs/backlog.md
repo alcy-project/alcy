@@ -907,7 +907,14 @@ replaced. The foundations are in `roadmap.md`.
   `EnumType` lookup (`:3176`); `tag_of` and `as_enum` are constant time,
   so a lookup that resolves or instantiates the head is what is left -
   the same shape as the call-resolution cost already fixed, and the
-  same remedy applies if so.
+  same remedy applies if so. The lookup chain is short:
+  `enum_variants` (`types_expr.cc:3037`) asks `nominal_decl(type,
+  ast::ItemKind::Enum)` (`:3038`) and returns the declaration's
+  variants, so `nominal_decl` (types_expr.cc:2983) is the
+  last place a per-call deep walk can hide. It is the same helper the
+  exhaustiveness work leaned on, so read it with the nesting in mind:
+  if it resolves the type through its origin or a structural
+  comparison each time, a nest pays for it once per variant per level.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
