@@ -901,6 +901,17 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. Handoff for the tuple-variant branch
+  (`types_expr.cc` around the `PathValue::Kind::TupleVariant` case, which
+  moved with the rebase - grep it, do not trust a remembered line): the
+  per-level work is `nominal_index`, `generic_find`, the inference,
+  `push_generic_scope`, `variant_payloads`, and the argument's `unify`.
+  All the call counts are flat, so measure iterations inside them, not
+  calls: `variant_payloads` over the variant's fields and whatever
+  `push_generic_scope` or `type_origin` walks. A symbolized profile
+  remains the fastest way to name it - the `perf_symbols` GN argument
+  exists for exactly this - so wiring that up is worth more than another
+  counter.
   costs milliseconds. The cache was written and it changed nothing: with
   the inference remembered per call expression and instantiation the
   counts are 1,112,963,399, 4,108,665,978, and 16,078,486,237 against
