@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. No pattern node is revisited: a per-index counter
+  at the head of `bind_pattern` never reaches a thousand for any node,
+  so the seven hundred calls are spread over distinct nodes and the
+  doubling is inside a single call, not from re-descending a node. What
+  the tuple case calls on a deeply nested type is the suspect list:
+  `resolve_variant_path` (`types_expr.cc:132`), `unify` (`:146`),
+  `variant_payloads` (`:147` and `:162`), and `generic_instance_for`
+  (`:151`). One of them must cost `2^depth` for one nested type. Count
+  and time those four the way the walk was timed, or bisect them one at
+  a time, before changing anything.
   costs milliseconds. Its body opens with one case per pattern kind
   (`types_expr.cc:113`: wildcard, identifier, literal, tuple) and the
   tuple case resolves its variant, unifies, asks for the payloads, and
