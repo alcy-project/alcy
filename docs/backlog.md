@@ -901,6 +901,15 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. Its body opens with one case per pattern kind
+  (`types_expr.cc:113`: wildcard, identifier, literal, tuple) and the
+  tuple case resolves its variant, unifies, asks for the payloads, and
+  walks the elements - a single recursion per child, so the doubling is
+  not visible from the shape alone. Count visits per pattern index the
+  way the expression walk was counted earlier: put a per-index counter
+  at the head of `bind_pattern` and print the first index that crosses
+  a thousand, with its kind. That name is the node being re-descended,
+  and the caller that reaches it twice per visit is the fix.
   costs milliseconds. The bisect ran and found it: with `bind_pattern`
   returning false at its first line (`types_expr.cc:107`, `return
   false;` before its `const bool comp` line) the counts are 147,936,572,
