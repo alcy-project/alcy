@@ -818,7 +818,11 @@ replaced. The foundations are in `roadmap.md`.
   Any standard library growth showed up as a gate failure rather than
   a number; find the deep path, or budget the stack, before the
   headroom runs out the same way.
-- [ ] A deeply nested pattern hangs the cover walk: a `match` arm of
+- [x] A deeply nested pattern hangs the cover walk: a `match` arm of
+  (Resolved: the nested enum type was laid out twice per level, which is
+  the whole cost, and the cover walk is linear; both shapes below check in
+  245M instructions at sixty-four levels. The analysis is kept for the
+  record.)
   the form `Option::Some(Option::Some(... (E::A | E::B) ...))` with a
   wildcard arm costs about a second at twenty levels of nesting and
   more than a hundred at twenty-eight, where `alcy check` had to be
