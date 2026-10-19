@@ -901,6 +901,14 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The first attempt at bisecting
+  `variant_payloads` (`types.cc:7609`) inserted the early return on the
+  signature line - a mistake repeated from the earlier attempt - so it
+  did not compile and the printed counts were the previous binary's.
+  The body's first line is `if (is_error(enum_type) || resolved.enom ==
+  nullptr) {` at `:7612`; put the `return {};` before that, never on
+  the parameter line. Then measure and revert. The same care applies to
+  `generic_instance_for` and `resolve_variant_path`.
   costs milliseconds. No pattern node is revisited: a per-index counter
   at the head of `bind_pattern` never reaches a thousand for any node,
   so the seven hundred calls are spread over distinct nodes and the
