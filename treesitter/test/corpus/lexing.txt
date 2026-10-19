@@ -411,3 +411,23 @@ fn f(c: bool) -> i32 {
         (block
           (return_expression
             (integer)))))))
+
+================================================================================
+A byte order mark opens a source
+================================================================================
+
+﻿fn main() -> i32 {
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    name: (identifier)
+    parameters: (parameters)
+    return_type: (return_type
+      type: (primitive_type))
+    body: (block
+      value: (return_expression
+        value: (integer)))))

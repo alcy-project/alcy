@@ -38,6 +38,12 @@ module.exports = grammar({
   name: 'alcy',
 
   extras: $ => [
+    // The compiler drops a byte order mark at the very start of a source
+    // and refuses one anywhere else (grammar.md, "Lexical notes"). The
+    // editor grammar takes it anywhere rather than growing a scanner for
+    // the first three bytes, which keeps the two agreeing on every file
+    // the compiler accepts.
+    /\uFEFF/,
     /\s/,
     $.line_comment,
     $.block_comment,

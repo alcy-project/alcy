@@ -5535,6 +5535,10 @@
   "extras": [
     {
       "type": "PATTERN",
+      "value": "\\uFEFF"
+    },
+    {
+      "type": "PATTERN",
       "value": "\\s"
     },
     {
