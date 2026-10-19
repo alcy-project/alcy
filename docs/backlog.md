@@ -901,6 +901,21 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The symbols are resolved at last, and they are not
+  in the type checker: the hot frames are `ir::is_float_type(ir::TypeTag)`
+  at 16 percent, `std::optional<comp::IrRunError>::operator=` at 11, and
+  `comp::Interpreter::fail` at 8, all in the comp interpreter
+  (`compiler/comp/ir_interpreter.cc`, `compiler/ir/type_util.h`). The
+  nested constructor chain is being **evaluated** at compile time, and
+  `Interpreter::fail` being that hot says the evaluation is failing all
+  the way down, level by level. The doubling is therefore comp-time
+  evaluation of the chain, not typing, and the fix is on that side: stop
+  re-evaluating each level, or memoise the interpreter's per-node result.
+  The recipe that made this readable: build with
+  `--build-subdir=opt --gn-arg=perf_symbols=true`, profile the kept
+  unstripped binary at `out/opt/exe.unstripped/alcy`
+  (`build/toolchains/gcc_clang.gni:308`), and resolve the addresses with
+  `addr2line` against that same binary.
   costs milliseconds. The documented symbol recipe is
   `--build-subdir=opt --gn-arg=perf_symbols=true` (`compiler/docs/build.md:26`,
   `performance.md:72`), and `out/opt/args.gn` does record
