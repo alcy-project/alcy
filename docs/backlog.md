@@ -901,6 +901,14 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. A bucket of the intervals by expression kind makes
+  the shape of it clear: the first five thousand entries cost under a
+  millisecond in total, with `Path` (kind 1) and the nested call (kind
+  10) holding almost all of it, while the run takes a hundred
+  milliseconds and up - so the cost is in the last few thousand entries,
+  not spread evenly. The next print should come every thousand entries
+  and report the top kind bucket so the tail is visible, and the kind
+  that grows at the end is the case to open.
   costs milliseconds - about seventy microseconds per entry, since the
   whole run enters `check_expr` fewer than ten thousand times at every
   depth. Every count measured (resolution under four hundred, cover walk
