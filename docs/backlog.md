@@ -1451,6 +1451,20 @@ replaced. The foundations are in `roadmap.md`.
   reads a field across the boundary. `dependencies_test` does all three
   with the library's sources gone. A signature that *names* a nominal
   is still left out, and the reason is the item below.
+- [ ] A summary call passes what the callee takes: a call into a
+  summary is declared in the external table under the C calling
+  convention, and that convention passes an aggregate as a pointer of
+  its own shape where the library's own alcy function takes the shape
+  the caller has, so a nominal-typed parameter cannot be called yet (the
+  emitter's LLVM assertion catches it, and a field argument taught the
+  call to hand over the value rather than its place). Spelling a
+  signature through a copy is refused for the same reason: the row is
+  left out rather than passed a shape the other side does not take. A
+  declaration as a bodyless foreign function with the caller's own types
+  was tried: a direct call works, but the binary then lowers prelude
+  code the extern never reached, and `core/string.al`'s latent borrow
+  error (`ret s` from a local at `core/string.al:133`) fails the build,
+  so that route wants the prelude's reach answered first.
 - [ ] One nominal as several type nodes: the checker can intern a
   second type node over a declaration's own struct or enum shape (a
   `String` node beside the declaration's), and `types_equal` compares
@@ -1653,13 +1667,29 @@ replaced. The foundations are in `roadmap.md`.
   skip it; the spec says nothing, so this wants a decision before the
   lexer learns the three bytes.
   Resolved: the source view drops a leading `EF BB BF`, so the offsets
-  every reader sees are the text's own; the grammar's lexical notes
-  record the decision. A mark anywhere else stays an invalid character.
+  every reader sees are the text's own and a file with the mark and one
+  without are the same program; the grammar's lexical notes record the
+  decision. The mark stays an invalid character anywhere else.
+- [x] A struct kept two fields under one name and an enum two variants
+  under one: nothing at the declaration checked, so a struct literal was
+  asked for both fields and an access reached the first, while a second
+  variant was unreachable. Both declarations reject a repeated name now,
+  naming it, and the surviving member is the first
+  (`err-duplicate-field`, `err-duplicate-variant`).
 - [x] Qualified generic calls: `helper::id::<i32>(x)` answered
   "Unresolved value 'id'" because neither module-qualified resolution
   branch reached the generic-function lookup. Both do now, with the
   reachability check a qualified name owes (`ok-qualified-generic-call`,
   `err-qualified-generic-private`).
+- [x] An associated call bound the owner's turbofish to the member: the
+  two-segment branch passed the whole path's arguments on, so
+  `Holder::<i32>::map_to(true)` pinned the member's first generic to
+  `i32` and refused the argument, and an owner with two parameters
+  reported a mismatch against the member's one written slot. A call's
+  arguments bind the member's own parameters now, the way a method
+  call's do, and the owner's turbofish stays the owner's
+  (`ok-assoc-fn-infer` pins the numeric and the differently-typed
+  call).
 - [x] An associated function's turbofish names its own arguments: the
   parser records which segment the turbofish followed and the resolver
   reads it, so `P::id::<i32>(x)` instantiates the member while
