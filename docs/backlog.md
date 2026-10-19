@@ -1574,6 +1574,14 @@ replaced. The foundations are in `roadmap.md`.
   `too-many-locals` provokes the local-cap report through release
   register counts, so it wants rechecking when regalloc-adjacent work
   lands.
+- [x] A moved-from owning closure was still callable: `h := g` handed
+  the environment to `h`, but `g()` still passed `g`'s own storage as
+  the environment and read what `h`'s drop freed - the byte it printed
+  changed from run to run. The borrow pass reports a store whose value
+  is the address of a moved place, and a closure that owns nothing
+  stops being moved at all: its captures are borrows, so a second
+  handle shares the one loan (ADR-0064). `err-closure-move-reuse`
+  holds it.
 - [ ] Owning function types (ADR-0075) beyond parameters and returns:
   a method's `fn(...)` parameter infers from its arguments, a turbofish
   spells only the parameters a declaration writes, and the return
