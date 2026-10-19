@@ -157,6 +157,7 @@ struct Parsed {
   std::vector<base::Digest128> file_hashes;
   std::vector<LoadedIr::AddrNameEntry> addr_names;
   std::vector<SummaryEntry> summary;
+  std::vector<str::StringPoolId> summary_field_names;
   std::vector<diag::Span> spans;
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
@@ -902,13 +903,18 @@ bool read_addr_names(Parsed& parsed, std::span<const u8> payload) {
 }
 
 bool read_summary(Parsed& parsed, std::span<const u8> payload) {
-  const u32 count = record_count(payload.size(), 20);
-  if (count == NONE) {
+  if (payload.size() < 4) {
     return false;
   }
   Cursor cursor(payload);
-  u32 read = 0;
-  if (!cursor.read_u32(read) || read != count) {
+  u32 count = 0;
+  if (!cursor.read_u32(count)) {
+    return false;
+  }
+  // The rows are twenty bytes each; the field runs below are optional,
+  // so a payload that ends after the rows is one from before them.
+  const usize rows_end = 4 + static_cast<usize>(count) * 20;
+  if (payload.size() < rows_end) {
     return false;
   }
   for (u32 i = 0; i < count; ++i) {
@@ -957,6 +963,59 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
         .kind = summary_kind,
         .needs_body = (flags & 0x01u) != 0,
     });
+  }
+  if (cursor.at() == payload.size()) {
+    return true;
+  }
+  u32 groups = 0;
+  if (!cursor.read_u32(groups)) {
+    return false;
+  }
+  struct Run {
+    u32 row;
+    u32 first;
+    u32 count;
+  };
+  std::vector<Run> runs;
+  runs.reserve(groups);
+  for (u32 i = 0; i < groups; ++i) {
+    u32 row = 0;
+    u32 first = 0;
+    u32 length = 0;
+    if (!cursor.read_u32(row) || !cursor.read_u32(first) ||
+        !cursor.read_u32(length)) {
+      return false;
+    }
+    if (row >= parsed.summary.size()) {
+      return false;
+    }
+    runs.push_back(Run{row, first, length});
+  }
+  u32 name_count = 0;
+  if (!cursor.read_u32(name_count)) {
+    return false;
+  }
+  parsed.summary_field_names.reserve(name_count);
+  for (u32 i = 0; i < name_count; ++i) {
+    u32 index = 0;
+    if (!cursor.read_u32(index)) {
+      return false;
+    }
+    if (index != NONE && index >= parsed.string_ids.size()) {
+      return false;
+    }
+    parsed.summary_field_names.push_back(string_id(parsed, index));
+  }
+  if (cursor.at() != payload.size()) {
+    return false;
+  }
+  for (const Run& run : runs) {
+    if (static_cast<usize>(run.first) + run.count >
+        parsed.summary_field_names.size()) {
+      return false;
+    }
+    parsed.summary[run.row].fields = std::span<const str::StringPoolId>(
+        parsed.summary_field_names.data() + run.first, run.count);
   }
   return true;
 }
@@ -1169,6 +1228,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   loaded.prelude_functions = parsed.prelude_functions;
   loaded.identity = parsed.identity;
   loaded.summary = std::move(parsed.summary);
+  loaded.summary_field_names = std::move(parsed.summary_field_names);
   loaded.width = parsed.width;
   loaded.compiler_version = std::move(parsed.compiler_version);
   return base::make_ok(std::move(loaded));

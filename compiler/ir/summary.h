@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <span>
+
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -38,6 +40,12 @@ struct SummaryEntry {
   // The symbol the item's code is written under, so a dependent calls
   // it by the name the library's own artifact exports.
   str::StringPoolId symbol = str::INVALID_STRING_POOL_ID;
+  // The names a nominal row's declaration carries, in declaration
+  // order: a struct's fields. The vector backing them outlives the
+  // rows, and every other row leaves this empty. The default keeps
+  // every designated initializer of a row whole.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const str::StringPoolId> fields = {};
   SummaryKind kind = SummaryKind::Free;
   bool needs_body = false;
 };

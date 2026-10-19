@@ -272,6 +272,9 @@ class Serializer {
       collect_pool_id(entry.name, offsets);
       collect_pool_id(entry.path, offsets);
       collect_pool_id(entry.symbol, offsets);
+      for (const str::StringPoolId field : entry.fields) {
+        collect_pool_id(field, offsets);
+      }
     }
     std::sort(offsets.begin(), offsets.end());
     offsets.erase(std::unique(offsets.begin(), offsets.end()), offsets.end());
@@ -605,6 +608,37 @@ class Serializer {
       out.put_u8(static_cast<u8>(entry.kind));
       out.put_u8(static_cast<u8>(entry.needs_body ? 1u : 0u));
       out.zeros(2);
+    }
+    // The field names each nominal row declares, one run per row. A
+    // payload that ends here is one from before the runs existed.
+    u32 groups = 0;
+    u32 names = 0;
+    for (const SummaryEntry& entry : summary_) {
+      if (!entry.fields.empty()) {
+        ++groups;
+        names += static_cast<u32>(entry.fields.size());
+      }
+    }
+    if (groups == 0) {
+      return out;
+    }
+    out.put_u32(groups);
+    u32 first = 0;
+    for (usize i = 0; i < summary_.size(); ++i) {
+      const SummaryEntry& entry = summary_[i];
+      if (entry.fields.empty()) {
+        continue;
+      }
+      out.put_u32(static_cast<u32>(i));
+      out.put_u32(first);
+      out.put_u32(static_cast<u32>(entry.fields.size()));
+      first += static_cast<u32>(entry.fields.size());
+    }
+    out.put_u32(names);
+    for (const SummaryEntry& entry : summary_) {
+      for (const str::StringPoolId field : entry.fields) {
+        out.put_u32(string_index(field));
+      }
     }
     return out;
   }

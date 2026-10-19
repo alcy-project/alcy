@@ -306,6 +306,8 @@ TEST_CASE("The reader hands back the identity the writer computed") {
 TEST_CASE("A summary section reads back the package's surface") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
+  const std::vector<str::StringPoolId> string_fields{strings.intern("data"),
+                                                     strings.intern("len")};
   const std::array<SummaryEntry, 3> summary{
       SummaryEntry{.function = FunctionIdx(0),
                    .name = strings.intern("main"),
@@ -320,6 +322,7 @@ TEST_CASE("A summary section reads back the package's surface") {
       SummaryEntry{.function = FunctionIdx(3),
                    .name = strings.intern("String"),
                    .path = strings.intern("string"),
+                   .fields = string_fields,
                    .kind = SummaryKind::Struct},
   };
   const std::vector<u8> bytes =
@@ -360,6 +363,16 @@ TEST_CASE("A summary section reads back the package's surface") {
   CHECK(package.strings->get(package.summary[2].name) == "String");
   CHECK(package.summary[2].kind == SummaryKind::Struct);
   CHECK_FALSE(package.summary[2].needs_body);
+  // A struct row carries the names its declaration's fields go by, in
+  // declaration order.
+  CHECK(package.summary[2].fields.size() == 2);
+  if (package.summary[2].fields.size() == 2) {
+    CHECK(package.strings->get(package.summary[2].fields[0]) == "data");
+    CHECK(package.strings->get(package.summary[2].fields[1]) == "len");
+  }
+  // Every row without fields keeps the section free of runs.
+  CHECK(package.summary[0].fields.empty());
+  CHECK(package.summary[1].fields.empty());
 
   // Reading and writing again produces the bytes it read, summary and
   // all: a dependent that reads and forwards keeps the surface.

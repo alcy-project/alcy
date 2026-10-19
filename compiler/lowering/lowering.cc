@@ -1659,7 +1659,8 @@ std::vector<ir::SummaryEntry> collect_summary(
     const analyzer::CheckedPackage& pkg,
     const ast::AstArena& ast,
     const std::vector<Lowerer::FnEntry>& fns,
-    ir::SymbolTable& strings) {
+    ir::SymbolTable& strings,
+    std::vector<std::vector<str::StringPoolId>>& summary_fields) {
   std::vector<ir::SummaryEntry> summary;
   for (const Lowerer::FnEntry& entry : fns) {
     if (entry.closure.is_valid() || !entry.item.is_valid() ||
@@ -1697,10 +1698,25 @@ std::vector<ir::SummaryEntry> collect_summary(
         const ir::TypeIdx type =
             generic ? ir::TypeIdx(base::INVALID_IDX)
                     : nominal_type_of(pkg, mod, item, is_struct);
+        // A struct's field names ride with the row: without them a
+        // dependent cannot spell the declaration's fields.
+        std::span<const str::StringPoolId> field_names;
+        if (is_struct) {
+          const ast::ItemStruct& strukt = node.payload.get<ast::ItemStruct>();
+          std::vector<str::StringPoolId> names;
+          names.reserve(strukt.fields.size());
+          for (const ast::ItemStructField& field : strukt.fields) {
+            names.push_back(strings.intern(field.name.name));
+          }
+          summary_fields.emplace_back(std::move(names));
+          field_names =
+              std::span<const str::StringPoolId>(summary_fields.back());
+        }
         summary.push_back(ir::SummaryEntry{
             .function = ir::FunctionIdx(type.idx),
             .name = strings.intern(name),
             .path = path,
+            .fields = field_names,
             .kind = is_struct ? ir::SummaryKind::Struct : ir::SummaryKind::Enum,
             .needs_body = generic || !type.is_valid()});
         continue;
@@ -1760,8 +1776,9 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   if (lowerer.failed) {
     return base::make_err(diag::Reported{});
   }
+  std::vector<std::vector<str::StringPoolId>> summary_fields;
   std::vector<ir::SummaryEntry> summary =
-      collect_summary(lowerer.pkg, ast, lowerer.fns, strings);
+      collect_summary(lowerer.pkg, ast, lowerer.fns, strings, summary_fields);
   // Side tables move out before the builder, which finish() consumes.
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
@@ -1810,7 +1827,8 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
                          prelude_functions,
                          0,
                          0,
-                         std::move(summary)};
+                         std::move(summary),
+                         std::move(summary_fields)};
   // ADR-0054: the IR engine is compared against the AST engine over
   // every comp call lowering made, before it is trusted to answer. A
   // disagreement is a compiler bug; a construct the interpreter does

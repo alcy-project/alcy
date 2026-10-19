@@ -108,13 +108,13 @@ std::optional<lowering::LoweredPackage> cache_load(PipelineContext& ctx,
     addr_names.push_back(
         {name.reg, ctx.strings.get(*id), name.is_param, name.is_capture});
   }
-  return lowering::LoweredPackage{std::move(entry.storage),
-                                  std::move(entry.instr_spans),
-                                  std::move(addr_names),
-                                  entry.prelude_functions,
-                                  0,
-                                  0,
-                                  std::move(entry.summary)};
+  return lowering::LoweredPackage{
+      std::move(entry.storage), std::move(entry.instr_spans),
+      std::move(addr_names), entry.prelude_functions, 0, 0,
+      std::move(entry.summary),
+      // One run per nominal row, exactly as the writer laid them out.
+      std::vector<std::vector<str::StringPoolId>>{
+          std::move(entry.summary_field_names)}};
 }
 
 bool cache_store(std::string_view dir,

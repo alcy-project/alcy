@@ -94,6 +94,10 @@ struct LoweredPackage {
   // The package's public surface, for the summary a dependent reads
   // (ADR-0078). Empty when the package has no public items.
   std::vector<ir::SummaryEntry> summary;
+  // The field names the summary rows point into, one run per nominal
+  // row; the rows borrow them. Growing the container moves the runs,
+  // which keeps each run's own buffer where the rows point.
+  std::vector<std::vector<str::StringPoolId>> summary_fields;
 };
 
 base::Result<LoweredPackage, diag::Reported> lower_package(
