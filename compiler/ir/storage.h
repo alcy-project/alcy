@@ -148,15 +148,15 @@ inline TypeLayout enum_payload_area(const StorageState& state,
     if (fields.empty()) {
       continue;
     }
-    for (TypeIdx field : fields) {
-      const u64 field_align = type_layout(state, field, width).align;
-      if (field_align > align) {
-        align = field_align;
-      }
+    // One walk yields both numbers: sizing the fields and taking their
+    // strictest alignment is the same loop, and running it twice made a
+    // nesting of enums double the layout work per level.
+    const TypeLayout variant_layout = fields_layout(state, fields, width);
+    if (variant_layout.align > align) {
+      align = variant_layout.align;
     }
-    const u64 variant_size = fields_layout(state, fields, width).size;
-    if (variant_size > size) {
-      size = variant_size;
+    if (variant_layout.size > size) {
+      size = variant_layout.size;
     }
   }
   return {align_up(size, align), align};
