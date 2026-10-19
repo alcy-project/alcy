@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The walk is innocent: the whole run enters
+  `check_expr` about five thousand times - the print stops before six -
+  and the summed interval over every entry is under a millisecond, so
+  the nested calls, the paths, and the typing all cost nothing against a
+  136 ms run. What is left is the pattern side, and its two functions
+  add up: the cover walk's worst interval (481 us) times its seventy
+  calls is about 34 ms, and `bind_pattern`'s (80 us) times its seven
+  hundred is about 56 ms, together near the run's own time. So the cost
+  is per call in the pattern machinery, not in how often it is called.
+  Time inside `bind_pattern` per pattern kind next.
   costs milliseconds. A bucket of the intervals by expression kind makes
   the shape of it clear: the first five thousand entries cost under a
   millisecond in total, with `Path` (kind 1) and the nested call (kind
