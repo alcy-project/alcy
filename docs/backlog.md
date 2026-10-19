@@ -932,6 +932,14 @@ replaced. The foundations are in `roadmap.md`.
   the time is in the pattern work around it - typing or resolving the
   deeply nested pattern before coverage is asked - so instrument the
   passes that build and type a match arm's pattern, not the cover walk.
+  That pass is `check_match` (`types_expr.cc:3382`): it types the
+  scrutinee once (`:3388`, with the comp-known walk gated at `:3390`)
+  and then loops over the arms, typing each pattern below `:3411`.
+  The scrutinee here is the nested call chain itself, which the
+  resolution cache already made linear, so the seconds have to be in
+  the loop that types the arm's nested pattern. Read from `:3411` and
+  count the pattern-typing calls per arm the way the cover walk was
+  counted.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
