@@ -939,7 +939,15 @@ replaced. The foundations are in `roadmap.md`.
   resolution cache already made linear, so the seconds have to be in
   the loop that types the arm's nested pattern. Read from `:3411` and
   count the pattern-typing calls per arm the way the cover walk was
-  counted.
+  counted. The loop calls `bind_pattern(module, arm.pattern,
+  pattern_ty, pattern_by_ref)` (`types_expr.cc:3421`) once per arm, and
+  `bind_pattern` (`:107`) is the recursive pattern walk itself - it is
+  what decides refutability and binds names - so that is the function
+  to count and time next. It is a good suspect for per-node work that
+  grows with the type, such as enumerating a variant's fields or asking
+  for nominal declarations again at every step, and the fix, when the
+  hot spot is named, is the same as the resolution cache: remember the
+  answer per pattern and type instead of deriving it twice.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
