@@ -890,6 +890,15 @@ replaced. The foundations are in `roadmap.md`.
   work inside each call on a deeply nested type: `enum_variants`
   (`:3175`), the `EnumType` copy (`:3176`), and `type_origin` or a
   nominal lookup per call, each of which may walk the whole nesting.
+  The or-split is out as well: the same nest without any `|`
+  (`Option::Some(...(E::A)...)`) takes 109 ms and 1,513 ms at twenty
+  and twenty-four levels against 143 ms and 1,916 ms with it, so
+  expanding alternatives is not what costs. Both depths stay under ten
+  thousand calls yet the time differs thirteenfold, so the work per
+  call grows with the nesting. Time the calls next, not count them:
+  accumulate the interval between consecutive entries with a steady
+  clock, bucketed by column count, and the bucket that eats the time
+  names the operation.
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
