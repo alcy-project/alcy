@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The scope scans are real: `lookup_local`
+  (`types.cc:4227`) and `scope_of` (`:4238`) each walk every scope and
+  every local in it, so a name lookup costs the whole binding stack, and
+  a nest that binds one name per level pays that at every node. That is
+  quadratic in the nesting rather than exponential, so it alone does not
+  account for the doubling, but it is a genuine cost and a clear fix: a
+  map from name to the innermost binding, kept as scopes are pushed and
+  popped. Note it and then keep looking for the exponential - the two
+  are separate findings and the map can be done first, with
+  `perf stat -e instructions` to show what it buys.
   costs milliseconds. The top level is flat too: `check_stmt`
   (`types_expr.cc:4242`) reaches five hundred and not a thousand at both
   depths. So every count is flat - the statements, the expressions, the
