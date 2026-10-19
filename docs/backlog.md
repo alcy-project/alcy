@@ -901,6 +901,18 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The count is really flat: a threshold list shows
+  seven hundred reached and eight hundred never, at twenty and at
+  twenty-four alike, so `bind_pattern` cannot itself be the doubling
+  and the earlier bisect conclusion was too quick. Returning false at
+  its head also skips every binding, so the scopes stay empty and
+  everything after - the cover walk, the rows, any comp-known walk -
+  runs on different data. The linear count seen in that experiment is
+  most likely that behaviour change, not the function. Redo the bisect
+  with a change that does not alter what is bound, or stop bisecting and
+  measure instructions per phase: put a counter on the top-level calls
+  (`check_stmt`, `check_block`, `check_match`) and compare per depth,
+  which needs no behaviour change at all.
   costs milliseconds. `resolve_variant_path` (`types.cc:7539`) is flat
   too - fewer than a hundred calls at twenty levels, a little over at
   twenty-four - so every call inside the tuple case is now flat or
