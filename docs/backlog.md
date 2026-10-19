@@ -642,11 +642,14 @@ replaced. The foundations are in `roadmap.md`.
   complete check is pattern overlap - ranges, or-patterns, enum shapes -
   and wants a decision on whether the duplicate is a warning or an
   error; a guarded arm must not count as covering a later unguarded one.
-- [ ] A UTF-8 byte order mark at the start of a source is an `Invalid
+- [x] A UTF-8 byte order mark at the start of a source is an `Invalid
   character` at 1:1: the lexer has no rule for the sequence, so an
   editor that saves one makes the whole file unreadable. Other compilers
   skip it; the spec says nothing, so this wants a decision before the
   lexer learns the three bytes.
+  Resolved: the source view drops a leading `EF BB BF`, so the offsets
+  every reader sees are the text's own; the grammar's lexical notes
+  record the decision. A mark anywhere else stays an invalid character.
 - [x] A struct kept two fields under one name and an enum two variants
   under one: nothing at the declaration checked, so a struct literal was
   asked for both fields and an access reached the first, while a second
@@ -1617,11 +1620,14 @@ replaced. The foundations are in `roadmap.md`.
   the differential check green; a condition grammar that forks on the
   token after the closing `)` is what would let the inline form
   through.
-- [ ] A UTF-8 byte order mark at the start of a source is an `Invalid
+- [x] A UTF-8 byte order mark at the start of a source is an `Invalid
   character` at 1:1: the lexer has no rule for the sequence, so an
   editor that saves one makes the whole file unreadable. Other compilers
   skip it; the spec says nothing, so this wants a decision before the
   lexer learns the three bytes.
+  Resolved: the source view drops a leading `EF BB BF`, so the offsets
+  every reader sees are the text's own; the grammar's lexical notes
+  record the decision. A mark anywhere else stays an invalid character.
 - [x] Qualified generic calls: `helper::id::<i32>(x)` answered
   "Unresolved value 'id'" because neither module-qualified resolution
   branch reached the generic-function lookup. Both do now, with the
