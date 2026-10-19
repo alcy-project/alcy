@@ -901,6 +901,16 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. The entry signature explains the failures:
+  `interpret_function` takes a `u64& quota` and a `u32& depth`
+  (`compiler/comp/ir_interpreter.h:75`), so the interpreter is bounded on
+  purpose and `Interpreter::fail` is the guard firing. A nested chain
+  that hits the depth guard fails, that failure propagates one level up,
+  and the caller tries the next level and fails again - the doubling is
+  that retry ladder, with `is_float_type` on the way. The fix is to try
+  the deep evaluation once (or cache the failure per node), not once per
+  level of the chain. Read the depth and quota handling around
+  `Interpreter::fail` and the call site that retries before changing it.
   costs milliseconds. The symbols are resolved at last, and they are not
   in the type checker: the hot frames are `ir::is_float_type(ir::TypeTag)`
   at 16 percent, `std::optional<comp::IrRunError>::operator=` at 11, and
