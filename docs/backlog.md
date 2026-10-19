@@ -901,6 +901,17 @@ replaced. The foundations are in `roadmap.md`.
   names the operation. The calls are few: no column count reaches five
   hundred entries, so the walk makes only tens of calls over the whole
   nest while the run takes a tenth of a second and up - each call
+  costs milliseconds. Strongest candidate, and it is the same family as
+  the resolution cost already fixed: `generic_instance_for`
+  (`types_expr.cc:151`), reached when the variant's type is generic, is
+  where a nested type could be instantiated again per call. The generic
+  call path got a cache (`Checker::call_resolutions_`); this one may
+  need the same treatment, or the instantiation it asks for may be
+  re-minted because a re-parameterised type does not compare equal. Test
+  it by measuring the instantiation machinery's involvement in the
+  pattern phase rather than by disabling anything: count
+  `generic_instance_for` and any `instantiate_generic` it reaches per
+  depth, with the signature included in the anchor.
   costs milliseconds. A caution for the next instrument: `resolve_variant_path`
   (`types.cc:7539`) begins with a line that appears three times in the
   file (`if (node.segments.empty())`), so a bare body line is not a
