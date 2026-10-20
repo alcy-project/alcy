@@ -39,6 +39,10 @@ struct CompInputs {
   std::span<const ir::TypeIdx> generic_insts;
   // (copy, origin) pairs, newest last.
   std::span<const std::pair<ir::TypeIdx, ir::TypeIdx>> type_origins;
+  // The type arguments each generic function or intrinsic bound. A
+  // type-only intrinsic such as `size_of` has no value argument to
+  // recover its binding from, so it reads the instance here.
+  std::span<const FnInstance> fn_insts;
 };
 
 // The AST engine of compile-time evaluation (ADR-0054): it interprets

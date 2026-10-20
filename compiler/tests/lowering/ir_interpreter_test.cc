@@ -67,7 +67,8 @@ std::optional<comp::CompVal> ast_value(Fixture& f,
   if (ok) {
     analyzer::CompEvaluator evaluator(
         analyzer::CompInputs{checked.tree, checked.modules,
-                             checked.generic_insts, checked.type_origins},
+                             checked.generic_insts, checked.type_origins,
+                             checked.fn_insts},
         f.ast, builder, ir::PointerWidth::W64);
     ok = evaluator.evaluate_item(0, init, analyzer::NO_INST, value);
   }

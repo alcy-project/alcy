@@ -984,6 +984,26 @@ bool CompEvaluator::comp_eval_intrinsic(
                                                    : (l * r) & modulus;
     return true;
   }
+  if (name == "size_of" || name == "align_of") {
+    // A layout query binds its type through the turbofish alone, so
+    // the instance is the only place the argument lives.
+    const FnInstance* instance = nullptr;
+    for (const FnInstance& candidate : inputs_.fn_insts) {
+      if (candidate.item.idx == sig.item.idx && candidate.inst == sig.inst) {
+        instance = &candidate;
+        break;
+      }
+    }
+    if (instance == nullptr || instance->args.size() != 1) {
+      return fail(span, "intrinsic arity");
+    }
+    const ir::TypeLayout layout =
+        ir::type_layout(builder.state(), instance->args[0], width);
+    out.type = usize_type();
+    out.value.tag = CompValue::Tag::Int;
+    out.value.int_value = name == "size_of" ? layout.size : layout.align;
+    return true;
+  }
   if (name != "str_len" && name != "str_byte" && name != "str_slice") {
     return fail(span, "intrinsic is not comp-evaluable");
   }

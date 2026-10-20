@@ -118,7 +118,7 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
       bag(bag),
       profiler(profiler),
       comp_(analyzer::CompInputs{pkg.tree, pkg.modules, pkg.generic_insts,
-                                 pkg.type_origins},
+                                 pkg.type_origins, pkg.fn_insts},
             ast,
             builder,
             width) {

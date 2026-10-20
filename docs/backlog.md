@@ -601,11 +601,12 @@ replaced. The foundations are in `roadmap.md`.
   one column at a time now, and a row of wildcards ends the descent on a
   type that contains itself. `exe-nested-pattern` and
   `ok-nested-pattern` each held a match genuinely missing `E::C`.
-- [ ] `size_of::<T>()` is not comp-evaluable: `const N: usize =
-  size_of::<()>()` reports `Construct 'intrinsic is not comp-evaluable'
-  is not supported`. The answer is a property of the layout the lowering
-  already holds, and an array length written with it would fold. It wants
-  a decision on which layout queries the comp engine may answer.
+- [x] `size_of::<T>()` is not comp-evaluable: `const N: usize =
+  size_of::<()>()` reported `Construct 'intrinsic is not comp-evaluable'
+  is not supported`. The comp engine answers `size_of` and `align_of`
+  from the type layout now, reading the type argument from the
+  instantiation table since a type-only intrinsic carries no value
+  argument. `exe-sizeof-comp` holds the values.
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides
@@ -808,11 +809,12 @@ replaced. The foundations are in `roadmap.md`.
   evaluation rules are in `docs/spec/comp.md`; the predicate lives in
   `compiler/analyzer/comp_evaluator.cc` (the parameter checks around
   `:867`) with the interface in `comp_evaluator.h`.
-- [ ] `size_of::<T>()` is not comp-evaluable: `const N: usize =
-  size_of::<()>()` reports `Construct 'intrinsic is not comp-evaluable'
-  is not supported`. The answer is a property of the layout the lowering
-  already holds, and an array length written with it would fold. It wants
-  a decision on which layout queries the comp engine may answer.
+- [x] `size_of::<T>()` is not comp-evaluable: `const N: usize =
+  size_of::<()>()` reported `Construct 'intrinsic is not comp-evaluable'
+  is not supported`. The comp engine answers `size_of` and `align_of`
+  from the type layout now, reading the type argument from the
+  instantiation table since a type-only intrinsic carries no value
+  argument. `exe-sizeof-comp` holds the values.
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides

@@ -4657,8 +4657,8 @@ bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
     return false;
   }
   comp::CompVal value;
-  CompEvaluator eval(CompInputs{tree, modules, {}, type_origins_}, ast, builder,
-                     width);
+  CompEvaluator eval(CompInputs{tree, modules, {}, type_origins_, fn_instances},
+                     ast, builder, width);
   eval.set_call_recorder(this, &Checker::record_comp_call);
   if (!eval.evaluate_item(info.module, info.init, cur_inst, value) ||
       value.value.tag != comp::CompValue::Tag::Int) {
