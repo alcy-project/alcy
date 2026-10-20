@@ -2242,12 +2242,19 @@ ir::TypeIdx Checker::check_cast(u32 module,
   const ast::ExprIdx operand = node.payload.get<ast::ExprCast>().inner;
   const ir::TypeIdx target =
       resolve_type(module, node.payload.get<ast::ExprCast>().type, nullptr);
-  // An unsuffixed integer literal takes the target's type: the cast
-  // spells that magnitude, where the default would hold only what fits
-  // it. A suffixed literal keeps its own type, which the cast then
-  // converts.
-  const bool retypes =
-      is_unsuffixed_int_literal(operand) && is_integer_tag(tag_of(target));
+  // An unsuffixed integer literal whose magnitude only the target
+  // holds takes the target's type, so a value past `i32` can still be
+  // spelled. One that fits its default `i32` keeps it, and the cast
+  // then converts it: `300 as u8` truncates rather than tripping the
+  // literal's range check. A suffixed literal keeps its own type, which
+  // the cast converts.
+  bool retypes = false;
+  if (is_unsuffixed_int_literal(operand) && is_integer_tag(tag_of(target))) {
+    const ast::Literal& value =
+        ast.literals[ast.exprs[operand].payload.get<ast::ExprLiteral>().value];
+    retypes = int_literal_fits(value.spelling, tag_of(target),
+                               value.is_negative != literal_negated_);
+  }
   const ir::TypeIdx inner =
       check_expr(module, operand, retypes ? &target : nullptr);
   if (is_error(inner) || is_error(target)) {

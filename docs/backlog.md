@@ -834,6 +834,12 @@ replaced. The foundations are in `roadmap.md`.
   pointer pointees, array lengths, tuple elements, and closure
   signatures. `err-mismatch-nominal`, `err-mismatch-generic-args`, and
   `err-mismatch-closure` hold it.
+- [x] An unsuffixed integer literal before `as` was typed as the
+  destination, so `300 as u8` tripped the literal's range check
+  instead of truncating to 44. The literal takes the target only when
+  its magnitude needs it (a value past `i32`); otherwise it keeps its
+  default and the cast converts. A magnitude past every type it could
+  take is still refused. `exe-cast-literal` holds it.
 - [x] An enum whose payload is an array of destructible values emitted
   an invalid GEP: the drop glue reached each field through a `u8`
   address and then projected an element from it, so the emitter built

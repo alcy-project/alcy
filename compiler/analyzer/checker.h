@@ -718,6 +718,12 @@ class Checker {
   std::string_view nominal_name(ir::TypeIdx idx) const;
   ir::TypeTag tag_of(ir::TypeIdx idx) const;
   bool is_integer_tag(ir::TypeTag tag) const;
+  // Whether an unsuffixed integer literal's magnitude fits `tag`. A
+  // negative sign is part of the literal's value, so it narrows the
+  // unsigned types to zero.
+  static bool int_literal_fits(std::string_view spelling,
+                               ir::TypeTag tag,
+                               bool negative);
   bool is_float_tag(ir::TypeTag tag) const;
   bool is_void(ir::TypeIdx idx) const;
   bool is_never(ir::TypeIdx idx) const;

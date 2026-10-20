@@ -4524,9 +4524,9 @@ bool Checker::classify_suffix(std::string_view spelling,
 // Whether an integer literal's magnitude fits the type it was given.
 // A signed minimum is one past the positive maximum, so a negation has
 // room the positive form does not.
-static bool int_literal_fits(std::string_view spelling,
-                             ir::TypeTag tag,
-                             bool negative) {
+bool Checker::int_literal_fits(std::string_view spelling,
+                               ir::TypeTag tag,
+                               bool negative) {
   bool overflow = false;
   const u64 magnitude = comp::parse_numeric_value(spelling, &overflow);
   // Past u64 is past every type, and the parse wraps there.
