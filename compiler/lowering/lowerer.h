@@ -254,6 +254,13 @@ class Lowerer {
   };
   Val materialize(Val v);
   Val address_of(Val v);
+  // Emits the borrow pass's marker for a consumed place. The drop
+  // walk's event is separate because a point may record the move
+  // before the read that consumes it: a match's arms read the
+  // payload, so its move has to land after them for the borrow pass
+  // and before them for the drop walk.
+  void emit_move_marker(Val v);
+  void record_move_event(Val v);
   void mark_move(Val v);
   // A projection that takes a non-Copy value out of a field consumes the
   // field's place, so the enclosing owner's drop skips it.

@@ -401,6 +401,11 @@ ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
 // consumed. The marker's source is the place address so later
 // ownership analysis observes origins, not temporaries.
 void Lowerer::mark_move(Val v) {
+  emit_move_marker(v);
+  record_move_event(v);
+}
+
+void Lowerer::emit_move_marker(Val v) {
   if (!v.place || !v.address || is_copy(v.type)) {
     return;
   }
@@ -416,6 +421,15 @@ void Lowerer::mark_move(Val v) {
   }
   const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
   (void)marker;
+}
+
+void Lowerer::record_move_event(Val v) {
+  if (!v.place || !v.address || is_copy(v.type)) {
+    return;
+  }
+  if (closure_entry(v.type) != nullptr && !runs_destructor(v.type)) {
+    return;
+  }
   const ir::Operand& operand = builder.state().operands[v.op.idx];
   if (!operand.is<ir::RegisterIdx>()) {
     return;

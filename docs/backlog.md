@@ -798,6 +798,13 @@ replaced. The foundations are in `roadmap.md`.
   glue ended a second time - a double free in safe code. The refusal
   covers a field of an element too (`a[0].name`), and an intrinsic's
   by-value argument takes the same road.
+- [x] A match that returned from inside an arm double-freed its
+  scrutinee: the move a by-value match records landed at the join
+  block, so an arm that returned before it never recorded the move,
+  and the scrutinee's drop ran on the payload the arm's binding had
+  already taken. The drop walk's event lands before the arms now,
+  while the borrow marker stays at the join, after the payload reads.
+  `exe-match-move-return` holds it.
 - [x] An enum whose payload is an array of destructible values emitted
   an invalid GEP: the drop glue reached each field through a `u8`
   address and then projected an element from it, so the emitter built

@@ -4312,6 +4312,14 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
                      .ref_types[builder.state().types[scrut_type].as_ref()]
                      .pointee;
   }
+  // The drop walk's move event lands before the arms: an arm that
+  // returns from inside never reaches the join, and without the event
+  // the scrutinee's drop would run on the payload the arm took. The
+  // borrow marker still lands at the join, after the arms have read
+  // the payloads.
+  if (!borrowed) {
+    record_move_event(addr);
+  }
   const ir::TypeIdx result_type = expr_type(expr);
   Val slot{size_one, result_type, false, false};
   const bool has_slot = tag_of(result_type) != ir::TypeTag::Void &&
@@ -4426,11 +4434,12 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     return Val{size_one, builder.never_type(), false, false};
   }
   switch_to(join);
-  // A by-value match consumes a non-Copy scrutinee, but the arms read
-  // its discriminant and payloads to do so, so the move lands after
-  // them. A scrutinee read through a reference stays its owner.
+  // A by-value match consumes a non-Copy scrutinee; the drop walk's
+  // event was recorded before the arms, and the borrow marker lands
+  // here, after the reads. A scrutinee read through a reference stays
+  // its owner.
   if (!borrowed) {
-    mark_move(addr);
+    emit_move_marker(addr);
   }
   if (has_slot) {
     return materialize(slot);
