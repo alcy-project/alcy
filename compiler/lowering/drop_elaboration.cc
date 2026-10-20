@@ -602,8 +602,12 @@ void Lowerer::place_ends() {
           if (!runs_destructor(field)) {
             continue;
           }
+          // The address carries the field's own type, not the byte
+          // it was reached through: a projection from it recovers the
+          // element type from the register, and a byte register would
+          // index the element type itself.
           const ir::RegisterIdx field_addr =
-              pass_emit(seq_of(out), ir::Opcode::GetElementPtr, byte,
+              pass_emit(seq_of(out), ir::Opcode::GetElementPtr, field,
                         {to_operand(area, byte),
                          index_operand(static_cast<u32>(ir::field_offset(
                              builder.state(), fields, fi, width)))},

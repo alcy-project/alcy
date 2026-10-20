@@ -798,6 +798,12 @@ replaced. The foundations are in `roadmap.md`.
   glue ended a second time - a double free in safe code. The refusal
   covers a field of an element too (`a[0].name`), and an intrinsic's
   by-value argument takes the same road.
+- [x] An enum whose payload is an array of destructible values emitted
+  an invalid GEP: the drop glue reached each field through a `u8`
+  address and then projected an element from it, so the emitter built
+  `getelementptr i8` with two indices and LLVM refused the function.
+  The field address carries the field's own type now.
+  `exe-enum-array-drop` holds it.
 - [ ] Moving an element out of an owned array, which the refusal above
   stands in for: the drop walk's paths name fields and tuple slots, so
   the pass needs an element step that ends the elements the move left
