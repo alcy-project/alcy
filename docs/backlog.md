@@ -88,17 +88,17 @@ replaced. The foundations are in `roadmap.md`.
   complete check is pattern overlap - ranges, or-patterns, enum shapes -
   and wants a decision on whether the duplicate is a warning or an
   error; a guarded arm must not count as covering a later unguarded one.
-- [ ] References into the type tables held across checking: a struct
+- [x] References into the type tables held across checking: a struct
   literal's check kept a `StructType&` while a field value's check
   could intern a type and move the table (a heap-use-after-free the
-  new std module's layout shift exposed; the struct case copies now).
-  Twenty-four more readers copy their entry now - the struct, tuple,
-  variant, pattern, element-index, run-index, array, and intrinsic
-  readers, the drop walk, and the comp evaluator among them - and the
-  audit is not finished: a `TypeNode` held across `drop_scan`'s
-  recursion, `match_compound_target`'s resolved target held across
-  `resolve_type`, and the `func_types`, `ref_types`, and `types()`
-  readers the first pass never named all still hold table slots.
+  new std module's layout shift exposed). The audit closes with
+  forty-five readers copying their entry - the struct, tuple, variant,
+  pattern, element-index, run-index, array, intrinsic, and shape
+  readers, the drop walk, the comp evaluator, and every other read of
+  a builder table a call could move between. The rule is the file's
+  now: a reference into a table the checker can grow is never held
+  across a call. The few sites that read the frozen `Storage` keep
+  their references, because nothing can move it.
 - [x] A discarded temporary that owns memory ends where it stands:
   `_ := format("x")` and a bare `format("x")` are both ended by the
   discard path's `record_drop_in_place`, which the sanitized runs of
@@ -160,16 +160,18 @@ replaced. The foundations are in `roadmap.md`.
   exists only per instantiation. Fetching the instantiation from the
   library, or spelling the instantiations the library already built
   under synthesized names, is the choice the ADR records.
-- [ ] `core::string`'s `trim_start_matches` returns a slice local the
-  borrow checker reads as a reference to the local: `mut s := self` is
-  reassigned from `strip_prefix` in the loop, and the `None` arm's
-  `ret s` is reported as returning a reference to `s`, though the
-  slice's loan lies on `self` (or on `pat`, whichever the implied
-  lifetime rule ties `strip_prefix`'s result to). No current test
-  reaches the function; a bodyless declaration of a summary call did,
-  which is how it was found. Wants a reading of the implied-lifetime
-  rule for a multi-`str` signature and of the loan a reassigned slice
-  local carries.
+- [ ] `core::string`'s `trim_start_matches` once reported `Returns
+  reference to local 's'` for the `None` arm's `ret s` - the loop
+  reassigns `mut s` from `s.strip_prefix(pat)` and the local holds a
+  slice view, so the loan's place is the local while its pointee is the
+  text. Six shapes faithful to it pass now (the free function with one
+  and two parameters, the method form, the staged prelude reached from
+  a program, and both reassignment orders), so the function alone does
+  not produce the report; it came from a configuration that no longer
+  exists (a summary call declared as a bodyless foreign function, which
+  reached std code the extern path never reaches) and rebuilding that
+  route is what would say whether the report was a false positive about
+  a loan's place or a conservative rule worth keeping.
 - [ ] One nominal as several type nodes: the checker can intern a
   second type node over a declaration's own struct or enum shape (a
   `String` node beside the declaration's), and `types_equal` compares

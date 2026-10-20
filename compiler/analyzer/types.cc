@@ -1958,7 +1958,7 @@ CheckedModule::ReceiverKind Checker::classify_receiver(ir::TypeIdx first,
   if (first.idx == self.idx) {
     return CheckedModule::ReceiverKind::ByValue;
   }
-  const ir::TypeNode& node = builder.types()[first];
+  const ir::TypeNode node = builder.types()[first];
   if (node.tag == ir::TypeTag::Ref &&
       builder.ref_types()[node.as_ref()].pointee.idx == self.idx) {
     return CheckedModule::ReceiverKind::Shared;
@@ -3757,7 +3757,7 @@ bool Checker::drop_scan(ir::TypeIdx type, std::vector<u32>& stack) {
     }
   }
   stack.push_back(type.idx);
-  const ir::TypeNode& node = builder.types()[type];
+  const ir::TypeNode node = builder.types()[type];
   bool result = false;
   CheckedModule::DropGlue glue;
   switch (node.tag) {
@@ -3821,7 +3821,7 @@ CheckedModule::MethodInfo& Checker::add_method(u32 module,
 // The nominal shape a type node names: two nodes over one struct or
 // enum are the same declaration however they were interned.
 std::optional<u64> Checker::drop_shape_key(ir::TypeIdx type) const {
-  const ir::TypeNode& node = builder.types()[type];
+  const ir::TypeNode node = builder.types()[type];
   if (node.tag == ir::TypeTag::Struct) {
     return (static_cast<u64>(ir::TypeTag::Struct) << 32) | node.as_struct().idx;
   }
@@ -3874,18 +3874,22 @@ CheckedModule::DropGlue Checker::find_drop_glue(ir::TypeIdx type) {
 }
 
 bool Checker::holds_destructible(ir::TypeIdx type, std::vector<u32>& stack) {
-  const ir::TypeNode& node = builder.types()[type];
+  const ir::TypeNode node = builder.types()[type];
   if (node.tag == ir::TypeTag::Struct) {
-    for (ir::TypeIdx field : builder.struct_types()[node.as_struct()].fields) {
+    // The walk below builds glue, which can move the table this shape
+    // was read from, so the shape is a copy and not a reference.
+    const ir::StructType shape = builder.struct_types()[node.as_struct()];
+    for (ir::TypeIdx field : shape.fields) {
       if (drop_scan(field, stack)) {
         return true;
       }
     }
     return false;
   }
-  for (ir::EnumVariantTypeIdx v :
-       builder.enum_types()[node.as_enum()].variants) {
-    for (ir::TypeIdx payload : builder.enum_variant_types()[v].fields) {
+  const ir::EnumType shape = builder.enum_types()[node.as_enum()];
+  for (ir::EnumVariantTypeIdx v : shape.variants) {
+    const ir::EnumVariantType variant = builder.enum_variant_types()[v];
+    for (ir::TypeIdx payload : variant.fields) {
       if (drop_scan(payload, stack)) {
         return true;
       }
@@ -4022,7 +4026,7 @@ bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
     return true;
   }
   if (tag == ir::TypeTag::Tuple) {
-    const ir::TupleType& tuple =
+    const ir::TupleType tuple =
         builder.tuple_types()[builder.types()[type].as_tuple()];
     for (const ir::TypeIdx element : tuple.elements) {
       if (!is_builtin_comparable(element)) {
@@ -4032,7 +4036,7 @@ bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
     return true;
   }
   if (tag == ir::TypeTag::Array) {
-    const ir::ArrayType& array =
+    const ir::ArrayType array =
         builder.array_types()[builder.types()[type].as_array()];
     return is_builtin_comparable(array.element);
   }
@@ -4095,24 +4099,24 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
       return types_equal_inner(pa, pb, seen);
     }
     case ir::TypeTag::Array: {
-      const ir::ArrayType& aa =
+      const ir::ArrayType aa =
           builder.array_types()[builder.types()[a].as_array()];
-      const ir::ArrayType& ab =
+      const ir::ArrayType ab =
           builder.array_types()[builder.types()[b].as_array()];
       return aa.count == ab.count &&
              types_equal_inner(aa.element, ab.element, seen);
     }
     case ir::TypeTag::Slice: {
-      const ir::SliceType& sa =
+      const ir::SliceType sa =
           builder.slice_types()[builder.types()[a].as_slice()];
-      const ir::SliceType& sb =
+      const ir::SliceType sb =
           builder.slice_types()[builder.types()[b].as_slice()];
       return types_equal_inner(sa.element, sb.element, seen);
     }
     case ir::TypeTag::Tuple: {
-      const ir::TupleType& ta_t =
+      const ir::TupleType ta_t =
           builder.tuple_types()[builder.types()[a].as_tuple()];
-      const ir::TupleType& tb_t =
+      const ir::TupleType tb_t =
           builder.tuple_types()[builder.types()[b].as_tuple()];
       if (ta_t.elements.size() != tb_t.elements.size()) {
         return false;
@@ -4125,9 +4129,9 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
       return true;
     }
     case ir::TypeTag::Func: {
-      const ir::FuncType& fa =
+      const ir::FuncType fa =
           builder.func_types()[builder.types()[a].as_func()];
-      const ir::FuncType& fb =
+      const ir::FuncType fb =
           builder.func_types()[builder.types()[b].as_func()];
       if (fa.params.size() != fb.params.size()) {
         return false;
@@ -4191,9 +4195,9 @@ bool Checker::coerces_array_to_slice(ir::TypeIdx expected, ir::TypeIdx actual) {
   if (tag_of(apointee) != ir::TypeTag::Array) {
     return false;
   }
-  const ir::SliceType& slice =
+  const ir::SliceType slice =
       builder.slice_types()[builder.types()[epointee].as_slice()];
-  const ir::ArrayType& array =
+  const ir::ArrayType array =
       builder.array_types()[builder.types()[apointee].as_array()];
   return types_equal(slice.element, array.element);
 }
@@ -4234,7 +4238,7 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
   // the view borrows the environment the value owns (ADR-0064).
   if (const ClosureSig* closure = closure_sig_of_type(actual);
       closure != nullptr && tag_of(expected) == ir::TypeTag::Func) {
-    const ir::FuncType& shape =
+    const ir::FuncType shape =
         builder.func_types()[builder.types()[expected].as_func()];
     bool matches = shape.params.size() == closure->params.size() &&
                    types_equal(shape.ret, closure->ret);
@@ -5666,14 +5670,17 @@ bool Checker::match_compound_target(
     std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
     std::vector<ValueParam>& value_scope) {
   const ast::TypeNode& node = ast.types[target.idx];
-  const ir::TypeNode& actual = builder.types()[self];
+  // The walk recurses into resolutions that intern, which can move the
+  // table this node was read from, so it is a copy and not a
+  // reference, and so are the shapes its cases read.
+  const ir::TypeNode actual = builder.types()[self];
   switch (node.kind) {
     case ast::TypeKind::Str: return actual.tag == ir::TypeTag::Str;
     case ast::TypeKind::Slice: {
       if (actual.tag != ir::TypeTag::Slice) {
         return false;
       }
-      const ir::SliceType& slice = builder.slice_types()[actual.as_slice()];
+      const ir::SliceType slice = builder.slice_types()[actual.as_slice()];
       return match_compound_target(module,
                                    node.payload.get<ast::TypeSlice>().element,
                                    params, slice.element, scope, value_scope);
@@ -5683,7 +5690,7 @@ bool Checker::match_compound_target(
         return false;
       }
       const ast::TypeArray& array = node.payload.get<ast::TypeArray>();
-      const ir::ArrayType& shape = builder.array_types()[actual.as_array()];
+      const ir::ArrayType shape = builder.array_types()[actual.as_array()];
       if (array.length_path.is_valid()) {
         const ast::Path& path = ast.paths[array.length_path];
         if (path.segments.size() != 1) {
@@ -6182,7 +6189,7 @@ bool Checker::check_own_fn_witness(u32 module,
   if (is_error(want_ret)) {
     return false;
   }
-  const ir::FuncType& shape =
+  const ir::FuncType shape =
       builder.func_types()[builder.types()[sig.idx].as_func()];
   if (shape.params.size() != want_params.size()) {
     return reject();
@@ -6418,7 +6425,7 @@ bool Checker::bind_fn_slots(u32 module,
   if (!sig.is_valid() || tag_of(sig) != ir::TypeTag::Func) {
     return true;
   }
-  const ir::FuncType& actual_shape =
+  const ir::FuncType actual_shape =
       builder.func_types()[builder.types()[sig.idx].as_func()];
   bound[slot] = type_origin(actual_shape.ret);
   (void)span;
@@ -7722,14 +7729,14 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
     }
   }
   visited.push_back(idx.idx);
-  const ir::TypeNode& node = builder.types()[idx];
+  const ir::TypeNode node = builder.types()[idx];
   switch (node.tag) {
     case ir::TypeTag::MutRef: return true;
     case ir::TypeTag::Ref:
       return contains_mut_ref(builder.ref_types()[node.as_ref()].pointee,
                               visited);
     case ir::TypeTag::Struct: {
-      const ir::StructType& struct_type =
+      const ir::StructType struct_type =
           builder.struct_types()[node.as_struct()];
       for (ir::TypeIdx field : struct_type.fields) {
         if (contains_mut_ref(field, visited)) {
@@ -7745,7 +7752,7 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
       return contains_mut_ref(builder.slice_types()[node.as_slice()].element,
                               visited);
     case ir::TypeTag::Enum: {
-      const ir::EnumType& enum_type = builder.enum_types()[node.as_enum()];
+      const ir::EnumType enum_type = builder.enum_types()[node.as_enum()];
       for (ir::EnumVariantTypeIdx vidx = enum_type.variants.head();
            vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
            vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
@@ -7758,7 +7765,7 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
       return false;
     }
     case ir::TypeTag::Tuple: {
-      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      const ir::TupleType tuple = builder.tuple_types()[node.as_tuple()];
       for (ir::TypeIdx element : tuple.elements) {
         if (contains_mut_ref(element, visited)) {
           return true;
@@ -7867,10 +7874,10 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
   // first discriminant to exit code 0. See
   // docs/adr/0009-result-option-library-enums.md.
   if (tag == ir::TypeTag::Enum) {
-    const ir::EnumType& shape =
+    const ir::EnumType shape =
         builder.enum_types()[builder.types()[ret].as_enum()];
     if (shape.variants.size() == 2) {
-      const ir::EnumVariantType& first =
+      const ir::EnumVariantType first =
           builder.enum_variant_types()[shape.variants.head()];
       if (first.fields.size() == 1 && is_void(first.fields.head())) {
         return;
