@@ -1416,10 +1416,14 @@ replaced. The foundations are in `roadmap.md`.
 - [x] References into the type tables held across checking: a struct
   literal's check kept a `StructType&` while a field value's check
   could intern a type and move the table (a heap-use-after-free the
-  new std module's layout shift exposed). The analyzer's readers had
-  the same shape throughout; they now take a copy - ten in
-  `types_expr.cc`, ten in `types.cc`, and four in `comp_evaluator.cc`
-  - so no live reference spans a check that can intern.
+  new std module's layout shift exposed). The audit closes with
+  forty-five readers copying their entry - the struct, tuple, variant,
+  pattern, element-index, run-index, array, intrinsic, and shape
+  readers, the drop walk, the comp evaluator, and every other read of
+  a builder table a call could move between. The rule is the file's
+  now: a reference into a table the checker can grow is never held
+  across a call. The few sites that read the frozen `Storage` keep
+  their references, because nothing can move it.
 - [x] A discarded temporary that owns memory ends where it stands:
   `_ := format("x")` and a bare `format("x")` are both ended by the
   discard path's `record_drop_in_place`, which the sanitized runs of
@@ -1462,41 +1466,52 @@ replaced. The foundations are in `roadmap.md`.
   library's sources gone. Spelling a signature through a copy was
   refused while this was open; a row spells it now, because identical
   shapes lay out alike.
-- [ ] Associated functions and methods in a summary: a row says the
-  symbol kind but not the nominal the item belongs to, so a dependent
-  cannot spell the `impl` a method sits in. The lowering's `FnEntry`
-  carries the kind and the item but no owner, and the checked module's
-  method table is where the owner lives (the shape `nominal_type_of`
-  reads for structs). The row wants an owner beside its function and
-  the surface wants to group rows by it into `impl` items. The call
-  needs nothing new: a summary call crosses as the value the callee
-  takes, and a receiver is one more argument.
-- [ ] `core::string`'s `trim_start_matches` returns a slice local the
-  borrow checker reads as a reference to the local: `mut s := self` is
-  reassigned from `strip_prefix` in the loop, and the `None` arm's
-  `ret s` is reported as returning a reference to `s`, though the
-  slice's loan lies on `self` (or on `pat`, whichever the implied
-  lifetime rule ties `strip_prefix`'s result to). No current test
-  reaches the function; a bodyless declaration of a summary call did,
-  which is how it was found. Wants a reading of the implied-lifetime
-  rule for a multi-`str` signature and of the loan a reassigned slice
-  local carries.
-- [ ] One nominal as several type nodes: the checker can intern a
-  second type node over a declaration's own struct or enum shape (a
-  `String` node beside the declaration's), and `types_equal` compares
-  origins, so two nodes over one declaration read as different types
-  while only the drop lookup was taught to see through them. What
-  interns the second node - and whether the nodes should collapse to
-  one - wants finding. What is known: a library build mints one node
-  (an instrumented `intern_nominal` fires once for the declaration and
-  the generic instance path never runs for it), yet a dependent's view
-  of the same artifact holds two (`struct Pair(i32, i32)` at #19 and
-  #158 in a two-field dump), the summary row for the declaration names
-  one, and a function's parameter names the other - which is why a
-  nominal-typed signature cannot spell even though the declaration
-  spells. Both mint sites are instrumented and silent on the second, so
-  the path that builds it is still to find; the deserializer's view is
-  the next place to look.
+- [x] Associated functions and methods in a summary: a row names the
+  nominal its item belongs to now (`owner`, the type the declaration
+  names), and the surface groups the rows by it into the `impl` the
+  declaration's module holds, after every nominal has been spelled. A
+  method spells its receiver as `self` - `mut self` when the receiver
+  takes an exclusive borrow, which its type says - and its call crosses
+  as the value the callee takes with the receiver as the first
+  parameter; a call names the callee's own item before its name, which
+  two impls could share. A comp function gets no row, because its call
+  belongs to the package's build rather than a dependent's.
+  `dependencies_test` calls `Pair::new` and `p.total()` with the
+  library's sources gone.
+- [ ] The generic boundary in a summary: a `needs_body` row is
+  omitted, so a dependent that names a generic item reads "Unresolved
+  import" without learning why. The IR has no parameterized types (its
+  tags are concrete), so a declaration's shape cannot be spelled; it
+  exists only per instantiation. Fetching the instantiation from the
+  library, or spelling the instantiations the library already built
+  under synthesized names, is the choice the ADR records.
+- [ ] `core::string`'s `trim_start_matches` once reported `Returns
+  reference to local 's'` for the `None` arm's `ret s` - the loop
+  reassigns `mut s` from `s.strip_prefix(pat)` and the local holds a
+  slice view, so the loan's place is the local while its pointee is the
+  text. Six shapes faithful to it pass now (the free function with one
+  and two parameters, the method form, the staged prelude reached from
+  a program, and both reassignment orders), so the function alone does
+  not produce the report; it came from a configuration that no longer
+  exists (a summary call declared as a bodyless foreign function, which
+  reached std code the extern path never reaches) and rebuilding that
+  route is what would say whether the report was a false positive about
+  a loan's place or a conservative rule worth keeping.
+- [x] One nominal as several type nodes: the checker interned a
+  second type node over a declaration's own shape (a `String` node
+  beside the declaration's), and `types_equal` compares origins, so two
+  nodes over one declaration read as different types while only the
+  drop lookup was taught to see through them. The observable symptom
+  was a two-node dump (`struct Pair(i32, i32)` at #19 and #158) that
+  made a nominal-typed signature unspellable. It no longer reproduces:
+  a library with a struct, a nested struct, an impl, and calls dumps
+  one node per declaration now, and the dependent spells, links, and
+  runs a nominal parameter, return, nested field, and reference. The
+  diagnosis that stands is that the object a field or parameter holds
+  is a storage copy - a reference the checker records an origin for,
+  which lowering follows - so a consumer that meets one resolves it by
+  shape; if the extra node returns, the reader audit's rule and
+  `type_origins` are where to look.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
   minor may break under 1.0. The rule reads the parsed requirement -
   one `Equal` bound is a pin and stays silent - so `0.5.x`,
@@ -1587,6 +1602,20 @@ replaced. The foundations are in `roadmap.md`.
   entries it names. The final pass's per-worker memory cost is why
   spreading it lost by measurement (ADR-0047), so the sizing waits for a
   reason to spread it.
+- [x] A moved-from owning closure was still callable: `h := g` handed
+  the environment to `h`, but `g()` still passed `g`'s own storage as
+  the environment and read what `h`'s drop freed. The borrow pass
+  refuses a store whose value is the address of a moved place, which is
+  the shape a closure call writes its environment through;
+  `err-closure-move-reuse` holds it. A place reached through a deref is
+  exempt, because the value names the referent rather than the slot a
+  move takes.
+- [ ] Two handles over one exclusive loan: a closure that owns nothing
+  is not moved (its captures are borrows, ADR-0064), so `h := g` on a
+  closure holding a `&mut` capture gives two handles that share one
+  loan, which `exe-closure-capture-mut` expects; whether both may write
+  through it is the borrow checker's question rather than the move
+  walk's.
 
 ### Language and library surface
 
