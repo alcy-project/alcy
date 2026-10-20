@@ -1451,20 +1451,34 @@ replaced. The foundations are in `roadmap.md`.
   reads a field across the boundary. `dependencies_test` does all three
   with the library's sources gone. A signature that *names* a nominal
   is still left out, and the reason is the item below.
-- [ ] A summary call passes what the callee takes: a call into a
-  summary is declared in the external table under the C calling
-  convention, and that convention passes an aggregate as a pointer of
-  its own shape where the library's own alcy function takes the shape
-  the caller has, so a nominal-typed parameter cannot be called yet (the
-  emitter's LLVM assertion catches it, and a field argument taught the
-  call to hand over the value rather than its place). Spelling a
-  signature through a copy is refused for the same reason: the row is
-  left out rather than passed a shape the other side does not take. A
-  declaration as a bodyless foreign function with the caller's own types
-  was tried: a direct call works, but the binary then lowers prelude
-  code the extern never reached, and `core/string.al`'s latent borrow
-  error (`ret s` from a local at `core/string.al:133`) fails the build,
-  so that route wants the prelude's reach answered first.
+- [x] A summary call passes what the callee takes: the call handed the
+  argument's place over where the callee takes its value, so a field
+  read as an argument met the emitter's LLVM assertion. It crosses as
+  the value now, the way a C entry point's does, and a nominal
+  parameter, a nominal return, a nested nominal field, and a reference
+  to a nominal all work - `dependencies_test` runs all four with the
+  library's sources gone. Spelling a signature through a copy was
+  refused while this was open; a row spells it now, because identical
+  shapes lay out alike.
+- [ ] Associated functions and methods in a summary: a row says the
+  symbol kind but not the nominal the item belongs to, so a dependent
+  cannot spell the `impl` a method sits in. The lowering's `FnEntry`
+  carries the kind and the item but no owner, and the checked module's
+  method table is where the owner lives (the shape `nominal_type_of`
+  reads for structs). The row wants an owner beside its function and
+  the surface wants to group rows by it into `impl` items. The call
+  needs nothing new: a summary call crosses as the value the callee
+  takes, and a receiver is one more argument.
+- [ ] `core::string`'s `trim_start_matches` returns a slice local the
+  borrow checker reads as a reference to the local: `mut s := self` is
+  reassigned from `strip_prefix` in the loop, and the `None` arm's
+  `ret s` is reported as returning a reference to `s`, though the
+  slice's loan lies on `self` (or on `pat`, whichever the implied
+  lifetime rule ties `strip_prefix`'s result to). No current test
+  reaches the function; a bodyless declaration of a summary call did,
+  which is how it was found. Wants a reading of the implied-lifetime
+  rule for a multi-`str` signature and of the loan a reassigned slice
+  local carries.
 - [ ] One nominal as several type nodes: the checker can intern a
   second type node over a declaration's own struct or enum shape (a
   `String` node beside the declaration's), and `types_equal` compares
