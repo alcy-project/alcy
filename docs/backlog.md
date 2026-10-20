@@ -1561,8 +1561,9 @@ replaced. The foundations are in `roadmap.md`.
   and the module statics. `Lowerer::expr_type` scans backward ("last
   entry wins") while `CompEvaluator::expr_type_in` scans forward ("first
   wins"), so the readers can disagree on a duplicate key, and
-  `MAX_FN_ENTRIES = 8192` turns a package past it into an internal error
-  rather than a diagnostic.
+  `MAX_FN_ENTRIES = 8192` reports `ED013` at the call that spends the
+  last slot now, rather than failing at an unspecified internal span;
+  raising the budget itself waits for the indexing.
 - [ ] Split `Lowerer`: comp evaluation, format expansion, and AST-to-IR
   lowering share one class with a large public surface.
 - [ ] Borrow-pass scratch sized by the program, not the function: the
