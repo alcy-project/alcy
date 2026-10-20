@@ -815,6 +815,18 @@ replaced. The foundations are in `roadmap.md`.
   (`exe-guard-ref-scrutinee`, `err-guard-moves-binding`). Borrowing
   bindings for a by-value scrutinee is the feature that lifts the
   refusal.
+- [x] A pattern condition whose then-arm returned from inside did not
+  record the move that takes the bound payload out of the scrutinee,
+  so the scrutinee's drop ran on the payload the binding had already
+  taken - a double free in safe code. The drop walk's move event lands
+  before the then-arm's body now, while the borrow marker stays at the
+  arm's tail. `exe-cond-arm-return` holds it.
+- [ ] A pattern condition marks its scrutinee moved on the else-arm
+  even when the pattern did not match, so that value's destructor is
+  skipped and leaks. The move is what keeps a later read from seeing
+  the consumed scrutinee, and the borrow walk's may-analysis for
+  `moved` cannot yet express a conditional drop; the drop would have
+  to run behind the same flag an end site uses.
 - [x] An enum whose payload is an array of destructible values emitted
   an invalid GEP: the drop glue reached each field through a `u8`
   address and then projected an element from it, so the emitter built

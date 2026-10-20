@@ -4568,27 +4568,38 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    // The arm test reads the discriminant and payload out of the
-    // scrutinee place, and the body can still reborrow through the
-    // binding, so the move lands after the body - but before the arm's
-    // branch, since a terminated block takes no more instructions.
-    auto finish_pattern_arm = [&](Val produced, ir::BlockIdx epilogue,
-                                  bool& live_out) {
+    // The then-arm's binding takes a non-`Copy` payload out of the
+    // scrutinee, so the drop walk's move event lands at the top of the
+    // body: a body that returns from inside still records it. The
+    // borrow marker lands at the arm's tail, after the binding is read,
+    // since a terminated block takes no more instructions.
+    switch_to(body_block);
+    record_move_event(addr);
+    auto finish_then_arm = [&](Val produced, ir::BlockIdx epilogue,
+                               bool& live_out) {
       if (!terminated_cur()) {
-        mark_move(addr);
+        emit_move_marker(addr);
       }
       arm_tail(produced, arm_mark, epilogue, live_out);
     };
-    switch_to(body_block);
-    finish_pattern_arm(lower_block(if_expr.then_block, expected), then_epilogue,
-                       then_live);
+    finish_then_arm(lower_block(if_expr.then_block, expected), then_epilogue,
+                    then_live);
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
     switch_to(else_block);
     if (if_expr.else_block.is_valid()) {
-      finish_pattern_arm(lower_block(if_expr.else_block, expected),
-                         else_epilogue, else_live);
+      // The condition consumes its scrutinee on either arm, so the
+      // else-arm records the move too and a later read does not see it.
+      auto finish_else_arm = [&](Val produced, ir::BlockIdx epilogue,
+                                 bool& live_out) {
+        if (!terminated_cur()) {
+          mark_move(addr);
+        }
+        arm_tail(produced, arm_mark, epilogue, live_out);
+      };
+      finish_else_arm(lower_block(if_expr.else_block, expected), else_epilogue,
+                      else_live);
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
