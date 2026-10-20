@@ -153,6 +153,13 @@ replaced. The foundations are in `roadmap.md`.
   belongs to the package's build rather than a dependent's.
   `dependencies_test` calls `Pair::new` and `p.total()` with the
   library's sources gone.
+- [ ] The generic boundary in a summary: a `needs_body` row is
+  omitted, so a dependent that names a generic item reads "Unresolved
+  import" without learning why. The IR has no parameterized types (its
+  tags are concrete), so a declaration's shape cannot be spelled; it
+  exists only per instantiation. Fetching the instantiation from the
+  library, or spelling the instantiations the library already built
+  under synthesized names, is the choice the ADR records.
 - [ ] `core::string`'s `trim_start_matches` returns a slice local the
   borrow checker reads as a reference to the local: `mut s := self` is
   reassigned from `strip_prefix` in the loop, and the `None` arm's

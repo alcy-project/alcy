@@ -117,5 +117,22 @@ library, its sources present and then gone). The trim is the resolver's
 `PackageRoot.exports`, so a summary never shows a dependent more than
 the source it stands in for.
 
-**Next:** the generic boundary, where a declaration has no body to
-instantiate and the summary has to say so.
+**The generic boundary wants a decision.** The artifact carries no
+parameterized types: its tags are concrete, and a generic declaration's
+shape exists only per instantiation, so a summary cannot spell the
+declaration a dependent would instantiate, and a `needs_body` row is
+omitted from the surface. A dependent that names such an item reads
+"Unresolved import", which is honest but does not say why.
+
+Two shapes are open. One fetches: the dependent asks the library (or a
+service the roadmap calls a fetcher) to build the instantiation it
+needs, which keeps one source of truth and costs a protocol. The other
+spells what the library already built: a concrete instantiation has a
+concrete shape, so it can be spelled under a name of its own
+(`Holder_i32` for `Holder<i32>`), which works today with the machinery
+the rows already have and shows a dependent a name the library never
+wrote. Which one belongs in the language is the open question.
+
+**Next:** that decision; and the export-list question is answered
+above, the nominal boundary is landed, so the summary is otherwise
+whole for what a row can carry.
