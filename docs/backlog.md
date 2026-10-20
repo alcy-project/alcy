@@ -805,6 +805,16 @@ replaced. The foundations are in `roadmap.md`.
   already taken. The drop walk's event lands before the arms now,
   while the borrow marker stays at the join, after the payload reads.
   `exe-match-move-return` holds it.
+- [x] A guarded arm that bound a non-`Copy` value by move took it
+  before the guard ran, so a false guard fell through to the next arm
+  with the value already gone - a double free in safe code, and
+  before that an emitter dominance error from the binding's drop
+  flag. A by-value non-`Copy` binding in a guarded arm is refused now,
+  and the guard's false edge ends the arm's bindings so the sweep can
+  place their drops. `match` on a reference still binds by reference
+  (`exe-guard-ref-scrutinee`, `err-guard-moves-binding`). Borrowing
+  bindings for a by-value scrutinee is the feature that lifts the
+  refusal.
 - [x] An enum whose payload is an array of destructible values emitted
   an invalid GEP: the drop glue reached each field through a `u8`
   address and then projected an element from it, so the emitter built

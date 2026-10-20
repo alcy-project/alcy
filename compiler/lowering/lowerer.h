@@ -589,6 +589,10 @@ class Lowerer {
   // stays the owner to end, and a wildcard must not touch it.
   bool scrutinee_borrowed(ast::ExprIdx expr) const;
   bool arm_borrowed_ = false;
+  // Whether the arm being tested carries a guard: a by-value binding of
+  // a non-`Copy` value would be taken before the guard runs, and a
+  // false guard falls through with it gone.
+  bool guard_arm_ = false;
   void expand_or_arms(
       const ast::ExprMatchArm& arm,
       std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>>& out);

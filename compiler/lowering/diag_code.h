@@ -50,6 +50,10 @@ enum class DiagCode : u8 {
   // budget holds. The program is refused rather than crashing the
   // lowering at whatever the table happened to hold.
   FunctionBudgetExhausted = 13,
+  // A guarded arm's pattern binds a non-`Copy` value by move: a false
+  // guard falls through to the next arm, which would take the value a
+  // second time.
+  GuardMovesBinding = 14,
 };
 
 }  // namespace lowering

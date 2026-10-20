@@ -668,6 +668,19 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
                             init.type);
         return;
       }
+      // A guard sees the binding, but a by-value binding of a non-`Copy`
+      // value would already have taken it when the guard runs, and a
+      // false guard falls through to the next arm with the value gone.
+      // The move is refused; a `match` on a reference binds by reference
+      // and carries no such hazard.
+      if (guard_arm_ && !is_copy(init.type)) {
+        const u32 index = bag.emit<i18n::Key::LowerGuardMovesBinding>(
+            diag::Severity::Error, diag::Stage::Lowering,
+            DiagCode::GuardMovesBinding, node.span, name);
+        (void)index;
+        failed = true;
+        return;
+      }
       const Val material = materialize(init);
       const ir::RegisterIdx addr =
           emit(ir::Opcode::Alloca, init.type, {size_one});
@@ -4377,7 +4390,10 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     const ir::BlockIdx next = i + 1 < patterns.size() ? tests[i + 1] : fail;
     const bool has_guard = guard_blocks[i].is_valid();
     const ir::BlockIdx matched = has_guard ? guard_blocks[i] : bodies[i];
+    const bool saved_guard_arm = guard_arm_;
+    guard_arm_ = has_guard;
     lower_arm_test(patterns[i], addr, scrut_type, matched, next);
+    guard_arm_ = saved_guard_arm;
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -4389,7 +4405,15 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       if (failed) {
         return Val{size_one, error_type(), false, false};
       }
-      emit_cond_br(use_value(guard), bodies[i], next);
+      // A false guard falls through to the next arm, and the pattern's
+      // bindings end on that edge: the next arm's test must not see
+      // them. Ending them in the guard block itself would drop them on
+      // the taken edge too, so the false edge gets its own block.
+      const ir::BlockIdx guard_fail = reserve_block();
+      emit_cond_br(use_value(guard), bodies[i], guard_fail);
+      switch_to(guard_fail);
+      record_end(arm_mark, node.span);
+      emit_br(next);
     }
     // Arm testing always leaves lowering at the body block.
     switch_to(bodies[i]);
