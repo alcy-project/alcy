@@ -2778,7 +2778,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       const ir::TypeIdx element = resolve_type(module, array.element, self);
       u64 count = array.count;
       if (array.length_path.is_valid() &&
-          !const_array_length(module, array, node.span, count)) {
+          !const_array_length(module, array.length_path, node.span, count)) {
         return error_type();
       }
       return builder.array_type(element, count);
@@ -4579,11 +4579,10 @@ void Checker::validate_cycles(const ir::Storage& storage) {
 // Value namespace
 
 bool Checker::const_array_length(u32 module,
-                                 const ast::TypeArray& array,
+                                 ast::PathIdx path,
                                  diag::Span span,
                                  u64& out) {
-  const std::span<const ast::Ident> segments =
-      ast.paths[array.length_path].segments;
+  const std::span<const ast::Ident> segments = ast.paths[path].segments;
   if (segments.empty()) {
     return false;
   }
@@ -4608,7 +4607,7 @@ bool Checker::const_array_length(u32 module,
     }
   }
   u32 target = NO_MODULE;
-  if (!walk_module_prefix(module, array.length_path, "value", target)) {
+  if (!walk_module_prefix(module, path, "value", target)) {
     return false;
   }
   const CheckedModule::StaticInfo* info = lookup_static(target, name);

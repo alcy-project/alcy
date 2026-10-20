@@ -3502,6 +3502,11 @@ ir::TypeIdx Checker::check_array(u32 module,
                                  const ir::TypeIdx* expected) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+  u64 count = array.count;
+  if (array.count_path.is_valid() &&
+      !const_array_length(module, array.count_path, node.span, count)) {
+    return error_type();
+  }
   // Bounds compiler-time expansion: repeat counts are unbounded
   // literals, and lowering stores per element.
   static constexpr u64 MAX_ARRAY_ELEMENTS = 1u << 20;
@@ -3518,24 +3523,23 @@ ir::TypeIdx Checker::check_array(u32 module,
     has_expected_count = true;
   }
   if (array.repeat.is_valid()) {
-    if (array.count > MAX_ARRAY_ELEMENTS) {
+    if (count > MAX_ARRAY_ELEMENTS) {
       const u32 index = bag.emit<i18n::Key::AnalyzerArrayRepeatTooLarge>(
           diag::Severity::Error, diag::Stage::Analyzer,
-          DiagCode::InvalidOperation, node.span, array.count,
-          MAX_ARRAY_ELEMENTS);
+          DiagCode::InvalidOperation, node.span, count, MAX_ARRAY_ELEMENTS);
       (void)index;
       return error_type();
     }
     const ir::TypeIdx element =
         check_expr(module, array.repeat, element_expected);
-    if (has_expected_count && expected_count != array.count) {
+    if (has_expected_count && expected_count != count) {
       const u32 index = bag.emit<i18n::Key::AnalyzerArrayRepeatArity>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
-          node.span, expected_count, array.count);
+          node.span, expected_count, count);
       (void)index;
       return error_type();
     }
-    const ir::TypeIdx type = builder.array_type(element, array.count);
+    const ir::TypeIdx type = builder.array_type(element, count);
     if (expected != nullptr) {
       return unify(*expected, type, node.span, "array");
     }

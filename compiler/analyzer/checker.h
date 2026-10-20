@@ -769,7 +769,7 @@ class Checker {
   // evaluated at compile time, through the comp evaluator, once the
   // initializers of the consts it references are checked.
   bool const_array_length(u32 module,
-                          const ast::TypeArray& array,
+                          ast::PathIdx path,
                           diag::Span span,
                           u64& out);
   // The integer value of a const item, evaluated through the comp

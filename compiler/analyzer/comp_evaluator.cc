@@ -1555,11 +1555,20 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
       out.type = expr_type_in(mod, expr);
       out.value.tag = CompValue::Tag::Array;
       if (array.repeat.is_valid()) {
+        // A named repeat count resolves through the array type the
+        // checker built, the same count the lowering lays out.
+        u64 count = array.count;
+        if (tag_of(out.type) == ir::TypeTag::Array) {
+          const ir::ArrayType shape =
+              builder.state()
+                  .array_types[builder.state().types[out.type].as_array()];
+          count = shape.count;
+        }
         CompVal element;
         if (!comp_eval_expr(mod, array.repeat, scope, element)) {
           return false;
         }
-        for (u64 i = 0; i < array.count; ++i) {
+        for (u64 i = 0; i < count; ++i) {
           out.value.fields.push_back(element.value);
         }
         return true;

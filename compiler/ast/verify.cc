@@ -205,6 +205,10 @@ bool verify_expr_children(const ExprNode& node, const AstArena& arena) {
       if (!bound(array.repeat, arena.exprs)) {
         return false;
       }
+      if (array.count_path.is_valid() &&
+          !bound(array.count_path, arena.paths)) {
+        return false;
+      }
       for (const ExprIdx element : array.elements) {
         if (!bound(element, arena.exprs)) {
           return false;

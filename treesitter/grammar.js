@@ -801,11 +801,13 @@ module.exports = grammar({
       ']',
     ),
 
+    // The repeat count takes the same length grammar as the array
+    // type: a literal or a path to a `const` integer value (ADR-0054).
     repeat_expression: $ => seq(
       '[',
       field('value', $._expression),
       ';',
-      field('length', $.integer),
+      field('length', choice($.integer, $.path)),
       ']',
     ),
 

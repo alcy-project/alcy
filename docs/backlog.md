@@ -607,6 +607,12 @@ replaced. The foundations are in `roadmap.md`.
   from the type layout now, reading the type argument from the
   instantiation table since a type-only intrinsic carries no value
   argument. `exe-sizeof-comp` holds the values.
+- [x] An array repeat count was a decimal only: `[0u8; N]` was refused
+  even though the array type `[u8; N]` and the spec's length rule take
+  a value parameter or a path to a `const` integer. The literal takes
+  the same grammar as the type now, resolving the path through the
+  array length check, and a runtime local still reports
+  (`ok-array-repeat-const`, `err-array-repeat-not-const`).
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides
@@ -815,6 +821,12 @@ replaced. The foundations are in `roadmap.md`.
   from the type layout now, reading the type argument from the
   instantiation table since a type-only intrinsic carries no value
   argument. `exe-sizeof-comp` holds the values.
+- [x] An array repeat count was a decimal only: `[0u8; N]` was refused
+  even though the array type `[u8; N]` and the spec's length rule take
+  a value parameter or a path to a `const` integer. The literal takes
+  the same grammar as the type now, resolving the path through the
+  array length check, and a runtime local still reports
+  (`ok-array-repeat-const`, `err-array-repeat-not-const`).
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides

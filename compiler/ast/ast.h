@@ -471,6 +471,9 @@ struct ExprArray {
   std::span<const ExprIdx> elements;
   ExprIdx repeat = ExprIdx::invalid();
   u64 count = 0;
+  // A named repeat count: a path to a `const` integer value. Exactly
+  // one of `count` (a literal) and `count_path` is set.
+  PathIdx count_path = PathIdx::invalid();
 };
 
 struct ExprUnary {

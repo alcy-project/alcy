@@ -1466,15 +1466,21 @@ ast::ExprIdx Parser::parse_array_literal() {
     return ast::ExprIdx::invalid();
   }
   if (match(lexer::TokenKind::Semicolon)) {
-    if (peek_kind() != lexer::TokenKind::Integer) {
-      expect(lexer::TokenKind::Integer, "array repeat count");
-      return ast::ExprIdx::invalid();
-    }
+    // The repeat count is a literal or a path to a `const` integer
+    // value, the same grammar the array type's length takes (ADR-0054).
     u64 count = 0;
-    if (!parse_decimal_u64(&count)) {
-      return ast::ExprIdx::invalid();
+    ast::PathIdx count_path = ast::PathIdx::invalid();
+    if (peek_kind() == lexer::TokenKind::Integer) {
+      if (!parse_decimal_u64(&count)) {
+        return ast::ExprIdx::invalid();
+      }
+      advance();
+    } else {
+      count_path = parse_path();
+      if (!count_path.is_valid()) {
+        return ast::ExprIdx::invalid();
+      }
     }
-    advance();
     if (!expect(lexer::TokenKind::RBracket, "`]`")) {
       return ast::ExprIdx::invalid();
     }
@@ -1485,6 +1491,7 @@ ast::ExprIdx Parser::parse_array_literal() {
         .elements = {},
         .repeat = first,
         .count = count,
+        .count_path = count_path,
     });
     return ast_.exprs.push_back(node);
   }

@@ -3946,8 +3946,17 @@
           "type": "FIELD",
           "name": "length",
           "content": {
-            "type": "SYMBOL",
-            "name": "integer"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "integer"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "path"
+              }
+            ]
           }
         },
         {
