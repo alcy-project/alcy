@@ -613,6 +613,14 @@ replaced. The foundations are in `roadmap.md`.
   the same grammar as the type now, resolving the path through the
   array length check, and a runtime local still reports
   (`ok-array-repeat-const`, `err-array-repeat-not-const`).
+- [x] A generic struct literal resolved every turbofish argument as a
+  type, so `ArrayVec::<i32, 3> { ... }` for `struct ArrayVec<T, N:
+  usize>` reported "A value argument cannot be used as a type" - the
+  declaration ADR-0054 names as the value parameter's acceptance case.
+  The literal resolves a value parameter's argument as a value now, the
+  same mixed rule the type path already used, so the turbofish, an
+  inferred expected type, and a value-first parameter list all work.
+  `exe-value-param-struct` holds the three.
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides
@@ -827,6 +835,14 @@ replaced. The foundations are in `roadmap.md`.
   the same grammar as the type now, resolving the path through the
   array length check, and a runtime local still reports
   (`ok-array-repeat-const`, `err-array-repeat-not-const`).
+- [x] A generic struct literal resolved every turbofish argument as a
+  type, so `ArrayVec::<i32, 3> { ... }` for `struct ArrayVec<T, N:
+  usize>` reported "A value argument cannot be used as a type" - the
+  declaration ADR-0054 names as the value parameter's acceptance case.
+  The literal resolves a value parameter's argument as a value now, the
+  same mixed rule the type path already used, so the turbofish, an
+  inferred expected type, and a value-first parameter list all work.
+  `exe-value-param-struct` holds the three.
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides

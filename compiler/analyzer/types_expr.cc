@@ -2053,8 +2053,23 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     // expectation may be a field storage copy, so it is followed to
     // its origin.
     std::vector<ir::TypeIdx> explicit_args;
-    for (ast::TypeIdx arg : node.payload.get<ast::ExprStruct>().type_args) {
-      const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+    const std::span<const ast::GenericParam> params = nominal_params(*nominal);
+    const std::span<const ast::TypeIdx> written =
+        node.payload.get<ast::ExprStruct>().type_args;
+    explicit_args.reserve(written.size());
+    for (usize i = 0; i < written.size(); ++i) {
+      // A value parameter takes its argument as a value, exactly as the
+      // type path's turbofish does.
+      if (i < params.size() && is_value_param(ast, params[i])) {
+        u64 value = 0;
+        if (!resolve_value_argument(module, written[i], params[i].name.name,
+                                    node.span, value)) {
+          return error_type();
+        }
+        explicit_args.push_back(builder.const_type(value));
+        continue;
+      }
+      const ir::TypeIdx resolved = resolve_type(module, written[i], nullptr);
       if (is_error(resolved)) {
         return error_type();
       }
