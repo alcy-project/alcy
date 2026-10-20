@@ -1624,7 +1624,16 @@ ir::TypeIdx Checker::check_call(u32 module,
     ir::TypeIdx enum_type = resolved.type;
     std::vector<ir::TypeIdx> payloads;
     if (!is_error(enum_type)) {
-      payloads = variant_payloads(resolved, enum_type, span);
+      // The owner's turbofish may have named a generic instance, whose
+      // payloads resolve under its bindings.
+      const GenericInstance* instance = generic_find(type_origin(enum_type));
+      if (instance != nullptr) {
+        const GenericScope kept = push_generic_scope(*instance);
+        payloads = variant_payloads(resolved, enum_type, span);
+        pop_generic_scope(kept);
+      } else {
+        payloads = variant_payloads(resolved, enum_type, span);
+      }
     } else {
       // Generic enum: the expectation selects the instantiation. With
       // no expectation, a payload whose declared type is exactly a type

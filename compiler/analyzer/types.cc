@@ -7388,11 +7388,7 @@ bool Checker::resolve_value_path(u32 module,
         }
         out.enom = matches[0].enom;
         out.variant = matches[0].variant;
-        out.type = decl.payload.get<ast::ItemEnum>()
-                           .variants[matches[0].variant]
-                           .fields.empty()
-                       ? variant_owner_type(matches[0].enom)
-                       : nominal_owner_type(matches[0].enom);
+        out.type = variant_owner_type(matches[0].enom);
         out.kind = decl.payload.get<ast::ItemEnum>()
                            .variants[matches[0].variant]
                            .fields.empty()
@@ -7450,11 +7446,7 @@ bool Checker::resolve_value_path(u32 module,
               member) {
             out.enom = nominal;
             out.variant = i;
-            out.type = nominal_node.payload.get<ast::ItemEnum>()
-                               .variants[i]
-                               .fields.empty()
-                           ? variant_owner_type(nominal)
-                           : nominal_owner_type(nominal);
+            out.type = variant_owner_type(nominal);
             out.kind = nominal_node.payload.get<ast::ItemEnum>()
                                .variants[i]
                                .fields.empty()

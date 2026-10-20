@@ -621,6 +621,13 @@ replaced. The foundations are in `roadmap.md`.
   same mixed rule the type path already used, so the turbofish, an
   inferred expected type, and a value-first parameter list all work.
   `exe-value-param-struct` holds the three.
+- [x] A tuple variant's owner turbofish was ignored: for
+  `Vec2::<i32, 2>::Items([5, 6])` the instance had to come from the
+  payload, which cannot read a value parameter out of an array length,
+  so the call reported "Cannot infer the generic type" despite the
+  annotation. A named owner instantiates the variant's enum now, and
+  the payload resolves under the instance's bindings.
+  `exe-variant-value-args` holds it.
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides
@@ -843,6 +850,13 @@ replaced. The foundations are in `roadmap.md`.
   same mixed rule the type path already used, so the turbofish, an
   inferred expected type, and a value-first parameter list all work.
   `exe-value-param-struct` holds the three.
+- [x] A tuple variant's owner turbofish was ignored: for
+  `Vec2::<i32, 2>::Items([5, 6])` the instance had to come from the
+  payload, which cannot read a value parameter out of an array length,
+  so the call reported "Cannot infer the generic type" despite the
+  annotation. A named owner instantiates the variant's enum now, and
+  the payload resolves under the instance's bindings.
+  `exe-variant-value-args` holds it.
 - [ ] A type mismatch between two closure literals reads `expected
   'struct', found 'struct'`: each closure literal is its own type, which
   is what the error is about, and the message names the kind both sides
