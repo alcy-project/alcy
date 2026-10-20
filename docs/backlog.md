@@ -172,22 +172,21 @@ replaced. The foundations are in `roadmap.md`.
   reached std code the extern path never reaches) and rebuilding that
   route is what would say whether the report was a false positive about
   a loan's place or a conservative rule worth keeping.
-- [ ] One nominal as several type nodes: the checker can intern a
-  second type node over a declaration's own struct or enum shape (a
-  `String` node beside the declaration's), and `types_equal` compares
-  origins, so two nodes over one declaration read as different types
-  while only the drop lookup was taught to see through them. What
-  interns the second node - and whether the nodes should collapse to
-  one - wants finding. What is known: a library build mints one node
-  (an instrumented `intern_nominal` fires once for the declaration and
-  the generic instance path never runs for it), yet a dependent's view
-  of the same artifact holds two (`struct Pair(i32, i32)` at #19 and
-  #158 in a two-field dump), the summary row for the declaration names
-  one, and a function's parameter names the other - which is why a
-  nominal-typed signature cannot spell even though the declaration
-  spells. Both mint sites are instrumented and silent on the second, so
-  the path that builds it is still to find; the deserializer's view is
-  the next place to look.
+- [x] One nominal as several type nodes: the checker interned a
+  second type node over a declaration's own shape (a `String` node
+  beside the declaration's), and `types_equal` compares origins, so two
+  nodes over one declaration read as different types while only the
+  drop lookup was taught to see through them. The observable symptom
+  was a two-node dump (`struct Pair(i32, i32)` at #19 and #158) that
+  made a nominal-typed signature unspellable. It no longer reproduces:
+  a library with a struct, a nested struct, an impl, and calls dumps
+  one node per declaration now, and the dependent spells, links, and
+  runs a nominal parameter, return, nested field, and reference. The
+  diagnosis that stands is that the object a field or parameter holds
+  is a storage copy - a reference the checker records an origin for,
+  which lowering follows - so a consumer that meets one resolves it by
+  shape; if the extra node returns, the reader audit's rule and
+  `type_origins` are where to look.
 - [x] Manifest lint: a pre-1.0 version range warns (WH007), since a
   minor may break under 1.0. The rule reads the parsed requirement -
   one `Equal` bound is a pin and stays silent - so `0.5.x`,
