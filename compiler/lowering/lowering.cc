@@ -713,7 +713,11 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   }
   static constexpr usize MAX_FN_ENTRIES = 8192;
   if (fns.size() >= MAX_FN_ENTRIES) {
-    internal(diag::Span{}, "function specialization budget exhausted");
+    const u32 index = bag.emit<i18n::Key::LowerFunctionBudgetExhausted>(
+        diag::Severity::Error, diag::Stage::Lowering,
+        DiagCode::FunctionBudgetExhausted, cur_span_);
+    (void)index;
+    failed = true;
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
@@ -789,7 +793,11 @@ ir::FunctionIdx Lowerer::closure_fn_index(
   }
   static constexpr usize MAX_FN_ENTRIES = 8192;
   if (fns.size() >= MAX_FN_ENTRIES) {
-    internal(diag::Span{}, "function specialization budget exhausted");
+    const u32 index = bag.emit<i18n::Key::LowerFunctionBudgetExhausted>(
+        diag::Severity::Error, diag::Stage::Lowering,
+        DiagCode::FunctionBudgetExhausted, cur_span_);
+    (void)index;
+    failed = true;
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));

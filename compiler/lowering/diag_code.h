@@ -46,6 +46,10 @@ enum class DiagCode : u8 {
   // A block whose value is a reference to a local the block declares:
   // the slot ends with the block and the binding outlives it.
   BlockReferenceEscapes = 12,
+  // The package specializes more functions than the compiler's function
+  // budget holds. The program is refused rather than crashing the
+  // lowering at whatever the table happened to hold.
+  FunctionBudgetExhausted = 13,
 };
 
 }  // namespace lowering

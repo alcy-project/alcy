@@ -306,6 +306,7 @@
   F(LowerBlockReferenceEscapes, "Reference to local '{}' escapes the block that declares it") \
   F(LowerCompEngineMismatch, "Internal error: the comp engines disagree on '{}'") \
   F(LowerCompOverflow, "Integer overflow in constant evaluation") \
+  F(LowerFunctionBudgetExhausted, "The compiler's function budget cannot hold the specialized functions this package needs") \
   F(LowerIrVerificationFailed, "Lowered IR failed verification") \
   F(LowerMoveOutOfBorrow, "Cannot move a non-`Copy` value out of a reference") \
   F(LowerMoveOutOfDestructor, "Cannot move a field out of '{}'; its type implements `drop`") \
