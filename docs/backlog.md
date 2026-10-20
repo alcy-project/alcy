@@ -268,8 +268,9 @@ replaced. The foundations are in `roadmap.md`.
   and the module statics. `Lowerer::expr_type` scans backward ("last
   entry wins") while `CompEvaluator::expr_type_in` scans forward ("first
   wins"), so the readers can disagree on a duplicate key, and
-  `MAX_FN_ENTRIES = 8192` turns a package past it into an internal error
-  rather than a diagnostic.
+  `MAX_FN_ENTRIES = 8192` reports `ED013` at the call that spends the
+  last slot now, rather than failing at an unspecified internal span;
+  raising the budget itself waits for the indexing.
 - [ ] Split `Lowerer`: comp evaluation, format expansion, and AST-to-IR
   lowering share one class with a large public surface.
 - [ ] Borrow-pass scratch sized by the program, not the function: the
@@ -277,6 +278,20 @@ replaced. The foundations are in `roadmap.md`.
   entries it names. The final pass's per-worker memory cost is why
   spreading it lost by measurement (ADR-0047), so the sizing waits for a
   reason to spread it.
+- [x] A moved-from owning closure was still callable: `h := g` handed
+  the environment to `h`, but `g()` still passed `g`'s own storage as
+  the environment and read what `h`'s drop freed. The borrow pass
+  refuses a store whose value is the address of a moved place, which is
+  the shape a closure call writes its environment through;
+  `err-closure-move-reuse` holds it. A place reached through a deref is
+  exempt, because the value names the referent rather than the slot a
+  move takes.
+- [ ] Two handles over one exclusive loan: a closure that owns nothing
+  is not moved (its captures are borrows, ADR-0064), so `h := g` on a
+  closure holding a `&mut` capture gives two handles that share one
+  loan, which `exe-closure-capture-mut` expects; whether both may write
+  through it is the borrow checker's question rather than the move
+  walk's.
 
 ### Language and library surface
 

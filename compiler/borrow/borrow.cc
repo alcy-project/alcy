@@ -1393,6 +1393,21 @@ class Checker {
         Place place;
         u32 target = NO_ROOT;
         if (operand_reg(1, target) && operand_place(1, place)) {
+          // The address of a moved place is not a value that may be
+          // passed on. A closure call hands its environment over as the
+          // closure variable's own address, so a moved-from closure
+          // still reaches the storage its move gave away. A register
+          // that names a place without a deref step is that address;
+          // one loaded from a reference names the referent, which a
+          // move of the slot does not take.
+          u32 handed = NO_ROOT;
+          Place handed_place;
+          if (operand_reg(0, handed) && handed < path.size() &&
+              std::find(path[handed].begin(), path[handed].end(), DEREF_STEP) ==
+                  path[handed].end() &&
+              operand_place(0, handed_place)) {
+            check_place_use(moved, handed_place, span, "read");
+          }
           kill_moved(moved, place);
           // Writing through a loan is what the loan is for, so a store
           // is exempt from the loans its own address carries. Every

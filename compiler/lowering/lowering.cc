@@ -396,6 +396,16 @@ void Lowerer::mark_move(Val v) {
   if (!v.place || !v.address || is_copy(v.type)) {
     return;
   }
+  // A closure that owns nothing is not moved: its captures are borrows,
+  // so the value holds handles to storage that stays where it is and a
+  // second binding shares the one loan (ADR-0064). A shared-borrow
+  // closure is `Copy` and returned above; an exclusive capture is the
+  // shape `exe-closure-capture-mut` expects to hand on, so the two
+  // handles share the loan there too, and whether both may write
+  // through it is the borrow checker's question, not this walk's.
+  if (closure_entry(v.type) != nullptr && !runs_destructor(v.type)) {
+    return;
+  }
   const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
   (void)marker;
   const ir::Operand& operand = builder.state().operands[v.op.idx];
