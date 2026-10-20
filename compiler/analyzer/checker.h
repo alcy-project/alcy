@@ -452,6 +452,11 @@ class Checker {
   // The name a diagnostic uses for a type: the nominal's, else the
   // scalar spelling.
   std::string_view type_name(ir::TypeIdx type) const;
+  // The type spelled the way the source writes it, so a mismatch names
+  // both sides instead of repeating their kind. `depth` bounds the walk
+  // over a type that nests through its arguments.
+  std::string type_display(ir::TypeIdx type) const;
+  std::string type_display_at(ir::TypeIdx type, usize depth) const;
   // Resolves every declared super-spec, rejects cycles, and requires an
   // implementation of each ancestor beside every implementation of a
   // spec (ADR-0053). Runs after every module's signatures registered,

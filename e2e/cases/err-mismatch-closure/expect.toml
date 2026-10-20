@@ -1,0 +1,2 @@
+exit = 4
+contains = ["expected '(i32) -> i32', found '(i64) -> i32'"]

@@ -827,6 +827,13 @@ replaced. The foundations are in `roadmap.md`.
   the consumed scrutinee, and the borrow walk's may-analysis for
   `moved` cannot yet express a conditional drop; the drop would have
   to run behind the same flag an end site uses.
+- [x] A type mismatch between two nominals, two instantiations, or two
+  closure signatures printed only the kind twice (`expected 'struct',
+  found 'struct'`). Diagnostics spell the type the way the source
+  writes it now (`type_display`): nominal and arguments, reference and
+  pointer pointees, array lengths, tuple elements, and closure
+  signatures. `err-mismatch-nominal`, `err-mismatch-generic-args`, and
+  `err-mismatch-closure` hold it.
 - [x] An enum whose payload is an array of destructible values emitted
   an invalid GEP: the drop glue reached each field through a `u8`
   address and then projected an element from it, so the emitter built

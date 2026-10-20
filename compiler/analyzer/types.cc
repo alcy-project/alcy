@@ -929,6 +929,107 @@ std::string_view Checker::type_name(ir::TypeIdx type) const {
   return pretty_tag(tag);
 }
 
+std::string Checker::type_display(ir::TypeIdx type) const {
+  return type_display_at(type, 0);
+}
+
+std::string Checker::type_display_at(ir::TypeIdx type, usize depth) const {
+  if (is_error(type)) {
+    return "error";
+  }
+  if (depth > 6) {
+    return "...";
+  }
+  const ir::TypeIdx origin = type_origin(type);
+  const ir::TypeNode& node = builder.types()[origin];
+  switch (node.tag) {
+    case ir::TypeTag::Ref:
+      return "&" + type_display_at(builder.ref_types()[node.as_ref()].pointee,
+                                   depth + 1);
+    case ir::TypeTag::MutRef:
+      return "&mut " +
+             type_display_at(builder.ref_types()[node.as_ref()].pointee,
+                             depth + 1);
+    case ir::TypeTag::RawPtr:
+      return "*" + type_display_at(builder.ref_types()[node.as_ref()].pointee,
+                                   depth + 1);
+    case ir::TypeTag::RawMutPtr:
+      return "*mut " +
+             type_display_at(builder.ref_types()[node.as_ref()].pointee,
+                             depth + 1);
+    case ir::TypeTag::Array: {
+      const ir::ArrayType& array = builder.array_types()[node.as_array()];
+      return "[" + type_display_at(array.element, depth + 1) + "; " +
+             std::to_string(array.count) + "]";
+    }
+    case ir::TypeTag::Slice: {
+      const ir::SliceType& slice = builder.slice_types()[node.as_slice()];
+      return "[" + type_display_at(slice.element, depth + 1) + "]";
+    }
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      std::string out = "(";
+      for (usize i = 0; i < tuple.elements.size(); ++i) {
+        if (i != 0) {
+          out += ", ";
+        }
+        out += type_display_at(tuple.elements[i], depth + 1);
+      }
+      out += ')';
+      return out;
+    }
+    case ir::TypeTag::Func: {
+      const ir::FuncType& func = builder.func_types()[node.as_func()];
+      std::string out = "(";
+      for (usize i = 0; i < func.params.size(); ++i) {
+        if (i != 0) {
+          out += ", ";
+        }
+        out += type_display_at(func.params[i], depth + 1);
+      }
+      out += ") -> " + type_display_at(func.ret, depth + 1);
+      return out;
+    }
+    case ir::TypeTag::Struct: {
+      const ir::StructType& shape = builder.struct_types()[node.as_struct()];
+      // The shape carries its declared name, which a nominal lookup can
+      // miss when the type only appears as another instance's argument.
+      const std::string_view declared = interner.get(shape.name);
+      std::string out(declared.empty() ? type_name(origin) : declared);
+      if (shape.params.size() > 0) {
+        out += '<';
+        for (usize i = 0; i < shape.params.size(); ++i) {
+          if (i != 0) {
+            out += ", ";
+          }
+          out += type_display_at(shape.params[i], depth + 1);
+        }
+        out += '>';
+      }
+      return out;
+    }
+    case ir::TypeTag::Enum: {
+      const ir::EnumType& shape = builder.enum_types()[node.as_enum()];
+      const std::string_view declared = interner.get(shape.name);
+      std::string out(declared.empty() ? type_name(origin) : declared);
+      if (shape.params.size() > 0) {
+        out += '<';
+        for (usize i = 0; i < shape.params.size(); ++i) {
+          if (i != 0) {
+            out += ", ";
+          }
+          out += type_display_at(shape.params[i], depth + 1);
+        }
+        out += '>';
+      }
+      return out;
+    }
+    case ir::TypeTag::Const:
+      return std::to_string(builder.const_types()[node.as_const()].value);
+    default: return std::string(pretty_tag(node.tag));
+  }
+}
+
 bool Checker::implements_spec(ir::TypeIdx type,
                               u32 spec,
                               std::span<const ir::TypeIdx> spec_args,
@@ -4276,7 +4377,7 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerTypeMismatchExpectedFound>(
       diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-      span, what, pretty_tag(tag_of(expected)), pretty_tag(tag_of(actual)));
+      span, what, type_display(expected), type_display(actual));
   (void)index;
   return error_type();
 }
