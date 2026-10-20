@@ -435,10 +435,16 @@ class Lowerer {
   // pass by value, and the gate was checked at the call site.
   // A call into a package a summary answers for: its code lives in the
   // dependency's own artifact, so the call names the symbol the
-  // dependency's build wrote for it (ADR-0078).
+  // dependency's build wrote for it (ADR-0078). A method's receiver is
+  // its first parameter and travels apart from the call's arguments.
   Val lower_summary_call(ast::ExprIdx expr,
-                         const analyzer::CheckedModule::FnSig& sig,
-                         u32 module);
+                         std::string_view name,
+                         std::span<const ir::TypeIdx> params,
+                         ir::TypeIdx ret,
+                         ast::ItemIdx item,
+                         u32 module,
+                         std::span<const ast::ExprIdx> args,
+                         std::optional<Val> receiver);
   Val lower_extern_call(ast::ExprIdx expr,
                         const analyzer::CheckedModule::FnSig& sig);
   ir::TypeIdx usize_type();

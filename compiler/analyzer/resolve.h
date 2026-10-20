@@ -82,10 +82,13 @@ struct PackagePolicy {
 };
 
 // One item a summary spelled, with the symbol its code is written
-// under: a dependent calls it by that name (ADR-0078).
+// under: a dependent calls it by that name (ADR-0078). The item is the
+// spelled declaration, which a call names exactly when a name repeats
+// across impls.
 struct SummarySymbol {
   str::StringPoolId name = str::INVALID_STRING_POOL_ID;
   str::StringPoolId symbol = str::INVALID_STRING_POOL_ID;
+  ast::ItemIdx item = ast::ItemIdx::invalid();
 };
 
 struct ModuleNode {

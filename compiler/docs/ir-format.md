@@ -314,15 +314,16 @@ instead of walking them. A file written before this kind existed carries
 none, and a reader answers empty for those.
 
 **SUMMARY**: `count` × `{ function u32, name u32, path u32, symbol u32,
-kind u8, flags u8, reserved u8[2] }`, the package's public surface for a
+owner u32, kind u8, flags u8, reserved u8[2] }`, the package's public surface for a
 dependent to resolve against (ADR-0078). `function` names the `FUNCTIONS`
 row whose signature carries the item, or a `TYPES` row when `kind` names a
 struct or an enum; `U32_MAX` stands where the declaration is generic and
 has no code of its own. `name` is the source name in `STRINGS`; `path` is
 the module it belongs to, dotted from the package root; `symbol` is the
 name the item's code is written under, so a dependent calls it by what
-the library's own artifact exports; `kind` is the symbol kind a function
-row is written as, or the nominal a struct or enum row names; and `flags`
+the library's own artifact exports; `owner` is the nominal an
+associated function or method belongs to, `U32_MAX` for a free function;
+`kind` is the symbol kind a function row is written as, or the nominal a struct or enum row names; and `flags`
 bit 0 says the item needs its body to be used, as a generic declaration
 does. When a struct row is present the rows are followed by the field
 runs: `u32 group_count`, that many `{ row u32, first u32, count u32 }`,

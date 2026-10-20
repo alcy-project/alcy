@@ -105,7 +105,10 @@ too: the row spells the declaration a copy repeats when the shapes
 match, and a call crosses it as the value the callee takes. A nominal
 parameter, a nominal return, a nested nominal field, and a reference to
 a nominal all resolve, link against the library's object, and run with
-the library's sources gone.
+the library's sources gone. An associated function or method crosses
+too: a row names the nominal it belongs to, the surface groups those
+rows into the `impl` the declaration's module holds, and a method's
+receiver travels as its first argument.
 
 **The export list trims a summary the way it trims source.** An
 unexported module is refused on both paths, an exported surface
@@ -114,7 +117,5 @@ library, its sources present and then gone). The trim is the resolver's
 `PackageRoot.exports`, so a summary never shows a dependent more than
 the source it stands in for.
 
-**Next:** associated functions and methods, which need the nominal a
-row belongs to (`Associated functions and methods in a summary` in the
-backlog carries the shape), and then the generic boundary, where a
-declaration has no body to instantiate and the summary has to say so.
+**Next:** the generic boundary, where a declaration has no body to
+instantiate and the summary has to say so.

@@ -53,6 +53,10 @@ struct SummaryEntry {
   // every designated initializer of a row whole.
   // NOLINTNEXTLINE(readability-redundant-member-init)
   std::span<const SummaryField> fields = {};
+  // The nominal an associated function or method belongs to, by the
+  // type its declaration names; invalid for a free function. A
+  // dependent groups the rows by it into the `impl` the item sits in.
+  TypeIdx owner = TypeIdx(base::INVALID_IDX);
   SummaryKind kind = SummaryKind::Free;
   bool needs_body = false;
 };

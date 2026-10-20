@@ -891,6 +891,14 @@ TEST_CASE("A dependency a summary answers for is not read") {
       {{"lib.al",
         "pub struct Pair {\n  pub left: i32,\n  pub right: i32,\n}\n\n"
         "pub struct Line {\n  pub a: Pair,\n  pub b: Pair,\n}\n\n"
+        "impl Pair {\n"
+        "  pub fn new(left: i32, right: i32) -> Pair {\n"
+        "    ret Pair { left: left, right: right }\n"
+        "  }\n\n"
+        "  pub fn total(self: &Pair) -> i32 {\n"
+        "    ret self.left + self.right\n"
+        "  }\n"
+        "}\n\n"
         "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n\n"
         "pub fn sum(p: Pair) -> i32 {\n  ret p.left + p.right\n}\n\n"
         "pub fn make(a: i32, b: i32) -> Pair {\n"
@@ -957,9 +965,9 @@ TEST_CASE("A dependency a summary answers for is not read") {
       {{"main.al",
         "use dep::Line\nuse dep::Pair\nuse dep::double\nuse dep::left_of\n"
         "use dep::make\nuse dep::sum\n\nfn main() -> i32 {\n"
-        "  p := make(20, 1)\n"
+        "  p := Pair::new(20, 1)\n"
         "  l := Line { a: p, b: p }\n"
-        "  ret double(sum(l.a) + left_of(&l.a) - 41)\n}\n"}});
+        "  ret double(sum(l.a) + left_of(&l.a) + p.total() - 62)\n}\n"}});
   CHECK(app_written);
   if (!app_written) {
     return;
@@ -991,9 +999,9 @@ TEST_CASE("A dependency a summary answers for is not read") {
       "proj/main.al",
       "use dep::Line\nuse dep::Pair\nuse dep::double\nuse dep::left_of\n"
       "use dep::make\nuse dep::sum\n\nfn main() -> i32 {\n"
-      "  p := make(20, 1)\n"
+      "  p := Pair::new(20, 1)\n"
       "  l := Line { a: p, b: p }\n"
-      "  ret double(sum(l.a) + left_of(&l.a) - 41)\n}\n"));
+      "  ret double(sum(l.a) + left_of(&l.a) + p.total() - 62)\n}\n"));
 #if !BUILD_FLAG(IS_OS_ASMJS)
   {
     PipelineContext ctx{i18n::Language::EnUs};

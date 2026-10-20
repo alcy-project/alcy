@@ -486,9 +486,11 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
   }
 }
 
-// Spells one free function of the summary into an item: a wildcard per
+// Spells one function of the summary into an item: a wildcard per
 // parameter, because a summary carries no pattern names, and no body,
-// because the package's own artifact holds the code.
+// because the package's own artifact holds the code. A method's first
+// parameter is its receiver, which the grammar writes `self`; the one
+// that takes an exclusive borrow is the receiver that writes through.
 bool spell_function(const SpellContext& ctx,
                     std::string_view name,
                     ir::FunctionIdx function_index,
@@ -499,18 +501,35 @@ bool spell_function(const SpellContext& ctx,
     return false;
   }
   const ir::FunctionMeta& meta = storage.functions()[function_index].meta;
-  if (meta.kind != ir::SymbolKind::Free || !meta.generics.empty()) {
+  if (!meta.generics.empty()) {
+    return false;
+  }
+  const bool is_method = meta.kind == ir::SymbolKind::Method;
+  if (is_method && meta.param_types.empty()) {
     return false;
   }
   std::vector<ast::ItemFnParam> params;
   params.reserve(meta.param_types.size());
-  for (ir::TypeIdx param : meta.param_types) {
-    const ast::TypeIdx spelled = spell_type(ctx, param);
+  for (usize i = 0; i < meta.param_types.size(); ++i) {
+    const ast::TypeIdx spelled = spell_type(ctx, meta.param_types[i]);
     if (!spelled.is_valid()) {
       return false;
     }
     ast::PatternNode pattern;
-    pattern.kind = ast::PatternKind::Wildcard;
+    if (is_method && i == 0) {
+      const bool exclusive =
+          storage.types()[meta.param_types[i].idx].tag == ir::TypeTag::MutRef;
+      pattern.kind =
+          exclusive ? ast::PatternKind::MutIdent : ast::PatternKind::Ident;
+      const ast::PatternIdent self{ast::Ident{"self", diag::Span{}}};
+      if (exclusive) {
+        pattern.payload.mut_ident = self;
+      } else {
+        pattern.payload.ident = self;
+      }
+    } else {
+      pattern.kind = ast::PatternKind::Wildcard;
+    }
     const ast::PatternIdx pattern_index = ast.patterns.push_back(pattern);
     params.push_back(
         ast::ItemFnParam{.pattern = pattern_index, .type = spelled});
@@ -683,16 +702,20 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   std::unordered_map<std::string, std::vector<ast::ItemIdx>> items_by_module;
   std::unordered_map<std::string, std::vector<SummarySymbol>> symbols_by_module;
   std::vector<std::string> order;
+  // Members wait for the declarations they target: an impl is built
+  // after every nominal is spelled, and it lands in the module the
+  // declaration is in, whatever module the method's row names.
+  struct ImplGroup {
+    std::string_view path;
+    std::vector<ast::ItemIdx> methods;
+    std::vector<SummarySymbol> symbols;
+  };
+  std::unordered_map<u32, ImplGroup> impls;
+  std::vector<u32> impl_order;
   for (const ir::SummaryEntry& row : summary.summary) {
-    // What a dependent cannot use yet - an associated function, a
-    // method, or a declaration that needs its body - is left for the
-    // slices the summary carries them in.
+    // A declaration that needs its body cannot be spelled from a
+    // summary; the row says so.
     if (row.needs_body || !row.function.is_valid()) {
-      continue;
-    }
-    if (row.kind != ir::SummaryKind::Free &&
-        row.kind != ir::SummaryKind::Struct &&
-        row.kind != ir::SummaryKind::Enum) {
       continue;
     }
     const std::string_view name = named(row.name, "");
@@ -701,10 +724,34 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     // source name is the closest a surface can spell.
     const std::string_view symbol = named(row.symbol, name);
     ast::ItemIdx item = ast::ItemIdx::invalid();
-    const bool spelled = row.kind == ir::SummaryKind::Free
-                             ? spell_function(context, name, row.function, item)
-                             : spell_declaration(context, row, name, item);
-    if (!spelled) {
+    if (row.kind == ir::SummaryKind::Free) {
+      if (!spell_function(context, name, row.function, item)) {
+        continue;
+      }
+    } else if (row.kind == ir::SummaryKind::Struct ||
+               row.kind == ir::SummaryKind::Enum) {
+      if (!spell_declaration(context, row, name, item)) {
+        continue;
+      }
+    } else {
+      // An associated function or method belongs to a nominal: without
+      // the declaration it cannot sit in an impl, and its row waits.
+      const auto owner = context.nominals.find(row.owner.idx);
+      if (owner == context.nominals.end() ||
+          !spell_function(context, name, row.function, item)) {
+        continue;
+      }
+      ImplGroup& group = impls[row.owner.idx];
+      if (group.methods.empty()) {
+        group.path = owner->second.path;
+        impl_order.push_back(row.owner.idx);
+      }
+      group.methods.push_back(item);
+      group.symbols.push_back(
+          SummarySymbol{strings.intern(name), strings.intern(symbol), item});
+      if (ast.exhausted()) {
+        return surface;
+      }
       continue;
     }
     std::vector<ast::ItemIdx>& items = items_by_module[std::string(path)];
@@ -713,7 +760,43 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     }
     items.push_back(item);
     symbols_by_module[std::string(path)].push_back(
-        SummarySymbol{strings.intern(name), strings.intern(symbol)});
+        SummarySymbol{strings.intern(name), strings.intern(symbol), item});
+    if (ast.exhausted()) {
+      return surface;
+    }
+  }
+  for (const u32 owner : impl_order) {
+    const ImplGroup& group = impls[owner];
+    const auto site = context.nominals.find(owner);
+    if (site == context.nominals.end()) {
+      continue;
+    }
+    const std::optional<ast::TypeIdx> target =
+        spell_nominal_path(context, site->second);
+    if (!target.has_value()) {
+      continue;
+    }
+    ast::ItemImpl impl;
+    impl.type = *target;
+    impl.methods = ast::copy_to_arena(ast.spans, group.methods);
+    ast::ItemNode node;
+    node.kind = ast::ItemKind::Impl;
+    node.is_pub = true;
+    node.payload.set(impl);
+    const ast::ItemIdx item = ast.items.push_back(node);
+    if (!item.is_valid()) {
+      return surface;
+    }
+    std::vector<ast::ItemIdx>& items = items_by_module[std::string(group.path)];
+    if (items.empty()) {
+      order.emplace_back(group.path);
+    }
+    items.push_back(item);
+    std::vector<SummarySymbol>& symbols =
+        symbols_by_module[std::string(group.path)];
+    for (const SummarySymbol& entry : group.symbols) {
+      symbols.push_back(entry);
+    }
     if (ast.exhausted()) {
       return surface;
     }

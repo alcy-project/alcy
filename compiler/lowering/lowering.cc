@@ -1628,6 +1628,23 @@ ir::SummaryKind summary_kind_of(ir::SymbolKind kind) {
   }
 }
 
+// The nominal an associated function or method belongs to, found by the
+// item the checked method tables recorded for it.
+ir::TypeIdx method_owner_of(const analyzer::CheckedPackage& pkg,
+                            u32 mod,
+                            ast::ItemIdx item) {
+  if (mod >= pkg.modules.size()) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  for (const analyzer::CheckedModule::MethodInfo& info :
+       pkg.modules[mod].methods) {
+    if (info.item == item) {
+      return info.self_type;
+    }
+  }
+  return ir::TypeIdx(base::INVALID_IDX);
+}
+
 // The nominal a declaration interned, found by the item the checked
 // tables recorded for it; the definition's row precedes any
 // instantiation's.
@@ -1670,10 +1687,19 @@ std::vector<ir::SummaryEntry> collect_summary(
     if (!is_own_module(pkg.tree, entry.mod) || !ast.items[entry.item].is_pub) {
       continue;
     }
+    if (ast.items[entry.item].kind != ast::ItemKind::Fn ||
+        ast.items[entry.item].payload.get<ast::ItemFn>().is_comp) {
+      // A comp call is evaluated while the package is built, so a
+      // dependent cannot reach it and the row stays out.
+      continue;
+    }
     summary.push_back(ir::SummaryEntry{
         .function = entry.idx,
         .name = entry.name_id,
         .path = strings.intern(pkg.tree.modules[entry.mod]->path),
+        .owner = entry.kind == ir::SymbolKind::Free
+                     ? ir::TypeIdx(base::INVALID_IDX)
+                     : method_owner_of(pkg, entry.mod, entry.item),
         .kind = summary_kind_of(entry.kind)});
   }
   for (u32 mod = 0; mod < pkg.tree.modules.size(); ++mod) {
@@ -1724,7 +1750,7 @@ std::vector<ir::SummaryEntry> collect_summary(
       }
       if (node.kind == ast::ItemKind::Fn) {
         const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
-        if (fn.generic.empty() || !fn.body.is_valid()) {
+        if (fn.generic.empty() || !fn.body.is_valid() || fn.is_comp) {
           continue;
         }
         summary.push_back(
@@ -1745,13 +1771,14 @@ std::vector<ir::SummaryEntry> collect_summary(
           continue;
         }
         const ast::ItemFn& fn = method_node.payload.get<ast::ItemFn>();
-        if (impl.params.empty() && fn.generic.empty()) {
+        if (fn.is_comp || (impl.params.empty() && fn.generic.empty())) {
           continue;
         }
         summary.push_back(ir::SummaryEntry{
             .function = ir::FunctionIdx(base::INVALID_IDX),
             .name = strings.intern(fn.name.name),
             .path = path,
+            .owner = method_owner_of(pkg, mod, method),
             .kind = takes_receiver(ast, fn) ? ir::SummaryKind::Method
                                             : ir::SummaryKind::Assoc,
             .needs_body = true});

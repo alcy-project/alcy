@@ -141,15 +141,18 @@ replaced. The foundations are in `roadmap.md`.
   library's sources gone. Spelling a signature through a copy was
   refused while this was open; a row spells it now, because identical
   shapes lay out alike.
-- [ ] Associated functions and methods in a summary: a row says the
-  symbol kind but not the nominal the item belongs to, so a dependent
-  cannot spell the `impl` a method sits in. The lowering's `FnEntry`
-  carries the kind and the item but no owner, and the checked module's
-  method table is where the owner lives (the shape `nominal_type_of`
-  reads for structs). The row wants an owner beside its function and
-  the surface wants to group rows by it into `impl` items. The call
-  needs nothing new: a summary call crosses as the value the callee
-  takes, and a receiver is one more argument.
+- [x] Associated functions and methods in a summary: a row names the
+  nominal its item belongs to now (`owner`, the type the declaration
+  names), and the surface groups the rows by it into the `impl` the
+  declaration's module holds, after every nominal has been spelled. A
+  method spells its receiver as `self` - `mut self` when the receiver
+  takes an exclusive borrow, which its type says - and its call crosses
+  as the value the callee takes with the receiver as the first
+  parameter; a call names the callee's own item before its name, which
+  two impls could share. A comp function gets no row, because its call
+  belongs to the package's build rather than a dependent's.
+  `dependencies_test` calls `Pair::new` and `p.total()` with the
+  library's sources gone.
 - [ ] `core::string`'s `trim_start_matches` returns a slice local the
   borrow checker reads as a reference to the local: `mut s := self` is
   reassigned from `strip_prefix` in the loop, and the `None` arm's

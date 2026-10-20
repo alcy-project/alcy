@@ -1327,7 +1327,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   }
   if (target->module < pkg.tree.modules.size() &&
       pkg.tree.modules[target->module]->is_summary) {
-    return lower_summary_call(expr, sig, target->module);
+    return lower_summary_call(expr, sig.name, sig.params, sig.ret, sig.item,
+                              target->module, call.args, std::nullopt);
   }
   if (sig.is_extern) {
     return lower_extern_call(expr, sig);
@@ -1406,6 +1407,11 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   }
   const std::span<const ast::ExprIdx> args =
       call.payload.get<ast::ExprCall>().args;
+  if (target->module < pkg.tree.modules.size() &&
+      pkg.tree.modules[target->module]->is_summary) {
+    return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
+                              target->module, args, std::nullopt);
+  }
   const std::vector<u32> comp = comp_positions(info.item);
   std::vector<CompVal> comp_args;
   for (u32 pos : comp) {
@@ -1517,24 +1523,37 @@ ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
 // references over them - pass this way (ADR-0078).
 
 Val Lowerer::lower_summary_call(ast::ExprIdx expr,
-                                const analyzer::CheckedModule::FnSig& sig,
-                                u32 module) {
+                                std::string_view name,
+                                std::span<const ir::TypeIdx> params,
+                                ir::TypeIdx ret,
+                                ast::ItemIdx item,
+                                u32 module,
+                                std::span<const ast::ExprIdx> args,
+                                std::optional<Val> receiver) {
   const ast::ExprNode& node = ast.exprs[expr];
-  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-  if (call.args.size() != sig.params.size()) {
+  const usize count = args.size() + (receiver.has_value() ? 1 : 0);
+  if (count != params.size()) {
     internal(node.span, "summary call arity");
     return Val{size_one, error_type(), false, false};
   }
   // The symbol the dependency's build wrote for this item, which the
-  // summary carried with it.
+  // summary carried with it. The callee's own item is exact, which a
+  // name cannot be where two impls carry one; a name is the fallback.
   std::string_view symbol;
   if (module < pkg.tree.modules.size()) {
+    std::string_view by_name;
     for (const analyzer::SummarySymbol& entry :
          pkg.tree.modules[module]->summary_symbols) {
-      if (strings.get(entry.name) == sig.name) {
+      if (item.is_valid() && entry.item == item) {
         symbol = strings.get(entry.symbol);
         break;
       }
+      if (by_name.empty() && strings.get(entry.name) == name) {
+        by_name = strings.get(entry.symbol);
+      }
+    }
+    if (symbol.empty()) {
+      symbol = by_name;
     }
   }
   if (symbol.empty()) {
@@ -1544,33 +1563,39 @@ Val Lowerer::lower_summary_call(ast::ExprIdx expr,
   // The declaration names the symbol as it stands; the parameter shapes
   // are the external table's, which unwrap to the plain value the
   // callee's own artifact takes.
+  const std::vector<ir::TypeIdx> declared(params.begin(), params.end());
   const ir::ExternalFunctionIdx callee =
-      declare_external(symbol, sig.ret, sig.params);
+      declare_external(symbol, ret, declared);
   if (!callee.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_external_function(
       callee, builder.primitive(ir::TypeTag::Function))));
-  for (usize i = 0; i < call.args.size(); ++i) {
-    Val arg = lower_moved(call.args[i], &sig.params[i]);
+  usize at = 0;
+  if (receiver.has_value()) {
+    ops.push_back(arg_for(*receiver, params[0]));
+    at = 1;
+  }
+  for (usize i = 0; i < args.size(); ++i) {
+    Val arg = lower_moved(args[i], &params[at + i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
     // The argument crosses as the value the callee takes, the same way
     // a C entry point's does.
-    ops.push_back(arg_for(arg, sig.params[i]));
+    ops.push_back(arg_for(arg, params[at + i]));
   }
-  const ir::RegisterIdx result = sig.ret == builder.primitive(ir::TypeTag::Void)
+  const ir::RegisterIdx result = ret == builder.primitive(ir::TypeTag::Void)
                                      ? ir::RegisterIdx(base::INVALID_IDX)
-                                     : emit(ir::Opcode::Call, sig.ret, ops);
+                                     : emit(ir::Opcode::Call, ret, ops);
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
   if (!result.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
-  return Val{to_operand(result, sig.ret), sig.ret, false, false};
+  return Val{to_operand(result, ret), ret, false, false};
 }
 
 // An `extern "C"` call: the declaration names the symbol the linker
@@ -2944,14 +2969,19 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   if (failed || terminated_cur()) {
     return stopped_value();
   }
+  const std::span<const ast::ExprIdx> method_args =
+      method.payload.get<ast::ExprMethodCall>().args;
+  if (target->module < pkg.tree.modules.size() &&
+      pkg.tree.modules[target->module]->is_summary) {
+    return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
+                              target->module, method_args, receiver);
+  }
   const std::vector<u32> comp = comp_positions(info.item);
   if (!comp.empty() && comp[0] == 0) {
     unsupported(method.span, "comp method receiver");
     return Val{size_one, error_type(), false, false};
   }
   std::vector<CompVal> comp_args;
-  const std::span<const ast::ExprIdx> method_args =
-      method.payload.get<ast::ExprMethodCall>().args;
   for (u32 pos : comp) {
     CompVal arg;
     if (!comp_evaluate(module, method_args[pos - 1], arg)) {

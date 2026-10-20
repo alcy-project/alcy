@@ -309,7 +309,7 @@ TEST_CASE("A summary section reads back the package's surface") {
   const std::vector<SummaryField> string_fields{
       SummaryField{strings.intern("data"), true},
       SummaryField{strings.intern("len"), false}};
-  const std::array<SummaryEntry, 3> summary{
+  const std::array<SummaryEntry, 4> summary{
       SummaryEntry{.function = FunctionIdx(0),
                    .name = strings.intern("main"),
                    .path = strings.intern(""),
@@ -325,6 +325,12 @@ TEST_CASE("A summary section reads back the package's surface") {
                    .path = strings.intern("string"),
                    .fields = string_fields,
                    .kind = SummaryKind::Struct},
+      SummaryEntry{.function = FunctionIdx(0),
+                   .name = strings.intern("push"),
+                   .path = strings.intern("string"),
+                   .symbol = strings.intern("_A1m3:string4:push"),
+                   .owner = TypeIdx(3),
+                   .kind = SummaryKind::Method},
   };
   const std::vector<u8> bytes =
       test::composite_bytes(strings, storage, /*hashes=*/{}, summary);
@@ -344,8 +350,8 @@ TEST_CASE("A summary section reads back the package's surface") {
     return;
   }
   LoadedIr package = std::move(loaded).unwrap();
-  CHECK(package.summary.size() == 3);
-  if (package.summary.size() != 3) {
+  CHECK(package.summary.size() == 4);
+  if (package.summary.size() != 4) {
     return;
   }
   CHECK(package.summary[0].function.idx == 0);
@@ -376,6 +382,11 @@ TEST_CASE("A summary section reads back the package's surface") {
   // Every row without fields keeps the section free of runs.
   CHECK(package.summary[0].fields.empty());
   CHECK(package.summary[1].fields.empty());
+  // A method row names the nominal it belongs to.
+  CHECK(package.summary[3].owner.idx == 3);
+  CHECK(package.summary[3].kind == SummaryKind::Method);
+  CHECK_FALSE(package.summary[3].needs_body);
+  CHECK_FALSE(package.summary[0].owner.is_valid());
 
   // Reading and writing again produces the bytes it read, summary and
   // all: a dependent that reads and forwards keeps the surface.

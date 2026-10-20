@@ -605,6 +605,7 @@ class Serializer {
       out.put_u32(string_index(entry.name));
       out.put_u32(string_index(entry.path));
       out.put_u32(string_index(entry.symbol));
+      out.put_u32(entry.owner.idx);
       out.put_u8(static_cast<u8>(entry.kind));
       out.put_u8(static_cast<u8>(entry.needs_body ? 1u : 0u));
       out.zeros(2);

@@ -913,7 +913,7 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
   }
   // The rows are twenty bytes each; the field runs below are optional,
   // so a payload that ends after the rows is one from before them.
-  const usize rows_end = 4 + static_cast<usize>(count) * 20;
+  const usize rows_end = 4 + static_cast<usize>(count) * 24;
   if (payload.size() < rows_end) {
     return false;
   }
@@ -922,13 +922,15 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
     u32 name = 0;
     u32 path = 0;
     u32 symbol = 0;
+    u32 owner = 0;
     u8 kind = 0;
     u8 flags = 0;
     u8 reserved = 0;
     if (!cursor.read_u32(function) || !cursor.read_u32(name) ||
         !cursor.read_u32(path) || !cursor.read_u32(symbol) ||
-        !cursor.read_u8(kind) || !cursor.read_u8(flags) ||
-        !cursor.read_u8(reserved) || !cursor.read_u8(reserved)) {
+        !cursor.read_u32(owner) || !cursor.read_u8(kind) ||
+        !cursor.read_u8(flags) || !cursor.read_u8(reserved) ||
+        !cursor.read_u8(reserved)) {
       return false;
     }
     if (name != NONE && name >= parsed.string_ids.size()) {
@@ -938,6 +940,9 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
       return false;
     }
     if (symbol != NONE && symbol >= parsed.string_ids.size()) {
+      return false;
+    }
+    if (owner != NONE && owner >= parsed.state.types.size()) {
       return false;
     }
     const SummaryKind summary_kind = static_cast<SummaryKind>(kind);
@@ -960,6 +965,7 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
         .name = string_id(parsed, name),
         .path = string_id(parsed, path),
         .symbol = string_id(parsed, symbol),
+        .owner = owner == NONE ? TypeIdx(base::INVALID_IDX) : TypeIdx(owner),
         .kind = summary_kind,
         .needs_body = (flags & 0x01u) != 0,
     });
