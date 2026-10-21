@@ -532,6 +532,10 @@ class Checker {
   struct OwnFnReturnWitness {
     ast::ItemIdx item;
     usize slot;
+    // The instantiation the witness answers for: the type arguments
+    // the call resolved, with the witness slot itself left open. Two
+    // instantiations of one declaration have their own witness.
+    std::vector<ir::TypeIdx> args;
     ir::TypeIdx witness;
   };
   // One return-position slot a body check is answering: the stand-in
@@ -542,6 +546,8 @@ class Checker {
     ir::TypeIdx stand_in;
     const OwnFnBound* declared;
     diag::Span span;
+    // The instantiation this record answers for.
+    std::vector<ir::TypeIdx> args;
   };
   std::deque<std::vector<ast::GenericParam>> own_fn_params_;
   std::deque<std::string> own_fn_names_;
@@ -557,9 +563,11 @@ class Checker {
   // The recorded owning-function signature for a parameter name, or
   // null when the parameter is not one.
   const OwnFnBound* own_fn_bound(std::string_view name) const;
-  // The witness recorded for a return-position slot, or an invalid type
-  // while the body has not answered.
-  ir::TypeIdx own_fn_return_witness(ast::ItemIdx item, usize slot) const;
+  // The witness recorded for a return-position slot of one
+  // instantiation, or an invalid type while the body has not answered.
+  ir::TypeIdx own_fn_return_witness(ast::ItemIdx item,
+                                    usize slot,
+                                    std::span<const ir::TypeIdx> args) const;
   // The stand-in a return-position signature resolves with until the
   // body names its witness: one nominal, like the method-parameter
   // stand-in, because a pending record carries which slot it answers.

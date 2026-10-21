@@ -41,6 +41,18 @@
 
 namespace analyzer {
 
+// The key a witness is recorded under: the instantiation's type
+// arguments with the witness slot itself left open, so the two sides of
+// a lookup agree whichever stand-in the other side used.
+std::vector<ir::TypeIdx> witness_key(std::span<const ir::TypeIdx> args,
+                                     usize slot) {
+  std::vector<ir::TypeIdx> key(args.begin(), args.end());
+  if (slot < key.size()) {
+    key[slot] = ir::TypeIdx::invalid();
+  }
+  return key;
+}
+
 Checker::Checker(const ModuleTree& tree,
                  ir::PointerWidth width,
                  ast::AstArena& ast,
@@ -5612,7 +5624,8 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
         if (own == nullptr || !own->is_return) {
           continue;
         }
-        const ir::TypeIdx known = own_fn_return_witness(entry.method_item, i);
+        const ir::TypeIdx known = own_fn_return_witness(
+            entry.method_item, i, witness_key(inferred, i));
         if (known.is_valid()) {
           inferred[i] = known;
           continue;
@@ -5652,9 +5665,10 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     // instantiation consumes the record and takes the witness for the
     // return type, or reports that none came.
     for (usize slot : return_slots) {
-      pending_own_fn_returns_.push_back(PendingOwnFnReturn{
-          entry.method_item, slot, method_args[slot],
-          own_fn_bound(method_fn.generic[slot].name.name), span});
+      pending_own_fn_returns_.push_back(
+          PendingOwnFnReturn{entry.method_item, slot, method_args[slot],
+                             own_fn_bound(method_fn.generic[slot].name.name),
+                             span, witness_key(method_args, slot)});
     }
     return instantiate_method(entry.module, self, scope, value_scope, impl,
                               name, method_args);
@@ -6101,12 +6115,19 @@ const Checker::OwnFnBound* Checker::own_fn_bound(std::string_view name) const {
   return nullptr;
 }
 
-ir::TypeIdx Checker::own_fn_return_witness(ast::ItemIdx item,
-                                           usize slot) const {
+ir::TypeIdx Checker::own_fn_return_witness(
+    ast::ItemIdx item,
+    usize slot,
+    std::span<const ir::TypeIdx> args) const {
   for (const OwnFnReturnWitness& recorded : own_fn_return_witnesses_) {
-    if (recorded.item == item && recorded.slot == slot) {
-      return recorded.witness;
+    if (recorded.item != item || recorded.slot != slot) {
+      continue;
     }
+    if (recorded.args.size() != args.size() ||
+        !std::equal(recorded.args.begin(), recorded.args.end(), args.begin())) {
+      continue;
+    }
+    return recorded.witness;
   }
   return ir::TypeIdx::invalid();
 }
@@ -6133,13 +6154,13 @@ bool Checker::try_bind_own_fn_return(u32 module,
   if (!is_error(actual) &&
       check_own_fn_witness(module, actual, *pending.declared, span)) {
     own_fn_return_witnesses_.push_back(
-        OwnFnReturnWitness{pending.item, pending.slot, actual});
+        OwnFnReturnWitness{pending.item, pending.slot, pending.args, actual});
     fn_ret = actual;
   } else {
     // An answer that failed: later returns meet the error, and the
     // instantiation reports nothing further.
-    own_fn_return_witnesses_.push_back(
-        OwnFnReturnWitness{pending.item, pending.slot, error_type()});
+    own_fn_return_witnesses_.push_back(OwnFnReturnWitness{
+        pending.item, pending.slot, pending.args, error_type()});
     fn_ret = error_type();
   }
   return true;
@@ -6524,7 +6545,8 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
       pending_own_fn_returns_.back().item == item) {
     const PendingOwnFnReturn pending = pending_own_fn_returns_.back();
     pending_own_fn_returns_.pop_back();
-    const ir::TypeIdx witness = own_fn_return_witness(item, pending.slot);
+    const ir::TypeIdx witness =
+        own_fn_return_witness(item, pending.slot, pending.args);
     if (witness.is_valid()) {
       modules[module].functions[sig_index].ret = witness;
       for (FnInstance& instance : fn_instances) {
@@ -6753,7 +6775,8 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
     if (declared == nullptr || !declared->is_return) {
       continue;
     }
-    const ir::TypeIdx known = own_fn_return_witness(item, i);
+    const ir::TypeIdx known =
+        own_fn_return_witness(item, i, witness_key(bound, i));
     if (known.is_valid()) {
       bound[i] = known;
       continue;
@@ -6798,7 +6821,8 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   // return type with the witness, or reports that none came.
   for (usize slot : return_slots) {
     pending_own_fn_returns_.push_back(PendingOwnFnReturn{
-        item, slot, bound[slot], own_fn_bound(params[slot].name.name), span});
+        item, slot, bound[slot], own_fn_bound(params[slot].name.name), span,
+        witness_key(bound, slot)});
   }
   return instantiate_fn(module, item, bound);
 }
@@ -6934,7 +6958,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
       const PendingOwnFnReturn pending = pending_own_fn_returns_.back();
       pending_own_fn_returns_.pop_back();
       const ir::TypeIdx witness =
-          own_fn_return_witness(method_item, pending.slot);
+          own_fn_return_witness(method_item, pending.slot, pending.args);
       if (witness.is_valid()) {
         entry->ret = witness;
         modules[impl_module].functions[method_sig_index].ret = witness;
