@@ -1,8 +1,9 @@
 # ADR-0063: Generic Bodies Are Checked at Their Calls
 
 - Subject: the language
-- Status: Accepted
+- Status: Superseded by ADR-0079
 - Date: 2026-10-13
+- Superseded: 2026-10-21, the generic boundary
 
 ## Context
 
@@ -28,6 +29,11 @@ checking, which is today's rule.
 Bounds are what make that acceptable: a bounded body's failures are
 reported where the type is known, and an unbounded body that a bound
 would describe takes one instead of a second checking mode.
+
+Superseded by ADR-0079: a generic body is checked once, at its
+definition, against its parameters. The code still checks per
+instantiation until that record's slices land, so this record describes
+what the compiler does today and not what it will do.
 
 ## Consequences
 

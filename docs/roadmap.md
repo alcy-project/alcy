@@ -160,9 +160,13 @@ peripheral work lives in `backlog.md`. The language record lives in
   envelope; and a `[lib]` target's IR binary carries a `SUMMARY` of the
   package's public surface - the code that carries each signature, and
   a generic declaration marked as needing its body - which the reader
-  rebuilds and the cache hit path hands back. What remains is the
-  analyzer consuming a summary instead of a dependency's source, and
-  everything after it. Designed in
+  rebuilds and the cache hit path hands back. A dependent now resolves
+  against a summary in place of the dependency's source, and the
+  generic half is decided: a generic item crosses as its declaration
+  and its checked body, and the dependent instantiates it
+  (`docs/adr/0079-a-generic-item-crosses-as-its-checked-body.md`).
+  What remains is that work, and the spec implementations the roadmap
+  asks a summary to carry. Designed in
   `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md`, for the
   cache's key, artifact, location, and reporting,
   `docs/adr/0072-a-packages-cache-holds-its-binary-ir.md`, and for the

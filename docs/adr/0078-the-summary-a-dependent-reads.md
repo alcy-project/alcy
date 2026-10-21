@@ -3,6 +3,8 @@
 - Subject: the compiler
 - Status: Accepted
 - Date: 2026-10-18
+- Amended: 2026-10-21, the generic boundary (ADR-0079) and the body's
+  place in the artifact
 
 ## Context
 
@@ -15,12 +17,18 @@ the summary a dependent resolves against. The roadmap's item states
 what it must carry: signatures, nominal shapes, generic instances, and
 spec implementations.
 
-What makes the generic half the hard one is that alcy monomorphizes
-from typed AST at the call site: a wall between packages cannot hand
-out a declaration of a generic item, because a dependent that calls
-one needs the body to instantiate it. A summary that carried bodies
-would be a source archive by another name, and one that carried
-pre-instantiated code would need the set of instances up front.
+The generic half looked hard because alcy monomorphizes from typed
+AST at the call site, so a declaration of a generic item was thought
+not to cross a package boundary: a dependent that calls one needs the
+body to instantiate it, and the artifact carried no body. That
+reasoning was wrong in two places. The artifact the writer produces
+carries the bodies already - the `.summary` sidecar is the whole
+serialized package, and the sidecar is what a dependent reads. And a
+body that cannot be carried is not a wall but a representation gap: the
+IR's type tags name concrete types, so a body of a generic item has
+nowhere to put its parameter. A summary that carried bodies would not
+be a source archive by another name either: a checked, lowered body is
+not source, and it is what the artifact already holds.
 
 ## Decision
 
@@ -29,23 +37,24 @@ form the compiler already has.** A library target's IR binary carries
 a `SUMMARY` section: one row per public item of the package's own
 modules. A function row names the `FUNCTIONS` row whose signature
 carries it, a struct or enum row the `TYPES` row of its nominal, and
-every row the source name, the module it belongs to, and whether the
-item needs its body to be used. The type tables are the artifact's, so a nominal shape a
-signature mentions is already there; the module path on every function
-row says which modules are the package's own. A bin's artifact carries
-none, because nothing depends on a bin.
+every row the source name, the module it belongs to, and the symbol
+its code is written under. The type tables are the artifact's, so a
+nominal shape a signature mentions is already there; the module path
+on every function row says which modules are the package's own. A
+bin's artifact carries none, because nothing depends on a bin.
 
-**Bodies are never carried.** The dependency's object holds them and
-the dependent links it, so a summary is a header: the surface a
-dependent checks against, not the code it runs.
+**A monomorphic body is not carried in a summary.** The dependency's
+object holds it and the dependent links it, so a summary is a header
+for the code that is already monomorphic: the surface a dependent
+checks against, not the code it runs. A generic body is a different
+case and is carried, because no concrete object can hold it; ADR-0079
+decides how.
 
-**A generic item is named but marked unusable.** Its row has no
-`FUNCTIONS` index and sets the flag that says the body is what an
-instantiation needs. A dependent that reaches one is refused by name
-rather than told the item does not exist. The three ways past this -
-carrying typed bodies, pre-instantiating a declared set in the
-producer, or leaving the boundary closed for generics - are the next
-slice's question; the format reserves the answer in one flag.
+**A generic item is named, and today it is not usable.** Its row has
+no code to point at and sets the flag that says an instantiation needs
+the body. The reader drops such a row, so a dependent that names one
+reads "Unresolved import", which is honest but does not say why.
+ADR-0079 replaces the flag with the body itself.
 
 **Versioning is the binary form's.** The section rides inside ALIR, so
 a `MAJOR` bump that a reader must refuse, a `MINOR` a reader may walk
@@ -66,9 +75,11 @@ and the IR. That is the price of keeping one format rather than
 inventing a second, and a `[lib]` that is never depended on pays it
 too, because the writer's input is the package and not the target.
 
-What is explicitly out of scope: the analyzer consuming a summary in
-place of a dependency's source; the generic boundary; multi-object
-linking; registry and git fetchers; and lockfiles.
+What is explicitly out of scope: registry and git fetchers, and
+lockfiles. The analyzer's consumption of a summary, the nominal
+boundary, multi-object linking, and the generic boundary have since
+landed or been decided: the first three are in the staged landing
+below, and the generic boundary is ADR-0079.
 
 ## Staged landing
 
@@ -108,7 +119,9 @@ a nominal all resolve, link against the library's object, and run with
 the library's sources gone. An associated function or method crosses
 too: a row names the nominal it belongs to, the surface groups those
 rows into the `impl` the declaration's module holds, and a method's
-receiver travels as its first argument.
+receiver travels as its first argument. The member's symbol names the
+nominal it is declared on, so two impls of one module that declare a
+same-named member stay apart.
 
 **The export list trims a summary the way it trims source.** An
 unexported module is refused on both paths, an exported surface
@@ -117,22 +130,10 @@ library, its sources present and then gone). The trim is the resolver's
 `PackageRoot.exports`, so a summary never shows a dependent more than
 the source it stands in for.
 
-**The generic boundary wants a decision.** The artifact carries no
-parameterized types: its tags are concrete, and a generic declaration's
-shape exists only per instantiation, so a summary cannot spell the
-declaration a dependent would instantiate, and a `needs_body` row is
-omitted from the surface. A dependent that names such an item reads
-"Unresolved import", which is honest but does not say why.
-
-Two shapes are open. One fetches: the dependent asks the library (or a
-service the roadmap calls a fetcher) to build the instantiation it
-needs, which keeps one source of truth and costs a protocol. The other
-spells what the library already built: a concrete instantiation has a
-concrete shape, so it can be spelled under a name of its own
-(`Holder_i32` for `Holder<i32>`), which works today with the machinery
-the rows already have and shows a dependent a name the library never
-wrote. Which one belongs in the language is the open question.
-
-**Next:** that decision; and the export-list question is answered
-above, the nominal boundary is landed, so the summary is otherwise
-whole for what a row can carry.
+**The generic boundary is decided: ADR-0079.** A generic item crosses
+as its declaration and its checked body, and the dependent instantiates
+it. The artifact carries no parameterized types yet - its tags are
+concrete, and a generic declaration's shape exists only per
+instantiation - so the `needs_body` row is still omitted from the
+surface, and a dependent that names such an item still reads
+"Unresolved import". ADR-0079 is the work that ends that.
