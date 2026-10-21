@@ -1137,6 +1137,37 @@ i32 run_run_on(io::TempDir& dir,
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
+i32 run_init_on(io::TempDir& dir, std::string_view rel) {
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "init", target};
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& arg : storage) {
+    argv.push_back(arg.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+#if ALCY_TEST_LINKS
+TEST_CASE("Run executes a package and forwards its exit code") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object, IR, or
+  // executable this case builds; its own suite covers what it writes.
+  return;
+#endif
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_exit_test_");
+  const bool setup = write_package(dir, "proj",
+                                   "fn main() -> i32 {\n"
+                                   "  ret 3\n"
+                                   "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  SilencedOutput silenced;
+  CHECK(run_run_on(dir, "proj") == 3);
+}
+
 TEST_CASE("Run links the objects a dependency answered for") {
 #if !ALCY_BACKEND_LLVM
   // The direct backend writes a module, not the object this case links.
@@ -1171,36 +1202,6 @@ TEST_CASE("Run links the objects a dependency answered for") {
   CHECK(run_run_on(dir, "proj") == 7);
 }
 
-i32 run_init_on(io::TempDir& dir, std::string_view rel) {
-  const std::string target = dir.join(rel);
-  std::vector<std::string> storage{"alcy", "init", target};
-  std::vector<char*> argv;
-  argv.reserve(storage.size());
-  for (std::string& arg : storage) {
-    argv.push_back(arg.data());
-  }
-  return cli_main(static_cast<i32>(argv.size()), argv.data());
-}
-
-#if ALCY_TEST_LINKS
-TEST_CASE("Run executes a package and forwards its exit code") {
-#if !ALCY_BACKEND_LLVM
-  // The direct backend writes a module, not the object, IR, or
-  // executable this case builds; its own suite covers what it writes.
-  return;
-#endif
-  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_exit_test_");
-  const bool setup = write_package(dir, "proj",
-                                   "fn main() -> i32 {\n"
-                                   "  ret 3\n"
-                                   "}\n");
-  CHECK(setup);
-  if (!setup) {
-    return;
-  }
-  SilencedOutput silenced;
-  CHECK(run_run_on(dir, "proj") == 3);
-}
 #endif
 
 // The two cases below read the streams rather than discarding them.
