@@ -6,7 +6,7 @@
 // `importScripts`, so `AlcyWasmApi` lands on the worker's global scope.
 //
 // The struct layout mirrors `AlcyResult` from
-// `compiler/playground/playground.h`, built for wasm32: four-byte
+// `src/playground/playground.h`, built for wasm32: four-byte
 // pointers and `usize`, no padding between the fields. The table below is
 // the one place the JS side names it.
 

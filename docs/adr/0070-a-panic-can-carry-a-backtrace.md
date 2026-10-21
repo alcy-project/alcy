@@ -114,13 +114,13 @@ unreachable there and `--on-panic` is the whole override.
 
 ## Reference
 
-- `compiler/codegen_llvm/llvm_ir_emitter.{h,cc}`: `BacktraceName`,
+- `src/codegen_llvm/llvm_ir_emitter.{h,cc}`: `BacktraceName`,
   `define_backtrace_table`, the entry `noinline`, and the table slot.
-- `compiler/codegen_llvm/runtime_ir.{h,cc}`: `build_panic_walk` and the
+- `src/codegen_llvm/runtime_ir.{h,cc}`: `build_panic_walk` and the
   `noinline` on `alcy_panic`.
-- `compiler/codegen_llvm/emit.cc`: table definition and the frame
+- `src/codegen_llvm/emit.cc`: table definition and the frame
   attributes, before optimization.
-- `compiler/codegen/backend.h`: `EmitRequest.backtrace`, the only
+- `src/codegen/backend.h`: `EmitRequest.backtrace`, the only
   profile value a backend sees.
 - `docs/adr/0011-symbol-mangling.md`: encoded names stay; the table
   carries the readable ones.

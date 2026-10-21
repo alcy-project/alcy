@@ -32,7 +32,7 @@ decision.
 A command produces a single `cli::Envelope` describing what happened:
 its status, its diagnostics, its statistics, an optional human message,
 and, when tracing ran, the profile events. Envelopes are rendered by
-one of two functions in the new `compiler/cli/output.{h,cc}`:
+one of two functions in the new `src/cli/output.{h,cc}`:
 
 - `render_diagnostics` writes diagnostics through `diag::render`, and
   `render_result` writes a result line and the time-trace tree; `report`
@@ -68,7 +68,7 @@ The peak resident set is sampled at the same point and rides the result
 note beside the time; where the host cannot answer, the text leaves it
 out and `stats.peak_memory_bytes` stays zero.
 
-`base::logger` and `compiler/base/logger.{h,cc}` are removed, along with the
+`base::logger` and `src/base/logger.{h,cc}` are removed, along with the
 `fpag/logging` dependency. Two `fpag` facilities stay, because neither
 is about output: `term::console_color_style` for terminal capability
 detection, which `docs/adr/0008-cli-owned-diagnostic-color.md` assigned to `fpag::term` and which includes

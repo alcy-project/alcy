@@ -1,0 +1,36 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The formatter is a module of the toolchain tree rather than a stage of
+# the compiler: it reads source for people, not for the pipeline, and no
+# compiler target depends on it - the dependency direction is the
+# boundary, and gn check holds it. Its headers take the flat "fmt/..."
+# spelling the module's directory gives them; the vendored formatting
+# library owns a fixed set of flat "fmt/<name>.h" spellings of its own
+# (args, base, chrono, color, compile, core, enum, format, format-inl,
+# os, ostream, printf, ranges, std, xchar), and a file under fmt/ never
+# takes one of those names, so the two prefixes cannot meet.
+config("fmt_config") {
+  include_dirs = [ "//src" ]
+}
+
+source_set("alcy_fmt") {
+  sources = [
+    "cst.cc",
+    "cst.h",
+    "doc.cc",
+    "doc.h",
+    "formatter.cc",
+    "formatter.h",
+    "lex.cc",
+    "lex.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+    "//src/i18n",
+    "//src/lexer",
+    "//src/source",
+  ]
+  public_configs = [ ":fmt_config" ]
+}

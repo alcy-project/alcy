@@ -72,7 +72,7 @@ jobs:
             out/playground
           # A constant key never refreshes: the first snapshot would be
           # restored forever, however far the compiler moved on.
-          key: ${{ runner.os }}-wasm-wasm32-${{ inputs.build_type }}-${{ inputs.role }}-false-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'compiler/**') }}
+          key: ${{ runner.os }}-wasm-wasm32-${{ inputs.build_type }}-${{ inputs.role }}-false-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'src/**') }}
 
       - name: Build All
         shell: bash

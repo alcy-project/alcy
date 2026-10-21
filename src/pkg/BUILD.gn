@@ -1,0 +1,29 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("pkg") {
+  sources = [
+    "arena_copy.cc",
+    "arena_copy.h",
+    "config.h",
+    "diag_code.h",
+    "manifest.cc",
+    "manifest.h",
+    "profile.cc",
+    "profile.h",
+    "toolchain.cc",
+    "toolchain.h",
+    "version.cc",
+    "version.h",
+    "version_req.cc",
+    "version_req.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+    "//src/i18n",
+    "//src/source",
+    "//third_party/toml",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

@@ -21,7 +21,7 @@ input barely move — and its output is 64 bits, which is fine for a
 dedup accelerator and not fine for a content address once entries are
 shared or counted in the millions. The project already vendors
 `third_party/xxhash` (0.8.4), `fpag` already links it, and
-`compiler/docs/architecture.md` already lists it among the wrapped
+`src/docs/architecture.md` already lists it among the wrapped
 dependencies, so a better hash is not a new dependency.
 
 ## Decision
@@ -36,7 +36,7 @@ the project's own code.**
   counts make a 64-bit birthday bound a real number. A digest whose
   collisions are settled by comparing the whole stays **XXH3-64**: the
   diagnostic bag's dedup hash and the benchmark generator's label.
-- **One facade.** `compiler/base/hash.h` exposes the hashing the
+- **One facade.** `src/base/hash.h` exposes the hashing the
   project uses: a `Digest128` value (two `u64`s, equality,
   little-endian bytes, hex), one-shot hashing over byte spans, and a
   streaming form for composed digests. `xxhash.h` stays inside the
@@ -45,7 +45,7 @@ the project's own code.**
   footer grows to 16 bytes, every `FILES` row carries a 16-byte hash,
   and `IDENTITY` becomes 16 bytes. The form has no production
   consumers, which is what makes this the cheap moment;
-  `compiler/docs/ir-format.md` records the spelling.
+  `src/docs/ir-format.md` records the spelling.
 - **fpag's `Xxh3Hasher64` is not extended for this.** It is a
   container hasher — 64 bits, string-shaped, for `fpag`'s own users —
   and the compiler needs spans, 128 bits, streaming, and a digest

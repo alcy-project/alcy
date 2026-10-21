@@ -26,7 +26,7 @@ arguments rather than living in the tool.
 
 ## Decision
 
-**The formatter is a library under `fmt/`, it builds a concrete syntax
+**The formatter is a module of the toolchain tree under `src/fmt/`, it builds a concrete syntax
 tree rather than reading the compiler's abstract one, and its layout
 parameters are injected while it holds no configuration of its own.**
 
@@ -57,12 +57,13 @@ parameters are injected while it holds no configuration of its own.**
   it, and a body's last statement keeps its statement status rather
   than becoming the block's value.
 
-The library lives beside the compiler rather than inside it: the
-compiler never depends on it, and it leans on the lexer alone. Its
-headers take the flat `fmt/...` spelling the module's directory gives
-them. The vendored formatting library owns a fixed set of flat
-`fmt/<name>.h` spellings of its own, and the module's files never
-reuse one of those names, so the two prefixes cannot meet.
+The library is a module of the toolchain tree rather than a stage of
+the compiler: no compiler target depends on it - the dependency
+direction is the boundary, and gn check holds it - and it leans on the
+lexer alone. Its headers take the flat `fmt/...` spelling the module's
+directory gives them. The vendored formatting library owns a fixed set
+of flat `fmt/<name>.h` spellings of its own, and the module's files
+never reuse one of those names, so the two prefixes cannot meet.
 
 ## Consequences
 

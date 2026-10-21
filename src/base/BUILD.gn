@@ -1,0 +1,20 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("base") {
+  sources = [
+    "for_each.h",
+    "hash.h",
+    "nesting.cc",
+    "nesting.h",
+    "process_memory.cc",
+    "process_memory.h",
+  ]
+  configs += [ "//src:alcy_config" ]
+  deps = [
+    "//src/config",
+    "//src/debug",
+    "//third_party/fpag",
+    "//third_party/xxhash",
+  ]
+}

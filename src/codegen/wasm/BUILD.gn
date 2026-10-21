@@ -1,0 +1,32 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The direct wasm backend. It is small enough to build into every
+# compiler, which is what lets a native host test it without a wasm
+# toolchain and lets a build with no LLVM still emit a wasm module.
+source_set("wasm") {
+  sources = [
+    "backend.cc",
+    "backend.h",
+    "emit.cc",
+    "emit.h",
+    "emit_compute.cc",
+    "emit_memory.cc",
+    "module.cc",
+    "module.h",
+    "opcodes.h",
+    "reach.cc",
+    "reach.h",
+    "writer.cc",
+    "writer.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/codegen",
+    "//src/diag",
+    "//src/i18n",
+    "//src/ir",
+    "//src/overlay",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

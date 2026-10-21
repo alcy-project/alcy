@@ -92,9 +92,9 @@ def tool_commands(dry_run: bool) -> list[list[str]]:
     """
     commands: list[list[str]] = []
     commands.append(
-        ["uv", "run", "ast-grep", "scan", "--error", "compiler"]
+        ["uv", "run", "ast-grep", "scan", "--error", "src"]
         if dry_run
-        else ["uv", "run", "ast-grep", "scan", "-U", "compiler"]
+        else ["uv", "run", "ast-grep", "scan", "-U", "src"]
     )
     if shutil.which("taplo") is not None:
         commands.append(["taplo", "fmt", "--check"] if dry_run else ["taplo", "fmt"])

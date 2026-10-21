@@ -6,7 +6,7 @@
 // it separate from the worker also keeps it runnable outside a worker,
 // which is how it is smoke-tested.
 //
-// The module contract is fixed by `compiler/playground/`: the program
+// The module contract is fixed by `src/playground/`: the program
 // exports `_start` and its memory, and imports `fd_write` and `proc_exit`
 // from `wasi_snapshot_preview1`.
 

@@ -6,7 +6,7 @@
 
 ## Context
 
-`compiler/docs/architecture.md` says the `cli` parses argv, validates flag
+`src/docs/architecture.md` says the `cli` parses argv, validates flag
 values, dispatches, and maps exit codes, and performs no semantic validation
 of source or manifests. The code said otherwise in three commands: each
 probed the target for `alcy.toml` and emitted a `pipeline::DiagCode`

@@ -10,7 +10,7 @@ only number that repeats is the instruction count: it is what the program
 asked the machine to do, so it does not move with load, caches or frequency.
 Wall clock is the second question, and it is answered by running two binaries
 against the same corpus in an interleaved order and taking the minimum, which
-is what `ab` does. See `compiler/docs/performance.md` for the loop these
+is what `ab` does. See `src/docs/performance.md` for the loop these
 commands are steps in.
 
     uv run ./tools/perf.py corpus --shape plain --modules 300
@@ -38,7 +38,7 @@ sizes, reads each symbol's self time from `perf report`, and reports it per
 module at both sizes. A symbol whose per-module cost rises is the one to read.
 The shares are samples of cycles, so a rise can also be locality rather than
 work; `scale` is what says which. It needs a build with symbols, which
-`compiler/docs/performance.md` shows how to make without committing the
+`src/docs/performance.md` shows how to make without committing the
 change.
 """
 

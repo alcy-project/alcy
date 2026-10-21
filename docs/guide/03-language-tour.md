@@ -274,7 +274,7 @@ Write `=0.5.0` in place of `0.5.x` to pin the version exactly.
 - [The principles](../principles.md) describe where the language is
   going and what decides design questions.
 - [The specification](../spec/overview.md) is the normative description.
-- [The architecture](../../compiler/docs/architecture.md) describes the
+- [The architecture](../../src/docs/architecture.md) describes the
   compiler's design.
 
 The language is far from finished: generic functions take no bounds

@@ -29,7 +29,7 @@ or an associated function and a method that share a name.
 A symbol is derived from the signature it names, never from the source
 name. The signature is the module path, the owner of a member, the item
 name, what the item is, and the type arguments of the instantiation.
-`compiler/symbol` encodes it to a string beginning `_A`, and decodes it
+`src/symbol` encodes it to a string beginning `_A`, and decodes it
 back.
 
 ```ebnf

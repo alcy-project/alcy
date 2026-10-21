@@ -5,7 +5,7 @@ states what a conforming implementation does, never how this one does it:
 no file of the compiler, no module of it, and no symbol it defines appears
 here. Where a rule is observable from a program, that is the rule's
 argument for belonging here; a decision about the implementation belongs
-in `compiler/docs/`, and the reasoning behind either is recorded in
+in `src/docs/`, and the reasoning behind either is recorded in
 `docs/adr/`.
 
 Normative keywords (MUST, SHOULD, MAY) follow RFC 2119 throughout

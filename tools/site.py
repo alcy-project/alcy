@@ -23,7 +23,7 @@ file server can host.
 `build` takes whatever compiler artifacts it finds and warns when there
 are none, so the site still works for highlighting alone. Pass
 `--with-compiler` to build the `playground` target first; it carries the
-direct wasm backend and no LLVM (see `compiler/playground/README.md`).
+direct wasm backend and no LLVM (see `src/playground/README.md`).
 
 The TypeScript compiler and the tree-sitter web binding are installed
 with bun into `out/site-cache/`, at the versions `config.toml` pins;
@@ -62,7 +62,7 @@ BUILD_DIR = SITE_DIR / "build"
 GRAMMAR_DIR = project_root_dir / "treesitter"
 DEFAULT_BUILD_SUBDIR = "playground"
 DEFAULT_WASM_TARGET = "playground"
-# The playground build carries no LLVM; `compiler/backends.gni` selects the
+# The playground build carries no LLVM; `src/backends.gni` selects the
 # backends, and an empty list is what a browser needs.
 DEFAULT_GN_ARG = "alcy_backends=[]"
 CACHE_DIR = project_root_dir / "out" / "site-cache"

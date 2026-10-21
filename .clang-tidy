@@ -60,7 +60,7 @@ Checks: >
   readability-identifier-naming,
   readability-redundant-member-init,
   readability-redundant-smartptr-get
-HeaderFilterRegex: '^.*[\\/](compiler)[\\/].*$'
+HeaderFilterRegex: '^.*[\\/](src)[\\/].*$'
 ExcludeHeaderFilterRegex: '^.*[\\/](third_party)[\\/].*$'
 SystemHeaders:    false
 WarningsAsErrors: '*'
@@ -134,4 +134,4 @@ CheckOptions:
   - key:          modernize-loop-convert.MakeReverseRangeHeader
     value:        1
   - key: misc-include-cleaner.IgnoreHeaders
-    value:        '^.*[\\/](third_party|compiler[\\/]build|include|catch2)[\\/].*$'
+    value:        '^.*[\\/](third_party|src[\\/]build|include|catch2)[\\/].*$'

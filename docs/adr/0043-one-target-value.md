@@ -73,6 +73,6 @@ after one of its four jobs.
   and the pipeline reports file errors with its own code.
 - Cross-compilation is still not testable here, but it is now a value
   rather than a set of host facts, which is what a test would need.
-- Two things stay open, both recorded in `compiler/codegen_llvm/README.md`:
+- Two things stay open, both recorded in `src/codegen_llvm/README.md`:
   the optimization level is still O3 behind a boolean with no `-O`, and
   `pipeline` still holds `llvm::LLVMContext` and `llvm::Module` itself.

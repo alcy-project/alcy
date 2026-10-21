@@ -15,7 +15,7 @@ __pycache__/
 .xmake/
 # libFuzzer corpus: a cache that grows without bound, kept between runs
 # and never an artifact.
-/compiler/fuzz/corpus/
+/src/fuzz/corpus/
 
 # Prerequisites
 *.d

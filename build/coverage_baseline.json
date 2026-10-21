@@ -2,41 +2,49 @@
   "comment": [
     "Recorded by tools/check_coverage.py --update.",
     "A ratchet: check_coverage.py fails when the measured line",
-    "coverage of compiler/ drops below this. Move it only on purpose."
+    "coverage of src/ drops below this. Move it only on purpose."
   ],
   "lines": {
-    "count": 36740,
-    "covered": 29659,
-    "percent": 80.7267283614589
+    "count": 78865,
+    "covered": 65634,
+    "percent": 83.22322956951753
   },
   "modules": {
     "analyzer": {
-      "count": 6447,
-      "covered": 4793
+      "count": 14119,
+      "covered": 10901
     },
     "ast": {
-      "count": 463,
-      "covered": 356
+      "count": 795,
+      "covered": 654
     },
     "base": {
-      "count": 13,
-      "covered": 13
+      "count": 108,
+      "covered": 106
     },
     "benchmarks": {
-      "count": 506,
-      "covered": 182
+      "count": 510,
+      "covered": 174
     },
     "borrow": {
-      "count": 1147,
-      "covered": 1049
+      "count": 1486,
+      "covered": 1381
     },
     "cli": {
-      "count": 1718,
-      "covered": 1493
+      "count": 2344,
+      "covered": 2017
+    },
+    "codegen": {
+      "count": 2655,
+      "covered": 1217
     },
     "codegen_llvm": {
-      "count": 1343,
-      "covered": 1204
+      "count": 3050,
+      "covered": 2730
+    },
+    "comp": {
+      "count": 1180,
+      "covered": 630
     },
     "config": {
       "count": 0,
@@ -47,56 +55,72 @@
       "covered": 0
     },
     "diag": {
-      "count": 310,
-      "covered": 295
+      "count": 710,
+      "covered": 637
+    },
+    "fmt": {
+      "count": 1747,
+      "covered": 1455
     },
     "i18n": {
-      "count": 58,
+      "count": 55,
       "covered": 37
     },
     "ir": {
-      "count": 1129,
-      "covered": 858
+      "count": 4099,
+      "covered": 3341
     },
     "lexer": {
-      "count": 682,
-      "covered": 671
+      "count": 701,
+      "covered": 691
     },
-    "lower": {
-      "count": 5820,
-      "covered": 3716
+    "lowering": {
+      "count": 9453,
+      "covered": 7713
+    },
+    "opt": {
+      "count": 272,
+      "covered": 252
+    },
+    "overlay": {
+      "count": 106,
+      "covered": 86
     },
     "parser": {
-      "count": 2982,
-      "covered": 2531
+      "count": 4342,
+      "covered": 3797
     },
     "path": {
-      "count": 80,
-      "covered": 77
+      "count": 85,
+      "covered": 82
     },
     "pipeline": {
-      "count": 1056,
-      "covered": 817
+      "count": 3671,
+      "covered": 2921
     },
     "pkg": {
-      "count": 1045,
-      "covered": 856
+      "count": 1465,
+      "covered": 1233
+    },
+    "playground": {
+      "count": 131,
+      "covered": 111
     },
     "source": {
-      "count": 61,
-      "covered": 57
+      "count": 78,
+      "covered": 74
     },
     "symbol": {
-      "count": 345,
-      "covered": 251
+      "count": 466,
+      "covered": 388
     },
     "tests": {
-      "count": 11427,
-      "covered": 10307
+      "count": 25129,
+      "covered": 22907
     },
     "text": {
       "count": 108,
-      "covered": 96
+      "covered": 99
     }
   }
 }

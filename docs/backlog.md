@@ -2128,7 +2128,7 @@ replaced. The foundations are in `roadmap.md`.
   room for a second code-generating backend, that its sub-ranges are
   narrower than the stages that use them, and that a stage should not
   have to know the layout of the whole compiler to pick a number. The
-  registry in `compiler/docs/diagnostics.md` stopped restating the
+  registry in `src/docs/diagnostics.md` stopped restating the
   numbers; the enums own them, and every id is spelled out.
   Designed in `docs/adr/0039-diagnostic-code-space.md`.
 - [x] CI carries the gates: `lint`, the coverage ratchet, the sanitized

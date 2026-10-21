@@ -8,7 +8,7 @@
 
 A diagnostic code was a number, and the number was a stride per stage:
 `lexer` owned 2000–2999, `parser` 3000–3999, `analyzer` 4000–4999, and
-so on to 8000, with 9000 and up unassigned. `compiler/docs/diagnostics.md`
+so on to 8000, with 9000 and up unassigned. `src/docs/diagnostics.md`
 was the registry that restated the strides, and 70 constants lived in
 twelve source files — four of them in `.cc` files where nothing outside
 that file could see them.
@@ -67,7 +67,7 @@ ordinal plus one, so a kind and its code cannot drift apart.
 than as a string, so a tool never parses a letter. A message from outside
 a check area keeps `"code": null`.
 
-`compiler/docs/diagnostics.md` becomes an index: the letter table, and
+`src/docs/diagnostics.md` becomes an index: the letter table, and
 what each check means. It no longer restates the numbers, and it drops the
 twenty-four references to source files and symbols that were the part
 most likely to rot. `tools/check_spec.py` gains a pattern for a

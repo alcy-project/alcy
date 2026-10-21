@@ -6,7 +6,7 @@
 """Computes the version string built into the compiler.
 
 The string is baked into a single generated translation unit (see
-`compiler/cli/BUILD.gn`), which is what keeps a new commit from rebuilding
+`src/cli/BUILD.gn`), which is what keeps a new commit from rebuilding
 every file in the cli. It is `project_version` on a clean release tag, and
 `project_version-snapshot` carrying the build commit otherwise; a working
 tree with uncommitted tracked changes marks the commit `-dirty` and adds

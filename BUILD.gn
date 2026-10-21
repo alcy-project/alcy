@@ -2,24 +2,24 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 group("default") {
-  deps = [ "//compiler:alcy" ]
+  deps = [ "//src:alcy" ]
 }
 
 group("tests") {
-  deps = [ "//compiler/tests" ]
+  deps = [ "//src/tests" ]
 }
 
 group("benchmarks") {
-  deps = [ "//compiler/benchmarks" ]
+  deps = [ "//src/benchmarks" ]
 }
 
 # The playground's host API. On a wasm build this is the loadable
 # artifact (`alcy_playground.js`/`.wasm`); elsewhere it is the library
 # itself, so the API still compiles and its tests still run.
 group("playground") {
-  deps = [ "//compiler/playground" ]
+  deps = [ "//src/playground" ]
   if (is_wasm) {
-    deps += [ "//compiler/playground:alcy_playground" ]
+    deps += [ "//src/playground:alcy_playground" ]
   }
 }
 
@@ -28,7 +28,7 @@ group("playground") {
 # with `./tools/build.py --target=fuzz --args=is_fuzz=true`.
 group("fuzz") {
   testonly = true
-  deps = [ "//compiler/fuzz" ]
+  deps = [ "//src/fuzz" ]
 }
 
 group("all") {

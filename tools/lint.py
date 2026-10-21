@@ -132,8 +132,8 @@ def check_ascii_only(files: list[str]) -> bool:
 # outside the header gate until the generator is renamed. A stale
 # entry fails the run instead of silently passing.
 GENERATED_HEADER_EXCLUSIONS = [
-    "compiler/pipeline/embedded_std.h",
-    "compiler/cli/version.h",
+    "src/pipeline/embedded_std.h",
+    "src/cli/version.h",
 ]
 
 

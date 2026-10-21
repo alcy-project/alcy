@@ -59,13 +59,13 @@ def check_sources(
 
 def main():
     from utils.paths import (
-        compiler_dir,
         default_out_dir,
         excluded_source_dirs,
+        src_dir,
     )
 
     out_dir = default_out_dir
-    return check_sources(out_dir, compiler_dir, excluded_source_dirs)
+    return check_sources(out_dir, src_dir, excluded_source_dirs)
 
 
 if __name__ == "__main__":

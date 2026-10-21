@@ -6,7 +6,7 @@
 
 ## Context
 
-The language is stated in `docs/spec/` and implemented once, in `compiler/`.
+The language is stated in `docs/spec/` and implemented once, in `src/`.
 An editor, however, wants a syntax tree long before the compiler runs, and
 wants it for a buffer that does not compile yet. That is a second reading of
 the same language, written against the specification rather than against
@@ -78,7 +78,7 @@ string that would refuse to.
 An editor gets a tree for a buffer that does not compile, and the
 specification gains a reader that will notice when it stops being what the
 compiler implements. The cost is a third copy of the grammar to keep
-honest: `grammar.ebnf`, `compiler/parser/`, and `grammar.js`. The
+honest: `grammar.ebnf`, `src/parser/`, and `grammar.js`. The
 differential check is what makes the third affordable, and it is also the
 thing that would have to grow first, since it is the only one of the three
 that can notice all three disagreeing at once.

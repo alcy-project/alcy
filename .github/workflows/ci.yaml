@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths: &ci_paths
-      - compiler/**
-      - fmt/**
+      - src/**
       - lib/**
       - e2e/**
       - exe/**

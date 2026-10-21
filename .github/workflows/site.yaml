@@ -9,7 +9,7 @@ on:
     paths: &site_paths
       - site/**
       - docs/guide/**
-      - compiler/**
+      - src/**
       - lib/**
       - treesitter/**
       - build/**
@@ -46,7 +46,7 @@ env:
   # built for Emscripten.
   COMPILER_TARGET: playground
   # The compiler carries no backend but the direct wasm one
-  # (see compiler/backends.gni).
+  # (see src/backends.gni).
   ALCY_GN_ARGS: alcy_backends=[]
   BUILD_SUBDIR: playground
 
@@ -110,7 +110,7 @@ jobs:
           path: |
             out/playground
             out/site-cache
-          key: ${{ runner.os }}-site-wasm32-release-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'compiler/**', 'lib/**') }}
+          key: ${{ runner.os }}-site-wasm32-release-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'src/**', 'lib/**') }}
 
       - name: Cache tree-sitter's Wasm Toolchain
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9

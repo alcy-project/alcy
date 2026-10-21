@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- A C++20 toolchain: Clang, LLD, and libc++ (see [compiler/docs/build.md](compiler/docs/build.md)).
+- A C++20 toolchain: Clang, LLD, and libc++ (see [src/docs/build.md](src/docs/build.md)).
 - GN and Ninja.
 - Python via `uv` (`uv sync` sets up the environment; `uv run` prefixes commands).
 - The tree-sitter CLI and Bun, for the language's grammar (see [treesitter/README.md](treesitter/README.md)).
@@ -74,7 +74,7 @@ Performance work has its own loop: a generated corpus, instruction counts
 instead of wall clock, a profile that names the function, and an emitted-IR
 comparison as the equivalence proof. `uv run ./tools/perf.py` runs the
 measurements, and
-[compiler/docs/performance.md](compiler/docs/performance.md) is the loop they
+[src/docs/performance.md](src/docs/performance.md) is the loop they
 are steps in.
 
 To fix code style and lint issues:
@@ -129,10 +129,10 @@ Notes:
 
 ## Conventions
 
-- **Architecture:** Follow [compiler/docs/architecture.md](compiler/docs/architecture.md) for module responsibilities,
+- **Architecture:** Follow [src/docs/architecture.md](src/docs/architecture.md) for module responsibilities,
   dependency direction, ownership/lifetime boundaries, allocation contracts, and core design
   principles. IR construction rules (type currency, operand factories, `SeqBuilder`, opcode
-  conventions) live in [compiler/docs/ir.md](compiler/docs/ir.md).
+  conventions) live in [src/docs/ir.md](src/docs/ir.md).
 - **Standard:** C++20. Follow the Google C++ Style Guide where it does not conflict with
   repository-specific conventions.
 - **Explicitness:** Keep significant behavior visible at the call site. Do not use operator
@@ -141,7 +141,7 @@ Notes:
   (unnamed numbers or strings) in domain logic; bind them to meaningful constants.
 - **Ownership:** Make ownership and lifetime explicit in APIs. Prefer non-owning views for
   non-owning relationships and owning types only where ownership is part of the contract.
-- **Dependencies:** Respect the dependency direction defined by `compiler/docs/architecture.md`. Do not
+- **Dependencies:** Respect the dependency direction defined by `src/docs/architecture.md`. Do not
   introduce dependencies on higher-level modules for convenience, and do not create cyclic
   module dependencies.
 - **Naming & Types:** `PascalCase` for classes/structs/enums, `UPPER_SNAKE_CASE` for constants,
@@ -160,7 +160,7 @@ Notes:
 - **Code style:** Use `#pragma once` for include guards and relative includes from project root.
   Prefer `std::string_view` over `std::string` and `std::span` over `std::vector` unless
   ownership retention is required.
-- **One translation unit per header:** Every header under `compiler/` gets a sibling `.cc`, listed in
+- **One translation unit per header:** Every header under `src/` gets a sibling `.cc`, listed in
   its module's `BUILD.gn`. Put the header's out-of-line definitions in it; when it declares none,
   it holds only the license header and an `#include` of the header.
 
@@ -169,7 +169,7 @@ Notes:
   include goes unseen: `clang-tidy` ran only on `.c`/`.cc`, and a header with no translation
   unit is compiled with a command that has no include paths, so the check reports nothing
   rather than failing. Generated translation units are the exception:
-  `compiler/pipeline/embedded_std.h` is implemented by a generated file that already occupies
+  `src/pipeline/embedded_std.h` is implemented by a generated file that already occupies
   the sibling name, so it is listed in `lint.py`
   until the generator is renamed.
 - **Comments:** English only. Write comments sparingly-only for design rationale, invariants or
@@ -181,14 +181,14 @@ Notes:
   other linters cannot: fixed-width type aliases, owned memory, and the constructs the project
   does without. New source files must carry the license header.
 - **Module naming:** Module names stay abbreviated (`pkg`, `diag`). Directory, GN module,
-  and namespace names must always match; full forms live in `compiler/docs/architecture.md`.
+  and namespace names must always match; full forms live in `src/docs/architecture.md`.
 - **Wording:** The private LLVM fork is `llvm-alcy-fork` on first mention per document,
   and `the fork` thereafter.
 - **Architecture decisions:** One decision, one record. Significant technical decisions get an ADR
   in `docs/adr/` (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one. A
   reference names the file (`docs/adr/0011-symbol-mangling.md`), never the number alone: a number
   breaks when the log is renumbered, and a filename is what a reader can open.
-- **ASCII Character Set**: All C++ source files (`compiler/`) must remain pure ASCII. Do not use
+- **ASCII Character Set**: All C++ source files (`src/`) must remain pure ASCII. Do not use
   non-ASCII Unicode characters in code or comments (e.g., em-dashes `—`, smart quotes `“”`, or arrows `→`).
   Use standard ASCII equivalents (`-`, `"..."`, `->`). Non-ASCII characters are permitted only in
   documentation (`docs/`).
@@ -275,7 +275,7 @@ so it is not a test.
 6. **A failure found by a fuzzer is checked in as a seed and a unit test.** The
    artifact alone is not a regression test, because it is only replayed by a fuzzer.
 7. **Coverage may not go down.** `./tools/check_coverage.py` fails when line
-   coverage of `compiler/` drops below the recorded baseline. Move the baseline with
+   coverage of `src/` drops below the recorded baseline. Move the baseline with
    `--update` only in a commit that says so.
 8. **`fmt`, `lint`, and the unit suite are clean before you push.** So is the
    coverage ratchet: it runs in CI, and CI is not a substitute for running

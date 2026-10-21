@@ -27,7 +27,7 @@ the division.
 overlay beside it, and each backend realizes the checks from the
 table.**
 
-- `compiler/overlay` computes the overlay once per build, over the
+- `src/overlay` computes the overlay once per build, over the
   whole IR and after the release passes (ADR-0067) have run. The IR
   is neither copied nor rewritten: the definitions of ADR-0066 stay
   in it, and the overlay says only which operations the build checks

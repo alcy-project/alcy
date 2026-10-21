@@ -2,11 +2,11 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Builds and drives the libFuzzer targets under //compiler/fuzz.
+"""Builds and drives the libFuzzer targets under //src/fuzz.
 
 The targets themselves carry no CLI: each one is a plain libFuzzer
 binary. This wraps them so the common cases need no recall of libFuzzer
-flags and so a crash is classified against compiler/fuzz/known before it
+flags and so a crash is classified against src/fuzz/known before it
 is reported.
 
     uv run ./tools/run_fuzz.py                      build, then 30s per target
@@ -40,7 +40,7 @@ BUILD_SUBDIR = "fuzz"
 CORPUS_DIR = fuzz_dir / "corpus"
 KNOWN_DIR = fuzz_dir / "known"
 
-# Kept in step with //compiler/fuzz/BUILD.gn. Each entry names the
+# Kept in step with //src/fuzz/BUILD.gn. Each entry names the
 # byte-level boundary a target drives; see the comment at the top of that
 # file for what the oracle is in each case.
 TARGETS = {
@@ -180,8 +180,8 @@ def run_fuzzing(
                     file=sys.stderr,
                 )
                 print(
-                    "    a crash in compiler/ is a bug: reduce it to a unit test "
-                    "under compiler/tests. See compiler/fuzz/known/README.md.",
+                    "    a crash in src/ is a bug: reduce it to a unit test "
+                    "under src/tests. See src/fuzz/known/README.md.",
                     file=sys.stderr,
                 )
             else:

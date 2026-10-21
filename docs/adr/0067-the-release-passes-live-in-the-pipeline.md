@@ -22,7 +22,7 @@ them belong above the backends.
 **The pipeline owns an IR pass stage between borrow checking and
 codegen, and `--release` is what turns it on.**
 
-- `compiler/opt` holds the passes and runs them over the verified
+- `src/opt` holds the passes and runs them over the verified
   lowered storage; the result is rebuilt through the verifier, so a
   backend still receives proved IR. A pass that fails verification is
   a compiler bug, reported as such.

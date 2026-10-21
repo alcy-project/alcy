@@ -60,9 +60,9 @@ declare_args() {
   use_lld = true
 }
 
-# Builds the libFuzzer targets under //compiler/fuzz. Off by default: they need
+# Builds the libFuzzer targets under //src/fuzz. Off by default: they need
 # clang's fuzzer runtime and are a development tool, so a normal build
-# should not carry them. See //compiler/fuzz/BUILD.gn.
+# should not carry them. See //src/fuzz/BUILD.gn.
 declare_args() {
   is_fuzz = false
 }
@@ -78,7 +78,7 @@ declare_args() {
 
 # Keeps debug information and the symbol table in an optimised build, so a
 # profile can name what it sampled. Off by default: a release artifact does
-# not need either. See //compiler/docs/performance.md.
+# not need either. See //src/docs/performance.md.
 declare_args() {
   perf_symbols = false
 }

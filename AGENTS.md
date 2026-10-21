@@ -6,7 +6,7 @@ This workspace contains `alcy`, a high-performance programming language compiler
 
 Prior to generating, refactoring, or reviewing code, strictly follow the specifications in:
 
-- `compiler/docs/architecture.md`: Pipeline architecture, intermediate representation design, LLVM integration, and repository structure.
+- `src/docs/architecture.md`: Pipeline architecture, intermediate representation design, LLVM integration, and repository structure.
 - `CONTRIBUTING.md`: Workflow scripts (`build.py`, `lint.py`), tooling setup, formatting, and commit conventions.
 
 # Code Quality & Refactoring Directives
@@ -20,7 +20,7 @@ Prior to generating, refactoring, or reviewing code, strictly follow the specifi
 - **Error Handling & Constraints**:
   - The project builds with `-fno-exceptions` and `-fno-rtti`. **Do not use `try`, `catch`, `throw`, `dynamic_cast`, or RTTI.**
   - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`AutoTaggedUnion` types, or diagnostic handlers) instead of exceptions.
-  - Use assertions (`DCHECK()`) or diagnostic logging (`compiler/base/`, `compiler/debug/`) for internal compiler invariant failures.
+  - Use assertions (`DCHECK()`) or diagnostic logging (`src/base/`, `src/debug/`) for internal compiler invariant failures.
 - **Signal-to-Noise Ratio in Comments**:
   - **No Session or Metacognitive Leakage**: NEVER write comments that reference the prompt, chat session, negative decisions, or omitted alternatives (e.g., BAD: `// No std::filesystem, we don't use it here`, `// Per user instruction`). Write comments purely from the perspective of long-term codebase maintenance.
   - **No Over-Explanation or Justifications**: Do not write multi-line defenses or excuses for obvious code choices.
@@ -35,14 +35,14 @@ To optimize token efficiency and execution speed:
   - Direct output to a clear log name under `/tmp/` that names the worktree or branch and the check, not the console; parallel checkouts then keep separate logs.
     (example: `LOG="/tmp/alcy-<branch>-lint.log"; uv run tools/lint.py > $LOG 2>&1 || tail -n 50 $LOG`)
 - **Precision Search & Diffing**:
-  - Use `-l` with `rg` to list matching files first: `rg "pattern" compiler/ -l`.
-  - Cap search results using pipe limiters: `rg "pattern" compiler/ | head -n 30`.
+  - Use `-l` with `rg` to list matching files first: `rg "pattern" src/ -l`.
+  - Cap search results using pipe limiters: `rg "pattern" src/ | head -n 30`.
   - Check change volume with `git diff --stat` before fetching detailed file diffs.
 - **Batch Refactoring via `ast-grep`**:
   - Use `ast-grep` one-liners for structural, repetitive transformations instead of making multiple iterative manual edits.
 
 # Code Generation Directives
 
-- Respect module boundaries inside `compiler/*` and adhere strictly to the linear pipeline flow defined in `compiler/docs/architecture.md`.
+- Respect module boundaries inside `src/*` and adhere strictly to the linear pipeline flow defined in `src/docs/architecture.md`.
 - Ensure new files include the project license header and have corresponding target entries in their module's `BUILD.gn`.
 - Code generation, comments, documentation, and commit messages must be written in English.

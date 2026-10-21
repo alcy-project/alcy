@@ -11,7 +11,7 @@ from:
     tools/build.py --target=playground --target-os=emscripten \\
         --build-subdir=playground --gn-arg='alcy_backends=[]'
 
-and runs `compiler/playground/js/smoke.mjs` under bun, which loads the
+and runs `src/playground/js/smoke.mjs` under bun, which loads the
 launcher, compiles a program through the C ABI, runs the module it
 produced, and checks a rejected source comes back with diagnostics. The
 program's output is compared here, so the whole path -- page wrapper,

@@ -106,17 +106,17 @@ one `playground/` directory for everything else.
 ## What the page expects from the compiler module
 
 The module's C ABI is `AlcyResult`, `alcy_check`, `alcy_compile`, and
-`alcy_release`, defined in `compiler/playground/playground.h`;
+`alcy_release`, defined in `src/playground/playground.h`;
 `wasm-api.ts` carries the site's copy of the struct layout (wasm32:
 four-byte pointers, no padding) and is the file to touch if the header
 changes. `alcy_compile` returns the program as a final wasm module, not an
 object, and `diagnostics` is the `--json` envelope's diagnostic array as
-UTF-8 JSON. `compiler/playground/js/alcy.mjs` is the compiler side's
+UTF-8 JSON. `src/playground/js/alcy.mjs` is the compiler side's
 reference wrapper; the site has its own adapter so the worker split and
 the WASI host stay under `site/playground/`.
 
 The module must be the Emscripten `MODULARIZE` build from
-`compiler/playground/BUILD.gn`, whose factory is the global
+`src/playground/BUILD.gn`, whose factory is the global
 `createAlcyPlayground` (classic glue, not `EXPORT_ES6`), with the sidecar
 `.wasm` next to the glue script, built with `-sENVIRONMENT=web,worker,node`
 so the same artifact runs in the page's worker and in the bun smoke test.

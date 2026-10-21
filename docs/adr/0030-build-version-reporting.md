@@ -34,7 +34,7 @@ by hand at each release. The short commit is twelve hex digits.
 
 The string is baked into a single generated translation unit,
 `$target_gen_dir/version.cc`, produced by `write_file` and exposed
-through `cli::alcy_version()` in `compiler/cli/version.h`. Only that
+through `cli::alcy_version()` in `src/cli/version.h`. Only that
 unit's compile command carries the commit, so a new commit recompiles
 one file and relinks. `write_file` leaves the timestamp alone when the
 string is unchanged, so a rebuild between commits does nothing.

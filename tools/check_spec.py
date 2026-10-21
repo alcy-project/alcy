@@ -25,7 +25,7 @@ from utils.paths import project_root_dir
 SPEC_DIR = project_root_dir / "docs" / "spec"
 
 # A path to a source file or a build tree. `docs/adr/0007-....md` and
-# `compiler/docs/architecture.md` are documents and are left alone.
+# `src/docs/architecture.md` are documents and are left alone.
 PATTERNS = {
     "a source or build path": re.compile(
         r"(?<![\w./-])(?:src|compiler|third_party|lib|tools|e2e|exe|samples|out)"

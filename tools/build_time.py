@@ -47,7 +47,7 @@ def read_edges(log_path: Path) -> dict[str, int]:
 
 
 def module_of(output: str) -> str:
-    # `obj/compiler/analyzer/analyzer/types.o` names the analyzer module;
+    # `obj/src/analyzer/analyzer/types.o` names the analyzer module;
     # the second component is the target the object was built into.
     parts = Path(output).parts
     if len(parts) >= 3 and parts[0] == "obj":

@@ -23,4 +23,4 @@ only for building LLVM inside the fork.
 - Fast, hermetic-feeling builds with a single `gn gen` + `ninja` flow;
   `compile_commands.json` is generated for clangd.
 - Build logic is split accordingly: GN owns the compiler, CMake owns LLVM.
-  Contributors need both tools, documented in `compiler/docs/build.md`.
+  Contributors need both tools, documented in `src/docs/build.md`.

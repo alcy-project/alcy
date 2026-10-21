@@ -1,0 +1,126 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+import("//src/backends.gni")
+
+executable("tests") {
+  sources = [
+    "analyzer/resolve_modules_test.cc",
+    "analyzer/types_test.cc",
+    "ast/ast_test.cc",
+    "ast/node_vec_test.cc",
+    "ast/verify_test.cc",
+    "base/for_each_test.cc",
+    "base/hash_test.cc",
+    "base/process_memory_test.cc",
+    "benchmarks/engine_test.cc",
+    "benchmarks/generator_test.cc",
+    "borrow/borrow_test.cc",
+    "cli/cli_config_test.cc",
+    "cli/cli_main_test.cc",
+    "cli/logger_test.cc",
+    "cli/output_test.cc",
+    "cli/parse_args_test.cc",
+    "cli/parse_output_test.cc",
+    "cli/suggest_test.cc",
+    "cli/trace_report_test.cc",
+    "cli/validate_test.cc",
+    "codegen/backend_test.cc",
+    "codegen/wasm_module_test.cc",
+    "codegen/wasm_reach_test.cc",
+    "codegen/wasm_writer_test.cc",
+    "diag/bag_test.cc",
+    "diag/render_test.cc",
+    "diag/worker_bags_test.cc",
+    "fmt/formatter_test.cc",
+    "i18n/i18n_test.cc",
+    "ir/deserialize_test.cc",
+    "ir/ir_common_test.cc",
+    "ir/ir_fixtures.h",
+    "ir/serialize_test.cc",
+    "ir/storage_builder_test.cc",
+    "ir/symbol_table_test.cc",
+    "ir/text_dump_test.cc",
+    "ir/type_layout_test.cc",
+    "ir/verifier_test.cc",
+    "lexer/lexer_test.cc",
+    "lexer/token_test.cc",
+    "lowering/ir_interpreter_test.cc",
+    "lowering/lowering_fixture.h",
+    "opt/opt_test.cc",
+    "overlay/overlay_test.cc",
+    "parser/desugar_test.cc",
+    "parser/parser_test.cc",
+    "path/path_test.cc",
+    "pipeline/api_test.cc",
+    "pipeline/cache_test.cc",
+    "pipeline/call_sites_test.cc",
+    "pipeline/check_test.cc",
+    "pipeline/dependencies_test.cc",
+    "pipeline/hostile_input_test.cc",
+    "pipeline/ir_emit_test.cc",
+    "pipeline/modules_test.cc",
+    "pipeline/nesting_test.cc",
+    "pipeline/new_test.cc",
+    "pipeline/parse_test.cc",
+    "pipeline/pipeline_test.cc",
+    "pipeline/profile_resolve_test.cc",
+    "pipeline/spawn_test.cc",
+    "pipeline/std_select_test.cc",
+    "pipeline/std_stage_test.cc",
+    "pkg/manifest_test.cc",
+    "pkg/profile_parse_test.cc",
+    "pkg/toolchain_test.cc",
+    "pkg/version_req_test.cc",
+    "playground/playground_test.cc",
+    "property/mangle_property_test.cc",
+    "source/source_test.cc",
+    "source/virtual_source_test.cc",
+    "symbol/mangle_test.cc",
+    "test_main.cc",
+    "text/unescape_test.cc",
+    "util/add_sources_test.cc",
+    "util/test_util.cc",
+    "util/test_util.h",
+    "util/virtual_source.cc",
+    "util/virtual_source.h",
+  ]
+
+  # The LLVM-backed cases need the implementation in the graph: the
+  # lowering cases emit through LLVM to check what lowering produced, and
+  # the two codegen_llvm suites test that emitter directly. A build with
+  # no LLVM still runs everything else, which is what the playground
+  # configuration wants.
+  if (alcy_use_llvm) {
+    sources += [
+      "codegen_llvm/llvm_ir_emitter_test.cc",
+      "codegen_llvm/runtime_ir_test.cc",
+      "lowering/lowering_test.cc",
+      "pipeline/emit_mode_test.cc",
+    ]
+  }
+
+  configs += [
+    "//src:alcy_config",
+    "//src:win_sys_libs",
+  ]
+
+  # doctest forward-declares std::ostream by default, which MSVC's
+  # string_view operator<< cannot instantiate; including the real headers
+  # fixes Windows builds (see doctest configuration.md). Must be global:
+  # every TU including doctest needs it before the first include.
+  defines = [ "DOCTEST_CONFIG_USE_STD_HEADERS" ]
+
+  deps = [
+    "//src:alcy_lib",
+    "//src/benchmarks:bench",
+    "//src/benchmarks:bench_cases",
+    "//src/cli",
+    "//src/fmt:alcy_fmt",
+    "//third_party/doctest",
+
+    # A property test parses what a serializer wrote, which is the only
+    # way to state "the output is loadable" without a second reader.
+    "//third_party/toml",
+  ]
+}

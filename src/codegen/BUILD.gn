@@ -1,0 +1,20 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("codegen") {
+  sources = [
+    "backend.cc",
+    "backend.h",
+    "diag_code.h",
+    "target.cc",
+    "target.h",
+    "x86_emitter.cc",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/diag",
+    "//src/ir",
+    "//src/overlay",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

@@ -11,8 +11,8 @@
 //
 //     bun site/build/ssg/src/main.js \
 //       --docs docs/guide --dist site/dist --site site --repo-root . \
-//       --alcy compiler/playground/js/alcy.mjs \
-//       --glue site/dist/playground/compiler/alcy_playground.js \
+//       --alcy src/playground/js/alcy.mjs \
+//       --glue site/dist/playground/src/alcy_playground.js \
 //       --grammar site/dist/playground/grammar/tree-sitter-alcy.wasm \
 //       --highlights site/dist/playground/grammar/highlights.scm \
 //       --tree-sitter out/site-cache/deps/node_modules/web-tree-sitter/web-tree-sitter.js

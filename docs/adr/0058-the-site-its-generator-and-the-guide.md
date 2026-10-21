@@ -71,5 +71,5 @@ only consumer is the site it serves.
 
 The rename touches the build tool, the Pages workflow, and the
 architecture's layout table. The ADR log and the compiler-side
-`compiler/playground/` module keep their names: the first is history, and
+`src/playground/` module keep their names: the first is history, and
 the second is the embedding API, not the site.

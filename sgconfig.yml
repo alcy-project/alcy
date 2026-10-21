@@ -2,7 +2,7 @@
 # type aliases the project spells every number with, and the constructs
 # whose absence is a decision rather than an accident. `ast-grep test`
 # checks the rules against tools/ast-grep/rule-tests; `ast-grep scan
-# compiler` applies them to the tree.
+# src applies them to the tree.
 ruleDirs:
   - tools/ast-grep/rules
 testConfigs:

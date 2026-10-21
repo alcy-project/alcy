@@ -17,7 +17,7 @@ to the compiler.
 Three checks were not in CI at all, all three reachable by hand:
 
 - `check_coverage.py`, the ratchet that fails when line coverage of
-  `compiler/` falls below `build/coverage_baseline.json`.
+  `src/` falls below `build/coverage_baseline.json`.
 - `check_exe.py --sanitize`, which compiles what alcy emits through clang so
   the sanitizers can instrument a program the compiler wrote itself.
 - `check.sh` itself, the gate `CONTRIBUTING.md` tells a contributor to run

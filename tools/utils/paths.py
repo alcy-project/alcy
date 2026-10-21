@@ -15,14 +15,14 @@ default_out_dir: Path = out_dir / "build"
 config_toml_file: Path = project_root_dir / "config.toml"
 
 # include_dir: Path = project_root_dir / "include"
-compiler_dir: Path = project_root_dir / "compiler"
-fuzz_dir: Path = compiler_dir / "fuzz"
+src_dir: Path = project_root_dir / "src"
+fuzz_dir: Path = src_dir / "fuzz"
 # tests_dir: Path = project_root_dir / "tests"
 # benchmarks_dir: Path = project_root_dir / "benchmarks"
 
 
 project_source_dirs: list[Path] = [
-    compiler_dir,
+    src_dir,
     # tests_dir,
     # benchmarks_dir,
 ]

@@ -25,7 +25,7 @@ explicit `Alloca`/`Load`/`Store`, blocks, calls -- so a small emitter can turn
 it into an object directly, and the embedded lld the compiler already links
 through does the linking in-process.
 
-`compiler/codegen/` is the reserved place for this. Its README states the
+`src/codegen/` is the reserved place for this. Its README states the
 contract: consume verified IR, return `base::Result`, report through the bag.
 What it does not state is the shape of a second backend beside `codegen_llvm`,
 the language features a first version must cover, or what the playground

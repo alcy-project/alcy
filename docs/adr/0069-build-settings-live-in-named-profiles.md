@@ -91,8 +91,8 @@ optimize = true
 
 ## Reference
 
-- `compiler/pkg/profile.{h,cc}` parses the file; the built-in bases and
-  resolution live in `compiler/pipeline/profile.{h,cc}`.
+- `src/pkg/profile.{h,cc}` parses the file; the built-in bases and
+  resolution live in `src/pipeline/profile.{h,cc}`.
 - `docs/adr/0019-goal-config-in-dot-alcy.md`: where goal
   configuration lives, and why `compile` reads no file.
 - `docs/adr/0049-the-direct-backends-and-the-playground.md`: the
