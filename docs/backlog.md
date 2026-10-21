@@ -821,12 +821,11 @@ replaced. The foundations are in `roadmap.md`.
   taken - a double free in safe code. The drop walk's move event lands
   before the then-arm's body now, while the borrow marker stays at the
   arm's tail. `exe-cond-arm-return` holds it.
-- [ ] A pattern condition marks its scrutinee moved on the else-arm
-  even when the pattern did not match, so that value's destructor is
-  skipped and leaks. The move is what keeps a later read from seeing
-  the consumed scrutinee, and the borrow walk's may-analysis for
-  `moved` cannot yet express a conditional drop; the drop would have
-  to run behind the same flag an end site uses.
+- [x] A pattern condition marked its scrutinee moved on the else-arm
+  even when the pattern did not match, so that value's destructor was
+  skipped and leaked. The else-arm ends the scrutinee in place now -
+  the end is the move the borrow walk sees - so the value is spent
+  once whichever arm runs. `exe-cond-else-drop` holds it.
 - [x] A type mismatch between two nominals, two instantiations, or two
   closure signatures printed only the kind twice (`expected 'struct',
   found 'struct'`). Diagnostics spell the type the way the source

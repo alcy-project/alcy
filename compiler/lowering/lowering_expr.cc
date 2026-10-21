@@ -4604,7 +4604,15 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       auto finish_else_arm = [&](Val produced, ir::BlockIdx epilogue,
                                  bool& live_out) {
         if (!terminated_cur()) {
-          mark_move(addr);
+          // The condition consumes its scrutinee on either arm, so the
+          // arm the pattern did not take ends the value in place rather
+          // than moving it and leaving its destructor unrun. Ending it
+          // is itself the move the borrow walk sees.
+          if (runs_destructor(addr.type)) {
+            record_drop_in_place(addr.op, addr.type, node.span);
+          } else {
+            mark_move(addr);
+          }
         }
         arm_tail(produced, arm_mark, epilogue, live_out);
       };
