@@ -66,6 +66,18 @@ struct NameKeyHash {
   }
 };
 
+// Whether a name is one of the generic items a summary named but could
+// not spell.
+bool is_generic_item(std::span<const std::string_view> names,
+                     std::string_view name) {
+  for (const std::string_view candidate : names) {
+    if (candidate == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
 class Resolver {
  public:
   Resolver(ast::AstArena& ast, diag::DiagBag& bag, debug::Profiler* profiler)
@@ -296,6 +308,7 @@ class Resolver {
       modules[root]->items = input.items;
       modules[root]->is_summary = input.input.id == source::UNKNOWN_FILE;
       modules[root]->summary_symbols = input.input.summary_symbols;
+      modules[root]->summary_generic_names = input.input.summary_generic_names;
       return;
     }
     u32 parent = root_module;
@@ -319,6 +332,8 @@ class Resolver {
           // and its symbols are what a call out of the package links by.
           modules[child]->is_summary = true;
           modules[child]->summary_symbols = input.input.summary_symbols;
+          modules[child]->summary_generic_names =
+              input.input.summary_generic_names;
         }
         if (out_of_arena) {
           return;
@@ -832,6 +847,17 @@ class Resolver {
       }
     }
     if (!resolved && !private_seen) {
+      // A generic item is in the package, and a summary named it; what
+      // a summary does not carry yet is its body. Saying so is the
+      // difference between a missing item and one that cannot be used
+      // yet.
+      if (is_generic_item(modules[current]->summary_generic_names, member)) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerGenericItemUnavailable>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::GenericItemUnavailable, node.span, member);
+        (void)index;
+        return;
+      }
       emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
                       node.span, std_hints_, "import", member);
     }

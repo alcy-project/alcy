@@ -113,6 +113,10 @@ struct ModuleNode {
   // The symbols the summary's items link by, for the calls that leave
   // the package.
   std::span<const SummarySymbol> summary_symbols;
+  // The generic items the summary named but could not spell: a
+  // dependent that reaches one is told what it is, rather than reading
+  // that the item does not exist.
+  std::span<const std::string_view> summary_generic_names;
 };
 
 // What a trace row for a module reads: the path the tree gave it, or the
@@ -237,6 +241,10 @@ struct ModuleInput {
   // whole, which the missing-field warning wants.
   // NOLINTNEXTLINE(readability-redundant-member-init)
   std::span<const SummarySymbol> summary_symbols = {};
+  // The generic items a summary named but could not spell, in the same
+  // module.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const std::string_view> summary_generic_names = {};
 };
 
 // One module input and the syntax the parser made of its file. Lexing,

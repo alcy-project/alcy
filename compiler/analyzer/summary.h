@@ -33,6 +33,12 @@ struct SummarySurface {
     std::span<const ast::ItemIdx> items;
     // The symbol each item links by, parallel to `items`.
     std::span<const SummarySymbol> symbols;
+    // The items the package declared that a summary cannot spell: a
+    // generic item's body is not in the artifact yet. They are named
+    // here so a dependent that reaches one is told what it is, rather
+    // than reading that the item does not exist. The names are views of
+    // the name table, which outlives the surface.
+    std::vector<std::string_view> generic_names;
   };
   std::vector<Module> modules;
 };

@@ -52,9 +52,10 @@ decides how.
 
 **A generic item is named, and today it is not usable.** Its row has
 no code to point at and sets the flag that says an instantiation needs
-the body. The reader drops such a row, so a dependent that names one
-reads "Unresolved import", which is honest but does not say why.
-ADR-0079 replaces the flag with the body itself.
+the body. The row cannot be spelled, but the name is kept, and a
+dependent that reaches one is told that the item is generic and that a
+summary does not carry its body yet, rather than reading that the item
+does not exist. ADR-0079 replaces the flag with the body itself.
 
 **Versioning is the binary form's.** The section rides inside ALIR, so
 a `MAJOR` bump that a reader must refuse, a `MINOR` a reader may walk

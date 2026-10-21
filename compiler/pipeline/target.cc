@@ -255,6 +255,10 @@ struct PackageSources {
   // it once the last module is in: the targets borrow the spans for
   // as long as they resolve.
   std::vector<analyzer::ParsedModule> dependency_modules;
+  // The generic items each dependency's summary named but could not
+  // spell. The module inputs borrow these, so nothing resizes them
+  // once the last module is in.
+  std::vector<std::vector<std::string_view>> summary_generic_names;
   std::vector<analyzer::DependencyPackage> dependencies;
   // Every package's spec policy: the root's, each path dependency's,
   // and each selected staged member's, in that order. The tree borrows
@@ -437,12 +441,19 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       }
       std::span<const ast::ItemIdx> items;
       std::span<const analyzer::SummarySymbol> symbols;
+      std::span<const std::string_view> generic_names;
       if (surface.has_value()) {
         for (const analyzer::SummarySurface::Module& module :
              surface->modules) {
           if (analyzer::summary_module_name(module.path) == input.name) {
             items = module.items;
             symbols = module.symbols;
+            if (!module.generic_names.empty()) {
+              // The names are views of the name table, which outlives
+              // the resolution; the list that holds them is this run's.
+              sources.summary_generic_names.push_back(module.generic_names);
+              generic_names = sources.summary_generic_names.back();
+            }
             break;
           }
         }
@@ -451,6 +462,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       // empty one stands for the module a summary spelled.
       analyzer::ModuleInput spelled = input;
       spelled.summary_symbols = symbols;
+      spelled.summary_generic_names = generic_names;
       sources.dependency_modules.push_back(analyzer::ParsedModule{
           spelled, path::Path::from_native(std::string_view{}).unwrap(),
           items});

@@ -175,6 +175,7 @@
   F(AnalyzerFormatPrecisionNotFloat, "A format precision applies to floats only") \
   F(AnalyzerFormatStringNotCompKnown, "Format string must be comp-known") \
   F(AnalyzerGenericArgumentsUnsupported, "Generic arguments are not supported") \
+  F(AnalyzerGenericItemUnavailable, "Item '{}' is generic; a summary does not carry a generic item's body yet") \
   F(AnalyzerGenericImplUnsupported, "Generic impl blocks are not supported") \
   F(AnalyzerIfWithoutElse, "If without else yields '()'") \
   F(AnalyzerImportNotQualified, "Imports must be module-qualified (`self::foo`)") \

@@ -877,6 +877,67 @@ TEST_CASE("Suites reject a member resolving back into its suite") {
                              dir.join("proj/vendor/tools") + "'"));
 }
 
+TEST_CASE("A generic item a summary cannot spell is named for what it is") {
+  // A summary carries no generic item's body yet, so a dependent that
+  // names one is told that the item is generic rather than that it
+  // does not exist.
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_generic_test_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "pub struct Holder<T> {\n  pub value: T,\n}\n\n"
+        "pub fn make(x: i32) -> i32 {\n  ret x\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildProfile{}, LinkOptions{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join("dep/out/dep.summary")));
+  }
+  // The library's sources are gone, so the summary answers for it.
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  CHECK(dir.write_file(
+      "proj/alcy.toml",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n"));
+  CHECK(dir.write_file("proj/main.al",
+                       "use dep::Holder\n\nfn main() -> i32 {\n  ret 0\n}\n"));
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    const base::Result<CheckOutcome, diag::Reported> checked =
+        check_proj(ctx, dir);
+    CHECK(checked.is_err());
+    CHECK(reports(ctx.bag,
+                  "Item 'Holder' is generic; a summary does not carry a "
+                  "generic item's body yet"));
+  }
+}
+
 TEST_CASE("A dependency a summary answers for is not read") {
   // A library's build leaves its surface beside the artifact; a
   // dependent checks against it, and the library's own sources can be

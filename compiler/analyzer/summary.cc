@@ -3,8 +3,10 @@
 
 #include "analyzer/summary.h"
 
+#include <algorithm>
 #include <deque>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -701,6 +703,8 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
                              strings, nominals, nominals_by_name};
   std::unordered_map<std::string, std::vector<ast::ItemIdx>> items_by_module;
   std::unordered_map<std::string, std::vector<SummarySymbol>> symbols_by_module;
+  std::unordered_map<std::string, std::vector<std::string_view>>
+      generic_names_by_module;
   std::vector<std::string> order;
   // Members wait for the declarations they target: an impl is built
   // after every nominal is spelled, and it lands in the module the
@@ -714,8 +718,16 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   std::vector<u32> impl_order;
   for (const ir::SummaryEntry& row : summary.summary) {
     // A declaration that needs its body cannot be spelled from a
-    // summary; the row says so.
+    // summary; the row says so. The item is named anyway: it exists,
+    // and a dependent that reaches it is told that it is a generic
+    // item rather than that it is missing.
     if (row.needs_body) {
+      const std::string_view name = named(row.name, "");
+      const std::string_view path = named(row.path, "");
+      const std::optional<str::StringPoolId> id = strings.intern_copied(name);
+      if (id.has_value()) {
+        generic_names_by_module[std::string(path)].push_back(strings.get(*id));
+      }
       continue;
     }
     const bool is_nominal = row.kind == ir::SummaryKind::Struct ||
@@ -812,8 +824,26 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     const std::vector<ast::ItemIdx>& items = items_by_module[path];
     const std::vector<SummarySymbol>& symbols = symbols_by_module[path];
     surface.modules.push_back(
-        SummarySurface::Module{path, ast::copy_to_arena(ast.spans, items),
-                               ast::copy_to_arena(ast.spans, symbols)});
+        SummarySurface::Module{path,
+                               ast::copy_to_arena(ast.spans, items),
+                               ast::copy_to_arena(ast.spans, symbols),
+                               {}});
+  }
+  // A module whose only items are generic ones has no entry above, and
+  // the names it holds are what a dependent needs to hear about.
+  for (const auto& [path, names] : generic_names_by_module) {
+    const auto found =
+        std::find_if(surface.modules.begin(), surface.modules.end(),
+                     [&path](const SummarySurface::Module& module) {
+                       return module.path == path;
+                     });
+    if (found == surface.modules.end()) {
+      surface.modules.push_back(
+          SummarySurface::Module{path, std::span<const ast::ItemIdx>{},
+                                 std::span<const SummarySymbol>{}, names});
+      continue;
+    }
+    found->generic_names = names;
   }
   return surface;
 }

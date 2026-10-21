@@ -100,6 +100,9 @@ enum class DiagCode : u8 {
   // (`{:.2}` for `{:.2f}`): the two are one piece, and the spelling
   // that says what it formats is what the lint asks for.
   FmtPrecisionImplicit = 45,
+  // A generic item's name reached a dependent: the item is there, and
+  // what a summary does not carry yet is its body.
+  GenericItemUnavailable = 46,
 };
 
 }  // namespace analyzer
