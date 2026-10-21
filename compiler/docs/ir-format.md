@@ -241,7 +241,9 @@ the writer are not preserved and MUST NOT be written.
 **STRINGS** as above.
 
 **TYPES**: `count` × `{ tag u8, pad u8[3], payload u32 }`. `payload`
-is the row in the tag's composite table, or 0 for a primitive tag.
+is the row in the tag's composite table, or 0 for a primitive tag. A
+type parameter's payload is the parameter's index instead: a parameter
+is not a row in a table (ADR-0079).
 
 **STRUCTS**: `{ name u32 (string), fields_head u32, fields_size u32,
 params_head u32, params_size u32 }`.

@@ -162,6 +162,31 @@ TEST_CASE("A const argument survives the binary form") {
   CHECK(serialize(reinput.input) == bytes);
 }
 
+TEST_CASE("A type parameter survives the binary form") {
+  // The parameter's index is the payload, not a table row, so the
+  // round trip has to keep it (ADR-0079).
+  ir::SymbolTable strings;
+  const Storage storage = test::composite_storage(strings);
+  const std::vector<u8> bytes = test::composite_bytes(strings, storage);
+  base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  LoadedIr package = std::move(loaded).unwrap();
+  const Storage& read = *package.storage;
+  bool found = false;
+  for (TypeIdx idx(0); idx.idx < read.types().size(); ++idx) {
+    const TypeNode& node = read.types()[idx];
+    if (node.tag != TypeTag::Param) {
+      continue;
+    }
+    found = true;
+    CHECK(node.as_param().value == 0);
+  }
+  CHECK(found);
+}
+
 TEST_CASE("A corrupt binary form is refused") {
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);

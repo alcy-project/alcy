@@ -60,6 +60,13 @@ enum class TypeTag : u8 {
   // const_type creates one. It sits after the pre-interned tags so
   // their table positions stay stable.
   Const,
+  // A type parameter of the item the node belongs to: the payload is
+  // the parameter's index, counting the item's own type parameters.
+  // A body that has not been specialized still names the types it was
+  // written with, and the specialization replaces them (ADR-0079).
+  // It is never a value of the language: a parameter has no layout
+  // until the argument is known.
+  Param,
 };
 
 // Target pointer width: selects the mapping of isize/usize. Passed
@@ -147,10 +154,16 @@ struct ConstType {
   u64 value;
 };
 
+// The index of a type parameter. The union holds it as a value: a
+// parameter is not a row in a table.
+struct ParamIndex {
+  u32 value = 0;
+};
+
 struct TypeNode {
   TypeTag tag;
   // Meaningful only for Struct/Array/Slice/Enum/Ref/MutRef/RawPtr/
-  // RawMutPtr/Tuple/Func/Const tags.
+  // RawMutPtr/Tuple/Func/Const/Param tags.
   base::Union<StructTypeIdx,
               ArrayTypeIdx,
               SliceTypeIdx,
@@ -158,7 +171,8 @@ struct TypeNode {
               RefTypeIdx,
               TupleTypeIdx,
               FuncTypeIdx,
-              ConstTypeIdx>
+              ConstTypeIdx,
+              ParamIndex>
       data;
 
   inline StructTypeIdx as_struct() const {
@@ -203,6 +217,11 @@ struct TypeNode {
     DCHECK_MSG(tag == TypeTag::Const, "type node is not a const argument");
     return data.get<ConstTypeIdx>();
   }
+
+  inline ParamIndex as_param() const {
+    DCHECK_MSG(tag == TypeTag::Param, "type node is not a type parameter");
+    return data.get<ParamIndex>();
+  }
 };
 
 constexpr const char* type_to_str(TypeTag tag) {
@@ -241,6 +260,7 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::Tuple: return "tuple";
     case T::Error: return "error";
     case T::Const: return "const";
+    case T::Param: return "param";
     default: UNREACHABLE();
   }
 }

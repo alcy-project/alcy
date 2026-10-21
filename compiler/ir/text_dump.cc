@@ -214,6 +214,11 @@ class TextWriter {
         fmt::format_to(std::back_inserter(out_), "const {}",
                        state_.const_types[node.as_const()].value);
         break;
+      // A type parameter, by its index: the node carries no name, and
+      // the name belongs to the declaration it belongs to.
+      case TypeTag::Param:
+        fmt::format_to(std::back_inserter(out_), "T{}", node.as_param().value);
+        break;
       case TypeTag::Tuple: {
         const TypeIdxRange elements =
             state_.tuple_types[node.as_tuple()].elements;

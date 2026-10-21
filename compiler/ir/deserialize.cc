@@ -273,6 +273,8 @@ bool read_types(Parsed& parsed, std::span<const u8> payload) {
       case TypeTag::Tuple: node.data.set(TupleTypeIdx(value)); break;
       case TypeTag::Func: node.data.set(FuncTypeIdx(value)); break;
       case TypeTag::Const: node.data.set(ConstTypeIdx(value)); break;
+      // A type parameter's payload is its index, not a table row.
+      case TypeTag::Param: node.data.set(ParamIndex{value}); break;
       default: break;
     }
     parsed.state.types.emplace_back(node);

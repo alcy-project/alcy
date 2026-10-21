@@ -112,7 +112,11 @@ item.
 
 1. A type parameter in the IR: a type node that names a parameter of
    the item it belongs to, and a generic item emitted once in that
-   form.
+   form. The node lands first, and the analyzer's resolution of a
+   declaration's own signature follows: it binds the parameters to
+   those nodes, so it must run where no check can see that scope, or a
+   check that runs under it records a type that names a parameter where
+   it means a type.
 2. The analyzer checks a generic body once, against its parameters.
 3. A specialization pass over IR, after linking.
 4. The summary carries a generic body, and the `needs_body` flag

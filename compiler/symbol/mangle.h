@@ -78,6 +78,9 @@ struct DecodedType {
     // A function signature: `parts[0..n-1]` are the parameters and
     // `parts[n]` is the return type.
     Func,
+    // A type parameter of the item the symbol belongs to; `count` is
+    // its index.
+    Param,
   };
   Kind kind = Kind::Prim;
   std::string spelling;

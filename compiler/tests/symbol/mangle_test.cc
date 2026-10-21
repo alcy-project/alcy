@@ -89,6 +89,30 @@ TEST_CASE("Mangle distinguishes signatures that share a source name") {
   CHECK(a.starts_with("_A1"));
 }
 
+TEST_CASE("Mangle carries a type parameter") {
+  // A body that has not been specialized names its parameters, and a
+  // symbol that carries one decodes back (ADR-0079).
+  Fixture f;
+  const TypeIdx param = f.builder.param_type(0);
+  symbol::Signature sig = signature("m", "get", symbol::Signature::Kind::Free);
+  sig.generics = {param};
+  const ir::Storage types = f.build();
+  const std::string encoded = symbol::mangle(sig, types, f.strings);
+  base::Result<symbol::Demangled, symbol::DemangleError> decoded =
+      symbol::demangle(encoded);
+  CHECK(decoded.is_ok());
+  if (decoded.is_err()) {
+    return;
+  }
+  const symbol::Demangled back = std::move(decoded).unwrap();
+  CHECK(back.generics.size() == 1);
+  if (back.generics.size() == 1) {
+    CHECK(back.generics[0].kind == symbol::DecodedType::Kind::Param);
+    CHECK(back.generics[0].count == 0);
+    CHECK(symbol::display(back.generics[0]) == "T0");
+  }
+}
+
 TEST_CASE("Mangle distinguishes two owners that share a member name") {
   // A method is identified by the nominal it is declared on as well as
   // by its name, so two impls of one module cannot collide.

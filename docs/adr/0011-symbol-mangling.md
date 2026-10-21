@@ -43,6 +43,7 @@ generics = { type }
 type     = prim | "z" str | "p" ptr
          | "r" type | "w" type | "y" DIGITS type
          | "u" DIGITS { type } | "n" seglist DIGITS { type }
+         | "D" DIGITS
 ```
 
 Four decisions inside that shape are worth stating.

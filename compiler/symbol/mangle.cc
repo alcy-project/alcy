@@ -92,6 +92,9 @@ constexpr char TAG_NEVER = 'x';
 constexpr char TAG_ERROR = 'e';
 constexpr char TAG_FUNCTION = 'k';
 constexpr char TAG_FUNC = 'g';
+// A type parameter: the index of the parameter in the item the symbol
+// belongs to, which is a de Bruijn index into that item's own.
+constexpr char TAG_PARAM = 'D';
 
 struct Primitive {
   char tag;
@@ -259,6 +262,11 @@ class Encoder {
       }
       case ir::TypeTag::Struct:
       case ir::TypeTag::Enum: encode_nominal(node); return;
+      case ir::TypeTag::Param: {
+        out_.push_back(TAG_PARAM);
+        append_length(out_, node.as_param().value);
+        return;
+      }
       case ir::TypeTag::Void: out_.push_back(TAG_VOID); return;
       case ir::TypeTag::Never: out_.push_back(TAG_NEVER); return;
       case ir::TypeTag::Error: out_.push_back(TAG_ERROR); return;
@@ -433,6 +441,10 @@ class Decoder {
         out.kind = DecodedType::Kind::Const;
         return read_length(out.count);
       }
+      case TAG_PARAM: {
+        out.kind = DecodedType::Kind::Param;
+        return read_length(out.count);
+      }
       case TAG_VOID: out.kind = DecodedType::Kind::Unit; return true;
       case TAG_NEVER: out.kind = DecodedType::Kind::Never; return true;
       case TAG_ERROR: out.kind = DecodedType::Kind::Error; return true;
@@ -591,6 +603,7 @@ std::string display(const DecodedType& type) {
              std::to_string(type.count) + "]";
     // A const argument is spelled as the bare value it carries.
     case DecodedType::Kind::Const: return std::to_string(type.count);
+    case DecodedType::Kind::Param: return "T" + std::to_string(type.count);
     case DecodedType::Kind::Tuple: {
       std::string out = "(";
       for (usize i = 0; i < type.parts.size(); ++i) {

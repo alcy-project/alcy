@@ -239,6 +239,11 @@ inline TypeLayout type_layout(const StorageState& state,
     // A const argument is never a value, so no layout exists for it; a
     // reachable call would mean one leaked into a value position.
     case TypeTag::Const: UNREACHABLE();
+    // A type parameter has no layout until the argument is known: the
+    // size of the type it stands for is the size of that type. A
+    // reachable call would mean an unspecialized body reached the
+    // backend (ADR-0079).
+    case TypeTag::Param: UNREACHABLE();
   }
   UNREACHABLE();
 }
@@ -261,6 +266,10 @@ inline bool is_copy_type(const StorageState& state,
     // A const argument is never a value, so the question does not apply
     // to it; a reachable call is a bug, as in type_layout.
     case TypeTag::Const: UNREACHABLE();
+    // A type parameter is not Copy: whether it is depends on the type
+    // it stands for, and a body that has not been specialized cannot
+    // know. The bound that says `T: Copy` is what settles it.
+    case TypeTag::Param: return false;
     case TypeTag::Ref:
     case TypeTag::Void:
     case TypeTag::Never:

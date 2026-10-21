@@ -322,6 +322,8 @@ class Serializer {
       case TypeTag::Tuple: return node.as_tuple().idx;
       case TypeTag::Func: return node.as_func().idx;
       case TypeTag::Const: return node.as_const().idx;
+      // A type parameter's payload is its index, not a table row.
+      case TypeTag::Param: return node.as_param().value;
       default: return 0;
     }
   }

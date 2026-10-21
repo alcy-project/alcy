@@ -172,6 +172,23 @@ class StorageBuilder {
     return state_.types.emplace_back(node);
   }
 
+  // The type of a type parameter, by its index in the item it belongs
+  // to. Parameters intern like any other type: one parameter is one
+  // node, so a body that names it twice names the same type.
+  TypeIdx param_type(u32 index) {
+    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+         ++idx) {
+      const TypeNode& node = state_.types[idx];
+      if (node.tag == TypeTag::Param && node.as_param().value == index) {
+        return idx;
+      }
+    }
+    TypeNode node{};
+    node.tag = TypeTag::Param;
+    node.data.set(ParamIndex{index});
+    return state_.types.emplace_back(node);
+  }
+
   // Reserves an empty nominal node that re-entrant references resolve
   // to; fill_struct/fill_enum complete it. Placeholders are valid, so
   // error paths need no cleanup.

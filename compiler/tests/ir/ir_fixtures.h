@@ -112,6 +112,9 @@ inline Storage composite_storage(ir::SymbolTable& strings) {
   fn_params.push(builder.ref_type(i32));
   (void)builder.func_type(fn_params.finish(), i32);
 
+  // A type parameter, the way an unspecialized body names one.
+  (void)builder.param_type(0);
+
   TypeSeq print_params;
   print_params.push(builder.ref_type(ptr));
   print_params.push(builder.ref_type(u32));
