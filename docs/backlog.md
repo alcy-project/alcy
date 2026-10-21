@@ -840,6 +840,14 @@ replaced. The foundations are in `roadmap.md`.
   its magnitude needs it (a value past `i32`); otherwise it keeps its
   default and the cast converts. A magnitude past every type it could
   take is still refused. `exe-cast-literal` holds it.
+- [ ] The exponent form of a float loses mantissa digits: the
+  scientific branch normalizes to [1, 10) by multiplying by 0.1 once
+  per decade, and the roundings accumulate, so `{:.17f}` of
+  `f64::MAX` prints `1.79769313486234683e308` where the value's own
+  digits are `1.79769313486231570e308` (the spec promises about
+  sixteen significant digits). Scaling by a power of ten computed in
+  one step, or by an exact power of two beside a short decimal
+  correction, would keep the roundings to a handful.
 - [x] An enum whose payload is an array of destructible values emitted
   an invalid GEP: the drop glue reached each field through a `u8`
   address and then projected an element from it, so the emitter built
