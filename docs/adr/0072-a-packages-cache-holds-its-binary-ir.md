@@ -72,8 +72,12 @@ loads it instead of running the front end.**
 A rebuild of unchanged inputs skips lexing, parsing, name resolution,
 checking, and lowering — the front end — and pays only the load, the
 backend, and the link. `check` keeps no cache: its report *is* the
-result, and a cached report would be a stale one. `run` inherits the
-cache through the build it wraps.
+result, and a cached report would be a stale one. `run` does not
+consult the cache: it lowers the package itself rather than going
+through the build, so a run pays the front end every time. The
+record's first draft said a run inherited the cache through the build
+it wraps, and the code says otherwise; the backlog carries the gap
+until the run path shares the build's.
 
 Out of scope, each with its own decision: caching a backend's output
 (the profile joins above that key, which is what ADR-0056 anticipated);

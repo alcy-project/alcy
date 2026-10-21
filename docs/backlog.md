@@ -495,8 +495,10 @@ replaced. The foundations are in `roadmap.md`.
   resolved, so a hit cannot skip the work that dominates, and the
   compiler's version string does not identify the binary that wrote an
   entry: two builds of one dirty tree share every key.
-- [ ] `alcy run` compiles without the cache, while the cache's own
-  record says a run inherits it through the build it wraps.
+- [ ] `alcy run` compiles without the cache, so a run pays the front
+  end every time. The build's cache lookup and the run's lowering are
+  two paths over the same work, and the run path is the one that has
+  no key.
 
 ## Shipped
 

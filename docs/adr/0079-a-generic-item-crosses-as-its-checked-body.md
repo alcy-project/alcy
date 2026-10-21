@@ -91,10 +91,8 @@ to keep.
 
 What this record does not settle, because each is a decision of its
 own: where the specialization pass sits relative to the borrow pass, a
-generic body being borrowed once or once per specialization; how a call
-on a parameter resolves, which is the bounds' question and not the
-pass's; and whether a generic body may call a spec method on a
-parameter at all.
+generic body being borrowed once or once per specialization. How a call
+on a parameter resolves is ADR-0080.
 
 ## Staged landing
 
