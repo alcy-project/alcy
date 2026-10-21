@@ -3389,24 +3389,34 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
       return stopped_value();
     }
     Val base_addr = address_of(base);
-    // Update consumes the base value.
-    mark_move(base_addr);
+    // Each base field ends in its own place: one the initializer did
+    // not write moves into the result, and one it did is dropped where
+    // it stands. The base is then fully spent, so its own drop has
+    // nothing left to end.
+    const bool base_place = base_addr.place;
     for (u32 i = 0; i < static_cast<u32>(seen.size()); ++i) {
-      if (seen[i]) {
-        continue;
-      }
       const ir::TypeIdx element_type = field_type_of(struct_type, i, node.span);
       const ir::RegisterIdx src =
           emit(ir::Opcode::GetElementPtr, element_type,
                {base_addr.op, zero_i32, index_operand(i)}, {.inbounds = true});
+      const ir::OperandIdx src_op = to_operand(src, element_type);
+      if (seen[i]) {
+        // The initializer wrote this field, so the base's copy ends here.
+        if (runs_destructor(element_type)) {
+          record_drop_in_place(src_op, element_type, node.span);
+        }
+        continue;
+      }
       const ir::RegisterIdx loaded =
-          emit(ir::Opcode::Load, element_type, {to_operand(src, element_type)});
+          emit(ir::Opcode::Load, element_type, {src_op});
       const ir::RegisterIdx dst =
           emit(ir::Opcode::GetElementPtr, element_type,
                {to_operand(addr, struct_type), zero_i32, index_operand(i)},
                {.inbounds = true});
       emit_void(ir::Opcode::Store, {to_operand(loaded, element_type),
                                     to_operand(dst, element_type)});
+      // The field moves out of the base into the result.
+      mark_move(Val{src_op, element_type, true, base_place});
     }
   }
   return Val{to_operand(addr, struct_type), struct_type, true, false};

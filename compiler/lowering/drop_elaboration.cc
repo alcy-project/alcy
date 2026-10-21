@@ -257,7 +257,11 @@ void Lowerer::place_ends() {
     return static_cast<u32>(places.size() - 1);
   };
   for (const OwnershipEvent& event : ownership_) {
-    if (event.kind == OwnershipEvent::Kind::DropInPlace) {
+    // A place a drop ends is tracked like any other: the owner's own
+    // drop still has to skip it. Only an untracked place (a temporary,
+    // an element) names no local to hold the state.
+    if (event.kind == OwnershipEvent::Kind::DropInPlace &&
+        event.local == base::INVALID_IDX) {
       continue;
     }
     place_of(event.local, event.path);

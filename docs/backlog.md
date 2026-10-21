@@ -848,6 +848,15 @@ replaced. The foundations are in `roadmap.md`.
   sixteen significant digits). Scaling by a power of ten computed in
   one step, or by an exact power of two beside a short decimal
   correction, would keep the roundings to a handful.
+- [x] A struct move-update (`S { a: new, ..base }`) with non-`Copy`
+  fields was refused with "Use of moved" on a named base and leaked
+  the overwritten field on a temporary one: the lowering marked the
+  whole base moved before reading the surviving fields, and the drop
+  walk did not track a field a `record_drop_in_place` had ended. Each
+  base field now ends in its own place - the overwritten one is
+  dropped where it stands, the rest move into the result - and the
+  drop walk registers the place a drop ends.
+  `exe-struct-update-drop` holds it.
 - [x] An enum whose payload is an array of destructible values emitted
   an invalid GEP: the drop glue reached each field through a `u8`
   address and then projected an element from it, so the emitter built
