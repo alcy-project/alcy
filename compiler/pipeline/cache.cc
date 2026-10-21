@@ -3,6 +3,7 @@
 
 #include "pipeline/cache.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <span>
@@ -16,7 +17,6 @@
 #include "fpag/io/io_util.h"
 #include "ir/deserialize.h"
 #include "ir/summary.h"
-#include "ir/type.h"
 #include "ir/write_input.h"
 #include "lowering/lowering.h"
 #include "pipeline/pipeline_context.h"
@@ -53,22 +53,41 @@ bool create_directories(std::string_view dir) {
 
 namespace pipeline {
 
-base::Digest128 cache_key(const ir::FileTable& files,
-                          ir::PointerWidth width,
-                          std::string_view compiler_version,
-                          std::string_view manifest,
-                          std::string_view triple) {
+base::Digest128 cache_key(const CacheInputs& inputs) {
   const base::Digest128 identity =
-      ir::identity_digest(files, width, compiler_version);
-  const base::Digest128 manifest_hash = base::hash128(manifest);
+      ir::identity_digest(inputs.files, inputs.width, inputs.compiler_version);
+  const base::Digest128 manifest_hash = base::hash128(inputs.manifest);
+  std::vector<std::array<u8, 16>> summaries;
+  summaries.reserve(inputs.summary_digests.size());
+  for (const base::Digest128 digest : inputs.summary_digests) {
+    summaries.push_back(digest.bytes());
+  }
+  std::sort(summaries.begin(), summaries.end());
   std::vector<u8> canonical;
-  canonical.reserve(16 + 16 + triple.size());
+  canonical.reserve(16 + 16 + inputs.triple.size() + inputs.target_name.size() +
+                    summaries.size() * 16 + 2);
   for (const std::array<u8, 16> part :
        {identity.bytes(), manifest_hash.bytes()}) {
     canonical.insert(canonical.end(), part.begin(), part.end());
   }
-  for (const char ch : triple) {
+  for (const char ch : inputs.triple) {
     canonical.push_back(static_cast<u8>(ch));
+  }
+  canonical.push_back(0);
+  // The name is length-delimited: a name that ran into the next field
+  // would key two different targets the same.
+  const std::string target_length = std::to_string(inputs.target_name.size());
+  for (const char ch : target_length) {
+    canonical.push_back(static_cast<u8>(ch));
+  }
+  canonical.push_back(0);
+  for (const char ch : inputs.target_name) {
+    canonical.push_back(static_cast<u8>(ch));
+  }
+  canonical.push_back(inputs.is_lib ? 1 : 0);
+  canonical.push_back(inputs.emit_entry ? 1 : 0);
+  for (const std::array<u8, 16>& digest : summaries) {
+    canonical.insert(canonical.end(), digest.begin(), digest.end());
   }
   return base::hash128(std::span<const u8>(canonical.data(), canonical.size()));
 }
@@ -81,8 +100,10 @@ std::string cache_entry_path(std::string_view dir, base::Digest128 key) {
   return path;
 }
 
-std::optional<lowering::LoweredPackage> cache_load(PipelineContext& ctx,
-                                                   std::string_view path) {
+std::optional<lowering::LoweredPackage> cache_load(
+    PipelineContext& ctx,
+    std::string_view path,
+    const base::Digest128& identity) {
   const std::string bytes = io::read_file(std::string(path));
   if (bytes.empty()) {
     return std::nullopt;
@@ -94,6 +115,12 @@ std::optional<lowering::LoweredPackage> cache_load(PipelineContext& ctx,
     return std::nullopt;
   }
   ir::LoadedIr entry = std::move(loaded).unwrap();
+  // The entry records the identity it was written from. One written from
+  // other inputs is a miss: a key collision, or an entry copied to the
+  // wrong name, must not answer for this build.
+  if (entry.identity != identity) {
+    return std::nullopt;
+  }
   // The backend reads the context's table, so the entry's table becomes
   // the context's: storage and strings travel together, and an entry
   // always agrees with the table beside it.

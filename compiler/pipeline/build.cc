@@ -950,12 +950,25 @@ base::Result<std::string, diag::Reported> build_package(
       const SourceFiles sources = source_file_table(ctx);
       const std::string_view manifest_bytes =
           ctx.sources.bytes(manifest_file).value_or(std::string_view{});
-      const base::Digest128 key = cache_key(
-          ir::FileTable{.names = sources.names, .hashes = sources.hashes},
-          ctx.target.width, ctx.version, manifest_bytes, ctx.target.triple);
+      const ir::FileTable files{.names = sources.names,
+                                .hashes = sources.hashes};
+      const base::Digest128 identity =
+          ir::identity_digest(files, ctx.target.width, ctx.version);
+      const base::Digest128 key = cache_key(CacheInputs{
+          .files = files,
+          .width = ctx.target.width,
+          .compiler_version = ctx.version,
+          .manifest = manifest_bytes,
+          .triple = ctx.target.triple,
+          .target_name = target.name,
+          .is_lib = target.is_lib,
+          .emit_entry =
+              !target.is_lib && planned_target.mode == EmitMode::Executable,
+          .summary_digests = ctx.summary_digests,
+      });
       cache_dir = std::string(out_dir.join(".cache").as_view());
       entry = cache_entry_path(cache_dir, key);
-      cached = cache_load(ctx, entry);
+      cached = cache_load(ctx, entry, identity);
       ctx.cache_outcome = combine_cache_outcome(
           ctx.cache_outcome,
           cached.has_value() ? CacheOutcome::Hit : CacheOutcome::Miss);

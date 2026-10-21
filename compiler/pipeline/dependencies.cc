@@ -222,6 +222,10 @@ bool load_summary_dependency(PipelineContext& ctx,
       return false;
     }
   }
+  // The dependent's lowering reads this summary, so the bytes that
+  // answer for the dependency are part of what its cache entry was
+  // built from.
+  ctx.summary_digests.push_back(base::hash128(view));
   // The module names the dependent will spell, in row order: the same
   // slash form a `use` writes, without the duplicate separators a
   // dotted path spells.

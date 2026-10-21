@@ -8,6 +8,7 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
+#include "base/hash.h"
 #include "codegen/backend.h"
 #include "codegen/target.h"
 #include "diag/bag.h"
@@ -74,6 +75,10 @@ struct PipelineContext {
   // What the cache did for this run, combined across targets with a
   // miss dominating. The command reports it.
   CacheOutcome cache_outcome = CacheOutcome::Off;
+  // Digests of the dependency summaries this run resolved against. A
+  // summary steers lowering the way a source does, so the cache key
+  // carries them.
+  std::vector<base::Digest128> summary_digests;
 
   // `span_capacity` is the syntax arena's reservation. A case that has
   // to spend it can ask for less, the way `ast::AstArena` allows.
