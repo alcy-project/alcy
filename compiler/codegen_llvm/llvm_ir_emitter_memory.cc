@@ -77,7 +77,14 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
 
       const ir::Register& dst_reg = storage_->registers()[i.dst];
       llvm::Type* load_ty = type(dst_reg.type);
-
+      // A zero-sized value has no storage to read, so the access is a
+      // no-op and the placeholder is the result. Emitting it would
+      // hand a sanitizer a zero-byte check over an address that is
+      // valid for nothing; the address names a value, never bytes.
+      if (module_->getDataLayout().getTypeStoreSize(load_ty) == 0) {
+        values_.add_register(i.dst, llvm::UndefValue::get(load_ty));
+        break;
+      }
       values_.add_register(
           i.dst, builder_->CreateLoad(load_ty, resolve_operand_value(ptr_op)));
       break;
@@ -86,6 +93,16 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       DCHECK(ops.size() == 2);
       const ir::Operand& lhs = storage_->operands()[ops.head()];
       const ir::Operand& rhs = storage_->operands()[ops.head() + 1];
+      // Nothing crosses for a zero-sized value either, so the store
+      // is the same no-op; a store's own value is the placeholder its
+      // destination asks for.
+      llvm::Type* stored_ty = type(lhs.type);
+      if (module_->getDataLayout().getTypeStoreSize(stored_ty) == 0) {
+        if (i.dst.is_valid()) {
+          values_.add_register(i.dst, llvm::UndefValue::get(stored_ty));
+        }
+        break;
+      }
       llvm::StoreInst* store = builder_->CreateStore(
           resolve_operand_value(lhs), resolve_operand_value(rhs));
       if (i.dst.is_valid()) {
