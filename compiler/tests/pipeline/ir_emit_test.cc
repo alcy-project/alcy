@@ -356,15 +356,20 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
     }
     if (name == "Point") {
       CHECK(entry.kind == ir::SummaryKind::Struct);
-      point = !entry.needs_body && entry.function.is_valid();
+      point = !entry.needs_body && entry.type.is_valid();
+      // A nominal row names a type, never code, and carries no symbol.
+      CHECK_FALSE(entry.function.is_valid());
+      CHECK(entry.symbol == str::INVALID_STRING_POOL_ID);
     }
     if (name == "Boxed") {
       CHECK(entry.kind == ir::SummaryKind::Struct);
-      boxed = entry.needs_body && !entry.function.is_valid();
+      boxed = entry.needs_body && !entry.type.is_valid();
+      CHECK_FALSE(entry.function.is_valid());
     }
     if (name == "Kind") {
       CHECK(entry.kind == ir::SummaryKind::Enum);
-      kind = !entry.needs_body && entry.function.is_valid();
+      kind = !entry.needs_body && entry.type.is_valid();
+      CHECK_FALSE(entry.function.is_valid());
     }
   }
   CHECK(doubled);

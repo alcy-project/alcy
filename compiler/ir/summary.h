@@ -40,7 +40,13 @@ enum class SummaryKind : u8 {
 // a dependent cannot resolve, because instantiating it needs the body
 // only the package's own artifact holds.
 struct SummaryEntry {
-  FunctionIdx function;
+  // A row names one of two things and the kind says which: a function
+  // row holds the lowered code that carries its signature in
+  // `function`, a nominal row holds the type it declares in `type`.
+  // The other field is invalid, so neither index is ever read through
+  // the table it does not belong to.
+  FunctionIdx function = FunctionIdx(base::INVALID_IDX);
+  TypeIdx type = TypeIdx(base::INVALID_IDX);
   str::StringPoolId name = str::INVALID_STRING_POOL_ID;
   // The module path, dotted from the package root; empty for the root.
   str::StringPoolId path = str::EMPTY_STRING_ID;

@@ -1758,7 +1758,7 @@ std::vector<ir::SummaryEntry> collect_summary(
               std::span<const ir::SummaryField>(summary_fields.back());
         }
         summary.push_back(ir::SummaryEntry{
-            .function = ir::FunctionIdx(type.idx),
+            .type = type,
             .name = strings.intern(name),
             .path = path,
             .fields = field_names,

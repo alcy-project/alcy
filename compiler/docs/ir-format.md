@@ -313,12 +313,15 @@ pointer width, and the version string - so a cache can compare one digest
 instead of walking them. A file written before this kind existed carries
 none, and a reader answers empty for those.
 
-**SUMMARY**: `count` × `{ function u32, name u32, path u32, symbol u32,
-owner u32, kind u8, flags u8, reserved u8[2] }`, the package's public surface for a
-dependent to resolve against (ADR-0078). `function` names the `FUNCTIONS`
-row whose signature carries the item, or a `TYPES` row when `kind` names a
-struct or an enum; `U32_MAX` stands where the declaration is generic and
-has no code of its own. `name` is the source name in `STRINGS`; `path` is
+**SUMMARY**: `count` × `{ function u32, type u32, name u32, path u32,
+symbol u32, owner u32, kind u8, flags u8, reserved u8[2] }`, the package's
+public surface for a dependent to resolve against (ADR-0078). A row names
+one of two things: a function row puts the `FUNCTIONS` row whose signature
+carries the item in `function`, and a nominal row puts the `TYPES` row it
+declares in `type`. The field the kind does not use is `U32_MAX`, so an
+index is never read through the table it does not belong to; `U32_MAX`
+also stands where the declaration is generic and has no code or type of
+its own. `name` is the source name in `STRINGS`; `path` is
 the module it belongs to, dotted from the package root; `symbol` is the
 name the item's code is written under, so a dependent calls it by what
 the library's own artifact exports; `owner` is the nominal an
@@ -329,9 +332,9 @@ does. When a struct row is present the rows are followed by the field
 runs: `u32 group_count`, that many `{ row u32, first u32, count u32 }`,
 `u32 name_count`, and that many `{ name u32, flags u8, reserved u8[3] }`
 entries whose `name` indexes `STRINGS` and whose bit 0 says the
-declaration made the field public; a payload that ends after the rows is
-one from before the runs existed, and its struct rows carry no field
-names. The section is written for a library
+declaration made the field public. The trailer is present even when no
+row carries names, so a payload is either whole or rejected. The section
+is written for a library
 target and absent otherwise, and a reader answers empty for a file that
 carries none.
 

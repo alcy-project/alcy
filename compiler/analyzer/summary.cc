@@ -560,10 +560,10 @@ bool spell_declaration(const SpellContext& ctx,
                        ast::ItemIdx& item_out) {
   const ir::Storage& storage = ctx.storage;
   ast::AstArena& ast = ctx.ast;
-  if (row.function.idx >= storage.types().size()) {
+  if (row.type.idx >= storage.types().size()) {
     return false;
   }
-  const ir::TypeNode& type = storage.types()[row.function.idx];
+  const ir::TypeNode& type = storage.types()[row.type.idx];
   if (row.kind == ir::SummaryKind::Struct) {
     if (type.tag != ir::TypeTag::Struct ||
         type.as_struct().idx >= storage.struct_types().size()) {
@@ -686,15 +686,15 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
         row.kind != ir::SummaryKind::Enum) {
       continue;
     }
-    if (row.needs_body || !row.function.is_valid()) {
+    if (row.needs_body || !row.type.is_valid()) {
       continue;
     }
-    nominals.emplace(row.function.idx,
+    nominals.emplace(row.type.idx,
                      NominalSite{named(row.path, ""), named(row.name, "")});
     const std::optional<u32> name =
-        shape_name(storage, ir::TypeIdx(row.function.idx));
+        shape_name(storage, ir::TypeIdx(row.type.idx));
     if (name.has_value()) {
-      nominals_by_name[*name].push_back(row.function.idx);
+      nominals_by_name[*name].push_back(row.type.idx);
     }
   }
   const SpellContext context{storage, ast,      *summary.strings,
@@ -715,7 +715,12 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
   for (const ir::SummaryEntry& row : summary.summary) {
     // A declaration that needs its body cannot be spelled from a
     // summary; the row says so.
-    if (row.needs_body || !row.function.is_valid()) {
+    if (row.needs_body) {
+      continue;
+    }
+    const bool is_nominal = row.kind == ir::SummaryKind::Struct ||
+                            row.kind == ir::SummaryKind::Enum;
+    if (is_nominal ? !row.type.is_valid() : !row.function.is_valid()) {
       continue;
     }
     const std::string_view name = named(row.name, "");

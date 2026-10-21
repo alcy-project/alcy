@@ -13,8 +13,8 @@ namespace ir::binary {
 // One place for both writers of the form: the reader lives in
 // deserialize.h and names the same constants.
 inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
-inline constexpr u16 MAJOR = 2;
-inline constexpr u16 MINOR = 1;
+inline constexpr u16 MAJOR = 3;
+inline constexpr u16 MINOR = 0;
 // Bit 0: the payload is little-endian. Always set; a reader rejects a
 // file that clears it.
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;

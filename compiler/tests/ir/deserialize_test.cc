@@ -180,7 +180,8 @@ TEST_CASE("A corrupt binary form is refused") {
   }
   {
     std::vector<u8> broken = bytes;
-    broken[4] = 3;  // A major version this reader does not know.
+    // A major version this reader does not know.
+    broken[4] = static_cast<u8>(ir::binary::MAJOR + 1);
     reseal(broken);
     CHECK(std::move(deserialize(broken)).unwrap_err() ==
           IrLoadError::UnsupportedVersion);
@@ -320,7 +321,7 @@ TEST_CASE("A summary section reads back the package's surface") {
                    .path = strings.intern("string"),
                    .kind = SummaryKind::Free,
                    .needs_body = true},
-      SummaryEntry{.function = FunctionIdx(3),
+      SummaryEntry{.type = TypeIdx(3),
                    .name = strings.intern("String"),
                    .path = strings.intern("string"),
                    .fields = string_fields,
@@ -366,7 +367,8 @@ TEST_CASE("A summary section reads back the package's surface") {
   CHECK(package.summary[1].kind == SummaryKind::Free);
   CHECK(package.summary[1].needs_body);
   // A nominal row names a type rather than code.
-  CHECK(package.summary[2].function.idx == 3);
+  CHECK(package.summary[2].type.idx == 3);
+  CHECK_FALSE(package.summary[2].function.is_valid());
   CHECK(package.strings->get(package.summary[2].name) == "String");
   CHECK(package.summary[2].kind == SummaryKind::Struct);
   CHECK_FALSE(package.summary[2].needs_body);

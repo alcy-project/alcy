@@ -602,6 +602,7 @@ class Serializer {
     out.put_u32(static_cast<u32>(summary_.size()));
     for (const SummaryEntry& entry : summary_) {
       out.put_u32(entry.function.idx);
+      out.put_u32(entry.type.idx);
       out.put_u32(string_index(entry.name));
       out.put_u32(string_index(entry.path));
       out.put_u32(string_index(entry.symbol));
@@ -610,8 +611,7 @@ class Serializer {
       out.put_u8(static_cast<u8>(entry.needs_body ? 1u : 0u));
       out.zeros(2);
     }
-    // The field names each nominal row declares, one run per row. A
-    // payload that ends here is one from before the runs existed.
+    // The field names each nominal row declares, one run per row.
     u32 groups = 0;
     u32 names = 0;
     for (const SummaryEntry& entry : summary_) {
@@ -619,9 +619,6 @@ class Serializer {
         ++groups;
         names += static_cast<u32>(entry.fields.size());
       }
-    }
-    if (groups == 0) {
-      return out;
     }
     out.put_u32(groups);
     u32 first = 0;

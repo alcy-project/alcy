@@ -911,14 +911,14 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
   if (!cursor.read_u32(count)) {
     return false;
   }
-  // The rows are twenty bytes each; the field runs below are optional,
-  // so a payload that ends after the rows is one from before them.
-  const usize rows_end = 4 + static_cast<usize>(count) * 24;
+  // The rows are twenty-eight bytes each, followed by the field runs.
+  const usize rows_end = 4 + static_cast<usize>(count) * 28;
   if (payload.size() < rows_end) {
     return false;
   }
   for (u32 i = 0; i < count; ++i) {
     u32 function = 0;
+    u32 type = 0;
     u32 name = 0;
     u32 path = 0;
     u32 symbol = 0;
@@ -926,11 +926,11 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
     u8 kind = 0;
     u8 flags = 0;
     u8 reserved = 0;
-    if (!cursor.read_u32(function) || !cursor.read_u32(name) ||
-        !cursor.read_u32(path) || !cursor.read_u32(symbol) ||
-        !cursor.read_u32(owner) || !cursor.read_u8(kind) ||
-        !cursor.read_u8(flags) || !cursor.read_u8(reserved) ||
-        !cursor.read_u8(reserved)) {
+    if (!cursor.read_u32(function) || !cursor.read_u32(type) ||
+        !cursor.read_u32(name) || !cursor.read_u32(path) ||
+        !cursor.read_u32(symbol) || !cursor.read_u32(owner) ||
+        !cursor.read_u8(kind) || !cursor.read_u8(flags) ||
+        !cursor.read_u8(reserved) || !cursor.read_u8(reserved)) {
       return false;
     }
     if (name != NONE && name >= parsed.string_ids.size()) {
@@ -949,19 +949,24 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
     if (kind > static_cast<u8>(SummaryKind::Enum)) {
       return false;
     }
+    if (function != NONE && function >= parsed.state.functions.size()) {
+      return false;
+    }
+    if (type != NONE && type >= parsed.state.types.size()) {
+      return false;
+    }
     // A function row names lowered code; a nominal row names a type, or
-    // nothing when the declaration is generic.
-    if (function != NONE) {
-      const bool is_nominal = summary_kind == SummaryKind::Struct ||
-                              summary_kind == SummaryKind::Enum;
-      if (is_nominal ? function >= parsed.state.types.size()
-                     : function >= parsed.state.functions.size()) {
-        return false;
-      }
+    // nothing when the declaration is generic. The other field is never
+    // set, so a row cannot name both.
+    const bool is_nominal = summary_kind == SummaryKind::Struct ||
+                            summary_kind == SummaryKind::Enum;
+    if (is_nominal ? function != NONE : type != NONE) {
+      return false;
     }
     parsed.summary.push_back(SummaryEntry{
         .function = function == NONE ? FunctionIdx(base::INVALID_IDX)
                                      : FunctionIdx(function),
+        .type = type == NONE ? TypeIdx(base::INVALID_IDX) : TypeIdx(type),
         .name = string_id(parsed, name),
         .path = string_id(parsed, path),
         .symbol = string_id(parsed, symbol),
@@ -969,9 +974,6 @@ bool read_summary(Parsed& parsed, std::span<const u8> payload) {
         .kind = summary_kind,
         .needs_body = (flags & 0x01u) != 0,
     });
-  }
-  if (cursor.at() == payload.size()) {
-    return true;
   }
   u32 groups = 0;
   if (!cursor.read_u32(groups)) {
