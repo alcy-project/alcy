@@ -460,11 +460,17 @@ class Checker {
         }
         const ir::TypeIdx src_type = storage.registers()[src].type;
         const ir::TypeTag src_tag = tag_of(src_type);
-        bool is_slice_value = src_tag == ir::TypeTag::Slice;
+        // A `str` is a view like a slice: its first field is the
+        // buffer it reads through, so the buffer half carries the loan
+        // the view stands for. Reading it as length owns nothing.
+        bool is_slice_value =
+            src_tag == ir::TypeTag::Slice || src_tag == ir::TypeTag::Str;
         if (src_tag == ir::TypeTag::Ref || src_tag == ir::TypeTag::MutRef) {
           const ir::TypeIdx pointee =
               storage.ref_types()[storage.types()[src_type].as_ref()].pointee;
-          is_slice_value = tag_of(pointee) == ir::TypeTag::Slice;
+          const ir::TypeTag pointee_tag = tag_of(pointee);
+          is_slice_value = pointee_tag == ir::TypeTag::Slice ||
+                           pointee_tag == ir::TypeTag::Str;
         }
         if (!is_slice_value) {
           break;

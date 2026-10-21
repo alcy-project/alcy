@@ -68,8 +68,6 @@ with "slice out of bounds".
 Only integer ranges are indexable; float ranges are legal data with
 no index meaning. The cursor that exposes integer ranges to `for`,
 with the stepping it carries, and slice patterns remain the open
-pieces. A `str` run extends whatever
-loan the buffer carries, but views derived through `ExtractValue` on
-a `str` drop it — the `str_slice` intrinsic has the same hole today —
-so that case is tracked as a known gap in
-`tools/check_borrow_rules.py` rather than as agreement.
+pieces. A `str` run extends whatever loan the buffer carries: the
+view's first field is the buffer it reads through, so a sub-slice
+keeps the loan and a write that may reallocate conflicts.

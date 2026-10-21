@@ -983,10 +983,9 @@ case(
 }""",
 )
 
-# A `str` run should carry the buffer's loan like a slice run does,
-# but views derived through `ExtractValue` on a `str` drop it: the
-# `str_slice` intrinsic has the same hole today, so this is a known
-# gap in the checker rather than in the run itself.
+# A `str` run carries the buffer's loan like a slice run does: the
+# view's first field is the buffer it reads through, so a sub-slice
+# keeps the loan and the write that may reallocate conflicts.
 case(
     "subslice",
     "str-run-then-buffer-write",
@@ -999,7 +998,6 @@ case(
   s.push(106u8)
   ret str_len(t) as i32
 }""",
-    known=True,
 )
 
 # --- a struct holding a reference composes by intersection ------------
