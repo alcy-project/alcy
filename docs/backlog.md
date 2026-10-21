@@ -837,6 +837,30 @@ replaced. The foundations are in `roadmap.md`.
   own failure now, with `Division by zero in constant evaluation`
   (ED015) the way overflow already had one. `err-comp-div-zero` holds
   it.
+- [x] The sanitized exe gate linked the sanitizer runtime but never
+  instrumented the generated code: with `-x ir` clang only reaches
+  functions marked `sanitize_address`, the alcy IR named none, and a
+  use-after-free or an out-of-bounds access in a compiled program ran
+  unreported - the leak scan at exit was the only half that worked.
+  The gate marks every definition in the module it hands to clang now;
+  `exe-closure-owning` and `exe-unit-arg` are the cases that caught
+  what the blindness had hidden.
+- [x] A closure's owning environment leaked its captures: the
+  environment tuple the lowering builds sits past the analyzer's
+  destructor tables, its field copies carried no origin link, its glue
+  lookups refused the copies, and the slot recorded no bind event -
+  four gaps that each left the captures undropped, and only all four
+  closed ends them. A copy interned by the lowering records its origin
+  the way the checker's do, `runs_destructor` answers out-of-table
+  types from their structure, the glue lookups follow the origin, and
+  the environment's bind event tells the walk the slot owns what it
+  holds. `exe-closure-owning` holds it under the instrumented gate.
+- [x] A zero-sized load or store crashed the sanitizer build: the
+  emitter wrote the access for a `()` value, and the address
+  sanitizer's runtime mishandles a zero-byte check - the report
+  printer itself died on it. A zero-sized value has no storage to
+  read or write, so the emitter leaves the access out and hands the
+  placeholder on; `exe-unit-arg` holds it.
 - [x] A type mismatch between two nominals, two instantiations, or two
   closure signatures printed only the kind twice (`expected 'struct',
   found 'struct'`). Diagnostics spell the type the way the source
@@ -1919,7 +1943,6 @@ replaced. The foundations are in `roadmap.md`.
   which spends the language's nesting budget and stops a hostile
   symbol before the stack; `mangle_test.cc` follows a type nested
   within it (`:319`) and refuses one past it (`:332`).
-
 - [ ] A value's type is named in three places, and a place is not a
   value: a register's row, the operand that names it, and the
   lowering's own value each carry a type, and the verifier compares

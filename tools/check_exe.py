@@ -87,6 +87,23 @@ SANITIZERS = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-g"]
 SYSTEM_CLANG = shutil.which("clang")
 
 
+def mark_instrumentable(ir: Path) -> None:
+    """Marks every definition in a textual module for instrumentation.
+
+    A front end carries `-fsanitize=address` into each function it emits
+    as the `sanitize_address` attribute, and the instrumentation pass
+    reaches only functions that carry it. The alcy IR names no
+    sanitizer, so a module handed straight to clang links the runtime
+    while every load and store stays unchecked, and the leak scan at
+    exit is the only half that still reports. Setting the attribute on
+    each definition is what lets the address checks see the generated
+    program; without the pass the attribute reads as inert metadata.
+    """
+    text = ir.read_text(encoding="utf-8")
+    marked = re.sub(r"(?m)^(define .*) \{$", r"\1 sanitize_address {", text)
+    ir.write_text(marked, encoding="utf-8")
+
+
 def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
     """Builds the case through textual IR so the sanitizers can reach it.
 
@@ -94,7 +111,9 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
     external compiler in the path, so the code it generates cannot be
     instrumented after the fact. Textual IR can: the module is handed to
     clang, which both compiles and instruments it, runtime included.
-    That is the reason --emit=llvm-ir exists, and this is what it is for.
+    That is the reason --emit=llvm-ir exists, and this is what it is
+    for. The marking above is what points the instrumentation at the
+    functions clang could otherwise not see.
     """
     ir = work / "main.ll"
     command = "build" if is_package else "compile"
@@ -118,6 +137,7 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
     if proc.returncode != 0 or not ir.is_file():
         return proc, "alcy --emit=llvm-ir did not produce a module"
 
+    mark_instrumentable(ir)
     link = [SYSTEM_CLANG, "-x", "ir", str(ir), *SANITIZERS, "-o", str(exe)]
     proc = subprocess.run(
         link, capture_output=True, text=True, encoding="utf-8", cwd=work
