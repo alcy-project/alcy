@@ -826,6 +826,10 @@ replaced. The foundations are in `roadmap.md`.
   skipped and leaked. The else-arm ends the scrutinee in place now -
   the end is the move the borrow walk sees - so the value is spent
   once whichever arm runs. `exe-cond-else-drop` holds it.
+- [x] An arity message counted in the plural for one: `f(1, 2)` on a
+  one-argument call read `expects 1 arguments`. The call, closure,
+  variant-call, variant-field, and format-placeholder counts carry the
+  singular suffix now. `err-call-arity-singular` holds the call case.
 - [x] A type mismatch between two nominals, two instantiations, or two
   closure signatures printed only the kind twice (`expected 'struct',
   found 'struct'`). Diagnostics spell the type the way the source

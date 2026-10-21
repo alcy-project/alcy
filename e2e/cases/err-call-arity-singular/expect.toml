@@ -1,0 +1,2 @@
+exit = 4
+contains = ["expects 1 argument, found 2"]

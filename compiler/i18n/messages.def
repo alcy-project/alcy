@@ -115,7 +115,7 @@
   F(AnalyzerBreakOutsideLoop, "Break outside of a loop") \
   F(AnalyzerBufferNotMutableSlice, "Buffer must be `&mut [u8]`") \
   F(AnalyzerBuiltinType, "The name `{}` is a built-in type") \
-  F(AnalyzerCallArityMismatch, "The call to '{}' expects {} arguments, found {}") \
+  F(AnalyzerCallArityMismatch, "The call to '{}' expects {} argument{}, found {}") \
   F(AnalyzerCallNonPath, "Cannot call a non-path expression") \
   F(AnalyzerCalleeNeedsArguments, "Callee needs arguments") \
   F(AnalyzerCaptureCompBinding, "Cannot capture '{}'; a comp binding has no runtime storage") \
@@ -134,7 +134,7 @@
   F(AnalyzerCannotInferValueArgument, "Cannot infer the value argument for parameter '{}' of '{}'; add it with '{}::<...>(...)'") \
   F(AnalyzerCharacterLiteralDeferred, "Character literals need the core Char type (deferred)") \
   F(AnalyzerCheckedTypesFailedVerification, "Internal error: checked types failed verification ({} at index {})") \
-  F(AnalyzerClosureArityMismatch, "Closure expects {} parameters, found {}") \
+  F(AnalyzerClosureArityMismatch, "Closure expects {} parameter{}, found {}") \
   F(AnalyzerClosureParamNeedsAnnotation, "Cannot infer the type of parameter '{}'; add an annotation") \
   F(AnalyzerCompArgument, "Comp evaluation argument must be comp-known") \
   F(AnalyzerCompAssignPlace, "Comp assignment place is not comp-known") \
@@ -172,7 +172,7 @@
   F(AnalyzerFormatArity, "Intrinsic 'format' expects a format string, found {} arguments") \
   F(AnalyzerFormatConversionExplicit, "Write the fixed-point conversion explicitly: `{}`") \
   F(AnalyzerFormatInCompEvaluation, "Intrinsic 'format' is not allowed in comp evaluation") \
-  F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholders for {} arguments") \
+  F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholder{} for {} argument{}") \
   F(AnalyzerFormatPrecisionNotFloat, "A format precision applies to floats only") \
   F(AnalyzerFormatStringNotCompKnown, "Format string must be comp-known") \
   F(AnalyzerGenericArgumentsUnsupported, "Generic arguments are not supported") \
@@ -295,8 +295,8 @@
   F(AnalyzerValueParameterHasNoAddress, "Value parameter '{}' has no address") \
   F(AnalyzerValueParameterTypeNotInteger, "Value parameter '{}' must have an integer type") \
   F(AnalyzerVariadicNotExpanded, "A variadic parameter may only appear on a compiler-expanded function") \
-  F(AnalyzerVariantCallArity, "Variant expects {} arguments, found {}") \
-  F(AnalyzerVariantFieldArity, "Variant expects {} fields, pattern has {}") \
+  F(AnalyzerVariantCallArity, "Variant expects {} argument{}, found {}") \
+  F(AnalyzerVariantFieldArity, "Variant expects {} field{}, pattern has {}") \
   F(AnalyzerVariantNotInMatchedType, "Variant is not a member of the matched type") \
   F(AnalyzerViewIsAlreadyReference, "A view is already a reference; re-slice it without `&`") \
   F(AnalyzerWriteArity, "Intrinsic 'write' expects a format string and a buffer, found {} arguments") \

@@ -168,7 +168,7 @@ bool Checker::bind_pattern(u32 module,
           const u32 index = bag.emit<i18n::Key::AnalyzerVariantFieldArity>(
               diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::ArityError, node.span, payloads.size(),
-              elements.size());
+              payloads.size() == 1 ? "" : "s", elements.size());
           (void)index;
           bind_error_idents(module, pattern);
           return true;
@@ -681,7 +681,8 @@ void Checker::check_call_args(u32 module,
   if (args.size() + fixed != params.size()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerCallArityMismatch>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
-        span, what, params.size() - fixed, args.size());
+        span, what, params.size() - fixed,
+        (params.size() - fixed) == 1 ? "" : "s", args.size());
     (void)index;
     return;
   }
@@ -913,7 +914,9 @@ bool Checker::verify_fmt_literal(u32 module,
   if (parsed.placeholders != elements.size()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerFormatPlaceholderArity>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
-        ast.exprs[fmt_expr].span, parsed.placeholders, elements.size());
+        ast.exprs[fmt_expr].span, parsed.placeholders,
+        parsed.placeholders == 1 ? "" : "s", elements.size(),
+        elements.size() == 1 ? "" : "s");
     (void)index;
     return false;
   }
@@ -1280,7 +1283,8 @@ ir::TypeIdx Checker::check_closure(u32 module,
   if (has_expected_sig && expected_params.size() != closure.params.size()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerClosureArityMismatch>(
         diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
-        node.span, expected_params.size(), closure.params.size());
+        node.span, expected_params.size(),
+        expected_params.size() == 1 ? "" : "s", closure.params.size());
     (void)index;
     params_ok = false;
   }
@@ -1664,7 +1668,7 @@ ir::TypeIdx Checker::check_call(u32 module,
     if (args.size() != payloads.size()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerVariantCallArity>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
-          span, payloads.size(), args.size());
+          span, payloads.size(), payloads.size() == 1 ? "" : "s", args.size());
       (void)index;
       for (ast::ExprIdx arg : args) {
         check_expr(module, arg, nullptr);
