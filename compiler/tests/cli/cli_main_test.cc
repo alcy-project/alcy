@@ -1137,6 +1137,40 @@ i32 run_run_on(io::TempDir& dir,
   return cli_main(static_cast<i32>(argv.size()), argv.data());
 }
 
+TEST_CASE("Run links the objects a dependency answered for") {
+#if !ALCY_BACKEND_LLVM
+  // The direct backend writes a module, not the object this case links.
+  return;
+#endif
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_run_dep_test_");
+  const bool dep =
+      write_all(dir, "dep/alcy.toml",
+                "[package]\nname = \"dep\"\nversion = \"0.1.0\"\n"
+                "license = \"\"\n\n[modules]\ninclude = [\"lib\"]\n\n"
+                "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+                "[lib]\npath = \"lib.al\"\n") &&
+      write_all(dir, "dep/lib.al", "pub fn answer() -> i32 {\n  ret 7\n}\n");
+  const bool app =
+      write_all(dir, "proj/alcy.toml",
+                "[package]\nname = \"app\"\nversion = \"0.1.0\"\n"
+                "license = \"\"\n\n[modules]\ninclude = [\"main\"]\n\n"
+                "[dependencies]\n\"alcy/std/core\" = {}\n"
+                "dep = { path = \"../dep\" }\n\n"
+                "[[bin]]\nname = \"app\"\npath = \"main.al\"\n") &&
+      write_all(dir, "proj/main.al",
+                "use dep::answer\n\nfn main() -> i32 {\n  ret answer()\n}\n");
+  CHECK(dep);
+  CHECK(app);
+  if (!dep || !app) {
+    return;
+  }
+  // The library carries its object beside the summary only after its
+  // own build, which a run does not perform.
+  CHECK(run_build_on(dir, "dep") == 0);
+  SilencedOutput silenced;
+  CHECK(run_run_on(dir, "proj") == 7);
+}
+
 i32 run_init_on(io::TempDir& dir, std::string_view rel) {
   const std::string target = dir.join(rel);
   std::vector<std::string> storage{"alcy", "init", target};

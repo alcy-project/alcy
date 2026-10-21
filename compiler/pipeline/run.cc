@@ -39,6 +39,7 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
     std::string_view target,
     BuildProfile profile,
     LinkOptions link,
+    std::span<const std::string> linked_objects,
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
@@ -51,7 +52,10 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
   }
   const std::string exe_path =
       scratch.join(std::string("main") + std::string(exe_suffix()));
-  const std::vector<std::string> paths = std::move(objects).unwrap();
+  std::vector<std::string> paths = std::move(objects).unwrap();
+  // The dependencies a summary answered for bring their own objects,
+  // as they do for a build.
+  paths.insert(paths.end(), linked_objects.begin(), linked_objects.end());
   if (link_executable(ctx, link, paths, exe_path).is_err()) {
     return base::make_err(diag::Reported{});
   }
@@ -116,8 +120,8 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, bin.name, profile, link, args, announce,
-                      announce_ctx);
+  return link_and_run(ctx, lowered, bin.name, profile, link, bin.linked_objects,
+                      args, announce, announce_ctx);
 }
 
 }  // namespace pipeline
