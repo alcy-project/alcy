@@ -243,6 +243,7 @@
   F(AnalyzerSpecSignatureMismatch, "Method '{}' does not match the declaration in '{}'") \
   F(AnalyzerSpecSuperArguments, "Super-spec of '{}' takes arguments; generic supers are not supported yet") \
   F(AnalyzerSpecSuperCycle, "Super-spec chain of '{}' forms a cycle") \
+  F(AnalyzerStringPatternDeferred, "String literal patterns are deferred; compare with '==' instead") \
   F(AnalyzerSpecSuperMissing, "Implementing '{}' needs an implementation of '{}'") \
   F(AnalyzerSpecSuperUnknown, "Super-spec '{}' must name a spec in scope") \
   F(AnalyzerSpecTargetNotDirect, "Spec implementation target must name its type parameters directly") \

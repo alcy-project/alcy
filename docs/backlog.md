@@ -861,6 +861,15 @@ replaced. The foundations are in `roadmap.md`.
   printer itself died on it. A zero-sized value has no storage to
   read or write, so the emitter leaves the access out and hands the
   placeholder on; `exe-unit-arg` holds it.
+- [x] A string literal pattern crashed the compiler instead of being
+  refused: the checker admitted the pattern, the arm's test lowered
+  to one compare over the two-word view, and the LLVM emitter died
+  on it (`Unsupported comparison type: str`, an illegal instruction
+  that took the whole compiler down). String literal patterns are
+  deferred (docs/spec/deferred.md), so the checker refuses one with
+  `String literal patterns are deferred; compare with '==' instead`
+  (EC013) the way the other deferred features are named, and the
+  `==` comparison keeps working. `err-string-pattern` holds it.
 - [x] A type mismatch between two nominals, two instantiations, or two
   closure signatures printed only the kind twice (`expected 'struct',
   found 'struct'`). Diagnostics spell the type the way the source

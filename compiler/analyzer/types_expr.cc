@@ -123,6 +123,18 @@ bool Checker::bind_pattern(u32 module,
       return false;
     }
     case ast::PatternKind::Literal: {
+      // A string literal pattern is deferred (docs/spec/deferred.md):
+      // the view is two words, so the arm's test cannot be the one
+      // machine compare the other literal kinds lower to. Refusing it
+      // here keeps the refusal ahead of the lowering's compare.
+      if (ast.literals[node.payload.literal.value].kind ==
+          ast::LiteralKind::String) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerStringPatternDeferred>(
+            diag::Severity::Error, diag::Stage::Analyzer,
+            DiagCode::UnsupportedType, node.span);
+        (void)index;
+        return true;
+      }
       check_literal(node.payload.literal.value, &type);
       return true;
     }
