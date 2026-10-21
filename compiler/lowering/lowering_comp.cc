@@ -1353,7 +1353,7 @@ bool Lowerer::lower_rest_tuple(std::span<const ast::ExprIdx> args,
     if (tag_of(element) == ir::TypeTag::Error) {
       return false;
     }
-    const ir::TypeIdx slot = builder.ref_type(element);
+    const ir::TypeIdx slot = storage_copy(element);
     slots.push_back(slot);
     arg_types.push_back(element);
     element_seq.push(slot);

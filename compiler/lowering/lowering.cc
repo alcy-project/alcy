@@ -461,7 +461,35 @@ bool Lowerer::is_destructor(ast::ItemIdx item) const {
 }
 
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
-  return type.idx < pkg.needs_drop.size() && pkg.needs_drop[type.idx] != 0;
+  if (type.idx < pkg.needs_drop.size()) {
+    return pkg.needs_drop[type.idx] != 0;
+  }
+  // A type interned after the analyzer sized the table - the lowering
+  // builds tuple and reference types, a closure's environment among
+  // them - answers from its structure. A storage copy follows the
+  // copy back to the declaration the analyzer measured; the fields'
+  // entries are in the table; a reference owns nothing; and a value
+  // cycle cannot reach here because the checker rejects one before
+  // lowering runs.
+  const ir::TypeIdx origin = type_origin(type);
+  if (origin.idx != type.idx) {
+    return runs_destructor(origin);
+  }
+  const ir::TypeNode& node = builder.types()[type];
+  switch (node.tag) {
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      for (ir::TypeIdx element : tuple.elements) {
+        if (runs_destructor(element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ir::TypeTag::Array:
+      return runs_destructor(builder.array_types()[node.as_array()].element);
+    default: return false;
+  }
 }
 
 ir::OperandIdx Lowerer::use_value(Val v) {
@@ -883,7 +911,7 @@ ir::TypeIdx Lowerer::closure_env_type(
   }
   ir::TypeSeq seq;
   for (ir::TypeIdx field : fields) {
-    seq.push(builder.ref_type(field));
+    seq.push(storage_copy(field));
   }
   return builder.tuple_type(seq.finish());
 }
@@ -1033,6 +1061,16 @@ u32 Lowerer::callee_inst(
 ir::TypeIdx Lowerer::type_origin(ir::TypeIdx type) const {
   const auto found = type_origins_.find(type.idx);
   return found == type_origins_.end() ? type : ir::TypeIdx(found->second);
+}
+
+// A copy the lowering interns carries the same origin link the
+// checker's copies do, or the origin-based lookups - the destructor
+// tables, the owner scans - cannot name the declaration a copy came
+// from and answer as if it owned nothing.
+ir::TypeIdx Lowerer::storage_copy(ir::TypeIdx type) {
+  const ir::TypeIdx copy = builder.ref_type(type);
+  type_origins_.emplace(copy.idx, type.idx);
+  return copy;
 }
 
 const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
@@ -1564,12 +1602,12 @@ void Lowerer::materialize(const FnEntry& entry,
       ++comp_at;
       continue;
     }
-    params.push(builder.ref_type(entry.params[i]));
+    params.push(storage_copy(entry.params[i]));
   }
   ir::BlockIdxRange range{blocks.front(), static_cast<u32>(blocks.size())};
   ir::TypeSeq generics;
   for (const ir::TypeIdx arg : entry.generics) {
-    generics.push(builder.ref_type(arg));
+    generics.push(storage_copy(arg));
   }
   // The handle the gather left in the entry, which this copy of it
   // predates.

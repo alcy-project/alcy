@@ -117,10 +117,14 @@ void Lowerer::record_event(OwnershipEvent::Kind kind,
 void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
                                   ir::TypeIdx type,
                                   diag::Span span) {
-  if (!runs_destructor(type) || type.idx >= pkg.drop_glue.size()) {
+  // A storage copy calls the glue of the type it came from: the
+  // lowering interns copies the analyzer's table never measured, and
+  // a destructor belongs to the declaration, not to the copy.
+  const ir::TypeIdx glue_type = type_origin(type);
+  if (!runs_destructor(type) || glue_type.idx >= pkg.drop_glue.size()) {
     return;
   }
-  const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[type.idx];
+  const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[glue_type.idx];
   if (glue.index == base::INVALID_IDX) {
     return;
   }
@@ -524,8 +528,12 @@ void Lowerer::place_ends() {
     if (!runs_destructor(type)) {
       return;
     }
-    if (type.idx < pkg.drop_glue.size()) {
-      const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[type.idx];
+    // The same origin rule the collected call follows: a copy's
+    // glue is the one the type it came from declared.
+    const ir::TypeIdx glue_type = type_origin(type);
+    if (glue_type.idx < pkg.drop_glue.size()) {
+      const analyzer::CheckedModule::DropGlue& glue =
+          pkg.drop_glue[glue_type.idx];
       if (glue.index != base::INVALID_IDX) {
         const analyzer::CheckedModule& def = pkg.modules[glue.module];
         const analyzer::CheckedModule::MethodInfo& info =

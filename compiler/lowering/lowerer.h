@@ -320,6 +320,7 @@ class Lowerer {
   const analyzer::CheckedModule::StructInfo* struct_info(ir::TypeIdx type);
   // Follows a field storage copy back to the type it was copied from.
   ir::TypeIdx type_origin(ir::TypeIdx type) const;
+  ir::TypeIdx storage_copy(ir::TypeIdx type);
   ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected);
   // Interns a name whose bytes outlive the call, or one whose bytes may not
   // and so are copied into the table when it is new. Either reports the shared

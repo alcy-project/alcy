@@ -859,7 +859,7 @@ ir::ExternalFunctionIdx Lowerer::declare_external(
   }
   ir::TypeSeq seq;
   for (ir::TypeIdx param : params) {
-    seq.push(builder.ref_type(param));
+    seq.push(storage_copy(param));
   }
   // A C entry point keeps its own name: it is not ours to encode.
   const str::StringPoolId interned = intern_name(name);
@@ -976,9 +976,8 @@ ir::TypeIdx Lowerer::enum_slot_type(ir::TypeIdx enum_type) {
   // appends a node of its own, which would otherwise separate them.
   const ir::TypeIdx array =
       builder.array_type(carrier, area.size / carrier_bytes);
-  const ir::TypeIdx disc =
-      builder.ref_type(builder.primitive(ir::TypeTag::I32));
-  const ir::TypeIdx bytes = builder.ref_type(array);
+  const ir::TypeIdx disc = storage_copy(builder.primitive(ir::TypeTag::I32));
+  const ir::TypeIdx bytes = storage_copy(array);
   ir::TypeSeq seq;
   seq.push(disc);
   seq.push(bytes);
@@ -1215,6 +1214,11 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
     }
     if (runs_destructor(env_ty)) {
       locals.emplace_back("$closure", slot, env_ty);
+      // The captures are in the slot by now, so the place owns what
+      // it holds; without the event the walk reads the slot as never
+      // owned and the scope's end leaves the captures behind.
+      record_event(OwnershipEvent::Kind::Bind,
+                   static_cast<u32>(locals.size() - 1), {}, node.span);
     }
     if (!store_captures(to_operand(slot, env_ty))) {
       return Val{size_one, error_type(), false, false};
