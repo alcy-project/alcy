@@ -11,15 +11,22 @@ reports rather than writes with `--check`.
 
 ## Shape
 
-- `lex`: a lossless token stream. The compiler's lexer already reads
-  every token; this layer adds back the comments it treats as trivia
-  and keeps the newline-inserted semicolons marked, so the layout can
-  tell a spelled separator from a line break.
-- `cst`: a concrete syntax tree built from that stream. It nests
+The lossless front end lives in `cst/`, its own module: the tools'
+counterpart to `ast/`, built for the linter that will read the same
+tree the formatter does (ADR-0081).
+
+- `cst/lex`: a lossless token stream. The compiler's lexer already
+  reads every token; this layer adds back the comments it treats as
+  trivia and keeps the newline-inserted semicolons marked, so the
+  layout can tell a spelled separator from a line break.
+- `cst/cst`: a concrete syntax tree built from that stream. It nests
   delimiters only, so an input with unbalanced or unexpected tokens
   still becomes a tree; nothing is dropped. A brace is classified by
   the header in front of it, because a run of statements, a list of
   members, and a struct literal lay out differently.
+
+The formatter proper holds the layout side:
+
 - `doc`: a small layout algebra - text, line, group, nest - and a
   renderer that chooses between a flat and a broken rendering for each
   group against the width it was given.

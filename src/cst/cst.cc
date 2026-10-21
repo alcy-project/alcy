@@ -1,16 +1,16 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "fmt/cst.h"
+#include "cst/cst.h"
 
 #include <utility>
 #include <vector>
 
-#include "fmt/lex.h"
+#include "cst/lex.h"
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
 
-namespace alcy_fmt {
+namespace cst {
 
 namespace {
 
@@ -291,4 +291,4 @@ Node build_cst(const std::vector<Lexeme>& lexemes) {
   return builder.build();
 }
 
-}  // namespace alcy_fmt
+}  // namespace cst

@@ -59,8 +59,11 @@ parameters are injected while it holds no configuration of its own.**
 
 The library is a module of the toolchain tree rather than a stage of
 the compiler: no compiler target depends on it - the dependency
-direction is the boundary, and gn check holds it - and it leans on the
-lexer alone. Its headers take the flat `fmt/...` spelling the module's
+direction is the boundary, and gn check holds it - and it leans on
+the lexer alone. The lossless front end is its own module, `src/cst`:
+the tools' counterpart to `ast/`, one tree per kind of reader, held
+apart so the linter that comes can read the same tree the formatter
+does. Its headers take the flat `fmt/...` spelling the module's
 directory gives them. The vendored formatting library owns a fixed set
 of flat `fmt/<name>.h` spellings of its own, and the module's files
 never reuse one of those names, so the two prefixes cannot meet.

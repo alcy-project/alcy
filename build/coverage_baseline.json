@@ -5,14 +5,14 @@
     "coverage of src/ drops below this. Move it only on purpose."
   ],
   "lines": {
-    "count": 78865,
-    "covered": 65634,
-    "percent": 83.22322956951753
+    "count": 78883,
+    "covered": 65642,
+    "percent": 83.21438079180558
   },
   "modules": {
     "analyzer": {
       "count": 14119,
-      "covered": 10901
+      "covered": 10898
     },
     "ast": {
       "count": 795,
@@ -50,6 +50,10 @@
       "count": 0,
       "covered": 0
     },
+    "cst": {
+      "count": 349,
+      "covered": 308
+    },
     "debug": {
       "count": 0,
       "covered": 0
@@ -59,8 +63,8 @@
       "covered": 637
     },
     "fmt": {
-      "count": 1747,
-      "covered": 1455
+      "count": 1416,
+      "covered": 1162
     },
     "i18n": {
       "count": 55,
@@ -88,7 +92,7 @@
     },
     "parser": {
       "count": 4342,
-      "covered": 3797
+      "covered": 3792
     },
     "path": {
       "count": 85,
@@ -116,7 +120,7 @@
     },
     "tests": {
       "count": 25129,
-      "covered": 22907
+      "covered": 22908
     },
     "text": {
       "count": 108,

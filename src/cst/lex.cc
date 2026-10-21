@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "fmt/lex.h"
+#include "cst/lex.h"
 
 #include <algorithm>
 #include <string_view>
@@ -15,7 +15,7 @@
 #include "lexer/token.h"
 #include "source/source.h"
 
-namespace alcy_fmt {
+namespace cst {
 
 namespace {
 
@@ -161,4 +161,4 @@ std::string_view text_of(std::string_view source, u32 offset, u32 length) {
   return source.substr(offset, size);
 }
 
-}  // namespace alcy_fmt
+}  // namespace cst

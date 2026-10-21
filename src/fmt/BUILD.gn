@@ -16,21 +16,15 @@ config("fmt_config") {
 
 source_set("alcy_fmt") {
   sources = [
-    "cst.cc",
-    "cst.h",
     "doc.cc",
     "doc.h",
     "formatter.cc",
     "formatter.h",
-    "lex.cc",
-    "lex.h",
   ]
   deps = [
     "//src:base_modules",
-    "//src/diag",
-    "//src/i18n",
+    "//src/cst",
     "//src/lexer",
-    "//src/source",
   ]
   public_configs = [ ":fmt_config" ]
 }

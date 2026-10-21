@@ -113,9 +113,12 @@ what implements it lives in `src/`.
   it is self-hosted. The compiler's stages flow in one line
   (`src/lexer/`, `src/parser/`, `src/analyzer/`, ...), and the tools
   that read source for people sit beside them: `src/fmt/` is the source
-  formatter, a module no compiler target depends on - the dependency
-  direction is the boundary, and gn check holds it - leaning on the
-  compiler's lexer alone. `alcy fmt` reaches it from the command line,
+  formatter and `src/cst/` its lossless front end - the tools'
+  counterpart to `ast/`, built for the linter that will read the
+  same tree the formatter does. No compiler target depends on either -
+  the dependency direction is the boundary, and gn check holds it -
+  and both lean on the compiler's lexer alone. `alcy fmt` reaches the
+  formatter from the command line,
   and `tools/check_fmt.py` asks its properties of every source in the
   tree (see ADR-0081). `src/fuzz/` holds the fuzz targets, which need
   libFuzzer and are therefore outside `all`. The toolchain's own

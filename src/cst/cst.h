@@ -5,11 +5,11 @@
 
 #include <vector>
 
-#include "fmt/lex.h"
+#include "cst/lex.h"
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
 
-namespace alcy_fmt {
+namespace cst {
 
 // What a node is. The tree nests delimiters only: everything else is a
 // leaf, so a construct the grammar would reject still has a place in the
@@ -65,4 +65,4 @@ struct Node {
 // input yields a File sequence with no children.
 Node build_cst(const std::vector<Lexeme>& lexemes);
 
-}  // namespace alcy_fmt
+}  // namespace cst

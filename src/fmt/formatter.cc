@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "fmt/cst.h"
+#include "cst/cst.h"
+#include "cst/lex.h"
 #include "fmt/doc.h"
-#include "fmt/lex.h"
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
 
@@ -21,8 +21,8 @@ namespace {
 
 using lexer::TokenKind;
 
-std::string_view node_text(std::string_view source, const Node& node) {
-  return text_of(source, node.offset, node.length);
+std::string_view node_text(std::string_view source, const cst::Node& node) {
+  return cst::text_of(source, node.offset, node.length);
 }
 
 // The bytes of an error token, printed as they were read. A span that
@@ -32,8 +32,8 @@ std::string_view node_text(std::string_view source, const Node& node) {
 // by it in one pass and not the next would move the layout with it.
 // A span that ends short of the source keeps every byte, because the
 // next pass reads those bytes back the same way.
-std::string_view error_text(std::string_view source, const Node& node) {
-  std::string_view text = text_of(source, node.offset, node.length);
+std::string_view error_text(std::string_view source, const cst::Node& node) {
+  std::string_view text = cst::text_of(source, node.offset, node.length);
   // Trailing blanks never survive into the output -- the renderer
   // trims them before every newline it writes -- so the measure reads
   // the span without them, or a wrap decision is made over bytes the
@@ -125,97 +125,97 @@ bool dot_joins_number(std::string_view after) {
   return after == "f32" || after == "f64";
 }
 
-bool is_path_like(TokenKind kind) {
+bool is_path_like(lexer::TokenKind kind) {
   switch (kind) {
-    case TokenKind::Ident:
-    case TokenKind::Self:
-    case TokenKind::SelfType:
-    case TokenKind::I8:
-    case TokenKind::I16:
-    case TokenKind::I32:
-    case TokenKind::I64:
-    case TokenKind::I128:
-    case TokenKind::Isize:
-    case TokenKind::U8:
-    case TokenKind::U16:
-    case TokenKind::U32:
-    case TokenKind::U64:
-    case TokenKind::U128:
-    case TokenKind::Usize:
-    case TokenKind::F32:
-    case TokenKind::F64:
-    case TokenKind::Bool:
-    case TokenKind::Str: return true;
+    case lexer::TokenKind::Ident:
+    case lexer::TokenKind::Self:
+    case lexer::TokenKind::SelfType:
+    case lexer::TokenKind::I8:
+    case lexer::TokenKind::I16:
+    case lexer::TokenKind::I32:
+    case lexer::TokenKind::I64:
+    case lexer::TokenKind::I128:
+    case lexer::TokenKind::Isize:
+    case lexer::TokenKind::U8:
+    case lexer::TokenKind::U16:
+    case lexer::TokenKind::U32:
+    case lexer::TokenKind::U64:
+    case lexer::TokenKind::U128:
+    case lexer::TokenKind::Usize:
+    case lexer::TokenKind::F32:
+    case lexer::TokenKind::F64:
+    case lexer::TokenKind::Bool:
+    case lexer::TokenKind::Str: return true;
     default: return false;
   }
 }
 
-bool is_prefix_operator(TokenKind kind) {
+bool is_prefix_operator(lexer::TokenKind kind) {
   switch (kind) {
-    case TokenKind::Minus:
-    case TokenKind::Bang:
-    case TokenKind::Tilde:
-    case TokenKind::Amp:
-    case TokenKind::Star:
-    case TokenKind::StarStar:
-    case TokenKind::Hash: return true;
+    case lexer::TokenKind::Minus:
+    case lexer::TokenKind::Bang:
+    case lexer::TokenKind::Tilde:
+    case lexer::TokenKind::Amp:
+    case lexer::TokenKind::Star:
+    case lexer::TokenKind::StarStar:
+    case lexer::TokenKind::Hash: return true;
     default: return false;
   }
 }
 
 // Whether a token in front of an expression lets a following prefix
 // operator read as a prefix rather than a binary one.
-bool allows_prefix_after(TokenKind kind) {
+bool allows_prefix_after(lexer::TokenKind kind) {
   switch (kind) {
-    case TokenKind::Plus:
-    case TokenKind::Minus:
-    case TokenKind::Star:
-    case TokenKind::Slash:
-    case TokenKind::Percent:
-    case TokenKind::StarStar:
-    case TokenKind::Amp:
-    case TokenKind::Pipe:
-    case TokenKind::Caret:
-    case TokenKind::Tilde:
-    case TokenKind::LessLess:
-    case TokenKind::GreaterGreater:
-    case TokenKind::PlusEq:
-    case TokenKind::MinusEq:
-    case TokenKind::StarEq:
-    case TokenKind::SlashEq:
-    case TokenKind::PercentEq:
-    case TokenKind::StarStarEq:
-    case TokenKind::AmpEq:
-    case TokenKind::PipeEq:
-    case TokenKind::CaretEq:
-    case TokenKind::LessLessEq:
-    case TokenKind::GreaterGreaterEq:
-    case TokenKind::ColonEq:
-    case TokenKind::Eq:
-    case TokenKind::EqEq:
-    case TokenKind::Bang:
-    case TokenKind::AmpAmp:
-    case TokenKind::PipePipe:
-    case TokenKind::BangEq:
-    case TokenKind::Greater:
-    case TokenKind::Less:
-    case TokenKind::GreaterEq:
-    case TokenKind::LessEq:
-    case TokenKind::Arrow:
-    case TokenKind::FatArrow:
-    case TokenKind::Colon:
-    case TokenKind::Comma:
-    case TokenKind::As:
-    case TokenKind::In:
-    case TokenKind::Ret:
-    case TokenKind::If:
-    case TokenKind::Else:
-    case TokenKind::While:
-    case TokenKind::For:
-    case TokenKind::Match:
-    case TokenKind::DotDot:
-    case TokenKind::DotDotEq:
-    case TokenKind::DotDotLess: return true;
+    case lexer::TokenKind::Plus:
+    case lexer::TokenKind::Minus:
+    case lexer::TokenKind::Star:
+    case lexer::TokenKind::Slash:
+    case lexer::TokenKind::Percent:
+    case lexer::TokenKind::StarStar:
+    case lexer::TokenKind::Amp:
+    case lexer::TokenKind::Pipe:
+    case lexer::TokenKind::Caret:
+    case lexer::TokenKind::Tilde:
+    case lexer::TokenKind::LessLess:
+    case lexer::TokenKind::GreaterGreater:
+    case lexer::TokenKind::PlusEq:
+    case lexer::TokenKind::MinusEq:
+    case lexer::TokenKind::StarEq:
+    case lexer::TokenKind::SlashEq:
+    case lexer::TokenKind::PercentEq:
+    case lexer::TokenKind::StarStarEq:
+    case lexer::TokenKind::AmpEq:
+    case lexer::TokenKind::PipeEq:
+    case lexer::TokenKind::CaretEq:
+    case lexer::TokenKind::LessLessEq:
+    case lexer::TokenKind::GreaterGreaterEq:
+    case lexer::TokenKind::ColonEq:
+    case lexer::TokenKind::Eq:
+    case lexer::TokenKind::EqEq:
+    case lexer::TokenKind::Bang:
+    case lexer::TokenKind::AmpAmp:
+    case lexer::TokenKind::PipePipe:
+    case lexer::TokenKind::BangEq:
+    case lexer::TokenKind::Greater:
+    case lexer::TokenKind::Less:
+    case lexer::TokenKind::GreaterEq:
+    case lexer::TokenKind::LessEq:
+    case lexer::TokenKind::Arrow:
+    case lexer::TokenKind::FatArrow:
+    case lexer::TokenKind::Colon:
+    case lexer::TokenKind::Comma:
+    case lexer::TokenKind::As:
+    case lexer::TokenKind::In:
+    case lexer::TokenKind::Ret:
+    case lexer::TokenKind::If:
+    case lexer::TokenKind::Else:
+    case lexer::TokenKind::While:
+    case lexer::TokenKind::For:
+    case lexer::TokenKind::Match:
+    case lexer::TokenKind::DotDot:
+    case lexer::TokenKind::DotDotEq:
+    case lexer::TokenKind::DotDotLess: return true;
     default: return false;
   }
 }
@@ -223,44 +223,44 @@ bool allows_prefix_after(TokenKind kind) {
 // Whether a line may break after this operator. The grammar continues an
 // expression at a newline only when the line it leaves cannot end a
 // statement, so a break belongs after an operator rather than before one.
-bool is_break_after(TokenKind kind) {
+bool is_break_after(lexer::TokenKind kind) {
   switch (kind) {
-    case TokenKind::Plus:
-    case TokenKind::Minus:
-    case TokenKind::Star:
-    case TokenKind::Slash:
-    case TokenKind::Percent:
-    case TokenKind::StarStar:
-    case TokenKind::Amp:
-    case TokenKind::Pipe:
-    case TokenKind::Caret:
-    case TokenKind::LessLess:
-    case TokenKind::GreaterGreater:
-    case TokenKind::PlusEq:
-    case TokenKind::MinusEq:
-    case TokenKind::StarEq:
-    case TokenKind::SlashEq:
-    case TokenKind::PercentEq:
-    case TokenKind::StarStarEq:
-    case TokenKind::AmpEq:
-    case TokenKind::PipeEq:
-    case TokenKind::CaretEq:
-    case TokenKind::LessLessEq:
-    case TokenKind::GreaterGreaterEq:
-    case TokenKind::ColonEq:
-    case TokenKind::Eq:
-    case TokenKind::EqEq:
-    case TokenKind::AmpAmp:
-    case TokenKind::PipePipe:
-    case TokenKind::BangEq:
-    case TokenKind::Greater:
-    case TokenKind::Less:
-    case TokenKind::GreaterEq:
-    case TokenKind::LessEq:
-    case TokenKind::Arrow:
-    case TokenKind::FatArrow:
-    case TokenKind::As:
-    case TokenKind::In: return true;
+    case lexer::TokenKind::Plus:
+    case lexer::TokenKind::Minus:
+    case lexer::TokenKind::Star:
+    case lexer::TokenKind::Slash:
+    case lexer::TokenKind::Percent:
+    case lexer::TokenKind::StarStar:
+    case lexer::TokenKind::Amp:
+    case lexer::TokenKind::Pipe:
+    case lexer::TokenKind::Caret:
+    case lexer::TokenKind::LessLess:
+    case lexer::TokenKind::GreaterGreater:
+    case lexer::TokenKind::PlusEq:
+    case lexer::TokenKind::MinusEq:
+    case lexer::TokenKind::StarEq:
+    case lexer::TokenKind::SlashEq:
+    case lexer::TokenKind::PercentEq:
+    case lexer::TokenKind::StarStarEq:
+    case lexer::TokenKind::AmpEq:
+    case lexer::TokenKind::PipeEq:
+    case lexer::TokenKind::CaretEq:
+    case lexer::TokenKind::LessLessEq:
+    case lexer::TokenKind::GreaterGreaterEq:
+    case lexer::TokenKind::ColonEq:
+    case lexer::TokenKind::Eq:
+    case lexer::TokenKind::EqEq:
+    case lexer::TokenKind::AmpAmp:
+    case lexer::TokenKind::PipePipe:
+    case lexer::TokenKind::BangEq:
+    case lexer::TokenKind::Greater:
+    case lexer::TokenKind::Less:
+    case lexer::TokenKind::GreaterEq:
+    case lexer::TokenKind::LessEq:
+    case lexer::TokenKind::Arrow:
+    case lexer::TokenKind::FatArrow:
+    case lexer::TokenKind::As:
+    case lexer::TokenKind::In: return true;
     default: return false;
   }
 }
@@ -273,12 +273,13 @@ class Printer {
   Printer(std::string_view source, const FormatConfig& config)
       : source_(source), config_(config) {}
 
-  Doc run(const Node& root) {
-    const std::vector<Chunk> chunks = collect_chunks(root, BraceRole::Block);
+  Doc run(const cst::Node& root) {
+    const std::vector<Chunk> chunks =
+        collect_chunks(root, cst::BraceRole::Block);
     if (chunks.empty()) {
       return doc_empty();
     }
-    return print_body_lines(chunks, BraceRole::Block, true);
+    return print_body_lines(chunks, cst::BraceRole::Block, true);
   }
 
  private:
@@ -290,11 +291,11 @@ class Printer {
   };
 
   struct Item {
-    std::vector<const Node*> nodes;
+    std::vector<const cst::Node*> nodes;
   };
 
   struct Chunk {
-    std::vector<const Node*> nodes;
+    std::vector<const cst::Node*> nodes;
     bool is_comment = false;
     usize newlines_before = 0;
     // The chunk ended at a semicolon spelled in the source rather than
@@ -307,72 +308,78 @@ class Printer {
     usize riding_gap_start = 0;
   };
 
-  std::vector<Chunk> collect_chunks(const Node& seq, BraceRole role) const;
+  std::vector<Chunk> collect_chunks(const cst::Node& seq,
+                                    cst::BraceRole role) const;
   Doc chunk_line(const Chunk& chunk, Doc terminator);
   static usize trailing_eol_start(const Chunk& chunk);
-  static bool ends_in_block(const std::vector<const Node*>& code);
+  static bool ends_in_block(const std::vector<const cst::Node*>& code);
   static bool keeps_semicolon(const Chunk& chunk,
-                              const std::vector<const Node*>& code,
-                              BraceRole role,
+                              const std::vector<const cst::Node*>& code,
+                              cst::BraceRole role,
                               bool last_chunk,
                               bool next_suppresses);
   static bool chunk_is_semi_terminated_item(const Chunk& chunk);
   static bool chunk_starts_with_suppressor(const Chunk& chunk);
   Doc print_body_lines(const std::vector<Chunk>& chunks,
-                       BraceRole role,
+                       cst::BraceRole role,
                        bool top_level);
   Doc chunk_terminator(const Chunk& chunk,
-                       const std::vector<const Node*>& code,
-                       BraceRole role,
+                       const std::vector<const cst::Node*>& code,
+                       cst::BraceRole role,
                        bool last_chunk,
                        bool next_suppresses);
-  static bool ends_like_statement(const std::vector<const Node*>& nodes);
-  Doc print_line(const std::vector<const Node*>& nodes);
-  Doc print_flow(const std::vector<const Node*>& nodes, bool allow_wrap);
+  static bool ends_like_statement(const std::vector<const cst::Node*>& nodes);
+  Doc print_line(const std::vector<const cst::Node*>& nodes);
+  Doc print_flow(const std::vector<const cst::Node*>& nodes, bool allow_wrap);
   Doc build_flow(std::vector<Piece> pieces, bool allow_wrap);
-  Doc node_doc(const Node& node);
-  Doc print_group(const Node& group);
-  Doc print_brace_body(const Node& group);
-  Doc print_list(const Node& group,
+  Doc node_doc(const cst::Node& node);
+  Doc print_group(const cst::Node& group);
+  Doc print_brace_body(const cst::Node& group);
+  Doc print_list(const cst::Node& group,
                  std::string_view open,
                  std::string_view close);
-  Doc print_literal(const Node& group);
-  std::vector<Item> split_on_commas(const Node& seq,
+  Doc print_literal(const cst::Node& group);
+  std::vector<Item> split_on_commas(const cst::Node& seq,
                                     bool& had_comma,
                                     bool& trailing) const;
-  bool space_before(const Node* prev,
+  bool space_before(const cst::Node* prev,
                     bool prev_generic,
                     bool prev_unary,
-                    const Node& cur,
+                    const cst::Node& cur,
                     bool cur_generic) const;
-  void compute_generic(const std::vector<const Node*>& nodes,
+  void compute_generic(const std::vector<const cst::Node*>& nodes,
                        std::vector<bool>& generic) const;
-  bool looks_like_generic(const std::vector<const Node*>& nodes, usize i) const;
-  static const Node* previous_significant(const std::vector<const Node*>& nodes,
-                                          usize i);
-  static const Node* next_significant(const std::vector<const Node*>& nodes,
-                                      usize i);
+  bool looks_like_generic(const std::vector<const cst::Node*>& nodes,
+                          usize i) const;
+  static const cst::Node* previous_significant(
+      const std::vector<const cst::Node*>& nodes,
+      usize i);
+  static const cst::Node* next_significant(
+      const std::vector<const cst::Node*>& nodes,
+      usize i);
   static bool chunk_is_use(const Chunk& chunk);
 
   std::string_view source_;
   FormatConfig config_;
 };
 
-const Node* Printer::previous_significant(const std::vector<const Node*>& nodes,
-                                          usize i) {
+const cst::Node* Printer::previous_significant(
+    const std::vector<const cst::Node*>& nodes,
+    usize i) {
   while (i > 0) {
     --i;
-    if (nodes[i]->kind != NodeKind::Comment) {
+    if (nodes[i]->kind != cst::NodeKind::Comment) {
       return nodes[i];
     }
   }
   return nullptr;
 }
 
-const Node* Printer::next_significant(const std::vector<const Node*>& nodes,
-                                      usize i) {
+const cst::Node* Printer::next_significant(
+    const std::vector<const cst::Node*>& nodes,
+    usize i) {
   while (i < nodes.size()) {
-    if (nodes[i]->kind != NodeKind::Comment) {
+    if (nodes[i]->kind != cst::NodeKind::Comment) {
       return nodes[i];
     }
     ++i;
@@ -380,35 +387,36 @@ const Node* Printer::next_significant(const std::vector<const Node*>& nodes,
   return nullptr;
 }
 
-bool Printer::space_before(const Node* prev,
+bool Printer::space_before(const cst::Node* prev,
                            bool prev_generic,
                            bool prev_unary,
-                           const Node& cur,
+                           const cst::Node& cur,
                            bool cur_generic) const {
   if (prev == nullptr) {
     return false;
   }
-  if (cur.kind == NodeKind::Token) {
+  if (cur.kind == cst::NodeKind::Token) {
     switch (cur.token) {
-      case TokenKind::Comma:
-      case TokenKind::Semicolon:
-      case TokenKind::Dot:
-      case TokenKind::ColonColon:
-      case TokenKind::Question:
-      case TokenKind::Colon:
-      case TokenKind::RParen:
-      case TokenKind::RBracket:
-      case TokenKind::RBrace: return false;
+      case lexer::TokenKind::Comma:
+      case lexer::TokenKind::Semicolon:
+      case lexer::TokenKind::Dot:
+      case lexer::TokenKind::ColonColon:
+      case lexer::TokenKind::Question:
+      case lexer::TokenKind::Colon:
+      case lexer::TokenKind::RParen:
+      case lexer::TokenKind::RBracket:
+      case lexer::TokenKind::RBrace: return false;
       // A range reads tight against what bounds it, except in the one
       // place the language spells it loose: a parameter whose type is
       // the variadic run of dots.
-      case TokenKind::DotDot:
-      case TokenKind::DotDotEq:
-      case TokenKind::DotDotLess:
-        return prev->kind == NodeKind::Token && prev->token == TokenKind::Colon;
-      case TokenKind::Less:
-      case TokenKind::Greater:
-      case TokenKind::GreaterGreater:
+      case lexer::TokenKind::DotDot:
+      case lexer::TokenKind::DotDotEq:
+      case lexer::TokenKind::DotDotLess:
+        return prev->kind == cst::NodeKind::Token &&
+               prev->token == lexer::TokenKind::Colon;
+      case lexer::TokenKind::Less:
+      case lexer::TokenKind::Greater:
+      case lexer::TokenKind::GreaterGreater:
         if (cur_generic) {
           return false;
         }
@@ -416,51 +424,52 @@ bool Printer::space_before(const Node* prev,
       default: break;
     }
   }
-  if (cur.kind == NodeKind::Group && (cur.group_role == GroupRole::Paren ||
-                                      cur.group_role == GroupRole::Bracket)) {
-    if (prev->kind == NodeKind::Group &&
-        (prev->group_role == GroupRole::Paren ||
-         prev->group_role == GroupRole::Bracket)) {
+  if (cur.kind == cst::NodeKind::Group &&
+      (cur.group_role == cst::GroupRole::Paren ||
+       cur.group_role == cst::GroupRole::Bracket)) {
+    if (prev->kind == cst::NodeKind::Group &&
+        (prev->group_role == cst::GroupRole::Paren ||
+         prev->group_role == cst::GroupRole::Bracket)) {
       return false;
     }
-    if (prev->kind == NodeKind::Token) {
+    if (prev->kind == cst::NodeKind::Token) {
       if (is_path_like(prev->token)) {
         return false;
       }
-      if ((prev->token == TokenKind::Greater ||
-           prev->token == TokenKind::GreaterGreater) &&
+      if ((prev->token == lexer::TokenKind::Greater ||
+           prev->token == lexer::TokenKind::GreaterGreater) &&
           prev_generic) {
         return false;
       }
-      if (prev->token == TokenKind::ColonColon) {
+      if (prev->token == lexer::TokenKind::ColonColon) {
         return false;
       }
     }
   }
-  if (prev->kind == NodeKind::Token) {
+  if (prev->kind == cst::NodeKind::Token) {
     switch (prev->token) {
-      case TokenKind::Dot:
-      case TokenKind::ColonColon:
-      case TokenKind::Question:
-      case TokenKind::DotDot:
-      case TokenKind::DotDotEq:
-      case TokenKind::DotDotLess: return false;
+      case lexer::TokenKind::Dot:
+      case lexer::TokenKind::ColonColon:
+      case lexer::TokenKind::Question:
+      case lexer::TokenKind::DotDot:
+      case lexer::TokenKind::DotDotEq:
+      case lexer::TokenKind::DotDotLess: return false;
       // A generic list's opening bracket touches its first argument;
       // its closing bracket touches the path it finishes -- the call or
       // the index it opens, and the member it names. A brace is a
       // header or a literal, and an identifier is an impl's trait, and
       // both read with the space.
-      case TokenKind::Less:
+      case lexer::TokenKind::Less:
         if (prev_generic) {
           return false;
         }
         break;
-      case TokenKind::Greater:
-      case TokenKind::GreaterGreater:
-        if (prev_generic && ((cur.kind == NodeKind::Group &&
-                              cur.group_role != GroupRole::Brace) ||
-                             (cur.kind == NodeKind::Token &&
-                              cur.token == TokenKind::ColonColon))) {
+      case lexer::TokenKind::Greater:
+      case lexer::TokenKind::GreaterGreater:
+        if (prev_generic && ((cur.kind == cst::NodeKind::Group &&
+                              cur.group_role != cst::GroupRole::Brace) ||
+                             (cur.kind == cst::NodeKind::Token &&
+                              cur.token == lexer::TokenKind::ColonColon))) {
           return false;
         }
         break;
@@ -473,25 +482,25 @@ bool Printer::space_before(const Node* prev,
   return true;
 }
 
-void Printer::compute_generic(const std::vector<const Node*>& nodes,
+void Printer::compute_generic(const std::vector<const cst::Node*>& nodes,
                               std::vector<bool>& generic) const {
   usize depth = 0;
   for (usize i = 0; i < nodes.size(); ++i) {
-    const Node& node = *nodes[i];
-    if (node.kind != NodeKind::Token) {
+    const cst::Node& node = *nodes[i];
+    if (node.kind != cst::NodeKind::Token) {
       continue;
     }
-    if (node.token == TokenKind::Less) {
+    if (node.token == lexer::TokenKind::Less) {
       if (looks_like_generic(nodes, i)) {
         generic[i] = true;
         ++depth;
       }
-    } else if (node.token == TokenKind::Greater) {
+    } else if (node.token == lexer::TokenKind::Greater) {
       if (depth > 0) {
         generic[i] = true;
         --depth;
       }
-    } else if (node.token == TokenKind::GreaterGreater) {
+    } else if (node.token == lexer::TokenKind::GreaterGreater) {
       if (depth >= 2) {
         generic[i] = true;
         depth -= 2;
@@ -503,55 +512,58 @@ void Printer::compute_generic(const std::vector<const Node*>& nodes,
   }
 }
 
-bool Printer::looks_like_generic(const std::vector<const Node*>& nodes,
+bool Printer::looks_like_generic(const std::vector<const cst::Node*>& nodes,
                                  usize i) const {
-  const Node* prev = previous_significant(nodes, i);
-  if (prev == nullptr || prev->kind != NodeKind::Token) {
+  const cst::Node* prev = previous_significant(nodes, i);
+  if (prev == nullptr || prev->kind != cst::NodeKind::Token) {
     return false;
   }
-  const bool impl_params = prev->token == TokenKind::Impl;
+  const bool impl_params = prev->token == lexer::TokenKind::Impl;
   const bool prev_ok = is_path_like(prev->token) ||
-                       prev->token == TokenKind::ColonColon ||
-                       prev->token == TokenKind::Greater ||
-                       prev->token == TokenKind::GreaterGreater || impl_params;
+                       prev->token == lexer::TokenKind::ColonColon ||
+                       prev->token == lexer::TokenKind::Greater ||
+                       prev->token == lexer::TokenKind::GreaterGreater ||
+                       impl_params;
   if (!prev_ok) {
     return false;
   }
   usize depth = 1;
   usize j = i + 1;
   for (; j < nodes.size(); ++j) {
-    const Node& node = *nodes[j];
-    if (node.kind == NodeKind::Comment) {
+    const cst::Node& node = *nodes[j];
+    if (node.kind == cst::NodeKind::Comment) {
       continue;
     }
-    if (node.kind == NodeKind::Group) {
+    if (node.kind == cst::NodeKind::Group) {
       continue;
     }
     switch (node.token) {
-      case TokenKind::Less: ++depth; break;
-      case TokenKind::Greater:
+      case lexer::TokenKind::Less: ++depth; break;
+      case lexer::TokenKind::Greater:
         if (depth > 0) {
           --depth;
         }
         break;
-      case TokenKind::GreaterGreater: depth = depth >= 2 ? depth - 2 : 0; break;
-      case TokenKind::Semicolon:
-      case TokenKind::Eq:
-      case TokenKind::ColonEq:
-      case TokenKind::AmpAmp:
-      case TokenKind::PipePipe:
-      case TokenKind::If:
-      case TokenKind::Else:
-      case TokenKind::Match:
-      case TokenKind::While:
-      case TokenKind::For:
-      case TokenKind::Loop:
-      case TokenKind::Fn:
-      case TokenKind::Ret:
-      case TokenKind::Struct:
-      case TokenKind::Enum:
-      case TokenKind::Impl:
-      case TokenKind::Spec: return false;
+      case lexer::TokenKind::GreaterGreater:
+        depth = depth >= 2 ? depth - 2 : 0;
+        break;
+      case lexer::TokenKind::Semicolon:
+      case lexer::TokenKind::Eq:
+      case lexer::TokenKind::ColonEq:
+      case lexer::TokenKind::AmpAmp:
+      case lexer::TokenKind::PipePipe:
+      case lexer::TokenKind::If:
+      case lexer::TokenKind::Else:
+      case lexer::TokenKind::Match:
+      case lexer::TokenKind::While:
+      case lexer::TokenKind::For:
+      case lexer::TokenKind::Loop:
+      case lexer::TokenKind::Fn:
+      case lexer::TokenKind::Ret:
+      case lexer::TokenKind::Struct:
+      case lexer::TokenKind::Enum:
+      case lexer::TokenKind::Impl:
+      case lexer::TokenKind::Spec: return false;
       default: break;
     }
     if (depth == 0) {
@@ -562,59 +574,59 @@ bool Printer::looks_like_generic(const std::vector<const Node*>& nodes,
   if (depth != 0) {
     return false;
   }
-  const Node* follower = next_significant(nodes, j);
+  const cst::Node* follower = next_significant(nodes, j);
   if (follower == nullptr) {
     return true;
   }
-  if (follower->kind == NodeKind::Group) {
+  if (follower->kind == cst::NodeKind::Group) {
     return true;
   }
-  if (impl_params && follower->token == TokenKind::Ident) {
+  if (impl_params && follower->token == lexer::TokenKind::Ident) {
     return true;
   }
   switch (follower->token) {
-    case TokenKind::Comma:
-    case TokenKind::RParen:
-    case TokenKind::RBracket:
-    case TokenKind::RBrace:
-    case TokenKind::ColonColon:
-    case TokenKind::Dot:
-    case TokenKind::Question:
-    case TokenKind::Semicolon:
-    case TokenKind::Greater:
-    case TokenKind::GreaterGreater:
-    case TokenKind::Arrow:
-    case TokenKind::FatArrow:
-    case TokenKind::As:
-    case TokenKind::Eq:
-    case TokenKind::ColonEq:
-    case TokenKind::Plus:
-    case TokenKind::Minus:
-    case TokenKind::Star:
-    case TokenKind::Slash:
-    case TokenKind::Percent:
-    case TokenKind::StarStar:
-    case TokenKind::Amp:
-    case TokenKind::Pipe:
-    case TokenKind::Caret:
-    case TokenKind::LessLess:
-    case TokenKind::EqEq:
-    case TokenKind::BangEq:
-    case TokenKind::GreaterEq:
-    case TokenKind::LessEq:
-    case TokenKind::AmpAmp:
-    case TokenKind::PipePipe:
-    case TokenKind::PlusEq:
-    case TokenKind::MinusEq:
-    case TokenKind::StarEq:
-    case TokenKind::SlashEq:
-    case TokenKind::PercentEq:
-    case TokenKind::StarStarEq:
-    case TokenKind::AmpEq:
-    case TokenKind::PipeEq:
-    case TokenKind::CaretEq:
-    case TokenKind::LessLessEq:
-    case TokenKind::GreaterGreaterEq: return true;
+    case lexer::TokenKind::Comma:
+    case lexer::TokenKind::RParen:
+    case lexer::TokenKind::RBracket:
+    case lexer::TokenKind::RBrace:
+    case lexer::TokenKind::ColonColon:
+    case lexer::TokenKind::Dot:
+    case lexer::TokenKind::Question:
+    case lexer::TokenKind::Semicolon:
+    case lexer::TokenKind::Greater:
+    case lexer::TokenKind::GreaterGreater:
+    case lexer::TokenKind::Arrow:
+    case lexer::TokenKind::FatArrow:
+    case lexer::TokenKind::As:
+    case lexer::TokenKind::Eq:
+    case lexer::TokenKind::ColonEq:
+    case lexer::TokenKind::Plus:
+    case lexer::TokenKind::Minus:
+    case lexer::TokenKind::Star:
+    case lexer::TokenKind::Slash:
+    case lexer::TokenKind::Percent:
+    case lexer::TokenKind::StarStar:
+    case lexer::TokenKind::Amp:
+    case lexer::TokenKind::Pipe:
+    case lexer::TokenKind::Caret:
+    case lexer::TokenKind::LessLess:
+    case lexer::TokenKind::EqEq:
+    case lexer::TokenKind::BangEq:
+    case lexer::TokenKind::GreaterEq:
+    case lexer::TokenKind::LessEq:
+    case lexer::TokenKind::AmpAmp:
+    case lexer::TokenKind::PipePipe:
+    case lexer::TokenKind::PlusEq:
+    case lexer::TokenKind::MinusEq:
+    case lexer::TokenKind::StarEq:
+    case lexer::TokenKind::SlashEq:
+    case lexer::TokenKind::PercentEq:
+    case lexer::TokenKind::StarStarEq:
+    case lexer::TokenKind::AmpEq:
+    case lexer::TokenKind::PipeEq:
+    case lexer::TokenKind::CaretEq:
+    case lexer::TokenKind::LessLessEq:
+    case lexer::TokenKind::GreaterGreaterEq: return true;
     default: return false;
   }
 }
@@ -660,43 +672,44 @@ Doc Printer::build_flow(std::vector<Piece> pieces, bool allow_wrap) {
   return doc_group(doc_concat(std::move(out)));
 }
 
-Doc Printer::print_flow(const std::vector<const Node*>& nodes,
+Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
                         bool allow_wrap) {
   std::vector<bool> generic(nodes.size(), false);
   compute_generic(nodes, generic);
   std::vector<bool> unary(nodes.size(), false);
   for (usize i = 0; i < nodes.size(); ++i) {
-    const Node& node = *nodes[i];
-    if (node.kind == NodeKind::Token && is_prefix_operator(node.token)) {
-      const Node* prev = previous_significant(nodes, i);
-      unary[i] = prev == nullptr || (prev->kind == NodeKind::Token &&
+    const cst::Node& node = *nodes[i];
+    if (node.kind == cst::NodeKind::Token && is_prefix_operator(node.token)) {
+      const cst::Node* prev = previous_significant(nodes, i);
+      unary[i] = prev == nullptr || (prev->kind == cst::NodeKind::Token &&
                                      allows_prefix_after(prev->token));
     }
   }
 
   std::vector<Piece> pieces;
-  const Node* prev = nullptr;
+  const cst::Node* prev = nullptr;
   // The node immediately before this one, whatever it is: the gap the
   // source put between two nodes is what an error token's neighbours
   // are pinned against.
-  const Node* prev_node = nullptr;
+  const cst::Node* prev_node = nullptr;
   bool prev_generic = false;
   bool prev_unary = false;
   bool pending_break = false;
   bool suppress = false;
 
-  const auto is_error_token = [](const Node* node) {
-    return node != nullptr && node->kind == NodeKind::Token &&
-           node->token == TokenKind::Error;
+  const auto is_error_token = [](const cst::Node* node) {
+    return node != nullptr && node->kind == cst::NodeKind::Token &&
+           node->token == lexer::TokenKind::Error;
   };
   // The whitespace the source put around an error token, as its own
   // piece. An error's bytes re-lex as whatever the bytes around them
   // make of them -- a lone quote becomes a literal when a space opens
   // room for its closing half -- so the gap is pinned verbatim: it is
   // the one thing that keeps a second pass reading the same stream.
-  const auto pin_gap = [&](const Node& from, const Node& to) {
+  const auto pin_gap = [&](const cst::Node& from, const cst::Node& to) {
     usize gap_start = from.offset + from.length;
-    if (from.kind == NodeKind::Token && from.token == TokenKind::Error) {
+    if (from.kind == cst::NodeKind::Token &&
+        from.token == lexer::TokenKind::Error) {
       // The blanks an error span ends in are gap bytes, not span
       // bytes: the span re-absorbs one of them on every pass, so they
       // all ride in the gap and the count stays put.
@@ -710,8 +723,8 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
   };
 
   for (usize i = 0; i < nodes.size(); ++i) {
-    const Node& node = *nodes[i];
-    if (node.kind == NodeKind::Comment) {
+    const cst::Node& node = *nodes[i];
+    if (node.kind == cst::NodeKind::Comment) {
       Sep sep = Sep::None;
       if (!suppress && !pieces.empty()) {
         sep = Sep::Space;
@@ -724,7 +737,7 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
       // A comment that runs to end of line ends the line it sits on, so
       // what follows it has to start a new one. A block comment does
       // not: code may keep reading after it on the same line.
-      const bool runs_to_eol = node.comment != CommentKind::Block;
+      const bool runs_to_eol = node.comment != cst::CommentKind::Block;
       if (runs_to_eol) {
         std::vector<Doc> parts;
         parts.push_back(std::move(text));
@@ -740,8 +753,8 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
       continue;
     }
     Sep sep = Sep::None;
-    const bool near_error =
-        node.kind == NodeKind::Token && node.token == TokenKind::Error;
+    const bool near_error = node.kind == cst::NodeKind::Token &&
+                            node.token == lexer::TokenKind::Error;
     const bool after_comment_break = suppress;
     if (pieces.empty()) {
       sep = Sep::None;
@@ -755,10 +768,11 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
       sep = Sep::None;
     } else if (pending_break) {
       sep = allow_wrap ? Sep::Line : Sep::Space;
-    } else if (node.kind == NodeKind::Token && node.token == TokenKind::Dot &&
-               prev != nullptr && prev->kind == NodeKind::Token &&
-               (prev->token == TokenKind::Integer ||
-                prev->token == TokenKind::Float) &&
+    } else if (node.kind == cst::NodeKind::Token &&
+               node.token == lexer::TokenKind::Dot && prev != nullptr &&
+               prev->kind == cst::NodeKind::Token &&
+               (prev->token == lexer::TokenKind::Integer ||
+                prev->token == lexer::TokenKind::Float) &&
                dot_joins_number(i + 1 < nodes.size()
                                     ? node_text(source_, *nodes[i + 1])
                                     : std::string_view())) {
@@ -768,10 +782,11 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
       // token count of the output would differ from the tree's, so
       // the two never touch there.
       sep = Sep::Space;
-    } else if (node.kind == NodeKind::Token && node.token == TokenKind::Dot &&
-               !(prev != nullptr && prev->kind == NodeKind::Token &&
-                 (prev->token == TokenKind::Dot ||
-                  prev->token == TokenKind::DotDot))) {
+    } else if (node.kind == cst::NodeKind::Token &&
+               node.token == lexer::TokenKind::Dot &&
+               !(prev != nullptr && prev->kind == cst::NodeKind::Token &&
+                 (prev->token == lexer::TokenKind::Dot ||
+                  prev->token == lexer::TokenKind::DotDot))) {
       // The chain continues on the next line at a member boundary. In
       // the middle of a run of dots it must not: a break there
       // re-pairs the dots into range tokens on the next pass, and the
@@ -785,7 +800,8 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
     // the seam the layout actually wrote.
     if (sep == Sep::None && !after_comment_break && !near_error &&
         !is_error_token(prev_node) && prev_node != nullptr &&
-        prev_node->kind == NodeKind::Token && node.kind == NodeKind::Token &&
+        prev_node->kind == cst::NodeKind::Token &&
+        node.kind == cst::NodeKind::Token &&
         tokens_merge(node_text(source_, *prev_node),
                      node_text(source_, node))) {
       sep = Sep::Space;
@@ -793,8 +809,8 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
     pieces.push_back(Piece{node_doc(node), sep});
     // A generic bracket reads as a delimiter here, not as a comparison:
     // a break inside an argument list would space it flat.
-    pending_break = node.kind == NodeKind::Token && !unary[i] && !generic[i] &&
-                    is_break_after(node.token);
+    pending_break = node.kind == cst::NodeKind::Token && !unary[i] &&
+                    !generic[i] && is_break_after(node.token);
     prev = &node;
     prev_node = &node;
     prev_generic = generic[i];
@@ -803,26 +819,26 @@ Doc Printer::print_flow(const std::vector<const Node*>& nodes,
   return build_flow(std::move(pieces), allow_wrap);
 }
 
-Doc Printer::node_doc(const Node& node) {
+Doc Printer::node_doc(const cst::Node& node) {
   switch (node.kind) {
-    case NodeKind::Token:
-      if (node.token == TokenKind::Error) {
+    case cst::NodeKind::Token:
+      if (node.token == lexer::TokenKind::Error) {
         return doc_text(error_text(source_, node));
       }
       return doc_text(node_text(source_, node));
-    case NodeKind::Comment: return doc_text(node_text(source_, node));
-    case NodeKind::Group: return print_group(node);
-    case NodeKind::Sequence: return doc_empty();
+    case cst::NodeKind::Comment: return doc_text(node_text(source_, node));
+    case cst::NodeKind::Group: return print_group(node);
+    case cst::NodeKind::Sequence: return doc_empty();
   }
   return doc_empty();
 }
 
-Doc Printer::print_group(const Node& group) {
+Doc Printer::print_group(const cst::Node& group) {
   switch (group.group_role) {
-    case GroupRole::Paren: return print_list(group, "(", ")");
-    case GroupRole::Bracket: return print_list(group, "[", "]");
-    case GroupRole::Brace:
-      if (group.brace_role == BraceRole::Literal) {
+    case cst::GroupRole::Paren: return print_list(group, "(", ")");
+    case cst::GroupRole::Bracket: return print_list(group, "[", "]");
+    case cst::GroupRole::Brace:
+      if (group.brace_role == cst::BraceRole::Literal) {
         return print_literal(group);
       }
       return print_brace_body(group);
@@ -830,7 +846,7 @@ Doc Printer::print_group(const Node& group) {
   return doc_empty();
 }
 
-Doc Printer::print_brace_body(const Node& group) {
+Doc Printer::print_brace_body(const cst::Node& group) {
   const std::string close = group.has_closer ? "}" : "";
   if (group.kids.empty()) {
     std::vector<Doc> parts;
@@ -838,13 +854,13 @@ Doc Printer::print_brace_body(const Node& group) {
     parts.push_back(doc_text(close));
     return doc_concat(std::move(parts));
   }
-  const Node& inner = group.kids[0];
-  const BraceRole role = group.brace_role;
+  const cst::Node& inner = group.kids[0];
+  const cst::BraceRole role = group.brace_role;
   const std::vector<Chunk> chunks = collect_chunks(inner, role);
 
-  const bool member_body = role == BraceRole::ImplBody ||
-                           role == BraceRole::SpecBody ||
-                           role == BraceRole::ExternBody;
+  const bool member_body = role == cst::BraceRole::ImplBody ||
+                           role == cst::BraceRole::SpecBody ||
+                           role == cst::BraceRole::ExternBody;
   if (chunks.empty()) {
     // A member body still opens its lines: an impl that owns nothing
     // reads as the pair of braces the grammar gives it.
@@ -860,12 +876,12 @@ Doc Printer::print_brace_body(const Node& group) {
   // it wraps: on the line it started while it fits, over lines when it
   // does not. A comment that ends its line keeps it off the one-line
   // form, since the closer would land inside the comment.
-  if (role == BraceRole::ExprBlock && chunks.size() == 1 &&
+  if (role == cst::BraceRole::ExprBlock && chunks.size() == 1 &&
       !chunks[0].is_comment &&
       trailing_eol_start(chunks[0]) == chunks[0].nodes.size() &&
       chunks[0].newlines_before < 2) {
     const usize end = trailing_eol_start(chunks[0]);
-    std::vector<const Node*> code(
+    std::vector<const cst::Node*> code(
         chunks[0].nodes.begin(),
         chunks[0].nodes.begin() + static_cast<std::ptrdiff_t>(end));
     std::vector<Doc> inner_parts;
@@ -893,15 +909,16 @@ Doc Printer::print_brace_body(const Node& group) {
   return doc_concat(std::move(parts));
 }
 
-std::vector<Printer::Item> Printer::split_on_commas(const Node& seq,
+std::vector<Printer::Item> Printer::split_on_commas(const cst::Node& seq,
                                                     bool& had_comma,
                                                     bool& trailing) const {
   std::vector<Item> items;
   Item current;
   had_comma = false;
   trailing = false;
-  for (const Node& node : seq.kids) {
-    if (node.kind == NodeKind::Token && node.token == TokenKind::Comma) {
+  for (const cst::Node& node : seq.kids) {
+    if (node.kind == cst::NodeKind::Token &&
+        node.token == lexer::TokenKind::Comma) {
       had_comma = true;
       items.push_back(std::move(current));
       current = Item{};
@@ -917,7 +934,7 @@ std::vector<Printer::Item> Printer::split_on_commas(const Node& seq,
   return items;
 }
 
-Doc Printer::print_list(const Node& group,
+Doc Printer::print_list(const cst::Node& group,
                         std::string_view open,
                         std::string_view close) {
   if (group.kids.empty()) {
@@ -926,14 +943,14 @@ Doc Printer::print_list(const Node& group,
     parts.push_back(doc_text(close));
     return doc_concat(std::move(parts));
   }
-  const Node& inner = group.kids[0];
+  const cst::Node& inner = group.kids[0];
   bool had_comma = false;
   bool trailing = false;
   std::vector<Item> items = split_on_commas(inner, had_comma, trailing);
   if (!group.has_closer) {
-    std::vector<const Node*> nodes;
+    std::vector<const cst::Node*> nodes;
     nodes.reserve(inner.kids.size());
-    for (const Node& node : inner.kids) {
+    for (const cst::Node& node : inner.kids) {
       nodes.push_back(&node);
     }
     std::vector<Doc> parts;
@@ -984,11 +1001,11 @@ Doc Printer::print_list(const Node& group,
   return doc_group(doc_concat(std::move(out)));
 }
 
-Doc Printer::print_literal(const Node& group) {
+Doc Printer::print_literal(const cst::Node& group) {
   if (group.kids.empty()) {
     return doc_text("{}");
   }
-  const Node& inner = group.kids[0];
+  const cst::Node& inner = group.kids[0];
   bool had_comma = false;
   bool trailing = false;
   std::vector<Item> items = split_on_commas(inner, had_comma, trailing);
@@ -1050,11 +1067,11 @@ Doc Printer::print_literal(const Node& group) {
   return doc_group(doc_concat(std::move(out)));
 }
 
-std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
-                                                    BraceRole role) const {
-  const bool split_comma = role == BraceRole::StructBody ||
-                           role == BraceRole::EnumBody ||
-                           role == BraceRole::MatchBody;
+std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
+                                                    cst::BraceRole role) const {
+  const bool split_comma = role == cst::BraceRole::StructBody ||
+                           role == cst::BraceRole::EnumBody ||
+                           role == cst::BraceRole::MatchBody;
   std::vector<Chunk> chunks;
   Chunk current;
   // The previous lexeme ended a chunk: a comment on the same line as
@@ -1069,8 +1086,9 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
     }
   };
   usize separator_end = 0;
-  for (const Node& node : seq.kids) {
-    if (node.kind == NodeKind::Token && node.token == TokenKind::Semicolon) {
+  for (const cst::Node& node : seq.kids) {
+    if (node.kind == cst::NodeKind::Token &&
+        node.token == lexer::TokenKind::Semicolon) {
       // A semicolon with no chunk in front of it ends nothing: the
       // grammar skips a stray one, and its flag must not leak into the
       // chunk that follows.
@@ -1082,14 +1100,14 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
       separator_end = node.offset + node.length;
       continue;
     }
-    if (split_comma && node.kind == NodeKind::Token &&
-        node.token == TokenKind::Comma) {
+    if (split_comma && node.kind == cst::NodeKind::Token &&
+        node.token == lexer::TokenKind::Comma) {
       flush();
       after_separator = true;
       separator_end = node.offset + node.length;
       continue;
     }
-    if (node.kind == NodeKind::Comment) {
+    if (node.kind == cst::NodeKind::Comment) {
       const bool same_line = node.newlines_before == 0 &&
                              (!current.nodes.empty() || after_separator);
       if (same_line) {
@@ -1100,7 +1118,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
         } else {
           current.nodes.push_back(&node);
         }
-        if (node.comment == CommentKind::Line) {
+        if (node.comment == cst::CommentKind::Line) {
           flush();
         }
         after_separator = false;
@@ -1126,49 +1144,49 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const Node& seq,
 
 // Whether a run of nodes is one the lexer would end a statement after, so
 // the newline that replaces a spelled-out semicolon reads back as one.
-bool Printer::ends_like_statement(const std::vector<const Node*>& nodes) {
+bool Printer::ends_like_statement(const std::vector<const cst::Node*>& nodes) {
   for (usize i = nodes.size(); i > 0; --i) {
-    const Node& node = *nodes[i - 1];
-    if (node.kind == NodeKind::Comment) {
+    const cst::Node& node = *nodes[i - 1];
+    if (node.kind == cst::NodeKind::Comment) {
       continue;
     }
-    if (node.kind == NodeKind::Group) {
+    if (node.kind == cst::NodeKind::Group) {
       return node.has_closer;
     }
     switch (node.token) {
-      case TokenKind::Ident:
-      case TokenKind::Underscore:
-      case TokenKind::Integer:
-      case TokenKind::Float:
-      case TokenKind::String:
-      case TokenKind::Char:
-      case TokenKind::True:
-      case TokenKind::False:
-      case TokenKind::Break:
-      case TokenKind::Continue:
-      case TokenKind::Ret:
-      case TokenKind::Question:
-      case TokenKind::DotDot:
-      case TokenKind::DotDotEq:
-      case TokenKind::DotDotLess:
-      case TokenKind::Self:
-      case TokenKind::SelfType:
-      case TokenKind::I8:
-      case TokenKind::I16:
-      case TokenKind::I32:
-      case TokenKind::I64:
-      case TokenKind::I128:
-      case TokenKind::Isize:
-      case TokenKind::U8:
-      case TokenKind::U16:
-      case TokenKind::U32:
-      case TokenKind::U64:
-      case TokenKind::U128:
-      case TokenKind::Usize:
-      case TokenKind::F32:
-      case TokenKind::F64:
-      case TokenKind::Bool:
-      case TokenKind::Str: return true;
+      case lexer::TokenKind::Ident:
+      case lexer::TokenKind::Underscore:
+      case lexer::TokenKind::Integer:
+      case lexer::TokenKind::Float:
+      case lexer::TokenKind::String:
+      case lexer::TokenKind::Char:
+      case lexer::TokenKind::True:
+      case lexer::TokenKind::False:
+      case lexer::TokenKind::Break:
+      case lexer::TokenKind::Continue:
+      case lexer::TokenKind::Ret:
+      case lexer::TokenKind::Question:
+      case lexer::TokenKind::DotDot:
+      case lexer::TokenKind::DotDotEq:
+      case lexer::TokenKind::DotDotLess:
+      case lexer::TokenKind::Self:
+      case lexer::TokenKind::SelfType:
+      case lexer::TokenKind::I8:
+      case lexer::TokenKind::I16:
+      case lexer::TokenKind::I32:
+      case lexer::TokenKind::I64:
+      case lexer::TokenKind::I128:
+      case lexer::TokenKind::Isize:
+      case lexer::TokenKind::U8:
+      case lexer::TokenKind::U16:
+      case lexer::TokenKind::U32:
+      case lexer::TokenKind::U64:
+      case lexer::TokenKind::U128:
+      case lexer::TokenKind::Usize:
+      case lexer::TokenKind::F32:
+      case lexer::TokenKind::F64:
+      case lexer::TokenKind::Bool:
+      case lexer::TokenKind::Str: return true;
       default: return false;
     }
   }
@@ -1177,17 +1195,17 @@ bool Printer::ends_like_statement(const std::vector<const Node*>& nodes) {
 
 bool Printer::chunk_is_use(const Chunk& chunk) {
   for (usize i = 0; i < chunk.nodes.size(); ++i) {
-    const Node& node = *chunk.nodes[i];
-    if (node.kind != NodeKind::Token) {
+    const cst::Node& node = *chunk.nodes[i];
+    if (node.kind != cst::NodeKind::Token) {
       continue;
     }
-    if (node.token == TokenKind::Use) {
+    if (node.token == lexer::TokenKind::Use) {
       return true;
     }
-    if (node.token == TokenKind::Pub) {
+    if (node.token == lexer::TokenKind::Pub) {
       for (usize j = i + 1; j < chunk.nodes.size(); ++j) {
-        if (chunk.nodes[j]->kind == NodeKind::Token &&
-            chunk.nodes[j]->token == TokenKind::Use) {
+        if (chunk.nodes[j]->kind == cst::NodeKind::Token &&
+            chunk.nodes[j]->token == lexer::TokenKind::Use) {
           return true;
         }
       }
@@ -1203,8 +1221,9 @@ bool Printer::chunk_is_use(const Chunk& chunk) {
 usize Printer::trailing_eol_start(const Chunk& chunk) {
   usize end = chunk.nodes.size();
   while (end > 0) {
-    const Node& node = *chunk.nodes[end - 1];
-    if (node.kind != NodeKind::Comment || node.comment == CommentKind::Block) {
+    const cst::Node& node = *chunk.nodes[end - 1];
+    if (node.kind != cst::NodeKind::Comment ||
+        node.comment == cst::CommentKind::Block) {
       break;
     }
     --end;
@@ -1216,18 +1235,19 @@ usize Printer::trailing_eol_start(const Chunk& chunk) {
 // expression: a match arm whose body is a block takes no separator
 // after it, while one whose body is a match or a struct literal is an
 // expression arm and keeps its comma.
-bool Printer::ends_in_block(const std::vector<const Node*>& code) {
+bool Printer::ends_in_block(const std::vector<const cst::Node*>& code) {
   for (usize i = code.size(); i > 0; --i) {
-    const Node* node = code[i - 1];
-    if (node->kind == NodeKind::Comment) {
+    const cst::Node* node = code[i - 1];
+    if (node->kind == cst::NodeKind::Comment) {
       continue;
     }
-    if (node->kind != NodeKind::Group || node->group_role != GroupRole::Brace) {
+    if (node->kind != cst::NodeKind::Group ||
+        node->group_role != cst::GroupRole::Brace) {
       return false;
     }
-    return node->brace_role == BraceRole::Block ||
-           node->brace_role == BraceRole::ExprBlock ||
-           node->brace_role == BraceRole::FnBody;
+    return node->brace_role == cst::BraceRole::Block ||
+           node->brace_role == cst::BraceRole::ExprBlock ||
+           node->brace_role == cst::BraceRole::FnBody;
   }
   return false;
 }
@@ -1245,10 +1265,10 @@ bool Printer::ends_in_block(const std::vector<const Node*>& code) {
 // writes reads the same to the compiler, but the grammar spells these
 // terminators, so the layout does too.
 bool Printer::chunk_is_semi_terminated_item(const Chunk& chunk) {
-  for (const Node* node : chunk.nodes) {
-    if (node->kind == NodeKind::Token &&
-        (node->token == TokenKind::Use ||
-         node->token == TokenKind::Intrinsic)) {
+  for (const cst::Node* node : chunk.nodes) {
+    if (node->kind == cst::NodeKind::Token &&
+        (node->token == lexer::TokenKind::Use ||
+         node->token == lexer::TokenKind::Intrinsic)) {
       return true;
     }
   }
@@ -1260,24 +1280,24 @@ bool Printer::chunk_is_semi_terminated_item(const Chunk& chunk) {
 // stand in for a semicolon, so the spelled one ahead of it cannot be
 // dropped without merging the two chunks into one.
 bool Printer::chunk_starts_with_suppressor(const Chunk& chunk) {
-  for (const Node* node : chunk.nodes) {
-    if (node->kind != NodeKind::Token) {
+  for (const cst::Node* node : chunk.nodes) {
+    if (node->kind != cst::NodeKind::Token) {
       return false;
     }
     switch (node->token) {
-      case TokenKind::Comma:
-      case TokenKind::RParen:
-      case TokenKind::RBracket:
-      case TokenKind::RBrace:
-      case TokenKind::Dot:
+      case lexer::TokenKind::Comma:
+      case lexer::TokenKind::RParen:
+      case lexer::TokenKind::RBracket:
+      case lexer::TokenKind::RBrace:
+      case lexer::TokenKind::Dot:
       // The whole dot family: the lexer's probe reads the next
       // character, and every token that starts with a dot reads as a
       // chain continuation to it, so a line break before any of them
       // stands without a semicolon.
-      case TokenKind::DotDot:
-      case TokenKind::DotDotEq:
-      case TokenKind::DotDotLess:
-      case TokenKind::Else: return true;
+      case lexer::TokenKind::DotDot:
+      case lexer::TokenKind::DotDotEq:
+      case lexer::TokenKind::DotDotLess:
+      case lexer::TokenKind::Else: return true;
       default: return false;
     }
   }
@@ -1285,8 +1305,8 @@ bool Printer::chunk_starts_with_suppressor(const Chunk& chunk) {
 }
 
 bool Printer::keeps_semicolon(const Chunk& chunk,
-                              const std::vector<const Node*>& code,
-                              BraceRole role,
+                              const std::vector<const cst::Node*>& code,
+                              cst::BraceRole role,
                               bool last_chunk,
                               bool next_suppresses) {
   // The items the grammar terminates with a semicolon carry it whether
@@ -1299,7 +1319,7 @@ bool Printer::keeps_semicolon(const Chunk& chunk,
   if (!chunk.explicit_semi) {
     return false;
   }
-  if (role == BraceRole::SpecBody || role == BraceRole::ExternBody) {
+  if (role == cst::BraceRole::SpecBody || role == cst::BraceRole::ExternBody) {
     return true;
   }
   if (next_suppresses) {
@@ -1318,7 +1338,7 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
     return doc_text(node_text(source_, *chunk.nodes.front()));
   }
   const usize end = trailing_eol_start(chunk);
-  std::vector<const Node*> code(
+  std::vector<const cst::Node*> code(
       chunk.nodes.begin(),
       chunk.nodes.begin() + static_cast<std::ptrdiff_t>(end));
   std::vector<Doc> parts;
@@ -1335,12 +1355,12 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
   // feed them to the span.
   for (usize i = end; i < chunk.nodes.size(); ++i) {
     if (end > 0) {
-      const Node& last_code = *chunk.nodes[end - 1];
-      const Node& comment = *chunk.nodes[i];
+      const cst::Node& last_code = *chunk.nodes[end - 1];
+      const cst::Node& comment = *chunk.nodes[i];
       const bool rides_separator =
           i == end && chunk.has_riding_gap && chunk.riding_gap_start > 0;
-      if (last_code.kind == NodeKind::Token &&
-          last_code.token == TokenKind::Error) {
+      if (last_code.kind == cst::NodeKind::Token &&
+          last_code.token == lexer::TokenKind::Error) {
         const usize gap_start =
             rides_separator
                 ? chunk.riding_gap_start
@@ -1363,11 +1383,11 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
 
 // One chunk per line, with the blank lines the source had between them.
 Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
-                              BraceRole role,
+                              cst::BraceRole role,
                               bool top_level) {
-  const bool member = top_level || role == BraceRole::ImplBody ||
-                      role == BraceRole::SpecBody ||
-                      role == BraceRole::ExternBody;
+  const bool member = top_level || role == cst::BraceRole::ImplBody ||
+                      role == cst::BraceRole::SpecBody ||
+                      role == cst::BraceRole::ExternBody;
   std::vector<Doc> parts;
   for (usize k = 0; k < chunks.size(); ++k) {
     if (k > 0) {
@@ -1397,7 +1417,7 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
       }
     }
     const usize end = trailing_eol_start(chunks[k]);
-    std::vector<const Node*> code(
+    std::vector<const cst::Node*> code(
         chunks[k].nodes.begin(),
         chunks[k].nodes.begin() + static_cast<std::ptrdiff_t>(end));
     bool next_suppresses = false;
@@ -1421,35 +1441,36 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
 // spelled with a semicolon keeps it; everywhere else only a
 // load-bearing semicolon appears.
 Doc Printer::chunk_terminator(const Chunk& chunk,
-                              const std::vector<const Node*>& code,
-                              BraceRole role,
+                              const std::vector<const cst::Node*>& code,
+                              cst::BraceRole role,
                               bool last_chunk,
                               bool next_suppresses) {
   for (usize i = code.size(); i > 0; --i) {
-    const Node* node = code[i - 1];
-    if (node->kind == NodeKind::Comment) {
+    const cst::Node* node = code[i - 1];
+    if (node->kind == cst::NodeKind::Comment) {
       continue;
     }
     // A chunk that ends in a delimiter the source never closed eats
     // whatever follows it in the output, so the next pass would read a
     // terminator as part of the group's contents. No terminator is
     // written after one.
-    if (node->kind == NodeKind::Group && !node->has_closer) {
+    if (node->kind == cst::NodeKind::Group && !node->has_closer) {
       return doc_empty();
     }
     // A hungry error eats a separator the same way; a complete one
     // ended where it ended, and the separator after it reads back as a
     // separator.
-    if (node->kind == NodeKind::Token && node->token == TokenKind::Error &&
+    if (node->kind == cst::NodeKind::Token &&
+        node->token == lexer::TokenKind::Error &&
         error_absorbs(error_text(source_, *node))) {
       return doc_empty();
     }
     break;
   }
-  if (role == BraceRole::StructBody || role == BraceRole::EnumBody) {
+  if (role == cst::BraceRole::StructBody || role == cst::BraceRole::EnumBody) {
     return doc_text(",");
   }
-  if (role == BraceRole::MatchBody) {
+  if (role == cst::BraceRole::MatchBody) {
     if (chunk.explicit_semi) {
       return doc_text(";");
     }
@@ -1463,11 +1484,12 @@ Doc Printer::chunk_terminator(const Chunk& chunk,
              : doc_empty();
 }
 
-Doc Printer::print_line(const std::vector<const Node*>& nodes) {
+Doc Printer::print_line(const std::vector<const cst::Node*>& nodes) {
   bool has_block = false;
-  for (const Node* node : nodes) {
-    if (node->kind == NodeKind::Group && node->group_role == GroupRole::Brace &&
-        node->brace_role != BraceRole::Literal) {
+  for (const cst::Node* node : nodes) {
+    if (node->kind == cst::NodeKind::Group &&
+        node->group_role == cst::GroupRole::Brace &&
+        node->brace_role != cst::BraceRole::Literal) {
       has_block = true;
       break;
     }
@@ -1478,8 +1500,8 @@ Doc Printer::print_line(const std::vector<const Node*>& nodes) {
 }  // namespace
 
 std::string format(std::string_view source, const FormatConfig& config) {
-  const std::vector<Lexeme> lexemes = lex(source);
-  const Node root = build_cst(lexemes);
+  const std::vector<cst::Lexeme> lexemes = cst::lex(source);
+  const cst::Node root = cst::build_cst(lexemes);
   Printer printer(source, config);
   const Doc document = printer.run(root);
   std::string out = render(document, config.line_length);

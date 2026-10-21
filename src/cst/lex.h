@@ -9,7 +9,7 @@
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
 
-namespace alcy_fmt {
+namespace cst {
 
 // Which comment a trivia run is.
 enum class CommentKind : u8 { Line, Block, Doc };
@@ -40,4 +40,4 @@ std::vector<Lexeme> lex(std::string_view source);
 // The bytes a lexeme covers.
 std::string_view text_of(std::string_view source, u32 offset, u32 length);
 
-}  // namespace alcy_fmt
+}  // namespace cst
