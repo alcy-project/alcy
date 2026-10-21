@@ -85,6 +85,14 @@ void Lowerer::comp_overflow(diag::Span span) {
   failed = true;
 }
 
+void Lowerer::comp_div_zero(diag::Span span) {
+  const u32 index = bag.emit<i18n::Key::LowerCompDivisionByZero>(
+      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompDivZero,
+      span);
+  (void)index;
+  failed = true;
+}
+
 ir::TypeIdx Lowerer::error_type() {
   return builder.error_type();
 }

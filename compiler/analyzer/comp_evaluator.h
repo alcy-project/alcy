@@ -82,6 +82,7 @@ class CompEvaluator {
   bool failed() const { return failed_; }
   bool failure_is_internal() const { return fail_internal_; }
   bool failure_is_overflow() const { return fail_overflow_; }
+  bool failure_is_div_zero() const { return fail_div_zero_; }
   diag::Span failure_span() const { return fail_span_; }
   std::string_view failure() const { return fail_what_; }
   void clear_failure();
@@ -139,6 +140,9 @@ class CompEvaluator {
   // A program error, not an engine limit: the constant expression
   // overflows, which has a diagnostic of its own.
   bool fail_overflow(diag::Span span, std::string_view what);
+  // A program error, not an engine limit: the constant expression
+  // divides by zero, which has a diagnostic of its own.
+  bool fail_div_zero(diag::Span span, std::string_view what);
   // Spends one quota unit; false once the quota is exhausted.
   bool spend(diag::Span span);
 
@@ -253,6 +257,7 @@ class CompEvaluator {
   bool failed_ = false;
   bool fail_internal_ = false;
   bool fail_overflow_ = false;
+  bool fail_div_zero_ = false;
   diag::Span fail_span_{};
   std::string_view fail_what_;
   // The indexes the evaluator used to walk for: a type's instantiation

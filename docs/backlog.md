@@ -830,6 +830,13 @@ replaced. The foundations are in `roadmap.md`.
   one-argument call read `expects 1 arguments`. The call, closure,
   variant-call, variant-field, and format-placeholder counts carry the
   singular suffix now. `err-call-arity-singular` holds the call case.
+- [x] A constant expression that divided by zero reported `Construct
+  'division by zero in comp evaluation' is not supported in this
+  lowering slice`: the AST evaluator's generic failure category became
+  the lowering's unsupported-construct message. Division by zero is its
+  own failure now, with `Division by zero in constant evaluation`
+  (ED015) the way overflow already had one. `err-comp-div-zero` holds
+  it.
 - [x] A type mismatch between two nominals, two instantiations, or two
   closure signatures printed only the kind twice (`expected 'struct',
   found 'struct'`). Diagnostics spell the type the way the source

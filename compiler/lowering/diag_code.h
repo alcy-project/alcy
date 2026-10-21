@@ -36,6 +36,9 @@ enum class DiagCode : u8 {
   // A constant expression the compiler evaluated overflows its type
   // (ADR-0065): the program is refused rather than read as wrapping.
   CompOverflow = 9,
+  // A constant expression the compiler evaluated divides by zero: the
+  // program is refused the way a checked build refuses it at runtime.
+  CompDivZero = 15,
   // A non-`Copy` value read through a shared or exclusive reference:
   // taking it would leave the referent owned twice.
   ValueOutOfBorrow = 10,

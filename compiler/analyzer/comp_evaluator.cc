@@ -131,6 +131,7 @@ bool CompEvaluator::fail(diag::Span span, std::string_view what) {
     failed_ = true;
     fail_internal_ = false;
     fail_overflow_ = false;
+    fail_div_zero_ = false;
     fail_span_ = span;
     fail_what_ = what;
   }
@@ -142,6 +143,7 @@ bool CompEvaluator::fail_internal(diag::Span span, std::string_view what) {
     failed_ = true;
     fail_internal_ = true;
     fail_overflow_ = false;
+    fail_div_zero_ = false;
     fail_span_ = span;
     fail_what_ = what;
   }
@@ -153,6 +155,19 @@ bool CompEvaluator::fail_overflow(diag::Span span, std::string_view what) {
     failed_ = true;
     fail_internal_ = false;
     fail_overflow_ = true;
+    fail_div_zero_ = false;
+    fail_span_ = span;
+    fail_what_ = what;
+  }
+  return false;
+}
+
+bool CompEvaluator::fail_div_zero(diag::Span span, std::string_view what) {
+  if (!failed_) {
+    failed_ = true;
+    fail_internal_ = false;
+    fail_overflow_ = false;
+    fail_div_zero_ = true;
     fail_span_ = span;
     fail_what_ = what;
   }
@@ -171,6 +186,7 @@ void CompEvaluator::clear_failure() {
   failed_ = false;
   fail_internal_ = false;
   fail_overflow_ = false;
+  fail_div_zero_ = false;
   fail_span_ = diag::Span{};
   fail_what_ = {};
 }
@@ -1722,7 +1738,7 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
     case ast::BinaryOp::Div:
     case ast::BinaryOp::Mod: {
       if (right == 0) {
-        return fail(node.span, "division by zero in comp evaluation");
+        return fail_div_zero(node.span, "division by zero in comp evaluation");
       }
       if (comp::is_signed(tag)) {
         const i64 sl = comp::sign_extend(left, tag);
