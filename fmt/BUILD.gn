@@ -3,10 +3,13 @@
 
 # The formatter is a module beside the compiler rather than a stage inside
 # it: it reads source for people, not for the pipeline, and the compiler
-# never depends on it. Its headers are included as "fmt/src/...", so the
+# never depends on it. Its headers are included as "fmt/...", so the
 # repository root is on the include path for the target and for everything
-# that depends on it. The "src" level keeps the formatter's headers out of
-# the "fmt/..." prefix the vendored formatting library owns.
+# that depends on it. The vendored formatting library owns the flat
+# "fmt/<name>.h" spellings it ships (args, base, chrono, color, compile,
+# core, enum, format, format-inl, os, ostream, printf, ranges, std,
+# xchar); a file under fmt/ never takes one of those names, so the two
+# "fmt/..." prefixes cannot meet.
 config("fmt_config") {
   include_dirs = [
     "//",
@@ -16,14 +19,14 @@ config("fmt_config") {
 
 source_set("alcy_fmt") {
   sources = [
-    "src/cst.cc",
-    "src/cst.h",
-    "src/doc.cc",
-    "src/doc.h",
-    "src/format.cc",
-    "src/format.h",
-    "src/lex.cc",
-    "src/lex.h",
+    "cst.cc",
+    "cst.h",
+    "doc.cc",
+    "doc.h",
+    "formatter.cc",
+    "formatter.h",
+    "lex.cc",
+    "lex.h",
   ]
   deps = [
     "//compiler:base_modules",

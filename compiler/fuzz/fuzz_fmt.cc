@@ -22,7 +22,7 @@
 #include <string_view>
 #include <vector>
 
-#include "fmt/src/format.h"
+#include "fmt/formatter.h"
 #include "fpag/base/numeric.h"
 
 extern "C" i32 LLVMFuzzerTestOneInput(const u8* data, usize size) {

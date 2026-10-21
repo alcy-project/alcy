@@ -5,7 +5,7 @@
 
 #include <vector>
 
-#include "fmt/src/lex.h"
+#include "fmt/lex.h"
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
 

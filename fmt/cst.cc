@@ -1,12 +1,12 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "fmt/src/cst.h"
+#include "fmt/cst.h"
 
 #include <utility>
 #include <vector>
 
-#include "fmt/src/lex.h"
+#include "fmt/lex.h"
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
 

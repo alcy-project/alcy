@@ -23,7 +23,9 @@ reports rather than writes with `--check`.
 - `doc`: a small layout algebra - text, line, group, nest - and a
   renderer that chooses between a flat and a broken rendering for each
   group against the width it was given.
-- `format`: the public entry point, `format(source, config)`.
+- `formatter`: the public entry point, `format(source, config)`. The
+  header is named for the thing the module declares, per the naming
+  rule the tree documents.
 
 ## Layout
 

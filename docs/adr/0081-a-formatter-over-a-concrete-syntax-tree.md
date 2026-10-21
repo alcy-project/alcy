@@ -59,8 +59,10 @@ parameters are injected while it holds no configuration of its own.**
 
 The library lives beside the compiler rather than inside it: the
 compiler never depends on it, and it leans on the lexer alone. Its
-headers sit under `fmt/src/` so the `fmt/...` prefix the vendored
-formatting library owns stays that library's.
+headers take the flat `fmt/...` spelling the module's directory gives
+them. The vendored formatting library owns a fixed set of flat
+`fmt/<name>.h` spellings of its own, and the module's files never
+reuse one of those names, so the two prefixes cannot meet.
 
 ## Consequences
 

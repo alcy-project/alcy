@@ -14,7 +14,7 @@
 #include "cli/result_code.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
-#include "fmt/src/format.h"
+#include "fmt/formatter.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
