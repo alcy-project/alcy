@@ -153,6 +153,12 @@ replaced. The foundations are in `roadmap.md`.
   belongs to the package's build rather than a dependent's.
   `dependencies_test` calls `Pair::new` and `p.total()` with the
   library's sources gone.
+- [ ] A generic whose signature names an owning function type cannot be
+  checked once, because the closure's witness is per instantiation
+  (ADR-0075): the type the body returns is not the type the declaration
+  names. Making the closure's type carry its own parameters is what
+  would let such a generic be checked once, and cross a package
+  boundary with the rest.
 - [ ] The generic boundary in a summary: a `needs_body` row is
   omitted, so a dependent that names a generic item reads "Unresolved
   import" without learning why. The IR has no parameterized types (its
