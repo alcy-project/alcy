@@ -840,14 +840,15 @@ replaced. The foundations are in `roadmap.md`.
   its magnitude needs it (a value past `i32`); otherwise it keeps its
   default and the cast converts. A magnitude past every type it could
   take is still refused. `exe-cast-literal` holds it.
-- [ ] The exponent form of a float loses mantissa digits: the
-  scientific branch normalizes to [1, 10) by multiplying by 0.1 once
-  per decade, and the roundings accumulate, so `{:.17f}` of
-  `f64::MAX` prints `1.79769313486234683e308` where the value's own
-  digits are `1.79769313486231570e308` (the spec promises about
-  sixteen significant digits). Scaling by a power of ten computed in
-  one step, or by an exact power of two beside a short decimal
-  correction, would keep the roundings to a handful.
+- [x] The exponent form of a float lost mantissa digits: the
+  scientific branch normalized to [1, 10) by multiplying by 0.1 once
+  per decade, and the roundings accumulated, so `{:.16f}` of
+  `f64::MAX` printed `1.7976931348623468e308` where the value's own
+  digits are `1.7976931348623157e308`. The mantissa is rebuilt from
+  the original magnitude and one correctly-rounded power of ten (a
+  table entry and an exact product of tens), with the loop's own value
+  standing in only for a subnormal, where the power is past the
+  largest double. `exe-fmt-exponent` holds it.
 - [x] A struct move-update (`S { a: new, ..base }`) with non-`Copy`
   fields was refused with "Use of moved" on a named base and leaked
   the overwritten field on a temporary one: the lowering marked the

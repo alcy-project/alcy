@@ -942,25 +942,161 @@ bool Lowerer::emit_fmt_pieces(diag::Span span,
     }
     switch_to(norm_exit);
     {
-      const ir::RegisterIdx m =
-          emit(ir::Opcode::Load, f64_ty, {to_operand(m_addr, f64_ty)});
       const ir::RegisterIdx e =
           emit(ir::Opcode::Load, i32_ty, {to_operand(e_addr, i32_ty)});
+      auto i32_imm = [&](i64 value) {
+        return to_operand(
+            builder.immutable({.type = i32_ty, .data = {.i64_value = value}}),
+            i32_ty);
+      };
+      // Rebuild the mantissa from the original magnitude and a power of
+      // ten built from one table entry (a multiple of sixteen) and an
+      // exact product of tens. The normalization loop's repeated tenths
+      // accumulate a rounding per decade, which leaves the exponent
+      // form's last digits wrong; two scaled products keep the value's
+      // own digits.
+      const ir::RegisterIdx below_zero =
+          emit(ir::Opcode::Lt, boolean, {to_operand(e, i32_ty), zero_e});
+      const ir::RegisterIdx negated_places =
+          emit(ir::Opcode::IntSub, i32_ty, {zero_e, to_operand(e, i32_ty)});
+      const ir::RegisterIdx places =
+          emit(ir::Opcode::Select, i32_ty,
+               {to_operand(below_zero, boolean),
+                to_operand(negated_places, i32_ty), to_operand(e, i32_ty)});
+      // One power of ten, held as a table entry (a multiple of sixteen)
+      // and an exact product of tens, since ten to the fifteenth is the
+      // last that fits a double exactly.
+      auto pow10 = [](u32 exponent) -> f64 {
+        std::string text = "1";
+        text.append(exponent, '0');
+        return std::strtod(text.c_str(), nullptr);
+      };
+      const ir::RegisterIdx chunk =
+          emit(ir::Opcode::UintDiv, i32_ty,
+               {to_operand(places, i32_ty), i32_imm(16)});
+      const ir::RegisterIdx chunk_scaled = emit(
+          ir::Opcode::IntMul, i32_ty, {to_operand(chunk, i32_ty), i32_imm(16)});
+      const ir::RegisterIdx rest =
+          emit(ir::Opcode::IntSub, i32_ty,
+               {to_operand(places, i32_ty), to_operand(chunk_scaled, i32_ty)});
+      ir::OperandIdx high = f64_imm(pow10(0));
+      for (u32 i = 1; i <= 20; ++i) {
+        const ir::RegisterIdx hit = emit(
+            ir::Opcode::Eq, boolean, {to_operand(chunk, i32_ty), i32_imm(i)});
+        const ir::RegisterIdx chosen =
+            emit(ir::Opcode::Select, f64_ty,
+                 {to_operand(hit, boolean), f64_imm(pow10(16 * i)), high});
+        high = to_operand(chosen, f64_ty);
+      }
+      const ir::RegisterIdx low_addr =
+          emit(ir::Opcode::Alloca, f64_ty, {size_one});
+      emit_void(ir::Opcode::Store,
+                {f64_imm(1.0), to_operand(low_addr, f64_ty)});
+      const ir::RegisterIdx count_addr =
+          emit(ir::Opcode::Alloca, i32_ty, {size_one});
+      emit_void(ir::Opcode::Store, {zero_e, to_operand(count_addr, i32_ty)});
+      const ir::BlockIdx low_head = reserve_block();
+      const ir::BlockIdx low_body = reserve_block();
+      const ir::BlockIdx low_exit = reserve_block();
+      emit_br(low_head);
+      switch_to(low_head);
+      {
+        const ir::RegisterIdx at =
+            emit(ir::Opcode::Load, i32_ty, {to_operand(count_addr, i32_ty)});
+        const ir::RegisterIdx more =
+            emit(ir::Opcode::Lt, boolean,
+                 {to_operand(at, i32_ty), to_operand(rest, i32_ty)});
+        emit_cond_br(to_operand(more, boolean), low_body, low_exit);
+      }
+      switch_to(low_body);
+      {
+        const ir::RegisterIdx value =
+            emit(ir::Opcode::Load, f64_ty, {to_operand(low_addr, f64_ty)});
+        const ir::RegisterIdx grown =
+            emit(ir::Opcode::FMul, f64_ty,
+                 {to_operand(value, f64_ty), f64_imm(10.0)});
+        emit_void(ir::Opcode::Store,
+                  {to_operand(grown, f64_ty), to_operand(low_addr, f64_ty)});
+        const ir::RegisterIdx at =
+            emit(ir::Opcode::Load, i32_ty, {to_operand(count_addr, i32_ty)});
+        const ir::RegisterIdx next = emit(ir::Opcode::IntAdd, i32_ty,
+                                          {to_operand(at, i32_ty), i32_imm(1)});
+        emit_void(ir::Opcode::Store,
+                  {to_operand(next, i32_ty), to_operand(count_addr, i32_ty)});
+        emit_br(low_head);
+      }
+      switch_to(low_exit);
+      const ir::RegisterIdx low =
+          emit(ir::Opcode::Load, f64_ty, {to_operand(low_addr, f64_ty)});
+      const ir::RegisterIdx whole =
+          emit(ir::Opcode::FMul, f64_ty, {high, to_operand(low, f64_ty)});
+      // A power past the largest double only arises for a subnormal
+      // magnitude, where the loop's own mantissa stands in.
+      const ir::RegisterIdx overflowed =
+          emit(ir::Opcode::Gt, boolean,
+               {to_operand(whole, f64_ty), f64_imm(1.7976931348623157e308)});
+      const ir::RegisterIdx direct_tiny =
+          emit(ir::Opcode::FMul, f64_ty,
+               {to_operand(magnitude, f64_ty), to_operand(whole, f64_ty)});
+      const ir::RegisterIdx fallback =
+          emit(ir::Opcode::Load, f64_ty, {to_operand(m_addr, f64_ty)});
+      const ir::RegisterIdx tiny =
+          emit(ir::Opcode::Select, f64_ty,
+               {to_operand(overflowed, boolean), to_operand(fallback, f64_ty),
+                to_operand(direct_tiny, f64_ty)});
+      const ir::RegisterIdx divided =
+          emit(ir::Opcode::FDiv, f64_ty,
+               {to_operand(magnitude, f64_ty), to_operand(whole, f64_ty)});
+      const ir::RegisterIdx mantissa =
+          emit(ir::Opcode::Select, f64_ty,
+               {to_operand(big, boolean), to_operand(divided, f64_ty),
+                to_operand(tiny, f64_ty)});
+      // The loop's count can land one place off at a power of ten, so
+      // the recomputed mantissa is pulled back into [1, 10) and the
+      // exponent follows.
+      const ir::RegisterIdx too_big =
+          emit(ir::Opcode::Ge, boolean,
+               {to_operand(mantissa, f64_ty), f64_imm(10.0)});
+      const ir::RegisterIdx too_small =
+          emit(ir::Opcode::Lt, boolean,
+               {to_operand(mantissa, f64_ty), f64_imm(1.0)});
+      const ir::RegisterIdx halved =
+          emit(ir::Opcode::FMul, f64_ty,
+               {to_operand(mantissa, f64_ty), f64_imm(0.1)});
+      const ir::RegisterIdx doubled =
+          emit(ir::Opcode::FMul, f64_ty,
+               {to_operand(mantissa, f64_ty), f64_imm(10.0)});
+      const ir::RegisterIdx picked =
+          emit(ir::Opcode::Select, f64_ty,
+               {to_operand(too_small, boolean), to_operand(doubled, f64_ty),
+                to_operand(mantissa, f64_ty)});
+      const ir::RegisterIdx m =
+          emit(ir::Opcode::Select, f64_ty,
+               {to_operand(too_big, boolean), to_operand(halved, f64_ty),
+                to_operand(picked, f64_ty)});
+      const ir::RegisterIdx raised =
+          emit(ir::Opcode::IntAdd, i32_ty, {to_operand(e, i32_ty), i32_imm(1)});
+      const ir::RegisterIdx e_high =
+          emit(ir::Opcode::Select, i32_ty,
+               {to_operand(too_big, boolean), to_operand(raised, i32_ty),
+                to_operand(e, i32_ty)});
+      const ir::RegisterIdx lowered = emit(
+          ir::Opcode::IntSub, i32_ty, {to_operand(e_high, i32_ty), i32_imm(1)});
+      const ir::RegisterIdx base_e =
+          emit(ir::Opcode::Select, i32_ty,
+               {to_operand(too_small, boolean), to_operand(lowered, i32_ty),
+                to_operand(e_high, i32_ty)});
       ir::RegisterIdx folded = ir::RegisterIdx(base::INVALID_IDX);
       if (!emit_magnitude(m, digits, trim, /*fold=*/true, folded)) {
         return false;
       }
       // A mantissa that rounded up to ten is one step of the exponent.
       const ir::RegisterIdx bumped = emit(
-          ir::Opcode::IntAdd, i32_ty,
-          {to_operand(e, i32_ty),
-           to_operand(
-               builder.immutable({.type = i32_ty, .data = {.i64_value = 1}}),
-               i32_ty)});
+          ir::Opcode::IntAdd, i32_ty, {to_operand(base_e, i32_ty), i32_imm(1)});
       const ir::RegisterIdx exponent =
           emit(ir::Opcode::Select, i32_ty,
                {to_operand(folded, boolean), to_operand(bumped, i32_ty),
-                to_operand(e, i32_ty)});
+                to_operand(base_e, i32_ty)});
       ir::OperandIdx ptr = ir::OperandIdx::invalid();
       ir::OperandIdx len = ir::OperandIdx::invalid();
       if (!const_str("e", ptr, len) || !bounded_copy(ptr, len, len)) {
