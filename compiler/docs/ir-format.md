@@ -262,8 +262,10 @@ params_head u32, params_size u32 }`.
 **FUNCS**: `{ ret u32, params_head u32, params_size u32 }`.
 
 **FUNCTIONS**: `{ return_type u32, param_head u32, param_size u32,
-name u32, path u32, kind u8, pad u8[3], generics_head u32,
-generics_size u32, blocks_head u32, blocks_size u32 }`.
+name u32, path u32, owner u32, kind u8, pad u8[3], generics_head u32,
+generics_size u32, blocks_head u32, blocks_size u32 }`. `owner` is the
+`TYPES` row of the nominal an associated function or a method is
+declared on, and `U32_MAX` for a free function.
 
 **BLOCKS**: `{ instrs_head u32, instrs_size u32, params_head u32,
 params_size u32 }`.
@@ -287,8 +289,8 @@ immutable, `aux` is the string index and `value` is 0; for every other
 tag, `aux` is 0 and `value` is the union's bytes.
 
 **EXTERNALS**: `{ return_type u32, param_head u32, param_size u32,
-name u32, path u32, kind u8, cc u8, pad u8[2], generics_head u32,
-generics_size u32 }`.
+name u32, path u32, owner u32, kind u8, cc u8, pad u8[2],
+generics_head u32, generics_size u32 }`.
 
 **FILES**: `{ name u32, pad u32, hash u8[16] }`, one per file the spans
 name, in `FileId` order. `hash` is the file's XXH3-128 content digest,

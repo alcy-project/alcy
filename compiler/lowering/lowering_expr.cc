@@ -1421,9 +1421,10 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
     }
     comp_args.push_back(std::move(arg));
   }
-  const ir::FunctionIdx fn = fn_index(
-      target->module, info.item, info.name, info.params, info.ret,
-      callee_inst(target), std::move(comp_args), ir::SymbolKind::Assoc);
+  const ir::FunctionIdx fn =
+      fn_index(target->module, info.item, info.name, info.params, info.ret,
+               callee_inst(target), std::move(comp_args), ir::SymbolKind::Assoc,
+               /*extra_generics=*/{}, info.self_type);
   if (!fn.is_valid()) {
     internal(call.span, "call without function");
     return Val{size_one, error_type(), false, false};
@@ -2992,7 +2993,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   ir::FunctionIdx fn =
       fn_index(target->module, info.item, info.name, info.params, info.ret,
                callee_inst(target), std::move(comp_args),
-               ir::SymbolKind::Method, info.method_args);
+               ir::SymbolKind::Method, info.method_args, info.self_type);
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
@@ -3044,7 +3045,8 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
   }
   const ir::FunctionIdx fn = fn_index(
       target->module, info.item, info.name, info.params, info.ret,
-      callee_inst(target), std::vector<CompVal>{}, ir::SymbolKind::Method);
+      callee_inst(target), std::vector<CompVal>{}, ir::SymbolKind::Method,
+      /*extra_generics=*/{}, info.self_type);
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), as_place, false};
   }
@@ -3085,7 +3087,8 @@ Val Lowerer::emit_spec_call(const analyzer::CheckedModule::CallTarget* target,
   }
   const ir::FunctionIdx fn = fn_index(
       target->module, info.item, info.name, info.params, info.ret,
-      callee_inst(target), std::vector<CompVal>{}, ir::SymbolKind::Method);
+      callee_inst(target), std::vector<CompVal>{}, ir::SymbolKind::Method,
+      /*extra_generics=*/{}, info.self_type);
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }

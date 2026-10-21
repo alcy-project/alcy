@@ -443,6 +443,7 @@ class Serializer {
       write_range(out, meta.param_types);
       out.put_u32(string_index(meta.name));
       out.put_u32(string_index(meta.path));
+      out.put_u32(meta.owner.idx);
       out.put_u8(static_cast<u8>(meta.kind));
       out.zeros(3);
       write_range(out, meta.generics);
@@ -544,6 +545,7 @@ class Serializer {
       write_range(out, meta.param_types);
       out.put_u32(string_index(meta.name));
       out.put_u32(string_index(meta.path));
+      out.put_u32(meta.owner.idx);
       out.put_u8(static_cast<u8>(meta.kind));
       out.put_u8(static_cast<u8>(external.calling_conv));
       out.zeros(2);

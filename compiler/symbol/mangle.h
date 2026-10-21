@@ -28,6 +28,10 @@ struct Signature {
   std::string path;
   // Source name of the item.
   std::string name;
+  // The nominal an associated function or a method belongs to. Encoded
+  // for those kinds, so two owners with a same-named member stay
+  // distinct; invalid for a free function.
+  ir::TypeIdx owner = ir::TypeIdx(base::INVALID_IDX);
   enum class Kind : u8 {
     // Not encoded: a C entry point, or the synthesized program entry.
     Foreign,
@@ -92,6 +96,9 @@ struct Demangled {
   std::vector<std::string> path;
   std::string name;
   std::vector<DecodedType> generics;
+  // The owner an associated function or a method was encoded with.
+  DecodedType owner;
+  bool has_owner = false;
 };
 
 // Encodes a signature. Deterministic: the same signature always yields

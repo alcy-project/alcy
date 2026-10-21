@@ -69,8 +69,10 @@ TEST_CASE("Mangle distinguishes signatures that share a source name") {
       signature("", "free", symbol::Signature::Kind::Free);
   symbol::Signature method =
       signature("", "free", symbol::Signature::Kind::Method);
+  method.owner = f.i32;
   symbol::Signature assoc =
       signature("", "free", symbol::Signature::Kind::Assoc);
+  assoc.owner = f.str;
   symbol::Signature in_core =
       signature("core", "free", symbol::Signature::Kind::Free);
   const ir::Storage types = f.build();
@@ -87,13 +89,31 @@ TEST_CASE("Mangle distinguishes signatures that share a source name") {
   CHECK(a.starts_with("_A1"));
 }
 
+TEST_CASE("Mangle distinguishes two owners that share a member name") {
+  // A method is identified by the nominal it is declared on as well as
+  // by its name, so two impls of one module cannot collide.
+  Fixture f;
+  const TypeIdx pair = f.pair(f.i32, f.str);
+  symbol::Signature a =
+      signature("m", "total", symbol::Signature::Kind::Method);
+  a.owner = pair;
+  symbol::Signature b =
+      signature("m", "total", symbol::Signature::Kind::Method);
+  b.owner = f.str;
+  const ir::Storage types = f.build();
+  CHECK(symbol::mangle(a, types, f.strings) !=
+        symbol::mangle(b, types, f.strings));
+}
+
 TEST_CASE("Mangle distinguishes instantiations of one item") {
   Fixture f;
   const TypeIdx over_i32 = f.pair(f.i32, f.str);
   const TypeIdx over_u8 = f.pair(f.u8, f.str);
   symbol::Signature a = signature("m", "get", symbol::Signature::Kind::Method);
+  a.owner = f.i32;
   a.generics = {over_i32};
   symbol::Signature b = signature("m", "get", symbol::Signature::Kind::Method);
+  b.owner = f.i32;
   b.generics = {over_u8};
   const ir::Storage types = f.build();
   CHECK(symbol::mangle(a, types, f.strings) !=
@@ -250,6 +270,7 @@ TEST_CASE("Demangle recovers a signature") {
   Fixture f;
   symbol::Signature sig =
       signature("core::util", "parse", symbol::Signature::Kind::Method);
+  sig.owner = f.pair(f.i32, f.arr);
   sig.generics = {f.pair(f.i32, f.arr), f.mut_u8};
   const ir::Storage types = f.build();
   const std::string encoded = symbol::mangle(sig, types, f.strings);
@@ -266,6 +287,8 @@ TEST_CASE("Demangle recovers a signature") {
   CHECK(out.path[0] == "core");
   CHECK(out.path[1] == "util");
   CHECK(out.name == "parse");
+  CHECK(out.has_owner);
+  CHECK(out.owner.kind == symbol::DecodedType::Kind::Nominal);
   CHECK(out.generics.size() == 2);
   CHECK(out.generics[0].kind == symbol::DecodedType::Kind::Nominal);
   CHECK(out.generics[0].path.size() == 1);

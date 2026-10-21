@@ -26,9 +26,9 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Block) == 16);
   static_assert(sizeof(BlockParam) == 8);
 
-  static_assert(sizeof(ExternalFunction) == 36);
-  static_assert(sizeof(Function) == 40);
-  static_assert(sizeof(FunctionMeta) == 32);
+  static_assert(sizeof(ExternalFunction) == 40);
+  static_assert(sizeof(Function) == 44);
+  static_assert(sizeof(FunctionMeta) == 36);
 
   static_assert(sizeof(Immutable) == 16);
   static_assert(sizeof(Instruction) == 20);

@@ -536,6 +536,7 @@ std::string linkable_symbol(PipelineContext& ctx,
   symbol::Signature signature;
   signature.path = std::string(ctx.strings.get(meta.path));
   signature.name = std::string(ctx.strings.get(meta.name));
+  signature.owner = meta.owner;
   switch (meta.kind) {
     case ir::SymbolKind::Free:
       signature.kind = symbol::Signature::Kind::Free;

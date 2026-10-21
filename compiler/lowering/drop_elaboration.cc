@@ -128,7 +128,8 @@ void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
   const analyzer::CheckedModule::MethodInfo& info = def.methods[glue.index];
   const ir::FunctionIdx fn =
       fn_index(glue.module, info.item, info.name, info.params, info.ret,
-               generic_inst_index(info.self_type), {}, ir::SymbolKind::Method);
+               generic_inst_index(info.self_type), {}, ir::SymbolKind::Method,
+               /*extra_generics=*/{}, info.self_type);
   if (!fn.is_valid() || failed) {
     return;
   }
@@ -527,7 +528,8 @@ void Lowerer::place_ends() {
             def.methods[glue.index];
         ir::FunctionIdx fn = fn_index(
             glue.module, info.item, info.name, info.params, info.ret,
-            generic_inst_index(info.self_type), {}, ir::SymbolKind::Method);
+            generic_inst_index(info.self_type), {}, ir::SymbolKind::Method,
+            /*extra_generics=*/{}, info.self_type);
         if (!fn.is_valid()) {
           return;
         }

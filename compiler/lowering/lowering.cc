@@ -715,7 +715,8 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   u32 inst,
                                   std::vector<CompVal> comp_args,
                                   ir::SymbolKind kind,
-                                  std::span<const ir::TypeIdx> extra_generics) {
+                                  std::span<const ir::TypeIdx> extra_generics,
+                                  ir::TypeIdx owner) {
   std::string key = fn_key(item, params, ret, inst, comp_args, extra_generics);
   const auto found = fn_by_key_.find(key);
   if (found != fn_by_key_.end()) {
@@ -746,6 +747,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   entry.ret = ret;
   entry.inst = inst;
   entry.kind = kind;
+  entry.owner = owner;
   // A generic body is named by the arguments it was instantiated with.
   // A method's arguments come from the type it was instantiated on; a
   // generic free function's from the signature it registered.
@@ -1392,7 +1394,7 @@ void Lowerer::run() {
               ? ir::SymbolKind::Assoc
               : ir::SymbolKind::Method;
       fn_index(m, method.item, method.name, method.params, method.ret, inst, {},
-               kind);
+               kind, {}, method.self_type);
       if (failed) {
         return;
       }
@@ -1560,7 +1562,8 @@ void Lowerer::materialize(const FnEntry& entry,
                              .name = name,
                              .path = path,
                              .kind = entry.kind,
-                             .generics = generics.finish()},
+                             .generics = generics.finish(),
+                             .owner = entry.owner},
                     .blocks = range});
 }
 

@@ -814,6 +814,7 @@ std::string LlvmIrEmitter::linkable_name(
   symbol::Signature signature;
   signature.path = std::string(interner_->get(function_meta.path));
   signature.name = std::string(interner_->get(function_meta.name));
+  signature.owner = function_meta.owner;
   switch (function_meta.kind) {
     case ir::SymbolKind::Free:
       signature.kind = symbol::Signature::Kind::Free;

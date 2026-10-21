@@ -899,6 +899,11 @@ TEST_CASE("A dependency a summary answers for is not read") {
         "    ret self.left + self.right\n"
         "  }\n"
         "}\n\n"
+        "impl Line {\n"
+        "  pub fn total(self: &Line) -> i32 {\n"
+        "    ret self.a.left + self.b.left\n"
+        "  }\n"
+        "}\n\n"
         "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n\n"
         "pub fn sum(p: Pair) -> i32 {\n  ret p.left + p.right\n}\n\n"
         "pub fn make(a: i32, b: i32) -> Pair {\n"
@@ -1001,7 +1006,8 @@ TEST_CASE("A dependency a summary answers for is not read") {
       "use dep::make\nuse dep::sum\n\nfn main() -> i32 {\n"
       "  p := Pair::new(20, 1)\n"
       "  l := Line { a: p, b: p }\n"
-      "  ret double(sum(l.a) + left_of(&l.a) + p.total() - 62)\n}\n"));
+      "  ret double(sum(l.a) + left_of(&l.a) + p.total() + l.total() - 102)\n"
+      "}\n"));
 #if !BUILD_FLAG(IS_OS_ASMJS)
   {
     PipelineContext ctx{i18n::Language::EnUs};

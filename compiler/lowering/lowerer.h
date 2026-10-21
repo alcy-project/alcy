@@ -121,6 +121,8 @@ class Lowerer {
     ir::SymbolKind kind = ir::SymbolKind::Free;
     // Type arguments of the instantiation, for the symbol.
     std::vector<ir::TypeIdx> generics;
+    // The nominal a member belongs to, for the symbol.
+    ir::TypeIdx owner = ir::TypeIdx(base::INVALID_IDX);
     // Comp argument values in formal-parameter order.
     std::vector<CompVal> comp_args;
     // A closure body to compile instead of an item: the literal or
@@ -299,7 +301,8 @@ class Lowerer {
                            u32 inst,
                            std::vector<CompVal> comp_args,
                            ir::SymbolKind kind = ir::SymbolKind::Free,
-                           std::span<const ir::TypeIdx> extra_generics = {});
+                           std::span<const ir::TypeIdx> extra_generics = {},
+                           ir::TypeIdx owner = ir::TypeIdx(base::INVALID_IDX));
   u32 callee_inst(const analyzer::CheckedModule::CallTarget* target) const;
   // Type arguments of a nominal type, empty for a plain declaration.
   std::vector<ir::TypeIdx> nominal_arguments(ir::TypeIdx type) const;

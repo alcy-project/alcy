@@ -519,6 +519,12 @@ std::string mangle(const Signature& signature,
   append_length(out, signature.name.size());
   out.append(signature.name);
   Encoder encoder(types, strings, out);
+  // A member's identity includes the nominal it is declared on, which a
+  // name and a module path cannot express.
+  if (signature.kind == Signature::Kind::Assoc ||
+      signature.kind == Signature::Kind::Method) {
+    encoder.encode_type(signature.owner);
+  }
   for (const ir::TypeIdx generic : signature.generics) {
     encoder.encode_type(generic);
   }
@@ -547,6 +553,14 @@ base::Result<Demangled, DemangleError> demangle(std::string_view text) {
   }
   if (!decoder.read_segments(out.path) || !decoder.read_name(out.name)) {
     return base::make_err(DemangleError::Malformed);
+  }
+  // A member's owner comes before its own type arguments.
+  if (out.kind == Signature::Kind::Assoc ||
+      out.kind == Signature::Kind::Method) {
+    out.has_owner = decoder.decode_type(out.owner);
+    if (!out.has_owner) {
+      return base::make_err(DemangleError::Malformed);
+    }
   }
   while (!decoder.type_list_ended()) {
     out.generics.emplace_back();

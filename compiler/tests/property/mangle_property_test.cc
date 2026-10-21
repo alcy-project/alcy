@@ -48,11 +48,13 @@ struct Fixture {
 // lost or conflated a field, the decoder has no way to invent it back.
 symbol::Signature sig(std::string path,
                       std::string name,
-                      symbol::Signature::Kind kind) {
+                      symbol::Signature::Kind kind,
+                      TypeIdx owner) {
   symbol::Signature out;
   out.path = std::move(path);
   out.name = std::move(name);
   out.kind = kind;
+  out.owner = owner;
   return out;
 }
 
@@ -95,7 +97,7 @@ TEST_CASE("Property: a mangled symbol decodes back to its signature") {
   for (const char* path : PATHS) {
     for (const char* name : NAMES) {
       for (const symbol::Signature::Kind kind : KINDS) {
-        const symbol::Signature original = sig(path, name, kind);
+        const symbol::Signature original = sig(path, name, kind, f.i32);
         const std::string encoded = symbol::mangle(original, types, f.strings);
         INFO("path: " << std::string(path) << " name: " << std::string(name));
 
@@ -108,6 +110,9 @@ TEST_CASE("Property: a mangled symbol decodes back to its signature") {
         const symbol::Demangled back = std::move(decoded).unwrap();
         CHECK(back.kind == original.kind);
         CHECK(back.name == original.name);
+        const bool member = kind == symbol::Signature::Kind::Assoc ||
+                            kind == symbol::Signature::Kind::Method;
+        CHECK(back.has_owner == member);
         // The path comes back as segments, so compare the join rather
         // than re-splitting: the point is that no segment was lost or
         // invented, and `::`-joining an empty segment list is the empty
@@ -136,7 +141,7 @@ TEST_CASE("Property: mangling is injective over paths and names") {
     for (const char* name : NAMES) {
       for (const symbol::Signature::Kind kind : KINDS) {
         const std::string encoded =
-            symbol::mangle(sig(path, name, kind), types, f.strings);
+            symbol::mangle(sig(path, name, kind, f.i32), types, f.strings);
         INFO("path: " << std::string(path) << " name: " << std::string(name));
         CHECK(seen.insert(encoded).second);
       }
@@ -160,7 +165,7 @@ TEST_CASE("Property: mangled type arguments decode back") {
   tuple_seq.push(f.builder.ref_type(f.u8));
   const TypeIdx tuple = f.builder.tuple_type(tuple_seq.finish());
   symbol::Signature signature =
-      sig("m::n", "get", symbol::Signature::Kind::Free);
+      sig("m::n", "get", symbol::Signature::Kind::Free, f.i32);
   signature.generics = {slice, array, ref, tuple, konst};
   const ir::Storage types = f.build();
 
@@ -191,7 +196,8 @@ TEST_CASE("Property: mangling does not depend on the order items were built") {
   // each fixture's own storage, so their indices differ.
   Fixture a;
   const TypeIdx a_array = a.builder.array_type(a.u8, 3);
-  symbol::Signature sa = sig("m::n", "get", symbol::Signature::Kind::Method);
+  symbol::Signature sa =
+      sig("m::n", "get", symbol::Signature::Kind::Method, a.i32);
   sa.generics = {a.i32, a_array};
   const ir::Storage types_a = a.build();
   const std::string first = symbol::mangle(sa, types_a, a.strings);
@@ -201,7 +207,8 @@ TEST_CASE("Property: mangling does not depend on the order items were built") {
   (void)b.builder.array_type(b.i32, 7);
   (void)b.builder.reference_type(b.str, true);
   const TypeIdx b_array = b.builder.array_type(b.u8, 3);
-  symbol::Signature sb = sig("m::n", "get", symbol::Signature::Kind::Method);
+  symbol::Signature sb =
+      sig("m::n", "get", symbol::Signature::Kind::Method, b.i32);
   sb.generics = {b.i32, b_array};
   const ir::Storage types_b = b.build();
   const std::string second = symbol::mangle(sb, types_b, b.strings);

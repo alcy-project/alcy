@@ -33,6 +33,10 @@ struct FunctionMeta {
   SymbolKind kind = SymbolKind::Foreign;
   // Type arguments of the instantiation, empty for a non-generic item.
   TypeIdxRange generics;
+  // The nominal an associated function or a method is declared on, the
+  // concrete instance for a generic impl. Invalid for a free function:
+  // it is part of the item's identity, so the symbol must name it.
+  TypeIdx owner = TypeIdx(base::INVALID_IDX);
 };
 
 struct Function {

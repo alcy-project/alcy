@@ -27,23 +27,31 @@ or an associated function and a method that share a name.
 ## Decision
 
 A symbol is derived from the signature it names, never from the source
-name. The signature is the module path, the item name, what the item
-is, and the type arguments of the instantiation. `compiler/symbol` encodes
-it to a string beginning `_A`, and decodes it back.
+name. The signature is the module path, the owner of a member, the item
+name, what the item is, and the type arguments of the instantiation.
+`compiler/symbol` encodes it to a string beginning `_A`, and decodes it
+back.
 
 ```ebnf
-symbol   = "_A" version kind seglist name generics
+symbol   = "_A" version kind seglist name [owner] generics
 kind     = "f" free | "a" associated | "m" method
 seglist  = { segment } "."
 segment  = DIGITS name
 name     = DIGITS name
+owner    = type
 generics = { type }
 type     = prim | "z" str | "p" ptr
          | "r" type | "w" type | "y" DIGITS type
          | "u" DIGITS { type } | "n" seglist DIGITS { type }
 ```
 
-Three decisions inside that shape are worth stating.
+Four decisions inside that shape are worth stating.
+
+**A member names its owner.** An associated function and a method encode
+the nominal they are declared on before their own type arguments, so
+`Pair::total` and `Line::total` in one module are distinct symbols. The
+owner is the concrete instance for a generic impl, which is the same
+identity monomorphization gives the body.
 
 **A length, not a separator, delimits every name.** A segment and an
 item name carry their byte length, so any byte may appear in a name,
