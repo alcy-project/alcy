@@ -1985,6 +1985,16 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] A summary carries no spec implementation, so a dependent cannot
   see that a library's type implements one, and the roadmap asks a
   summary to carry them.
+- [ ] A reference to a container's element carries no loan: `r := &v[0]`
+  held across a `v.push` is accepted, the growth frees the buffer the
+  reference reads through, and the address sanitizer reports the
+  use-after-free the checker missed. `index_mut` is a spec method and a
+  summary carries no spec implementation, so the callee's return-region
+  never reaches the caller and the receiver's loan dies at the call;
+  the borrow on the returned reference names no place either, the
+  element sitting behind the container's raw buffer pointer. The
+  runtime half is covered now - the instrumented gate reports the read
+  - and the checker's half waits on the summary work above.
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the
   compiler's version string does not identify the binary that wrote an
