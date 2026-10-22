@@ -180,15 +180,15 @@ void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
 
 }  // namespace
 
-void double_negation(LintContext& ctx) {
+void DoubleNegation::run(LintContext& ctx) {
   for_each_expr(ctx, &check_double_negation);
 }
 
-void self_comparison(LintContext& ctx) {
+void SelfComparison::run(LintContext& ctx) {
   for_each_expr(ctx, &check_self_comparison);
 }
 
-void nested_if(LintContext& ctx) {
+void NestedIf::run(LintContext& ctx) {
   for_each_expr(ctx, &check_nested_if);
 }
 

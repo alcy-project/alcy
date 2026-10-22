@@ -64,11 +64,11 @@ void check_too_many_arguments(LintContext& ctx, ast::ItemIdx item) {
 
 }  // namespace
 
-void missing_docs(LintContext& ctx) {
+void MissingDocs::run(LintContext& ctx) {
   for_each_item(ctx, &check_missing_docs);
 }
 
-void too_many_arguments(LintContext& ctx) {
+void TooManyArguments::run(LintContext& ctx) {
   for_each_item(ctx, &check_too_many_arguments);
 }
 

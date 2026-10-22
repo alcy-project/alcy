@@ -60,15 +60,19 @@ newly exclusively.
 
 ## Adding a rule
 
-1. Declare the entry point in `rules/rules.h` and implement it under
-   `rules/`. A rule reads `LintContext` - the checked package, the AST,
-   the sources, and the resolved setting - and reports through
+1. Define the rule as a type in `rules/rules.h` - the id lint.toml
+   addresses, the default level, the code, the summary, and a static
+   `run` - and implement `run` under `rules/`. A rule reads
+   `LintContext` - the checked package, the AST, the sources, and the
+   resolved setting - and reports through
    `ctx.report<Key>(span, args...)`, which composes the catalog message
-   and applies the configured level.
+   and applies the configured level. The `RuleType` concept holds the
+   type to the shape before anything compiles.
 2. Add the message to `src/i18n/messages.def` under `/* linter */`.
-3. Add a `LintCode` in `diag_code.h` and a row to the table in
-   `rule.cc`. The table order is the configuration table order, so
-   append rather than insert.
+3. Add a `LintCode` in `diag_code.h` and the type to the list in
+   `rule.cc`. The list's order is the configuration table order, so
+   append rather than insert; the registry folds the list into the
+   table the runtime reads.
 4. Add a case to `src/tests/linter/linter_test.cc` that reaches
    the finding and asserts the name and the span.
 

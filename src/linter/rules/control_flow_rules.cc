@@ -159,19 +159,19 @@ void check_needless_return(LintContext& ctx, ast::ItemIdx item) {
 
 }  // namespace
 
-void unreachable_code(LintContext& ctx) {
+void UnreachableCode::run(LintContext& ctx) {
   for_each_block(ctx, &check_block);
 }
 
-void while_true(LintContext& ctx) {
+void WhileTrue::run(LintContext& ctx) {
   for_each_expr(ctx, &check_while);
 }
 
-void empty_loop(LintContext& ctx) {
+void EmptyLoop::run(LintContext& ctx) {
   for_each_expr(ctx, &check_loop);
 }
 
-void needless_return(LintContext& ctx) {
+void NeedlessReturn::run(LintContext& ctx) {
   for_each_item(ctx, &check_needless_return);
 }
 

@@ -68,19 +68,19 @@ void report_shadow(void*, LintContext& ctx, const BindingUse& binding) {
 
 }  // namespace
 
-void unused_variable(LintContext& ctx) {
+void UnusedVariable::run(LintContext& ctx) {
   for (const ast::ItemIdx item : ctx.module_node().items) {
     analyze_bindings(ctx, item, nullptr, report_unused);
   }
 }
 
-void unused_mut(LintContext& ctx) {
+void UnusedMut::run(LintContext& ctx) {
   for (const ast::ItemIdx item : ctx.module_node().items) {
     analyze_bindings(ctx, item, nullptr, report_unused_mut);
   }
 }
 
-void shadow(LintContext& ctx) {
+void Shadow::run(LintContext& ctx) {
   for (const ast::ItemIdx item : ctx.module_node().items) {
     analyze_bindings(ctx, item, nullptr, report_shadow);
   }

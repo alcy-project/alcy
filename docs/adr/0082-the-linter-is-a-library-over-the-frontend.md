@@ -38,19 +38,23 @@ that grew its own parser has had.
   hear about. Only the goal package's `.alcy/` is read, and only the
   goal package modules are linted: staged standard-library sources and
   path dependencies are skipped.
-- A rule is a row in a static table - id, default level, code, summary,
-  and a function pointer - with the implementation in
-  `linter/rules/`. There is no virtual dispatch, matching the
-  compiler no-runtime-polymorphism rule. The table order is the index
-  the parsed configuration is aligned with, so a rule is appended and
-  never inserted.
+- A rule is a type: the id, default level, code, and summary as
+  static members, and the check as a static `run`, defined in
+  `linter/rules/`. A concept holds every rule to that shape, and
+  the registry folds the type list into the runtime table the
+  engine iterates and lint.toml resolves against - the dispatch is
+  one function pointer per rule, generated rather than
+  hand-maintained. There is no virtual dispatch, matching the
+  compiler no-runtime-polymorphism rule. The type list's order is
+  the index the parsed configuration is aligned with, so a rule is
+  appended and never inserted.
 
 ## Consequences
 
 The linter gets the frontend, the diagnostic renderer, the source
 snippet, and the JSON envelope for free. The frontend grew one seam,
-`analyze_tree`, which build and check now also compose; a new rule is a
-file under `linter/rules/`, a declaration, and a table row.
+`analyze_tree`, which build and check now also compose; a new rule is
+a type under `linter/rules/` and one line in the registry's list.
 
 `missing-docs` and `shadow` default to `allow`: they are style choices
 a project opts into. `unreachable-code` is also opt-in, because the

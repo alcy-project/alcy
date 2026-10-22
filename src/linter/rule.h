@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <array>
+#include <concepts>
 #include <span>
 #include <string_view>
 
@@ -14,13 +16,23 @@ namespace linter {
 
 struct LintContext;
 
-// One registered check. A rule is data plus a function pointer rather
-// than a class: the linter has no runtime polymorphism, and a table of
-// these is what the configuration, the docs, and the engine all read.
-//
-// The id is the name lint.toml addresses and the name a rendered
-// finding carries, so it is a stable part of the interface. The code is
-// the machine's handle on the same check.
+// One check the linter runs, as a type: the identity lint.toml
+// addresses and the check itself live in one place, and this concept
+// holds every rule to the shape, so a rule that forgets a field or
+// misspells one fails here instead of at the registry.
+template <typename R>
+concept RuleType = requires(LintContext& ctx) {
+  { R::ID } -> std::convertible_to<std::string_view>;
+  { R::DEFAULT_LEVEL } -> std::convertible_to<LintLevel>;
+  { R::CODE } -> std::convertible_to<LintCode>;
+  { R::SUMMARY } -> std::convertible_to<std::string_view>;
+  R::run(ctx);
+};
+
+// The row the runtime reads. A rule type compiles to one of these in
+// the registry's table: the engine iterates rows and lint.toml's rule
+// names resolve against them, so the dispatch is one function pointer
+// per rule whatever the type carries.
 struct Rule {
   std::string_view id;
   LintLevel default_level;
@@ -31,9 +43,26 @@ struct Rule {
   void (*run)(LintContext&);
 };
 
-// Every rule, in registration order. The order is the index the
-// configuration table is aligned with, so a rule is appended, never
-// inserted or removed without renumbering the codes beside it.
+template <RuleType R>
+constexpr Rule rule_row() {
+  return Rule{
+      .id = R::ID,
+      .default_level = R::DEFAULT_LEVEL,
+      .code = R::CODE,
+      .summary = R::SUMMARY,
+      .run = &R::run,
+  };
+}
+
+// Folds a list of rule types into the runtime table. The list's order
+// is the table's order, which is the index the parsed configuration is
+// aligned with, so a rule is appended and never inserted.
+template <RuleType... Rs>
+constexpr std::array<Rule, sizeof...(Rs)> rule_table() {
+  return {{rule_row<Rs>()...}};
+}
+
+// Every rule, in registration order.
 std::span<const Rule> all_rules();
 
 // The registry index of a rule, or one past the end for a name no rule
