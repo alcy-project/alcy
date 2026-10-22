@@ -1681,7 +1681,47 @@
         "required": true,
         "types": [
           {
-            "type": "_pattern",
+            "type": "identifier_pattern",
+            "named": true
+          },
+          {
+            "type": "literal_pattern",
+            "named": true
+          },
+          {
+            "type": "mut_identifier_pattern",
+            "named": true
+          },
+          {
+            "type": "negative_literal_pattern",
+            "named": true
+          },
+          {
+            "type": "or_pattern",
+            "named": true
+          },
+          {
+            "type": "reference_pattern",
+            "named": true
+          },
+          {
+            "type": "struct_pattern",
+            "named": true
+          },
+          {
+            "type": "tuple_pattern",
+            "named": true
+          },
+          {
+            "type": "tuple_variant_pattern",
+            "named": true
+          },
+          {
+            "type": "unit_variant_pattern",
+            "named": true
+          },
+          {
+            "type": "wildcard_pattern",
             "named": true
           }
         ]

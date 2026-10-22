@@ -479,6 +479,7 @@ fn f(p: P) -> i32 {
 }
 
 --------------------------------------------------------------------------------
+
 (source_file
   (function_item
     (identifier)
@@ -522,6 +523,7 @@ fn f() -> i32 {
 }
 
 --------------------------------------------------------------------------------
+
 (source_file
   (function_item
     (identifier)
@@ -565,8 +567,9 @@ fn f(c: bool) -> i32 {
 }
 
 --------------------------------------------------------------------------------
+
 (source_file
-  (ERROR
+  (function_item
     (identifier)
     (parameters
       (parameter
@@ -575,15 +578,17 @@ fn f(c: bool) -> i32 {
         (primitive_type)))
     (return_type
       (primitive_type))
-    (struct_pattern
-      (path
-        (identifier))
-      (field_pattern
-        (identifier))
+    (block
       (ERROR
-        (integer)))
-    (identifier)
-    (integer)))
+        (struct_pattern
+          (path
+            (identifier))
+          (field_pattern
+            (identifier))
+          (ERROR
+            (integer)))
+        (identifier)
+        (integer)))))
 
 ================================================================================
 A bare range operator names no end, and the next operand starts a statement
@@ -606,3 +611,259 @@ fn f() {
         (range_expression
           (integer)))
       (integer))))
+
+================================================================================
+A parenthesized condition keeps its block
+================================================================================
+
+fn f(x: bool) -> i32 {
+  if (x) {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (parenthesized_expression
+            (path_expression
+              (path
+                (identifier))))
+          (block
+            (return_expression
+              (integer)))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+A parenthesized condition compares as an expression
+================================================================================
+
+fn f(x: i32, y: i32) -> i32 {
+  if (x) == (y) {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (comparison_expression
+            (parenthesized_expression
+              (path_expression
+                (path
+                  (identifier))))
+            (parenthesized_expression
+              (path_expression
+                (path
+                  (identifier)))))
+          (block
+            (return_expression
+              (integer)))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+A parenthesized tuple condition compares as an expression
+================================================================================
+
+fn f(x: i32, y: i32) -> i32 {
+  if (x, 1) == (y, 1) {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type))
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (comparison_expression
+            (tuple_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (integer))
+            (tuple_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (integer)))
+          (block
+            (return_expression
+              (integer)))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+A condition's tuple pattern binding keeps its `:=`
+================================================================================
+
+fn pair() -> (i32, i32) {
+  ret (1, 2)
+}
+
+fn main() -> i32 {
+  if (a, b) := pair() {
+    ret a + b
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (tuple_type
+        (primitive_type)
+        (primitive_type)))
+    (block
+      (return_expression
+        (tuple_expression
+          (integer)
+          (integer)))))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (declaration_condition
+            (tuple_pattern
+              (identifier_pattern
+                (identifier))
+              (identifier_pattern
+                (identifier)))
+            (call_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (arguments)))
+          (block
+            (return_expression
+              (binary_expression
+                (path_expression
+                  (path
+                    (identifier)))
+                (path_expression
+                  (path
+                    (identifier))))))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+A string in a condition hides no parenthesis
+================================================================================
+
+fn f() -> i32 {
+  if ("(") == "(" {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (comparison_expression
+            (parenthesized_expression
+              (string))
+            (string))
+          (block
+            (return_expression
+              (integer)))))
+      (return_expression
+        (integer)))))
+
+================================================================================
+A string in a condition's tuple comparison hides no parenthesis
+================================================================================
+
+fn f() -> i32 {
+  if (1, "a)") == (2, "b") {
+    ret 1
+  }
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (expression_statement
+        (if_expression
+          (comparison_expression
+            (tuple_expression
+              (integer)
+              (string))
+            (tuple_expression
+              (integer)
+              (string)))
+          (block
+            (return_expression
+              (integer)))))
+      (return_expression
+        (integer)))))

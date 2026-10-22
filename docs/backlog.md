@@ -1860,13 +1860,17 @@ replaced. The foundations are in `roadmap.md`.
   values, and with the canonical `i64` shapes and the runtime's own
   widening, `emit_mode_test`'s "writes the module as textual IR" and
   the CLI's same case pass under the emscripten host.
-- [ ] The tree-sitter grammar reads a condition that opens with `(` as
-  a pattern, so `if (x) == (y) {}` and `if (x, 1) == (y, 1) {}` parse
-  as an error there while the compiler accepts them. The
-  structural-equality cases bind their tuple comparisons first to keep
-  the differential check green; a condition grammar that forks on the
-  token after the closing `)` is what would let the inline form
-  through.
+- [x] The tree-sitter grammar read a condition that opens with `(` as
+  a pattern, so `if (x) {}`, `if (x) == (y) {}`, and `if (x, 1) ==
+  (y, 1) {}` parsed as an error there while the compiler accepts them.
+  The block such a condition needs is a token only one of the two
+  readings can ask the scanner for, and with both readings alive the
+  scanner was not asked from the reading that could take it. The
+  scanner now reads to the matching `)` and produces a `(` of its own
+  for a condition's pattern binding, told apart by the `:=` that
+  follows, so the fork takes one reading. `disambiguation.txt` holds
+  the inline and tuple comparisons and the strings the lookahead reads
+  past.
 - [x] A UTF-8 byte order mark at the start of a source is an `Invalid
   character` at 1:1: the lexer has no rule for the sequence, so an
   editor that saves one makes the whole file unreadable. Other compilers

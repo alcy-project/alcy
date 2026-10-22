@@ -25,9 +25,9 @@ Three oracles, in `tools/check_treesitter.py`:
 rejects for a failure to parse, which this grammar must reject too. It is
 empty, and the file says why.
 
-## Two rules no regular expression can express
+## Rules no regular expression can express
 
-Both live in `src/scanner.c`.
+These live in `src/scanner.c`.
 
 **The brace that opens a block.** The specification requires the `{` of
 `if`, `while`, `match`, `loop`, `for`, `fn`, `impl`, `struct`, `enum`,
@@ -52,6 +52,16 @@ statement-ending tokens to forget to update when the language changes.
 
 Block comments nest, which is the third thing the scanner does, because no
 regular expression can count depth.
+
+**The `(` of a condition's pattern binding.** A condition that opens with
+`(` is a parenthesized expression until a `:=` after the matching `)` makes
+it a pattern binding, and the block such a condition needs is a token only
+one of the two readings can ask the scanner for: with both readings alive
+the scanner is not asked from the reading that could take it. The scanner
+reads ahead to the matching `)`, past strings and comments, and produces
+`_cond_pattern_paren`, a `(` of its own, only when the `:=` follows. The
+fork then takes one reading, and a plain parenthesized condition keeps its
+block.
 
 ## Where this grammar is more permissive
 

@@ -3,13 +3,18 @@
 
 // The external scanner for the alcy grammar.
 //
-// Three tokens live here, and none of them can be written as a regular
-// expression:
+// Four tokens live here. Three cannot be written as a regular expression:
 //
 //   _block_lbrace   the `{` that opens a block whose header it belongs to,
 //                   which the specification requires to stay on that line
 //   _newline        the `;` the lexer inserts when a line ends a statement
 //   block_comment   a `/* */` comment, which nests
+//
+// The fourth is a `(` whose reading the grammar cannot settle by itself:
+//
+//   _cond_pattern_paren   the `(` of a condition's pattern binding, told
+//                         apart from the `(` a parenthesized expression
+//                         opens with by a `:=` after the matching `)`
 //
 // The rule for a newline is split in two on purpose. Whether a newline may
 // end a statement at all is decided by where `_newline` appears in
@@ -37,6 +42,7 @@ enum TokenType {
   NEWLINE,
   BLOCK_COMMENT,
   ERROR_SENTINEL,
+  COND_PATTERN_PAREN,
 };
 
 typedef struct {
@@ -126,6 +132,94 @@ static bool skip_block_comment(TSLexer *lexer) {
       continue;
     }
     advance(lexer);
+  }
+}
+
+// A condition's pattern binding opens with the `(` a parenthesized
+// expression would, and only the token after the matching `)` - `:=`
+// or anything else - says which reading it is. Reading ahead lets the
+// grammar take one reading at the fork, which is what keeps a plain
+// parenthesized condition's block its own header. The lookahead steps
+// over strings and comments so their parentheses do not count, and a
+// newline before the `:=` reads as anything else: a binding keeps its
+// `:=` on the header line.
+static bool scan_cond_pattern_paren(TSLexer *lexer) {
+  while (is_horizontal_space(lexer->lookahead)) {
+    skip(lexer);
+  }
+  if (lexer->lookahead != '(') {
+    return false;
+  }
+  advance(lexer);
+  lexer->mark_end(lexer);
+  int depth = 1;
+  for (;;) {
+    if (lexer->eof(lexer)) {
+      return false;
+    }
+    const int32_t c = lexer->lookahead;
+    if (c == '"') {
+      advance(lexer);
+      for (;;) {
+        if (lexer->eof(lexer) || lexer->lookahead == '\n') {
+          // An unterminated string is the internal lexer's to report,
+          // and the pattern reading is over either way.
+          return false;
+        }
+        if (lexer->lookahead == '\\') {
+          advance(lexer);
+          if (lexer->eof(lexer)) {
+            return false;
+          }
+          advance(lexer);
+          continue;
+        }
+        if (lexer->lookahead == '"') {
+          advance(lexer);
+          break;
+        }
+        advance(lexer);
+      }
+      continue;
+    }
+    if (c == '/') {
+      advance(lexer);
+      if (lexer->lookahead == '*') {
+        advance(lexer);
+        if (!skip_block_comment(lexer)) {
+          return false;
+        }
+        continue;
+      }
+      if (lexer->lookahead == '/') {
+        while (!lexer->eof(lexer) && lexer->lookahead != '\n') {
+          advance(lexer);
+        }
+        continue;
+      }
+      continue;
+    }
+    advance(lexer);
+    if (c == '(') {
+      ++depth;
+      continue;
+    }
+    if (c == ')') {
+      if (--depth == 0) {
+        while (is_horizontal_space(lexer->lookahead)) {
+          skip(lexer);
+        }
+        if (lexer->lookahead != ':') {
+          return false;
+        }
+        advance(lexer);
+        if (lexer->lookahead != '=') {
+          return false;
+        }
+        lexer->result_symbol = COND_PATTERN_PAREN;
+        return true;
+      }
+    }
   }
 }
 
@@ -219,6 +313,13 @@ bool tree_sitter_alcy_external_scanner_scan(void *payload, TSLexer *lexer,
     return true;
   }
   if (valid_symbols[NEWLINE] && scan_newline(lexer)) {
+    return true;
+  }
+  // Last, because its lookahead advances past the token and a later
+  // step would read the wrong character; the parser re-lexes from the
+  // token start once this declines.
+  if (valid_symbols[COND_PATTERN_PAREN] &&
+      scan_cond_pattern_paren(lexer)) {
     return true;
   }
   return false;

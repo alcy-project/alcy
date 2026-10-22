@@ -76,6 +76,7 @@ module.exports = grammar({
     $._newline,
     $.block_comment,
     $._error_sentinel,
+    $._cond_pattern_paren,
   ],
 
   word: $ => $.identifier,
@@ -934,10 +935,80 @@ module.exports = grammar({
       $._expression,
     ),
 
-    declaration_condition: $ => seq(
-      field('pattern', $._pattern),
-      ':=',
-      field('value', $._expression),
+    // A pattern binding's own `(` is the same token a parenthesized
+    // expression opens with, and the token after the matching `)` -
+    // `:=` or anything else - is what says which reading it is. The
+    // scanner reads ahead and produces `_cond_pattern_paren` for the
+    // `(` of a pattern binding, so the expression reading never starts
+    // and a plain parenthesized condition keeps its block: with both
+    // readings alive the brace the block needs is a token only one of
+    // them can ask the scanner for.
+    declaration_condition: $ => choice(
+      seq(
+        field('pattern', alias($.cond_tuple_pattern, $.tuple_pattern)),
+        ':=',
+        field('value', $._expression),
+      ),
+      seq(
+        field('pattern', $._condition_pattern),
+        ':=',
+        field('value', $._expression),
+      ),
+    ),
+
+    // The `(` of a condition's tuple pattern binding, which the scanner
+    // produces only when the matching `)` is followed by `:=`.
+    cond_tuple_pattern: $ => seq(
+      $._cond_pattern_paren,
+      choice(
+        $._pattern,
+        seq(
+          $._pattern,
+          ',',
+          optional(sepByTrailing($._pattern, ',')),
+          optional(','),
+        ),
+      ),
+      ')',
+    ),
+
+    // The pattern a condition may open with when the fork above is
+    // settled by the scanner rather than by the first token: everything
+    // a pattern can be except one that starts with a plain `(`. Once the
+    // reading is committed the inside is the ordinary pattern grammar,
+    // where a `(` is no longer ambiguous. The aliases keep the node
+    // names the queries and the corpus read.
+    _condition_pattern: $ => choice(
+      $._condition_primary,
+      $._condition_or_pattern,
+    ),
+
+    _condition_primary: $ => choice(
+      $.wildcard_pattern,
+      $.mut_identifier_pattern,
+      $.identifier_pattern,
+      $.literal_pattern,
+      $.negative_literal_pattern,
+      $.tuple_variant_pattern,
+      $.struct_pattern,
+      $.unit_variant_pattern,
+      $._condition_reference_pattern,
+    ),
+
+    _condition_reference_pattern: $ =>
+        alias($._cond_reference_pattern, $.reference_pattern),
+
+    _cond_reference_pattern: $ => seq(
+      '&',
+      optional('mut'),
+      field('pattern', $._condition_primary),
+    ),
+
+    _condition_or_pattern: $ => alias($._cond_or_pattern, $.or_pattern),
+
+    _cond_or_pattern: $ => seq(
+      field('alternative', $._condition_primary),
+      repeat1(seq('|', field('alternative', $._primary_pattern))),
     ),
 
     // Statements and blocks ------------------------------------------------
