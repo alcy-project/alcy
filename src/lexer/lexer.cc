@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "diag/span.h"
 #include "diag/stage.h"
 #include "fpag/base/numeric.h"
