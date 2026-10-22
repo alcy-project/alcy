@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # The paths whose content makes the compiler what it is. A change
 # anywhere else - a test, a sample - does not make a new compiler, and
 # naming it one would cost a cache miss for nothing.
-COMPILER_PATHS = ["compiler", "build", "tools", "third_party/fpag"]
+COMPILER_PATHS = ["src", "build", "tools", "third_party/fpag"]
 
 
 def _git(args: list[str]) -> subprocess.CompletedProcess:

@@ -28,7 +28,7 @@ SPEC_DIR = project_root_dir / "docs" / "spec"
 # `src/docs/architecture.md` are documents and are left alone.
 PATTERNS = {
     "a source or build path": re.compile(
-        r"(?<![\w./-])(?:src|compiler|third_party|lib|tools|e2e|exe|samples|out)"
+        r"(?<![\w./-])(?:src|third_party|lib|tools|e2e|exe|samples|out)"
         r"/[\w.*{}<>-]*\.(?:cc|h|py|gn|gni|al|toml|ebnf|def)\b"
     ),
     "a source file name": re.compile(r"\b[\w./-]*\.(?:cc|h|def)\b"),

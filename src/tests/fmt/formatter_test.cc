@@ -16,21 +16,21 @@ namespace {
 
 // One pass with the default configuration, which is what the tool passes.
 std::string once(std::string_view source) {
-  return format(source, default_format_config());
+  return alcy_fmt::format(source, default_format_config());
 }
 
 // One pass with an injected width, which is what a host does.
 std::string once_at(std::string_view source, usize line_length) {
   FormatConfig config;
   config.line_length = line_length;
-  return format(source, config);
+  return alcy_fmt::format(source, config);
 }
 
 // The property the formatter is built around: a second pass changes
 // nothing.
 bool idempotent(std::string_view source, const FormatConfig& config) {
-  const std::string first = format(source, config);
-  const std::string second = format(first, config);
+  const std::string first = alcy_fmt::format(source, config);
+  const std::string second = alcy_fmt::format(first, config);
   if (first != second) {
     return false;
   }

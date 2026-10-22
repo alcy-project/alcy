@@ -184,7 +184,7 @@ def main() -> int:
 
     if py[0] == "uv":
         run(*py, "ast-grep", "test")
-        run(*py, "ast-grep", "scan", "--error", "compiler")
+        run(*py, "ast-grep", "scan", "--error", "src")
         run(*py, "rumdl", "check", ".")
         run(*py, "ruff", "check", "tools")
         run(*py, "ruff", "format", "--check", "tools")

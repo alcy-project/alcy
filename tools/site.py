@@ -421,7 +421,7 @@ def build_guide(dist_dir: Path) -> None:
         "--repo-root",
         str(project_root_dir),
         "--alcy",
-        str(project_root_dir / "compiler" / "playground" / "js" / "alcy.mjs"),
+        str(project_root_dir / "src" / "playground" / "js" / "alcy.mjs"),
         "--stamp",
         stamp,
         "--stamp-url",

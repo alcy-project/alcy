@@ -47,7 +47,7 @@ def main():
         print("bun is not on PATH; needed to run the playground smoke")
         return 1
 
-    smoke = project_root_dir / "compiler" / "playground" / "js" / "smoke.mjs"
+    smoke = project_root_dir / "src" / "playground" / "js" / "smoke.mjs"
     proc = subprocess.run(
         [bun, str(smoke), str(launcher)],
         capture_output=True,
