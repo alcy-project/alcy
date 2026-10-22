@@ -79,10 +79,21 @@ class CompEvaluator {
                      u32 inst,
                      comp::CompVal& out);
 
-  bool failed() const { return failed_; }
-  bool failure_is_internal() const { return fail_internal_; }
-  bool failure_is_overflow() const { return fail_overflow_; }
-  bool failure_is_div_zero() const { return fail_div_zero_; }
+  // Why an evaluation stopped. The lowering turns the kind into the
+  // diagnostic a user reads, and each program error keeps its own kind
+  // so a checked evaluation refuses the way a checked build would.
+  enum class Failure : u8 {
+    None,
+    Program,      // an operation the engine cannot express
+    Internal,     // an engine invariant broke
+    Overflow,     // a checked arithmetic overflow (ADR-0065)
+    DivZero,      // a division by zero
+    OutOfBounds,  // an index past the end of a fixed array
+    Budget,       // the evaluation quota ran out
+  };
+
+  bool failed() const { return failure_ != Failure::None; }
+  Failure failure_kind() const { return failure_; }
   diag::Span failure_span() const { return fail_span_; }
   std::string_view failure() const { return fail_what_; }
   void clear_failure();
@@ -135,6 +146,7 @@ class CompEvaluator {
   using CompFlow = comp::CompFlow;
 
   // The first failure is kept; later ones are consequences of it.
+  bool fail_as(Failure kind, diag::Span span, std::string_view what);
   bool fail(diag::Span span, std::string_view what);
   bool fail_internal(diag::Span span, std::string_view what);
   // A program error, not an engine limit: the constant expression
@@ -143,6 +155,11 @@ class CompEvaluator {
   // A program error, not an engine limit: the constant expression
   // divides by zero, which has a diagnostic of its own.
   bool fail_div_zero(diag::Span span, std::string_view what);
+  // A program error, not an engine limit: the constant expression
+  // indexes past an array's end.
+  bool fail_oob(diag::Span span, std::string_view what);
+  // An engine limit: the evaluation ran past its quota of branches.
+  bool fail_budget(diag::Span span, std::string_view what);
   // Spends one quota unit; false once the quota is exhausted.
   bool spend(diag::Span span);
 
@@ -268,10 +285,7 @@ class CompEvaluator {
   u32 inst_ = NO_INST;
   u64 quota_ = 0;
   u32 call_depth_ = 0;
-  bool failed_ = false;
-  bool fail_internal_ = false;
-  bool fail_overflow_ = false;
-  bool fail_div_zero_ = false;
+  Failure failure_ = Failure::None;
   diag::Span fail_span_{};
   std::string_view fail_what_;
   // The indexes the evaluator used to walk for: a type's instantiation

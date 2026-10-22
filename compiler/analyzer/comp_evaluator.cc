@@ -126,67 +126,51 @@ ir::TypeIdx CompEvaluator::field_type_of(ir::TypeIdx base,
   return error_type();
 }
 
-bool CompEvaluator::fail(diag::Span span, std::string_view what) {
-  if (!failed_) {
-    failed_ = true;
-    fail_internal_ = false;
-    fail_overflow_ = false;
-    fail_div_zero_ = false;
+bool CompEvaluator::fail_as(Failure kind,
+                            diag::Span span,
+                            std::string_view what) {
+  if (failure_ == Failure::None) {
+    failure_ = kind;
     fail_span_ = span;
     fail_what_ = what;
   }
   return false;
+}
+
+bool CompEvaluator::fail(diag::Span span, std::string_view what) {
+  return fail_as(Failure::Program, span, what);
 }
 
 bool CompEvaluator::fail_internal(diag::Span span, std::string_view what) {
-  if (!failed_) {
-    failed_ = true;
-    fail_internal_ = true;
-    fail_overflow_ = false;
-    fail_div_zero_ = false;
-    fail_span_ = span;
-    fail_what_ = what;
-  }
-  return false;
+  return fail_as(Failure::Internal, span, what);
 }
 
 bool CompEvaluator::fail_overflow(diag::Span span, std::string_view what) {
-  if (!failed_) {
-    failed_ = true;
-    fail_internal_ = false;
-    fail_overflow_ = true;
-    fail_div_zero_ = false;
-    fail_span_ = span;
-    fail_what_ = what;
-  }
-  return false;
+  return fail_as(Failure::Overflow, span, what);
 }
 
 bool CompEvaluator::fail_div_zero(diag::Span span, std::string_view what) {
-  if (!failed_) {
-    failed_ = true;
-    fail_internal_ = false;
-    fail_overflow_ = false;
-    fail_div_zero_ = true;
-    fail_span_ = span;
-    fail_what_ = what;
-  }
-  return false;
+  return fail_as(Failure::DivZero, span, what);
+}
+
+bool CompEvaluator::fail_oob(diag::Span span, std::string_view what) {
+  return fail_as(Failure::OutOfBounds, span, what);
+}
+
+bool CompEvaluator::fail_budget(diag::Span span, std::string_view what) {
+  return fail_as(Failure::Budget, span, what);
 }
 
 bool CompEvaluator::spend(diag::Span span) {
   if (quota_ == 0) {
-    return fail(span, "comp evaluation quota exhausted");
+    return fail_budget(span, "comp evaluation quota exhausted");
   }
   --quota_;
   return true;
 }
 
 void CompEvaluator::clear_failure() {
-  failed_ = false;
-  fail_internal_ = false;
-  fail_overflow_ = false;
-  fail_div_zero_ = false;
+  failure_ = Failure::None;
   fail_span_ = diag::Span{};
   fail_what_ = {};
 }
@@ -399,7 +383,7 @@ bool CompEvaluator::comp_bind_pattern(u32 mod,
           return fail(field.name.span, "pattern field without value");
         }
         const ir::TypeIdx member_type = field_type_of(value.type, index, span);
-        if (failed_) {
+        if (failed()) {
           return false;
         }
         const CompVal member{value.value.fields[index], member_type};
@@ -531,7 +515,7 @@ bool CompEvaluator::comp_match_pattern(u32 mod,
         }
         const CompVal member{value.value.fields[index],
                              field_type_of(value.type, index, span)};
-        if (failed_) {
+        if (failed()) {
           scope.frames.back().resize(mark);
           return false;
         }
@@ -551,7 +535,7 @@ bool CompEvaluator::comp_match_pattern(u32 mod,
         if (comp_match_pattern(mod, alt, value, scope, span)) {
           return true;
         }
-        if (failed_) {
+        if (failed()) {
           scope.frames.back().resize(mark);
           return false;
         }
@@ -617,7 +601,7 @@ bool CompEvaluator::comp_eval_block(u32 mod,
   const ast::Block& node = ast.blocks[block];
   scope.frames.emplace_back();
   for (ast::StmtIdx stmt : node.statements) {
-    if (failed_) {
+    if (failed()) {
       scope.frames.pop_back();
       return false;
     }
@@ -632,7 +616,7 @@ bool CompEvaluator::comp_eval_block(u32 mod,
       return true;
     }
   }
-  if (failed_) {
+  if (failed()) {
     scope.frames.pop_back();
     return false;
   }
@@ -775,7 +759,7 @@ CompEvaluator::Place CompEvaluator::comp_place(u32 mod,
         return {};
       }
       if (position.value.int_value >= base.value->fields.size()) {
-        fail(node.span, "index out of bounds");
+        fail_oob(node.span, "index out of bounds");
         return {};
       }
       const ir::TypeNode shape = builder.types()[base.type];
@@ -818,7 +802,7 @@ bool CompEvaluator::comp_eval_stmt(u32 mod,
         return false;
       }
       const Place slot = comp_place(mod, reassign.place, scope);
-      if (failed_) {
+      if (failed()) {
         return false;
       }
       if (slot.value == nullptr) {
@@ -884,7 +868,7 @@ bool CompEvaluator::comp_eval_loop(u32 mod,
                                    CompFlow& out,
                                    diag::Span span,
                                    const ast::Cond* cond) {
-  while (!failed_) {
+  while (!failed()) {
     // Every turn of the loop is a backward jump, and the quota counts
     // it so a comp-known loop cannot run without bound.
     if (!spend(span)) {
@@ -904,7 +888,7 @@ bool CompEvaluator::comp_eval_loop(u32 mod,
         pattern_frame = true;
         enter = comp_match_pattern(mod, cond->pattern, init, scope,
                                    ast.exprs[cond->init].span);
-        if (failed_) {
+        if (failed()) {
           scope.frames.pop_back();
           return false;
         }
@@ -1152,7 +1136,7 @@ bool CompEvaluator::comp_eval_intrinsic(
   const u64 index = first.value.int_value;
   if (name == "str_byte") {
     if (index >= bytes.size()) {
-      return fail(span, "index out of bounds");
+      return fail_oob(span, "index out of bounds");
     }
     out.type = builder.primitive(ir::TypeTag::U8);
     out.value.tag = CompValue::Tag::Int;
@@ -1339,7 +1323,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
                                    CompScope& scope,
                                    CompVal& out,
                                    CompFlow* flow_out) {
-  if (failed_) {
+  if (failed()) {
     return false;
   }
   const ast::ExprNode& node = ast.exprs[expr];
@@ -1529,7 +1513,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         pattern_frame = true;
         take_then = comp_match_pattern(mod, cond.pattern, init, scope,
                                        ast.exprs[cond.init].span);
-        if (failed_) {
+        if (failed()) {
           scope.frames.pop_back();
           return false;
         }
@@ -1588,7 +1572,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         scope.frames.emplace_back();
         const bool matched = comp_match_pattern(
             mod, arm.pattern, scrutinee, scope, ast.exprs[arm.body].span);
-        if (failed_) {
+        if (failed()) {
           scope.frames.pop_back();
           return false;
         }
@@ -1737,7 +1721,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         return fail(node.span, "index without value");
       }
       if (position.value.int_value >= base.value.fields.size()) {
-        return fail(node.span, "index out of bounds");
+        return fail_oob(node.span, "index out of bounds");
       }
       out.type = expr_type_in(mod, expr);
       out.value =

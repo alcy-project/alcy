@@ -39,6 +39,12 @@ enum class DiagCode : u8 {
   // A constant expression the compiler evaluated divides by zero: the
   // program is refused the way a checked build refuses it at runtime.
   CompDivZero = 15,
+  // A constant expression the compiler evaluated indexes past the end
+  // of a fixed array.
+  CompOutOfBounds = 16,
+  // The evaluation ran past its quota of branches: the program would
+  // never finish compiling, so it is refused instead.
+  CompBudget = 17,
   // A non-`Copy` value read through a shared or exclusive reference:
   // taking it would leave the referent owned twice.
   ValueOutOfBorrow = 10,

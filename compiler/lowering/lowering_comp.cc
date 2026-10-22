@@ -195,17 +195,24 @@ bool Lowerer::comp_bind_pattern(u32 mod,
 }
 
 void Lowerer::report_comp_failure() {
-  if (comp_.failure_is_internal()) {
-    internal(comp_.failure_span(), comp_.failure());
-    return;
-  }
-  if (comp_.failure_is_overflow()) {
-    comp_overflow(comp_.failure_span());
-    return;
-  }
-  if (comp_.failure_is_div_zero()) {
-    comp_div_zero(comp_.failure_span());
-    return;
+  switch (comp_.failure_kind()) {
+    case analyzer::CompEvaluator::Failure::Internal:
+      internal(comp_.failure_span(), comp_.failure());
+      return;
+    case analyzer::CompEvaluator::Failure::Overflow:
+      comp_overflow(comp_.failure_span());
+      return;
+    case analyzer::CompEvaluator::Failure::DivZero:
+      comp_div_zero(comp_.failure_span());
+      return;
+    case analyzer::CompEvaluator::Failure::OutOfBounds:
+      comp_oob(comp_.failure_span());
+      return;
+    case analyzer::CompEvaluator::Failure::Budget:
+      comp_budget(comp_.failure_span());
+      return;
+    case analyzer::CompEvaluator::Failure::Program:
+    case analyzer::CompEvaluator::Failure::None: break;
   }
   unsupported(comp_.failure_span(), comp_.failure());
 }

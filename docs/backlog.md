@@ -872,13 +872,15 @@ replaced. The foundations are in `roadmap.md`.
   writes through it. `exe-comp-place` mutates a nested field, an array
   element, and a tuple element and checks the result against the same
   code at runtime.
-- [ ] A comp evaluation program error that has no diagnostic of its own
-  still surfaces as the lowering's `Construct '...' is not supported in
-  this lowering slice`: an index out of bounds reads and writes that
-  way, as does an exhausted evaluation quota. Overflow and division by
-  zero each got a category (ADR-0065 and the division entry above) and
-  the rest want the same treatment, with the offending operation's own
-  span.
+- [x] A comp evaluation program error with no category of its own still
+  surfaced as the lowering's `Construct '...' is not supported in this
+  lowering slice`: an index past an array's end, and an evaluation that
+  ran past the engine's quota, both read that way. Overflow and
+  division by zero each had a category; the engine's failure is one
+  kind now instead of a flag per category, so the two join them with
+  `Index out of bounds in constant evaluation` (ED016) and `Constant
+  evaluation exhausted its budget` (ED017), each at the offending
+  operation. `err-comp-index-oob` and `err-comp-budget` hold them.
 - [x] The sanitized exe gate linked the sanitizer runtime but never
   instrumented the generated code: with `-x ir` clang only reaches
   functions marked `sanitize_address`, the alcy IR named none, and a

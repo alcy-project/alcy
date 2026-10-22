@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Constant evaluation exhausted its budget"]

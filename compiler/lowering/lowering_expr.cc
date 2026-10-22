@@ -93,6 +93,21 @@ void Lowerer::comp_div_zero(diag::Span span) {
   failed = true;
 }
 
+void Lowerer::comp_oob(diag::Span span) {
+  const u32 index = bag.emit<i18n::Key::LowerCompOutOfBounds>(
+      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompOutOfBounds,
+      span);
+  (void)index;
+  failed = true;
+}
+
+void Lowerer::comp_budget(diag::Span span) {
+  const u32 index = bag.emit<i18n::Key::LowerCompBudget>(
+      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompBudget, span);
+  (void)index;
+  failed = true;
+}
+
 ir::TypeIdx Lowerer::error_type() {
   return builder.error_type();
 }
