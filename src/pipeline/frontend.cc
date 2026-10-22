@@ -25,32 +25,35 @@
 
 namespace pipeline {
 
-base::Result<FrontendOutput, diag::Reported> run_frontend(
+base::Result<analyzer::CheckedPackage, diag::Reported> analyze_tree(
     PipelineContext& ctx,
-    analyzer::ModuleTree tree) {
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked = [&] {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "analyze",
-                                             "frontend");
-    const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
-    return analyzer::check_package(tree, ctx.target.width, ctx.ast, ctx.bag,
-                                   ctx.strings, hints, ctx.profiler);
-  }();
-  if (checked.is_err() || ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
-  }
-  analyzer::CheckedPackage package = std::move(checked).unwrap();
+    const analyzer::ModuleTree& tree) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "analyze", "frontend");
+  const std::span<const analyzer::StdHint> hints(STD_HINTS, STD_HINT_COUNT);
+  return analyzer::check_package(tree, ctx.target.width, ctx.ast, ctx.bag,
+                                 ctx.strings, hints, ctx.profiler);
+}
+
+base::Result<FrontendOutput, diag::Reported> finish_frontend(
+    PipelineContext& ctx,
+    analyzer::CheckedPackage package) {
   // Staged prelude modules check with the package but read as
   // toolchain sources, so reported counts exclude them.
-  const usize module_count = package.modules.size() > tree.staged_modules
-                                 ? package.modules.size() - tree.staged_modules
-                                 : 0;
+  const usize staged = package.tree.staged_modules;
+  const usize module_count =
+      package.modules.size() > staged ? package.modules.size() - staged : 0;
+  // This half judges itself against the bag as it found it rather than
+  // against emptiness. A caller that linted first has findings in the
+  // bag already - a denied finding is an error - and those say nothing
+  // about whether lowering worked.
+  const u32 errors_before = ctx.bag.error_count();
   base::Result<lowering::LoweredPackage, diag::Reported> lowered = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower", "frontend");
     return lowering::lower_package(std::move(package), ctx.target.width,
                                    ctx.ast, ctx.strings, ctx.bag, ctx.profiler,
                                    &ctx.sources);
   }();
-  if (lowered.is_err() || ctx.bag.has_errors()) {
+  if (lowered.is_err() || ctx.bag.error_count() > errors_before) {
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage package_ir = std::move(lowered).unwrap();
@@ -65,7 +68,7 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
     return borrow::check_borrows(package_ir, ctx.bag, ctx.strings, ctx.profiler)
         .is_ok();
   }();
-  if (!borrows_ok || ctx.bag.has_errors()) {
+  if (!borrows_ok || ctx.bag.error_count() > errors_before) {
     return base::make_err(diag::Reported{});
   }
   return base::make_ok(FrontendOutput{
@@ -73,6 +76,17 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
       .module_count = module_count,
       .function_count = function_count,
   });
+}
+
+base::Result<FrontendOutput, diag::Reported> run_frontend(
+    PipelineContext& ctx,
+    analyzer::ModuleTree tree) {
+  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
+      analyze_tree(ctx, tree);
+  if (checked.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  return finish_frontend(ctx, std::move(checked).unwrap());
 }
 
 base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(

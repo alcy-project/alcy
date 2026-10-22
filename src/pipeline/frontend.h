@@ -4,6 +4,7 @@
 #pragma once
 
 #include "analyzer/resolve.h"
+#include "analyzer/types.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -27,6 +28,23 @@ struct FrontendOutput {
 base::Result<FrontendOutput, diag::Reported> run_frontend(
     PipelineContext& ctx,
     analyzer::ModuleTree tree);
+
+// The analyzer half of the frontend: name resolution and type checking
+// over a resolved tree. Nothing is lowered, so a reader that only wants
+// the checked package - the linter - stops here instead of paying for
+// IR construction it will not read. The tree is borrowed; the returned
+// package's views point into the context's arena and intern table, which
+// outlive it.
+base::Result<analyzer::CheckedPackage, diag::Reported> analyze_tree(
+    PipelineContext& ctx,
+    const analyzer::ModuleTree& tree);
+
+// The lowering and borrow half, over an already-checked package. This is
+// the tail of run_frontend, split out so a caller that analyzed the tree
+// itself can finish the pipeline without checking twice.
+base::Result<FrontendOutput, diag::Reported> finish_frontend(
+    PipelineContext& ctx,
+    analyzer::CheckedPackage package);
 
 // Whether the root module declares the free `main` a binary links.
 // Check and build both reject a binary target without one.
