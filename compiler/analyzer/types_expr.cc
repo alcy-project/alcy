@@ -380,6 +380,89 @@ bool Checker::is_bare_int_literal(ast::ExprIdx expr) const {
 // comp-known locals and literal consts, and pure combinations
 // thereof. Calls count when their arguments are comp-known and the
 // callee is not an intrinsic (print/panic never are).
+bool Checker::comp_known_value(u32 module,
+                               ast::ExprIdx expr,
+                               ir::TypeIdx type) const {
+  return expr_comp_known(module, expr) && type_comp_known(type);
+}
+
+bool Checker::type_comp_known(ir::TypeIdx type) const {
+  std::vector<u32> stack;
+  return type_comp_known_visit(type, stack);
+}
+
+bool Checker::type_comp_known_visit(ir::TypeIdx type,
+                                    std::vector<u32>& stack) const {
+  for (u32 entry : stack) {
+    if (entry == type.idx) {
+      // A type that contains itself in value position has no value to
+      // carry, comp-known or otherwise.
+      return false;
+    }
+  }
+  stack.push_back(type.idx);
+  const ir::TypeNode node = builder.types()[type];
+  bool known = true;
+  switch (node.tag) {
+    case ir::TypeTag::I1:
+    case ir::TypeTag::I8:
+    case ir::TypeTag::I16:
+    case ir::TypeTag::I32:
+    case ir::TypeTag::I64:
+    case ir::TypeTag::U8:
+    case ir::TypeTag::U16:
+    case ir::TypeTag::U32:
+    case ir::TypeTag::U64:
+    case ir::TypeTag::Str: break;
+    case ir::TypeTag::Array:
+      known = type_comp_known_visit(
+          builder.array_types()[node.as_array()].element, stack);
+      break;
+    case ir::TypeTag::Tuple:
+      for (ir::TypeIdx element :
+           builder.tuple_types()[node.as_tuple()].elements) {
+        if (!type_comp_known_visit(element, stack)) {
+          known = false;
+          break;
+        }
+      }
+      break;
+    case ir::TypeTag::Struct:
+      for (ir::TypeIdx field :
+           builder.struct_types()[node.as_struct()].fields) {
+        if (!type_comp_known_visit(field, stack)) {
+          known = false;
+          break;
+        }
+      }
+      break;
+    case ir::TypeTag::Enum: {
+      const ir::EnumType shape = builder.enum_types()[node.as_enum()];
+      for (ir::EnumVariantTypeIdx variant : shape.variants) {
+        for (ir::TypeIdx payload :
+             builder.enum_variant_types()[variant].fields) {
+          if (!type_comp_known_visit(payload, stack)) {
+            known = false;
+            break;
+          }
+        }
+        if (!known) {
+          break;
+        }
+      }
+      break;
+    }
+    default:
+      // The error marker is not a value the user wrote; a failed
+      // resolution has its own diagnostic and this predicate should not
+      // add another.
+      known = node.tag == ir::TypeTag::Error;
+      break;
+  }
+  stack.pop_back();
+  return known;
+}
+
 bool Checker::expr_comp_known(u32 module,
                               ast::ExprIdx expr,
                               std::span<const std::string_view> bound) const {
@@ -421,7 +504,16 @@ bool Checker::expr_comp_known(u32 module,
       if (value_param(segments[0].name) != nullptr) {
         return true;
       }
-      return is_const_item(module, path);
+      if (!is_const_item(module, path)) {
+        return false;
+      }
+      // The binding is a `const`, but the engine carries only the types
+      // a comp-known value can have: a `const K: f64` names no value it
+      // can read, and refusing it here is what keeps the evaluator's own
+      // `literal is not comp-evaluable` off a user's path.
+      const CheckedModule::StaticInfo* info =
+          find_static(module, segments[0].name);
+      return info != nullptr && type_comp_known(info->type);
     }
     case ast::ExprKind::Unary:
       return expr_comp_known(module, node.payload.get<ast::ExprUnary>().inner,
@@ -705,8 +797,12 @@ void Checker::check_call_args(u32 module,
     const bool comp_required =
         comp_depth > 0 ||
         (fixed + i < comp_params.size() && comp_params[fixed + i]);
+    // The argument's type must admit a comp-known value as well as its
+    // expression shape: `&K` borrows a const, which the expression rule
+    // admits, but the engine carries no reference and the evaluator
+    // would refuse it later, off the argument's own span.
     if (comp_required && !comp_checked_in_scope(args[i]) &&
-        !expr_comp_known(module, args[i])) {
+        !comp_known_value(module, args[i], actual)) {
       if (comp_depth > 0) {
         const u32 index = bag.emit<i18n::Key::AnalyzerCompArgument>(
             diag::Severity::Error, diag::Stage::Analyzer,
@@ -4112,7 +4208,7 @@ ir::TypeIdx Checker::check_block(u32 module,
       result = unify(*expected, result, ast.exprs[node.value].span, "block");
     }
     if (verify_comp_known && !comp_checked_in_scope(node.value) &&
-        !expr_comp_known(module, node.value)) {
+        !comp_known_value(module, node.value, result)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerCompBlockValue>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::NotCompKnown,
           ast.exprs[node.value].span);
@@ -4313,7 +4409,7 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       }
       if ((decl.is_const || verify_comp_known) &&
           !comp_checked_in_scope(decl.init) &&
-          !expr_comp_known(module, decl.init)) {
+          !comp_known_value(module, decl.init, init)) {
         const u32 index =
             bag.emit<i18n::Key::AnalyzerConstDeclarationInitializer>(
                 diag::Severity::Error, diag::Stage::Analyzer,

@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Comp evaluation argument must be comp-known"]

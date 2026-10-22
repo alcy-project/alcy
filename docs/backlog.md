@@ -837,6 +837,20 @@ replaced. The foundations are in `roadmap.md`.
   own failure now, with `Division by zero in constant evaluation`
   (ED015) the way overflow already had one. `err-comp-div-zero` holds
   it.
+- [x] A comp-known value was recognized by its expression alone, so a
+  value whose type cannot exist in the engine slipped through: a comp
+  block ending in a borrow of a constant tripped `Check failed!` in the
+  LLVM emitter's immutable setup, a struct with a reference field did
+  the same, `const x := &K` reached `Internal lowering error:
+  dereference of a non-reference`, and a `const K: f64` or a reference
+  passed to a `comp` parameter reached `Construct ... is not supported
+  in this lowering slice`. The spec's type rule - integers, `bool`,
+  `str`, and tuples, structs, fixed arrays, and enums of them - is
+  checked now at each site that materializes a comp-known value, and
+  the refusal is written on the argument or the block value.
+  `err-comp-ref-value`, `err-comp-ref-arg`, and `err-comp-float-arg`
+  hold the refusals; `ok-comp-types` holds the composites that stay
+  comp-known.
 - [x] The sanitized exe gate linked the sanitizer runtime but never
   instrumented the generated code: with `-x ir` clang only reaches
   functions marked `sanitize_address`, the alcy IR named none, and a

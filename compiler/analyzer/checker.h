@@ -1085,6 +1085,19 @@ class Checker {
   // a position may give it the type. The index and range rules want the
   // narrower decimal-only form above.
   bool is_unsuffixed_int_literal(ast::ExprIdx expr) const;
+  // The types a comp-known value can have (docs/spec/comp.md): the
+  // integer tags, `bool`, `str`, and the composites of them. The comp
+  // engine carries no float, reference, slice, or function value, so a
+  // `const` item of one of those types is not comp-known even though
+  // the binding itself is.
+  bool type_comp_known(ir::TypeIdx type) const;
+  bool type_comp_known_visit(ir::TypeIdx type, std::vector<u32>& stack) const;
+  // A comp-known value needs both an evaluable expression and a type
+  // that admits comp-known values (docs/spec/comp.md). The expression
+  // predicate alone admits a reference, which the engine has no value
+  // for, and a constant of one reaches an emitter check. Sites that
+  // materialize a value ask this instead.
+  bool comp_known_value(u32 module, ast::ExprIdx expr, ir::TypeIdx type) const;
   // Whether the comp engine can evaluate expr. bound names the
   // bindings a surrounding pattern or declaration introduced, which the
   // predicate itself cannot see in the checker's scopes.
