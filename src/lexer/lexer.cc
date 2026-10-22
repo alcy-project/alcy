@@ -512,9 +512,14 @@ void Lexer::lex_string(std::vector<Token>& out) {
             // be a Unicode scalar value, and unescaping would drop it -
             // a string that lost a character without a word.
             if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {
-              emit_error<i18n::Key::LexerUnicodeEscapeNotScalar>(
-                  out, pos_, i + 1 - pos_, diag::Stage::Lexer,
-                  DiagCode::InvalidEscape);
+              // The escape is inside a string, and the string token
+              // already covers it: emitting an error token as well
+              // splits the string in the lossless front end, and the
+              // formatter then rewrites it into something else.
+              const diag::Span span = span_at(pos_, i + 1 - pos_);
+              (void)bag_.emit<i18n::Key::LexerUnicodeEscapeNotScalar>(
+                  diag::Severity::Error, diag::Stage::Lexer,
+                  DiagCode::InvalidEscape, span);
             }
             pos_ = i + 1;
             continue;
