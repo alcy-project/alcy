@@ -5,7 +5,7 @@ struct ArrayVec<T, N: usize> {
   len: usize,
 }
 
-fn take(v: ArrayVec<i32, 2>) -> i32 {
+fn take(v: ArrayVec < i32, 2 >) -> i32 {
   ret v.data[1]
 }
 

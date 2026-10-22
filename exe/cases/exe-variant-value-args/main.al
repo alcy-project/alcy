@@ -8,7 +8,11 @@ enum Vec2<T, N: usize> {
 fn main() -> i32 {
   e := Vec2::<i32, 2>::Items([5, 6])
   match e {
-    Vec2::Items(items) => { ret items[1] }
-    Vec2::Empty => { ret 0 }
+    Vec2::Items(items) => {
+      ret items[1]
+    }
+    Vec2::Empty => {
+      ret 0
+    }
   }
 }
