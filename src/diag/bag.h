@@ -95,6 +95,29 @@ class DiagBag {
                 {out.data(), out.size()});
   }
 
+  // The same, naming the check the message came from. Only a lint has a
+  // name to give: a rule is addressed by it in configuration and docs,
+  // and the code a rule also carries is what a machine matches. The name
+  // is not copied, so it must outlive the bag; every rule names itself
+  // with a string literal.
+  template <i18n::Key K, DiagnosticId Id, typename... Args>
+  u32 emit_named(Severity severity,
+                 Stage stage,
+                 Id id,
+                 std::string_view check_name,
+                 Span primary,
+                 Args&&... args) {
+    fmt::memory_buffer out;
+    i18n::format_to<K>(std::back_inserter(out), language_,
+                       std::forward<Args>(args)...);
+    const u32 index = push(severity, Code{stage, static_cast<u8>(id)}, primary,
+                           true, {out.data(), out.size()});
+    if (index < size_) {
+      entries_[index].check_name = check_name;
+    }
+    return index;
+  }
+
   // Appends a diagnostic whose message is composed here rather than from
   // the catalog. Nothing the compiler reports arrives this way: a message
   // a user reads is a catalog entry, and a test that needs a wording of
@@ -137,9 +160,17 @@ class DiagBag {
 
   // Attaches secondary labels to a previously emitted diagnostic. The labels
   // array is copied into the arena. Fails when `index` does not name an
-  // emitted diagnostic.
+  // emitted diagnostic. The label messages are not copied, so they must
+  // outlive the bag; a composed one goes through label_composed.
   base::Result<void, BagError> label(u32 index,
                                      std::initializer_list<Label> labels);
+
+  // The same, for a message composed at the call site: the bytes are
+  // copied into the bag's arena first, so the label outlives the buffer
+  // that produced it. A lint's suggestion is the caller this exists for.
+  base::Result<void, BagError> label_composed(u32 index,
+                                              Span span,
+                                              std::string_view message);
 
   // Checked lookup: returns nullptr when `index` does not name an emitted
   // diagnostic.

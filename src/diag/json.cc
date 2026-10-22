@@ -45,6 +45,7 @@ const char* stage_name(Stage stage) {
     case Stage::Pipeline: return "pipeline";
     case Stage::CodegenLlvm: return "codegen_llvm";
     case Stage::CodegenNative: return "codegen";
+    case Stage::Lint: return "lint";
   }
   return "lexer";
 }
@@ -101,6 +102,14 @@ void append_diagnostic_json(std::string& out,
                    stage_name(diagnostic.code->stage), diagnostic.code->id);
   } else {
     out += "null";
+  }
+  // A lint's rule name travels beside the code so a tool can address a
+  // finding the way a config file and a docs page do. A compiler
+  // diagnostic has none and emits none, so the field is absent rather
+  // than null and the existing shape is unchanged.
+  if (!diagnostic.check_name.empty()) {
+    out += R"(,"check_name":)";
+    text::append_json_string(out, diagnostic.check_name);
   }
   out += R"(,"message":)";
   text::append_json_string(out, diagnostic.message);

@@ -97,24 +97,28 @@ TEST_CASE("Render without source") {
 TEST_CASE("Render without a code omits the bracket") {
   const Diagnostic coded{.severity = Severity::Error,
                          .code = Code{Stage::Lexer, 7},
+                         .check_name = {},
                          .message = "has a code",
                          .primary_span = {}};
   CHECK(render_str(coded) == "error[EA007]: has a code\n");
 
   const Diagnostic uncoded{.severity = Severity::Error,
                            .code = std::nullopt,
+                           .check_name = {},
                            .message = "has none",
                            .primary_span = {}};
   CHECK(render_str(uncoded) == "error: has none\n");
 
   const Diagnostic warned{.severity = Severity::Warning,
                           .code = std::nullopt,
+                          .check_name = {},
                           .message = "hmm",
                           .primary_span = {}};
   CHECK(render_str(warned) == "warning: hmm\n");
 
   const Diagnostic noted{.severity = Severity::Note,
                          .code = std::nullopt,
+                         .check_name = {},
                          .message = "fyi",
                          .primary_span = {}};
   CHECK(render_str(noted) == "note: fyi\n");

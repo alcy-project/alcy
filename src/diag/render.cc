@@ -247,7 +247,13 @@ void append_marker(fmt::memory_buffer& out,
   }
   fmt::format_to(std::back_inserter(out), "{}",
                  severity_text(diag.severity, options.language));
-  if (diag.code.has_value()) {
+  if (!diag.check_name.empty()) {
+    // A lint names itself: severity and rule, `warning[unused-variable]`.
+    // The name is what a reader configures and a docs page indexes, and
+    // the code the rule also carries stays out of the text so a
+    // configured lint reads the same however its code was assigned.
+    fmt::format_to(std::back_inserter(out), "[{}]", diag.check_name);
+  } else if (diag.code.has_value()) {
     // Severity, component, id: `error[EA001]`. The component's letter is
     // the only part that needs the registry to interpret, and the id is
     // padded to three digits so codes sort in the order they were

@@ -24,6 +24,7 @@ constexpr char LETTERS[] = {
     'I',  // Pipeline
     'J',  // CodegenLlvm
     'K',  // CodegenNative
+    'L',  // Lint
 };
 
 }  // namespace

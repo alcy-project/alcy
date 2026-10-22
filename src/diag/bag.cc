@@ -84,6 +84,7 @@ u32 DiagBag::push(Severity severity,
   Diagnostic& slot = entries_[index];
   slot.severity = severity;
   slot.code = code;
+  slot.check_name = {};
   slot.message = intern(message);
   slot.has_primary_span = has_primary;
   slot.primary_span = primary;
@@ -145,6 +146,21 @@ base::Result<void, BagError> DiagBag::label(
   return base::make_ok();
 }
 
+base::Result<void, BagError> DiagBag::label_composed(u32 index,
+                                                     Span span,
+                                                     std::string_view message) {
+  if (index >= size_) {
+    return base::make_err(BagError::InvalidIndex);
+  }
+  const std::string_view owned = intern(message);
+  if (owned.empty() && !message.empty()) {
+    // The arena could not hold the copy; a label is a reading aid, so
+    // dropping it leaves a whole rendering rather than a hole.
+    return base::make_ok();
+  }
+  return label(index, {Label{span, owned}});
+}
+
 namespace {
 
 // Two diagnostics are one problem seen twice when everything a renderer
@@ -155,6 +171,7 @@ bool same_span(Span a, Span b) {
 
 bool same_diagnostic(const Diagnostic& a, const Diagnostic& b) {
   if (a.severity != b.severity || a.code != b.code ||
+      a.check_name != b.check_name ||
       a.has_primary_span != b.has_primary_span || a.message != b.message ||
       a.label_count != b.label_count) {
     return false;
@@ -189,6 +206,7 @@ u64 hash_diagnostic(const Diagnostic& d) {
   mix(static_cast<u64>(d.severity));
   mix(d.code.has_value() ? (static_cast<u64>(d.code->stage) << 8) | d.code->id
                          : 1ull << 32);
+  mix_text(d.check_name);
   mix(d.has_primary_span ? 1 : 0);
   if (d.has_primary_span) {
     mix(d.primary_span.file);
@@ -302,6 +320,7 @@ void DiagBag::merge(const DiagBag& other) {
     }
     entries_[at].labels = labels;
     entries_[at].label_count = from.label_count;
+    entries_[at].check_name = from.check_name;
   }
   // What the other bag could not hold crosses too: the count is what a
   // caller reports, and an error among them still fails this bag.

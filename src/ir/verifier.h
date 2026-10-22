@@ -119,6 +119,7 @@ inline diag::Diagnostic to_diagnostic(const VerificationError& error) {
   return diag::Diagnostic{
       .severity = diag::Severity::Error,
       .code = diag::Code{diag::Stage::Ir, id},
+      .check_name = {},
       .message = format_as(error.kind),
       .primary_span = {},
   };

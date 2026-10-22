@@ -41,6 +41,12 @@ enum class Stage : u8 {
   Pipeline,
   CodegenLlvm,
   CodegenNative,
+  // The linter's findings. A lint is not a compilation stage: it runs
+  // beside the frontend and reports style where the compiler reports
+  // errors, but its codes occupy the same registry so a reader meets one
+  // spelling for both. `L` is the letter, after the build flow's letters
+  // rather than inside it.
+  Lint,
 };
 
 // A code, as the pair it actually is: which component, and which of its

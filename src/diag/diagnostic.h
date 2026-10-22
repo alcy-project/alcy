@@ -39,6 +39,13 @@ struct Diagnostic {
   // letter each component is written as, and
   // `src/docs/diagnostics.md` for what each check means.
   std::optional<Code> code;
+  // A lint rule's name, or empty for a compiler diagnostic. A lint
+  // finding reads by name (unused-variable) where a compiler diagnostic
+  // reads by code; the code stays for the machine audience and this for
+  // the human one. The view must outlive the diagnostic and is always
+  // static storage, which is what lets a rule registry name its rules
+  // once.
+  std::string_view check_name;
   std::string_view message;
   bool has_primary_span = false;
   Span primary_span;
@@ -56,6 +63,7 @@ constexpr Diagnostic message(Severity severity, std::string_view text) {
   return Diagnostic{
       .severity = severity,
       .code = std::nullopt,
+      .check_name = {},
       .message = text,
       .primary_span = {},
   };
