@@ -200,6 +200,14 @@ class CompEvaluator {
                       ast::StmtIdx stmt,
                       CompScope& scope,
                       CompFlow& out);
+  // An assignment place: the value an assignment mutates and that
+  // value's type, so a field of a field can still be looked up. A place
+  // the evaluation cannot mutate has no value and answers empty.
+  struct Place {
+    CompValue* value = nullptr;
+    ir::TypeIdx type = ir::TypeIdx(base::INVALID_IDX);
+  };
+  Place comp_place(u32 mod, ast::ExprIdx place, CompScope& scope);
   bool comp_eval_loop(u32 mod,
                       ast::BlockIdx body,
                       CompScope& scope,

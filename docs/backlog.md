@@ -862,6 +862,23 @@ replaced. The foundations are in `roadmap.md`.
   trailing `break`/`continue` like a trailing `ret` and carries a loop
   change out of the statement-shaped expressions that can hold one.
   `exe-comp-break` runs the loops both ways.
+- [x] An assignment in a comp block reached only a bare binding: a
+  field (`s.a = ...`) or an element (`a[i] = ...`) failed with
+  `Construct 'place without binding' is not supported in this lowering
+  slice`, so a valid comp block that mutated a struct or an array - and
+  the spec puts structs and arrays among the comp-known types - was
+  refused with an internal-looking message. The engine resolves the
+  place now - a binding, a field of one, an element of one, nested - and
+  writes through it. `exe-comp-place` mutates a nested field, an array
+  element, and a tuple element and checks the result against the same
+  code at runtime.
+- [ ] A comp evaluation program error that has no diagnostic of its own
+  still surfaces as the lowering's `Construct '...' is not supported in
+  this lowering slice`: an index out of bounds reads and writes that
+  way, as does an exhausted evaluation quota. Overflow and division by
+  zero each got a category (ADR-0065 and the division entry above) and
+  the rest want the same treatment, with the offending operation's own
+  span.
 - [x] The sanitized exe gate linked the sanitizer runtime but never
   instrumented the generated code: with `-x ir` clang only reaches
   functions marked `sanitize_address`, the alcy IR named none, and a

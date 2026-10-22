@@ -699,6 +699,97 @@ bool CompEvaluator::comp_eval_block(u32 mod,
   return true;
 }
 
+CompEvaluator::Place CompEvaluator::comp_place(u32 mod,
+                                               ast::ExprIdx place,
+                                               CompScope& scope) {
+  const ast::ExprNode& node = ast.exprs[place];
+  switch (node.kind) {
+    case ast::ExprKind::Path: {
+      const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
+      const std::span<const ast::Ident> segments = ast.paths[path].segments;
+      if (segments.size() != 1) {
+        return {};
+      }
+      for (usize i = scope.frames.size(); i-- > 0;) {
+        for (auto& binding : scope.frames[i]) {
+          if (binding.first == segments[0].name) {
+            return {&binding.second.value, binding.second.type};
+          }
+        }
+      }
+      if (scope.outer != nullptr) {
+        for (auto& binding : *scope.outer) {
+          if (binding.first == segments[0].name) {
+            return {&binding.second.value, binding.second.type};
+          }
+        }
+      }
+      return {};
+    }
+    case ast::ExprKind::Field: {
+      const ast::ExprField& field = node.payload.get<ast::ExprField>();
+      const Place base = comp_place(mod, field.receiver, scope);
+      if (base.value == nullptr) {
+        return {};
+      }
+      u32 index = 0;
+      if (base.value->tag == CompValue::Tag::Tuple) {
+        bool digits = !field.name.name.empty();
+        for (char c : field.name.name) {
+          if (c < '0' || c > '9') {
+            digits = false;
+            break;
+          }
+          index = index * 10 + static_cast<u32>(c - '0');
+        }
+        if (!digits || index >= base.value->fields.size()) {
+          fail(field.name.span, "unknown tuple field");
+          return {};
+        }
+      } else if (base.value->tag == CompValue::Tag::Struct) {
+        if (!struct_field_index(base.type, field.name.name, index) ||
+            index >= base.value->fields.size()) {
+          fail(field.name.span, "unknown field");
+          return {};
+        }
+      } else {
+        fail(node.span, "field without value");
+        return {};
+      }
+      return {&base.value->fields[index],
+              field_type_of(base.type, index, field.name.span)};
+    }
+    case ast::ExprKind::Index: {
+      const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      const Place base = comp_place(mod, index.receiver, scope);
+      if (base.value == nullptr) {
+        return {};
+      }
+      CompVal position;
+      if (!comp_eval_expr(mod, index.index, scope, position)) {
+        return {};
+      }
+      if (base.value->tag != CompValue::Tag::Array ||
+          position.value.tag != CompValue::Tag::Int) {
+        fail(node.span, "index without value");
+        return {};
+      }
+      if (position.value.int_value >= base.value->fields.size()) {
+        fail(node.span, "index out of bounds");
+        return {};
+      }
+      const ir::TypeNode shape = builder.types()[base.type];
+      if (shape.tag != ir::TypeTag::Array) {
+        fail(node.span, "index without value");
+        return {};
+      }
+      return {&base.value->fields[static_cast<usize>(position.value.int_value)],
+              builder.array_types()[shape.as_array()].element};
+    }
+    default: return {};
+  }
+}
+
 bool CompEvaluator::comp_eval_stmt(u32 mod,
                                    ast::StmtIdx stmt,
                                    CompScope& scope,
@@ -722,38 +813,20 @@ bool CompEvaluator::comp_eval_stmt(u32 mod,
       if (reassign.compound) {
         return fail(node.span, "compound assignment in comp evaluation");
       }
-      if (ast.exprs[reassign.place].kind != ast::ExprKind::Path) {
-        return fail(node.span, "place without binding");
-      }
-      const ast::PathIdx path =
-          ast.exprs[reassign.place].payload.get<ast::ExprPath>().idx;
-      const std::span<const ast::Ident> segments = ast.paths[path].segments;
-      if (segments.size() != 1) {
-        return fail(node.span, "place without binding");
-      }
       CompVal value;
       if (!comp_eval_expr(mod, reassign.value, scope, value)) {
         return false;
       }
-      for (usize i = scope.frames.size(); i-- > 0;) {
-        for (auto& binding : scope.frames[i]) {
-          if (binding.first == segments[0].name) {
-            binding.second = std::move(value);
-            out.kind = CompFlow::Kind::Value;
-            return true;
-          }
-        }
+      const Place slot = comp_place(mod, reassign.place, scope);
+      if (failed_) {
+        return false;
       }
-      if (scope.outer != nullptr) {
-        for (auto& binding : *scope.outer) {
-          if (binding.first == segments[0].name) {
-            binding.second = std::move(value);
-            out.kind = CompFlow::Kind::Value;
-            return true;
-          }
-        }
+      if (slot.value == nullptr) {
+        return fail(node.span, "place without binding");
       }
-      return fail(node.span, "place without binding");
+      *slot.value = std::move(value.value);
+      out.kind = CompFlow::Kind::Value;
+      return true;
     }
     case ast::StmtKind::Expr: {
       const ast::StmtExpr& expr = node.payload.get<ast::StmtExpr>();
