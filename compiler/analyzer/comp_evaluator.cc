@@ -665,11 +665,34 @@ bool CompEvaluator::comp_eval_block(u32 mod,
     out.value = std::move(value);
     return true;
   }
+  // A trailing `break` or `continue` is the block's value in the
+  // syntax and a loop change in the flow, the same way a trailing `ret`
+  // is a return. The loop above reads the flow, and the engine never
+  // evaluates the change as a value.
+  const ast::ExprKind value_kind = ast.exprs[node.value].kind;
+  if (value_kind == ast::ExprKind::Break) {
+    scope.frames.pop_back();
+    out.kind = CompFlow::Kind::Break;
+    return true;
+  }
+  if (value_kind == ast::ExprKind::Continue) {
+    scope.frames.pop_back();
+    out.kind = CompFlow::Kind::Continue;
+    return true;
+  }
+  // The trailing expression may itself be a statement-shaped one - a
+  // `match` whose arms change the loop - so its flow is carried out the
+  // same way a statement's is.
   CompVal value;
-  const bool ok = comp_eval_expr(mod, node.value, scope, value);
+  CompFlow value_flow;
+  const bool ok = comp_eval_expr(mod, node.value, scope, value, &value_flow);
   scope.frames.pop_back();
   if (!ok) {
     return false;
+  }
+  if (value_flow.kind != CompFlow::Kind::Value) {
+    out = std::move(value_flow);
+    return true;
   }
   out.kind = CompFlow::Kind::Value;
   out.value = std::move(value);
@@ -762,9 +785,17 @@ bool CompEvaluator::comp_eval_stmt(u32 mod,
         out.value = std::move(value);
         return true;
       }
+      // An `if`, `match`, or block statement whose taken arm ends the
+      // loop carries that change to the loop; every other expression is
+      // an ordinary value.
       CompVal discarded;
-      if (!comp_eval_expr(mod, expr.value, scope, discarded)) {
+      CompFlow flow;
+      if (!comp_eval_expr(mod, expr.value, scope, discarded, &flow)) {
         return false;
+      }
+      if (flow.kind != CompFlow::Kind::Value) {
+        out = std::move(flow);
+        return true;
       }
       out.kind = CompFlow::Kind::Value;
       return true;
@@ -1233,7 +1264,8 @@ bool CompEvaluator::comp_eval_const_item(u32 mod,
 bool CompEvaluator::comp_eval_expr(u32 mod,
                                    ast::ExprIdx expr,
                                    CompScope& scope,
-                                   CompVal& out) {
+                                   CompVal& out,
+                                   CompFlow* flow_out) {
   if (failed_) {
     return false;
   }
@@ -1462,6 +1494,11 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         }
       }
       if (flow.kind != CompFlow::Kind::Value) {
+        if (flow_out != nullptr && flow.kind != CompFlow::Kind::Return) {
+          out.value.tag = CompValue::Tag::Void;
+          *flow_out = std::move(flow);
+          return true;
+        }
         return fail(node.span, "control escapes the comp branch");
       }
       out.value = flow.value.value;
@@ -1503,13 +1540,22 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
             continue;
           }
         }
+        CompVal body_value;
         CompFlow flow;
-        const bool ok = comp_eval_expr(mod, arm.body, scope, flow.value);
+        const bool ok = comp_eval_expr(mod, arm.body, scope, body_value, &flow);
         scope.frames.pop_back();
         if (!ok) {
           return false;
         }
-        out.value = flow.value.value;
+        if (flow.kind != CompFlow::Kind::Value) {
+          if (flow_out != nullptr && flow.kind != CompFlow::Kind::Return) {
+            out.value.tag = CompValue::Tag::Void;
+            *flow_out = std::move(flow);
+            return true;
+          }
+          return fail(node.span, "control escapes the comp branch");
+        }
+        out.value = body_value.value;
         return true;
       }
       return fail(node.span, "match without value");
@@ -1522,6 +1568,11 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         return false;
       }
       if (flow.kind != CompFlow::Kind::Value) {
+        if (flow_out != nullptr && flow.kind != CompFlow::Kind::Return) {
+          out.value.tag = CompValue::Tag::Void;
+          *flow_out = std::move(flow);
+          return true;
+        }
         return fail(node.span, "control escapes the comp block");
       }
       out.value = flow.value.value;

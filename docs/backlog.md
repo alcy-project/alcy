@@ -851,6 +851,17 @@ replaced. The foundations are in `roadmap.md`.
   `err-comp-ref-value`, `err-comp-ref-arg`, and `err-comp-float-arg`
   hold the refusals; `ok-comp-types` holds the composites that stay
   comp-known.
+- [x] A `break` or `continue` confined to a loop inside a comp block was
+  refused, and once past the checker the engine failed it too: the
+  block a bare `if` or `match` statement leaves as its value was asked
+  for a comp-known value even though it carries none, and the evaluator
+  had no flow for a change that ends an `if` or `match` arm. The spec
+  says such control flow behaves normally (docs/spec/comp.md). A block
+  whose value expression is `break`, `continue`, `ret`, or of type `!`
+  or `()` carries nothing and is skipped; the evaluator treats a
+  trailing `break`/`continue` like a trailing `ret` and carries a loop
+  change out of the statement-shaped expressions that can hold one.
+  `exe-comp-break` runs the loops both ways.
 - [x] The sanitized exe gate linked the sanitizer runtime but never
   instrumented the generated code: with `-x ir` clang only reaches
   functions marked `sanitize_address`, the alcy IR named none, and a

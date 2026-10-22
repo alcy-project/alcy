@@ -4207,7 +4207,18 @@ ir::TypeIdx Checker::check_block(u32 module,
     if (expected != nullptr) {
       result = unify(*expected, result, ast.exprs[node.value].span, "block");
     }
-    if (verify_comp_known && !comp_checked_in_scope(node.value) &&
+    // A `break`, `continue`, or `ret` is a block's value expression in
+    // the syntax and leaves the block without a value, so there is none
+    // for the engine to carry. Its type is `!`, but an arm's expected
+    // type unifies it away, so the syntax is what says it diverges.
+    // Control flow that stays inside a loop of the comp block is its own
+    // business (docs/spec/comp.md).
+    const ast::ExprKind value_kind = ast.exprs[node.value].kind;
+    const bool diverges = value_kind == ast::ExprKind::Break ||
+                          value_kind == ast::ExprKind::Continue ||
+                          value_kind == ast::ExprKind::Return ||
+                          is_never(result) || is_void(result);
+    if (verify_comp_known && !diverges && !comp_checked_in_scope(node.value) &&
         !comp_known_value(module, node.value, result)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerCompBlockValue>(
           diag::Severity::Error, diag::Stage::Analyzer, DiagCode::NotCompKnown,

@@ -236,10 +236,16 @@ class CompEvaluator {
                              CompScope& scope,
                              CompVal& out);
   bool comp_eval_const_item(u32 mod, ast::ExprIdx init, CompVal& out);
+  // A control change a value position cannot carry out - a `break` or
+  // `continue` in an `if`, `match`, or block that is itself a
+  // statement - is written to `flow_out` when one is given, with the
+  // expression's value left empty. A `ret` there stays an error until
+  // the IR interpreter lands (docs/spec/comp.md).
   bool comp_eval_expr(u32 mod,
                       ast::ExprIdx expr,
                       CompScope& scope,
-                      CompVal& out);
+                      CompVal& out,
+                      CompFlow* flow_out = nullptr);
   bool comp_eval_binary(u32 mod,
                         ast::ExprIdx expr,
                         CompScope& scope,
