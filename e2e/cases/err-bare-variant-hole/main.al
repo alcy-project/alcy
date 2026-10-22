@@ -7,7 +7,9 @@ enum E {
 
 fn f(e: E) -> i32 {
   match e {
-    A => { ret 1 }
+    A => {
+      ret 1
+    }
   }
 }
 

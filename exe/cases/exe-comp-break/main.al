@@ -28,9 +28,15 @@ comp fn pick(comp n: i32) -> i32 {
     while i < n {
       i = i + 1
       match i {
-        2 => { continue }
-        7 => { break }
-        _ => { total = total + i }
+        2 => {
+          continue
+        }
+        7 => {
+          break
+        }
+        _ => {
+          total = total + i
+        }
       }
     }
     total

@@ -6,10 +6,15 @@ struct S {
 }
 
 const SIZE_U32: usize = size_of::<u32>()
+
 const ALIGN_U64: usize = align_of::<u64>()
+
 const SIZE_S: usize = size_of::<S>()
+
 const SIZE_TUPLE: usize = size_of::<(u8, u64)>()
+
 const SIZE_OPTION: usize = size_of::<Option<u32>>()
+
 const SIZE_UNIT: usize = size_of::<()>()
 
 fn main() -> i32 {

@@ -8,8 +8,12 @@ enum M {
 
 fn len_of(m: M) -> i32 {
   match m {
-    M::S(x) => { ret x.len() as i32 }
-    M::N => { ret 0 }
+    M::S(x) => {
+      ret x.len() as i32
+    }
+    M::N => {
+      ret 0
+    }
   }
 }
 

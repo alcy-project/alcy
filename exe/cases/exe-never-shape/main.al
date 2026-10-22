@@ -11,7 +11,7 @@ enum Maybe {
   B,
 }
 
-fn boom() -> ! {
+fn boom() -> !{
   panic("boom")
 }
 
@@ -20,12 +20,26 @@ fn takes(x: !) -> i32 {
 }
 
 fn main() -> i32 {
-  if size_of::<Dead>() != 1 { ret 1 }
-  if size_of::<(u8, !)>() != 1 { ret 2 }
-  if size_of::<[!; 4]>() != 0 { ret 3 }
-  if size_of::<Maybe>() != 4 { ret 4 }
-  if size_of::<()>() != 0 { ret 5 }
-  if align_of::<Dead>() != 1 { ret 6 }
-  if size_of::<(!, u64)>() != 8 { ret 7 }
+  if size_of::<Dead>() != 1 {
+    ret 1
+  }
+  if size_of::<(u8, !)>() != 1 {
+    ret 2
+  }
+  if size_of::<[!; 4]>() != 0 {
+    ret 3
+  }
+  if size_of::<Maybe>() != 4 {
+    ret 4
+  }
+  if size_of::<()>() != 0 {
+    ret 5
+  }
+  if align_of::<Dead>() != 1 {
+    ret 6
+  }
+  if size_of::<(!, u64)>() != 8 {
+    ret 7
+  }
   ret 0
 }

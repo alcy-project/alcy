@@ -1,8 +1,15 @@
 // An assignment in a comp block reaches a field or an element, not
 // only a bare binding (docs/spec/comp.md): the engine evaluates the
 // place through the binding and the value stays comp-known.
-struct Inner { x: i32, y: i32 }
-struct Outer { inner: Inner, z: i32 }
+struct Inner {
+  x: i32,
+  y: i32,
+}
+
+struct Outer {
+  inner: Inner,
+  z: i32,
+}
 
 comp fn c_value(comp n: i32) -> i32 {
   ret comp {

@@ -5,7 +5,11 @@
 fn main() -> i32 {
   s := "hello"
   match s {
-    "hello" => { ret 0 }
-    _ => { ret 1 }
+    "hello" => {
+      ret 0
+    }
+    _ => {
+      ret 1
+    }
   }
 }

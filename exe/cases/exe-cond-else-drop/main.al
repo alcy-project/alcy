@@ -9,6 +9,8 @@ fn main() -> i32 {
   } else {
     r = 2
   }
-  if r != 2 { ret 1 }
+  if r != 2 {
+    ret 1
+  }
   ret 0
 }
