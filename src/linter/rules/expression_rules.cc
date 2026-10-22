@@ -108,7 +108,7 @@ bool is_comparison(ast::BinaryOp op) {
   }
 }
 
-void check_double_negation(void*, LintContext& ctx, ast::ExprIdx expr) {
+void check_double_negation(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::Unary) {
     return;
@@ -127,7 +127,7 @@ void check_double_negation(void*, LintContext& ctx, ast::ExprIdx expr) {
   }
 }
 
-void check_self_comparison(void*, LintContext& ctx, ast::ExprIdx expr) {
+void check_self_comparison(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::Binary) {
     return;
@@ -141,7 +141,7 @@ void check_self_comparison(void*, LintContext& ctx, ast::ExprIdx expr) {
   }
 }
 
-void check_nested_if(void*, LintContext& ctx, ast::ExprIdx expr) {
+void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::If) {
     return;
@@ -181,21 +181,15 @@ void check_nested_if(void*, LintContext& ctx, ast::ExprIdx expr) {
 }  // namespace
 
 void double_negation(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.expr = &check_double_negation;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_expr(ctx, &check_double_negation);
 }
 
 void self_comparison(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.expr = &check_self_comparison;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_expr(ctx, &check_self_comparison);
 }
 
 void nested_if(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.expr = &check_nested_if;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_expr(ctx, &check_nested_if);
 }
 
 }  // namespace linter::rules

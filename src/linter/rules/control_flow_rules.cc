@@ -75,7 +75,7 @@ bool expr_diverges(const LintContext& ctx, ast::ExprIdx expr) {
   }
 }
 
-void check_block(void*, LintContext& ctx, ast::BlockIdx block) {
+void check_block(LintContext& ctx, ast::BlockIdx block) {
   const ast::Block& node = ctx.ast.blocks[block];
   bool diverged = false;
   for (const ast::StmtIdx stmt : node.statements) {
@@ -90,7 +90,7 @@ void check_block(void*, LintContext& ctx, ast::BlockIdx block) {
   }
 }
 
-void check_while(void*, LintContext& ctx, ast::ExprIdx expr) {
+void check_while(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::While) {
     return;
@@ -116,7 +116,7 @@ void check_while(void*, LintContext& ctx, ast::ExprIdx expr) {
   ctx.label<i18n::Key::LintWhileTrueHelp>(finding, node.span);
 }
 
-void check_loop(void*, LintContext& ctx, ast::ExprIdx expr) {
+void check_loop(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::Loop) {
     return;
@@ -128,7 +128,7 @@ void check_loop(void*, LintContext& ctx, ast::ExprIdx expr) {
   }
 }
 
-void check_needless_return(void*, LintContext& ctx, ast::ItemIdx item) {
+void check_needless_return(LintContext& ctx, ast::ItemIdx item) {
   const ast::ItemNode& node = ctx.ast.items[item];
   if (node.kind != ast::ItemKind::Fn) {
     return;
@@ -160,27 +160,19 @@ void check_needless_return(void*, LintContext& ctx, ast::ItemIdx item) {
 }  // namespace
 
 void unreachable_code(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.block = &check_block;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_block(ctx, &check_block);
 }
 
 void while_true(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.expr = &check_while;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_expr(ctx, &check_while);
 }
 
 void empty_loop(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.expr = &check_loop;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_expr(ctx, &check_loop);
 }
 
 void needless_return(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.item = &check_needless_return;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_item(ctx, &check_needless_return);
 }
 
 }  // namespace linter::rules

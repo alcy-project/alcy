@@ -34,7 +34,7 @@ bool documented_kind(ast::ItemKind kind) {
   }
 }
 
-void check_missing_docs(void*, LintContext& ctx, ast::ItemIdx item) {
+void check_missing_docs(LintContext& ctx, ast::ItemIdx item) {
   const ast::ItemNode& node = ctx.ast.items[item];
   if (!node.is_pub || !node.docs.empty() || !documented_kind(node.kind)) {
     return;
@@ -42,7 +42,7 @@ void check_missing_docs(void*, LintContext& ctx, ast::ItemIdx item) {
   ctx.report<i18n::Key::LintMissingDocs>(node.span, node.name());
 }
 
-void check_too_many_arguments(void*, LintContext& ctx, ast::ItemIdx item) {
+void check_too_many_arguments(LintContext& ctx, ast::ItemIdx item) {
   const ast::ItemNode& node = ctx.ast.items[item];
   if (node.kind != ast::ItemKind::Fn) {
     return;
@@ -65,15 +65,11 @@ void check_too_many_arguments(void*, LintContext& ctx, ast::ItemIdx item) {
 }  // namespace
 
 void missing_docs(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.item = &check_missing_docs;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_item(ctx, &check_missing_docs);
 }
 
 void too_many_arguments(LintContext& ctx) {
-  TreeVisitor visitor;
-  visitor.item = &check_too_many_arguments;
-  walk_module(ctx, ctx.module, visitor);
+  for_each_item(ctx, &check_too_many_arguments);
 }
 
 }  // namespace linter::rules
