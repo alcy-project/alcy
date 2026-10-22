@@ -20,6 +20,9 @@ enum class ResultCode : u8 {
   FmtFailed = 7,
   // fmt --check found a file whose layout would change.
   FmtNotClean = 8,
+  // A denied lint finding, or a lint run that could not read its
+  // input.
+  LintFailed = 9,
 };
 
 inline constexpr i32 result_code(ResultCode code) {

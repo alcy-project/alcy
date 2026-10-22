@@ -43,8 +43,9 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
       return base::make_err(ConfigError::CompileNeedsTarget);
     }
   }
-  if (config.subcommand == Subcommand::Check && !config.file.empty() &&
-      !config.target_dir.empty()) {
+  if ((config.subcommand == Subcommand::Check ||
+       config.subcommand == Subcommand::Lint) &&
+      !config.file.empty() && !config.target_dir.empty()) {
     return base::make_err(ConfigError::CheckFileWithTarget);
   }
   if (config.subcommand != Subcommand::Compile &&
@@ -53,7 +54,8 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
   }
   if (config.json && config.subcommand != Subcommand::Build &&
       config.subcommand != Subcommand::Compile &&
-      config.subcommand != Subcommand::Check) {
+      config.subcommand != Subcommand::Check &&
+      config.subcommand != Subcommand::Lint) {
     return base::make_err(ConfigError::JsonWithoutResult);
   }
   return base::make_ok();

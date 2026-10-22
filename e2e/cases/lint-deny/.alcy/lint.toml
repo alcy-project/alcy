@@ -1,0 +1,2 @@
+[rules]
+unused-variable = "deny"

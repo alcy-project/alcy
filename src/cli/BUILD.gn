@@ -45,6 +45,8 @@ source_set("cli") {
     "init_command.h",
     "init_handler.cc",
     "init_handler.h",
+    "lint_command.cc",
+    "lint_command.h",
     "logger.cc",
     "logger.h",
     "new_command.cc",
@@ -74,6 +76,7 @@ source_set("cli") {
   deps = [
     "//src/fmt:alcy_fmt",
     "//src/i18n",
+    "//src/linter",
     "//src/pipeline",
   ]
   defines = [ "ALCY_PROJECT_NAME=\"$project_name\"" ]

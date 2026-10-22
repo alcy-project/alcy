@@ -45,6 +45,7 @@ executable("tests") {
     "ir/verifier_test.cc",
     "lexer/lexer_test.cc",
     "lexer/token_test.cc",
+    "linter/linter_test.cc",
     "lowering/ir_interpreter_test.cc",
     "lowering/lowering_fixture.h",
     "opt/opt_test.cc",
@@ -117,6 +118,7 @@ executable("tests") {
     "//src/benchmarks:bench_cases",
     "//src/cli",
     "//src/fmt:alcy_fmt",
+    "//src/linter",
     "//third_party/doctest",
 
     # A property test parses what a serializer wrote, which is the only

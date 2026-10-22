@@ -18,6 +18,7 @@
 #include "cli/fmt_command.h"
 #include "cli/init_command.h"
 #include "cli/init_handler.h"
+#include "cli/lint_command.h"
 #include "cli/logger.h"
 #include "cli/new_command.h"
 #include "cli/output.h"
@@ -54,6 +55,7 @@ i32 dispatch(const CliConfig& config,
     case Subcommand::Check:
       return result_code(run_check(config, ctx, envelope));
     case Subcommand::Fmt: return result_code(run_fmt(config, ctx, envelope));
+    case Subcommand::Lint: return result_code(run_lint(config, ctx, envelope));
     case Subcommand::None: break;
   }
   // parse_args maps a missing subcommand to NoSubcommand/UnknownSubcommand,
@@ -72,6 +74,7 @@ std::string_view command_name(Subcommand subcommand) {
     case Subcommand::Init: return "init";
     case Subcommand::Check: return "check";
     case Subcommand::Fmt: return "fmt";
+    case Subcommand::Lint: return "lint";
     case Subcommand::None: break;
   }
   UNREACHABLE();

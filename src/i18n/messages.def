@@ -483,9 +483,9 @@
   F(CliFunctionSingular, "function") \
   F(CliInitAbout, "Create a package in an existing directory") \
   F(CliInvalidConfiguration, "Invalid configuration") \
-  F(CliJsonHelp, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, and check.") \
+  F(CliJsonHelp, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, check, and lint.") \
   F(CliJobsHelp, "How many threads read the source at once. Reading files is the only part of a run spread over them; everything after it is one thread. One by default, because a threaded read leaves the passes that read what it built to find nodes in an order that costs them more than the read saves.") \
-  F(CliJsonOnlyForResultVerbs, "`--json` only means anything for `build`, `compile`, and `check`") \
+  F(CliJsonOnlyForResultVerbs, "`--json` only means anything for `build`, `compile`, `check`, and `lint`") \
   F(CliLangHelp, "Language for every message this run prints. Taken from this flag alone: the locale the shell exports is not consulted, so the same command line reports the same text on every machine.") \
   F(CliLinkArgsOverrideHelp, "Argument for the link driver, after the objects. Repeatable, one argument each; overrides .alcy/toolchain.toml.") \
   F(CliLinkerOverrideHelp, "System linker driver for executable builds. Overrides .alcy/toolchain.toml.") \
@@ -523,6 +523,33 @@
   F(CliVerbFailed, "Failed") \
   F(CliVerbFormatted, "Formatted") \
   F(CliVerbRan, "Ran") \
+  /* linter */ \
+  F(CliLintAbout, "Check a package for lint findings") \
+  F(CliLintFileHelp, "Lint a single source file instead of a package directory.") \
+  F(CliLintFindingPlural, "findings") \
+  F(CliLintFindingSingular, "finding") \
+  F(CliVerbLinted, "Linted") \
+  F(LintConfigLevelNotString, "the level of lint rule '{}' in {} must be a string") \
+  F(LintConfigOptionNotInteger, "the max-args option of lint rule '{}' in {} must be an integer") \
+  F(LintConfigRuleNotTable, "lint rule '{}' in {} must be a level string or a table") \
+  F(LintConfigSyntaxError, "cannot parse {}: {}") \
+  F(LintConfigUnknownLevel, "unknown lint level '{}' in {}") \
+  F(LintConfigUnknownRule, "unknown lint rule '{}' in {}") \
+  F(LintDoubleNegation, "double negation is a no-op") \
+  F(LintEmptyLoop, "this loop has an empty body") \
+  F(LintMissingDocs, "public item {} is missing a documentation comment") \
+  F(LintNeedlessReturn, "unnecessary return at the end of the function") \
+  F(LintNestedIf, "nested if can be collapsed into a single condition") \
+  F(LintSelfComparison, "comparison of a value with itself") \
+  F(LintShadow, "binding shadows an earlier binding: {}") \
+  F(LintTooManyArguments, "function {} takes {} parameters, more than the {} allowed") \
+  F(LintUnreachableCode, "unreachable statement") \
+  F(LintUnusedMut, "variable does not need to be mutable: {}") \
+  F(LintUnusedParameter, "unused parameter: {}") \
+  F(LintUnusedVariable, "unused variable: {}") \
+  F(LintUnusedVariableHelp, "if this is intentional, prefix the name with an underscore") \
+  F(LintWhileTrue, "while true is a loop that never ends") \
+  F(LintWhileTrueHelp, "use a loop expression instead") \
   /* diagnostic renderer */ \
   F(RenderDiagnosticsDroppedPlural, "{} diagnostics were dropped: the compiler ran out of memory for them") \
   F(RenderDiagnosticsDroppedSingular, "{} diagnostic was dropped: the compiler ran out of memory for it") \

@@ -1,0 +1,64 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#pragma once
+
+#include <span>
+#include <string_view>
+
+#include "diag/bag.h"
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
+#include "fpag/mem/arena.h"
+#include "linter/level.h"
+#include "source/source.h"
+
+namespace linter {
+
+// Configuration for the goal package. The file is optional; absent
+// means every rule keeps its default level and options. See
+// docs/adr/0075-the-linter-is-a-library-over-the-frontend.md.
+constexpr std::string_view LINT_FILE_NAME = "lint.toml";
+
+// One rule's resolved settings. The level may be Allow even though the
+// rule registered warn by default; that is what silencing it means.
+struct RuleSetting {
+  LintLevel level = LintLevel::Warn;
+  // The most parameters a declaration may carry before
+  // too-many-arguments reports it. Zero keeps the rule's own default.
+  // One field serves one optional rule knob; a rule that grows a second
+  // gets a typed options struct rather than another unused field here.
+  u32 max_args = 0;
+};
+
+// The resolved configuration for one invocation: a default level and
+// one setting per registered rule, in registry order so a lookup is an
+// index. The rules span is arena-owned by the caller and lives as long
+// as the run.
+struct LintConfig {
+  LintLevel default_level = LintLevel::Warn;
+  std::span<const RuleSetting> rules;
+
+  // The setting for the rule at the given index in the registry. An
+  // index past the table reads the default, which is what a config
+  // parsed before the registry grew would want.
+  [[nodiscard]] RuleSetting setting(u32 index) const {
+    if (index < rules.size()) {
+      return rules[index];
+    }
+    return RuleSetting{.level = default_level};
+  }
+};
+
+// Parses .alcy/lint.toml bytes. Unknown keys are ignored, like
+// alcy.toml; a level that names no level and a rule name that matches
+// no registered rule are errors, because both are typos a reader wants
+// to hear about rather than silence.
+base::Result<LintConfig, diag::Reported> parse_lint_config(
+    std::string_view bytes,
+    std::string_view filename,
+    source::FileId /*file*/,
+    diag::DiagBag& bag,
+    mem::Arena& arena);
+
+}  // namespace linter

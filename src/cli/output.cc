@@ -144,6 +144,7 @@ std::string_view verb_for(Outcome outcome, i18n::Language language) {
     case Outcome::Built: return i18n::text<Key::CliVerbBuilt>(language);
     case Outcome::Compiled: return i18n::text<Key::CliVerbCompiled>(language);
     case Outcome::Checked: return i18n::text<Key::CliVerbChecked>(language);
+    case Outcome::Linted: return i18n::text<Key::CliVerbLinted>(language);
     case Outcome::Ran: return i18n::text<Key::CliVerbRan>(language);
     case Outcome::CreatedPackage:
       return i18n::text<Key::CliVerbCreatedPackage>(language);
@@ -163,6 +164,7 @@ const char* outcome_name(Outcome outcome) {
     case Outcome::Built: return "built";
     case Outcome::Compiled: return "compiled";
     case Outcome::Checked: return "checked";
+    case Outcome::Linted: return "linted";
     case Outcome::Ran: return "ran";
     case Outcome::CreatedPackage: return "created-package";
     case Outcome::CreatedSuite: return "created-suite";
@@ -295,6 +297,19 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
     // The formatted source already left on standard output; a subject
     // after it would read as part of the source.
     case Outcome::Piped: return {};
+    case Outcome::Linted: {
+      std::string subject;
+      if (envelope.file_count > 0) {
+        append_count(subject, envelope.file_count,
+                     i18n::text<Key::CliFileSingular>(language),
+                     i18n::text<Key::CliFilePlural>(language));
+        subject += ", ";
+      }
+      append_count(subject, envelope.lint_count,
+                   i18n::text<Key::CliLintFindingSingular>(language),
+                   i18n::text<Key::CliLintFindingPlural>(language));
+      return subject;
+    }
     case Outcome::Built:
     case Outcome::Compiled:
     case Outcome::Ran: return envelope.output_path;
@@ -552,6 +567,8 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   append_json_number(out, envelope.module_count);
   out += R"(,"functions":)";
   append_json_number(out, envelope.function_count);
+  out += R"(,"findings":)";
+  append_json_number(out, envelope.lint_count);
   out += R"(,"output_bytes":)";
   append_json_number(out, envelope.output_bytes);
   out += R"(,"wall_ns":)";

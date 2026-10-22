@@ -1,0 +1,4 @@
+subcommand = "lint"
+exit = 0
+contains = ["warning[unused-variable]"]
+not_contains = ["error["]

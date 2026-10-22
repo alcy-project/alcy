@@ -76,6 +76,8 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
     c.subcommand = Subcommand::Check;
   } else if (selected == "fmt") {
     c.subcommand = Subcommand::Fmt;
+  } else if (selected == "lint") {
+    c.subcommand = Subcommand::Lint;
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
   // `--release` selects the release profile; `--profile` names a profile
@@ -443,6 +445,13 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("check")
                        .help(usage.text(i18n::Key::CliFmtCheckHelp))
                        .is_flag(true)
+                       .build())
+          .build());
+  builder.add_subcommand(
+      build_subcommand("lint", std::string(usage.text(i18n::Key::CliLintAbout)))
+          .add_arg(arg::ArgBuilder("file")
+                       .help(usage.text(i18n::Key::CliLintFileHelp))
+                       .default_value("")
                        .build())
           .build());
   return arg::Parser(std::move(builder).build());

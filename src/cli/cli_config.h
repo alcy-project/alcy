@@ -31,6 +31,7 @@ enum class Subcommand : u8 {
   Init,
   Check,
   Fmt,
+  Lint,
 };
 
 struct CliConfig {

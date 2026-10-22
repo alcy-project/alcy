@@ -39,6 +39,7 @@ enum class Outcome : u8 {
   Built,
   Compiled,
   Checked,
+  Linted,
   Ran,
   CreatedPackage,
   CreatedSuite,
@@ -96,6 +97,9 @@ struct Envelope {
   usize file_count = 0;
   usize module_count = 0;
   usize function_count = 0;
+  // Findings a lint run reported. Zero for every other verb, which has
+  // no findings to count.
+  usize lint_count = 0;
   // Size of what was written, or zero when the command wrote nothing.
   u64 output_bytes = 0;
   // Wall time of the whole invocation, measured by the caller with a

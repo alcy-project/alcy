@@ -5,14 +5,14 @@
     "coverage of src/ drops below this. Move it only on purpose."
   ],
   "lines": {
-    "count": 78883,
-    "covered": 65642,
-    "percent": 83.21438079180558
+    "count": 80753,
+    "covered": 66804,
+    "percent": 82.72633834037126
   },
   "modules": {
     "analyzer": {
       "count": 14119,
-      "covered": 10898
+      "covered": 10899
     },
     "ast": {
       "count": 795,
@@ -31,8 +31,8 @@
       "covered": 1381
     },
     "cli": {
-      "count": 2344,
-      "covered": 2017
+      "count": 2444,
+      "covered": 2104
     },
     "codegen": {
       "count": 2655,
@@ -59,8 +59,8 @@
       "covered": 0
     },
     "diag": {
-      "count": 710,
-      "covered": 637
+      "count": 743,
+      "covered": 662
     },
     "fmt": {
       "count": 1416,
@@ -71,12 +71,16 @@
       "covered": 37
     },
     "ir": {
-      "count": 4099,
-      "covered": 3341
+      "count": 4100,
+      "covered": 3342
     },
     "lexer": {
       "count": 701,
       "covered": 691
+    },
+    "linter": {
+      "count": 1564,
+      "covered": 871
     },
     "lowering": {
       "count": 9453,
@@ -92,15 +96,15 @@
     },
     "parser": {
       "count": 4342,
-      "covered": 3792
+      "covered": 3797
     },
     "path": {
       "count": 85,
       "covered": 82
     },
     "pipeline": {
-      "count": 3671,
-      "covered": 2921
+      "count": 3668,
+      "covered": 2918
     },
     "pkg": {
       "count": 1465,
@@ -119,8 +123,8 @@
       "covered": 388
     },
     "tests": {
-      "count": 25129,
-      "covered": 22908
+      "count": 25304,
+      "covered": 23083
     },
     "text": {
       "count": 108,

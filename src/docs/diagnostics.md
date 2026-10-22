@@ -46,6 +46,7 @@ partly because UTF-8 validation is coming and it should not have to move.
 | `I` | pipeline | `src/pipeline` | |
 | `J` | codegen_llvm | `src/codegen_llvm` | reserved |
 | `K` | codegen | reserved for the native backend | reserved |
+| `L` | lint | `linter/` | one per rule, plus the config file's own two |
 
 `E`, `N` and `W` are not in the table because they are the severity
 letters and they sit in the same bracket; a component holding one of them
@@ -65,7 +66,9 @@ than a wider field.
 `ir` is the one component with no enum of its own. A code there is the
 `VerificationErrorKind`'s ordinal shifted by one, so a kind and its code
 cannot drift apart; adding a kind needs no renumbering, and the message
-is the kind name.
+is the kind name. `lint` renders by rule name rather than by code - a
+reader configures `unused-variable`, not `L010` - while the code travels
+in `--json` and keeps the same shape every other component has.
 
 ## What this document is
 

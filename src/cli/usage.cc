@@ -153,6 +153,8 @@ UsageText::UsageText(Language language)
   set(Key::CliCheckFileHelp, i18n::format<Key::CliCheckFileHelp>(language));
   set(Key::CliFmtAbout, i18n::format<Key::CliFmtAbout>(language));
   set(Key::CliFmtCheckHelp, i18n::format<Key::CliFmtCheckHelp>(language));
+  set(Key::CliLintAbout, i18n::format<Key::CliLintAbout>(language));
+  set(Key::CliLintFileHelp, i18n::format<Key::CliLintFileHelp>(language));
 }
 
 const UsageText& usage_text(Language language) {

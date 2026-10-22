@@ -1,0 +1,53 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The linter: a library over the compiler frontend, invoked as
+# alcy lint. It is a module of the toolchain tree rather than a stage
+# of the compiler: no compiler target depends on it - the dependency
+# direction is the boundary, and gn check holds it - and the cli links
+# it instead of the library linking it.
+#
+# A header is named from the src root (linter/lint.h), which the shared
+# alcy_config carries, so dependents - the cli, the tests - include the
+# same spelling every module uses.
+source_set("linter") {
+  sources = [
+    "bindings.cc",
+    "bindings.h",
+    "config.cc",
+    "config.h",
+    "context.cc",
+    "context.h",
+    "diag_code.cc",
+    "diag_code.h",
+    "engine.cc",
+    "engine.h",
+    "level.cc",
+    "level.h",
+    "lint.cc",
+    "lint.h",
+    "rule.cc",
+    "rule.h",
+    "rules/bindings_rules.cc",
+    "rules/control_flow_rules.cc",
+    "rules/expression_rules.cc",
+    "rules/item_rules.cc",
+    "rules/rules.cc",
+    "rules/rules.h",
+    "walk.cc",
+    "walk.h",
+  ]
+
+  configs += [ "//src:alcy_config" ]
+  public_configs = [ "//src:alcy_config" ]
+
+  # Every compiler module is reached through the archive the binaries
+  # already link, rather than by naming each source set a second time:
+  # a complete static library that a source set also depended on would
+  # put its objects in the link twice. toml++ is the one third-party
+  # include this module makes directly.
+  deps = [
+    "//src:alcy_lib",
+    "//third_party/toml",
+  ]
+}

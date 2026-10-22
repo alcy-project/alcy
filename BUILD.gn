@@ -36,5 +36,6 @@ group("all") {
     ":benchmarks",
     ":default",
     ":tests",
+    "//src/linter",
   ]
 }
