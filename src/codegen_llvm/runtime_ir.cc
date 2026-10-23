@@ -46,6 +46,7 @@ class RuntimeBuilder {
         windows_(target.is_windows()),
         freestanding_(freestanding),
         backtrace_(backtrace),
+        comdat_(llvm::Triple(target.triple).isOSBinFormatCOFF()),
         arch_(target.triple.substr(0, target.triple.find('-'))),
         usize_(target.width == ir::PointerWidth::W64 ? builder_.getInt64Ty()
                                                      : builder_.getInt32Ty()) {}
@@ -101,14 +102,14 @@ class RuntimeBuilder {
       if (!argc->hasInitializer()) {
         argc->setInitializer(llvm::ConstantInt::get(builder_.getInt32Ty(), 0));
       }
-      argc->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+      link_once_odr(*argc);
       llvm::GlobalVariable* argv =
           module_.getOrInsertGlobal("alcy_argv", builder_.getPtrTy());
       if (!argv->hasInitializer()) {
         argv->setInitializer(
             llvm::ConstantPointerNull::get(builder_.getPtrTy()));
       }
-      argv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+      link_once_odr(*argv);
     }
     if (declared("alcy_arg_count")) {
       build_arg_count();
@@ -286,17 +287,34 @@ class RuntimeBuilder {
   // Every entry point is `linkonce_odr`: an object alcy writes carries
   // the whole runtime, so two of them in one image would each define
   // `alcy_*`, and a discardable definition is what lets the linker keep
-  // one copy and the optimizer drop what no program calls.
+  // one copy and the optimizer drop what no program calls. On COFF a
+  // discardable definition also needs a comdat: the object format
+  // resolves a weak external through a `.weak.<name>.default.<tag>`
+  // copy whose tag names this object's first caller, so two objects of
+  // one image conflict (LNK1227) unless the comdat marks them the same
+  // definition. Mach-O rejects comdats, and the other formats dedup
+  // the plain linkage by symbol.
+  void link_once_odr(llvm::GlobalObject& value) {
+    value.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    if (comdat_) {
+      llvm::Comdat* comdat = module_.getOrInsertComdat(value.getName());
+      comdat->setSelectionKind(llvm::Comdat::Any);
+      value.setComdat(comdat);
+    }
+  }
+
   llvm::Function* runtime(std::string_view name, llvm::FunctionType* type) {
     if (llvm::Function* declared = module_.getFunction(name)) {
       DCHECK_MSG(declared->getFunctionType() == type,
                  "runtime signature changed under the program's declaration");
       DCHECK_MSG(declared->isDeclaration(), "runtime defined twice");
-      declared->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+      link_once_odr(*declared);
       return declared;
     }
-    return llvm::Function::Create(type, llvm::GlobalValue::LinkOnceODRLinkage,
-                                  name, module_);
+    llvm::Function* function = llvm::Function::Create(
+        type, llvm::GlobalValue::ExternalLinkage, name, module_);
+    link_once_odr(*function);
+    return function;
   }
 
   llvm::Function* libc(std::string_view name, llvm::FunctionType* type) {
@@ -1377,6 +1395,9 @@ class RuntimeBuilder {
   bool freestanding_;
   // Whether `alcy_panic` walks the frame chain before it aborts.
   bool backtrace_;
+  // Whether a discardable definition needs a comdat to dedup by name:
+  // only COFF resolves weak externals through per-object defaults.
+  bool comdat_;
   std::string arch_;
   llvm::IntegerType* usize_;
   llvm::Constant* empty_text_ = nullptr;

@@ -36,8 +36,12 @@ llvm::FunctionType* signature(llvm::Type* return_type,
 // here would only surface as a verifier error much later. The linkage is
 // part of the contract for the same reason: an object alcy writes
 // carries the whole runtime, so a second object in one image defines
-// these again unless each definition is discardable.
+// these again unless each definition is discardable. On COFF the
+// comdat is part of that contract too: the format resolves a weak
+// external through a per-object default, so a discardable definition
+// only dedups when the comdat names it.
 void check_definition(llvm::Module& module,
+                      const codegen_llvm::Target& target,
                       std::string_view name,
                       llvm::FunctionType* expected) {
   llvm::Function* function = module.getFunction(name);
@@ -47,6 +51,9 @@ void check_definition(llvm::Module& module,
   }
   CHECK(!function->isDeclaration());
   CHECK(function->hasLinkOnceODRLinkage());
+  if (llvm::Triple(target.triple).isOSBinFormatCOFF()) {
+    CHECK(function->getComdat() != nullptr);
+  }
   CHECK(function->getFunctionType() == expected);
 }
 
@@ -84,6 +91,56 @@ bool builds_panic_walk(const codegen_llvm::Target& target) {
 
 }  // namespace
 
+TEST_CASE("A COFF runtime dedups its discardables by comdat") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_comdat_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+
+  declare(module, "alcy_panic",
+          signature(void_ty, {pointer, usize, pointer, usize}));
+  const codegen_llvm::Target coff{"x86_64-pc-windows-msvc",
+                                  ir::PointerWidth::W64};
+  add_runtime_definitions(module, coff);
+
+  // Two objects of one image carry the runtime twice, and COFF resolves
+  // a weak external through a `.weak.<name>.default.<tag>` copy whose
+  // tag names the object's own first caller, so the definitions dedup
+  // only when a comdat names them (LNK1227 otherwise).
+  llvm::Function* panic = module.getFunction("alcy_panic");
+  CHECK(panic != nullptr);
+  if (panic != nullptr) {
+    CHECK(panic->getComdat() != nullptr);
+    CHECK(panic->getComdat()->getName() == "alcy_panic");
+    CHECK(panic->getComdat()->getSelectionKind() == llvm::Comdat::Any);
+  }
+  llvm::GlobalVariable* argc = module.getGlobalVariable("alcy_argc");
+  CHECK(argc != nullptr);
+  if (argc != nullptr) {
+    CHECK(argc->getComdat() != nullptr);
+    CHECK(argc->getComdat()->getName() == "alcy_argc");
+  }
+
+  // The other object formats dedup the plain linkage by symbol, and
+  // Mach-O rejects comdats outright.
+  llvm::LLVMContext other_context;
+  llvm::Module other("runtime_ir_comdat_test", other_context);
+  const auto other_usize = llvm::Type::getInt64Ty(other_context);
+  const auto other_void = llvm::Type::getVoidTy(other_context);
+  const auto other_pointer = opaque_pointer(other_context);
+  declare(other, "alcy_panic",
+          signature(other_void,
+                    {other_pointer, other_usize, other_pointer, other_usize}));
+  const codegen_llvm::Target macho{"arm64-apple-macosx", ir::PointerWidth::W64};
+  add_runtime_definitions(other, macho);
+  llvm::Function* bare = other.getFunction("alcy_panic");
+  CHECK(bare != nullptr);
+  if (bare != nullptr) {
+    CHECK(bare->getComdat() == nullptr);
+  }
+}
+
 TEST_CASE("Runtime defines every entry point") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);
@@ -102,19 +159,22 @@ TEST_CASE("Runtime defines every entry point") {
   declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
   declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
 
-  add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
+  const codegen_llvm::Target target = target_of(ir::PointerWidth::W64);
+  add_runtime_definitions(module, target);
 
   CHECK(!llvm::verifyModule(module));
 
-  check_definition(module, "alcy_print", signature(void_ty, {pointer, usize}));
-  check_definition(module, "alcy_println",
+  check_definition(module, target, "alcy_print",
                    signature(void_ty, {pointer, usize}));
-  check_definition(module, "alcy_panic",
+  check_definition(module, target, "alcy_println",
+                   signature(void_ty, {pointer, usize}));
+  check_definition(module, target, "alcy_panic",
                    signature(void_ty, {pointer, usize, pointer, usize}));
-  check_definition(module, "alcy_sys_write",
+  check_definition(module, target, "alcy_sys_write",
                    signature(void_ty, {i32, pointer, usize}));
-  check_definition(module, "alcy_alloc", signature(pointer, {usize, usize}));
-  check_definition(module, "alcy_dealloc",
+  check_definition(module, target, "alcy_alloc",
+                   signature(pointer, {usize, usize}));
+  check_definition(module, target, "alcy_dealloc",
                    signature(void_ty, {pointer, usize, usize}));
 
   llvm::Function* write_all = module.getFunction("alcy_write_all");
@@ -185,12 +245,15 @@ TEST_CASE("Runtime follows the target width") {
   declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
   declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
 
-  add_runtime_definitions(module, target_of(ir::PointerWidth::W32));
+  const codegen_llvm::Target target = target_of(ir::PointerWidth::W32);
+  add_runtime_definitions(module, target);
 
   CHECK(!llvm::verifyModule(module));
 
-  check_definition(module, "alcy_print", signature(void_ty, {pointer, usize}));
-  check_definition(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  check_definition(module, target, "alcy_print",
+                   signature(void_ty, {pointer, usize}));
+  check_definition(module, target, "alcy_alloc",
+                   signature(pointer, {usize, usize}));
 }
 
 TEST_CASE("The file helpers answer i64 on a 32-bit target") {
@@ -209,15 +272,16 @@ TEST_CASE("The file helpers answer i64 on a 32-bit target") {
   declare(module, "alcy_write_file",
           signature(i64, {pointer, usize32, pointer, usize32}));
 
-  add_runtime_definitions(module, target_of(ir::PointerWidth::W32));
+  const codegen_llvm::Target target = target_of(ir::PointerWidth::W32);
+  add_runtime_definitions(module, target);
 
   CHECK(!llvm::verifyModule(module));
 
-  check_definition(module, "alcy_file_size",
+  check_definition(module, target, "alcy_file_size",
                    signature(i64, {pointer, usize32}));
-  check_definition(module, "alcy_read_file_into",
+  check_definition(module, target, "alcy_read_file_into",
                    signature(i64, {pointer, usize32, pointer, usize32}));
-  check_definition(module, "alcy_write_file",
+  check_definition(module, target, "alcy_write_file",
                    signature(i64, {pointer, usize32, pointer, usize32}));
 }
 

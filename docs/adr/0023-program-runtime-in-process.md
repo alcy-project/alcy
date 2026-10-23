@@ -98,3 +98,19 @@ lookup in the module, not a link of two modules.
   jobs compile, link, and run the exe acceptance cases, so `_write`,
   `_aligned_malloc`, and `_aligned_free` all run. The sanitized pass over
   the same cases is local to `check.sh`.
+
+## Amendments
+
+**COFF names the discardable by comdat.** The `linkonce_odr` entry points
+met in one image on ELF and Mach-O, which resolve a weak symbol by name.
+COFF does not: its weak external carries a default of its own,
+`.weak.<name>.default.<tag>`, whose tag names the object's first caller,
+so two objects answered "which `alcy_panic`" differently and the Windows
+linker refused the pair (LNK1227). The first two-object image is a
+dependent's link ([`docs/adr/0078-the-summary-a-dependent-reads.md`](0078-the-summary-a-dependent-reads.md)),
+and it failed on `alcy_panic`, `alcy_check_overflow`,
+`alcy_check_shift`, `alcy_argc`, and `alcy_argv`. The runtime now
+attaches a comdat named for the entry point when the target's object
+format is COFF — the format's own statement that two definitions are
+the same one — while Mach-O, which rejects comdats, keeps the plain
+linkage and ELF keeps deduplicating it by symbol.
