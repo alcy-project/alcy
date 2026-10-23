@@ -175,6 +175,14 @@ struct CheckedModule {
     u32 inst = NO_INST;
   };
   std::vector<ExprType> expr_types;
+  // Where the last entry recorded for an expression under an
+  // instantiation sits. A re-checked expression keeps its last answer
+  // (a bare literal is re-checked against its sibling's type), so the
+  // index is overwritten rather than first-won.
+  std::unordered_map<u64, u32> expr_type_by_key;
+  [[nodiscard]] static u64 expr_type_key(ast::ExprIdx expr, u32 inst) {
+    return (static_cast<u64>(expr.idx) << 32) | static_cast<u64>(inst);
+  }
   struct CallTarget {
     ast::ExprIdx callee;
     bool is_method;
@@ -208,6 +216,28 @@ struct CheckedModule {
     return (static_cast<u64>(expr.idx) << 32) | static_cast<u64>(inst);
   }
   std::unordered_map<u64, u32> value_splice_by_key;
+  // The lowering side tables answer through these queries, so the
+  // keying and the duplicate rule stay here and no reader scans its
+  // own table. An expression's type is the last answer recorded for
+  // it; a call target and a value splice are recorded once per key.
+  [[nodiscard]] const ExprType* expr_type_of(ast::ExprIdx expr,
+                                             u32 inst) const {
+    const auto found = expr_type_by_key.find(expr_type_key(expr, inst));
+    return found == expr_type_by_key.end() ? nullptr
+                                           : &expr_types[found->second];
+  }
+  [[nodiscard]] const CallTarget* callee_of(ast::ExprIdx callee,
+                                            u32 inst) const {
+    const auto found = call_target_by_key.find(call_target_key(callee, inst));
+    return found == call_target_by_key.end() ? nullptr
+                                             : &call_targets[found->second];
+  }
+  [[nodiscard]] const ValueSplice* value_splice_of(ast::ExprIdx expr,
+                                                   u32 inst) const {
+    const auto found = value_splice_by_key.find(value_splice_key(expr, inst));
+    return found == value_splice_by_key.end() ? nullptr
+                                              : &value_splices[found->second];
+  }
   // One closure literal: the signature lowering compiles the body
   // against, with the parameters it binds. Keyed by the closure
   // expression; the body stays in the AST. `inst` keys entries

@@ -267,38 +267,20 @@ bool CompEvaluator::evaluate_item(u32 module,
 }
 
 ir::TypeIdx CompEvaluator::expr_type_in(u32 mod, ast::ExprIdx expr) {
-  // An expression can be checked more than once: a bare integer literal
-  // is re-checked against its sibling's type so `x + 42` adopts `x`'s,
-  // and the last entry is the answer the enclosing expression used. The
-  // lowering reads the same way, so the two agree on a duplicate key.
-  const auto& entries = inputs_.modules[mod].expr_types;
-  for (usize i = entries.size(); i > 0; --i) {
-    if (entries[i - 1].expr == expr && entries[i - 1].inst == inst_) {
-      return entries[i - 1].type;
-    }
-  }
-  return error_type();
+  const analyzer::CheckedModule::ExprType* entry =
+      inputs_.modules[mod].expr_type_of(expr, inst_);
+  return entry != nullptr ? entry->type : error_type();
 }
 
 const analyzer::CheckedModule::CallTarget* CompEvaluator::call_target_in(
     u32 mod,
     ast::ExprIdx callee) const {
-  const analyzer::CheckedModule& checked = inputs_.modules[mod];
-  const auto found = checked.call_target_by_key.find(
-      analyzer::CheckedModule::call_target_key(callee, inst_));
-  return found == checked.call_target_by_key.end()
-             ? nullptr
-             : &checked.call_targets[found->second];
+  return inputs_.modules[mod].callee_of(callee, inst_);
 }
 
 const CheckedModule::ValueSplice*
 CompEvaluator::value_splice_in(u32 mod, ast::ExprIdx expr, u32 inst) const {
-  const CheckedModule& checked = inputs_.modules[mod];
-  const auto found = checked.value_splice_by_key.find(
-      CheckedModule::value_splice_key(expr, inst));
-  return found == checked.value_splice_by_key.end()
-             ? nullptr
-             : &checked.value_splices[found->second];
+  return inputs_.modules[mod].value_splice_of(expr, inst);
 }
 
 bool CompEvaluator::comp_eval_literal(u32 mod,

@@ -561,26 +561,14 @@ const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(
 }
 
 ir::TypeIdx Lowerer::expr_type(ast::ExprIdx expr) {
-  // An expression can be checked more than once: a bare integer literal
-  // is re-checked against its sibling's type so `x + 42` adopts `x`'s, and
-  // the last entry is the answer the enclosing expression used.
-  const auto& entries = pkg.modules[module].expr_types;
-  for (usize i = entries.size(); i > 0; --i) {
-    if (entries[i - 1].expr == expr && entries[i - 1].inst == cur_inst_) {
-      return entries[i - 1].type;
-    }
-  }
-  return error_type();
+  const analyzer::CheckedModule::ExprType* entry =
+      pkg.modules[module].expr_type_of(expr, cur_inst_);
+  return entry != nullptr ? entry->type : error_type();
 }
 
 const analyzer::CheckedModule::CallTarget* Lowerer::call_target(
     ast::ExprIdx callee) const {
-  const analyzer::CheckedModule& checked = pkg.modules[module];
-  const auto found = checked.call_target_by_key.find(
-      analyzer::CheckedModule::call_target_key(callee, cur_inst_));
-  return found == checked.call_target_by_key.end()
-             ? nullptr
-             : &checked.call_targets[found->second];
+  return pkg.modules[module].callee_of(callee, cur_inst_);
 }
 
 const analyzer::CheckedModule::IndirectCall* Lowerer::indirect_call(

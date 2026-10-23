@@ -856,12 +856,7 @@ const analyzer::CheckedModule::ValueSplice* Lowerer::value_splice(
 const analyzer::CheckedModule::ValueSplice* Lowerer::value_splice_in(
     ast::ExprIdx expr,
     u32 inst) const {
-  const analyzer::CheckedModule& checked = pkg.modules[module];
-  const auto found = checked.value_splice_by_key.find(
-      analyzer::CheckedModule::value_splice_key(expr, inst));
-  return found == checked.value_splice_by_key.end()
-             ? nullptr
-             : &checked.value_splices[found->second];
+  return pkg.modules[module].value_splice_of(expr, inst);
 }
 
 const analyzer::CheckedModule::EnumInfo* Lowerer::enum_info(
