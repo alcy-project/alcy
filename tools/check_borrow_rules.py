@@ -1000,6 +1000,23 @@ case(
 }""",
 )
 
+# `String::slice` reaches `str_slice`, whose pointer advance names a
+# place inside the source buffer, so the view carries the buffer's loan
+# the way `as_str` does and the growth that may reallocate conflicts.
+case(
+    "subslice",
+    "string-slice-method-then-buffer-write",
+    "reject",
+    """fn main() -> i32 {
+  mut s := String::new()
+  s.push(104u8)
+  s.push(105u8)
+  t := s.slice(0, 1)
+  s.reserve(64)
+  ret str_len(t) as i32
+}""",
+)
+
 # --- a struct holding a reference composes by intersection ------------
 case(
     "struct",

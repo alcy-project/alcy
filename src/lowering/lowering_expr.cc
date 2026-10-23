@@ -2673,7 +2673,15 @@ Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    const ir::OperandIdx sub = advance_ptr(bytes, start, node.span);
+    // A byte reference at `start`: the element offset names a place
+    // inside the source buffer, so the loan the view carries reaches
+    // the result str the way it reaches the one `str_from_parts`
+    // builds. Advancing by integer arithmetic would leave the register
+    // loan-free, and a slice would then outlive the growth that frees
+    // the buffer under it.
+    const ir::TypeIdx byte_ref = builder.reference_type(u8_ty, false);
+    const ir::RegisterIdx sub_ref =
+        emit(ir::Opcode::ElemOffset, byte_ref, {bytes, start});
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
@@ -2684,7 +2692,8 @@ Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
         emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::Ptr),
              {to_operand(addr, str_ty), zero_i32, index_operand(0)});
     emit_void(ir::Opcode::Store,
-              {sub, to_operand(field0, builder.primitive(ir::TypeTag::Ptr))});
+              {to_operand(sub_ref, builder.primitive(ir::TypeTag::Ptr)),
+               to_operand(field0, builder.primitive(ir::TypeTag::Ptr))});
     const ir::RegisterIdx field1 =
         emit(ir::Opcode::GetElementPtr, usize_ty,
              {to_operand(addr, str_ty), zero_i32, index_operand(1)});

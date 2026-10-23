@@ -1463,6 +1463,14 @@ class Checker {
             continue;
           }
           const u32 root = loans[loan].place.root;
+          // A `str` local is a view, not storage: its two words point at
+          // a buffer someone else owns, so handing the view back does
+          // not hand back the local. A `String` owns, so a loan rooted
+          // there still escapes.
+          if (root < storage.registers().size() &&
+              tag_of(storage.registers()[root].type) == ir::TypeTag::Str) {
+            continue;
+          }
           if (!is_param_root(root, fn)) {
             const u32 index = bag.emit<i18n::Key::BorrowReturnsLocalReference>(
                 DiagCode::Escape, span, addr_name(root));
