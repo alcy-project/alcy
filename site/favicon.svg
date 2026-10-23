@@ -2,10 +2,10 @@
   <rect width="64" height="64" rx="12" fill="#e6002d" />
   <text
     x="32"
-    y="46"
+    y="50"
     text-anchor="middle"
-    font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-    font-size="42"
+    font-family="JetBrains Mono"
+    font-size="64"
     font-weight="600"
     fill="#ffffff"
   >a</text>

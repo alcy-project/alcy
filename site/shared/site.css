@@ -29,7 +29,7 @@
   --selection: rgba(230, 0, 45, 0.2);
   --accent-strong: #b30024;
   --focus: rgba(38, 36, 32, 0.55);
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
