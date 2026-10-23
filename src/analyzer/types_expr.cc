@@ -3774,6 +3774,44 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           return error_type();
         }
       }
+      // A `const` item names no storage of its own, so a mutable
+      // borrow that reaches one - through a field, an element, or a
+      // dereference as well - would write to a temporary and vanish.
+      // The shared form reads the value and is fine.
+      if (borrow.is_mut) {
+        ast::ExprIdx base = borrow.inner;
+        for (;;) {
+          const ast::ExprNode& at = ast.exprs[base];
+          if (at.kind == ast::ExprKind::Field) {
+            base = at.payload.get<ast::ExprField>().receiver;
+          } else if (at.kind == ast::ExprKind::Index) {
+            base = at.payload.get<ast::ExprIndex>().receiver;
+          } else if (at.kind == ast::ExprKind::Deref) {
+            base = at.payload.get<ast::ExprDeref>().inner;
+          } else {
+            break;
+          }
+        }
+        if (ast.exprs[base].kind == ast::ExprKind::Path) {
+          const ast::ExprPath& root =
+              ast.exprs[base].payload.get<ast::ExprPath>();
+          const std::span<const ast::Ident> segments =
+              ast.paths[root.idx].segments;
+          if (segments.size() == 1 &&
+              lookup_local(segments[0].name) == nullptr) {
+            const CheckedModule::StaticInfo* info =
+                find_static(module, segments[0].name);
+            if (info != nullptr && info->is_const) {
+              const u32 index =
+                  bag.emit<i18n::Key::AnalyzerNotAnAssignablePlace>(
+                      diag::Severity::Error, diag::Stage::Analyzer,
+                      DiagCode::BadAssignment, segments[0].span);
+              (void)index;
+              return error_type();
+            }
+          }
+        }
+      }
       if (ast.exprs[borrow.inner].kind == ast::ExprKind::Index) {
         return check_borrow_of_index(module, expr, borrow, expected);
       }

@@ -252,6 +252,14 @@ replaced. The foundations are in `roadmap.md`.
   runtime half is covered now - the instrumented gate reports the read
   - and the checker's half waits on the summary work above.
 
+- [ ] A mutable borrow never asks the borrowed place to be mutable: `x
+  := 7; r := &mut x; *r = 9` compiles and the write lands, and
+  `p := P { x: 1 }; r := &mut p.x` reaches the field the same way, while
+  the plain `x = 8` is refused. A `const` item is refused now, since the
+  write would vanish into the temporary a borrow of one leans on, so the
+  rule the borrow is missing is the one `check_place` states for an
+  assignment; a temporary stays mutable and keeps its allowance.
+
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the
   compiler's version string does not identify the binary that wrote an
