@@ -241,6 +241,20 @@ replaced. The foundations are in `roadmap.md`.
   see that a library's type implements one, and the roadmap asks a
   summary to carry them.
 
+- [ ] A single file checked or compiled on its own stages the embedded
+  suite and parses the target as an unnamed root beside it, so a
+  standard-library source handed to `--file` exists twice: once as the
+  disk file and once as the embedded member. `alcy check --file
+  lib/std/core/string.al` then reports `Type mismatch in method call:
+  expected 'StrIter', found 'StrIter'` (exit 4) and `alcy compile` the
+  same, because the disk copy's `impl str` declares its own `StrIter`
+  while the call resolves to the embedded copy's, and two different
+  declarations print one spelling. Identifying the target with the
+  suite member whose path it ends with, and staging the disk bytes in
+  that member's place, is the shape of the fix; the declaration
+  identity above is what would let the message tell the two apart until
+  then.
+
 - [ ] A reference to a container's element carries no loan: `r := &v[0]`
   held across a `v.push` is accepted, the growth frees the buffer the
   reference reads through, and the address sanitizer reports the
