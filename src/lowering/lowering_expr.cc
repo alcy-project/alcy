@@ -267,6 +267,18 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
           return Val{to_operand(local->addr, local->type), local->type, true,
                      true};
         }
+        // A `const` item names no storage of its own, so lending it a
+        // reference materializes the value into a temporary and lends
+        // that.
+        if (const auto* info = lookup_static(module, segments[0].name)) {
+          if (info->is_const && info->init.is_valid()) {
+            Val value = lower_path(expr, nullptr);
+            if (failed || terminated_cur()) {
+              return value;
+            }
+            return address_of(value);
+          }
+        }
       }
       unsupported(node.span, "borrowed place");
       return Val{size_one, error_type(), true, false};
