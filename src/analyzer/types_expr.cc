@@ -968,8 +968,12 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
           builder.func_type(seq.finish(), storage_copy(fn->ret));
       const auto where = position_by_address_.find(fn);
       if (where != position_by_address_.end()) {
-        modules[module].closure_fns.push_back(
+        CheckedModule& checked = modules[module];
+        checked.closure_fns.push_back(
             {expr, where->second.first, where->second.second, cur_inst});
+        checked.closure_fn_by_key.emplace(
+            CheckedModule::closure_fn_key(expr, cur_inst),
+            static_cast<u32>(checked.closure_fns.size() - 1));
       }
       if (expected != nullptr) {
         return unify(*expected, closure_type, span, "path");
@@ -1506,7 +1510,11 @@ ir::TypeIdx Checker::check_closure(u32 module,
   lit.self_type = self_type;
   lit.func_type = closure_type;
   if (fresh) {
-    modules[module].closures.push_back(std::move(lit));
+    CheckedModule& checked = modules[module];
+    checked.closures.push_back(std::move(lit));
+    checked.closure_by_key.emplace(
+        CheckedModule::closure_key(expr, cur_inst),
+        static_cast<u32>(checked.closures.size() - 1));
   }
   if (expected != nullptr) {
     if (types_equal(*expected, self_type)) {
@@ -1551,7 +1559,11 @@ ir::TypeIdx Checker::check_indirect_call(u32 module,
   if (args.size() != params.size()) {
     return error_type();
   }
-  modules[module].indirect_calls.push_back({callee, cur_inst});
+  CheckedModule& checked = modules[module];
+  checked.indirect_calls.push_back({callee, cur_inst});
+  checked.indirect_call_by_key.emplace(
+      CheckedModule::indirect_call_key(callee, cur_inst),
+      static_cast<u32>(checked.indirect_calls.size() - 1));
   if (expected != nullptr) {
     return unify(*expected, ret, span, "call");
   }

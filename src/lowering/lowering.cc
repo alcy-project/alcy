@@ -573,32 +573,17 @@ const analyzer::CheckedModule::CallTarget* Lowerer::call_target(
 
 const analyzer::CheckedModule::IndirectCall* Lowerer::indirect_call(
     ast::ExprIdx callee) const {
-  for (const auto& entry : pkg.modules[module].indirect_calls) {
-    if (entry.callee == callee && entry.inst == cur_inst_) {
-      return &entry;
-    }
-  }
-  return nullptr;
+  return pkg.modules[module].indirect_call_of(callee, cur_inst_);
 }
 
 const analyzer::CheckedModule::ClosureFn* Lowerer::closure_fn(
     ast::ExprIdx expr) const {
-  for (const auto& entry : pkg.modules[module].closure_fns) {
-    if (entry.expr == expr && entry.inst == cur_inst_) {
-      return &entry;
-    }
-  }
-  return nullptr;
+  return pkg.modules[module].closure_fn_of(expr, cur_inst_);
 }
 
 const analyzer::CheckedModule::ClosureLit* Lowerer::closure_lit(
     ast::ExprIdx expr) const {
-  for (const auto& entry : pkg.modules[module].closures) {
-    if (entry.expr == expr && entry.inst == cur_inst_) {
-      return &entry;
-    }
-  }
-  return nullptr;
+  return pkg.modules[module].closure_of(expr, cur_inst_);
 }
 
 std::vector<u32> Lowerer::comp_positions(ast::ItemIdx item) const {
@@ -1219,12 +1204,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   const analyzer::CheckedModule::ClosureLit* lit = closure_lit(entry.closure);
   const analyzer::CheckedModule::ClosureFn* fn = nullptr;
   if (lit == nullptr) {
-    for (const auto& candidate : pkg.modules[mod].closure_fns) {
-      if (candidate.expr == entry.closure && candidate.inst == entry.inst) {
-        fn = &candidate;
-        break;
-      }
-    }
+    fn = pkg.modules[mod].closure_fn_of(entry.closure, entry.inst);
   }
   if (lit == nullptr && fn == nullptr) {
     internal(ast.exprs[entry.closure].span, "closure without checking");

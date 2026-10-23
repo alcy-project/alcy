@@ -219,7 +219,8 @@ struct CheckedModule {
   // The lowering side tables answer through these queries, so the
   // keying and the duplicate rule stay here and no reader scans its
   // own table. An expression's type is the last answer recorded for
-  // it; a call target and a value splice are recorded once per key.
+  // it; every other table records once per key, and the first entry
+  // stands.
   [[nodiscard]] const ExprType* expr_type_of(ast::ExprIdx expr,
                                              u32 inst) const {
     const auto found = expr_type_by_key.find(expr_type_key(expr, inst));
@@ -276,6 +277,12 @@ struct CheckedModule {
     std::vector<Capture> captures;
   };
   std::vector<ClosureLit> closures;
+  // Where the closure literal recorded for an expression under an
+  // instantiation sits; a key records once, and the first entry stands.
+  std::unordered_map<u64, u32> closure_by_key;
+  [[nodiscard]] static u64 closure_key(ast::ExprIdx expr, u32 inst) {
+    return (static_cast<u64>(expr.idx) << 32) | static_cast<u64>(inst);
+  }
   // One call through a function value: the callee expression holds
   // the value, and the signature comes from its function type.
   struct IndirectCall {
@@ -283,6 +290,12 @@ struct CheckedModule {
     u32 inst = NO_INST;
   };
   std::vector<IndirectCall> indirect_calls;
+  // Where the indirect call recorded for a callee under an
+  // instantiation sits; a key records once, and the first entry stands.
+  std::unordered_map<u64, u32> indirect_call_by_key;
+  [[nodiscard]] static u64 indirect_call_key(ast::ExprIdx callee, u32 inst) {
+    return (static_cast<u64>(callee.idx) << 32) | static_cast<u64>(inst);
+  }
   // One named function coerced to a closure value: its code with a
   // null environment. Keyed by the path expression.
   struct ClosureFn {
@@ -292,6 +305,31 @@ struct CheckedModule {
     u32 inst = NO_INST;
   };
   std::vector<ClosureFn> closure_fns;
+  // Where the named-function closure recorded for an expression under
+  // an instantiation sits; a key records once, and the first entry
+  // stands.
+  std::unordered_map<u64, u32> closure_fn_by_key;
+  [[nodiscard]] static u64 closure_fn_key(ast::ExprIdx expr, u32 inst) {
+    return (static_cast<u64>(expr.idx) << 32) | static_cast<u64>(inst);
+  }
+  [[nodiscard]] const ClosureLit* closure_of(ast::ExprIdx expr,
+                                             u32 inst) const {
+    const auto found = closure_by_key.find(closure_key(expr, inst));
+    return found == closure_by_key.end() ? nullptr : &closures[found->second];
+  }
+  [[nodiscard]] const ClosureFn* closure_fn_of(ast::ExprIdx expr,
+                                               u32 inst) const {
+    const auto found = closure_fn_by_key.find(closure_fn_key(expr, inst));
+    return found == closure_fn_by_key.end() ? nullptr
+                                            : &closure_fns[found->second];
+  }
+  [[nodiscard]] const IndirectCall* indirect_call_of(ast::ExprIdx callee,
+                                                     u32 inst) const {
+    const auto found =
+        indirect_call_by_key.find(indirect_call_key(callee, inst));
+    return found == indirect_call_by_key.end() ? nullptr
+                                               : &indirect_calls[found->second];
+  }
   // Variant resolution for lowering: every checked variant use records
   // its meaning so lowering never re-resolves paths. `variant` is the
   // declaration-order index and doubles as the enum discriminant.
