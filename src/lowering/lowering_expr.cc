@@ -132,67 +132,6 @@ bool Lowerer::is_ref_tag(ir::TypeTag tag) const {
          tag == ir::TypeTag::Ptr;
 }
 
-// Structural equality for the same reason the checker needs it:
-// field slots hold copies, so shared shapes carry different indexes.
-bool Lowerer::same_shape(ir::TypeIdx a, ir::TypeIdx b) {
-  std::vector<u64> seen;
-  return same_shape_inner(a, b, seen);
-}
-
-bool Lowerer::same_shape_inner(ir::TypeIdx a,
-                               ir::TypeIdx b,
-                               std::vector<u64>& seen) {
-  if (a.idx == b.idx) {
-    return true;
-  }
-  const u64 key = (static_cast<u64>(a.idx) << 32) | b.idx;
-  for (u64 prior : seen) {
-    if (prior == key) {
-      return true;
-    }
-  }
-  seen.push_back(key);
-  const ir::TypeTag ta = tag_of(a);
-  if (ta != tag_of(b)) {
-    return false;
-  }
-  switch (ta) {
-    case ir::TypeTag::Ref:
-    case ir::TypeTag::MutRef:
-    case ir::TypeTag::RawPtr:
-    case ir::TypeTag::RawMutPtr: {
-      const auto& refs = builder.state().ref_types;
-      return same_shape_inner(refs[builder.state().types[a].as_ref()].pointee,
-                              refs[builder.state().types[b].as_ref()].pointee,
-                              seen);
-    }
-    case ir::TypeTag::Array: {
-      const auto& arrays = builder.state().array_types;
-      const ir::ArrayType& aa = arrays[builder.state().types[a].as_array()];
-      const ir::ArrayType& ab = arrays[builder.state().types[b].as_array()];
-      return aa.count == ab.count &&
-             same_shape_inner(aa.element, ab.element, seen);
-    }
-    case ir::TypeTag::Tuple: {
-      const auto& tuples = builder.state().tuple_types;
-      const ir::TupleType& ta_t = tuples[builder.state().types[a].as_tuple()];
-      const ir::TupleType& tb_t = tuples[builder.state().types[b].as_tuple()];
-      if (ta_t.elements.size() != tb_t.elements.size()) {
-        return false;
-      }
-      for (u32 i = 0; i < ta_t.elements.size(); ++i) {
-        if (!same_shape_inner(ta_t.elements[i], tb_t.elements[i], seen)) {
-          return false;
-        }
-      }
-      return true;
-    }
-    case ir::TypeTag::Struct:
-    case ir::TypeTag::Enum: return false;
-    default: return true;
-  }
-}
-
 ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
                                  const ir::TypeIdx* expected) {
   const ast::Literal& lit = ast.literals[value];

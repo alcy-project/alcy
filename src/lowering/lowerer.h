@@ -228,8 +228,6 @@ class Lowerer {
   bool is_copy(ir::TypeIdx type) const;
   ir::TypeTag tag_of(ir::TypeIdx idx) const;
   bool is_ref_tag(ir::TypeTag tag) const;
-  bool same_shape(ir::TypeIdx a, ir::TypeIdx b);
-  bool same_shape_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);
   ir::RegisterIdx claim_reg();
   ir::OperandIdx to_operand(ir::RegisterIdx reg, ir::TypeIdx type);
   ir::OperandIdx to_operand(ir::ImmutableIdx imm, ir::TypeIdx type);

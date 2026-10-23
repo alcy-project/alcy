@@ -1318,10 +1318,6 @@ class Checker {
   // to know the statement does not fall through.
   ir::TypeIdx check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
-  // Whether a value of the type copies, mirroring `ir::is_copy_type`.
-  // The checker's own walk so an in-progress recursive type cannot
-  // recurse forever; a revisit answers Copy, because the cycle itself
-  // is the error the checker reports elsewhere.
   void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
   void check_main(u32 module, ast::ItemIdx fn);
   void check_bodies();
