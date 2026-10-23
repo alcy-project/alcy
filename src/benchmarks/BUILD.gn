@@ -72,6 +72,7 @@ executable("benchmarks") {
 
   configs += [
     "//src:alcy_config",
+    "//src:win_stack_reserve",
     "//src:win_sys_libs",
   ]
 

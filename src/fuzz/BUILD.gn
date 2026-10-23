@@ -33,6 +33,7 @@ template("fuzz_target") {
     configs += [
       ":fuzz_config",
       "//src:alcy_config",
+      "//src:win_stack_reserve",
       "//src:win_sys_libs",
     ]
     deps = [ "//src:alcy_lib" ]

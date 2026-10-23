@@ -87,6 +87,11 @@ another.**
    analyzer both need the guard and neither subsumes the other: a long
    operator chain parses in a loop and so is shallow to the parser while
    building a 20000-deep tree, which only the analyzer's own budget sees.
+   The budget is only honest if every platform's stack can hold the
+   descent it permits, so the executables ask Windows for the 8 MiB main
+   thread the other platforms already default to (`win_stack_reserve`);
+   the 1 MiB Windows default overflowed inside the budget in a debug
+   build's frames and crashed the compiler on input the budget accepts.
 
 7. **Coverage is a ratchet, not a threshold.** A fixed target pushes
    effort at whichever module is easiest to move rather than the one that

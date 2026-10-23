@@ -97,6 +97,7 @@ executable("alcy") {
 
   configs += [
     "//src:alcy_config",
+    "//src:win_stack_reserve",
     "//src:win_sys_libs",
   ]
   deps = [ ":cli" ]

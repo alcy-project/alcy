@@ -93,3 +93,13 @@ config("win_sys_libs") {
     ]
   }
 }
+
+config("win_stack_reserve") {
+  # Windows reserves 1 MiB for the main thread where the other platforms
+  # default to 8: a parser descent that stays inside the nesting budget
+  # (base::MAX_NESTING) overflows it in a debug build's frames, crashing
+  # the compiler on input the budget accepts.
+  if (is_win) {
+    ldflags = [ "-Wl,/STACK:8388608" ]
+  }
+}
