@@ -241,19 +241,23 @@ replaced. The foundations are in `roadmap.md`.
   see that a library's type implements one, and the roadmap asks a
   summary to carry them.
 
-- [ ] A single file checked or compiled on its own stages the embedded
-  suite and parses the target as an unnamed root beside it, so a
-  standard-library source handed to `--file` exists twice: once as the
-  disk file and once as the embedded member. `alcy check --file
-  lib/std/core/string.al` then reports `Type mismatch in method call:
-  expected 'StrIter', found 'StrIter'` (exit 4) and `alcy compile` the
-  same, because the disk copy's `impl str` declares its own `StrIter`
-  while the call resolves to the embedded copy's, and two different
-  declarations print one spelling. Identifying the target with the
-  suite member whose path it ends with, and staging the disk bytes in
-  that member's place, is the shape of the fix; the declaration
-  identity above is what would let the message tell the two apart until
-  then.
+- [ ] A single file checked or compiled on its own parses the target as
+  an unnamed root beside the embedded suite, so a standard-library
+  source handed to `--file` is not the member it copies. `alcy check
+  --file lib/std/core/string.al` reports `Type mismatch in method call:
+  expected 'StrIter', found 'StrIter'` (exit 4), because the root copy's
+  `impl str` declares its own `StrIter` while the call resolves to the
+  embedded member's, and two declarations print one spelling. Eighteen
+  of forty suite sources check cleanly, so refusing the form is not the
+  answer. Two shapes were tried and each leaves a hole: naming the root
+  after the member its path ends with drops the embedded copy, and then
+  `core/prelude.al` cannot resolve `package::string`, the target sitting
+  in the root package instead of `core`; swapping that member's input
+  for the checkout's bytes pairs one file into two modules, and the
+  root pairing cannot resolve the file's own `is_ascii_space`. The fix
+  is a single-file mode that loads the target as the member it is, in
+  the member's package, with that module as the root of the analysis
+  rather than a root package of its own.
 
 - [ ] A reference to a container's element carries no loan: `r := &v[0]`
   held across a `v.push` is accepted, the growth frees the buffer the
