@@ -518,7 +518,14 @@ impl str {
     if !seen {
       ret Option::None
     }
-    mut value := (numerator as f64) / (scale as f64)
+    // The integer part and the fraction are converted apart: one
+    // division of the whole numerator rounds twice, and a value just
+    // past 2^53 then answers one step off (`"9007199254740993.0"` read
+    // as 9007199254740994 while the literal reads 9007199254740992).
+    // The integer part is exact, and an integral value keeps it.
+    whole := numerator / scale
+    rem := numerator % scale
+    mut value := (whole as f64) + (rem as f64) / (scale as f64)
     if negative {
       value = 0.0f64 - value
     }

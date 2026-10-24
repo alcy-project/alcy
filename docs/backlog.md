@@ -259,6 +259,17 @@ replaced. The foundations are in `roadmap.md`.
   the member's package, with that module as the root of the analysis
   rather than a root package of its own.
 
+- [ ] `parse_f64` converts the integer part exactly and still divides a
+  fraction below one in f64, so a numerator past 2^53 rounds twice:
+  `"0.9876543210987654321".parse_f64()` answers 0.98765432109876550
+  where the literal `0.9876543210987654321` answers
+  0.98765432109876539, one step apart, and `"0.3333333333333333333"`
+  and `"0.6666666666666666667"` are the same shape. An integral value
+  is exact now (`"9007199254740993.0"` answers 2^53), so the hole is
+  the fraction whose numerator passes 2^53 with no factor of ten to
+  cancel; closing it wants a rounding decision over more than the u64
+  numerator, and the language has no wider word.
+
 - [ ] A reference to a container's element carries no loan: `r := &v[0]`
   held across a `v.push` is accepted, the growth frees the buffer the
   reference reads through, and the address sanitizer reports the
