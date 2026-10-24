@@ -8,16 +8,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include "analyzer/types.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/seq_builder.h"
 #include "ir/type.h"
-
-namespace analyzer {
-struct CheckedPackage;
-}  // namespace analyzer
 
 namespace diag {
 class DiagBag;
@@ -76,7 +73,10 @@ struct EndSite {
 // the solving; the caller owns the bookkeeping that the block numbers
 // and the instruction spans need.
 struct DropElaborationInputs {
-  const analyzer::CheckedPackage& pkg;
+  // The two analyzer tables the pass reads: whether a type ends with
+  // code, and the glue method it ends through.
+  std::span<const u8> needs_drop;
+  std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
   std::span<const Local> locals;
@@ -132,7 +132,7 @@ void elaborate_drops(const DropElaborationInputs& inputs);
 // answers from its structure, following a storage copy back to the
 // declaration it came from.
 [[nodiscard]] bool runs_destructor(
-    const analyzer::CheckedPackage& pkg,
+    std::span<const u8> needs_drop,
     const ir::StorageBuilder& builder,
     const std::unordered_map<u32, u32>& type_origins,
     ir::TypeIdx type);

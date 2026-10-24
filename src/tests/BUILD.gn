@@ -46,6 +46,7 @@ executable("tests") {
     "lexer/lexer_test.cc",
     "lexer/token_test.cc",
     "linter/linter_test.cc",
+    "lowering/drop_elaboration_test.cc",
     "lowering/ir_interpreter_test.cc",
     "lowering/lowering_fixture.h",
     "opt/opt_test.cc",

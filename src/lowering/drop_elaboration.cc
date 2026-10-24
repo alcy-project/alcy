@@ -201,7 +201,8 @@ namespace {
 class DropElaborator {
  public:
   explicit DropElaborator(const DropElaborationInputs& inputs)
-      : pkg(inputs.pkg),
+      : needs_drop(inputs.needs_drop),
+        drop_glue(inputs.drop_glue),
         builder(inputs.builder),
         bag(inputs.bag),
         locals(inputs.locals),
@@ -243,7 +244,7 @@ class DropElaborator {
     return builder.operand(ir::Operand::from_immutable(imm, type));
   }
   [[nodiscard]] bool runs_destructor(ir::TypeIdx type) const {
-    return lowering::runs_destructor(pkg, builder, type_origins_, type);
+    return lowering::runs_destructor(needs_drop, builder, type_origins_, type);
   }
   [[nodiscard]] ir::BlockIdx reserve_block() { return reserve_block_(); }
   [[nodiscard]] usize at(ir::BlockIdx block) const { return block.idx - base_; }
@@ -288,7 +289,8 @@ class DropElaborator {
     return drop_method_(module, method);
   }
 
-  const analyzer::CheckedPackage& pkg;
+  std::span<const u8> needs_drop;
+  std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
   std::span<const Local> locals;
@@ -650,9 +652,8 @@ void DropElaborator::run() {
     // The same origin rule the collected call follows: a copy's
     // glue is the one the type it came from declared.
     const ir::TypeIdx glue_type = type_origin(type);
-    if (glue_type.idx < pkg.drop_glue.size()) {
-      const analyzer::CheckedModule::DropGlue& glue =
-          pkg.drop_glue[glue_type.idx];
+    if (glue_type.idx < drop_glue.size()) {
+      const analyzer::CheckedModule::DropGlue& glue = drop_glue[glue_type.idx];
       if (glue.index != base::INVALID_IDX) {
         const ir::FunctionIdx fn = drop_method(glue.module, glue.index);
         if (!fn.is_valid()) {
@@ -1091,7 +1092,8 @@ void Lowerer::place_ends() {
     return;
   }
   const DropElaborationInputs inputs{
-      .pkg = pkg,
+      .needs_drop = pkg.needs_drop,
+      .drop_glue = pkg.drop_glue,
       .builder = builder,
       .bag = bag,
       .locals = locals,
@@ -1175,12 +1177,12 @@ ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
       ir::Operand::from_immutable(builder.immutable(imm), type));
 }
 
-bool runs_destructor(const analyzer::CheckedPackage& pkg,
+bool runs_destructor(std::span<const u8> needs_drop,
                      const ir::StorageBuilder& builder,
                      const std::unordered_map<u32, u32>& type_origins,
                      ir::TypeIdx type) {
-  if (type.idx < pkg.needs_drop.size()) {
-    return pkg.needs_drop[type.idx] != 0;
+  if (type.idx < needs_drop.size()) {
+    return needs_drop[type.idx] != 0;
   }
   // A type interned after the analyzer sized the table - the lowering
   // builds tuple and reference types, a closure's environment among
@@ -1193,21 +1195,21 @@ bool runs_destructor(const analyzer::CheckedPackage& pkg,
   const ir::TypeIdx origin =
       found == type_origins.end() ? type : ir::TypeIdx(found->second);
   if (origin.idx != type.idx) {
-    return runs_destructor(pkg, builder, type_origins, origin);
+    return runs_destructor(needs_drop, builder, type_origins, origin);
   }
   const ir::TypeNode& node = builder.types()[type];
   switch (node.tag) {
     case ir::TypeTag::Tuple: {
       const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
       for (ir::TypeIdx element : tuple.elements) {
-        if (runs_destructor(pkg, builder, type_origins, element)) {
+        if (runs_destructor(needs_drop, builder, type_origins, element)) {
           return true;
         }
       }
       return false;
     }
     case ir::TypeTag::Array:
-      return runs_destructor(pkg, builder, type_origins,
+      return runs_destructor(needs_drop, builder, type_origins,
                              builder.array_types()[node.as_array()].element);
     default: return false;
   }

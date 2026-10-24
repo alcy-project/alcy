@@ -443,7 +443,8 @@ bool Lowerer::is_destructor(ast::ItemIdx item) const {
 }
 
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
-  return lowering::runs_destructor(pkg, builder, type_origins_, type);
+  return lowering::runs_destructor(pkg.needs_drop, builder, type_origins_,
+                                   type);
 }
 
 ir::OperandIdx Lowerer::use_value(Val v) {
