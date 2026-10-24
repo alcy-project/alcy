@@ -5965,6 +5965,21 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
       if (!shape_ok) {
         continue;
       }
+      // Only a block that declares the name is a candidate. An
+      // unrelated block's bounds are not this call's to fail: checking
+      // them first refused `Vec<f64>::iter` for `T: Ord`, which the
+      // sorting block asks of a method it does not hold.
+      bool provides = false;
+      for (ast::ItemIdx method_item : impl.methods) {
+        if (ast.items[method_item].payload.get<ast::ItemFn>().name.name ==
+            name) {
+          provides = true;
+          break;
+        }
+      }
+      if (!provides) {
+        continue;
+      }
       // The impl's bounds have to hold for this instantiation before
       // its body specializes (ADR-0028): the refusal names the type
       // the caller passed rather than a line inside the library.
