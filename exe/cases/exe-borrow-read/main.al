@@ -29,10 +29,10 @@ fn main() -> i32 {
   if (*r).n != 5 {
     ret 2
   }
-  if r.name.len() != 2 {
+  if r.name.len_bytes() != 2 {
     ret 3
   }
-  if (*r).name.len() != 2 {
+  if (*r).name.len_bytes() != 2 {
     ret 4
   }
 
@@ -66,6 +66,6 @@ fn main() -> i32 {
   if label != 7 {
     ret 10
   }
-  println("{} {} {} {}", r.n, r.name.len(), v[0], label)
+  println("{} {} {} {}", r.n, r.name.len_bytes(), v[0], label)
   ret 0
 }

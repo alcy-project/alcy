@@ -7,7 +7,7 @@ fn main() -> i32 {
   }
   mut t := format("abc")
   t.retain((b: u8) -> false)
-  if t.len() != 0 {
+  if t.len_bytes() != 0 {
     ret 2
   }
   ret 0

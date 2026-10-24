@@ -8,7 +8,7 @@ fn main() -> i32 {
   if b.as_str() != "MIXED" {
     ret 2
   }
-  if "".to_ascii_lowercase().len() != 0 {
+  if "".to_ascii_lowercase().len_bytes() != 0 {
     ret 3
   }
   c := "aZ".to_ascii_lowercase()

@@ -3,7 +3,7 @@
 // did not dominate it and the emitted IR was invalid.
 fn f(o: Option<String>) -> i32 {
   r := match o {
-    Option::Some(s) => s.len() as i32,
+    Option::Some(s) => s.len_bytes() as i32,
     Option::None => 0,
   }
   ret r

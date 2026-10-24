@@ -19,7 +19,7 @@ fn main() -> i32 {
   if s.trim() != "ok" {
     ret 6
   }
-  if s.trim().len() != 2 {
+  if s.trim().len_bytes() != 2 {
     ret 7
   }
   ret 0

@@ -2,7 +2,7 @@
 // an unnamed local, so it is read and retired once.
 
 fn takes(v: &String) -> usize {
-  ret v.len()
+  ret v.len_bytes()
 }
 
 fn main() -> i32 {
@@ -13,7 +13,7 @@ fn main() -> i32 {
     ret 2
   }
   r := &format("yz")
-  if r.len() != 2 {
+  if r.len_bytes() != 2 {
     ret 3
   }
   ret 0

@@ -10,8 +10,8 @@ fn main() -> i32 {
   mut t := String::new()
   t.push_str("hello")
   greet := [t]() -> {
-    println("{}", t.len())
-    ret t.len()
+    println("{}", t.len_bytes())
+    ret t.len_bytes()
   }
   if greet() != 5 {
     ret 1
@@ -24,7 +24,7 @@ fn main() -> i32 {
   if apply(
     [u]() ->
       {
-        ret u.len() as i32
+        ret u.len_bytes() as i32
       }
   ) != 6 {
     ret 2

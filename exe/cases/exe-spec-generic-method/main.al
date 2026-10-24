@@ -44,7 +44,7 @@ fn main() -> i32 {
     ret 2
   }
   moved := p.take::<String>(p.take::<String>(String::new()))
-  if moved.len() != 0 {
+  if moved.len_bytes() != 0 {
     ret 3
   }
   println("{}", p.total::<Point>(Point { x: 1, y: 1 }))

@@ -4,11 +4,11 @@ fn main() -> i32 {
   src := "let x = 1 + 2"
   mut idents := Vec::<String>::new()
   mut i := 0 as usize
-  while i < src.len() {
+  while i < src.len_bytes() {
     b := src.byte(i)
     if b >= 0x61u8 && b <= 0x7au8 {
       mut text := String::new()
-      while i < src.len() {
+      while i < src.len_bytes() {
         c := src.byte(i)
         if c < 0x61u8 || c > 0x7au8 {
           break

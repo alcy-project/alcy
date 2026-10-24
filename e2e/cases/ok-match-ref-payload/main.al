@@ -8,7 +8,7 @@ enum E {
 
 fn f(e: &E) -> i32 {
   r := match *e {
-    E::A(s) => s.len() as i32,
+    E::A(s) => s.len_bytes() as i32,
     E::B => 0,
   }
   ret r

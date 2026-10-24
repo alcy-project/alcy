@@ -7,12 +7,12 @@ fn apply(f: fn (i32) -> i32, x: i32) -> i32 {
 
 fn main() -> i32 {
   s := format("ab{}", 0)
-  g := [s](x: i32) -> x + s.len() as i32
+  g := [s](x: i32) -> x + s.len_bytes() as i32
   if g(3) != 6 {
     ret 1
   }
   t := format("cd{}", 1)
-  if apply([t](x: i32) -> x + t.len() as i32, 3) != 6 {
+  if apply([t](x: i32) -> x + t.len_bytes() as i32, 3) != 6 {
     ret 2
   }
   ret 0

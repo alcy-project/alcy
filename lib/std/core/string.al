@@ -44,8 +44,8 @@ fn is_ascii_space(b: u8) -> bool {
 }
 
 impl str {
-  // The byte length.
-  pub fn len(self: &Self) -> usize {
+  // The number of bytes.
+  pub fn len_bytes(self: &Self) -> usize {
     ret str_len(*self)
   }
 
@@ -53,10 +53,10 @@ impl str {
     ret str_len(*self) == 0
   }
 
-  // The byte at `at`; in bounds exactly when `at < self.len()`.
+  // The byte at `at`; in bounds exactly when `at < self.len_bytes()`.
   // The view over the bytes in `[start, end)`. An index past the end
   // clamps, so a span read never leaves the source.
-  pub fn slice(self: &Self, start: usize, end: usize) -> str {
+  pub fn byte_slice(self: &Self, start: usize, end: usize) -> str {
     m := str_len(*self)
     mut lo := start
     mut hi := end
@@ -557,6 +557,73 @@ impl str {
         }
       }
     }
+  }
+
+  // The number of scalar values the bytes hold. Every byte sequence
+  // has one: an ill-formed subsequence counts as a single replacement
+  // unit, the way Unicode's decoding algorithms consume the maximal
+  // subpart of one.
+  pub fn count_chars(self: &Self) -> usize {
+    mut n := 0 as usize
+    mut i := 0 as usize
+    total := str_len(*self)
+    while i < total {
+      b := str_byte(*self, i)
+      if b < 0x80u8 {
+        n = n + 1
+        i = i + 1
+        continue
+      }
+      // The length a lead byte asks for, and the range its first
+      // continuation byte may fall in. Zero means the byte is not a
+      // lead byte at all.
+      mut want := 0 as usize
+      mut lo := 0x80u8
+      mut hi := 0xBFu8
+      if b >= 0xC2u8 && b <= 0xDFu8 {
+        want = 2
+      } else if b == 0xE0u8 {
+        want = 3
+        lo = 0xA0u8
+      } else if b >= 0xE1u8 && b <= 0xECu8 {
+        want = 3
+      } else if b == 0xEDu8 {
+        want = 3
+        hi = 0x9Fu8
+      } else if b >= 0xEEu8 && b <= 0xEFu8 {
+        want = 3
+      } else if b == 0xF0u8 {
+        want = 4
+        lo = 0x90u8
+      } else if b >= 0xF1u8 && b <= 0xF3u8 {
+        want = 4
+      } else if b == 0xF4u8 {
+        want = 4
+        hi = 0x8Fu8
+      }
+      if want == 0 {
+        n = n + 1
+        i = i + 1
+        continue
+      }
+      // Consume the continuation bytes that fit the scalar's ranges; a
+      // sequence that stops short is one replacement unit.
+      mut k := 1 as usize
+      while k < want && i + k < total {
+        c := str_byte(*self, i + k)
+        mut fits := c >= 0x80u8 && c <= 0xBFu8
+        if k == 1 {
+          fits = c >= lo && c <= hi
+        }
+        if !fits {
+          break
+        }
+        k = k + 1
+      }
+      n = n + 1
+      i = i + k
+    }
+    ret n
   }
 
   // The index of the first `b`, or `None`.

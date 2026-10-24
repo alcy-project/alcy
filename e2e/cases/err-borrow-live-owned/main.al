@@ -8,7 +8,7 @@ fn main() -> i32 {
   v.push(String::from("b"))
   match live {
     Option::Some(s) => {
-      if s.len() != 1 {
+      if s.len_bytes() != 1 {
         ret 1
       }
     }

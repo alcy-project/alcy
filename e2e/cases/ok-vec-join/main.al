@@ -9,7 +9,7 @@ fn main() -> i32 {
     ret 1
   }
   mut e := Vec::<String>::new()
-  if join(&e, "-").len() != 0 {
+  if join(&e, "-").len_bytes() != 0 {
     ret 2
   }
   mut one := Vec::<String>::new()

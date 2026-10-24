@@ -3,5 +3,5 @@ fn main() -> i32 {
   s := format("x")
   t := s
   _ := s
-  ret t.len() as i32
+  ret t.len_bytes() as i32
 }

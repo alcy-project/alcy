@@ -10,7 +10,7 @@ fn main() -> i32 {
     ret 2
   }
   s.truncate(0)
-  if s.len() != 0 {
+  if s.len_bytes() != 0 {
     ret 3
   }
   mut t := String::new()

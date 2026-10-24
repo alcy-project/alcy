@@ -5,11 +5,11 @@ fn main() -> i32 {
   if word.as_str() != "let" {
     ret 1
   }
-  if word.len() != 3 {
+  if word.len_bytes() != 3 {
     ret 2
   }
   empty := Vec::<u8>::new()
-  if String::from_slice(empty.as_slice()).len() != 0 {
+  if String::from_slice(empty.as_slice()).len_bytes() != 0 {
     ret 3
   }
   ret 0

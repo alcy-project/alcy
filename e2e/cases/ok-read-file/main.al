@@ -2,7 +2,7 @@
 fn main() -> i32 {
   match String::read_file("main.al") {
     Option::Some(text) => {
-      if text.len() == 0 {
+      if text.len_bytes() == 0 {
         ret 1
       }
       if !text.as_str().contains("read_file") {

@@ -11,7 +11,7 @@ fn main() -> i32 {
   m := Maybe::<String, 2>::Some([String::from("a"), String::from("bb")])
   match m {
     Maybe::Some(x) => {
-      ret x[1].len() as i32
+      ret x[1].len_bytes() as i32
     }
     Maybe::None => {
       ret 0

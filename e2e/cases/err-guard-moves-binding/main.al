@@ -10,8 +10,8 @@ enum E {
 fn main() -> i32 {
   e := E::A(String::from("hello"))
   match e {
-    E::A(s) if s.len() > 3 => {
-      ret s.len() as i32
+    E::A(s) if s.len_bytes() > 3 => {
+      ret s.len_bytes() as i32
     }
     E::A(s) => {
       ret 0

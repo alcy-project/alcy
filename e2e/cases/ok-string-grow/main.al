@@ -7,7 +7,7 @@ fn main() -> i32 {
     s.push(97u8)
     i = i + 1
   }
-  if s.len() != 300 {
+  if s.len_bytes() != 300 {
     ret 1
   }
   big := format("{}{}{}", s.as_str(), s.as_str(), s.as_str())

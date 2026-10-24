@@ -11,7 +11,7 @@ struct Token {
 }
 
 fn slice_of(src: str, span: Span) -> str {
-  ret src.slice(span.start, span.end)
+  ret src.byte_slice(span.start, span.end)
 }
 
 fn main() -> i32 {

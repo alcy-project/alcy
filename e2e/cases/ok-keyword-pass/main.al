@@ -13,7 +13,7 @@ fn classify(word: str, keywords: &Map<i32>) -> i32 {
 fn parse_digits(text: str) -> i64 {
   mut value := 0 as i64
   mut i := 0 as usize
-  while i < text.len() {
+  while i < text.len_bytes() {
     b := text.byte(i)
     if b < 0x30u8 || b > 0x39u8 {
       break

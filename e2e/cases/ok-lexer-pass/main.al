@@ -23,7 +23,7 @@ fn is_alnum(b: u8) -> bool {
 
 fn lex(src: str) -> Vec<Token> {
   mut out := Vec::<Token>::new()
-  n := src.len()
+  n := src.len_bytes()
   mut i := 0 as usize
   while i < n {
     b := src.byte(i)
@@ -54,7 +54,7 @@ fn lex(src: str) -> Vec<Token> {
 }
 
 fn text_of(src: str, t: &Token) -> str {
-  ret src.slice(t.span.start, t.span.end)
+  ret src.byte_slice(t.span.start, t.span.end)
 }
 
 fn main() -> i32 {

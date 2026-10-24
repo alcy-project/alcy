@@ -13,7 +13,7 @@ fn main() -> i32 {
   if s.as_str() != "AB" {
     ret 2
   }
-  if s.len() != 2 {
+  if s.len_bytes() != 2 {
     ret 3
   }
   s.push(0x43u8)

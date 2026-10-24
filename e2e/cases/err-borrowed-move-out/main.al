@@ -15,5 +15,5 @@ fn f(e: &E) -> String {
 
 fn main() -> i32 {
   e := E::A(format("x"))
-  ret f(&e).len() as i32 - 1
+  ret f(&e).len_bytes() as i32 - 1
 }

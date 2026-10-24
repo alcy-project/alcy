@@ -23,7 +23,7 @@ fn main() -> i32 {
   w.push(format("a"))
   w.push(format("bb"))
   w.push(format("ccc"))
-  w.retain((s: &String) -> s.len() > 1)
+  w.retain((s: &String) -> s.len_bytes() > 1)
   if w.len() != 2 {
     ret 5
   }

@@ -9,7 +9,7 @@ fn main() -> i32 {
   if s.as_str() != "YaXb" {
     ret 2
   }
-  n := s.len()
+  n := s.len_bytes()
   s.insert_byte(n, 0x5au8)
   if s.as_str() != "YaXbZ" {
     ret 3

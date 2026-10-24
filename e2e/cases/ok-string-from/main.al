@@ -11,7 +11,7 @@ fn main() -> i32 {
     ret 3
   }
   e := String::from("")
-  if e.len() != 0 {
+  if e.len_bytes() != 0 {
     ret 4
   }
   ret 0

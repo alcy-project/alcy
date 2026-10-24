@@ -9,7 +9,7 @@ fn main() -> i32 {
   mut i := 0 as usize
   while i < words.len() {
     w := words.at(i).or_panic_with_message("expected a value")
-    key := w.slice(0, 1)
+    key := w.byte_slice(0, 1)
     list := groups.get_or_insert_with(key, () -> Vec::<String>::new())
     list.push(String::from(w.as_str()))
     i = i + 1

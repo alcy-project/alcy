@@ -767,7 +767,7 @@ case(
   s.push(104u8)
   r := s.as_str()
   s.push(105u8)
-  ret s.len() as i32
+  ret s.len_bytes() as i32
 }""",
 )
 

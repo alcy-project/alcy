@@ -5,7 +5,7 @@ fn main() -> i32 {
   }
   match arg_at(0) {
     Option::Some(name) => {
-      if name.len() < 1 {
+      if name.len_bytes() < 1 {
         ret 2
       }
     }

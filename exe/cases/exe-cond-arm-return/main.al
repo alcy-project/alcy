@@ -5,7 +5,7 @@
 fn main() -> i32 {
   o := Option::Some(String::from("hello"))
   if Option::Some(s) := o {
-    ret s.len() as i32
+    ret s.len_bytes() as i32
   }
   ret 0
 }

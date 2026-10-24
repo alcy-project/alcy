@@ -22,13 +22,13 @@ fn main() -> i32 {
   mut n := Map::<String>::new()
   {
     mut x := n.get_or_insert("k", format("abc"))
-    if x.len() != 3 {
+    if x.len_bytes() != 3 {
       ret 4
     }
   }
   {
     mut y := n.get_or_insert("k", format("zz"))
-    if y.len() != 3 {
+    if y.len_bytes() != 3 {
       ret 5
     }
   }

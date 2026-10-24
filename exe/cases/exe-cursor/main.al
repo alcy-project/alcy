@@ -11,7 +11,7 @@ impl Cursor {
   }
 
   fn at_end(self: &Self) -> bool {
-    ret self.pos >= self.src.len()
+    ret self.pos >= self.src.len_bytes()
   }
 
   fn bump(mut self: &mut Self) -> u8 {

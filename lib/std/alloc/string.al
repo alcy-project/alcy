@@ -25,7 +25,8 @@ impl String {
     ret String { buf: unsafe { alloc::<u8>(n) }, len: 0, cap: n }
   }
 
-  pub fn len(self: &Self) -> usize {
+  // The number of bytes.
+  pub fn len_bytes(self: &Self) -> usize {
     ret self.len
   }
 
@@ -140,7 +141,7 @@ impl String {
   }
 
   // Removes and answers the last byte, or `None` when empty.
-  pub fn pop(mut self: &mut Self) -> Option<u8> {
+  pub fn pop_byte(mut self: &mut Self) -> Option<u8> {
     if self.len == 0 {
       ret Option::None
     }
@@ -270,9 +271,9 @@ impl String {
   }
 
   // The view over the bytes in `[start, end)`, clamped the way
-  // `str::slice` clamps.
-  pub fn slice(self: &Self, start: usize, end: usize) -> str {
-    ret self.as_str().slice(start, end)
+  // `str::byte_slice` clamps.
+  pub fn byte_slice(self: &Self, start: usize, end: usize) -> str {
+    ret self.as_str().byte_slice(start, end)
   }
 
   pub fn as_bytes(self: &Self) -> &[u8] {
@@ -328,6 +329,12 @@ impl String {
 
   pub fn count(self: &Self, needle: str) -> usize {
     ret self.as_str().count(needle)
+  }
+
+  // The number of scalar values, counting an ill-formed subsequence as
+  // one replacement unit; see `str::count_chars`.
+  pub fn count_chars(self: &Self) -> usize {
+    ret self.as_str().count_chars()
   }
 
   pub fn lines(self: &Self) -> LinesIter {
@@ -468,11 +475,11 @@ impl Ord for String {
 
 impl PartialEq for String {
   fn eq(self: &Self, other: &Self) -> bool {
-    if self.len() != other.len() {
+    if self.len_bytes() != other.len_bytes() {
       ret false
     }
     mut i := 0 as usize
-    while i < self.len() {
+    while i < self.len_bytes() {
       if self[i] != other[i] {
         ret false
       }

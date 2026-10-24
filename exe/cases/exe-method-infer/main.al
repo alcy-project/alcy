@@ -28,7 +28,7 @@ fn main() -> i32 {
   }
   r := Runner { base: 10 }
   s := String::from("ab")
-  if r.run([s](x: i32) -> x + s.len() as i32, 1) != 13 {
+  if r.run([s](x: i32) -> x + s.len_bytes() as i32, 1) != 13 {
     ret 2
   }
   ret 0

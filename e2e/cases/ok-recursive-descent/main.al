@@ -11,7 +11,7 @@ impl Parser {
   }
 
   fn atom(mut self: &mut Self) -> Option<i32> {
-    if self.pos >= self.src.len() {
+    if self.pos >= self.src.len_bytes() {
       ret Option::None
     }
     b := self.src.byte(self.pos)
@@ -19,7 +19,7 @@ impl Parser {
       ret Option::None
     }
     mut value := 0
-    while self.pos < self.src.len() {
+    while self.pos < self.src.len_bytes() {
       c := self.src.byte(self.pos)
       if c < 0x30u8 || c > 0x39u8 {
         break
@@ -32,7 +32,7 @@ impl Parser {
 
   fn sum(mut self: &mut Self) -> Option<i32> {
     mut total := self.atom()?
-    while self.pos < self.src.len() {
+    while self.pos < self.src.len_bytes() {
       if self.src.byte(self.pos) != 0x2bu8 {
         break
       }

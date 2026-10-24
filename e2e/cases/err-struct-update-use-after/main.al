@@ -7,5 +7,5 @@ struct S {
 fn main() -> i32 {
   s := S { a: String::from("aa"), b: String::from("bbb") }
   t := S { a: String::from("x"), ..s }
-  ret s.b.len() as i32 + t.b.len() as i32
+  ret s.b.len_bytes() as i32 + t.b.len_bytes() as i32
 }

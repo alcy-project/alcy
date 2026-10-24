@@ -2,7 +2,7 @@
 
 fn main() -> i32 {
   s := "abc"
-  if s.len() != 3 {
+  if s.len_bytes() != 3 {
     ret 1
   }
   if s.is_empty() {

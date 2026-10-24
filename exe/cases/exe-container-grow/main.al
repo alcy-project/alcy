@@ -26,7 +26,7 @@ fn main() -> i32 {
   mut s := String::with_capacity(1)
   s.push_str("ab")
   s.push_str("cdefg")
-  if s.len() != 7 {
+  if s.len_bytes() != 7 {
     ret 3
   }
   if s.as_str() != "abcdefg" {

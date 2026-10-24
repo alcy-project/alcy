@@ -15,10 +15,10 @@ fn main() -> i32 {
   mut a := String::new()
   a.push_str("hi")
   n := take(P { name: a, tag: 1 })
-  if n.len() != 2 {
+  if n.len_bytes() != 2 {
     ret 1
   }
-  println("{}", n.len())
+  println("{}", n.len_bytes())
 
   mut v := Vec::<String>::new()
   mut b := String::new()
@@ -28,7 +28,7 @@ fn main() -> i32 {
   if v.len() != 1 {
     ret 2
   }
-  if v[0].len() != 2 {
+  if v[0].len_bytes() != 2 {
     ret 3
   }
   ret 0

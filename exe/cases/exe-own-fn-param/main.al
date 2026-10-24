@@ -12,7 +12,7 @@ fn inc(x: i32) -> i32 {
 
 fn main() -> i32 {
   s := String::from("ab")
-  if apply([s](x: i32) -> x + s.len() as i32, 1) != 6 {
+  if apply([s](x: i32) -> x + s.len_bytes() as i32, 1) != 6 {
     ret 1
   }
   if apply(inc, 20) != 42 {

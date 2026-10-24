@@ -11,7 +11,7 @@ struct Parser {
 
 impl Parser {
   fn byte(mut self: &mut Self) -> Result<u8, ParseError> {
-    if self.pos >= self.src.len() {
+    if self.pos >= self.src.len_bytes() {
       ret Result::Err(ParseError::End)
     }
     b := self.src.byte(self.pos)

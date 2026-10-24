@@ -9,7 +9,7 @@ fn main() -> i32 {
       if back.as_str() != "hello\nworld" {
         ret 2
       }
-      if back.len() != 11 {
+      if back.len_bytes() != 11 {
         ret 3
       }
       if back.byte(5) != 0x0au8 {

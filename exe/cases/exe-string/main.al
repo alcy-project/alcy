@@ -1,12 +1,12 @@
 fn main() -> i32 {
   mut bad := 0
   mut s := String::new()
-  if s.len() != 0 {
+  if s.len_bytes() != 0 {
     bad = 1
   }
   s.push(104u8)
   s.push(105u8)
-  if s.len() != 2 {
+  if s.len_bytes() != 2 {
     bad = 2
   }
   if str_len(s.as_str()) != 2 {
@@ -16,7 +16,7 @@ fn main() -> i32 {
     bad = 4
   }
   t := format("hi {}!", s.as_str())
-  if t.len() != 6 {
+  if t.len_bytes() != 6 {
     bad = 5
   }
   if str_byte(t.as_str(), 0) != 104u8 {
@@ -26,11 +26,11 @@ fn main() -> i32 {
     bad = 7
   }
   n := format("a={} b={}", 41i32, true)
-  if n.len() != 11 {
+  if n.len_bytes() != 11 {
     bad = 8
   }
   e := format("hi")
-  if e.len() != 2 {
+  if e.len_bytes() != 2 {
     bad = 9
   }
   // Past the old fixed limit: pushes and formatting both reallocate.
@@ -40,7 +40,7 @@ fn main() -> i32 {
     big.push(97u8)
     i = i + 1
   }
-  if big.len() != 300 {
+  if big.len_bytes() != 300 {
     bad = 10
   }
   if str_byte(big.as_str(), 299) != 97u8 {

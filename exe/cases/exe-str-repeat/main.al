@@ -7,12 +7,12 @@ fn main() -> i32 {
   }
   s2 := format("x")
   b := s2.repeat(0)
-  if b.len() != 0 {
+  if b.len_bytes() != 0 {
     ret 2
   }
   s3 := format("")
   c := s3.repeat(5)
-  if c.len() != 0 {
+  if c.len_bytes() != 0 {
     ret 3
   }
   s4 := format("-")

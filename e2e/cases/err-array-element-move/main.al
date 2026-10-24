@@ -4,5 +4,5 @@
 fn main() -> i32 {
   a := [String::new(), String::new()]
   w := a[0]
-  ret w.len() as i32
+  ret w.len_bytes() as i32
 }

@@ -5,7 +5,7 @@ struct S {
 
 fn main() -> i32 {
   x := S { s: format("hi") }
-  if x.s.len() != 2 {
+  if x.s.len_bytes() != 2 {
     ret 1
   }
   ret 0

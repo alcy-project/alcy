@@ -18,7 +18,7 @@ fn main() -> i32 {
   }
   s4 := format("")
   d := s4.to_ascii_lowercase()
-  if d.len() != 0 {
+  if d.len_bytes() != 0 {
     ret 4
   }
   s5 := format("already")

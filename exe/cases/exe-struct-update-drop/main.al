@@ -8,7 +8,7 @@ struct S {
 
 fn from_param(s: S) -> i32 {
   t := S { a: String::from("x"), ..s }
-  ret t.a.len() as i32 + t.b.len() as i32
+  ret t.a.len_bytes() as i32 + t.b.len_bytes() as i32
 }
 
 fn make() -> S {
@@ -18,7 +18,7 @@ fn make() -> S {
 fn main() -> i32 {
   s := S { a: String::from("aa"), b: String::from("bbb") }
   t := S { a: String::from("x"), ..s }
-  if t.a.len() != 1 || t.b.len() != 3 {
+  if t.a.len_bytes() != 1 || t.b.len_bytes() != 3 {
     ret 1
   }
   arg := S { a: String::from("aa"), b: String::from("bbb") }
@@ -26,7 +26,7 @@ fn main() -> i32 {
     ret 2
   }
   u := S { a: String::from("y"), ..make() }
-  if u.b.len() != 3 {
+  if u.b.len_bytes() != 3 {
     ret 3
   }
   ret 0

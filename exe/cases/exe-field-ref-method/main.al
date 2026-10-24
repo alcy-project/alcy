@@ -9,10 +9,10 @@ fn main() -> i32 {
   s := S { a: format("ab"), b: format("cde") }
   r := &s.a
   t := s.b
-  if r.len() != 2 {
+  if r.len_bytes() != 2 {
     ret 1
   }
-  if t.len() != 3 {
+  if t.len_bytes() != 3 {
     ret 2
   }
   ret 0

@@ -27,7 +27,7 @@ fn main() -> i32 {
     ret 7
   }
   t := "hello"
-  if t[1..<3].len() != 2 {
+  if t[1..<3].len_bytes() != 2 {
     ret 8
   }
   mut v := Vec::<i32>::new()

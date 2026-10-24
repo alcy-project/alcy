@@ -22,7 +22,7 @@ fn main() -> i32 {
     ret 1
   }
   s := Wrap::<i32> { value: 2 }
-  if s.pick::<String>(format("ok")).len() != 2 {
+  if s.pick::<String>(format("ok")).len_bytes() != 2 {
     ret 2
   }
   if w.pick::<i32>(w.value) != 1 {

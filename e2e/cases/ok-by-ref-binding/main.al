@@ -8,7 +8,7 @@ enum E {
 
 fn slen(e: &E) -> usize {
   ret match *e {
-    E::A(s) => s.len(),
+    E::A(s) => s.len_bytes(),
     E::B => 0,
   }
 }
@@ -19,7 +19,7 @@ struct P {
 
 fn plen(p: &P) -> usize {
   ret match *p {
-    P { s } => s.len(),
+    P { s } => s.len_bytes(),
   }
 }
 
