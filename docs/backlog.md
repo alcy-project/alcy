@@ -270,6 +270,17 @@ replaced. The foundations are in `roadmap.md`.
   cancel; closing it wants a rounding decision over more than the u64
   numerator, and the language has no wider word.
 
+- [ ] A request the allocator cannot meet is a panic in an ordinary
+  build and a sanitizer report in an instrumented one:
+  `Vec::<u8>::with_capacity(18446744073709551615u64)` prints `panic:
+  allocation failed` and exits 134, while the same program under the
+  address sanitizer stops inside `posix_memalign` with `requested
+  allocation size ... exceeds maximum supported size` before `alcy_alloc`
+  answers, so the instrumented gate cannot carry a case for it.
+  `doubled_capacity` refuses the doubling that would not fit a `usize`;
+  a guard over the byte count before the host allocator is what would
+  let the two builds say the same thing.
+
 - [ ] A reference to a container's element carries no loan: `r := &v[0]`
   held across a `v.push` is accepted, the growth frees the buffer the
   reference reads through, and the address sanitizer reports the
