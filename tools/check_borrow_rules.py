@@ -429,17 +429,16 @@ case(
     BOX,
 )
 
-# `Vec::pop` answers an owned element, and returning the answer is
-# refused: the method's summary carries the receiver's loan into it, so
-# an answer whose bytes moved out still reads as a reference to the
-# local container. A `Copy` element survives already
-# (`ok-borrow-owned-element`), and binding the answer to a local first
-# is the workaround; the loan-place work the backlog records is the
-# fix.
+# The scalar-aggregate relaxation keeps the loan for a payload that
+# carries a reference, so a value popped out of a container keeps the
+# buffer's loan and cannot leave the function that owns the container.
+# Binding it to a local reads it in place (`err-borrow-live-owned`
+# pins the `push` conflict); handing it back needs the region a loan
+# carries, which ADR-0012 records as the work that replaces this.
 case(
     "returned",
     "owned-element-returned",
-    "accept",
+    "reject",
     """fn take() -> Option<String> {
   mut v := Vec::<String>::new()
   v.push(String::from("a"))
@@ -456,7 +455,6 @@ fn main() -> i32 {
     }
   }
 }""",
-    known=True,
 )
 
 # --- extent across control flow ---------------------------------------
