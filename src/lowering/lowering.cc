@@ -49,6 +49,7 @@
 #include "ir/type_util.h"
 #include "ir/verifier.h"
 #include "lowering/diag_code.h"
+#include "lowering/drop_elaboration.h"
 #include "lowering/lowerer.h"
 #include "source/source.h"
 

@@ -38,6 +38,7 @@
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "lowering/diag_code.h"
+#include "lowering/drop_elaboration.h"
 #include "lowering/lowerer.h"
 #include "source/source.h"
 #include "text/unescape.h"
