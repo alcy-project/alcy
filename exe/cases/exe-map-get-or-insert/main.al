@@ -10,7 +10,7 @@ fn main() -> i32 {
     }
     *v = *v + 1
   }
-  if *m.get("a").unwrap() != 11 {
+  if *m.get("a").or_panic_with_message("expected a value") != 11 {
     ret 2
   }
   {

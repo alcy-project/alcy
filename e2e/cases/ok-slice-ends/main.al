@@ -2,10 +2,10 @@
 fn main() -> i32 {
   a := [1i32, 2i32, 3i32]
   s := a.as_slice()
-  if *s.first().unwrap() != 1 {
+  if *s.first().or_panic_with_message("expected a value") != 1 {
     ret 1
   }
-  if *s.last().unwrap() != 3 {
+  if *s.last().or_panic_with_message("expected a value") != 3 {
     ret 2
   }
   v := Vec::<i32>::new()

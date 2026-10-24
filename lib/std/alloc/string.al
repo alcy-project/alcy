@@ -258,7 +258,7 @@ impl String {
     mut s := String::with_capacity(slice_len(bytes))
     mut i := 0 as usize
     while i < slice_len(bytes) {
-      s.push(*bytes.at(i).unwrap())
+      s.push(*bytes.at(i).or_panic_with_message("the byte index is within the slice"))
       i = i + 1
     }
     ret s

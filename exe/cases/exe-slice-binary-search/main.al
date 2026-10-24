@@ -12,7 +12,7 @@ fn cmp5(x: &i32) -> i32 {
 fn main() -> i32 {
   a := [1, 3, 5, 7]
   s := a.as_slice()
-  if s.binary_search_by(cmp5).unwrap() != 2 {
+  if s.binary_search_by(cmp5).or_panic_with_message("expected a value") != 2 {
     ret 1
   }
   b := [1, 3]

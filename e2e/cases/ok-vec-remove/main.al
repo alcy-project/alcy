@@ -10,10 +10,10 @@ fn main() -> i32 {
   if v.len() != 2 {
     ret 2
   }
-  if *v.at(0).unwrap() != 2 {
+  if *v.at(0).or_panic_with_message("expected a value") != 2 {
     ret 3
   }
-  if *v.at(1).unwrap() != 3 {
+  if *v.at(1).or_panic_with_message("expected a value") != 3 {
     ret 4
   }
   if v.remove(1) != 3 {
@@ -22,7 +22,7 @@ fn main() -> i32 {
   if v.len() != 1 {
     ret 6
   }
-  if *v.at(0).unwrap() != 2 {
+  if *v.at(0).or_panic_with_message("expected a value") != 2 {
     ret 7
   }
   ret 0

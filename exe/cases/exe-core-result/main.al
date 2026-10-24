@@ -29,7 +29,7 @@ fn double(x: i32) -> Option<i32> {
 
 fn main() -> i32 {
   mut bad := 0
-  if bounded(21).unwrap() != 42 {
+  if bounded(21).or_panic_with_message("expected a value") != 42 {
     bad = 1
   }
   if bounded(0).is_ok() {
@@ -41,10 +41,10 @@ fn main() -> i32 {
   if bounded(0).or(7) != 7 {
     bad = 4
   }
-  if bounded(21).expect("unused") != 42 {
+  if bounded(21).or_panic_with_message("21 is within the bound") != 42 {
     bad = 5
   }
-  if double(21).unwrap() != 42 {
+  if double(21).or_panic_with_message("expected a value") != 42 {
     bad = 6
   }
   if double(0).or(-1) != -1 {

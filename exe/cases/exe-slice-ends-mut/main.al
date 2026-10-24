@@ -2,9 +2,9 @@
 fn main() -> i32 {
   mut a := [1i32, 2i32, 3i32]
   s := a.as_mut_slice()
-  mut f := s.first_mut().unwrap()
+  mut f := s.first_mut().or_panic_with_message("expected a value")
   *f = 10
-  mut l := s.last_mut().unwrap()
+  mut l := s.last_mut().or_panic_with_message("expected a value")
   *l = 30
   if a[0] != 10 {
     ret 1

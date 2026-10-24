@@ -13,7 +13,7 @@ fn main() -> i32 {
     if inner.len() != 1 {
       ret 1
     }
-    if *inner.at(0).unwrap() != 7 {
+    if *inner.at(0).or_panic_with_message("expected a value") != 7 {
       ret 2
     }
     seen = seen + 1

@@ -6,7 +6,7 @@ fn main() -> i32 {
   if s.contains("xyz") {
     ret 2
   }
-  if s.find("world").unwrap() != 6 {
+  if s.find("world").or_panic_with_message("expected a value") != 6 {
     ret 3
   }
   if s.find("world") != Option::Some(6 as usize) {
@@ -15,7 +15,7 @@ fn main() -> i32 {
   if s.find("xyz").is_some() {
     ret 5
   }
-  if s.find("").unwrap() != 0 {
+  if s.find("").or_panic_with_message("expected a value") != 0 {
     ret 6
   }
   if !"abc".contains("abc") {
@@ -24,7 +24,7 @@ fn main() -> i32 {
   if "abc".contains("abcd") {
     ret 8
   }
-  if "banana".find("na").unwrap() != 2 {
+  if "banana".find("na").or_panic_with_message("expected a value") != 2 {
     ret 9
   }
   if !s.starts_with("hello") {

@@ -25,19 +25,22 @@ impl<T> Option<T> {
     }
   }
 
-  // Panics on `None`. Prefer `is_some` or `?` where absence is
-  // expected rather than exceptional.
-  pub fn unwrap(self: Self) -> T {
-    ret match self {
-      Option::Some(v) => v,
-      Option::None => panic("called `Option::unwrap` on a `None` value"),
-    }
-  }
-
-  pub fn expect(self: Self, msg: str) -> T {
+  // The contained value, or a panic whose message is `msg`. Prefer
+  // `is_some` or `?` where absence is expected rather than
+  // exceptional.
+  pub fn or_panic_with_message(self: Self, msg: str) -> T {
     ret match self {
       Option::Some(v) => v,
       Option::None => panic(msg),
+    }
+  }
+
+  // The contained value, or a panic whose message `f` builds. `f`
+  // runs only on `None`.
+  pub fn or_panic_with(self: Self, f: () -> str) -> T {
+    ret match self {
+      Option::Some(v) => v,
+      Option::None => panic(f()),
     }
   }
 
@@ -49,13 +52,18 @@ impl<T> Option<T> {
     }
   }
 
-  // The contained value, or `default` when absent.
-  pub fn unwrap_or(self: Self, default: T) -> T {
-    ret self.or(default)
+  // The contained value, or what `f` returns when absent. `f` runs
+  // only on `None`.
+  pub fn or_else(self: Self, f: () -> T) -> T {
+    ret match self {
+      Option::Some(v) => v,
+      Option::None => f(),
+    }
   }
 
-  // The contained value, or what `f` returns when absent.
-  pub fn or_else(self: Self, f: () -> Option<T>) -> Option<T> {
+  // The option, or what `f` returns when absent. `f` runs only on
+  // `None`.
+  pub fn or_option(self: Self, f: () -> Option<T>) -> Option<T> {
     ret match self {
       Option::Some(v) => Option::Some(v),
       Option::None => f(),

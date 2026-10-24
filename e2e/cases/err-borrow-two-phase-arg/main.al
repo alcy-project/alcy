@@ -6,6 +6,6 @@ fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1)
   held := v.at(0)
-  v.push(*held.unwrap())
+  v.push(*held.or_panic_with_message("expected a value"))
   ret 0
 }

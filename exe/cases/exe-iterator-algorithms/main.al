@@ -60,7 +60,7 @@ fn main() -> i32 {
   if out.len() != 3 {
     ret 10
   }
-  if *out.at(2).unwrap() != 3 {
+  if *out.at(2).or_panic_with_message("expected a value") != 3 {
     ret 11
   }
   ret 0

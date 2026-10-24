@@ -5,13 +5,13 @@ fn main() -> i32 {
   v.push(3)
   v.push(5)
   v.push(7)
-  if v.binary_search_by((x: &i32) -> *x - 5).unwrap() != 2 {
+  if v.binary_search_by((x: &i32) -> *x - 5).or_panic_with_message("expected a value") != 2 {
     ret 1
   }
-  if v.binary_search_by((x: &i32) -> *x - 1).unwrap() != 0 {
+  if v.binary_search_by((x: &i32) -> *x - 1).or_panic_with_message("expected a value") != 0 {
     ret 2
   }
-  if v.binary_search_by((x: &i32) -> *x - 7).unwrap() != 3 {
+  if v.binary_search_by((x: &i32) -> *x - 7).or_panic_with_message("expected a value") != 3 {
     ret 3
   }
   if v.binary_search_by((x: &i32) -> *x - 4).is_some() {

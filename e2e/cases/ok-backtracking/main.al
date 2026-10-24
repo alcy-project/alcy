@@ -9,7 +9,7 @@ impl Parser {
     if self.pos >= self.kinds.len() {
       ret 0
     }
-    ret *self.kinds.at(self.pos).unwrap()
+    ret *self.kinds.at(self.pos).or_panic_with_message("expected a value")
   }
 
   fn try_ab(mut self: &mut Self) -> bool {

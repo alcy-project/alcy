@@ -11,7 +11,7 @@ impl Lexer {
     if at >= self.kinds.len() {
       ret 0
     }
-    ret *self.kinds.at(at).unwrap()
+    ret *self.kinds.at(at).or_panic_with_message("expected a value")
   }
 
   fn bump(mut self: &mut Self) -> i32 {

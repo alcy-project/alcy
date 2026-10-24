@@ -9,7 +9,7 @@ fn main() -> i32 {
     ret 2
   }
   v.push(1)
-  if *v.at(0).unwrap() != 1 {
+  if *v.at(0).or_panic_with_message("expected a value") != 1 {
     ret 3
   }
   if v.capacity() < 10 {

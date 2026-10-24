@@ -153,7 +153,7 @@ impl<V> Map<V> {
     if !self.contains(key) {
       _ := self.insert(key, value)
     }
-    ret self.get_mut(key).unwrap()
+    ret self.get_mut(key).or_panic_with_message("the key was just inserted")
   }
 
   // The value for `key`, inserting `make()`'s when absent, so the
@@ -162,14 +162,14 @@ impl<V> Map<V> {
     if !self.contains(key) {
       _ := self.insert(key, make())
     }
-    ret self.get_mut(key).unwrap()
+    ret self.get_mut(key).or_panic_with_message("the key was just inserted")
   }
 
   // The entry for `key`: the value when present, or the map and key to
   // fill when absent.
   pub fn entry(mut self: &mut Self, key: str) -> Entry<V> {
     if self.contains(key) {
-      ret Entry::Occupied(self.get_mut(key).unwrap())
+      ret Entry::Occupied(self.get_mut(key).or_panic_with_message("the key was just inserted"))
     }
     ret Entry::Vacant(self, key)
   }

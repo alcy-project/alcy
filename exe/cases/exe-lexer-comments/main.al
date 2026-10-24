@@ -85,13 +85,13 @@ fn main() -> i32 {
   if tokens.len() != 5 {
     ret 1
   }
-  if text_of(src, tokens.at(0).unwrap()) != "let" {
+  if text_of(src, tokens.at(0).or_panic_with_message("expected a value")) != "let" {
     ret 2
   }
-  if text_of(src, tokens.at(3).unwrap()) != "\"hi\"" {
+  if text_of(src, tokens.at(3).or_panic_with_message("expected a value")) != "\"hi\"" {
     ret 3
   }
-  if text_of(src, tokens.at(4).unwrap()) != "+" {
+  if text_of(src, tokens.at(4).or_panic_with_message("expected a value")) != "+" {
     ret 4
   }
   ret 0

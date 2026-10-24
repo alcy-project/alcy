@@ -7,6 +7,6 @@ fn main() -> i32 {
   v.push(11i32)
   held := v.at(0)
   v.push(22i32)
-  r := held.unwrap()
+  r := held.or_panic_with_message("expected a value")
   ret *r - 11
 }

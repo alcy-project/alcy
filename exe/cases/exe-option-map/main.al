@@ -16,7 +16,7 @@ fn small(x: i32) -> Option<u8> {
 fn main() -> i32 {
   a: Option<i32> := Option::Some(41)
   b: Option<i32> := a.map::<i32>(inc)
-  if b.unwrap() != 42 {
+  if b.or_panic_with_message("expected a value") != 42 {
     ret 1
   }
   absent: Option<i32> := Option::None
@@ -26,7 +26,7 @@ fn main() -> i32 {
 
   c: Option<i32> := Option::Some(7)
   d: Option<u8> := c.and_then::<u8>(small)
-  if d.unwrap() != 7 as u8 {
+  if d.or_panic_with_message("expected a value") != 7 as u8 {
     ret 3
   }
   e: Option<i32> := Option::Some(-1)

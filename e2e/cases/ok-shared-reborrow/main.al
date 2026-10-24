@@ -34,7 +34,7 @@ fn main() -> i32 {
   if o.is_none() {
     ret 3
   }
-  if *o.unwrap() != 5 {
+  if *o.or_panic_with_message("expected a value") != 5 {
     ret 4
   }
   if c.opt(1).is_some() {

@@ -33,7 +33,7 @@ fn main() -> i32 {
   if last.is_none() {
     ret 3
   }
-  if last.unwrap() != 9i32 {
+  if last.or_panic_with_message("expected a value") != 9i32 {
     ret 4
   }
   if b.size() != 1 {
@@ -44,7 +44,7 @@ fn main() -> i32 {
   if t.size() != 1 {
     ret 6
   }
-  if *t.items.at(0).unwrap() != 3 {
+  if *t.items.at(0).or_panic_with_message("expected a value") != 3 {
     ret 7
   }
   ret 0

@@ -14,11 +14,11 @@ impl Parser {
     if self.pos >= self.tokens.len() {
       ret false
     }
-    ret self.tokens.at(self.pos).unwrap().kind == kind
+    ret self.tokens.at(self.pos).or_panic_with_message("expected a value").kind == kind
   }
 
   fn bump(mut self: &mut Self) -> Token {
-    t := self.tokens.at(self.pos).unwrap()
+    t := self.tokens.at(self.pos).or_panic_with_message("expected a value")
     self.pos = self.pos + 1
     ret Token { kind: t.kind, value: t.value }
   }

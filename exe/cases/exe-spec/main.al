@@ -60,10 +60,10 @@ fn main() -> i32 {
   }
   // A generic spec over a local type.
   mut c := Counter { n: 0 }
-  if c.next().unwrap() != 1 {
+  if c.next().or_panic_with_message("expected a value") != 1 {
     bad = 2
   }
-  if c.next().unwrap() != 2 {
+  if c.next().or_panic_with_message("expected a value") != 2 {
     bad = 3
   }
   // A generic impl specializes per instantiation.

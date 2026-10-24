@@ -22,11 +22,11 @@ impl Parser {
     if self.pos >= self.tokens.len() {
       ret false
     }
-    ret self.tokens.at(self.pos).unwrap().kind == kind
+    ret self.tokens.at(self.pos).or_panic_with_message("expected a value").kind == kind
   }
 
   fn bump(mut self: &mut Self) -> i64 {
-    v := self.tokens.at(self.pos).unwrap().value
+    v := self.tokens.at(self.pos).or_panic_with_message("expected a value").value
     self.pos = self.pos + 1
     ret v
   }
@@ -76,7 +76,7 @@ impl Parser {
 }
 
 fn eval(nodes: &Vec<Expr>, idx: usize) -> i64 {
-  match nodes.at(idx).unwrap() {
+  match nodes.at(idx).or_panic_with_message("expected a value") {
     Expr::Num(v) => {
       ret *v
     }
@@ -106,7 +106,7 @@ fn token(kind: i32, value: i64) -> Token {
 }
 
 fn write_expr(nodes: &Vec<Expr>, idx: usize, out: &mut String) {
-  match nodes.at(idx).unwrap() {
+  match nodes.at(idx).or_panic_with_message("expected a value") {
     Expr::Num(v) => {
       text := format("{}", *v)
       out.push_str(text.as_str())

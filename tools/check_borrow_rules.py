@@ -511,7 +511,7 @@ case(
     VEC
     + """  r := v.at(0)
   v.push(3i32)
-  ret *r.unwrap()
+  ret *r.or_panic_with_message("expected a value")
 }""",
 )
 
@@ -531,7 +531,7 @@ case(
     "at_mut-then-push",
     "reject",
     VEC
-    + """  mut r := v.at_mut(0).unwrap()
+    + """  mut r := v.at_mut(0).or_panic_with_message("expected a value")
   v.push(3i32)
   ret *r
 }""",
@@ -542,8 +542,8 @@ case(
     "two-at-same-index",
     "accept",
     VEC
-    + """  a := v.at(0).unwrap()
-  b := v.at(0).unwrap()
+    + """  a := v.at(0).or_panic_with_message("expected a value")
+  b := v.at(0).or_panic_with_message("expected a value")
   ret *a + *b
 }""",
 )
@@ -553,8 +553,8 @@ case(
     "two-at_mut-same-index",
     "reject",
     VEC
-    + """  mut a := v.at_mut(0).unwrap()
-  mut b := v.at_mut(0).unwrap()
+    + """  mut a := v.at_mut(0).or_panic_with_message("expected a value")
+  mut b := v.at_mut(0).or_panic_with_message("expected a value")
   ret *a + *b
 }""",
 )
@@ -564,8 +564,8 @@ case(
     "two-at-distinct-index",
     "accept",
     VEC
-    + """  a := v.at(0).unwrap()
-  b := v.at(1).unwrap()
+    + """  a := v.at(0).or_panic_with_message("expected a value")
+  b := v.at(1).or_panic_with_message("expected a value")
   ret *a + *b
 }""",
 )
@@ -580,8 +580,8 @@ case(
     "two-at_mut-both-live",
     "reject",
     VEC
-    + """  mut a := v.at_mut(0).unwrap()
-  mut b := v.at_mut(1).unwrap()
+    + """  mut a := v.at_mut(0).or_panic_with_message("expected a value")
+  mut b := v.at_mut(1).or_panic_with_message("expected a value")
   *a = 10
   *b = 20
   ret *a + *b
@@ -593,9 +593,9 @@ case(
     "two-at_mut-first-dead",
     "accept",
     VEC
-    + """  mut a := v.at_mut(0).unwrap()
+    + """  mut a := v.at_mut(0).or_panic_with_message("expected a value")
   *a = 10
-  mut b := v.at_mut(1).unwrap()
+  mut b := v.at_mut(1).or_panic_with_message("expected a value")
   *b = 20
   ret 0
 }""",
@@ -607,9 +607,9 @@ case(
     "reject",
     VEC
     + """  mut i := 0 as usize
-  mut a := v.at_mut(i).unwrap()
+  mut a := v.at_mut(i).or_panic_with_message("expected a value")
   i = 1
-  mut b := v.at_mut(i).unwrap()
+  mut b := v.at_mut(i).or_panic_with_message("expected a value")
   ret *a + *b
 }""",
 )
@@ -625,7 +625,7 @@ case(
   _ := m.insert("a", 1i32)
   view := m.get("a")
   _ := m.insert("b", 2i32)
-  ret *view.unwrap()
+  ret *view.or_panic_with_message("expected a value")
 }""",
 )
 
@@ -638,7 +638,7 @@ case(
   _ := m.insert("a", 1i32)
   view := m.get("a")
   n := m.len()
-  ret *view.unwrap() + n as i32 - 1
+  ret *view.or_panic_with_message("expected a value") + n as i32 - 1
 }""",
 )
 
@@ -651,7 +651,7 @@ case(
   _ := m.insert("a", 1i32)
   view := m.get("a")
   _ := m.remove("a")
-  ret *view.unwrap()
+  ret *view.or_panic_with_message("expected a value")
 }""",
 )
 
@@ -667,7 +667,7 @@ fn main() -> i32 {
   _ := x.a.insert("k", 5i32)
   view := x.a.get("k")
   _ := x.b.insert("j", 7i32)
-  ret *view.unwrap() - 5
+  ret *view.or_panic_with_message("expected a value") - 5
 }""",
 )
 
@@ -681,7 +681,7 @@ fn main() -> i32 {
   _ := x.a.insert("k", 5i32)
   view := x.a.get("k")
   _ := x.a.insert("j", 7i32)
-  ret *view.unwrap() - 5
+  ret *view.or_panic_with_message("expected a value") - 5
 }""",
 )
 
@@ -852,7 +852,7 @@ case(
   s[0] = 9
   n := slice_len(s)
   v.push(2i32)
-  ret *v.at(0).unwrap() + n as i32 - 10
+  ret *v.at(0).or_panic_with_message("expected a value") + n as i32 - 10
 }""",
 )
 

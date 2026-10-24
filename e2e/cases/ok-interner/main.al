@@ -11,7 +11,7 @@ impl Interner {
   fn intern(mut self: &mut Self, name: str) -> usize {
     mut i := 0 as usize
     while i < self.names.len() {
-      if self.names.at(i).unwrap().as_str() == name {
+      if self.names.at(i).or_panic_with_message("expected a value").as_str() == name {
         ret i
       }
       i = i + 1
@@ -21,7 +21,7 @@ impl Interner {
   }
 
   fn name_of(self: &Self, id: usize) -> str {
-    ret self.names.at(id).unwrap().as_str()
+    ret self.names.at(id).or_panic_with_message("expected a value").as_str()
   }
 }
 

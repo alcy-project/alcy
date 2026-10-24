@@ -62,7 +62,7 @@ fn report(src: str, tokens: &Vec<Token>, known: &Map<i32>) -> Option<String> {
   mut bad := 0
   mut i := 0 as usize
   while i < tokens.len() {
-    t := tokens.at(i).unwrap()
+    t := tokens.at(i).or_panic_with_message("expected a value")
     if t.kind == 1 {
       word := src.slice(t.span.start, t.span.end)
       if !known.contains(word) {

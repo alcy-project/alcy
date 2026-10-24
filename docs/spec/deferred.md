@@ -56,7 +56,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
 - Struct variants for enums; tuple struct declarations.
 - `async`, parallel constructs, `union` types, `register` operations.
 - `From`-style error conversion; `Debug` printing; the combinators
-  (`map`, `and_then`, `unwrap_or`) on `Result` (they landed on
+  (`map`, `and_then`, `or`) on `Result` (they landed on
   `Option`).
 - `break` with a value; `main` returning richer types.
 - `pub(...)` restricted visibility; glob imports.

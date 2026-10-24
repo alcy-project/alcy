@@ -58,7 +58,7 @@ impl<T>[T] {
   pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := 0 as usize
     while i < slice_len(self) {
-      if pred(self.at(i).unwrap()) {
+      if pred(self.at(i).or_panic_with_message("the index is within the slice")) {
         ret Option::Some(i)
       }
       i = i + 1
@@ -70,7 +70,7 @@ impl<T>[T] {
   pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
     mut i := 0 as usize
     while i < slice_len(self) {
-      if pred(self.at(i).unwrap()) {
+      if pred(self.at(i).or_panic_with_message("the index is within the slice")) {
         ret self.at(i)
       }
       i = i + 1
@@ -83,7 +83,7 @@ impl<T>[T] {
   pub fn contains(self: &Self, value: &T) -> bool {
     mut i := 0 as usize
     while i < slice_len(self) {
-      if *self.at(i).unwrap() == *value {
+      if *self.at(i).or_panic_with_message("the index is within the slice") == *value {
         ret true
       }
       i = i + 1
@@ -99,7 +99,9 @@ impl<T>[T] {
     }
     mut i := 0 as usize
     while i < n {
-      if *self.at(i).unwrap() != *prefix.at(i).unwrap() {
+      if *self.at(i).or_panic_with_message("the index is within the slice") != *prefix.at(i).or_panic_with_message(
+        "the index is within the slice"
+      ) {
         ret false
       }
       i = i + 1
@@ -116,7 +118,9 @@ impl<T>[T] {
     }
     mut i := 0 as usize
     while i < n {
-      if *self.at(m - n + i).unwrap() != *suffix.at(i).unwrap() {
+      if *self.at(m - n + i).or_panic_with_message("the index is within the slice") != *suffix.at(i).or_panic_with_message(
+        "the index is within the slice"
+      ) {
         ret false
       }
       i = i + 1
@@ -129,7 +133,7 @@ impl<T>[T] {
     mut i := slice_len(self)
     while i > 0 {
       i = i - 1
-      if pred(self.at(i).unwrap()) {
+      if pred(self.at(i).or_panic_with_message("the index is within the slice")) {
         ret Option::Some(i)
       }
     }
@@ -141,7 +145,10 @@ impl<T>[T] {
   pub fn is_sorted_by(self: &Self, less: (&T, &T) -> bool) -> bool {
     mut i := 1 as usize
     while i < slice_len(self) {
-      if less(self.at(i).unwrap(), self.at(i - 1).unwrap()) {
+      if less(
+        self.at(i).or_panic_with_message("the index is within the slice"),
+        self.at(i - 1).or_panic_with_message("the index is within the slice"),
+      ) {
         ret false
       }
       i = i + 1
@@ -156,7 +163,7 @@ impl<T>[T] {
     mut hi := slice_len(self)
     while lo < hi {
       mid := lo + (hi - lo) / 2
-      c := compare(self.at(mid).unwrap())
+      c := compare(self.at(mid).or_panic_with_message("the index is within the slice"))
       if c == 0 {
         ret Option::Some(mid)
       }
@@ -202,7 +209,9 @@ impl<T>[T] {
     if slice_len(self) == 0 {
       ret Option::None
     }
-    ret Option::Some((self.at(0).unwrap(), self.split_at(1).1))
+    ret Option::Some(
+      (self.at(0).or_panic_with_message("the slice is not empty"), self.split_at(1).1)
+    )
   }
 
   // The last element and the front, or `None` when empty.
@@ -211,7 +220,9 @@ impl<T>[T] {
     if n == 0 {
       ret Option::None
     }
-    ret Option::Some((self.at(n - 1).unwrap(), self.split_at(n - 1).0))
+    ret Option::Some(
+      (self.at(n - 1).or_panic_with_message("the slice is not empty"), self.split_at(n - 1).0)
+    )
   }
 
   // A shared cursor over the elements; the slice's loan is what keeps

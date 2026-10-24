@@ -1,6 +1,6 @@
 // `parse_usize` reads an unsigned machine word from text.
 fn main() -> i32 {
-  if "42".parse_usize().unwrap() != 42 as usize {
+  if "42".parse_usize().or_panic_with_message("expected a value") != 42 as usize {
     ret 1
   }
   if "x".parse_usize().is_some() {
@@ -13,7 +13,7 @@ fn main() -> i32 {
     ret 4
   }
   mut s := format("7")
-  if s.parse_usize().unwrap() != 7 as usize {
+  if s.parse_usize().or_panic_with_message("expected a value") != 7 as usize {
     ret 5
   }
   ret 0

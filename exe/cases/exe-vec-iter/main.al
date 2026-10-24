@@ -17,7 +17,7 @@ fn main() -> i32 {
     ret 2
   }
   v.push(4)
-  if *v.at(3).unwrap() != 4 {
+  if *v.at(3).or_panic_with_message("expected a value") != 4 {
     ret 3
   }
   ret 0

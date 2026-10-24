@@ -9,10 +9,10 @@ fn main() -> i32 {
   if x.len() != 3 {
     ret 1
   }
-  if *x.at(0).unwrap() != 10i32 {
+  if *x.at(0).or_panic_with_message("expected a value") != 10i32 {
     ret 2
   }
-  if *x.at(2).unwrap() != 30i32 {
+  if *x.at(2).or_panic_with_message("expected a value") != 30i32 {
     ret 3
   }
   y := s[..=2]
@@ -23,14 +23,14 @@ fn main() -> i32 {
   if z.len() != 1 {
     ret 5
   }
-  if *z.at(0).unwrap() != 30i32 {
+  if *z.at(0).or_panic_with_message("expected a value") != 30i32 {
     ret 6
   }
   w := s[1..=2]
   if w.len() != 2 {
     ret 7
   }
-  if *w.at(1).unwrap() != 30i32 {
+  if *w.at(1).or_panic_with_message("expected a value") != 30i32 {
     ret 8
   }
   mut b := [1i32, 2i32, 3i32, 4i32]

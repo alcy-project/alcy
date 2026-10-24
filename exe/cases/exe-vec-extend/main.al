@@ -10,10 +10,10 @@ fn main() -> i32 {
   if a.len() != 4 {
     ret 1
   }
-  if *a.at(0).unwrap() != 1 {
+  if *a.at(0).or_panic_with_message("expected a value") != 1 {
     ret 2
   }
-  if *a.at(3).unwrap() != 4 {
+  if *a.at(3).or_panic_with_message("expected a value") != 4 {
     ret 3
   }
   mut s := Vec::<String>::new()
@@ -24,7 +24,7 @@ fn main() -> i32 {
   if s.len() != 2 {
     ret 4
   }
-  if s.at(1).unwrap().as_str() != "b" {
+  if s.at(1).or_panic_with_message("expected a value").as_str() != "b" {
     ret 5
   }
   ret 0

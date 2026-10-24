@@ -11,7 +11,7 @@ fn main() -> i32 {
   if !s.b.is_some() {
     ret 1
   }
-  if s.b.unwrap().len() != 1 {
+  if s.b.or_panic_with_message("expected a value").len() != 1 {
     ret 2
   }
   ret 0

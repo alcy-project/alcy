@@ -2,13 +2,13 @@
 fn main() -> i32 {
   a := [1i32, 2i32, 3i32]
   s := a.as_slice()
-  if s.position((x: &i32) -> *x == 2).unwrap() != 1 {
+  if s.position((x: &i32) -> *x == 2).or_panic_with_message("expected a value") != 1 {
     ret 1
   }
   if s.position((x: &i32) -> *x == 9).is_some() {
     ret 2
   }
-  if *s.find((x: &i32) -> *x == 3).unwrap() != 3 {
+  if *s.find((x: &i32) -> *x == 3).or_panic_with_message("expected a value") != 3 {
     ret 3
   }
   if s.find((x: &i32) -> *x == 9).is_some() {

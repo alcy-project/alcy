@@ -13,8 +13,8 @@ fn main() -> i32 {
   mut table := Vec::<Handler>::new()
   table.push(Handler { f: inc, name: format("inc") })
   table.push(Handler { f: (x: i32) -> x * 2, name: format("double") })
-  first := table.at(0).unwrap()
-  second := table.at(1).unwrap()
+  first := table.at(0).or_panic_with_message("expected a value")
+  second := table.at(1).or_panic_with_message("expected a value")
   if (first.f)(1) != 2 {
     ret 1
   }

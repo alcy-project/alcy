@@ -28,19 +28,21 @@ impl<T, E> Result<T, E> {
     }
   }
 
-  // Panics on `Err`, discarding the payload. Prefer `is_ok` or `?`
-  // where failure is expected rather than exceptional.
-  pub fn unwrap(self: Self) -> T {
-    ret match self {
-      Result::Ok(v) => v,
-      Result::Err(_) => panic("called `Result::unwrap` on an `Err` value"),
-    }
-  }
-
-  pub fn expect(self: Self, msg: str) -> T {
+  // The contained value, or a panic whose message is `msg`. Prefer
+  // `is_ok` or `?` where failure is expected rather than exceptional.
+  pub fn or_panic_with_message(self: Self, msg: str) -> T {
     ret match self {
       Result::Ok(v) => v,
       Result::Err(_) => panic(msg),
+    }
+  }
+
+  // The contained value, or a panic whose message the error builds.
+  // `f` runs only on `Err`.
+  pub fn or_panic_with(self: Self, f: (E) -> str) -> T {
+    ret match self {
+      Result::Ok(v) => v,
+      Result::Err(e) => panic(f(e)),
     }
   }
 
@@ -49,6 +51,15 @@ impl<T, E> Result<T, E> {
     ret match self {
       Result::Ok(v) => v,
       Result::Err(_) => default,
+    }
+  }
+
+  // The contained value, or what `f` returns on failure. `f` runs
+  // only on `Err`.
+  pub fn or_else(self: Self, f: () -> T) -> T {
+    ret match self {
+      Result::Ok(v) => v,
+      Result::Err(_) => f(),
     }
   }
 }

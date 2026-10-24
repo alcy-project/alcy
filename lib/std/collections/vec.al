@@ -162,7 +162,7 @@ impl<T> Vec<T> {
   pub fn contains(self: &Self, value: &T) -> bool {
     mut i := 0 as usize
     while i < self.len {
-      if *self.at(i).unwrap() == *value {
+      if *self.at(i).or_panic_with_message("the index is within the vec") == *value {
         ret true
       }
       i = i + 1
@@ -176,7 +176,7 @@ impl<T> Vec<T> {
     mut state := acc
     mut i := 0 as usize
     while i < self.len {
-      state = step(state, self.at(i).unwrap())
+      state = step(state, self.at(i).or_panic_with_message("the index is within the vec"))
       i = i + 1
     }
     ret state
@@ -200,7 +200,7 @@ impl<T> Vec<T> {
   pub fn all(self: &Self, pred: (&T) -> bool) -> bool {
     mut i := 0 as usize
     while i < self.len {
-      if !pred(self.at(i).unwrap()) {
+      if !pred(self.at(i).or_panic_with_message("the index is within the vec")) {
         ret false
       }
       i = i + 1
@@ -213,7 +213,7 @@ impl<T> Vec<T> {
   pub fn any(self: &Self, pred: (&T) -> bool) -> bool {
     mut i := 0 as usize
     while i < self.len {
-      if pred(self.at(i).unwrap()) {
+      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
         ret true
       }
       i = i + 1
@@ -226,7 +226,7 @@ impl<T> Vec<T> {
     mut i := self.len
     while i > 0 {
       i = i - 1
-      if pred(self.at(i).unwrap()) {
+      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
         ret Option::Some(i)
       }
     }
@@ -237,7 +237,7 @@ impl<T> Vec<T> {
   pub fn find(self: &Self, pred: (&T) -> bool) -> Option<&T> {
     mut i := 0 as usize
     while i < self.len {
-      if pred(self.at(i).unwrap()) {
+      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
         ret self.at(i)
       }
       i = i + 1
@@ -255,7 +255,10 @@ impl<T> Vec<T> {
     mut write := 1 as usize
     mut scan := 1 as usize
     while scan < self.len {
-      if !same(self.at(write - 1).unwrap(), self.at(scan).unwrap()) {
+      if !same(
+        self.at(write - 1).or_panic_with_message("the index is within the vec"),
+        self.at(scan).or_panic_with_message("the index is within the vec"),
+      ) {
         if write != scan {
           self.swap(write, scan)
         }
@@ -276,7 +279,7 @@ impl<T> Vec<T> {
     mut hi := self.len
     while lo < hi {
       mid := lo + (hi - lo) / 2
-      c := compare(self.at(mid).unwrap())
+      c := compare(self.at(mid).or_panic_with_message("the index is within the vec"))
       if c == 0 {
         ret Option::Some(mid)
       }
@@ -293,7 +296,7 @@ impl<T> Vec<T> {
   pub fn position(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := 0 as usize
     while i < self.len {
-      if pred(self.at(i).unwrap()) {
+      if pred(self.at(i).or_panic_with_message("the index is within the vec")) {
         ret Option::Some(i)
       }
       i = i + 1
@@ -309,7 +312,7 @@ impl<T> Vec<T> {
     mut write := 0 as usize
     mut scan := 0 as usize
     while scan < self.len {
-      if keep(self.at(scan).unwrap()) {
+      if keep(self.at(scan).or_panic_with_message("the index is within the vec")) {
         self.swap(write, scan)
         write = write + 1
       }
@@ -360,7 +363,7 @@ impl<T> Vec<T> {
       self.swap(i, i + 1)
       i = i + 1
     }
-    ret self.pop().unwrap()
+    ret self.pop().or_panic_with_message("the vec is not empty")
   }
 
   // Removes and answers the element at `index`, moving the last
@@ -369,7 +372,7 @@ impl<T> Vec<T> {
   // bounds.
   pub fn swap_remove(mut self: &mut Self, index: usize) -> T {
     self.swap(index, self.len - 1)
-    ret self.pop().unwrap()
+    ret self.pop().or_panic_with_message("the vec is not empty")
   }
 
   // Removes and returns the last element, or `None` when empty.
@@ -413,7 +416,7 @@ impl<T> Vec<T> {
     out.reserve(self.len)
     mut i := 0 as usize
     while i < self.len {
-      out.push(f(self.at(i).unwrap()))
+      out.push(f(self.at(i).or_panic_with_message("the index is within the vec")))
       i = i + 1
     }
     ret out
@@ -549,13 +552,13 @@ impl<T> Iterator < &mut T > for VecIterMut<T> {
 // indexing does.
 impl<T> Index < usize, T > for Vec<T> {
   fn index(self: &Self, i: usize) -> &T {
-    ret self.at(i).unwrap()
+    ret self.at(i).or_panic_with_message("index out of bounds")
   }
 }
 
 impl<T> IndexMut < usize, T > for Vec<T> {
   fn index_mut(mut self: &mut Self, i: usize) -> &mut T {
-    ret self.at_mut(i).unwrap()
+    ret self.at_mut(i).or_panic_with_message("index out of bounds")
   }
 }
 
@@ -587,7 +590,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     if i > 0 {
       out.push_str(sep)
     }
-    out.push_str(parts.at(i).unwrap().as_str())
+    out.push_str(parts.at(i).or_panic_with_message("the index is within the parts").as_str())
     i = i + 1
   }
   ret out

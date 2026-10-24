@@ -3,23 +3,23 @@ fn run(code: &[i32]) -> i64 {
   mut stack := Vec::<i64>::new()
   mut i := 0 as usize
   while i < code.len() {
-    op := *code.at(i).unwrap()
+    op := *code.at(i).or_panic_with_message("expected a value")
     if op == 1 {
       i = i + 1
-      stack.push(*code.at(i).unwrap() as i64)
+      stack.push(*code.at(i).or_panic_with_message("expected a value") as i64)
       i = i + 1
       continue
     }
     if op == 2 {
-      b := stack.pop().unwrap()
-      a := stack.pop().unwrap()
+      b := stack.pop().or_panic_with_message("expected a value")
+      a := stack.pop().or_panic_with_message("expected a value")
       stack.push(a + b)
       i = i + 1
       continue
     }
     i = i + 1
   }
-  ret *stack.at(0).unwrap()
+  ret *stack.at(0).or_panic_with_message("expected a value")
 }
 
 fn main() -> i32 {

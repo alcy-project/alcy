@@ -10,7 +10,7 @@ fn depth_of(scopes: &Vec<Scope>, at: i32) -> i32 {
   mut cur := at
   while cur >= 0 {
     n = n + 1
-    cur = scopes.at(cur as usize).unwrap().parent
+    cur = scopes.at(cur as usize).or_panic_with_message("expected a value").parent
   }
   ret n
 }

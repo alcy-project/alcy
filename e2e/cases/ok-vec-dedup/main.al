@@ -12,16 +12,16 @@ fn main() -> i32 {
   if v.len() != 4 {
     ret 1
   }
-  if *v.at(0).unwrap() != 1 {
+  if *v.at(0).or_panic_with_message("expected a value") != 1 {
     ret 2
   }
-  if *v.at(1).unwrap() != 2 {
+  if *v.at(1).or_panic_with_message("expected a value") != 2 {
     ret 3
   }
-  if *v.at(2).unwrap() != 3 {
+  if *v.at(2).or_panic_with_message("expected a value") != 3 {
     ret 4
   }
-  if *v.at(3).unwrap() != 1 {
+  if *v.at(3).or_panic_with_message("expected a value") != 1 {
     ret 5
   }
   mut e := Vec::<i32>::new()

@@ -8,7 +8,7 @@ struct Module {
 fn lookup(modules: &Vec<Module>, module_name: str, name: str) -> Option<i32> {
   mut i := 0 as usize
   while i < modules.len() {
-    m := modules.at(i).unwrap()
+    m := modules.at(i).or_panic_with_message("expected a value")
     if m.name.as_str() == module_name {
       match m.symbols.get(name) {
         Option::Some(v) => {

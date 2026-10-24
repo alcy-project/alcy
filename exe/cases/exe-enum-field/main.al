@@ -22,7 +22,7 @@ fn main() -> i32 {
     }
     Option::None => {}
   }
-  if s.b.unwrap() != 3 {
+  if s.b.or_panic_with_message("expected a value") != 3 {
     ret 4
   }
   if s.c.is_some() {

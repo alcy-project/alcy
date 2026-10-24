@@ -8,10 +8,10 @@ fn main() -> i32 {
   for mut x in v.iter_mut() {
     *x = *x + 10
   }
-  if *v.at(0).unwrap() != 11 {
+  if *v.at(0).or_panic_with_message("expected a value") != 11 {
     ret 1
   }
-  if *v.at(1).unwrap() != 12 {
+  if *v.at(1).or_panic_with_message("expected a value") != 12 {
     ret 2
   }
   ret 0

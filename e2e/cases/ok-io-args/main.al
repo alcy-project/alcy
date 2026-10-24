@@ -4,7 +4,7 @@ fn main() -> i32 {
   if a.len() < 1 {
     ret 1
   }
-  if a.at(0).unwrap().len() < 1 {
+  if a.at(0).or_panic_with_message("expected a value").len() < 1 {
     ret 2
   }
   ret 0

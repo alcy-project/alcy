@@ -6,7 +6,9 @@ fn sort_in_place(v: &mut Vec<i32>) {
   while i < n {
     mut j := 0 as usize
     while j + 1 < n - i {
-      if *v.at(j).unwrap() > *v.at(j + 1).unwrap() {
+      if *v.at(j).or_panic_with_message("expected a value") > *v.at(j + 1).or_panic_with_message(
+        "expected a value"
+      ) {
         v.swap(j, j + 1)
       }
       j = j + 1
@@ -21,13 +23,13 @@ fn main() -> i32 {
   v.push(1)
   v.push(2)
   sort_in_place(&mut v)
-  if *v.at(0).unwrap() != 1 {
+  if *v.at(0).or_panic_with_message("expected a value") != 1 {
     ret 1
   }
-  if *v.at(1).unwrap() != 2 {
+  if *v.at(1).or_panic_with_message("expected a value") != 2 {
     ret 2
   }
-  if *v.at(2).unwrap() != 3 {
+  if *v.at(2).or_panic_with_message("expected a value") != 3 {
     ret 3
   }
   ret 0

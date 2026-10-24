@@ -39,7 +39,7 @@ fn evaluate(tokens: &Vec<Token>) -> i64 {
   mut total := 0i64
   mut i := 0 as usize
   while i < tokens.len() {
-    match tokens.at(i).unwrap() {
+    match tokens.at(i).or_panic_with_message("expected a value") {
       Token::Num(value) => {
         total = total + sign * *value
       }

@@ -6,10 +6,10 @@ fn main() -> i32 {
   for x in v.iter_mut() {
     *x = *x * 2
   }
-  if *v.at(0).unwrap() != 2 {
+  if *v.at(0).or_panic_with_message("expected a value") != 2 {
     ret 1
   }
-  if *v.at(1).unwrap() != 4 {
+  if *v.at(1).or_panic_with_message("expected a value") != 4 {
     ret 2
   }
   ret 0

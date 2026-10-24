@@ -1,5 +1,5 @@
 fn main() -> i32 {
-  (a, b) := "k=v".split_once("=").unwrap()
+  (a, b) := "k=v".split_once("=").or_panic_with_message("expected a value")
   if a != "k" {
     ret 1
   }
@@ -42,7 +42,7 @@ fn main() -> i32 {
   if whole != 1 {
     ret 8
   }
-  (c, d) := "a=b=c".split_once("=").unwrap()
+  (c, d) := "a=b=c".split_once("=").or_panic_with_message("expected a value")
   if c != "a" {
     ret 9
   }
@@ -50,7 +50,7 @@ fn main() -> i32 {
     ret 10
   }
   s := format("x;y")
-  (e, f) := s.split_once(";").unwrap()
+  (e, f) := s.split_once(";").or_panic_with_message("expected a value")
   if e != "x" {
     ret 11
   }

@@ -9,5 +9,5 @@ fn main() -> i32 {
   if v.len() == 1 {
     v.push(2i32)
   }
-  ret *held.unwrap() - 1
+  ret *held.or_panic_with_message("expected a value") - 1
 }

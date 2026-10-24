@@ -22,7 +22,7 @@ fn main() -> i32 {
   if tokens.len() != 2 {
     ret 1
   }
-  t := tokens.at(0).unwrap()
+  t := tokens.at(0).or_panic_with_message("expected a value")
   if t.kind != 1 {
     ret 2
   }
@@ -32,7 +32,7 @@ fn main() -> i32 {
   if slice_of(src, t.span) != "let" {
     ret 4
   }
-  if slice_of(src, tokens.at(1).unwrap().span) != "x" {
+  if slice_of(src, tokens.at(1).or_panic_with_message("expected a value").span) != "x" {
     ret 5
   }
   ret 0

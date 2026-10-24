@@ -20,7 +20,7 @@ fn render(msgs: Vec<Diagnostic>) -> String {
   mut out := String::new()
   mut i := 0 as usize
   while i < ordered.len() {
-    d := ordered.at(i).unwrap()
+    d := ordered.at(i).or_panic_with_message("expected a value")
     if i > 0 {
       out.push(0x0au8)
     }

@@ -10,7 +10,7 @@ fn main() -> i32 {
   if v.len() != 1 {
     ret 1
   }
-  if *v.at(0).unwrap() != 1 {
+  if *v.at(0).or_panic_with_message("expected a value") != 1 {
     ret 2
   }
   v.truncate(5)

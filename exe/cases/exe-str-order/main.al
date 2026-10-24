@@ -20,13 +20,13 @@ fn main() -> i32 {
   names.push(format("a"))
   names.push(format("ab"))
   names.sort()
-  if names.at(0).unwrap().as_str() != "a" {
+  if names.at(0).or_panic_with_message("expected a value").as_str() != "a" {
     ret 6
   }
-  if names.at(1).unwrap().as_str() != "ab" {
+  if names.at(1).or_panic_with_message("expected a value").as_str() != "ab" {
     ret 7
   }
-  if names.at(2).unwrap().as_str() != "b" {
+  if names.at(2).or_panic_with_message("expected a value").as_str() != "b" {
     ret 8
   }
   ret 0

@@ -11,7 +11,7 @@ fn main() -> i32 {
   if s[1..<3].first().is_some() != true {
     ret 2
   }
-  if *s[1..<3].at(0).unwrap() != 20i32 {
+  if *s[1..<3].at(0).or_panic_with_message("expected a value") != 20i32 {
     ret 3
   }
   if s[..<2].len() != 2 {

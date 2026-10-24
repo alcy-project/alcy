@@ -6,13 +6,13 @@ fn main() -> i32 {
   if x.len() != 1 {
     ret 1
   }
-  if *x.at(0).unwrap() != 1 {
+  if *x.at(0).or_panic_with_message("expected a value") != 1 {
     ret 2
   }
   if y.len() != 2 {
     ret 3
   }
-  if *y.at(0).unwrap() != 2 {
+  if *y.at(0).or_panic_with_message("expected a value") != 2 {
     ret 4
   }
   (p, q) := s.split_at(0)

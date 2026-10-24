@@ -12,10 +12,10 @@ fn main() -> i32 {
     ret 1
   }
   names.sort()
-  if names.at(0).unwrap().as_str() != "a" {
+  if names.at(0).or_panic_with_message("expected a value").as_str() != "a" {
     ret 2
   }
-  if names.at(1).unwrap().as_str() != "b" {
+  if names.at(1).or_panic_with_message("expected a value").as_str() != "b" {
     ret 3
   }
   ret 0

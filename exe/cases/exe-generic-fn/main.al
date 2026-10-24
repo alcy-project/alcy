@@ -9,7 +9,7 @@ fn identity<T>(x: T) -> T {
   ret x
 }
 
-fn unwrap_or<T>(b: Box<T>, fallback: T) -> T {
+fn or_default<T>(b: Box<T>, fallback: T) -> T {
   ret b.item
 }
 
@@ -47,11 +47,11 @@ fn main() -> i32 {
     bad = 5
   }
   bx: Box<i32> := Box { item: 5i32 }
-  if unwrap_or(bx, 0i32) != 5 {
+  if or_default(bx, 0i32) != 5 {
     bad = 6
   }
   nb: Box<Box<i32>> := Box { item: bx }
-  if unwrap_or(nb, bx).item != 5 {
+  if or_default(nb, bx).item != 5 {
     bad = 7
   }
   if recurse(9i32, 3) != 9 {

@@ -15,28 +15,28 @@ fn main() -> i32 {
   if s[1..<3].len() != 2 {
     ret 1
   }
-  if s[1..<3].at(0).unwrap().a != 2i64 {
+  if s[1..<3].at(0).or_panic_with_message("expected a value").a != 2i64 {
     ret 2
   }
-  if s[1..<3].at(1).unwrap().b != 33i64 {
+  if s[1..<3].at(1).or_panic_with_message("expected a value").b != 33i64 {
     ret 3
   }
-  if s[..<2].at(1).unwrap().a != 2i64 {
+  if s[..<2].at(1).or_panic_with_message("expected a value").a != 2i64 {
     ret 4
   }
-  if s[1..].at(0).unwrap().a != 2i64 {
+  if s[1..].at(0).or_panic_with_message("expected a value").a != 2i64 {
     ret 5
   }
-  if s[0..=1].at(1).unwrap().a != 2i64 {
+  if s[0..=1].at(1).or_panic_with_message("expected a value").a != 2i64 {
     ret 6
   }
   if s[1..<3].first().is_some() != true {
     ret 7
   }
-  if s[1..<3].last().unwrap().a != 3i64 {
+  if s[1..<3].last().or_panic_with_message("expected a value").a != 3i64 {
     ret 8
   }
-  if s[1..<3].position((p: &Pair) -> p.a == 3i64).unwrap() != 1 {
+  if s[1..<3].position((p: &Pair) -> p.a == 3i64).or_panic_with_message("expected a value") != 1 {
     ret 9
   }
   ret 0

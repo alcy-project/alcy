@@ -10,5 +10,5 @@ fn main() -> i32 {
   if v.len() != 2 {
     ret 1
   }
-  ret *held.unwrap() - 1
+  ret *held.or_panic_with_message("expected a value") - 1
 }

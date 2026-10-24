@@ -24,10 +24,10 @@ fn main() -> i32 {
   if idents.len() != 2 {
     ret 1
   }
-  if idents.at(0).unwrap().as_str() != "let" {
+  if idents.at(0).or_panic_with_message("expected a value").as_str() != "let" {
     ret 2
   }
-  if idents.at(1).unwrap().as_str() != "x" {
+  if idents.at(1).or_panic_with_message("expected a value").as_str() != "x" {
     ret 3
   }
   ret 0

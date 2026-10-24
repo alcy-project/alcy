@@ -18,7 +18,7 @@ fn main() -> i32 {
       if v.len() != 1 {
         ret 1
       }
-      if *v.at(0).unwrap() != 7 {
+      if *v.at(0).or_panic_with_message("expected a value") != 7 {
         ret 2
       }
     }

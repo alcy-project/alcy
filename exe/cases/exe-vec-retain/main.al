@@ -10,13 +10,13 @@ fn main() -> i32 {
   if v.len() != 3 {
     ret 1
   }
-  if *v.at(0).unwrap() != 1 {
+  if *v.at(0).or_panic_with_message("expected a value") != 1 {
     ret 2
   }
-  if *v.at(1).unwrap() != 3 {
+  if *v.at(1).or_panic_with_message("expected a value") != 3 {
     ret 3
   }
-  if *v.at(2).unwrap() != 5 {
+  if *v.at(2).or_panic_with_message("expected a value") != 5 {
     ret 4
   }
   mut w := Vec::<String>::new()
@@ -27,10 +27,10 @@ fn main() -> i32 {
   if w.len() != 2 {
     ret 5
   }
-  if w.at(0).unwrap().as_str() != "bb" {
+  if w.at(0).or_panic_with_message("expected a value").as_str() != "bb" {
     ret 6
   }
-  if w.at(1).unwrap().as_str() != "ccc" {
+  if w.at(1).or_panic_with_message("expected a value").as_str() != "ccc" {
     ret 7
   }
   ret 0

@@ -5,7 +5,7 @@ fn sum_all(v: &Vec<i32>) -> i32 {
   mut total := 0i32
   mut i := 0 as usize
   while i < v.len() {
-    total = total + *v.at(i).unwrap()
+    total = total + *v.at(i).or_panic_with_message("expected a value")
     i = i + 1
   }
   ret total
@@ -22,6 +22,6 @@ fn main() -> i32 {
     ret 1
   }
   // A result kept after the last push, which reallocated before it.
-  last := v.at(9).unwrap()
+  last := v.at(9).or_panic_with_message("expected a value")
   ret *last - 9
 }

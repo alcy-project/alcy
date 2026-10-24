@@ -8,18 +8,18 @@ fn main() -> i32 {
     ret 2
   }
   v.push(10)
-  if *v.first().unwrap() != 10 {
+  if *v.first().or_panic_with_message("expected a value") != 10 {
     ret 3
   }
-  if *v.last().unwrap() != 10 {
+  if *v.last().or_panic_with_message("expected a value") != 10 {
     ret 4
   }
   v.push(20)
   v.push(30)
-  if *v.first().unwrap() != 10 {
+  if *v.first().or_panic_with_message("expected a value") != 10 {
     ret 5
   }
-  if *v.last().unwrap() != 30 {
+  if *v.last().or_panic_with_message("expected a value") != 30 {
     ret 6
   }
   ret 0

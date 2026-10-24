@@ -17,45 +17,45 @@ fn main() -> i32 {
   if v.len() != 4 {
     ret 1
   }
-  if *v.at(2).unwrap() != 3i64 {
+  if *v.at(2).or_panic_with_message("expected a value") != 3i64 {
     ret 2
   }
   v.insert(0, 0i64)
-  if *v.at(0).unwrap() != 0i64 {
+  if *v.at(0).or_panic_with_message("expected a value") != 0i64 {
     ret 3
   }
-  if *v.at(4).unwrap() != 4i64 {
+  if *v.at(4).or_panic_with_message("expected a value") != 4i64 {
     ret 4
   }
   v.insert(5, 5i64)
-  if *v.at(5).unwrap() != 5i64 {
+  if *v.at(5).or_panic_with_message("expected a value") != 5i64 {
     ret 5
   }
   v.swap(0, 5)
-  if *v.at(0).unwrap() != 5i64 {
+  if *v.at(0).or_panic_with_message("expected a value") != 5i64 {
     ret 6
   }
-  if *v.at(5).unwrap() != 0i64 {
+  if *v.at(5).or_panic_with_message("expected a value") != 0i64 {
     ret 7
   }
   v.reverse()
-  if *v.at(0).unwrap() != 0i64 {
+  if *v.at(0).or_panic_with_message("expected a value") != 0i64 {
     ret 8
   }
-  if *v.at(5).unwrap() != 5i64 {
+  if *v.at(5).or_panic_with_message("expected a value") != 5i64 {
     ret 9
   }
   v.retain((x: &i64) -> *x % 2i64 == 0i64)
   if v.len() != 3 {
     ret 10
   }
-  if *v.at(0).unwrap() != 0i64 {
+  if *v.at(0).or_panic_with_message("expected a value") != 0i64 {
     ret 11
   }
-  if *v.at(1).unwrap() != 4i64 {
+  if *v.at(1).or_panic_with_message("expected a value") != 4i64 {
     ret 12
   }
-  if *v.at(2).unwrap() != 2i64 {
+  if *v.at(2).or_panic_with_message("expected a value") != 2i64 {
     ret 13
   }
   mut w := Vec::<i64>::new()
@@ -65,15 +65,15 @@ fn main() -> i32 {
   if v.len() != 5 {
     ret 14
   }
-  if *v.at(3).unwrap() != 7i64 {
+  if *v.at(3).or_panic_with_message("expected a value") != 7i64 {
     ret 15
   }
-  if *v.at(4).unwrap() != 8i64 {
+  if *v.at(4).or_panic_with_message("expected a value") != 8i64 {
     ret 16
   }
-  mut p := v.at_mut(2).unwrap()
+  mut p := v.at_mut(2).or_panic_with_message("expected a value")
   *p = 22i64
-  if *v.at(2).unwrap() != 22i64 {
+  if *v.at(2).or_panic_with_message("expected a value") != 22i64 {
     ret 17
   }
 
@@ -85,14 +85,14 @@ fn main() -> i32 {
   if b.len() != 4 {
     ret 18
   }
-  if *b.at(0).unwrap() != 9u8 {
+  if *b.at(0).or_panic_with_message("expected a value") != 9u8 {
     ret 19
   }
   b.reverse()
-  if *b.at(0).unwrap() != 3u8 {
+  if *b.at(0).or_panic_with_message("expected a value") != 3u8 {
     ret 20
   }
-  if *b.at(3).unwrap() != 9u8 {
+  if *b.at(3).or_panic_with_message("expected a value") != 9u8 {
     ret 21
   }
   b.retain((x: &u8) -> *x < 9u8)
@@ -107,27 +107,27 @@ fn main() -> i32 {
   if q.len() != 3 {
     ret 23
   }
-  if q.at(1).unwrap().a != 3i64 {
+  if q.at(1).or_panic_with_message("expected a value").a != 3i64 {
     ret 24
   }
-  if q.at(1).unwrap().b != 33i64 {
+  if q.at(1).or_panic_with_message("expected a value").b != 33i64 {
     ret 25
   }
-  if q.at(2).unwrap().b != 22i64 {
+  if q.at(2).or_panic_with_message("expected a value").b != 22i64 {
     ret 26
   }
   q.reverse()
-  if q.at(0).unwrap().a != 2i64 {
+  if q.at(0).or_panic_with_message("expected a value").a != 2i64 {
     ret 27
   }
-  if q.at(2).unwrap().a != 1i64 {
+  if q.at(2).or_panic_with_message("expected a value").a != 1i64 {
     ret 28
   }
   q.retain((x: &Pair) -> x.a != 3i64)
   if q.len() != 2 {
     ret 29
   }
-  if q.at(0).unwrap().b != 22i64 {
+  if q.at(0).or_panic_with_message("expected a value").b != 22i64 {
     ret 30
   }
   ret 0

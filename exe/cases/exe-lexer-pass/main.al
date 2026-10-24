@@ -63,16 +63,16 @@ fn main() -> i32 {
   if tokens.len() != 4 {
     ret 1
   }
-  if text_of(src, tokens.at(0).unwrap()) != "let" {
+  if text_of(src, tokens.at(0).or_panic_with_message("expected a value")) != "let" {
     ret 2
   }
-  if text_of(src, tokens.at(1).unwrap()) != "x1" {
+  if text_of(src, tokens.at(1).or_panic_with_message("expected a value")) != "x1" {
     ret 3
   }
-  if tokens.at(2).unwrap().kind != 3 {
+  if tokens.at(2).or_panic_with_message("expected a value").kind != 3 {
     ret 4
   }
-  if text_of(src, tokens.at(3).unwrap()) != "42" {
+  if text_of(src, tokens.at(3).or_panic_with_message("expected a value")) != "42" {
     ret 5
   }
   ret 0

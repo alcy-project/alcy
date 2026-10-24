@@ -27,7 +27,7 @@ pub fn args() -> Vec<String> {
   n := args_len()
   mut i := 0 as usize
   while i < n {
-    out.push(arg_at(i).unwrap())
+    out.push(arg_at(i).or_panic_with_message("the argument index is within the count"))
     i = i + 1
   }
   ret out

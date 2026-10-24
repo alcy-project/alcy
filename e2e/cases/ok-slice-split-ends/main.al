@@ -2,14 +2,14 @@
 fn main() -> i32 {
   a := [1, 2, 3]
   s := a.as_slice()
-  pair := s.split_first().unwrap()
+  pair := s.split_first().or_panic_with_message("expected a value")
   if *pair.0 != 1 {
     ret 1
   }
   if pair.1.len() != 2 {
     ret 2
   }
-  back := s.split_last().unwrap()
+  back := s.split_last().or_panic_with_message("expected a value")
   if *back.0 != 3 {
     ret 3
   }

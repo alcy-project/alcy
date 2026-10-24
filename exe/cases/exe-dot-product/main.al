@@ -8,7 +8,14 @@ fn dot(a: &Vec<i64>, b: &Vec<i64>) -> i64 {
   mut s := 0 as i64
   mut i := 0 as usize
   while i < n {
-    s = s + *a.at(i).unwrap() * *b.at(i).unwrap()
+    s =
+      s +
+      *a
+      .at(i)
+      .or_panic_with_message("expected a value") *
+      *b
+      .at(i)
+      .or_panic_with_message("expected a value")
     i = i + 1
   }
   ret s
