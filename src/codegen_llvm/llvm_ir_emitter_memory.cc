@@ -63,7 +63,21 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       const ir::Operand& size_op = storage_->operands()[ops.head()];
       llvm::Type* elem_ty = type(storage_->registers()[i.dst].type);
       llvm::Value* size = resolve_operand_value(size_op);
-      llvm::AllocaInst* alloca = builder_->CreateAlloca(elem_ty, size);
+      // A fixed-size slot belongs to the frame, not to the block that
+      // names it. One inside a loop body otherwise takes a fresh slot
+      // every iteration, and the stack walks down until it meets the
+      // heap - twenty thousand turns on a plain `Vec` were enough. A
+      // slot whose size is a value stays where it is: reserving it once
+      // would fix a length it does not have.
+      llvm::AllocaInst* alloca = nullptr;
+      if (llvm::isa<llvm::ConstantInt>(size)) {
+        llvm::BasicBlock& entry =
+            builder_->GetInsertBlock()->getParent()->getEntryBlock();
+        llvm::IRBuilder<> entry_builder(&entry, entry.begin());
+        alloca = entry_builder.CreateAlloca(elem_ty, size);
+      } else {
+        alloca = builder_->CreateAlloca(elem_ty, size);
+      }
       values_.add_register(i.dst, alloca);
       values_.add_alloca_type(i.dst, elem_ty);
       break;
