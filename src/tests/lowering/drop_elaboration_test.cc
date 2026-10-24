@@ -78,7 +78,7 @@ TEST_CASE("The drop pass ends a bound local at its site") {
                                            .locals = {0},
                                            .span = {}}};
   fx.streams.emplace_back();
-  fx.blocks.push_back(ir::BlockIdx(0));
+  fx.blocks.emplace_back(0);
 
   const DropElaborationInputs inputs{
       .needs_drop = fx.needs_drop,
@@ -141,7 +141,7 @@ TEST_CASE("The drop pass leaves a moved local alone") {
                                            .locals = {0},
                                            .span = {}}};
   fx.streams.emplace_back();
-  fx.blocks.push_back(ir::BlockIdx(0));
+  fx.blocks.emplace_back(0);
 
   const DropElaborationInputs inputs{
       .needs_drop = fx.needs_drop,
