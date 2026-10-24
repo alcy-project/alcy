@@ -429,6 +429,36 @@ case(
     BOX,
 )
 
+# `Vec::pop` answers an owned element, and returning the answer is
+# refused: the method's summary carries the receiver's loan into it, so
+# an answer whose bytes moved out still reads as a reference to the
+# local container. A `Copy` element survives already
+# (`ok-borrow-owned-element`), and binding the answer to a local first
+# is the workaround; the loan-place work the backlog records is the
+# fix.
+case(
+    "returned",
+    "owned-element-returned",
+    "accept",
+    """fn take() -> Option<String> {
+  mut v := Vec::<String>::new()
+  v.push(String::from("a"))
+  ret v.pop()
+}
+
+fn main() -> i32 {
+  match take() {
+    Option::Some(s) => {
+      ret str_len(s.as_str()) as i32 - 1
+    }
+    Option::None => {
+      ret 9
+    }
+  }
+}""",
+    known=True,
+)
+
 # --- extent across control flow ---------------------------------------
 case(
     "extent",
@@ -1077,11 +1107,11 @@ case(
 def is_borrow_diagnostic(reason):
     """Whether a rejection came from the borrow checker.
 
-    The borrow checker's own codes are 6xxx. Anything else means the
-    case is broken rather than the checker, which matters because a
-    type error would otherwise read as agreement.
+    The borrow checker's own codes carry the `EF` prefix. Anything else
+    means the case is broken rather than the checker, which matters
+    because a type error would otherwise read as agreement.
     """
-    return reason.startswith("E6") or "borrowed" in reason
+    return reason.startswith("EF") or reason.startswith("E6") or "borrowed" in reason
 
 
 def run_case(alcy, workdir, case):
@@ -1097,7 +1127,7 @@ def run_case(alcy, workdir, case):
     )
     got = "reject" if proc.returncode != 0 else "accept"
     out = proc.stdout + proc.stderr
-    match = re.search(r"error\[(E\d+)\]: ([^\n]*)", out)
+    match = re.search(r"error\[(E[A-Z0-9]+)\]: ([^\n]*)", out)
     reason = f"{match.group(1)} {match.group(2).strip()}" if match else ""
     return got, reason
 

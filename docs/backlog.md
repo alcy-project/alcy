@@ -281,6 +281,22 @@ replaced. The foundations are in `roadmap.md`.
   a guard over the byte count before the host allocator is what would
   let the two builds say the same thing.
 
+- [ ] Returning the owned element a container hands back is refused:
+  `fn take() -> Option<String> { mut v := Vec::<String>::new();
+  v.push(String::from("a")); ret v.pop() }` reports `Move of 'v'
+  invalidates an outstanding borrow` and `Returns reference to local
+  'v'`, while binding the answer to a local first compiles. The
+  method's summary carries the receiver's loan into the answer, and the
+  answer holds a reference at all only through the buffer the container
+  owns internally, so a `Copy` element survives
+  (`ok-borrow-owned-element`) and an owning one does not; `Vec::pop`,
+  `Vec::swap_remove`, and `Map::remove` all read this way, and the
+  workaround is the local binding. The loan has to sit on the buffer
+  rather than on the container before the summary can say so, which is
+  the loan-place work the borrow pass still wants.
+  `check_borrow_rules.py` tracks the reproducer as a known gap
+  (`returned/owned-element-returned`).
+
 - [ ] A reference to a container's element carries no loan: `r := &v[0]`
   held across a `v.push` is accepted, the growth frees the buffer the
   reference reads through, and the address sanitizer reports the
