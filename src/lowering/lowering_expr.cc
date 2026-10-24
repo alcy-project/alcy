@@ -254,19 +254,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
 ir::OperandIdx Lowerer::imm_from_u64(ir::TypeTag tag,
                                      ir::TypeIdx type,
                                      u64 value) {
-  ir::Immutable imm{.type = type, .data = {}};
-  switch (tag) {
-    case ir::TypeTag::I1: imm.data.i1_value = value != 0; break;
-    case ir::TypeTag::I8: imm.data.i8_value = static_cast<i8>(value); break;
-    case ir::TypeTag::I16: imm.data.i16_value = static_cast<i16>(value); break;
-    case ir::TypeTag::I32: imm.data.i32_value = static_cast<i32>(value); break;
-    case ir::TypeTag::I64: imm.data.i64_value = static_cast<i64>(value); break;
-    case ir::TypeTag::U8: imm.data.u8_value = static_cast<u8>(value); break;
-    case ir::TypeTag::U16: imm.data.u16_value = static_cast<u16>(value); break;
-    case ir::TypeTag::U32: imm.data.u32_value = static_cast<u32>(value); break;
-    default: imm.data.u64_value = value; break;
-  }
-  return to_operand(builder.immutable(imm), type);
+  return lowering::imm_from_u64(builder, tag, type, value);
 }
 
 // Address of a place expression. Non-places diagnose: checking

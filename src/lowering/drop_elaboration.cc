@@ -7,6 +7,8 @@
 // them, computes the state of every place at every point that decides
 // an end, and rewrites the function's blocks to carry the ends.
 
+#include "lowering/drop_elaboration.h"
+
 #include <algorithm>
 #include <functional>
 #include <span>
@@ -190,11 +192,127 @@ void Lowerer::record_drop_in_place(ir::OperandIdx place,
   ownership_.push_back(std::move(event));
 }
 
-ir::RegisterIdx Lowerer::pass_emit(ir::InstrSeq& seq,
-                                   ir::Opcode op,
-                                   ir::TypeIdx type,
-                                   const std::vector<ir::OperandIdx>& ops,
-                                   diag::Span span) {
+namespace {
+
+// The drop pass as one unit: the journals lowering recorded, the
+// streams it rewrites, and the caller's facilities, none of them
+// reached through the lowerer (ADR-0062).
+class DropElaborator {
+ public:
+  explicit DropElaborator(const DropElaborationInputs& inputs)
+      : pkg(inputs.pkg),
+        builder(inputs.builder),
+        bag(inputs.bag),
+        locals(inputs.locals),
+        ownership_(inputs.ownership),
+        end_sites_(inputs.end_sites),
+        instr_spans_(inputs.instr_spans),
+        streams_(inputs.streams),
+        fn_blocks_(inputs.blocks),
+        base_(inputs.base),
+        type_origins_(inputs.type_origins),
+        size_one(inputs.size_one),
+        zero_i32(inputs.zero_i32),
+        width(inputs.width),
+        drop_method_(inputs.drop_method),
+        reserve_block_(inputs.reserve_block) {}
+
+  void run();
+  ir::RegisterIdx pass_emit(ir::InstrSeq& seq,
+                            ir::Opcode op,
+                            ir::TypeIdx type,
+                            const std::vector<ir::OperandIdx>& ops,
+                            diag::Span span);
+  void pass_emit_void(ir::InstrSeq& seq,
+                      ir::Opcode op,
+                      const std::vector<ir::OperandIdx>& ops,
+                      diag::Span span);
+  void pass_copy(ir::InstrSeq& seq, ir::InstructionIdx idx);
+
+ private:
+  [[nodiscard]] ir::RegisterIdx claim_reg() const {
+    return ir::RegisterIdx(static_cast<u32>(builder.state().registers.size()));
+  }
+  [[nodiscard]] ir::OperandIdx to_operand(ir::RegisterIdx reg,
+                                          ir::TypeIdx type) const {
+    return builder.operand(ir::Operand::from_register(reg, type));
+  }
+  [[nodiscard]] ir::OperandIdx to_operand(ir::ImmutableIdx imm,
+                                          ir::TypeIdx type) const {
+    return builder.operand(ir::Operand::from_immutable(imm, type));
+  }
+  [[nodiscard]] bool runs_destructor(ir::TypeIdx type) const {
+    return lowering::runs_destructor(pkg, builder, type_origins_, type);
+  }
+  [[nodiscard]] ir::BlockIdx reserve_block() { return reserve_block_(); }
+  [[nodiscard]] usize at(ir::BlockIdx block) const { return block.idx - base_; }
+  [[nodiscard]] ir::TypeTag tag_of(ir::TypeIdx idx) const {
+    return builder.state().types[idx].tag;
+  }
+  [[nodiscard]] ir::TypeIdx type_origin(ir::TypeIdx type) const {
+    const auto found = type_origins_.find(type.idx);
+    return found == type_origins_.end() ? type : ir::TypeIdx(found->second);
+  }
+  [[nodiscard]] ir::TypeIdx usize_type() const {
+    return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
+                                                            : ir::TypeTag::U32);
+  }
+  [[nodiscard]] ir::TypeIdxRange variant_fields(ir::TypeIdx enum_type,
+                                                u32 variant) const {
+    const ir::EnumType& enum_ty =
+        builder.state().enum_types[builder.state().types[enum_type].as_enum()];
+    const u32 at = enum_ty.variants.head().idx + variant;
+    return builder.state()
+        .enum_variant_types[ir::EnumVariantTypeIdx(at)]
+        .fields;
+  }
+  [[nodiscard]] ir::OperandIdx imm_from_u64(ir::TypeTag tag,
+                                            ir::TypeIdx type,
+                                            u64 value) const {
+    return lowering::imm_from_u64(builder, tag, type, value);
+  }
+  [[nodiscard]] ir::OperandIdx index_operand(u32 index) const {
+    return imm_from_u64(ir::TypeTag::I32, builder.primitive(ir::TypeTag::I32),
+                        index);
+  }
+  [[nodiscard]] ir::OperandIdx bool_operand(bool value) const {
+    return imm_from_u64(ir::TypeTag::I1, builder.primitive(ir::TypeTag::I1),
+                        value ? 1 : 0);
+  }
+  [[nodiscard]] ir::TypeIdx type_at_path(ir::TypeIdx type,
+                                         std::span<const u32> path) const {
+    return lowering::type_at_path(builder, type_origins_, type, path);
+  }
+  [[nodiscard]] ir::FunctionIdx drop_method(u32 module, u32 method) const {
+    return drop_method_(module, method);
+  }
+
+  const analyzer::CheckedPackage& pkg;
+  ir::StorageBuilder& builder;
+  diag::DiagBag& bag;
+  std::span<const Local> locals;
+  std::span<const OwnershipEvent> ownership_;
+  std::span<const EndSite> end_sites_;
+  std::vector<diag::Span>& instr_spans_;
+  std::vector<ir::InstrSeq>& streams_;
+  std::vector<ir::BlockIdx>& fn_blocks_;
+  u32 base_ = 0;
+  const std::unordered_map<u32, u32>& type_origins_;
+  ir::OperandIdx size_one = ir::OperandIdx(0);
+  ir::OperandIdx zero_i32 = ir::OperandIdx(0);
+  ir::PointerWidth width = ir::PointerWidth::W64;
+  std::function<ir::FunctionIdx(u32, u32)> drop_method_;
+  std::function<ir::BlockIdx()> reserve_block_;
+};
+
+}  // namespace
+
+ir::RegisterIdx DropElaborator::pass_emit(
+    ir::InstrSeq& seq,
+    ir::Opcode op,
+    ir::TypeIdx type,
+    const std::vector<ir::OperandIdx>& ops,
+    diag::Span span) {
   const ir::RegisterIdx dst = claim_reg();
   const ir::OperandIdx head =
       ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
@@ -213,10 +331,10 @@ ir::RegisterIdx Lowerer::pass_emit(ir::InstrSeq& seq,
   return dst;
 }
 
-void Lowerer::pass_emit_void(ir::InstrSeq& seq,
-                             ir::Opcode op,
-                             const std::vector<ir::OperandIdx>& ops,
-                             diag::Span span) {
+void DropElaborator::pass_emit_void(ir::InstrSeq& seq,
+                                    ir::Opcode op,
+                                    const std::vector<ir::OperandIdx>& ops,
+                                    diag::Span span) {
   const ir::OperandIdx head =
       ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
   for (ir::OperandIdx op_idx : ops) {
@@ -232,7 +350,7 @@ void Lowerer::pass_emit_void(ir::InstrSeq& seq,
   instr_spans_.push_back(span);
 }
 
-void Lowerer::pass_copy(ir::InstrSeq& seq, ir::InstructionIdx idx) {
+void DropElaborator::pass_copy(ir::InstrSeq& seq, ir::InstructionIdx idx) {
   const ir::Instruction& old = builder.state().instrs[idx.idx];
   const ir::InstructionIdx copy = builder.instr({.op = old.op,
                                                  .flags = old.flags,
@@ -243,8 +361,8 @@ void Lowerer::pass_copy(ir::InstrSeq& seq, ir::InstructionIdx idx) {
   instr_spans_.push_back(instr_spans_[idx.idx]);
 }
 
-void Lowerer::place_ends() {
-  if (failed || (ownership_.empty() && end_sites_.empty())) {
+void DropElaborator::run() {
+  if (ownership_.empty() && end_sites_.empty()) {
     return;
   }
 
@@ -535,13 +653,7 @@ void Lowerer::place_ends() {
       const analyzer::CheckedModule::DropGlue& glue =
           pkg.drop_glue[glue_type.idx];
       if (glue.index != base::INVALID_IDX) {
-        const analyzer::CheckedModule& def = pkg.modules[glue.module];
-        const analyzer::CheckedModule::MethodInfo& info =
-            def.methods[glue.index];
-        ir::FunctionIdx fn = fn_index(
-            glue.module, info.item, info.name, info.params, info.ret,
-            generic_inst_index(info.self_type), {}, ir::SymbolKind::Method,
-            /*extra_generics=*/{}, info.self_type);
+        const ir::FunctionIdx fn = drop_method(glue.module, glue.index);
         if (!fn.is_valid()) {
           return;
         }
@@ -970,6 +1082,133 @@ void Lowerer::place_ends() {
     for (OutBlock& block : outputs[b].blocks) {
       streams_[at(block.block)] = block.seq;
     }
+  }
+}
+
+void Lowerer::place_ends() {
+  if (failed || (ownership_.empty() && end_sites_.empty())) {
+    return;
+  }
+  const DropElaborationInputs inputs{
+      .pkg = pkg,
+      .builder = builder,
+      .bag = bag,
+      .locals = locals,
+      .ownership = ownership_,
+      .end_sites = end_sites_,
+      .instr_spans = instr_spans_,
+      .streams = streams_,
+      .blocks = fn_blocks_,
+      .base = fn_block_base_,
+      .type_origins = type_origins_,
+      .size_one = size_one,
+      .zero_i32 = zero_i32,
+      .width = width,
+      .drop_method =
+          [this](u32 mod, u32 method) {
+            const analyzer::CheckedModule& def = pkg.modules[mod];
+            const analyzer::CheckedModule::MethodInfo& info =
+                def.methods[method];
+            return fn_index(mod, info.item, info.name, info.params, info.ret,
+                            generic_inst_index(info.self_type), {},
+                            ir::SymbolKind::Method, /*extra_generics=*/{},
+                            info.self_type);
+          },
+      .reserve_block = [this] { return reserve_block(); },
+  };
+  elaborate_drops(inputs);
+}
+
+void elaborate_drops(const DropElaborationInputs& inputs) {
+  DropElaborator pass(inputs);
+  pass.run();
+}
+
+ir::TypeIdx type_at_path(ir::StorageBuilder& builder,
+                         const std::unordered_map<u32, u32>& type_origins,
+                         ir::TypeIdx type,
+                         std::span<const u32> path) {
+  const auto origin_of = [&](ir::TypeIdx idx) {
+    const auto found = type_origins.find(idx.idx);
+    return found == type_origins.end() ? idx : ir::TypeIdx(found->second);
+  };
+  ir::TypeIdx current = origin_of(type);
+  for (u32 index : path) {
+    const ir::TypeNode& node = builder.types()[current];
+    if (node.tag == ir::TypeTag::Struct) {
+      const ir::StructType& fields = builder.struct_types()[node.as_struct()];
+      if (index >= fields.fields.size()) {
+        return builder.error_type();
+      }
+      current = origin_of(fields.fields[index]);
+    } else if (node.tag == ir::TypeTag::Tuple) {
+      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      if (index >= tuple.elements.size()) {
+        return builder.error_type();
+      }
+      current = origin_of(tuple.elements[index]);
+    } else {
+      return builder.error_type();
+    }
+  }
+  return current;
+}
+
+ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
+                            ir::TypeTag tag,
+                            ir::TypeIdx type,
+                            u64 value) {
+  ir::Immutable imm{.type = type, .data = {}};
+  switch (tag) {
+    case ir::TypeTag::I1: imm.data.i1_value = value != 0; break;
+    case ir::TypeTag::I8: imm.data.i8_value = static_cast<i8>(value); break;
+    case ir::TypeTag::I16: imm.data.i16_value = static_cast<i16>(value); break;
+    case ir::TypeTag::I32: imm.data.i32_value = static_cast<i32>(value); break;
+    case ir::TypeTag::I64: imm.data.i64_value = static_cast<i64>(value); break;
+    case ir::TypeTag::U8: imm.data.u8_value = static_cast<u8>(value); break;
+    case ir::TypeTag::U16: imm.data.u16_value = static_cast<u16>(value); break;
+    case ir::TypeTag::U32: imm.data.u32_value = static_cast<u32>(value); break;
+    default: imm.data.u64_value = value; break;
+  }
+  return builder.operand(
+      ir::Operand::from_immutable(builder.immutable(imm), type));
+}
+
+bool runs_destructor(const analyzer::CheckedPackage& pkg,
+                     const ir::StorageBuilder& builder,
+                     const std::unordered_map<u32, u32>& type_origins,
+                     ir::TypeIdx type) {
+  if (type.idx < pkg.needs_drop.size()) {
+    return pkg.needs_drop[type.idx] != 0;
+  }
+  // A type interned after the analyzer sized the table - the lowering
+  // builds tuple and reference types, a closure's environment among
+  // them - answers from its structure. A storage copy follows the
+  // copy back to the declaration the analyzer measured; the fields'
+  // entries are in the table; a reference owns nothing; and a value
+  // cycle cannot reach here because the checker rejects one before
+  // lowering runs.
+  const auto found = type_origins.find(type.idx);
+  const ir::TypeIdx origin =
+      found == type_origins.end() ? type : ir::TypeIdx(found->second);
+  if (origin.idx != type.idx) {
+    return runs_destructor(pkg, builder, type_origins, origin);
+  }
+  const ir::TypeNode& node = builder.types()[type];
+  switch (node.tag) {
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
+      for (ir::TypeIdx element : tuple.elements) {
+        if (runs_destructor(pkg, builder, type_origins, element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ir::TypeTag::Array:
+      return runs_destructor(pkg, builder, type_origins,
+                             builder.array_types()[node.as_array()].element);
+    default: return false;
   }
 }
 

@@ -35,6 +35,7 @@
 #include "ir/symbol_table.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
+#include "lowering/drop_elaboration.h"
 #include "lowering/lowering.h"
 #include "source/source.h"
 
@@ -51,15 +52,6 @@ struct Val {
   // holds belongs to whoever took the reference, so reading it out as a
   // value would take what that owner still ends.
   bool borrowed = false;
-};
-
-struct Local {
-  Local(std::string_view name, ir::RegisterIdx addr, ir::TypeIdx type)
-      : name(name), addr(addr), type(type) {}
-
-  std::string_view name;
-  ir::RegisterIdx addr;
-  ir::TypeIdx type;
 };
 
 class Lowerer {
@@ -673,35 +665,6 @@ class Lowerer {
   Val lower_literal_zero(ir::TypeIdx type, diag::Span span);
   void lower_stmt(ast::StmtIdx stmt);
   Val lower_block(ast::BlockIdx block, const ir::TypeIdx* expected);
-  // One ownership event the drop pass reads (ADR-0062), in lowering
-  // order. `offset` is the instruction count of the block at the moment
-  // the event was recorded: a Bind is after the binding's store, a Move
-  // after the marker, a Store after the store.
-  struct OwnershipEvent {
-    enum class Kind : u8 { Bind, Move, Store, DropInPlace };
-    Kind kind = Kind::Bind;
-    u32 local = base::INVALID_IDX;
-    std::vector<u32> path;
-    ir::BlockIdx block = ir::BlockIdx(0);
-    u32 offset = 0;
-    u32 seq = 0;
-    diag::Span span;
-    // DropInPlace only: the value at this pointer is ended where it
-    // stands, whatever place (if any) it names.
-    ir::OperandIdx place = ir::OperandIdx::invalid();
-    ir::TypeIdx place_type = ir::TypeIdx(base::INVALID_IDX);
-  };
-
-  // Where a place goes out of scope: a block and a position in it, and
-  // the locals the scope declared, innermost last. The pass ends them.
-  struct EndSite {
-    ir::BlockIdx block = ir::BlockIdx(0);
-    u32 offset = 0;
-    u32 seq = 0;
-    std::vector<u32> locals;
-    diag::Span span;
-  };
-
   std::vector<OwnershipEvent> ownership_;
   std::vector<EndSite> end_sites_;
   u32 record_seq_ = 0;
@@ -729,24 +692,10 @@ class Lowerer {
                            std::span<const ir::TypeIdx> arg_types,
                            diag::Span span);
 
-  // Solves ownership per place over this function's CFG and rewrites
-  // its streams to carry the ends. Runs after a body is lowered and
-  // before its blocks are published. See ADR-0062.
+  // Hands the journals and the function's streams to the drop pass,
+  // which solves ownership per place and places the ends (ADR-0062).
+  // Runs after a body is lowered and before its blocks are published.
   void place_ends();
-
-  // The pass's emitters: they append into a stream the pass is
-  // rebuilding, rather than into the current lowering block.
-  ir::RegisterIdx pass_emit(ir::SeqBuilder<ir::InstructionIdx>& seq,
-                            ir::Opcode op,
-                            ir::TypeIdx type,
-                            const std::vector<ir::OperandIdx>& ops,
-                            diag::Span span);
-  void pass_emit_void(ir::SeqBuilder<ir::InstructionIdx>& seq,
-                      ir::Opcode op,
-                      const std::vector<ir::OperandIdx>& ops,
-                      diag::Span span);
-  void pass_copy(ir::SeqBuilder<ir::InstructionIdx>& seq,
-                 ir::InstructionIdx instr);
 
   bool runs_destructor(ir::TypeIdx type) const;
   bool is_destructor(ast::ItemIdx item) const;

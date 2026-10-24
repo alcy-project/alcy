@@ -375,26 +375,7 @@ bool Lowerer::type_has_custom_drop(ir::TypeIdx type) const {
 }
 
 ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
-  ir::TypeIdx current = type_origin(type);
-  for (u32 index : path) {
-    const ir::TypeNode& node = builder.types()[current];
-    if (node.tag == ir::TypeTag::Struct) {
-      const ir::StructType& fields = builder.struct_types()[node.as_struct()];
-      if (index >= fields.fields.size()) {
-        return error_type();
-      }
-      current = type_origin(fields.fields[index]);
-    } else if (node.tag == ir::TypeTag::Tuple) {
-      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
-      if (index >= tuple.elements.size()) {
-        return error_type();
-      }
-      current = type_origin(tuple.elements[index]);
-    } else {
-      return error_type();
-    }
-  }
-  return current;
+  return lowering::type_at_path(builder, type_origins_, type, path);
 }
 
 // Uses a value, emitting a Move marker when a non-Copy place is
@@ -461,35 +442,7 @@ bool Lowerer::is_destructor(ast::ItemIdx item) const {
 }
 
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
-  if (type.idx < pkg.needs_drop.size()) {
-    return pkg.needs_drop[type.idx] != 0;
-  }
-  // A type interned after the analyzer sized the table - the lowering
-  // builds tuple and reference types, a closure's environment among
-  // them - answers from its structure. A storage copy follows the
-  // copy back to the declaration the analyzer measured; the fields'
-  // entries are in the table; a reference owns nothing; and a value
-  // cycle cannot reach here because the checker rejects one before
-  // lowering runs.
-  const ir::TypeIdx origin = type_origin(type);
-  if (origin.idx != type.idx) {
-    return runs_destructor(origin);
-  }
-  const ir::TypeNode& node = builder.types()[type];
-  switch (node.tag) {
-    case ir::TypeTag::Tuple: {
-      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
-      for (ir::TypeIdx element : tuple.elements) {
-        if (runs_destructor(element)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    case ir::TypeTag::Array:
-      return runs_destructor(builder.array_types()[node.as_array()].element);
-    default: return false;
-  }
+  return lowering::runs_destructor(pkg, builder, type_origins_, type);
 }
 
 ir::OperandIdx Lowerer::use_value(Val v) {
