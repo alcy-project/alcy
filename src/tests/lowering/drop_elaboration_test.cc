@@ -86,6 +86,7 @@ TEST_CASE("The drop pass ends a bound local at its site") {
 
   const DropElaborationInputs inputs{
       .needs_drop = fx.needs_drop,
+      .not_movable = {},
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
       .bag = fx.bag,
@@ -149,6 +150,7 @@ TEST_CASE("The drop pass leaves a moved local alone") {
 
   const DropElaborationInputs inputs{
       .needs_drop = fx.needs_drop,
+      .not_movable = {},
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
       .bag = fx.bag,
@@ -204,6 +206,7 @@ std::vector<u32> placed_calls(Fixture& fx,
   fx.blocks.emplace_back(0);
   const DropElaborationInputs inputs{
       .needs_drop = fx.needs_drop,
+      .not_movable = {},
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
       .bag = fx.bag,

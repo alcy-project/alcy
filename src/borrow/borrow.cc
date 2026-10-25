@@ -1315,6 +1315,24 @@ class Checker {
           (void)index;
           break;
         }
+        // ADR-0085: an unmovable value is never moved. The root's type
+        // decides, because a part of an unmovable value is reached
+        // through borrows only.
+        const ir::TypeIdx root_type = storage.registers()[place.root].type;
+        if (!ir::is_movable_type(storage.state(), root_type,
+                                 lowered.not_movable, [this](ir::TypeIdx idx) {
+                                   const auto found =
+                                       lowered.type_origins.find(idx.idx);
+                                   return found == lowered.type_origins.end()
+                                              ? idx
+                                              : ir::TypeIdx(found->second);
+                                 })) {
+          const u32 index = bag.emit<i18n::Key::BorrowUnmovableMoved>(
+              diag::Severity::Error, diag::Stage::Borrow,
+              DiagCode::UnmovableMoved, span, addr_name(place.root));
+          (void)index;
+          break;
+        }
         check_place_use(moved, place, span, "move");
         for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
           const Loan& loan = loans[id];

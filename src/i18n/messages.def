@@ -332,6 +332,7 @@
   F(BorrowConflict, "Conflicting borrows of '{}'") \
   F(BorrowMoveInvalidatesBorrow, "Move of '{}' invalidates an outstanding borrow") \
   F(BorrowMoveOutOfBorrow, "Cannot move out of '{}'; it is borrowed") \
+  F(BorrowUnmovableMoved, "A value holding an anchor is never moved: '{}' lives where it was built (ADR-0085)") \
   F(BorrowReturnsLocalReference, "Returns reference to local '{}'") \
   F(BorrowUseAfterMove, "Use of moved '{}' in {}") \
   /* codegen */ \

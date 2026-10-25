@@ -76,6 +76,8 @@ struct DropElaborationInputs {
   // The two analyzer tables the pass reads: whether a type ends with
   // code, and the glue method it ends through.
   std::span<const u8> needs_drop;
+  // Types that are never moved (ADR-0085): their end only ends.
+  std::span<const u8> not_movable;
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;

@@ -1,0 +1,3 @@
+# A value holding an anchor is never moved (ADR-0085).
+exit = 4
+contains = ["A value holding an anchor is never moved: 'p' lives where it was built (ADR-0085)"]

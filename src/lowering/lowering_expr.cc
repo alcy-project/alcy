@@ -121,7 +121,8 @@ Val Lowerer::stopped_value() {
 }
 
 bool Lowerer::is_copy(ir::TypeIdx type) const {
-  return ir::is_copy_type(builder.state(), type, pkg.needs_drop);
+  return ir::is_copy_type(builder.state(), type, pkg.needs_drop,
+                          pkg.not_movable);
 }
 
 ir::TypeTag Lowerer::tag_of(ir::TypeIdx idx) const {

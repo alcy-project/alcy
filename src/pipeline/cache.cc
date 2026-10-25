@@ -148,7 +148,13 @@ std::optional<lowering::LoweredPackage> cache_load(
                                   0,
                                   0,
                                   std::move(entry.summary),
-                                  std::move(summary_fields)};
+                                  std::move(summary_fields),
+                                  // A stored entry was checked before it
+                                  // was stored, and the key names the
+                                  // compiler that checked it, so the
+                                  // borrow pass needs no tables from it.
+                                  {},
+                                  {}};
 }
 
 bool cache_store(std::string_view dir,

@@ -10,6 +10,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -998,6 +999,14 @@ ir::TypeIdx Lowerer::type_origin(ir::TypeIdx type) const {
 ir::TypeIdx Lowerer::storage_copy(ir::TypeIdx type) {
   const ir::TypeIdx copy = builder.ref_type(type);
   type_origins_.emplace(copy.idx, type.idx);
+  // A copy carries the mark of what it came from, the way the
+  // checker's copies do (ADR-0085).
+  if (type.idx < pkg.not_movable.size() && pkg.not_movable[type.idx] != 0) {
+    if (pkg.not_movable.size() <= copy.idx) {
+      pkg.not_movable.resize(copy.idx + 1, 0);
+    }
+    pkg.not_movable[copy.idx] = 1;
+  }
   return copy;
 }
 
@@ -1814,6 +1823,11 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   // Side tables move out before the builder, which finish() consumes.
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
+  // The borrow pass reads both tables through the lowered package, so
+  // they travel with it; the lowerer itself is moved into finish()
+  // below (ADR-0085).
+  std::unordered_map<u32, u32> type_origins = std::move(lowerer.type_origins_);
+  std::vector<u8> not_movable = std::move(lowerer.pkg.not_movable);
   const usize prelude_functions = lowerer.prelude_functions_;
   const usize comp_engine_answered = lowerer.comp_engine_answered_;
   // Resolve each recorded comp call to the function lowering reserved
@@ -1860,7 +1874,9 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
                          0,
                          0,
                          std::move(summary),
-                         std::move(summary_fields)};
+                         std::move(summary_fields),
+                         std::move(type_origins),
+                         std::move(not_movable)};
   // ADR-0054: the IR engine is compared against the AST engine over
   // every comp call lowering made, before it is trusted to answer. A
   // disagreement is a compiler bug; a construct the interpreter does

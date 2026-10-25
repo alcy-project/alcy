@@ -2365,6 +2365,14 @@ ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
   const ir::TypeIdx copy = builder.ref_type(type);
   type_origins_.emplace_back(copy, type);
   type_origins_by_index_[copy.idx] = type.idx;
+  // A copy stands for the declaration it came from, so it carries the
+  // mark too: a walk over field slots sees copies (ADR-0085).
+  if (type.idx < not_movable_.size() && not_movable_[type.idx] != 0) {
+    if (not_movable_.size() <= copy.idx) {
+      not_movable_.resize(copy.idx + 1, 0);
+    }
+    not_movable_[copy.idx] = 1;
+  }
   return copy;
 }
 

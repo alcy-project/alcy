@@ -320,8 +320,15 @@ inline bool is_movable_type(const StorageState& state,
 // whatever its fields are.
 inline bool is_copy_type(const StorageState& state,
                          TypeIdx idx,
-                         std::span<const u8> has_drop) {
+                         std::span<const u8> has_drop,
+                         std::span<const u8> not_movable = {}) {
   if (idx.idx < has_drop.size() && has_drop[idx.idx] != 0) {
+    return false;
+  }
+  // A type that holds an anchor is not Copy: copying a value would
+  // place it somewhere else, which is what the anchor forbids
+  // (ADR-0085).
+  if (idx.idx < not_movable.size() && not_movable[idx.idx] != 0) {
     return false;
   }
   const TypeNode& node = state.types[idx];
@@ -357,7 +364,7 @@ inline bool is_copy_type(const StorageState& state,
     case TypeTag::Struct: {
       const StructType& struct_type = state.struct_types[node.as_struct()];
       for (TypeIdx field : struct_type.fields) {
-        if (!is_copy_type(state, field, has_drop)) {
+        if (!is_copy_type(state, field, has_drop, not_movable)) {
           return false;
         }
       }
@@ -365,10 +372,10 @@ inline bool is_copy_type(const StorageState& state,
     }
     case TypeTag::Array:
       return is_copy_type(state, state.array_types[node.as_array()].element,
-                          has_drop);
+                          has_drop, not_movable);
     case TypeTag::Slice:
       return is_copy_type(state, state.slice_types[node.as_slice()].element,
-                          has_drop);
+                          has_drop, not_movable);
     case TypeTag::Enum: {
       const EnumType& enum_type = state.enum_types[node.as_enum()];
       for (EnumVariantTypeIdx vidx = enum_type.variants.head();
@@ -376,7 +383,7 @@ inline bool is_copy_type(const StorageState& state,
            vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
         const EnumVariantType& variant = state.enum_variant_types[vidx];
         for (TypeIdx field : variant.fields) {
-          if (!is_copy_type(state, field, has_drop)) {
+          if (!is_copy_type(state, field, has_drop, not_movable)) {
             return false;
           }
         }
@@ -386,7 +393,7 @@ inline bool is_copy_type(const StorageState& state,
     case TypeTag::Tuple: {
       const TupleType& tuple = state.tuple_types[node.as_tuple()];
       for (TypeIdx element : tuple.elements) {
-        if (!is_copy_type(state, element, has_drop)) {
+        if (!is_copy_type(state, element, has_drop, not_movable)) {
           return false;
         }
       }

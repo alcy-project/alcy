@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "analyzer/types.h"
@@ -98,6 +99,10 @@ struct LoweredPackage {
   // row; the rows borrow them. Growing the container moves the runs,
   // which keeps each run's own buffer where the rows point.
   std::vector<std::vector<ir::SummaryField>> summary_fields;
+  // Where each type copy came from, and which types are never moved
+  // (ADR-0085). The borrow pass reads both through them.
+  std::unordered_map<u32, u32> type_origins;
+  std::vector<u8> not_movable;
 };
 
 base::Result<LoweredPackage, diag::Reported> lower_package(

@@ -202,6 +202,7 @@ class DropElaborator {
  public:
   explicit DropElaborator(const DropElaborationInputs& inputs)
       : needs_drop(inputs.needs_drop),
+        not_movable(inputs.not_movable),
         drop_glue(inputs.drop_glue),
         builder(inputs.builder),
         bag(inputs.bag),
@@ -245,6 +246,11 @@ class DropElaborator {
   }
   [[nodiscard]] bool runs_destructor(ir::TypeIdx type) const {
     return lowering::runs_destructor(needs_drop, builder, type_origins_, type);
+  }
+  [[nodiscard]] bool movable(ir::TypeIdx type) const {
+    return ir::is_movable_type(
+        builder.state(), type, not_movable,
+        [this](ir::TypeIdx idx) { return type_origin(idx); });
   }
   [[nodiscard]] ir::BlockIdx reserve_block() { return reserve_block_(); }
   [[nodiscard]] usize at(ir::BlockIdx block) const { return block.idx - base_; }
@@ -290,6 +296,7 @@ class DropElaborator {
   }
 
   std::span<const u8> needs_drop;
+  std::span<const u8> not_movable;
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
@@ -664,8 +671,9 @@ void DropElaborator::run() {
             pass_emit(seq_of(out), ir::Opcode::Load, type, {place}, span);
         // A binding's end marks the place moved; an explicit end does
         // not, because the reference names a value borrow should not
-        // retire for the rest of the buffer.
-        if (local < locals.size()) {
+        // retire for the rest of the buffer. An unmovable value is
+        // never moved, so its end only ends (ADR-0085).
+        if (local < locals.size() && movable(type)) {
           pass_emit_void(seq_of(out), ir::Opcode::Move, {place}, span);
         }
         pass_emit_void(seq_of(out), ir::Opcode::Call,
@@ -1093,6 +1101,7 @@ void Lowerer::place_ends() {
   }
   const DropElaborationInputs inputs{
       .needs_drop = pkg.needs_drop,
+      .not_movable = pkg.not_movable,
       .drop_glue = pkg.drop_glue,
       .builder = builder,
       .bag = bag,
