@@ -1,0 +1,5 @@
+# An inherent implementation lives where the type does (ADR-0090).
+exit = 4
+contains = [
+  "An inherent implementation lives where the type does: 'Thing' is declared in package 'acme_types'",
+]

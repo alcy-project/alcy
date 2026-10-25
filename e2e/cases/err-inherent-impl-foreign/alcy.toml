@@ -1,0 +1,11 @@
+[package]
+name = "app"
+version = "0.1.0"
+license = ""
+
+[[bin]]
+name = "app"
+path = "main.al"
+
+[dependencies]
+"acme/types" = { path = "vendor/types" }

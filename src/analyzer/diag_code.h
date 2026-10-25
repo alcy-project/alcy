@@ -103,6 +103,7 @@ enum class DiagCode : u8 {
   // A generic item's name reached a dependent: the item is there, and
   // what a summary does not carry yet is its body.
   GenericItemUnavailable = 46,
+  ImplOutsideItsHome = 47,
 };
 
 }  // namespace analyzer

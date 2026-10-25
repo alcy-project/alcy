@@ -181,6 +181,9 @@
   F(AnalyzerIfWithoutElse, "If without else yields '()'") \
   F(AnalyzerImportNotQualified, "Imports must be module-qualified (`self::foo`)") \
   F(AnalyzerInherentImplNeedsNominalType, "Inherent impl requires a nominal type") \
+  F(AnalyzerBuiltinImplOutsideItsSuite, "A builtin type belongs to the staged suite: '{}' cannot be implemented here") \
+  F(AnalyzerImplOutsideItsHome, "An implementation lives where the type or the spec lives: '{}' is declared in package '{}' and '{}' in package '{}'") \
+  F(AnalyzerInherentImplOutsideItsType, "An inherent implementation lives where the type does: '{}' is declared in package '{}'") \
   F(AnalyzerIntegerLiteralOutOfRange, "Integer literal is out of range for its type") \
   F(AnalyzerIntegerSuffixOnFloat, "Integer suffix on a float literal") \
   F(AnalyzerIntrinsicMissingUnsafe, "Intrinsic '{}' is unsafe; declare it `unsafe`") \

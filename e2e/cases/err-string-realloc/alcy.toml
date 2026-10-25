@@ -13,9 +13,9 @@ include = ["main"]
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}
 "alcy/std/io" = {}
-
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}
+
 [[bin]]
 name = "demo"
 path = "main.al"

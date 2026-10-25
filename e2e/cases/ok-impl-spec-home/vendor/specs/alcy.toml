@@ -1,0 +1,15 @@
+[package]
+name = "acme-specs"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["tagged"]
+export = ["tagged"]
+
+[dependencies]
+"acme/types" = { path = "../types" }
+
+[[bin]]
+name = "acme-specs"
+path = "tagged.al"

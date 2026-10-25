@@ -10,9 +10,9 @@ include = ["main"]
 "alcy/std/alloc" = {}
 "alcy/std/collections" = {}
 "alcy/std/core" = {}
-
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}
+
 [[bin]]
 name = "app"
 path = "main.al"

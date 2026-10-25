@@ -1735,6 +1735,28 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     (void)index;
     return;
   }
+  // ADR-0090: an implementation lives where the type does or where the
+  // spec does. A builtin type has no declaring package: it belongs to
+  // the staged suite, and a package outside it cannot implement for
+  // one.
+  if (primitive_target) {
+    if (!tree.modules[module]->is_staged) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
+          diag::Severity::Error, diag::Stage::Analyzer,
+          DiagCode::ImplOutsideItsHome, target_node.span, target_display);
+      (void)index;
+      return;
+    }
+  } else if (package_of(module) != package_of(target_entry->module) &&
+             package_of(module) != package_of(spec_entry->module)) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerImplOutsideItsHome>(
+        diag::Severity::Error, diag::Stage::Analyzer,
+        DiagCode::ImplOutsideItsHome, spec_node.span, target_entry->name,
+        package_of(target_entry->module), spec_entry->name,
+        package_of(spec_entry->module));
+    (void)index;
+    return;
+  }
   SpecTarget target;
   ir::TypeIdx self_type = error_type();
   if (primitive_target) {
@@ -3689,6 +3711,17 @@ void Checker::process_module(u32 module) {
                                       ast.items[entry->item].is_pub,
                                       self_node.span, target_name);
               target_known = true;
+              // ADR-0090: an inherent implementation lives where the
+              // type does.
+              if (package_of(module) != package_of(entry->module)) {
+                const u32 index =
+                    bag.emit<i18n::Key::AnalyzerInherentImplOutsideItsType>(
+                        diag::Severity::Error, diag::Stage::Analyzer,
+                        DiagCode::ImplOutsideItsHome, self_node.span,
+                        target_name, package_of(entry->module));
+                (void)index;
+                break;
+              }
               if (nominal_params(*entry).empty() &&
                   node.payload.get<ast::ItemImpl>().params.empty()) {
                 self_type = intern_nominal(*entry);
@@ -3705,12 +3738,30 @@ void Checker::process_module(u32 module) {
             }
           }
         } else if (self_node.kind == ast::TypeKind::Str) {
-          // `impl str`: the string view is a primitive, and the
-          // standard library owns the methods on it.
+          // `impl str`: the string view is a builtin, and the staged
+          // suite owns the methods on it (ADR-0090).
+          if (!tree.modules[module]->is_staged) {
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
+                    diag::Severity::Error, diag::Stage::Analyzer,
+                    DiagCode::ImplOutsideItsHome, self_node.span, "str");
+            (void)index;
+            break;
+          }
           self_type = builder.primitive(ir::TypeTag::Str);
           self_ok = true;
         } else if (self_node.kind == ast::TypeKind::Slice ||
                    self_node.kind == ast::TypeKind::Array) {
+          // A slice or array is a builtin too: the staged suite owns
+          // the methods on one (ADR-0090).
+          if (!tree.modules[module]->is_staged) {
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
+                    diag::Severity::Error, diag::Stage::Analyzer,
+                    DiagCode::ImplOutsideItsHome, self_node.span, "[T]");
+            (void)index;
+            break;
+          }
           if (node.payload.get<ast::ItemImpl>().params.empty()) {
             // `impl [i32]`: a concrete compound target registers like a
             // nominal's methods, keyed by the interned shape.

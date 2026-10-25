@@ -30,7 +30,14 @@
   what puts a spec's methods on a call — dispatch tries inherent
   methods first, then the in-scope spec impls. Coherence is global
   (one impl per spec and type), and every method the spec declares
-  must be implemented with a matching signature. See `grammar.md`.
+  must be implemented with a matching signature. An implementation
+  lives where the type does or where the spec does (ADR-0090): `impl
+  Spec for Type` is accepted in the package that declares `Type` or
+  the package that declares `Spec`, and an inherent block only in the
+  type's package. There are no covered types, so `impl MySpec for
+  Vec<MyType>` is accepted only where `MySpec` is declared. A builtin
+  type (`str`, a slice, an array, a scalar) belongs to the staged
+  suite, and only its packages implement for one. See `grammar.md`.
 - A spec may be sealed to its suite: the declaring package's manifest
   names it in `[spec] suite-only`, and only that package or a package
   of its suite may then implement it. A spec the list does not name

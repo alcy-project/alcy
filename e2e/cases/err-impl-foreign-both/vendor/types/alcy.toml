@@ -1,0 +1,12 @@
+[package]
+name = "acme-types"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["thing"]
+export = ["thing"]
+
+[[bin]]
+name = "acme-types"
+path = "thing.al"
