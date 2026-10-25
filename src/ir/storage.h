@@ -248,6 +248,71 @@ inline TypeLayout type_layout(const StorageState& state,
   UNREACHABLE();
 }
 
+// Structural movability over raw state (ADR-0085): a value is movable
+// unless it holds an anchor. `not_movable` marks the types a
+// declaration makes unmovable - the anchor itself - and the walk is
+// structural, so a struct, enum, tuple, or array holding one is
+// unmovable too. `origin` resolves a storage copy to the declaration
+// it came from, because a field slot holds a copy. Cycle-free input
+// required, like is_copy_type.
+template <class Origin>
+inline bool is_movable_type(const StorageState& state,
+                            TypeIdx idx,
+                            std::span<const u8> not_movable,
+                            const Origin& origin) {
+  idx = origin(idx);
+  if (idx.idx < not_movable.size() && not_movable[idx.idx] != 0) {
+    return false;
+  }
+  const TypeNode& node = state.types[idx];
+  switch (node.tag) {
+    case TypeTag::Error: return true;
+    case TypeTag::Const: UNREACHABLE();
+    // A type parameter is Movable: a type argument is, and a body that
+    // has not been specialized can assume it.
+    case TypeTag::Param: return true;
+    case TypeTag::Struct: {
+      const StructType& struct_type = state.struct_types[node.as_struct()];
+      for (TypeIdx field : struct_type.fields) {
+        if (!is_movable_type(state, field, not_movable, origin)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case TypeTag::Array:
+      return is_movable_type(state, state.array_types[node.as_array()].element,
+                             not_movable, origin);
+    case TypeTag::Slice:
+      return is_movable_type(state, state.slice_types[node.as_slice()].element,
+                             not_movable, origin);
+    case TypeTag::Enum: {
+      const EnumType& enum_type = state.enum_types[node.as_enum()];
+      for (EnumVariantTypeIdx vidx = enum_type.variants.head();
+           vidx.idx < enum_type.variants.head().idx + enum_type.variants.size();
+           vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
+        const EnumVariantType& variant = state.enum_variant_types[vidx];
+        for (TypeIdx field : variant.fields) {
+          if (!is_movable_type(state, field, not_movable, origin)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    case TypeTag::Tuple: {
+      const TupleType& tuple = state.tuple_types[node.as_tuple()];
+      for (TypeIdx element : tuple.elements) {
+        if (!is_movable_type(state, element, not_movable, origin)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    default: return true;
+  }
+}
+
 // Structural Copy query over raw state, shared by Storage and passes
 // that read through a builder before build() (see lowering). Cycle-free
 // input required (see Storage::is_copy_type). `has_drop` marks the

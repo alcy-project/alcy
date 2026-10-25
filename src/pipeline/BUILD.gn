@@ -22,6 +22,7 @@ action("embed_std") {
     "//lib/std/text/alcy.toml",
     "//lib/std/unicode/alcy.toml",
     "//lib/std/core/prelude.al",
+    "//lib/std/core/anchor.al",
     "//lib/std/core/cmp.al",
     "//lib/std/core/index.al",
     "//lib/std/core/iterator.al",

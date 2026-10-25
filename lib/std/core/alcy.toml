@@ -10,6 +10,7 @@ license = "Apache-2.0 WITH LLVM-exception"
 [modules]
 include = [
   "prelude",
+  "anchor",
   "iterator",
   "mem",
   "option",
@@ -27,6 +28,7 @@ include = [
 # a program depending on this package sees them with no `use`.
 export = [
   "prelude",
+  "anchor",
   "iterator",
   "mem",
   "option",

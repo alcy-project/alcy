@@ -236,6 +236,9 @@ class Checker {
   // Destructor resolution, aligned with the type table by index.
   std::vector<CheckedModule::DropGlue> drop_glue_;
   std::vector<u8> needs_drop_;
+  // Marked where the anchor interns; the walk that reads it is
+  // structural, so only the anchor itself needs an entry.
+  std::vector<u8> not_movable_;
   // Comp fn calls the const pre-pass answered, carried on the checked
   // package so lowering can compare them against the IR engine once the
   // storage exists (ADR-0054).
@@ -371,6 +374,9 @@ class Checker {
   // The package `module` belongs to, by the identity a `use` spells:
   // the root package's name, a dependency's, or a staged member's.
   std::string_view package_of(u32 module) const;
+  // Whether a value of the type may be moved (ADR-0085): the walk
+  // normalizes storage copies through the checker's origin links.
+  bool is_movable(ir::TypeIdx type) const;
   // The spec policy of `package`, or nullptr when the tree carries
   // none, which reads as every spec being open.
   const PackagePolicy* policy_of(std::string_view package) const;

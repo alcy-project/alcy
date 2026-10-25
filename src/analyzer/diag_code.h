@@ -104,6 +104,7 @@ enum class DiagCode : u8 {
   // what a summary does not carry yet is its body.
   GenericItemUnavailable = 46,
   ImplOutsideItsHome = 47,
+  UnmovableType = 48,
 };
 
 }  // namespace analyzer

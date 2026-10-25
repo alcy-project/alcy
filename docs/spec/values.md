@@ -15,6 +15,23 @@
   declared destructor is the one exception: it makes the type
   move-only, whatever its fields are.
 
+## Movability
+
+- A value is movable unless its type holds an anchor (ADR-0085). A
+  move is always a bitwise relocation that leaves the old place spent;
+  there is no user-defined move, and none is planned.
+- `Movable` is derived: a type is movable exactly when every field,
+  array element, and variant payload is. No declaration implements or
+  refuses it, and the only thing that takes it away is `core`'s
+  `Anchor`, a zero-sized value that is itself unmovable. A type holding
+  one is unmovable, and so is anything holding that type.
+- An unmovable value is built by an initializer that writes it
+  directly into its place, read through `&`/`&mut` only, and ended in
+  place. A parameter, return, and type argument is `Movable`, so an
+  unmovable value stays in the scope that built it, and an aggregate
+  holding one stays with it. The placement rules for calls and returns
+  are reserved until the first producer of unmovable values lands.
+
 ## Destruction
 
 - A type declares a destructor as `fn drop(self: Self)` in an `impl`

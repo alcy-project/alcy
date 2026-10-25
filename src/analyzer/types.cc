@@ -95,7 +95,9 @@ void Checker::register_nominals() {
         span = node.payload.get<ast::ItemEnum>().name.span;
       }
       bool duplicate = find_nominal(m, name) != nullptr;
-      if (!duplicate && name == "MaybeUninit") {
+      const bool staged = tree.modules[m]->is_staged;
+      if (!duplicate &&
+          (name == "MaybeUninit" || (name == "Anchor" && !staged))) {
         // The wrapper is compiler-owned; a declaration under the same
         // name would make the spelling resolve two ways.
         const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinType>(
@@ -307,6 +309,12 @@ SpecEntry* Checker::find_spec(u32 module, std::string_view name) {
     }
   }
   return nullptr;
+}
+
+bool Checker::is_movable(ir::TypeIdx type) const {
+  return ir::is_movable_type(
+      builder.state(), type, not_movable_,
+      [this](ir::TypeIdx idx) { return type_origin(idx); });
 }
 
 std::string_view Checker::package_of(u32 module) const {
@@ -2280,6 +2288,14 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
   entry.type =
       is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   entry.started = true;
+  // The anchor is the one type a declaration makes unmovable; anything
+  // holding one derives that (ADR-0085).
+  if (entry.name == "Anchor" && tree.modules[entry.module]->is_staged) {
+    if (not_movable_.size() <= entry.type.idx) {
+      not_movable_.resize(entry.type.idx + 1, 0);
+    }
+    not_movable_[entry.type.idx] = 1;
+  }
   if (is_struct) {
     std::vector<ir::TypeIdx> fields;
     fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
@@ -2510,6 +2526,20 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   // destructor, and its origin were interned under.
   if (params.empty()) {
     return intern_nominal(nominals[nominal]);
+  }
+  // ADR-0085: a type argument is Movable. This is where both a
+  // spelled turbofish and an instantiated type annotation arrive.
+  for (usize i = 0; i < args.size(); ++i) {
+    if (is_value_param(ast, params[i])) {
+      continue;
+    }
+    if (!is_error(args[i]) && !is_movable(args[i])) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableTypeArgument>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
+          span);
+      (void)index;
+      return error_type();
+    }
   }
   // A caller that reaches this from a value path resolves arguments
   // itself, so a value-declared slot must hold the const type a value
@@ -7969,6 +7999,16 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     fn_ret =
         resolve_type(module, node.payload.get<ast::ItemFn>().return_type, self);
   }
+  // ADR-0085: a parameter and a return is Movable. A destructor's
+  // receiver is the exception: the value ends in place.
+  const bool is_destructor =
+      self != nullptr && node.payload.get<ast::ItemFn>().name.name == "drop";
+  if (!is_destructor && !is_error(fn_ret) && !is_movable(fn_ret)) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableParameter>(
+        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
+        node.payload.get<ast::ItemFn>().name.span);
+    (void)index;
+  }
   in_fn = true;
   scopes.emplace_back();
   loop_depth = 0;
@@ -7980,6 +8020,12 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
       continue;
     }
     const ir::TypeIdx type = resolve_type(module, param.type, self);
+    if (!is_destructor && !is_error(type) && !is_movable(type)) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableParameter>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
+          ast.patterns[param.pattern].span);
+      (void)index;
+    }
     bind_comp_known = param.is_comp;
     const bool refutable = bind_pattern(module, param.pattern, type);
     bind_comp_known = false;
@@ -8390,9 +8436,11 @@ base::Result<CheckedPackage, diag::Reported> check_package(
                          std::move(checker.type_origins_),
                          {},
                          {},
+                         {},
                          {}};
   package.drop_glue = std::move(checker.drop_glue_);
   package.needs_drop = std::move(checker.needs_drop_);
+  package.not_movable = std::move(checker.not_movable_);
   package.comp_calls = std::move(checker.comp_calls_);
   // Generic instantiations lower as ordinary nominals; publish their
   // field or variant names under the defining module for lowering

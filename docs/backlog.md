@@ -278,3 +278,12 @@ replaced. The foundations are in `roadmap.md`.
   two words and `Option<bool>` is not one byte. Place the tag in the
   payload's spare bit patterns in the shared layout, teach construction
   and matching the shape, and pin both sizes in a case.
+
+- [ ] An unmovable value is never moved (ADR-0085), but only the
+  spellings are enforced: the analyzer refuses an unmovable parameter,
+  return, and type argument, while a move inside a body (`u := t` for
+  an anchored `t`) still lowers to a `Move`. Refuse the move in the
+  borrow pass, skip the drop pass's end marker for an unmovable place,
+  and pin the refusal in a case. A generic function's instantiation
+  (`f<Anchored>(x)` or an inferred one) is outside the nominal path
+  that checks type arguments today.

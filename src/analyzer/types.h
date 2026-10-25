@@ -385,6 +385,9 @@ struct CheckedPackage {
   // differential run after lowering built the storage (ADR-0054). The
   // checker's own reader has no lowered IR to offer while it runs.
   std::vector<CompCallRecord> comp_calls;
+  // Types that are never moved (ADR-0085): the anchor and anything
+  // holding one. Parallel to the type table.
+  std::vector<u8> not_movable;
 };
 
 // Resolves every type position in the package to interned TypeIdx:
