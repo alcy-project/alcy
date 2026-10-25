@@ -17,3 +17,8 @@ export = ["prelude"]
 [dependencies]
 "alcy/std/core" = {}
 "alcy/std/io" = {}
+"alcy/std/alloc" = {}
+"alcy/std/arch" = {}
+"alcy/std/fmt" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}

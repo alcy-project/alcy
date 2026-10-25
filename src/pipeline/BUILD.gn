@@ -19,6 +19,8 @@ action("embed_std") {
     "//lib/std/arch/alcy.toml",
     "//lib/std/simd/alcy.toml",
     "//lib/std/time/alcy.toml",
+    "//lib/std/text/alcy.toml",
+    "//lib/std/unicode/alcy.toml",
     "//lib/std/core/prelude.al",
     "//lib/std/core/cmp.al",
     "//lib/std/core/index.al",
@@ -33,9 +35,8 @@ action("embed_std") {
     "//lib/std/alloc/prelude.al",
     "//lib/std/alloc/heap.al",
     "//lib/std/alloc/box.al",
-    "//lib/std/alloc/string.al",
+    "//lib/std/alloc/vec.al",
     "//lib/std/collections/prelude.al",
-    "//lib/std/collections/vec.al",
     "//lib/std/collections/map.al",
     "//lib/std/collections/set.al",
     "//lib/std/fmt/prelude.al",
@@ -51,6 +52,10 @@ action("embed_std") {
     "//lib/std/arch/prelude.al",
     "//lib/std/simd/prelude.al",
     "//lib/std/time/prelude.al",
+    "//lib/std/text/prelude.al",
+    "//lib/std/text/string.al",
+    "//lib/std/unicode/prelude.al",
+    "//lib/std/unicode/utf8.al",
   ]
   outputs = [ "$target_gen_dir/embedded_std.cc" ]
 

@@ -7,14 +7,10 @@
 // package's implicit surface. The modules beside this one hold the
 // definitions and are reachable by path.
 //
-// The containers that live on the heap; `alloc` holds the heap itself
-// and `String`. See docs/adr/0016-suites-and-the-std-split.md.
+// The containers with lookup algorithms, `Map` and `Set`. The heap is
+// `alloc`'s, the string `text`'s, and the buffer `Vec` is `alloc`'s
+// too; see docs/adr/0016-suites-and-the-std-split.md.
 
-pub use package::vec::Vec;
-pub use package::vec::VecIntoIter;
-pub use package::vec::VecIter;
-pub use package::vec::VecIterMut;
-pub use package::vec::join;
 pub use package::map::Map;
 pub use package::map::MapEntryIter;
 pub use package::map::MapIntoIter;

@@ -11,6 +11,8 @@ include = ["main"]
 "alcy/std/alloc" = {}
 "alcy/std/collections" = {}
 
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}
 [[bin]]
 name = "demo"
 path = "main.al"

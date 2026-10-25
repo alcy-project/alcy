@@ -75,6 +75,8 @@ TEST_CASE("Selection expands a suite glob to every member") {
   CHECK(has_member(selection, "alloc"));
   CHECK(has_member(selection, "fmt"));
   CHECK(has_member(selection, "io"));
+  CHECK(has_member(selection, "text"));
+  CHECK(has_member(selection, "unicode"));
 }
 
 TEST_CASE("Selection keeps a single member") {

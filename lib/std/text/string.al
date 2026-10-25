@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/alloc`: an owned string.
+// `alcy/std/text`: an owned string.
 
 // A growable sequence of bytes, owning the buffer it reads through.
 // The shape mirrors `Vec<u8>`: `buf` is uninitialized storage, `len`
@@ -28,29 +28,6 @@ impl String {
   // The number of bytes.
   pub fn len_bytes(self: &Self) -> usize {
     ret self.len
-  }
-
-  // The whole file at `path`, or `None` when it cannot be read.
-  pub fn read_file(path: str) -> Option<String> {
-    n := unsafe { file_size(path) }
-    if n < 0 {
-      ret Option::None
-    }
-    mut s := String::with_capacity(n as usize)
-    at := s.len
-    spare := s.cap - at
-    m := unsafe { read_file_into(path, uninit_assume(elem_ptr(s.buf, at)), spare) }
-    if m < 0 {
-      ret Option::None
-    }
-    unsafe { s.set_len(m as usize) }
-    ret Option::Some(s)
-  }
-
-  // Writes `contents` to the file at `path`, answering whether it
-  // could. An existing file is truncated.
-  pub fn write_file(path: str, contents: str) -> bool {
-    ret unsafe { write_file_all(path, contents) } >= 0
   }
 
   // A new string with `A`-`Z` folded to lower case; other bytes copy.
@@ -550,4 +527,19 @@ impl str {
       }
     }
   }
+}
+
+// A new string that joins string elements with `sep` between each.
+// An empty vector answers an empty string.
+pub fn join(parts: &Vec<String>, sep: str) -> String {
+  mut out := String::new()
+  mut i := 0 as usize
+  while i < parts.len() {
+    if i > 0 {
+      out.push_str(sep)
+    }
+    out.push_str(parts.at(i).or_panic_with_message("the index is within the parts").as_str())
+    i = i + 1
+  }
+  ret out
 }

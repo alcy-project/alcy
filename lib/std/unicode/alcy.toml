@@ -1,0 +1,20 @@
+# Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
+#
+# Text as Unicode: the algorithms that read a byte view as scalar
+# values and, later, as grapheme clusters. No allocation, so a program
+# without the heap reaches them.
+
+[package]
+name = "unicode"
+version = "0.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[modules]
+include = ["prelude", "utf8"]
+# The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
+# enforces it yet. Its `pub` items are also the implicit surface:
+# a program depending on this package sees them with no `use`.
+export = ["prelude", "utf8"]
+
+[dependencies]
+"alcy/std/core" = {}

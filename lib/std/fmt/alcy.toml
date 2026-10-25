@@ -17,6 +17,8 @@ export = ["prelude", "display", "format", "write"]
 [dependencies]
 "alcy/std/core" = {}
 "alcy/std/alloc" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}
 
 # Specs only this suite may implement (ADR-0053). `{}` is the
 # compiler's operator for user types, so its capability is sealed like

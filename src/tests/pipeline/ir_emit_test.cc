@@ -279,6 +279,8 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
           "\"alcy/std/arch\" = {}\n"
           "\"alcy/std/fmt\" = {}\n"
           "\"alcy/std/io\" = {}\n"
+          "\"alcy/std/text\" = {}\n"
+          "\"alcy/std/unicode\" = {}\n"
           "\"alcy/std/collections\" = {}\n\n"
           "[lib]\npath = \"lib.al\"\n") &&
       dir.write_file("proj/lib.al",

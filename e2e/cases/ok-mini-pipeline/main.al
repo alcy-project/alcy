@@ -89,10 +89,10 @@ fn main() -> i32 {
   }
   match report(src, &tokens, &known) {
     Option::Some(msgs) => {
-      if !String::write_file("report.txt", msgs.as_str()) {
+      if !write_file("report.txt", msgs.as_str()) {
         ret 2
       }
-      match String::read_file("report.txt") {
+      match read_file("report.txt") {
         Option::Some(back) => {
           if back.as_str() != "unknown x\n" {
             ret 3

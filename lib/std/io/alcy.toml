@@ -18,5 +18,6 @@ export = ["prelude", "args", "file", "print"]
 "alcy/std/core" = {}
 "alcy/std/alloc" = {}
 "alcy/std/arch" = {}
-"alcy/std/collections" = {}
 "alcy/std/fmt" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}

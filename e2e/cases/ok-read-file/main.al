@@ -1,6 +1,6 @@
-// `String::read_file` reads a whole file; a missing path is `None`.
+// `read_file` reads a whole file; a missing path is `None`.
 fn main() -> i32 {
-  match String::read_file("main.al") {
+  match read_file("main.al") {
     Option::Some(text) => {
       if text.len_bytes() == 0 {
         ret 1
@@ -13,7 +13,7 @@ fn main() -> i32 {
       ret 3
     }
   }
-  if String::read_file("/nonexistent/alcy-no-such-file").is_some() {
+  if read_file("/nonexistent/alcy-no-such-file").is_some() {
     ret 4
   }
   ret 0

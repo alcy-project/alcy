@@ -1,6 +1,6 @@
 # Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
 #
-# The containers that live on the heap.
+# The containers with lookup algorithms.
 
 [package]
 name = "collections"
@@ -8,12 +8,14 @@ version = "0.1.0"
 license = "Apache-2.0 WITH LLVM-exception"
 
 [modules]
-include = ["prelude", "vec", "map", "set"]
+include = ["prelude", "map", "set"]
 # The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = ["prelude", "vec", "map", "set"]
+export = ["prelude", "map", "set"]
 
 [dependencies]
 "alcy/std/core" = {}
 "alcy/std/alloc" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}

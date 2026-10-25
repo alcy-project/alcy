@@ -1,6 +1,6 @@
 # Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
 #
-# The heap, and the values that live on it.
+# The heap, and the raw buffers that live on it.
 
 [package]
 name = "alloc"
@@ -8,11 +8,11 @@ version = "0.1.0"
 license = "Apache-2.0 WITH LLVM-exception"
 
 [modules]
-include = ["prelude", "box", "heap", "string"]
+include = ["prelude", "box", "heap", "vec"]
 # The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = ["prelude", "box", "heap", "string"]
+export = ["prelude", "box", "heap", "vec"]
 
 [dependencies]
 "alcy/std/core" = {}

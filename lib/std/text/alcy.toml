@@ -1,0 +1,21 @@
+# Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
+#
+# Owned text: the string, beside the package that owns the memory it
+# uses and below the one that reads it as Unicode.
+
+[package]
+name = "text"
+version = "0.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[modules]
+include = ["prelude", "string"]
+# The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
+# enforces it yet. Its `pub` items are also the implicit surface:
+# a program depending on this package sees them with no `use`.
+export = ["prelude", "string"]
+
+[dependencies]
+"alcy/std/core" = {}
+"alcy/std/alloc" = {}
+"alcy/std/unicode" = {}

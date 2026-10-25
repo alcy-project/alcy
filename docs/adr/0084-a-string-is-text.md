@@ -69,10 +69,11 @@ joins `alloc`; and `alloc` keeps `core` as its only dependency.**
   `alloc` for the string names `text` or the suite.
 - `io` gains `text` as a dependency, and `read_file` and `write_file`
   live there as free functions rather than methods on `String`.
-- Two new packages join the suite's member list. ADR-0016's rule makes
-  that cheap for consumers: naming a member requires its closure
-  rather than pulling names in, and only the selected members are
-  staged.
+- Two new packages join the suite's member list, and ADR-0016's rule
+  spells a closure out: every manifest that names a member above
+  `text` or `unicode` names them too. The cost is the names, once per
+  manifest, and it is what a closure that is required rather than
+  pulled in costs.
 
 ## Alternatives considered
 
