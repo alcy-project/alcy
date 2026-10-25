@@ -39,6 +39,18 @@
   compiler ends each destructible struct or tuple field, the live
   variant's destructible fields after a discriminant read, and each
   destructible array element.
+- Ends have a stated order (ADR-0086): a block's values end in reverse
+  declaration order, so the value declared last ends first and a
+  borrower's end precedes the end of what it borrows; a `return` takes
+  the result first, then ends what is still alive in the same order.
+- A struct's or tuple's fields end in declaration order, an enum's
+  live payload in declaration order, and an array's elements in index
+  order. A type with its own destructor runs it first; the fields of
+  its receiver end when the destructor's scope exits, in the same
+  order. The std's sequences end their elements from first to last.
+- There is no `forget` and no `ManuallyDrop`-shaped wrapper: a value's
+  destructor runs at its end, or the program panics and leaves what it
+  owned to the process. Deliberately leaking a value has no spelling.
 - Discarding a value ends it where it stands: `_ := v` runs the
   destructor, and a bare expression statement whose value is not `()`
   warns and does the same. A wildcard binding in a pattern ends what it

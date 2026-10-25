@@ -60,7 +60,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
   `Option`).
 - `break` with a value; `main` returning richer types.
 - `pub(...)` restricted visibility; glob imports.
-- `f16`, 128-bit integers, posit, and decimal types; `Char`/`Ascii`/
+- `f16`, 128-bit integers, posit, and decimal types; `char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
 - Interior mutability; mutable statics; `const`-position extensions.
 - Attribute system in full (`#[repr(C)]` and beyond).

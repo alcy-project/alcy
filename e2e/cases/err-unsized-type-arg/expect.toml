@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Unsized type `[T]` must be behind a reference (`&[T]`)"]

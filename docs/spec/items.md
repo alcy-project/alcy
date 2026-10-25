@@ -164,6 +164,21 @@
   `return` run it, and a type without one ends its destructible fields.
   See `values.md`.
 - Enums have unit and tuple variants only (`Ok(T)`/`Err(E)` and
-  `Some(T)`/`None` are the canonical examples). Struct variants,
-  explicit discriminants, and layout guarantees are deferred; default
-  layout is compiler-chosen.
+  `Some(T)`/`None` are the canonical examples). Struct variants and
+  explicit discriminants are deferred; layout is the compiler's except
+  for the niches promised below.
+
+## Layout
+
+- The language promises two niches (ADR-0087): a reference is never
+  null, and a `bool` is zero or one. An option-shaped enum over `&T`,
+  `&mut T`, or `bool` therefore has the payload's size and alignment,
+  and `Option<&T>` is a pointer.
+- Nothing else is promised. Field order, an enum's discriminant width
+  and placement, a zero-sized type's treatment, and padding are the
+  compiler's, and `size_of` and `align_of` are a function of the type
+  for one compiler version and target, not across them.
+- The only stable boundary is a declaration in the C convention
+  (`extern "C"`), whose scalar parameters and returns map to the
+  platform's C ABI. A struct or enum crossing that boundary waits for
+  `repr(C)`, and the internal calling convention is not a promise.

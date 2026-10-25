@@ -272,3 +272,9 @@ replaced. The foundations are in `roadmap.md`.
   end every time. The build's cache lookup and the run's lowering are
   two paths over the same work, and the run path is the one that has
   no key.
+
+- [ ] The two niches are promised (ADR-0087) but the enum layout still
+  carries an unconditional tag beside the payload, so `Option<&T>` is
+  two words and `Option<bool>` is not one byte. Place the tag in the
+  payload's spare bit patterns in the shared layout, teach construction
+  and matching the shape, and pin both sizes in a case.

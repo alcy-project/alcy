@@ -42,6 +42,27 @@
   `const` integer value, whose initializer is evaluated at compile
   time (see `comp.md`).
 
+## Sizes
+
+- Every value's size is known at compile time, and a type without a
+  size has no values: it appears only as a borrow's pointee (ADR-0083).
+  A parameter, return, local, field, array element, and type argument
+  is a sized type, so layout, moves, and ABI lowering are total over
+  everything a function can name.
+- The unsized types are `[T]` and a future trait object. Each appears
+  only as the pointee of `&`/`&mut`, and a borrow of one is a fat,
+  sized value; a thin raw pointer cannot name one.
+- `str` is a sized, compiler-known view: a pointer and a length travel
+  together as the value, and it is not a special case of `[T]`.
+- Sizedness is an invariant, not a bound. No declaration spells it,
+  nothing relaxes it, and there is no negative form; the compiler
+  derives a type's size from its shape the way it derives `Copy`.
+- A type argument is sized: a slice or a trait object is never a type
+  argument, and generic code that wants one spells a borrow (`&[T]`).
+- There is no owned unsized value: `Box<[T]>`, `Box<str>`, and a
+  future `Box<dyn>` have no spelling. The types that own
+  runtime-length data are `Vec<T>` and `String`.
+
 ## Slices
 
 - A slice `[T]` is a run of `T` of runtime length. It is unsized, so
@@ -163,9 +184,20 @@
 ## Text (staged)
 
 - The compiler-known text type is `str`: byte sequences backing
-  string literals. No validation is performed in MVP; `Char` and the
-  core text library live post-MVP. Baremetal targets without core
-  use `u8`/`u32` directly.
+  string literals. Nothing validates them - not a literal, not a
+  `String`'s byte API, not a foreign function's bytes - so every
+  operation on `str` is total over arbitrary bytes (ADR-0091).
+- `len_bytes` is the byte count. `count_chars` counts scalar values,
+  where an ill-formed subsequence counts as one replacement unit, the
+  way Unicode's decoding algorithms consume the maximal subpart of
+  one; `count_graphemes` arrives with the segmentation tables.
+- Whether bytes are valid UTF-8 is a query - `unicode`'s
+  `utf8::valid` - and a `char` comes only from a checked decode.
+  Validating literals is a strictness decision of its own and is
+  reserved.
+- `char` (a Unicode scalar value), grapheme segmentation, and width
+  live post-MVP; the names are reserved. Baremetal targets without
+  core use `u8`/`u32` directly.
 
 ## Ranges (staged)
 

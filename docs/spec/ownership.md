@@ -5,6 +5,17 @@
 - `&T` (shared reference): freely duplicable; any number may coexist.
 - `&mut T` (exclusive reference): at most one live at a time, and no
   `&T` to the same place may be live while it is.
+- Both rules are promises the optimizer may use, not only checking
+  rules (ADR-0089): the pointee of a shared borrow is unchanged for
+  the borrow's life, and the pointee of an exclusive borrow is reached
+  through no other path, which is what lets a backend mark that
+  parameter `noalias`.
+- Interior mutability does not exist: no type makes the pointee of a
+  shared borrow writable. If one lands, it is a compiler-known wrapper
+  whose pointee is exempt from the read-only assumption, and shared
+  borrows of the wrapper grant only what its methods offer.
+- A raw pointer carries no promise - it may alias - and building a
+  reference from one inside `unsafe` accepts the reference's promise.
 - A call's exclusive receiver is a reservation (ADR-0012): the borrow
   is taken before the arguments evaluate, reads of the place in that
   window are admitted, and the call itself activates it, where any
@@ -37,9 +48,10 @@
   borrow lasts while any handle of the closure value is live, and a
   value reached through a capture is borrowed content: it cannot be
   moved out of.
-- These rules make safety checking independent of general may-alias
-  analysis. Optimization-time alias analysis in backends is unaffected
-  and still exists.
+- Safety checking stays independent of general may-alias analysis: the
+  promises above are what a function boundary may optimize on, and
+  whatever a backend's own alias analysis adds inside a body is its
+  business.
 - `&mut T` fields are permitted and make the aggregate move-only
   through the structural `Copy` rule (see region composition below).
 - A buffer view (`str`, `&[T]`) carries the loan of the buffer it
