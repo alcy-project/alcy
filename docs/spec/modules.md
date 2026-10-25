@@ -101,8 +101,8 @@ member list and the dependency graph.
 
 ## Packages
 
-- A binary package declares exactly one `[[bin]]` target with an
-  explicit `path` in `alcy.toml`; the target name defaults to the
+- A binary package declares exactly one `[[bin]]` artifact with an
+  explicit `path` in `alcy.toml`; the artifact name defaults to the
   package name. A library package declares one `[lib]` table instead,
   naming its root module the same way. A package holds at most one of
   each; a manifest with neither is an error, and so is a directory

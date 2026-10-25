@@ -370,8 +370,8 @@
   F(PipelineBackendNoOptimizer, "The '{}' backend does not optimize; build with a profile that does not") \
   F(PipelineBackendNotBuilt, "The '{}' backend is not part of this build of the compiler") \
   F(PipelineBackendUnsupported, "The '{}' backend cannot write this output") \
-  F(PipelineBinTargetNotDiscovered, "Bin target '{}' was not discovered") \
-  F(PipelineBinTargetNotSelected, "Bin target '{}' is not in [modules]") \
+  F(PipelineBinArtifactNotDiscovered, "Bin artifact '{}' was not discovered") \
+  F(PipelineBinArtifactNotSelected, "Bin artifact '{}' is not in [modules]") \
   F(PipelineCannotCreateDirectory, "Cannot create directory '{}'") \
   F(PipelineCannotCreatePackage, "Cannot create package '{}'") \
   F(PipelineCannotCreatePackageFiles, "Cannot create package files: '{}'") \
@@ -412,13 +412,13 @@
   F(PipelineInvalidSourcePath, "Invalid source path for file") \
   F(PipelineInvalidSuiteName, "Invalid suite name '{}'; write <name> or <owner>/<name>") \
   F(PipelineInvalidTarget, "Invalid target '{}'") \
-  F(PipelineLibTargetNotDiscovered, "Lib target '{}' was not discovered") \
-  F(PipelineLibTargetNotSelected, "Lib target '{}' is not in [modules]") \
+  F(PipelineLibArtifactNotDiscovered, "Lib artifact '{}' was not discovered") \
+  F(PipelineLibArtifactNotSelected, "Lib artifact '{}' is not in [modules]") \
   F(PipelineLinkFailed, "Linking '{}' failed") \
   F(PipelineManifestNoBinToRun, "Manifest '{}' declares no [[bin]] target to run") \
   F(PipelineManifestNoTarget, "Manifest '{}' declares no [[bin]] or [lib] targets") \
   F(PipelineManifestNotLoaded, "Manifest '{}' is not a loaded file") \
-  F(PipelineManifestTooManyBinTargets, "Manifest '{}' declares {} [[bin]] targets; only one is supported") \
+  F(PipelineManifestTooManyBinArtifacts, "Manifest '{}' declares {} [[bin]] artifacts; only one is supported") \
   F(PipelineModuleIncludeEscapesPackage, "Manifest [modules] include '{}' resolves outside the package") \
   F(PipelineModuleIncludeHasNoFile, "Manifest [modules] include '{}' has no file") \
   F(PipelineModuleIncludeNotAModulePath, "Manifest [modules] include '{}' is not a module path") \
@@ -461,12 +461,12 @@
   F(CliByteSingular, "byte") \
   F(CliCheckAbout, "Check a package without emitting code") \
   F(CliCheckFileHelp, "Check one source file instead of a package directory.") \
-  F(CliCheckFileOrTarget, "The `check` command takes a directory or `--file`, not both") \
+  F(CliCheckFileOrInput, "The `check` command takes a directory or `--file`, not both") \
   F(CliColorHelp, "Color mode for logging and diagnostics") \
   F(CliCompileAbout, "Compile a single source file") \
   F(CliCompileLinkArgsHelp, "Argument for the link driver, after the objects. Repeatable, one argument each.") \
   F(CliCompileLinkerHelp, "System linker driver for executable builds.") \
-  F(CliCompileNeedsTarget, "The `compile` command needs a file target or `--stdin`") \
+  F(CliCompileNeedsInput, "The `compile` command needs a file input or `--stdin`") \
   F(CliCompileOutputHelp, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
   F(CliDepsHelp, "A dependency on top of the default suite (`alcy/std/*`), as a package specifier or `specifier = {{ ... }}`. The default already globs every member; repeatable.") \
   F(CliDepsOnlyForCompile, "The `--no-std` and `--deps` flags only mean anything for `compile`") \
@@ -509,7 +509,7 @@
   F(CliRunTakesDirectory, "The `run` command takes a package directory; use `compile` for a file") \
   F(CliStdinHelp, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
   F(CliStdinNeedsOutput, "Compiling from standard input needs `-o` to name the output") \
-  F(CliStdinTakesNoTarget, "The `--stdin` flag takes no target") \
+  F(CliStdinTakesNoInput, "The `--stdin` flag takes no input") \
   F(CliSuiteHelp, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
   F(CliTargetHelp, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
   F(CliTimeTraceHelp, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \

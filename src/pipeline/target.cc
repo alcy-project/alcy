@@ -59,8 +59,8 @@ namespace {
 
 }  // namespace
 
-bool check_entry_point(PipelineContext& ctx, const PackageTarget& target) {
-  if (target.is_lib || has_free_main(ctx, target.tree)) {
+bool check_entry_point(PipelineContext& ctx, const Artifact& target) {
+  if (target.kind == ArtifactKind::Lib || has_free_main(ctx, target.tree)) {
     return true;
   }
   const u32 index = ctx.bag.emit<i18n::Key::PipelineNoEntryPoint>(
@@ -88,7 +88,7 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
   base::Result<source::FileId, source::SourceError> manifest =
       ctx.sources.load(manifest_path.as_view());
   if (manifest.is_err()) {
-    // Naming the target is the useful part; when there is none, saying
+    // Naming the artifact is the useful part; when there is none, saying
     // "current directory" reads better than saying ".".
     const bool current = root == ".";
     if (file_hint) {
@@ -242,8 +242,8 @@ std::optional<EnclosingSuite> find_enclosing_suite(
 namespace {
 
 // A package's sources after discovery, staging, parsing, and selection:
-// everything every target resolves against. None of that work depends on
-// a target - only the entry file and the directory names are read
+// everything every artifact resolves against. None of that work depends
+// on an artifact - only the entry file and the directory names are read
 // relative to - so it happens once and this owns the storage the targets
 // borrow while they read it.
 struct PackageSources {
@@ -383,7 +383,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   std::sort(closure_ids.begin(), closure_ids.end());
   closure_ids.erase(std::unique(closure_ids.begin(), closure_ids.end()),
                     closure_ids.end());
-  // The module-input naming is target-relative; the only work `resolve`
+  // The module-input naming is artifact-relative; the only work `resolve`
   // does not repeat between a binary and a library is this, so its own
   // scope shows what repeating it costs.
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-target",
@@ -469,7 +469,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
     }
   }
   // The spans hold into `dependency_modules`, which holds every
-  // module by now, so the views stay valid for every target.
+  // module by now, so the views stay valid for every artifact.
   sources.dependencies.reserve(dependencies.size());
   usize begin = 0;
   for (usize i = 0; i < dependencies.size(); ++i) {
@@ -518,14 +518,14 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
 // exactly as for a binary. Parsing does not depend on the target, so the
 // only work here is naming: which file is the entry, and which directory
 // the other names are read relative to.
-base::Result<PackageTarget, diag::Reported> resolve_target(
+base::Result<Artifact, diag::Reported> resolve_target(
     PipelineContext& ctx,
     const path::Path& root,
     const pkg::PackageManifest& manifest,
     const PackageSources& sources,
     std::string_view target_path,
     std::string_view target_name,
-    bool is_lib) {
+    ArtifactKind kind) {
   const path::Path target_file_path = root.join(target_path);
   source::FileId root_file = source::UNKNOWN_FILE;
   for (const ParsedFile& file : sources.parsed.files) {
@@ -538,12 +538,13 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   // library and a binary in one package are told apart.
   if (root_file == source::UNKNOWN_FILE) {
     const u32 index =
-        is_lib ? ctx.bag.emit<i18n::Key::PipelineLibTargetNotDiscovered>(
-                     diag::Severity::Error, diag::Stage::Pipeline,
-                     DiagCode::NoTargets, target_path)
-               : ctx.bag.emit<i18n::Key::PipelineBinTargetNotDiscovered>(
-                     diag::Severity::Error, diag::Stage::Pipeline,
-                     DiagCode::NoTargets, target_path);
+        kind == ArtifactKind::Lib
+            ? ctx.bag.emit<i18n::Key::PipelineLibArtifactNotDiscovered>(
+                  diag::Severity::Error, diag::Stage::Pipeline,
+                  DiagCode::NoTargets, target_path)
+            : ctx.bag.emit<i18n::Key::PipelineBinArtifactNotDiscovered>(
+                  diag::Severity::Error, diag::Stage::Pipeline,
+                  DiagCode::NoTargets, target_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -551,11 +552,11 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   bool root_selected = false;
   std::vector<analyzer::ModuleInput> inputs;
   // Module paths resolve relative to the target root's directory.
-  std::string_view target_dir;
+  std::string_view input;
   {
     const usize slash = target_path.rfind('/');
     if (slash != std::string_view::npos) {
-      target_dir = target_path.substr(0, slash);
+      input = target_path.substr(0, slash);
     }
   }
   for (const analyzer::ModuleInput& entry : sources.selection) {
@@ -565,10 +566,9 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
       continue;
     }
     std::string_view name = entry.name;
-    if (!target_dir.empty() && name.size() > target_dir.size() &&
-        name.substr(0, target_dir.size()) == target_dir &&
-        name[target_dir.size()] == '/') {
-      name.remove_prefix(target_dir.size() + 1);
+    if (!input.empty() && name.size() > input.size() &&
+        name.substr(0, input.size()) == input && name[input.size()] == '/') {
+      name.remove_prefix(input.size() + 1);
     }
     // Stripping the target's directory can map two distinct files onto
     // one module name; the resolver would report that as a duplicate,
@@ -578,7 +578,7 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
         const u32 index =
             ctx.bag.emit<i18n::Key::PipelineModuleSharedByTwoFiles>(
                 diag::Severity::Error, diag::Stage::Pipeline,
-                DiagCode::NoTargets, diag::Span{}, name, target_dir);
+                DiagCode::NoTargets, diag::Span{}, name, input);
         (void)index;
         return base::make_err(diag::Reported{});
       }
@@ -587,12 +587,13 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   }
   if (!root_selected) {
     const u32 index =
-        is_lib ? ctx.bag.emit<i18n::Key::PipelineLibTargetNotSelected>(
-                     diag::Severity::Error, diag::Stage::Pipeline,
-                     DiagCode::NoTargets, target_path)
-               : ctx.bag.emit<i18n::Key::PipelineBinTargetNotSelected>(
-                     diag::Severity::Error, diag::Stage::Pipeline,
-                     DiagCode::NoTargets, target_path);
+        kind == ArtifactKind::Lib
+            ? ctx.bag.emit<i18n::Key::PipelineLibArtifactNotSelected>(
+                  diag::Severity::Error, diag::Stage::Pipeline,
+                  DiagCode::NoTargets, target_path)
+            : ctx.bag.emit<i18n::Key::PipelineBinArtifactNotSelected>(
+                  diag::Severity::Error, diag::Stage::Pipeline,
+                  DiagCode::NoTargets, target_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -612,7 +613,7 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  PackageTarget target;
+  Artifact target;
   target.tree = std::move(tree).unwrap();
   target.file_count = sources.file_count;
   // A dependency a summary answered for contributes its own object to
@@ -625,18 +626,18 @@ base::Result<PackageTarget, diag::Reported> resolve_target(
   // A target that names nothing is the package, which is what makes a
   // one-file manifest readable.
   target.name = target_name.empty() ? manifest.name : target_name;
-  target.is_lib = is_lib;
+  target.kind = kind;
   return base::make_ok(target);
 }
 
 }  // namespace
 
-base::Result<std::vector<PackageTarget>, diag::Reported>
-resolve_package_targets(PipelineContext& ctx,
-                        const path::Path& root,
-                        source::FileId manifest_file,
-                        std::string_view manifest_name,
-                        TargetScope scope) {
+base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    ArtifactScope scope) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "targets", "frontend");
   // Entry validation: the caller supplies a raw manifest id, which must
   // name a loaded file, and the bytes must then be structurally whole
@@ -698,7 +699,7 @@ resolve_package_targets(PipelineContext& ctx,
   }
   if (manifest.bin_count > 1) {
     const u32 index =
-        ctx.bag.emit<i18n::Key::PipelineManifestTooManyBinTargets>(
+        ctx.bag.emit<i18n::Key::PipelineManifestTooManyBinArtifacts>(
             diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
             manifest_name, manifest.bin_count);
     (void)index;
@@ -711,13 +712,14 @@ resolve_package_targets(PipelineContext& ctx,
   }
   const PackageSources collected = std::move(sources).unwrap();
 
-  std::vector<PackageTarget> targets;
-  // The binary comes first: `alcy run` takes the front target, and a
+  std::vector<Artifact> targets;
+  // The binary comes first: `alcy run` takes the front artifact, and a
   // package's headline artifact is its executable.
-  const auto add = [&](std::string_view path, std::string_view name,
-                       bool is_lib) -> base::Result<void, diag::Reported> {
-    base::Result<PackageTarget, diag::Reported> target =
-        resolve_target(ctx, root, manifest, collected, path, name, is_lib);
+  const auto add =
+      [&](std::string_view path, std::string_view name,
+          ArtifactKind kind) -> base::Result<void, diag::Reported> {
+    base::Result<Artifact, diag::Reported> target =
+        resolve_target(ctx, root, manifest, collected, path, name, kind);
     if (target.is_err() || ctx.bag.has_errors()) {
       return base::make_err(diag::Reported{});
     }
@@ -726,14 +728,14 @@ resolve_package_targets(PipelineContext& ctx,
   };
   if (manifest.bin_count == 1) {
     base::Result<void, diag::Reported> added =
-        add(manifest.bins[0].path, manifest.bins[0].name, false);
+        add(manifest.bins[0].path, manifest.bins[0].name, ArtifactKind::Bin);
     if (added.is_err()) {
       return base::make_err(diag::Reported{});
     }
   }
-  if (scope == TargetScope::All && manifest.lib != nullptr) {
+  if (scope == ArtifactScope::All && manifest.lib != nullptr) {
     base::Result<void, diag::Reported> added =
-        add(manifest.lib->path, manifest.lib->name, true);
+        add(manifest.lib->path, manifest.lib->name, ArtifactKind::Lib);
     if (added.is_err()) {
       return base::make_err(diag::Reported{});
     }
@@ -743,7 +745,7 @@ resolve_package_targets(PipelineContext& ctx,
   const path::Path output_dir =
       member ? suite->root.join(path::DEFAULT_OUT_DIR).join(suite->member)
              : root.join(path::DEFAULT_OUT_DIR);
-  for (PackageTarget& target : targets) {
+  for (Artifact& target : targets) {
     target.output_dir = output_dir;
   }
   return base::make_ok(targets);

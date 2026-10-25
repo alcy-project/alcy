@@ -46,9 +46,9 @@ struct Announcement {
   const Logger& err;
 };
 
-void announce_exec(std::string_view target, const void* ctx) {
+void announce_exec(std::string_view program, const void* ctx) {
   const auto& a = *static_cast<const Announcement*>(ctx);
-  announce(a.err, "Running", target, a.options);
+  announce(a.err, "Running", program, a.options);
 }
 
 }  // namespace
@@ -62,8 +62,7 @@ i32 run_run(const CliConfig& config,
   const i32 failed = result_code(ResultCode::RunFailed);
   // Validation keeps single files out: `run` takes a package directory,
   // and `compile` takes the file.
-  const std::string_view raw_dir =
-      config.target_dir.empty() ? "." : config.target_dir;
+  const std::string_view raw_dir = config.input.empty() ? "." : config.input;
   const std::span<const std::string_view> args(config.program_args);
 
   base::Result<pipeline::ManifestProbe, diag::Reported> probe =

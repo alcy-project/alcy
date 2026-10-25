@@ -34,8 +34,7 @@ ResultCode run_build(const CliConfig& config,
   const ResultCode failed = ResultCode::BuildFailed;
   // Validation keeps single files out: `build` takes a package
   // directory, and `compile` takes the file.
-  const std::string_view raw_dir =
-      config.target_dir.empty() ? "." : config.target_dir;
+  const std::string_view raw_dir = config.input.empty() ? "." : config.input;
   base::Result<pipeline::ManifestProbe, diag::Reported> probe =
       pipeline::require_package_manifest(ctx, raw_dir, false);
   if (probe.is_err()) {

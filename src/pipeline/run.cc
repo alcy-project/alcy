@@ -95,13 +95,13 @@ base::Result<RunOutcome, diag::Reported> run_package(
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
-  base::Result<std::vector<PackageTarget>, diag::Reported> targets =
-      resolve_package_targets(ctx, root, manifest_file, manifest_name,
-                              TargetScope::BinOnly);
+  base::Result<std::vector<Artifact>, diag::Reported> targets =
+      resolve_artifacts(ctx, root, manifest_file, manifest_name,
+                        ArtifactScope::BinOnly);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  std::vector<PackageTarget> resolved = std::move(targets).unwrap();
+  std::vector<Artifact> resolved = std::move(targets).unwrap();
   if (resolved.empty()) {
     // A library builds but never runs: there is no entry to execute.
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoBinToRun>(
@@ -110,7 +110,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  PackageTarget& bin = resolved.front();
+  Artifact& bin = resolved.front();
   if (!check_entry_point(ctx, bin)) {
     return base::make_err(diag::Reported{});
   }

@@ -28,7 +28,7 @@ finish_check(PipelineContext& ctx, analyzer::ModuleTree tree, usize file_count);
 
 base::Result<CheckOutcome, diag::Reported> check_single_file(
     PipelineContext& ctx,
-    std::string_view target);
+    std::string_view input);
 
 // Checks a single source held in memory. `name` is what diagnostics and
 // module naming see and need not be a path, so a caller with text but no

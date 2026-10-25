@@ -25,28 +25,28 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
     return base::make_err(ConfigError::UnexpectedProgramArgs);
   }
   if (config.subcommand == Subcommand::Build &&
-      path::has_source_extension(config.target_dir)) {
+      path::has_source_extension(config.input)) {
     return base::make_err(ConfigError::BuildSingleFile);
   }
   if (config.subcommand == Subcommand::Run &&
-      path::has_source_extension(config.target_dir)) {
+      path::has_source_extension(config.input)) {
     return base::make_err(ConfigError::RunSingleFile);
   }
   if (config.subcommand == Subcommand::Compile) {
-    if (config.stdin_source && !config.target_dir.empty()) {
-      return base::make_err(ConfigError::CompileTargetWithStdin);
+    if (config.stdin_source && !config.input.empty()) {
+      return base::make_err(ConfigError::CompileInputWithStdin);
     }
     if (config.stdin_source && config.output.empty()) {
       return base::make_err(ConfigError::CompileStdinNeedsOutput);
     }
-    if (!config.stdin_source && config.target_dir.empty()) {
-      return base::make_err(ConfigError::CompileNeedsTarget);
+    if (!config.stdin_source && config.input.empty()) {
+      return base::make_err(ConfigError::CompileNeedsInput);
     }
   }
   if ((config.subcommand == Subcommand::Check ||
        config.subcommand == Subcommand::Lint) &&
-      !config.file.empty() && !config.target_dir.empty()) {
-    return base::make_err(ConfigError::CheckFileWithTarget);
+      !config.file.empty() && !config.input.empty()) {
+    return base::make_err(ConfigError::CheckFileWithInput);
   }
   if (config.subcommand != Subcommand::Compile &&
       (config.no_std || !config.deps.empty())) {
@@ -72,14 +72,14 @@ std::string describe_config_error(ConfigError error, i18n::Language language) {
       return i18n::format<Key::CliBuildTakesDirectory>(language);
     case ConfigError::RunSingleFile:
       return i18n::format<Key::CliRunTakesDirectory>(language);
-    case ConfigError::CompileNeedsTarget:
-      return i18n::format<Key::CliCompileNeedsTarget>(language);
-    case ConfigError::CompileTargetWithStdin:
-      return i18n::format<Key::CliStdinTakesNoTarget>(language);
+    case ConfigError::CompileNeedsInput:
+      return i18n::format<Key::CliCompileNeedsInput>(language);
+    case ConfigError::CompileInputWithStdin:
+      return i18n::format<Key::CliStdinTakesNoInput>(language);
     case ConfigError::CompileStdinNeedsOutput:
       return i18n::format<Key::CliStdinNeedsOutput>(language);
-    case ConfigError::CheckFileWithTarget:
-      return i18n::format<Key::CliCheckFileOrTarget>(language);
+    case ConfigError::CheckFileWithInput:
+      return i18n::format<Key::CliCheckFileOrInput>(language);
     case ConfigError::DepsWithoutCompile:
       return i18n::format<Key::CliDepsOnlyForCompile>(language);
     case ConfigError::JsonWithoutResult:

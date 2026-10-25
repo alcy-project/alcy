@@ -25,13 +25,13 @@ enum class ConfigError : u8 {
   // `run` takes a package directory; a single file is `compile`'s.
   RunSingleFile,
   // `compile` needs something to compile: a file or `--stdin`.
-  CompileNeedsTarget,
-  // Reading the pipe and also naming a target is a contradiction.
-  CompileTargetWithStdin,
+  CompileNeedsInput,
+  // Reading the pipe and also naming an input is a contradiction.
+  CompileInputWithStdin,
   // `--stdin` names no file, so the output needs a name.
   CompileStdinNeedsOutput,
   // `check` takes a directory or `--file`, not both.
-  CheckFileWithTarget,
+  CheckFileWithInput,
   // `--no-std` and `--deps` select the prelude of a single file, so
   // they only mean anything for `compile`.
   DepsWithoutCompile,

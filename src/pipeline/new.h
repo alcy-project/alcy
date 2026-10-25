@@ -34,28 +34,26 @@ using NewResult = base::Result<ScaffoldResult, i32>;
 // package joins the nearest ancestor suite when one encloses it
 // (ADR-0057).
 NewResult create_new_package(PipelineContext& ctx,
-                             std::string_view target_dir,
+                             std::string_view input,
                              Vcs vcs);
 
 // Creates alcy.toml and main.al inside an existing directory, deriving
 // the package name from the directory itself; "." means the process's
 // own directory. A package created inside a suite joins it, like
 // create_new_package.
-NewResult init_package(PipelineContext& ctx,
-                       std::string_view target_dir,
-                       Vcs vcs);
+NewResult init_package(PipelineContext& ctx, std::string_view input, Vcs vcs);
 
 // Creates a suite manifest. `new` makes the directory, named after the
-// suite unless target_dir names one; `init` writes into an existing
+// suite unless input names one; `init` writes into an existing
 // directory. `spec` is `<name>` or `<owner>/<name>`, each segment
 // validated like a package name.
 NewResult create_new_suite(PipelineContext& ctx,
-                           std::string_view target_dir,
+                           std::string_view input,
                            std::string_view spec,
                            Vcs vcs);
 
 NewResult init_suite(PipelineContext& ctx,
-                     std::string_view target_dir,
+                     std::string_view input,
                      std::string_view spec,
                      Vcs vcs);
 

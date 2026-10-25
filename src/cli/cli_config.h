@@ -46,7 +46,7 @@ struct CliConfig {
   Subcommand subcommand = Subcommand::None;
   // The build profile this invocation selects: `debug` when nothing
   // named another, and `release` when `--release` did. Borrows argv
-  // storage like target_dir.
+  // storage like input.
   std::string_view profile = pipeline::DEFAULT_PROFILE_NAME;
   // Whether `--release` was given. It selects the release profile, and
   // validation refuses it beside an explicit `--profile`.
@@ -62,16 +62,16 @@ struct CliConfig {
   std::optional<bool> overflow_checks = std::nullopt;
   // Skip the build cache for this invocation: no lookup and no store.
   bool no_cache = false;
-  // First positional, read as each subcommand's target (empty when
+  // First positional, read as each subcommand's input (empty when
   // absent; the cli substitutes "."). Borrows argv storage, so a config
   // must not outlive the argument vector it was parsed from.
-  std::string_view target_dir;
+  std::string_view input;
   // Single file for `check --file`, naming one source explicitly so the
   // positional stays a package directory. Borrows argv storage like
-  // target_dir.
+  // input.
   std::string_view file;
   // Where the output goes (empty selects a path beside the input, or the
-  // package's out/ directory). Borrows argv storage like target_dir.
+  // package's out/ directory). Borrows argv storage like input.
   std::string_view output;
   // What the build writes. Defaults to an executable, so the name says
   // which one only when it is not the default.
@@ -82,32 +82,32 @@ struct CliConfig {
   codegen::Backend backend = codegen::Backend::None;
   // The machine to build for, from --target; the host when unnamed.
   codegen::Target target = codegen::host_target();
-  // Compile the program on standard input rather than a target. The name it
+  // Compile the program on standard input rather than a file. The name it
   // is reported under is <stdin>, since a pipe carries no file behind it.
   bool stdin_source = false;
   // System linker driver for executable builds (empty selects the default
-  // toolchain driver). Borrows argv storage like target_dir.
+  // toolchain driver). Borrows argv storage like input.
   std::string_view linker;
   // Arguments handed to that driver, in `--link-args` order: one flag per
   // argument, so nothing has to be split or quoted. Replaces the file's
-  // own list when given. Views borrow argv storage like target_dir.
+  // own list when given. Views borrow argv storage like input.
   std::vector<std::string_view> link_args;
-  // Trailing positionals after the target, passed to the program by
-  // `run`. Views borrow argv storage like target_dir.
+  // Trailing positionals after the input, passed to the program by
+  // `run`. Views borrow argv storage like input.
   std::vector<std::string_view> program_args;
   // `compile` starts with no standard library: nothing is staged unless
-  // `--deps` names it. Views borrow argv storage like target_dir.
+  // `--deps` names it. Views borrow argv storage like input.
   bool no_std = false;
   // `compile` dependencies on top of the default suite, in `--deps`
   // fragment form (`alcy/std/core`, or `name = { ... }`). Views borrow
-  // argv storage like target_dir.
+  // argv storage like input.
   std::vector<std::string_view> deps;
   // fmt was asked to report the files whose layout would change rather
   // than write them.
   bool fmt_check = false;
   // The files fmt was pointed at, in command-line order. Empty reads
   // standard input and writes standard output. Views borrow argv storage
-  // like target_dir.
+  // like input.
   std::vector<std::string_view> fmt_files;
   // Which ignore file `new` and `init` write. Defaults to git because
   // that is the version control most packages are kept in, and the
@@ -116,7 +116,7 @@ struct CliConfig {
   // `--suite` for `new` and `init`: `<name>` or `<owner>/<name>`
   // scaffolds a suite, and an empty value scaffolds a package (which
   // joins an enclosing suite when one is found). Borrows argv storage
-  // like target_dir.
+  // like input.
   std::string_view suite = "";
   // Emit the result as one JSON document on standard output instead of
   // the text report, for an editor or another tool reading it.

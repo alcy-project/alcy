@@ -47,7 +47,7 @@ TEST_CASE("Parse build subcommand") {
                             .subcommand = Subcommand::Build,
                             .profile = "release",
                             .release = true,
-                            .target_dir = "mydir",
+                            .input = "mydir",
                             .file = "",
                             .output = "",
                             .linker = "",
@@ -125,14 +125,14 @@ TEST_CASE("Parse new suite flag") {
   const CliConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::New);
   CHECK(config.suite == "acme/tools");
-  CHECK(config.target_dir == "my-tools");
+  CHECK(config.input == "my-tools");
 }
 
 TEST_CASE("Parse build output flag") {
   const std::string_view args[] = {"alcy", "build", "main.al", "-o", "main.o"};
   const CliConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::Build);
-  CHECK(config.target_dir == "main.al");
+  CHECK(config.input == "main.al");
   CHECK(config.output == "main.o");
 }
 
@@ -203,7 +203,7 @@ TEST_CASE("Parse build defaults") {
   const CliConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::Build);
   CHECK(!config.release);
-  CHECK(config.target_dir.empty());
+  CHECK(config.input.empty());
 }
 
 TEST_CASE("Parse other subcommands") {
@@ -214,12 +214,12 @@ TEST_CASE("Parse other subcommands") {
   const std::string_view compile[] = {"alcy", "compile", "main.al"};
   CHECK(parse_ok(run).subcommand == Subcommand::Run);
   CHECK(parse_ok(created).subcommand == Subcommand::New);
-  CHECK(parse_ok(created).target_dir == "mypkg");
+  CHECK(parse_ok(created).input == "mypkg");
   CHECK(parse_ok(init).subcommand == Subcommand::Init);
-  CHECK(parse_ok(init).target_dir == "existing");
+  CHECK(parse_ok(init).input == "existing");
   CHECK(parse_ok(check).subcommand == Subcommand::Check);
   CHECK(parse_ok(compile).subcommand == Subcommand::Compile);
-  CHECK(parse_ok(compile).target_dir == "main.al");
+  CHECK(parse_ok(compile).input == "main.al");
 }
 
 TEST_CASE("Parse scaffolding VCS option") {
@@ -250,14 +250,14 @@ TEST_CASE("Parse check file flag") {
   const CliConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::Check);
   CHECK(config.file == "main.al");
-  CHECK(config.target_dir.empty());
+  CHECK(config.input.empty());
 }
 
 TEST_CASE("Parse run forwards trailing positionals") {
   const std::string_view args[] = {"alcy", "run", ".", "hello", "world"};
   const CliConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::Run);
-  CHECK(config.target_dir == ".");
+  CHECK(config.input == ".");
   CHECK(config.program_args.size() == 2);
   CHECK(config.program_args[0] == "hello");
   CHECK(config.program_args[1] == "world");
@@ -378,7 +378,7 @@ TEST_CASE("Parse argv overload") {
     const CliConfig config = outcome.get<CliConfig>();
     CHECK(config.subcommand == Subcommand::Build);
     CHECK(config.release);
-    CHECK(config.target_dir == "mydir");
+    CHECK(config.input == "mydir");
   }
 }
 

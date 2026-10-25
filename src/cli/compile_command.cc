@@ -121,7 +121,7 @@ ResultCode run_compile(const CliConfig& config,
   }
   const pipeline::BuildProfile profile = std::move(resolved).unwrap();
   resolve_backend_options(config, ctx, profile);
-  // Validation guarantees one of these: a target, or the pipe with a
+  // Validation guarantees one of these: an input, or the pipe with a
   // named output.
   if (config.stdin_source) {
     base::Result<std::string, std::string_view> text = read_stdin();
@@ -148,9 +148,8 @@ ResultCode run_compile(const CliConfig& config,
     return ResultCode::Success;
   }
 
-  base::Result<std::string, diag::Reported> res =
-      pipeline::build_single_file(ctx, config.target_dir, config.output,
-                                  profile, link, config.emit, selection);
+  base::Result<std::string, diag::Reported> res = pipeline::build_single_file(
+      ctx, config.input, config.output, profile, link, config.emit, selection);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;

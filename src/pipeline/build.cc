@@ -785,7 +785,7 @@ base::Result<std::string, diag::Reported> emit_output(
 // emits an object and links it into an executable.
 base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
-    std::string_view target,
+    std::string_view input,
     std::string_view output,
     BuildProfile profile,
     LinkOptions link,
@@ -793,19 +793,19 @@ base::Result<std::string, diag::Reported> build_single_file(
     const StdSelection& selection) {
   base::Result<source::FileId, source::SourceError> file = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
-    return ctx.sources.load(target);
+    return ctx.sources.load(input);
   }();
   if (file.is_err()) {
     const source::SourceError reason = std::move(file).unwrap_err();
     if (reason == source::SourceError::NotRegular) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineSourceNotRegular>(
           diag::Severity::Error, diag::Stage::Pipeline,
-          DiagCode::SourceNotRegular, target);
+          DiagCode::SourceNotRegular, input);
       (void)index;
     } else {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
           diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          target);
+          input);
       (void)index;
     }
     return base::make_err(diag::Reported{});
@@ -814,7 +814,7 @@ base::Result<std::string, diag::Reported> build_single_file(
   std::string output_path(output);
   if (output.empty()) {
     base::Result<std::string, diag::Reported> derived =
-        default_output_path(ctx, target, mode);
+        default_output_path(ctx, input, mode);
     if (derived.is_err()) {
       return base::make_err(diag::Reported{});
     }
@@ -858,13 +858,13 @@ base::Result<std::string, diag::Reported> build_package(
     BuildProfile profile,
     LinkOptions link,
     EmitMode mode) {
-  base::Result<std::vector<PackageTarget>, diag::Reported> targets =
-      resolve_package_targets(ctx, root, manifest_file, manifest_name,
-                              TargetScope::All);
+  base::Result<std::vector<Artifact>, diag::Reported> targets =
+      resolve_artifacts(ctx, root, manifest_file, manifest_name,
+                        ArtifactScope::All);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  std::vector<PackageTarget> resolved = std::move(targets).unwrap();
+  std::vector<Artifact> resolved = std::move(targets).unwrap();
   if (resolved.size() > 1 && !output.empty()) {
     // One `-o` cannot name two artifacts.
     const u32 index =
@@ -874,18 +874,20 @@ base::Result<std::string, diag::Reported> build_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  struct PlannedTarget {
-    PackageTarget* target;
+  struct PlannedArtifact {
+    Artifact* target;
     EmitMode mode;
     std::string path;
   };
-  std::vector<PlannedTarget> planned;
+  std::vector<PlannedArtifact> planned;
   planned.reserve(resolved.size());
-  for (PackageTarget& target : resolved) {
+  for (Artifact& target : resolved) {
     // A library has no entry to link, so an executable request becomes
     // an object one.
     const EmitMode target_mode =
-        target.is_lib && mode == EmitMode::Executable ? EmitMode::Object : mode;
+        target.kind == ArtifactKind::Lib && mode == EmitMode::Executable
+            ? EmitMode::Object
+            : mode;
     // A binary that will be linked needs its entry point before the
     // linker sees it.
     if (target_mode == EmitMode::Executable &&
@@ -920,10 +922,10 @@ base::Result<std::string, diag::Reported> build_package(
       // Two targets sharing a default name write the same file in every
       // mode but the executable one, and the second silently wins. Refuse
       // the pair before compiling either, naming what collided.
-      const PackageTarget& one = *planned[i].target;
-      const PackageTarget& other = *planned[j].target;
-      const PackageTarget& bin = one.is_lib ? other : one;
-      const PackageTarget& lib = one.is_lib ? one : other;
+      const Artifact& one = *planned[i].target;
+      const Artifact& other = *planned[j].target;
+      const Artifact& bin = one.kind == ArtifactKind::Lib ? other : one;
+      const Artifact& lib = one.kind == ArtifactKind::Lib ? one : other;
       const u32 index = ctx.bag.emit<i18n::Key::PipelineTargetOutputsCollide>(
           diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
           bin.name, lib.name, planned[i].path);
@@ -935,8 +937,8 @@ base::Result<std::string, diag::Reported> build_package(
   // targets names the first: the binary, resolved ahead of the library.
   bool failed = false;
   std::string first_output;
-  for (PlannedTarget& planned_target : planned) {
-    PackageTarget& target = *planned_target.target;
+  for (PlannedArtifact& planned_target : planned) {
+    Artifact& target = *planned_target.target;
     // The cache stores the unoptimized package, so the lookup runs
     // before the frontend and the store runs before the optimizer:
     // a hit and a miss optimize, check, and emit the same way.
@@ -961,9 +963,9 @@ base::Result<std::string, diag::Reported> build_package(
           .manifest = manifest_bytes,
           .triple = ctx.target.triple,
           .target_name = target.name,
-          .is_lib = target.is_lib,
-          .emit_entry =
-              !target.is_lib && planned_target.mode == EmitMode::Executable,
+          .is_lib = target.kind == ArtifactKind::Lib,
+          .emit_entry = target.kind == ArtifactKind::Bin &&
+                        planned_target.mode == EmitMode::Executable,
           .summary_digests = ctx.summary_digests,
       });
       cache_dir = std::string(out_dir.join(".cache").as_view());
@@ -977,7 +979,8 @@ base::Result<std::string, diag::Reported> build_package(
       base::Result<lowering::LoweredPackage, diag::Reported> package =
           compile_tree_unoptimized(
               ctx, target.tree,
-              !target.is_lib && planned_target.mode == EmitMode::Executable,
+              target.kind == ArtifactKind::Bin &&
+                  planned_target.mode == EmitMode::Executable,
               target.name);
       if (package.is_err() || ctx.bag.has_errors()) {
         failed = true;
@@ -987,8 +990,9 @@ base::Result<std::string, diag::Reported> build_package(
       // a stored entry stays silent when it is read back.
       if (!ctx.no_cache && ctx.bag.size() == 0) {
         lowering::LoweredPackage fresh = std::move(package).unwrap();
-        cache_store(cache_dir, entry,
-                    serialize_package_ir(ctx, fresh, target.is_lib));
+        cache_store(
+            cache_dir, entry,
+            serialize_package_ir(ctx, fresh, target.kind == ArtifactKind::Lib));
         cached = std::move(fresh);
       } else {
         cached = std::move(package).unwrap();
@@ -999,7 +1003,7 @@ base::Result<std::string, diag::Reported> build_package(
     // build leaves it beside the artifact, before optimization, where
     // the summary's indices still name the tables it was collected from
     // (ADR-0078).
-    if (target.is_lib && !lowered.summary.empty()) {
+    if (target.kind == ArtifactKind::Lib && !lowered.summary.empty()) {
       base::Result<path::Path, path::PathError> output_path =
           path::Path::from_native(planned_target.path);
       if (output_path.is_err()) {
@@ -1024,9 +1028,9 @@ base::Result<std::string, diag::Reported> build_package(
       failed = true;
       break;
     }
-    base::Result<std::string, diag::Reported> written =
-        emit_output(ctx, lowered, profile, link, planned_target.mode,
-                    planned_target.path, target.is_lib, target.linked_objects);
+    base::Result<std::string, diag::Reported> written = emit_output(
+        ctx, lowered, profile, link, planned_target.mode, planned_target.path,
+        target.kind == ArtifactKind::Lib, target.linked_objects);
     if (written.is_err() || ctx.bag.has_errors()) {
       failed = true;
       break;

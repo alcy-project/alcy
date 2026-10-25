@@ -17,7 +17,7 @@
 
 namespace pipeline {
 
-// Called with the bin target's name immediately before the program is
+// Called with the bin artifact's name immediately before the program is
 // executed, and not at all if the build or the link failed. A function
 // pointer and a context rather than a callback object, as the
 // diagnostic renderer's source lookup, so that neither side has to
@@ -27,7 +27,7 @@ namespace pipeline {
 // imminent. A caller that announced earlier would be announcing a
 // build, and a caller that announced later would be announcing
 // something the reader has already watched happen.
-using AnnounceExec = void (*)(std::string_view target, const void* ctx);
+using AnnounceExec = void (*)(std::string_view program, const void* ctx);
 
 // Outcome of a successful `run`: the exit code, which is program
 // output rather than a failure. A failed build, link, or execution is

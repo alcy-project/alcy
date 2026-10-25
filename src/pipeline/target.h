@@ -20,31 +20,37 @@
 
 namespace pipeline {
 
-// Resolved build target: the module tree plus its source count,
-// target name, and whether it is a library. Shared by check, build,
-// and run; callers report and map failures to their own result codes.
-// `name` borrows manifest arena storage through the caller's
-// PipelineContext, so it stays valid as long as the context outlives
-// the target.
-struct PackageTarget {
+// Which artifact a build produces: a runnable binary, or a library a
+// dependent resolves against.
+enum class ArtifactKind : u8 {
+  Bin,
+  Lib,
+};
+
+// Resolved build artifact: the module tree plus its source count, its
+// name, and its kind. Shared by check, build, and run; callers report
+// and map failures to their own result codes. `name` borrows manifest
+// arena storage through the caller's PipelineContext, so it stays
+// valid as long as the context outlives the artifact.
+struct Artifact {
   analyzer::ModuleTree tree;
   usize file_count = 0;
   std::string_view name;
-  bool is_lib = false;
+  ArtifactKind kind = ArtifactKind::Bin;
   // Where a default build writes: the suite member's directory under
   // the suite's `out/`, or the package's own `out/` (ADR-0057). Set by
-  // resolve_package_targets.
+  // resolve_artifacts.
   std::optional<path::Path> output_dir;
   // The objects a link needs beside this package's own: the
   // dependencies a summary answered for (ADR-0078).
   std::vector<std::string> linked_objects;
 };
 
-// Emits the missing-entry-point diagnostic when a binary target
-// declares no free `main`, and answers whether the target can go on. A
-// library needs no entry point; a binary without one reaches the
+// Emits the missing-entry-point diagnostic when a binary artifact
+// declares no free `main`, and answers whether the artifact can go on.
+// A library needs no entry point; a binary without one reaches the
 // linker, whose failure names the tool rather than the declaration.
-bool check_entry_point(PipelineContext& ctx, const PackageTarget& target);
+bool check_entry_point(PipelineContext& ctx, const Artifact& target);
 
 // The suite a package sits inside: its root, its manifest, and the
 // suite-relative path the package's directory has there.
@@ -71,7 +77,7 @@ std::optional<EnclosingSuite> find_enclosing_suite(
     const path::Path& package_dir);
 
 // A manifest probe result: `found` with a loaded manifest, or absent
-// when the raw target has no alcy.toml. Path errors are emitted to the
+// when the raw input has no alcy.toml. Path errors are emitted to the
 // bag and reported as a failed probe.
 struct ManifestProbe {
   bool found = false;
@@ -80,7 +86,7 @@ struct ManifestProbe {
   std::string manifest_name;
 };
 
-// Probes a raw cli target for a package manifest and loads it. A target
+// Probes a raw cli input for a package manifest and loads it. An input
 // without one is reported here, because "build, check, and run all need
 // a manifest" is a pipeline fact and three commands writing that message
 // three ways is three chances to disagree. `file_hint` selects the
@@ -91,23 +97,23 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
     std::string_view raw,
     bool file_hint);
 
-// Which declared targets resolution returns. A run wants the binary
+// Which declared artifacts resolution returns. A run wants the binary
 // alone: a library it will not execute is not its business, so one
 // the module selection leaves out must not refuse the run.
-enum class TargetScope : u8 {
+enum class ArtifactScope : u8 {
   All,
   BinOnly,
 };
 
-// Parses the manifest and resolves the targets `scope` names: the
+// Parses the manifest and resolves the artifacts `scope` names: the
 // binary first when one exists, then the library. Shared by build,
 // check, and run; the manifest views borrow the context arena.
-base::Result<std::vector<PackageTarget>, diag::Reported>
-resolve_package_targets(PipelineContext& ctx,
-                        const path::Path& root,
-                        source::FileId manifest_file,
-                        std::string_view manifest_name,
-                        TargetScope scope);
+base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    ArtifactScope scope);
 
 // Loads `.alcy/toolchain.toml` beside the package root. An absent file
 // means defaults; a corrupt one lands in the bag.

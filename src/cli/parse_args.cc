@@ -143,10 +143,10 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   const std::span<const std::string_view> positionals = matches.positionals();
   if (c.subcommand == Subcommand::Fmt) {
     // fmt takes any number of files: the first positional is not a
-    // target directory, and the rest are not program arguments.
+    // input path, and the rest are not program arguments.
     c.fmt_files.assign(positionals.begin(), positionals.end());
   } else if (!positionals.empty()) {
-    c.target_dir = positionals[0];
+    c.input = positionals[0];
     c.program_args.assign(positionals.begin() + 1, positionals.end());
   }
 
@@ -164,8 +164,8 @@ ParseOutcome to_outcome(arg::Parser& parser,
       }
       CliConfig config = std::move(extracted).unwrap();
       if (config.subcommand == Subcommand::None) {
-        if (!config.target_dir.empty()) {
-          UnknownSubcommand unknown{std::string(config.target_dir), ""};
+        if (!config.input.empty()) {
+          UnknownSubcommand unknown{std::string(config.input), ""};
           if (auto suggestion =
                   suggest_subcommand(parser.root_command(), unknown.name)) {
             unknown.suggestion = std::move(*suggestion);

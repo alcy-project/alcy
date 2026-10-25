@@ -53,22 +53,22 @@ base::Result<CheckOutcome, diag::Reported> finish_check(
 
 base::Result<CheckOutcome, diag::Reported> check_single_file(
     PipelineContext& ctx,
-    std::string_view target) {
+    std::string_view input) {
   base::Result<source::FileId, source::SourceError> file = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "load", "frontend");
-    return ctx.sources.load(target);
+    return ctx.sources.load(input);
   }();
   if (file.is_err()) {
     const source::SourceError reason = std::move(file).unwrap_err();
     if (reason == source::SourceError::NotRegular) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineSourceNotRegular>(
           diag::Severity::Error, diag::Stage::Pipeline,
-          DiagCode::SourceNotRegular, target);
+          DiagCode::SourceNotRegular, input);
       (void)index;
     } else {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
           diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          target);
+          input);
       (void)index;
     }
     return fail();
@@ -100,13 +100,13 @@ base::Result<CheckOutcome, diag::Reported> check_package(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name) {
-  base::Result<std::vector<PackageTarget>, diag::Reported> targets =
-      resolve_package_targets(ctx, root, manifest_file, manifest_name,
-                              TargetScope::All);
+  base::Result<std::vector<Artifact>, diag::Reported> targets =
+      resolve_artifacts(ctx, root, manifest_file, manifest_name,
+                        ArtifactScope::All);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return fail();
   }
-  std::vector<PackageTarget> resolved = std::move(targets).unwrap();
+  std::vector<Artifact> resolved = std::move(targets).unwrap();
   // Every target draws on the same module selection but roots a different
   // tree, and `package::` resolves at the root: an error in one tree is
   // invisible from another, so every tree is analyzed. A tree that
@@ -115,7 +115,7 @@ base::Result<CheckOutcome, diag::Reported> check_package(
   bool ok = true;
   bool have_outcome = false;
   CheckOutcome outcome{};
-  for (PackageTarget& target : resolved) {
+  for (Artifact& target : resolved) {
     base::Result<CheckOutcome, diag::Reported> one =
         finish_check(ctx, target.tree, target.file_count);
     if (one.is_err() || ctx.bag.has_errors()) {

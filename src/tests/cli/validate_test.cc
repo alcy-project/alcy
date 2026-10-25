@@ -56,12 +56,12 @@ TEST_CASE("Config validation refuses release beside a profile") {
 TEST_CASE("Config validation splits files from packages") {
   CliConfig build{};
   build.subcommand = Subcommand::Build;
-  build.target_dir = "main.al";
+  build.input = "main.al";
   CHECK(validate_cli_config(build).is_err());
 
   CliConfig run{};
   run.subcommand = Subcommand::Run;
-  run.target_dir = "main.al";
+  run.input = "main.al";
   CHECK(validate_cli_config(run).is_err());
 
   CliConfig compile{};
@@ -71,7 +71,7 @@ TEST_CASE("Config validation splits files from packages") {
   CliConfig both{};
   both.subcommand = Subcommand::Compile;
   both.stdin_source = true;
-  both.target_dir = "main.al";
+  both.input = "main.al";
   CHECK(validate_cli_config(both).is_err());
 
   CliConfig piped{};
@@ -87,7 +87,7 @@ TEST_CASE("Config validation splits files from packages") {
 
   CliConfig check{};
   check.subcommand = Subcommand::Check;
-  check.target_dir = "pkg";
+  check.input = "pkg";
   check.file = "main.al";
   CHECK(validate_cli_config(check).is_err());
 }

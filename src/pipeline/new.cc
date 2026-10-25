@@ -414,14 +414,13 @@ bool valid_package_name(std::string_view name) {
 }
 
 NewResult create_new_package(PipelineContext& ctx,
-                             std::string_view target_dir,
+                             std::string_view input,
                              Vcs vcs) {
   base::Result<path::Path, path::PathError> root =
-      path::Path::from_native(target_dir);
+      path::Path::from_native(input);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreatePackage>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        target_dir);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -429,8 +428,7 @@ NewResult create_new_package(PipelineContext& ctx,
   const std::string_view name = dir_basename(package_dir.as_view());
   if (!valid_package_name(name)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidPackageName>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        target_dir);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -457,15 +455,12 @@ NewResult create_new_package(PipelineContext& ctx,
       ScaffoldResult{.name = std::string(name), .suite = std::move(spelling)});
 }
 
-NewResult init_package(PipelineContext& ctx,
-                       std::string_view target_dir,
-                       Vcs vcs) {
+NewResult init_package(PipelineContext& ctx, std::string_view input, Vcs vcs) {
   base::Result<path::Path, path::PathError> root =
-      path::Path::from_native(target_dir);
+      path::Path::from_native(input);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotInitPackage>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        target_dir);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -484,8 +479,7 @@ NewResult init_package(PipelineContext& ctx,
   }
   if (!valid_package_name(name)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotDerivePackageName>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        target_dir);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -513,7 +507,7 @@ NewResult init_package(PipelineContext& ctx,
 }
 
 NewResult create_new_suite(PipelineContext& ctx,
-                           std::string_view target_dir,
+                           std::string_view input,
                            std::string_view spec,
                            Vcs vcs) {
   std::string owner;
@@ -522,14 +516,12 @@ NewResult create_new_suite(PipelineContext& ctx,
     return base::make_err(0);
   }
   // `new --suite tools` makes ./tools; a named target overrides that.
-  const std::string_view dir = (target_dir.empty() || target_dir == ".")
-                                   ? std::string_view(name)
-                                   : target_dir;
+  const std::string_view dir =
+      (input.empty() || input == ".") ? std::string_view(name) : input;
   base::Result<path::Path, path::PathError> root = path::Path::from_native(dir);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateSuite>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        target_dir);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -540,7 +532,7 @@ NewResult create_new_suite(PipelineContext& ctx,
 }
 
 NewResult init_suite(PipelineContext& ctx,
-                     std::string_view target_dir,
+                     std::string_view input,
                      std::string_view spec,
                      Vcs vcs) {
   std::string owner;
@@ -549,11 +541,10 @@ NewResult init_suite(PipelineContext& ctx,
     return base::make_err(0);
   }
   base::Result<path::Path, path::PathError> root =
-      path::Path::from_native(target_dir);
+      path::Path::from_native(input);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateSuite>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        target_dir);
+        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }

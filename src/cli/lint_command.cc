@@ -76,10 +76,9 @@ ResultCode run_lint(const CliConfig& config,
     return lint_result_code(ctx);
   }
 
-  const std::string_view raw_target =
-      config.target_dir.empty() ? "." : config.target_dir;
+  const std::string_view raw_input = config.input.empty() ? "." : config.input;
   base::Result<pipeline::ManifestProbe, diag::Reported> probe =
-      pipeline::require_package_manifest(ctx, raw_target, true);
+      pipeline::require_package_manifest(ctx, raw_input, true);
   if (probe.is_err()) {
     return ResultCode::LintFailed;
   }

@@ -141,16 +141,16 @@ base::Result<LintOutcome, diag::Reported> lint_package(
     source::FileId manifest_file,
     std::string_view manifest_name,
     const LintConfig& config) {
-  base::Result<std::vector<pipeline::PackageTarget>, diag::Reported> targets =
-      pipeline::resolve_package_targets(ctx, root, manifest_file, manifest_name,
-                                        pipeline::TargetScope::All);
+  base::Result<std::vector<pipeline::Artifact>, diag::Reported> targets =
+      pipeline::resolve_artifacts(ctx, root, manifest_file, manifest_name,
+                                  pipeline::ArtifactScope::All);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return fail();
   }
-  std::vector<pipeline::PackageTarget> resolved = std::move(targets).unwrap();
+  std::vector<pipeline::Artifact> resolved = std::move(targets).unwrap();
   LintOutcome total{};
   bool ok = true;
-  for (pipeline::PackageTarget& target : resolved) {
+  for (pipeline::Artifact& target : resolved) {
     base::Result<analyzer::CheckedPackage, diag::Reported> checked =
         pipeline::analyze_tree(ctx, target.tree);
     if (checked.is_err() || ctx.bag.has_errors()) {

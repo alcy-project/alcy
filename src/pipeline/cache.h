@@ -52,8 +52,8 @@ struct CacheInputs {
   std::string_view manifest;
   // The machine the build targets.
   std::string_view triple;
-  // Which target of the package is being lowered: two targets read the
-  // same sources and lower different trees, down to the entry point
+  // Which artifact of the package is being lowered: two artifacts read
+  // the same sources and lower different trees, down to the entry point
   // they ask for and the module they root at.
   std::string_view target_name;
   bool is_lib = false;
