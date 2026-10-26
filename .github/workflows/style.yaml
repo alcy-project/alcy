@@ -150,7 +150,7 @@ jobs:
         run: echo "taplo=$(python3 tools/config_values.py --get taplo_version)" >> "$GITHUB_OUTPUT"
 
       - name: Install taplo
-        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91
         with:
           tool: taplo@${{ steps.versions.outputs.taplo }}
 
