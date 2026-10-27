@@ -48,15 +48,8 @@ replaced. The foundations are in `roadmap.md`.
   other-instantiation variant record wants one case proving the
   predicate's miss stays a compile error. The spelling and the
   evaluation rules are in `docs/spec/comp.md`; the predicate lives in
-  `compiler/analyzer/comp_evaluator.cc` (the parameter checks around
-  `:867`) with the interface in `comp_evaluator.h`.
-
-- [ ] A type mismatch between two closure literals reads `expected
-  'struct', found 'struct'`: each closure literal is its own type, which
-  is what the error is about, and the message names the kind both sides
-  share instead. Spelling an anonymous closure by its signature, or
-  numbering the environments, is what a reader needs - it wants a
-  decision on what a closure type is called in a diagnostic.
+  `src/analyzer/comp_evaluator.cc` with the interface in
+  `comp_evaluator.h`.
 
 - [ ] The compiler's stack on a small-stack host: compiling to an
   object needs most of 64 KiB even natively, so the wasm test binary
@@ -64,13 +57,6 @@ replaced. The foundations are in `roadmap.md`.
   Any standard library growth showed up as a gate failure rather than
   a number; find the deep path, or budget the stack, before the
   headroom runs out the same way.
-
-- [ ] An unreachable match arm is not reported: two arms with the same
-  literal pattern keep the first and the later one can never run, while
-  the compiler does warn about a statement after `ret` (WD003). The
-  complete check is pattern overlap - ranges, or-patterns, enum shapes -
-  and wants a decision on whether the duplicate is a warning or an
-  error; a guarded arm must not count as covering a later unguarded one.
 
 - [ ] A generic whose signature names an owning function type cannot be
   checked once, because the closure's witness is per instantiation
@@ -190,15 +176,6 @@ replaced. The foundations are in `roadmap.md`.
   named storage (`struct H { f: fn(...) }`) needs generics threaded by
   hand.
 
-- [ ] A reference stored into a longer-lived place outlives its
-  referent: `mut r: &i32 := &0; { n := 5; r = &n; } *r` compiles, and
-  so does the same store through a struct field or an `if` arm, which
-  leaves `*r` reading storage the scope already ended.
-  `docs/spec/deferred.md` leaves the outlives constraints between
-  regions to the region-annotated captures work, so the check wants that
-  relation rather than a rule about one instruction; the case is here so
-  that work starts from a reproducer.
-
 - [ ] `Map` key ergonomics, the rest: an `Entry` once the borrow rules
   allow, generic keys, which wait for a `Hash` spec, and
   bounds; `keys()` traversal and `Vec` sorting moved to the roadmap's
@@ -272,3 +249,9 @@ replaced. The foundations are in `roadmap.md`.
   end every time. The build's cache lookup and the run's lowering are
   two paths over the same work, and the run path is the one that has
   no key.
+
+- [ ] A reference to a slice is fat, so an option over one carries a
+  discriminant (ADR-0087 promises no niche there). The data pointer's
+  null pattern is still spare: teach the niche a fat null - a null pair
+  as the fieldless spell, and the discriminant read through the data
+  pointer - and `Option<&[T]>` is two words again.
