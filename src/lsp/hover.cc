@@ -109,6 +109,123 @@ const analyzer::CheckedModule::StaticInfo* find_static(
   return nullptr;
 }
 
+std::string_view span_text(std::string_view source, diag::Span span) {
+  if (span.offset + span.length > source.size()) {
+    return {};
+  }
+  return source.substr(span.offset, span.length);
+}
+
+// The smallest type or expression whose span holds the cursor: the one
+// the position is written inside, not the statement around it.
+std::optional<ast::TypeIdx> innermost_type(
+    const pipeline::PipelineContext& context,
+    usize offset) {
+  std::optional<ast::TypeIdx> best;
+  usize best_length = 0;
+  context.ast.types.for_each_node([&](const ast::TypeIdx index) {
+    const diag::Span span = context.ast.types[index].span;
+    if (!span_contains(span, offset)) {
+      return;
+    }
+    if (!best.has_value() || span.length < best_length) {
+      best = index;
+      best_length = span.length;
+    }
+  });
+  return best;
+}
+
+std::optional<ast::ExprIdx> innermost_expr(
+    const pipeline::PipelineContext& context,
+    usize offset) {
+  std::optional<ast::ExprIdx> best;
+  usize best_length = 0;
+  context.ast.exprs.for_each_node([&](const ast::ExprIdx index) {
+    const diag::Span span = context.ast.exprs[index].span;
+    if (!span_contains(span, offset)) {
+      return;
+    }
+    if (!best.has_value() || span.length < best_length) {
+      best = index;
+      best_length = span.length;
+    }
+  });
+  return best;
+}
+
+// The type the checker decided for an expression. A checked entry exists
+// once per instantiation; the declaration's own entry is the one a hover
+// without a call site wants.
+std::optional<ir::TypeIdx> expr_type(const analyzer::CheckedPackage& package,
+                                     ast::ExprIdx expr) {
+  std::optional<ir::TypeIdx> fallback;
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::ExprType& entry : module.expr_types) {
+      if (entry.expr != expr) {
+        continue;
+      }
+      if (entry.inst == analyzer::NO_INST) {
+        return entry.type;
+      }
+      if (!fallback.has_value()) {
+        fallback = entry.type;
+      }
+    }
+  }
+  return fallback;
+}
+
+// One line naming a type's size and alignment, or nothing for a type
+// that has no layout until an argument is known.
+std::string layout_line(const pipeline::PipelineContext& context,
+                        const analyzer::CheckedPackage& package,
+                        ir::TypeIdx type) {
+  const ir::TypeNode& node = package.types->state().types[type];
+  if (node.tag == ir::TypeTag::Param || node.tag == ir::TypeTag::Const ||
+      node.tag == ir::TypeTag::Error) {
+    return {};
+  }
+  const ir::TypeLayout layout =
+      ir::type_layout(package.types->state(), type, context.target.width);
+  if (layout.size == 0) {
+    return {};
+  }
+  return "\nsize " + std::to_string(layout.size) + " bytes, align " +
+         std::to_string(layout.align) + "\n";
+}
+
+// A written type: a path that names a declaration shows the checked type
+// and its layout, and every other spelling shows itself.
+std::string type_reference_markdown(const pipeline::PipelineContext& context,
+                                    const analyzer::CheckedPackage& package,
+                                    std::string_view source,
+                                    ast::TypeIdx index) {
+  const ast::TypeNode& node = context.ast.types[index];
+  const std::string_view written = span_text(source, node.span);
+  if (node.kind == ast::TypeKind::Path) {
+    const ast::TypePath& path = node.payload.get<ast::TypePath>();
+    if (path.path != ast::PathIdx::invalid()) {
+      const ast::Path& parsed = context.ast.paths[path.path];
+      if (!parsed.segments.empty()) {
+        const std::string_view name = parsed.segments.back().name;
+        for (const analyzer::CheckedModule& module : package.modules) {
+          for (const analyzer::CheckedModule::NamedType& named : module.types) {
+            if (named.name != name) {
+              continue;
+            }
+            return "~~~alcy\n" +
+                   type_name(package.types->state(), context.strings,
+                             named.type) +
+                   "\n~~~\n" + layout_line(context, package, named.type);
+          }
+        }
+      }
+    }
+  }
+  return "~~~alcy\n" + std::string(written) + "\n~~~\n";
+}
+
 }  // namespace
 
 std::optional<std::string> hover_markdown(const Document& document,
@@ -226,6 +343,19 @@ std::optional<std::string> hover_markdown(const Document& document,
         }
         default: break;
       }
+    }
+  }
+  if (const std::optional<ast::TypeIdx> type = innermost_type(context, offset);
+      type.has_value()) {
+    return type_reference_markdown(context, package, source, *type);
+  }
+  if (const std::optional<ast::ExprIdx> expr = innermost_expr(context, offset);
+      expr.has_value()) {
+    const std::optional<ir::TypeIdx> type = expr_type(package, *expr);
+    if (type.has_value()) {
+      return "~~~alcy\n" +
+             type_name(package.types->state(), context.strings, *type) +
+             "\n~~~\n" + layout_line(context, package, *type);
     }
   }
   return std::nullopt;

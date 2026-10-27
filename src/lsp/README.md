@@ -20,10 +20,10 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   finding arrive from the same pass.
 - `formatting.{h,cc}` returns the `alcy_fmt` edit that canonicalizes a
   buffer, or none when the buffer already has that layout.
-- `hover.{h,cc}` reads the checked package once and renders the
-  declaration under the cursor: a struct or enum layout, a field or
-  variant's place in it, and the type a function, const, or static was
-  decided to have.
+- `hover.{h,cc}` reads the checked package once and renders what the
+  cursor is on: a declaration's layout or signature, a field or
+  variant's place in it, and the type an expression or a written type
+  resolved to.
 - `layout.{h,cc}` reads a struct's or enum's size, alignment, and
   field or variant offsets from the checked package (`ir::type_layout`),
   and renders them for hover markdown and for the `alcy/structLayout`

@@ -68,9 +68,38 @@ TEST_CASE("Hover on a const shows its decided type") {
   }
 }
 
-TEST_CASE("Hover off a declaration answers nothing") {
+TEST_CASE("Hover on an expression shows its inferred type") {
   const std::optional<std::string> markdown =
-      hover("fn add(a: i32) -> i32 {\n  ret a\n}\n", 1, 4);
+      hover("fn f() -> i32 {\n  x := 1\n  ret x\n}\n", 2, 6);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("i32") != std::string::npos);
+  }
+}
+
+TEST_CASE("Hover on a type reference resolves the declared type") {
+  const std::optional<std::string> markdown = hover(
+      "struct Point {\n  x: i32,\n}\nfn f(p: Point) -> i32 {\n  ret 0\n}\n", 3,
+      9);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("Point") != std::string::npos);
+    CHECK(markdown->find("size 4") != std::string::npos);
+  }
+}
+
+TEST_CASE("Hover on a primitive type shows its spelling") {
+  const std::optional<std::string> markdown =
+      hover("fn f(p: i32) -> i32 {\n  ret p\n}\n", 0, 9);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("i32") != std::string::npos);
+  }
+}
+
+TEST_CASE("Hover off every node answers nothing") {
+  const std::optional<std::string> markdown =
+      hover("struct Mix {\n  // just a note\n  a: u8,\n}\n", 1, 6);
   CHECK(!markdown.has_value());
 }
 
