@@ -164,6 +164,12 @@ def main() -> int:
     # its formatting.
     tool("check_fmt.py", f"--build-subdir={debug_subdir}")
 
+    # The language server is a process an editor talks to over a pipe, so
+    # its gate drives the built binary through one session: the framing,
+    # the diagnostics, and the formatter edit are one path, not three
+    # units the suite already covers separately.
+    tool("check_lsp.py", f"--build-subdir={debug_subdir}")
+
     # The specification is what a program is written against, and the
     # compiler is how this one happens to implement it. That boundary is
     # prose in `docs/spec/overview.md` and a check here, since a

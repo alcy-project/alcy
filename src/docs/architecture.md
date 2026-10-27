@@ -80,7 +80,9 @@ In scope:
 Deliberately out of scope for MVP:
 
 - Parallel or incremental compilation.
-- Language-server functionality.
+- Language-server functionality in the compiler pipeline; the language
+  server is a toolchain module beside the compiler, not a stage in it
+  (see ADR-0083).
 - Build-system dependency tracking.
 - A direct x86 backend; the direct wasm backend is.
 
@@ -123,7 +125,10 @@ what implements it lives in `src/`.
   tree (see ADR-0081). `src/linter/` is the static analyzer, `alcy lint`,
   over the frontend: no compiler target depends on it, the cli does, and
   its rules, configuration, and entry points are documented in
-  `src/linter/README.md` (see ADR-0082). `src/fuzz/` holds the fuzz
+  `src/linter/README.md` (see ADR-0082). `src/lsp/` is the language
+  server, `alcy lsp`: it publishes the linter's diagnostics and the
+  formatter's edit over JSON-RPC, and re-implements none of the
+  analysis behind them (see ADR-0083). `src/fuzz/` holds the fuzz
   targets, which need libFuzzer and are therefore outside `all`.
   The toolchain's own documentation is in `src/docs/`.
 - `lib/` - the toolchain standard library as source suites

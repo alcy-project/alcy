@@ -1,0 +1,38 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The language server: a library over the frontend and the toolchain
+# modules, invoked as `alcy lsp`. Like the linter it is a module of the
+# toolchain tree rather than a stage of the compiler, so no compiler
+# target depends on it and the cli links it instead.
+source_set("lsp") {
+  sources = [
+    "diagnostics.cc",
+    "diagnostics.h",
+    "document.cc",
+    "document.h",
+    "formatting.cc",
+    "formatting.h",
+    "frame.cc",
+    "frame.h",
+    "lsp.cc",
+    "lsp.h",
+    "server.cc",
+    "server.h",
+    "transport.cc",
+    "transport.h",
+  ]
+
+  deps = [
+    "//src:alcy_lib",
+    "//src/fmt:alcy_fmt",
+    "//src/linter",
+  ]
+
+  configs += [
+    "//src:alcy_config",
+    "//src:win_sys_libs",
+  ]
+
+  public_configs = [ "//src:alcy_config" ]
+}

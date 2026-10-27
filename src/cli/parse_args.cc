@@ -78,6 +78,8 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
     c.subcommand = Subcommand::Fmt;
   } else if (selected == "lint") {
     c.subcommand = Subcommand::Lint;
+  } else if (selected == "lsp") {
+    c.subcommand = Subcommand::Lsp;
   }
   c.release = matches.get<bool>("release").unwrap_or(false);
   // `--release` selects the release profile; `--profile` names a profile
@@ -457,6 +459,9 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliLintFileHelp))
                        .default_value("")
                        .build())
+          .build());
+  builder.add_subcommand(
+      build_subcommand("lsp", std::string(usage.text(i18n::Key::CliLspAbout)))
           .build());
   return arg::Parser(std::move(builder).build());
 }

@@ -534,6 +534,7 @@
   F(CliVerbRan, Note, Pipeline, "Ran") \
   /* linter */ \
   F(CliLintAbout, Note, Pipeline, "Check a package for lint findings") \
+  F(CliLspAbout, Note, Pipeline, "Serve the language server over standard input and output") \
   F(CliLintFileHelp, Note, Pipeline, "Lint a single source file instead of a package directory.") \
   F(CliLintFindingPlural, Note, Pipeline, "findings") \
   F(CliLintFindingSingular, Note, Pipeline, "finding") \

@@ -107,6 +107,13 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
 
+      # The language server is a process an editor talks to over a pipe;
+      # this drives the built binary through one session so the framing,
+      # the diagnostics, and the formatter edit are exercised as a whole.
+      - name: Run LSP Smoke
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_lsp.py --build-subdir=build
+
       - name: Run e2e Acceptance
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build

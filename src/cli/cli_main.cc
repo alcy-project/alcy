@@ -20,6 +20,7 @@
 #include "cli/init_handler.h"
 #include "cli/lint_command.h"
 #include "cli/logger.h"
+#include "cli/lsp_command.h"
 #include "cli/new_command.h"
 #include "cli/output.h"
 #include "cli/parse_args.h"
@@ -56,6 +57,7 @@ i32 dispatch(const CliConfig& config,
       return result_code(run_check(config, ctx, envelope));
     case Subcommand::Fmt: return result_code(run_fmt(config, ctx, envelope));
     case Subcommand::Lint: return result_code(run_lint(config, ctx, envelope));
+    case Subcommand::Lsp: return run_lsp(config, ctx, envelope);
     case Subcommand::None: break;
   }
   // parse_args maps a missing subcommand to NoSubcommand/UnknownSubcommand,
@@ -75,6 +77,7 @@ std::string_view command_name(Subcommand subcommand) {
     case Subcommand::Check: return "check";
     case Subcommand::Fmt: return "fmt";
     case Subcommand::Lint: return "lint";
+    case Subcommand::Lsp: return "lsp";
     case Subcommand::None: break;
   }
   UNREACHABLE();

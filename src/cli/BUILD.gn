@@ -49,6 +49,8 @@ source_set("cli") {
     "lint_command.h",
     "logger.cc",
     "logger.h",
+    "lsp_command.cc",
+    "lsp_command.h",
     "new_command.cc",
     "new_command.h",
     "output.cc",
@@ -77,6 +79,7 @@ source_set("cli") {
     "//src/fmt:alcy_fmt",
     "//src/i18n",
     "//src/linter",
+    "//src/lsp",
     "//src/pipeline",
   ]
   defines = [ "ALCY_PROJECT_NAME=\"$project_name\"" ]
