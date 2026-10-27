@@ -8,7 +8,6 @@ source_set("codegen") {
     "diag_code.h",
     "target.cc",
     "target.h",
-    "x86_emitter.cc",
   ]
   deps = [
     "//src:base_modules",
