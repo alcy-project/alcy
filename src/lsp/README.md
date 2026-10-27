@@ -24,6 +24,9 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   finding arrive from the same pass.
 - `formatting.{h,cc}` returns the `alcy_fmt` edit that canonicalizes a
   buffer, or none when the buffer already has that layout.
+- `inlay_hints.{h,cc}` shows the inferred type of a binding that wrote
+  none, and the size, alignment, and field offsets of every struct or
+  enum, from the checked package.
 - `hover.{h,cc}` reads the checked package once and renders what the
   cursor is on: a declaration's layout or signature, a field or
   variant's place in it, and the type an expression or a written type
@@ -48,13 +51,13 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   `lsp.{h,cc}` is the entry point the cli calls.
 
 The unit suite drives framing, position mapping, diagnostics, the
-layout engine, hover, navigation, completion, signature help, the
-outline, and folding directly. `tools/check_lsp.py` runs a session
-against the built binary and asserts the handshake, a published
+layout engine, hover, inlay hints, navigation, completion, signature
+help, the outline, and folding directly. `tools/check_lsp.py` runs a
+session against the built binary and asserts the handshake, a published
 diagnostic, a formatting edit, the outline, both kinds of fold, a
-definition and its references, a completion and a signature, and the
-layout both hover and `alcy/structLayout` return, which is the gate CI
-asks.
+definition and its references, a completion and a signature, an inlay
+hint, and the layout both hover and `alcy/structLayout` return, which
+is the gate CI asks.
 
 ## Notes
 
@@ -73,6 +76,11 @@ Diagnostics run the linter's single-source entry, which runs the
 frontend the rules need and then the rules. Caching per-document
 analysis is future work behind the same request path, not a second
 analysis path.
+
+The checked package also holds the standard library, whose spans
+belong to other files. A feature compares a span against the cursor
+only when its file is the buffer the request opened, or a name from
+another module would answer for it.
 
 ## Plan
 

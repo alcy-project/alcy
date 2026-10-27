@@ -26,6 +26,7 @@
 #include "lsp/layout.h"
 #include "lsp/typing.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 
 namespace lsp {
 
@@ -104,12 +105,13 @@ std::string_view span_text(std::string_view source, diag::Span span) {
 // the position is written inside, not the statement around it.
 std::optional<ast::TypeIdx> innermost_type(
     const pipeline::PipelineContext& context,
-    usize offset) {
+    usize offset,
+    source::FileId root) {
   std::optional<ast::TypeIdx> best;
   usize best_length = 0;
   context.ast.types.for_each_node([&](const ast::TypeIdx index) {
     const diag::Span span = context.ast.types[index].span;
-    if (!span_contains(span, offset)) {
+    if (span.file != root || !span_contains(span, offset)) {
       return;
     }
     if (!best.has_value() || span.length < best_length) {
@@ -122,12 +124,13 @@ std::optional<ast::TypeIdx> innermost_type(
 
 std::optional<ast::ExprIdx> innermost_expr(
     const pipeline::PipelineContext& context,
-    usize offset) {
+    usize offset,
+    source::FileId root) {
   std::optional<ast::ExprIdx> best;
   usize best_length = 0;
   context.ast.exprs.for_each_node([&](const ast::ExprIdx index) {
     const diag::Span span = context.ast.exprs[index].span;
-    if (!span_contains(span, offset)) {
+    if (span.file != root || !span_contains(span, offset)) {
       return;
     }
     if (!best.has_value() || span.length < best_length) {
@@ -136,28 +139,6 @@ std::optional<ast::ExprIdx> innermost_expr(
     }
   });
   return best;
-}
-
-// The type the checker decided for an expression. A checked entry exists
-// once per instantiation; the declaration's own entry is the one a hover
-// without a call site wants.
-std::optional<ir::TypeIdx> expr_type(const analyzer::CheckedPackage& package,
-                                     ast::ExprIdx expr) {
-  std::optional<ir::TypeIdx> fallback;
-  for (const analyzer::CheckedModule& module : package.modules) {
-    for (const analyzer::CheckedModule::ExprType& entry : module.expr_types) {
-      if (entry.expr != expr) {
-        continue;
-      }
-      if (entry.inst == analyzer::NO_INST) {
-        return entry.type;
-      }
-      if (!fallback.has_value()) {
-        fallback = entry.type;
-      }
-    }
-  }
-  return fallback;
 }
 
 // One line naming a type's size and alignment, or nothing for a type
@@ -216,8 +197,9 @@ std::optional<std::string> hover_markdown(const Document& document,
                                           Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   pipeline::PipelineContext context{i18n::Language::EnUs};
+  source::FileId root = source::UNKNOWN_FILE;
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document);
+      analyze_document(context, document, &root);
   if (checked.is_err()) {
     return std::nullopt;
   }
@@ -227,6 +209,9 @@ std::optional<std::string> hover_markdown(const Document& document,
   for (const analyzer::ModuleNode* module : package.tree.modules) {
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
+      if (item_name_span(context.ast, item).file != root) {
+        continue;
+      }
       using K = ast::ItemKind;
       switch (item.kind) {
         case K::Struct: {
@@ -329,13 +314,15 @@ std::optional<std::string> hover_markdown(const Document& document,
       }
     }
   }
-  if (const std::optional<ast::TypeIdx> type = innermost_type(context, offset);
+  if (const std::optional<ast::TypeIdx> type =
+          innermost_type(context, offset, root);
       type.has_value()) {
     return type_reference_markdown(context, package, source, *type);
   }
-  if (const std::optional<ast::ExprIdx> expr = innermost_expr(context, offset);
+  if (const std::optional<ast::ExprIdx> expr =
+          innermost_expr(context, offset, root);
       expr.has_value()) {
-    const std::optional<ir::TypeIdx> type = expr_type(package, *expr);
+    const std::optional<ir::TypeIdx> type = checked_expr_type(package, *expr);
     if (type.has_value()) {
       return "~~~alcy\n" +
              type_name(package.types->state(), context.strings, *type) +

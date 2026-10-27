@@ -23,6 +23,7 @@
 #include "lsp/document.h"
 #include "lsp/typing.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -246,8 +247,9 @@ std::optional<StructLayout> struct_layout_at(const Document& document,
                                              Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   pipeline::PipelineContext context{i18n::Language::EnUs};
+  source::FileId root = source::UNKNOWN_FILE;
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document);
+      analyze_document(context, document, &root);
   if (checked.is_err()) {
     return std::nullopt;
   }
@@ -256,6 +258,7 @@ std::optional<StructLayout> struct_layout_at(const Document& document,
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
       if (item.kind == ast::ItemKind::Struct &&
+          item.payload.get<ast::ItemStruct>().name.span.file == root &&
           span_contains(item.payload.get<ast::ItemStruct>().name.span,
                         offset)) {
         return struct_layout_of(context, package, document.text(), index);
@@ -269,8 +272,9 @@ std::optional<EnumLayout> enum_layout_at(const Document& document,
                                          Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   pipeline::PipelineContext context{i18n::Language::EnUs};
+  source::FileId root = source::UNKNOWN_FILE;
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document);
+      analyze_document(context, document, &root);
   if (checked.is_err()) {
     return std::nullopt;
   }
@@ -279,6 +283,7 @@ std::optional<EnumLayout> enum_layout_at(const Document& document,
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
       if (item.kind == ast::ItemKind::Enum &&
+          item.payload.get<ast::ItemEnum>().name.span.file == root &&
           span_contains(item.payload.get<ast::ItemEnum>().name.span, offset)) {
         return enum_layout_of(context, package, document.text(), index);
       }

@@ -18,6 +18,7 @@
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 
 namespace lsp {
 
@@ -28,14 +29,16 @@ bool span_contains(diag::Span span, usize offset) {
 }
 
 bool same_span(diag::Span left, diag::Span right) {
-  return left.offset == right.offset && left.length == right.length;
+  return left.file == right.file && left.offset == right.offset &&
+         left.length == right.length;
 }
 
 // A binding's name, which the package does not table because it lives
 // and dies with the checker's scope stack.
 std::optional<diag::Span> pattern_name_at(
     const pipeline::PipelineContext& context,
-    usize offset) {
+    usize offset,
+    source::FileId root) {
   std::optional<diag::Span> found;
   context.ast.patterns.for_each_node([&](const ast::PatternIdx index) {
     if (found.has_value()) {
@@ -43,11 +46,13 @@ std::optional<diag::Span> pattern_name_at(
     }
     const ast::PatternNode& node = context.ast.patterns[index];
     if (node.kind == ast::PatternKind::Ident) {
-      if (span_contains(node.payload.ident.name.span, offset)) {
+      if (span_contains(node.payload.ident.name.span, offset) &&
+          node.payload.ident.name.span.file == root) {
         found = node.payload.ident.name.span;
       }
     } else if (node.kind == ast::PatternKind::MutIdent) {
-      if (span_contains(node.payload.mut_ident.name.span, offset)) {
+      if (span_contains(node.payload.mut_ident.name.span, offset) &&
+          node.payload.mut_ident.name.span.file == root) {
         found = node.payload.mut_ident.name.span;
       }
     }
@@ -60,12 +65,16 @@ std::optional<diag::Span> pattern_name_at(
 std::optional<diag::Span> declaration_name_at(
     const pipeline::PipelineContext& context,
     const analyzer::CheckedPackage& package,
-    usize offset) {
+    usize offset,
+    source::FileId root) {
   using K = ast::ItemKind;
   for (const analyzer::ModuleNode* module : package.tree.modules) {
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
       const diag::Span name = item_name_span(context.ast, item);
+      if (name.file != root) {
+        continue;
+      }
       if (span_contains(name, offset)) {
         return name;
       }
@@ -102,7 +111,7 @@ std::optional<diag::Span> declaration_name_at(
       }
     }
   }
-  return pattern_name_at(context, offset);
+  return pattern_name_at(context, offset, root);
 }
 
 }  // namespace
@@ -111,8 +120,9 @@ std::optional<diag::Span> definition_at(const Document& document,
                                         Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   pipeline::PipelineContext context{i18n::Language::EnUs};
+  source::FileId root = source::UNKNOWN_FILE;
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document);
+      analyze_document(context, document, &root);
   if (checked.is_err()) {
     return std::nullopt;
   }
@@ -120,20 +130,22 @@ std::optional<diag::Span> definition_at(const Document& document,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
-      if (span_contains(reference.site, offset)) {
+      if (reference.site.file == root &&
+          span_contains(reference.site, offset)) {
         return reference.declaration;
       }
     }
   }
-  return declaration_name_at(context, package, offset);
+  return declaration_name_at(context, package, offset, root);
 }
 
 std::vector<diag::Span> references_at(const Document& document,
                                       Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   pipeline::PipelineContext context{i18n::Language::EnUs};
+  source::FileId root = source::UNKNOWN_FILE;
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document);
+      analyze_document(context, document, &root);
   if (checked.is_err()) {
     return {};
   }
@@ -143,7 +155,8 @@ std::vector<diag::Span> references_at(const Document& document,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
-      if (span_contains(reference.site, offset)) {
+      if (reference.site.file == root &&
+          span_contains(reference.site, offset)) {
         declaration = reference.declaration;
         break;
       }
@@ -153,7 +166,7 @@ std::vector<diag::Span> references_at(const Document& document,
     }
   }
   if (!declaration.has_value()) {
-    declaration = declaration_name_at(context, package, offset);
+    declaration = declaration_name_at(context, package, offset, root);
   }
   if (!declaration.has_value()) {
     return {};
@@ -163,7 +176,8 @@ std::vector<diag::Span> references_at(const Document& document,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
-      if (!same_span(reference.declaration, *declaration)) {
+      if (reference.site.file != root ||
+          !same_span(reference.declaration, *declaration)) {
         continue;
       }
       bool duplicate = false;

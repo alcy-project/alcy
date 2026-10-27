@@ -226,7 +226,13 @@ def main() -> int:
                 "position": {"line": 4, "character": 7},
             },
         },
-        {"jsonrpc": "2.0", "id": 11, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "textDocument/inlayHint",
+            "params": {"textDocument": {"uri": MAIN_URI}},
+        },
+        {"jsonrpc": "2.0", "id": 12, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -271,6 +277,8 @@ def main() -> int:
         return fail("initialize did not advertise completionProvider")
     if not isinstance(capabilities.get("signatureHelpProvider"), dict):
         return fail("initialize did not advertise signatureHelpProvider")
+    if capabilities.get("inlayHintProvider") is not True:
+        return fail("initialize did not advertise inlayHintProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -368,7 +376,14 @@ def main() -> int:
     if "id" not in labels:
         return fail(f"completion missed the function: {completion!r}")
 
-    if by_id.get(11, {}).get("result", "missing") is not None:
+    hints = by_id.get(11, {}).get("result")
+    hint_labels = [hint.get("label") for hint in (hints or [])]
+    if not any(
+        isinstance(label, str) and label.startswith("size ") for label in hint_labels
+    ):
+        return fail(f"inlayHint missed the layout: {hints!r}")
+
+    if by_id.get(12, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

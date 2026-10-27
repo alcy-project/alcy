@@ -24,6 +24,7 @@
 #include "lsp/document.h"
 #include "lsp/typing.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -43,7 +44,8 @@ struct CallSite {
 };
 
 std::optional<CallSite> call_at(const pipeline::PipelineContext& context,
-                                usize offset) {
+                                usize offset,
+                                source::FileId root) {
   std::optional<CallSite> best;
   usize best_length = 0;
   context.ast.exprs.for_each_node([&](const ast::ExprIdx index) {
@@ -52,7 +54,7 @@ std::optional<CallSite> call_at(const pipeline::PipelineContext& context,
         node.kind != ast::ExprKind::MethodCall) {
       return;
     }
-    if (!span_contains(node.span, offset)) {
+    if (node.span.file != root || !span_contains(node.span, offset)) {
       return;
     }
     if (best.has_value() && node.span.length >= best_length) {
@@ -116,14 +118,15 @@ std::string signature_label(const pipeline::PipelineContext& context,
 text::JsonValue signature_help(const Document& document, Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   pipeline::PipelineContext context{i18n::Language::EnUs};
+  source::FileId root = source::UNKNOWN_FILE;
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document);
+      analyze_document(context, document, &root);
   if (checked.is_err()) {
     return {};
   }
   const analyzer::CheckedPackage& package = checked.value();
 
-  const std::optional<CallSite> site = call_at(context, offset);
+  const std::optional<CallSite> site = call_at(context, offset, root);
   if (!site.has_value()) {
     return {};
   }

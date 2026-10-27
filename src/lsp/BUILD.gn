@@ -25,6 +25,8 @@ source_set("lsp") {
     "frame.h",
     "hover.cc",
     "hover.h",
+    "inlay_hints.cc",
+    "inlay_hints.h",
     "layout.cc",
     "layout.h",
     "lsp.cc",

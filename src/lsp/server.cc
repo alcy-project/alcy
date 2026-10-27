@@ -18,6 +18,7 @@
 #include "lsp/folding.h"
 #include "lsp/formatting.h"
 #include "lsp/hover.h"
+#include "lsp/inlay_hints.h"
 #include "lsp/layout.h"
 #include "lsp/navigation.h"
 #include "lsp/protocol.h"
@@ -179,6 +180,15 @@ void Server::handle_request(const text::JsonValue& message) {
     }
     return;
   }
+  if (method == "textDocument/inlayHint") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "inlayHint needs params");
+      return;
+    }
+    inlay_hint(*id, *params);
+    return;
+  }
   if (method == "textDocument/completion" ||
       method == "textDocument/signatureHelp") {
     const text::JsonValue* params = field(message, "params");
@@ -272,6 +282,7 @@ void Server::initialize(const text::JsonValue& id) {
   signature_triggers.push(make_string(","));
   signature_options.set("triggerCharacters", std::move(signature_triggers));
   capabilities.set("signatureHelpProvider", std::move(signature_options));
+  capabilities.set("inlayHintProvider", text::JsonValue::make_bool(true));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
   capabilities.set("experimental", std::move(experimental));
@@ -423,6 +434,22 @@ void Server::signature(const text::JsonValue& id,
     return;
   }
   send_result(id, signature_help(*document, position));
+}
+
+void Server::inlay_hint(const text::JsonValue& id,
+                        const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  if (text_document == nullptr || !text_document->is_object()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, inlay_hints(*document));
 }
 
 void Server::struct_layout(const text::JsonValue& id,
