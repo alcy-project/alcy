@@ -173,3 +173,20 @@ peripheral work lives in `backlog.md`. The language record lives in
   surface a dependent reads,
   `docs/adr/0078-the-summary-a-dependent-reads.md`; the pieces
   are named in `docs/spec/deferred.md`.
+
+## 1.0
+
+The number is a compatibility boundary rather than a feature count,
+and ADR-0099 says what it means: the promises in `docs/adr/` stop
+being editable there. It is declared when the boxes below are ticked,
+and not on a date.
+
+- [ ] The spec's MVP sections are implemented, and every staged or
+  deferred marker is implemented or moved to an explicit post-1.0
+  list in `docs/spec/deferred.md`.
+- [ ] Every Accepted ADR is implemented or explicitly deferred, and
+  none contradicts the code.
+- [ ] The suite's public surface is described in `docs/spec/`, so the
+  record of what is promised lives beside the record of why.
+- [ ] A program written against the suite needs no `unsafe` outside
+  the standard library's own internals (ADR-0100).
