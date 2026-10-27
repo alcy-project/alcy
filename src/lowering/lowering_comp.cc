@@ -137,7 +137,7 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
         // carrying one is the payload the loop below stores (ADR-0087).
         if (value.value.variant == niche.fieldless) {
           emit_void(ir::Opcode::Store,
-                    {null_reference(slot), to_operand(addr, slot)});
+                    {niche_sentinel(niche), to_operand(addr, slot)});
         }
       } else {
         const ir::RegisterIdx tag_reg =
@@ -163,8 +163,14 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
               niche.has ? addr
                         : payload_field_addr(slot_addr, value.type, fields,
                                              static_cast<u32>(i));
+          const ir::OperandIdx stored =
+              niche.has && niche.slot != niche.payload
+                  ? to_operand(emit(ir::Opcode::TypeCast, niche.slot,
+                                    {use_value(lowered)}),
+                               niche.slot)
+                  : use_value(lowered);
           emit_void(ir::Opcode::Store,
-                    {use_value(lowered), to_operand(field_addr, payloads[i])});
+                    {stored, to_operand(field_addr, payloads[i])});
         }
       }
       return Val{to_operand(addr, slot), value.type, true, false};

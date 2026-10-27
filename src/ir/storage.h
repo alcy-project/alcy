@@ -105,6 +105,12 @@ struct EnumNiche {
   u32 carrying = 0;
   u32 fieldless = 0;
   TypeIdx payload = TypeIdx(0);
+  // The type the slot holds: the payload itself, or the byte a `bool`
+  // payload's third state needs.
+  TypeIdx slot = TypeIdx(0);
+  // The byte that spells the fieldless variant when the slot is a byte;
+  // zero when the payload is a reference and null does the work.
+  u8 sentinel = 0;
 };
 
 inline EnumNiche enum_niche(const StorageState& state, TypeIdx idx) {
@@ -140,10 +146,21 @@ inline EnumNiche enum_niche(const StorageState& state, TypeIdx idx) {
     return niche;
   }
   const TypeTag payload_tag = state.types[niche.payload].tag;
-  if (payload_tag != TypeTag::Ref && payload_tag != TypeTag::MutRef) {
+  if (payload_tag == TypeTag::Ref || payload_tag == TypeTag::MutRef) {
+    niche.slot = niche.payload;
+    niche.sentinel = 0;
+    niche.has = true;
     return niche;
   }
-  niche.has = true;
+  if (payload_tag == TypeTag::I1) {
+    // A bool needs a third state and a bit has none: the slot is a
+    // byte, zero or one is the payload, and two is the fieldless
+    // variant.
+    niche.slot = primitive_idx(TypeTag::U8);
+    niche.sentinel = 2;
+    niche.has = true;
+    return niche;
+  }
   return niche;
 }
 
@@ -280,7 +297,7 @@ inline TypeLayout type_layout(const StorageState& state,
       // (ADR-0087).
       const EnumNiche niche = enum_niche(state, idx);
       if (niche.has) {
-        return type_layout(state, niche.payload, width);
+        return type_layout(state, niche.slot, width);
       }
       // Discriminant, padded up to the payload area's alignment, then
       // the area itself, and the whole rounded up to the alignment as

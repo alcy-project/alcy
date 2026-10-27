@@ -228,7 +228,7 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
       // other, so a missing branch here fails the build.
       const ir::EnumNiche niche = ir::enum_niche(storage_->state(), idx);
       if (niche.has) {
-        return type(niche.payload);
+        return type(niche.slot);
       }
       // A discriminant, then the payload in the slot itself. Keeping the
       // payload here rather than behind a pointer is what lets an enum

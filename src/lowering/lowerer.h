@@ -488,6 +488,9 @@ class Lowerer {
   // A null reference of the given reference type, spelling the
   // fieldless variant of a niche-carrying enum (ADR-0087).
   ir::OperandIdx null_reference(ir::TypeIdx ref_type);
+  // The operand that spells a niche-carrying enum's fieldless variant:
+  // a null reference, or the byte above one for a bool.
+  ir::OperandIdx niche_sentinel(const ir::EnumNiche& niche);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
   Val void_value();
   Val load_payload_field(Val slot_addr,

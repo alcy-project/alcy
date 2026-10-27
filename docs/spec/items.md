@@ -178,10 +178,9 @@
 ## Layout
 
 - The language promises two niches (ADR-0087): a reference is never
-  null, and a `bool` is zero or one. An option-shaped enum over `&T`
-  or `&mut T` therefore has the payload's size and alignment, and
-  `Option<&T>` is a pointer. The same size for a `bool` payload lands
-  with the byte encoding its spare patterns need (see `backlog.md`).
+  null, and a `bool` is zero or one. An option-shaped enum over `&T`,
+  `&mut T`, or `bool` therefore has the payload's size and alignment:
+  `Option<&T>` is a pointer and `Option<bool>` is a byte.
 - Nothing else is promised. Field order, an enum's discriminant width
   and placement, a zero-sized type's treatment, and padding are the
   compiler's, and `size_of` and `align_of` are a function of the type

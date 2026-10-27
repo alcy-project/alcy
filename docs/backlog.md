@@ -273,17 +273,6 @@ replaced. The foundations are in `roadmap.md`.
   two paths over the same work, and the run path is the one that has
   no key.
 
-- [ ] The two niches are promised (ADR-0087) but the enum layout still
-  carries an unconditional tag beside the payload, so `Option<&T>` is
-  two words and `Option<bool>` is not one byte. Place the tag in the
-  payload's spare bit patterns in the shared layout, teach construction
-  and matching the shape, and pin both sizes in a case.
-
-- [ ] `Option<bool>` is two bytes: the bool niche is promised
-  (ADR-0087) and an `I1` slot has no way to hold the third state. Give
-  a bool-payload niche enum a byte slot, write the spare pattern
-  through it, and pin the size in a case.
-
 - [ ] A generic function's instantiation (`f<Anchored>(x)` or an
   inferred one) is outside the nominal path that checks type arguments
   today, so ADR-0085's "a type argument is Movable" is unenforced

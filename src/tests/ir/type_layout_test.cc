@@ -229,6 +229,30 @@ TEST_CASE("Layout gives a referencing option the payload's shape") {
   (void)fieldless;
 }
 
+TEST_CASE("Layout gives a bool option a byte") {
+  StorageBuilder builder;
+  const TypeIdx boolean = builder.primitive(TypeTag::I1);
+  TypeSeq some;
+  some.push(boolean);
+  const EnumVariantTypeIdx carrying =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, some.finish());
+  const TypeSeq none;
+  const EnumVariantTypeIdx fieldless =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, none.finish());
+  const TypeIdx option =
+      builder.enum_type(str::INVALID_STRING_POOL_ID,
+                        EnumVariantTypeIdxRange{carrying, 2}, TypeIdxRange{});
+  Storage storage = std::move(builder).build().unwrap().unwrap();
+
+  // A bit has no third state, so the slot is a byte: zero or one is the
+  // payload and two is the fieldless variant (ADR-0087).
+  const TypeLayout layout =
+      layout_of(storage.state(), option, PointerWidth::W64);
+  CHECK(layout.align == 1);
+  CHECK(layout.size == 1);
+  (void)fieldless;
+}
+
 TEST_CASE("Layout gives a payload-less enum only its discriminant") {
   StorageBuilder builder;
   TypeSeq none;

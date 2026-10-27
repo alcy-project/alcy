@@ -784,9 +784,10 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     // A fieldless variant is the payload's spare pattern, so the slot
     // holds the null reference and there is no discriminant to write
     // (ADR-0087).
-    if (ir::enum_niche(builder.state(), use->enum_type).has) {
+    const ir::EnumNiche niche = ir::enum_niche(builder.state(), use->enum_type);
+    if (niche.has) {
       emit_void(ir::Opcode::Store,
-                {null_reference(slot), to_operand(addr, slot)});
+                {niche_sentinel(niche), to_operand(addr, slot)});
       return Val{to_operand(addr, slot), use->enum_type, true, false};
     }
     const ir::RegisterIdx tag =
@@ -918,8 +919,8 @@ ir::TypeIdx Lowerer::enum_slot_type(ir::TypeIdx enum_type) {
   // payload is the whole slot (ADR-0087).
   const ir::EnumNiche niche = ir::enum_niche(builder.state(), enum_type);
   if (niche.has) {
-    enum_slot_types_.emplace(enum_type.idx, niche.payload);
-    return niche.payload;
+    enum_slot_types_.emplace(enum_type.idx, niche.slot);
+    return niche.slot;
   }
   const ir::TypeLayout area =
       ir::enum_payload_area(builder.state(), enum_type, width);
@@ -1000,8 +1001,13 @@ Val Lowerer::lower_variant_construct(
                     : payload_field_addr(
                           Val{to_operand(addr, slot), slot, true, false},
                           use->enum_type, fields, static_cast<u32>(i));
-      emit_void(ir::Opcode::Store,
-                {use_value(value), to_operand(field, payloads[i])});
+      const ir::OperandIdx stored =
+          niche.has && niche.slot != niche.payload
+              ? to_operand(
+                    emit(ir::Opcode::TypeCast, niche.slot, {use_value(value)}),
+                    niche.slot)
+              : use_value(value);
+      emit_void(ir::Opcode::Store, {stored, to_operand(field, payloads[i])});
     }
   }
   return Val{to_operand(addr, slot), use->enum_type, true, false};
@@ -2851,11 +2857,17 @@ Val Lowerer::load_disc(Val slot_addr) {
     // carrying one otherwise. The two are one apart, so one apply of
     // the null test answers.
     const ir::RegisterIdx loaded =
-        emit(ir::Opcode::Load, niche.payload, {slot_addr.op});
+        emit(ir::Opcode::Load, niche.slot, {slot_addr.op});
     const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-    const ir::RegisterIdx is_null = emit(
-        ir::Opcode::Eq, i1,
-        {to_operand(loaded, niche.payload), null_reference(niche.payload)});
+    const ir::RegisterIdx is_null =
+        niche.slot == niche.payload
+            ? emit(ir::Opcode::Eq, i1,
+                   {to_operand(loaded, niche.payload),
+                    null_reference(niche.payload)})
+            : emit(ir::Opcode::Gt, i1,
+                   {to_operand(loaded, niche.slot),
+                    imm_from_u64(ir::TypeTag::U8, niche.slot,
+                                 niche.sentinel > 0 ? niche.sentinel - 1 : 0)});
     const ir::RegisterIdx step =
         emit(ir::Opcode::TypeCast, i32, {to_operand(is_null, i1)});
     const bool fieldless_first = niche.fieldless < niche.carrying;
@@ -2871,6 +2883,16 @@ Val Lowerer::load_disc(Val slot_addr) {
   const ir::RegisterIdx loaded =
       emit(ir::Opcode::Load, i32, {to_operand(gep, i32)});
   return Val{to_operand(loaded, i32), i32, false, false};
+}
+
+// The operand that spells a niche-carrying enum's fieldless variant:
+// a null reference, or the byte above one when the payload is a bool.
+ir::OperandIdx Lowerer::niche_sentinel(const ir::EnumNiche& niche) {
+  if (niche.slot == niche.payload) {
+    return null_reference(niche.payload);
+  }
+  const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
+  return imm_from_u64(ir::TypeTag::U8, u8, niche.sentinel);
 }
 
 // A null reference of the given reference type: the payload's spare
@@ -2915,8 +2937,18 @@ Val Lowerer::load_payload_field(Val slot_addr,
                                 ir::TypeIdxRange fields,
                                 u32 field) {
   const ir::TypeIdx field_type = fields[field];
+  const ir::EnumNiche niche = ir::enum_niche(builder.state(), enum_type);
   const ir::RegisterIdx field_gep =
       payload_field_addr(slot_addr, enum_type, fields, field);
+  if (niche.has && niche.slot != niche.payload) {
+    // The slot holds a byte where the payload is a bool: read the byte
+    // and narrow it (ADR-0087).
+    const ir::RegisterIdx byte =
+        emit(ir::Opcode::Load, niche.slot, {to_operand(field_gep, niche.slot)});
+    const ir::RegisterIdx narrowed =
+        emit(ir::Opcode::TypeCast, field_type, {to_operand(byte, niche.slot)});
+    return Val{to_operand(narrowed, field_type), field_type, false, false};
+  }
   const ir::RegisterIdx loaded =
       emit(ir::Opcode::Load, field_type, {to_operand(field_gep, field_type)});
   return Val{to_operand(loaded, field_type), field_type, false, false};
