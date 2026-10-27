@@ -229,6 +229,36 @@ TEST_CASE("Layout gives a referencing option the payload's shape") {
   (void)fieldless;
 }
 
+TEST_CASE("Layout gives an option over a slice reference a tag") {
+  StorageBuilder builder;
+  const TypeIdx i32_ty = builder.primitive(TypeTag::I32);
+  const TypeIdx slice = builder.slice_type(i32_ty);
+  const TypeIdx ref = builder.reference_type(slice, false);
+  TypeSeq some;
+  some.push(ref);
+  const EnumVariantTypeIdx carrying =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, some.finish());
+  const TypeSeq none;
+  const EnumVariantTypeIdx fieldless =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, none.finish());
+  const TypeIdx option =
+      builder.enum_type(str::INVALID_STRING_POOL_ID,
+                        EnumVariantTypeIdxRange{carrying, 2}, TypeIdxRange{});
+  Storage storage = std::move(builder).build().unwrap().unwrap();
+
+  // A slice reference is fat, and the null pattern of its data pointer is
+  // not the compiler's to promise (ADR-0087): the enum carries a
+  // discriminant, so it is a tag and the padded payload rather than the
+  // payload alone.
+  const TypeLayout payload = layout_of(storage.state(), ref, PointerWidth::W64);
+  const TypeLayout layout =
+      layout_of(storage.state(), option, PointerWidth::W64);
+  CHECK(payload.size == 16);
+  CHECK(layout.align == payload.align);
+  CHECK(layout.size == 24);
+  (void)fieldless;
+}
+
 TEST_CASE("Layout gives a bool option a byte") {
   StorageBuilder builder;
   const TypeIdx boolean = builder.primitive(TypeTag::I1);

@@ -147,6 +147,17 @@ inline EnumNiche enum_niche(const StorageState& state, TypeIdx idx) {
   }
   const TypeTag payload_tag = state.types[niche.payload].tag;
   if (payload_tag == TypeTag::Ref || payload_tag == TypeTag::MutRef) {
+    // Only a thin reference has a spare null pattern. A reference to a
+    // slice is fat - a data pointer and a length - and a fieldless
+    // variant would have to spell a null pair, which ADR-0087 does not
+    // promise and the lowering does not build. Such an enum carries a
+    // discriminant like any other.
+    const TypeNode& payload_node = state.types[niche.payload];
+    const TypeNode& pointee =
+        state.types[state.ref_types[payload_node.as_ref()].pointee];
+    if (pointee.tag == TypeTag::Slice) {
+      return niche;
+    }
     niche.slot = niche.payload;
     niche.sentinel = 0;
     niche.has = true;

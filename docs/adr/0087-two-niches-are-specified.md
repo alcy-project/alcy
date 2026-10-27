@@ -34,11 +34,14 @@ observable.**
 - An enum's discriminant may occupy a niche of a field: a
   reference-typed payload leaves the all-zero pattern free, and a
   `bool` payload leaves every pattern but zero and one. An
-  option-shaped enum over `&T`, `&mut T`, or `bool` therefore has the
-  payload's size and alignment, and `Option<&T>` is a pointer.
+  option-shaped enum over a reference to a sized type, or over `bool`,
+  therefore has the payload's size and alignment, and `Option<&i32>` is
+  a pointer.
 - Nothing else is promised. Field order inside a value, an enum's
   discriminant width and placement, a zero-sized type's treatment, the
-  layout of a future fat pointer, and padding are the compiler's.
+  layout of a fat pointer (`&[T]` today, a trait object later) and
+  whether an enum over one finds a niche, and padding are the
+  compiler's.
   The compiler may use niches beyond the two; none of them is a
   promise, and because none is observable except through `size_of`, one
   may appear or disappear in a later compiler.
