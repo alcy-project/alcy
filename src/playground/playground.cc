@@ -167,10 +167,14 @@ extern "C" i32 alcy_compile(const u8* src, usize len, AlcyResult* out) {
       .bag = &ctx.bag,
       .target = ctx.target,
       .emit_entry = true,
-      .optimize = false,
       .overlay = &checks,
       .kind = codegen::OutputKind::Module,
-      .profiler = ctx.profiler,
+      .options = codegen::EmitOptions{.freestanding = false,
+                                      .backtrace = false,
+                                      .optimize = false,
+                                      .parts = 1,
+                                      .workers = 1,
+                                      .profiler = ctx.profiler},
   };
   base::Result<std::vector<u8>, codegen::EmitError> bytes =
       pipeline::emit_with_backend(ctx.backend, std::move(request));

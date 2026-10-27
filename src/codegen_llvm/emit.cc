@@ -63,20 +63,21 @@ struct EmittedModule {
     // carries its items unwrapped, even one named `main`.
     LlvmIrEmitter emitter(module.get(), std::move(request.storage),
                           request.strings, request.target, request.emit_entry,
-                          request.freestanding, request.overlay,
-                          request.profiler, request.backtrace,
+                          request.options.freestanding, request.overlay,
+                          request.options.profiler, request.options.backtrace,
                           request.instr_spans, request.instr_site_names);
     EmittedBacktrace named = std::move(emitter).emit();
     // Before the optimizer, so the runtime is inlined and folded like
     // any other code, and after the program, so its definitions land in
     // the declarations the program's call sites already hold.
     {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.profiler, "runtime",
-                                               "backend");
-      add_runtime_definitions(*module, request.target, request.freestanding,
-                              request.backtrace);
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                               "runtime", "backend");
+      add_runtime_definitions(*module, request.target,
+                              request.options.freestanding,
+                              request.options.backtrace);
     }
-    if (request.backtrace) {
+    if (request.options.backtrace) {
       // The frames the walk reads and the names it prints: every
       // generated function keeps a frame pointer, and one table names
       // the program's functions while another names the call sites a
@@ -102,12 +103,13 @@ struct EmittedModule {
       UNREACHABLE();
     }
 #endif
-    if (!request.optimize) {
+    if (!request.options.optimize) {
       return base::make_ok();
     }
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.profiler, "optimize",
-                                             "backend");
-    if (optimize_module(*module, request.target, request.profiler).is_err()) {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                             "optimize", "backend");
+    if (optimize_module(*module, request.target, request.options.profiler)
+            .is_err()) {
       return base::make_err(codegen::EmitError::CannotOptimize);
     }
     return base::make_ok();
@@ -116,7 +118,7 @@ struct EmittedModule {
 
 // How many threads a split may use: the request's count, and never none.
 u32 workers_of(const codegen::EmitRequest& request) {
-  return request.workers == 0 ? 1 : request.workers;
+  return request.options.workers == 0 ? 1 : request.options.workers;
 }
 
 }  // namespace
@@ -141,8 +143,8 @@ base::Result<std::vector<u8>, codegen::EmitError> Llvm::emit(
   }
   switch (request.kind) {
     case codegen::OutputKind::Object: {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.profiler, "emit-object",
-                                               "backend");
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                               "emit-object", "backend");
       base::Result<std::vector<u8>, ObjectEmitError> object =
           emit_object(*emitted.module, request.target);
       if (object.is_err()) {
@@ -151,14 +153,14 @@ base::Result<std::vector<u8>, codegen::EmitError> Llvm::emit(
       return base::make_ok(std::move(object).unwrap());
     }
     case codegen::OutputKind::Text: {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.profiler, "emit-ir",
-                                               "backend");
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                               "emit-ir", "backend");
       const std::string ir = emit_ir(*emitted.module);
       return base::make_ok(std::vector<u8>(ir.begin(), ir.end()));
     }
     case codegen::OutputKind::Bitcode: {
-      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.profiler, "emit-bitcode",
-                                               "backend");
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                               "emit-bitcode", "backend");
       return base::make_ok(emit_bitcode(*emitted.module));
     }
     case codegen::OutputKind::Module: break;
@@ -169,8 +171,8 @@ base::Result<std::vector<u8>, codegen::EmitError> Llvm::emit(
 base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
 Llvm::emit_artifacts(codegen::EmitRequest request) {
   const u32 parts =
-      request.kind == codegen::OutputKind::Object && request.parts > 1
-          ? request.parts
+      request.kind == codegen::OutputKind::Object && request.options.parts > 1
+          ? request.options.parts
           : 1;
   if (parts <= 1) {
     base::Result<std::vector<u8>, codegen::EmitError> single =
@@ -194,8 +196,8 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   // backend runs the middle end per part, on the thread that writes it, and
   // imports what the other parts define. A request that asked for no
   // optimization has nothing to link and only the code generation is spread.
-  const bool optimize_parts = request.optimize;
-  request.optimize = false;
+  const bool optimize_parts = request.options.optimize;
+  request.options.optimize = false;
   EmittedModule emitted;
   base::Result<void, codegen::EmitError> built = emitted.build(request);
   if (built.is_err()) {

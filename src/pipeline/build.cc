@@ -354,14 +354,17 @@ struct Emission {
         .bag = &ctx.bag,
         .target = ctx.target,
         .emit_entry = !is_lib,
-        .freestanding = ctx.freestanding,
-        .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
-        .optimize = profile.optimize,
         .overlay = profile.overflow_checks ? &checks : nullptr,
         .kind = kind,
-        .profiler = ctx.profiler,
-        .parts = parts,
-        .workers = workers,
+        .options =
+            codegen::EmitOptions{
+                .freestanding = ctx.freestanding,
+                .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
+                .optimize = profile.optimize,
+                .parts = parts,
+                .workers = workers,
+                .profiler = ctx.profiler,
+            },
     };
   }
 

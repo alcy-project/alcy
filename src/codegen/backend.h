@@ -42,8 +42,41 @@ enum class EmitError : u8 {
   NoOptimizer,
 };
 
+// What an emission is asked to *do*, beyond the input it reads. These
+// are one value rather than fields of the request because only some
+// backends act on them - the direct wasm emitter has no middle end, no
+// runtime of its own, and no split - and a shared field that one backend
+// ignores is a field the next reader has to check.
+struct EmitOptions {
+  // Whether the entry is `_start` and the link skips the C runtime
+  // (ADR-0052); only meaningful with `emit_entry`. The LLVM backend's
+  // runtime carries the sequence, so this is what that emitter is asked
+  // for.
+  bool freestanding = false;
+  // Whether a panic walks the frame chain and names the frames it can
+  // (ADR-0070). Only the LLVM backend keeps frame pointers and emits the
+  // table the walk reads; the direct wasm backend writes the message and
+  // its site and no frames.
+  bool backtrace = false;
+  // Whether to run the middle end. A backend without one answers
+  // `NoOptimizer` rather than emitting unoptimized code under a release
+  // command.
+  bool optimize = false;
+  // How many objects code generation may be split into, for a backend
+  // that can write more than one. The count is a function of the
+  // program, never of the machine running the build: what a run writes
+  // must not depend on how many threads read it.
+  u32 parts = 1;
+  // How many threads the split may use. A backend that ignores `parts`
+  // ignores this too.
+  u32 workers = 1;
+  debug::Profiler* profiler = nullptr;
+};
+
 // One emission request. The storage is moved in: the emitter consumes the
-// IR, and the proof it carries is what lets the backends trust it.
+// IR, and the proof it carries is what lets the backends trust it. Every
+// field here is input, or a question `supports` already answered; what the
+// backend is asked to do rides in `options`.
 struct EmitRequest {
   ir::VerifiedStorage storage;
   // Source spans parallel to storage instructions, for a backend that
@@ -59,33 +92,13 @@ struct EmitRequest {
   // Whether the module owns the program entry: a wrapper around `main`
   // that a binary needs and a library does not.
   bool emit_entry = false;
-  // Whether the entry is `_start` and the link skips the C runtime
-  // (ADR-0052); only meaningful with `emit_entry`.
-  bool freestanding = false;
-  // Whether a panic walks the frame chain and names the frames it can
-  // (ADR-0070). Only the LLVM backend keeps frame pointers and emits the
-  // table the walk reads; the direct wasm backend writes the message and
-  // its site and no frames.
-  bool backtrace = false;
-  // Whether to run the middle end. A backend without one answers
-  // `NoOptimizer` rather than emitting unoptimized code under a release
-  // command.
-  bool optimize = false;
   // The build's arithmetic checks, parallel to the storage's
   // instructions; null when the build checks nothing (ADR-0068). A
   // backend reads an entry in place of the profile, which never reaches
   // it.
   const overlay::Overlay* overlay = nullptr;
   OutputKind kind = OutputKind::Object;
-  debug::Profiler* profiler = nullptr;
-  // How many objects code generation may be split into, for a backend that
-  // can write more than one. The count is a function of the program, never
-  // of the machine running the build: what a run writes must not depend on
-  // how many threads read it.
-  u32 parts = 1;
-  // How many threads the split may use. A backend that ignores `parts`
-  // ignores this too.
-  u32 workers = 1;
+  EmitOptions options;
 };
 
 // A backend implementation. `emit` owns the request: the storage moves

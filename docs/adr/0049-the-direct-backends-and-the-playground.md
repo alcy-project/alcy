@@ -42,8 +42,13 @@ it. The pieces:
   `host_triple()` move out of `codegen_llvm`, so `PipelineContext` no longer
   depends on an LLVM module to know what it builds for.
 - `codegen/backend.h`: a `Backend` enum, an `EmitRequest` carrying verified
-  storage, the string interner, the bag, `Target`, `emit_entry`, `optimize`,
-  and the profiler, and one entry point per output kind. Implementations are
+  storage, the string interner, the bag, `Target`, `emit_entry`, and the
+  overlay, with what an emission is asked to do in one `EmitOptions` beside
+  them (the freestanding entry, the backtrace, the middle end, the split,
+  the profiler), and one entry point per output kind. The split is
+  deliberate: a shared field one backend ignores is a field the next reader
+  has to check, and the direct wasm emitter has no middle end, no runtime of
+  its own, and no split. Implementations are
   selected by a `switch` in one dispatch file. Static dispatch with concepts,
   not virtuals: the project is `-fno-rtti` and `-fno-exceptions`, and a
   backend is chosen once per build, not per call.
