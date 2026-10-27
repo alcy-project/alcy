@@ -25,10 +25,9 @@
 #include "i18n/language.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/diag_code.h"
-#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/profile.h"
 #include "pipeline/std_select.h"
 #include "source/source.h"
 #include "tests/util/test_util.h"
@@ -75,9 +74,9 @@ TEST_CASE("A build writes an object where it was asked for one") {
   {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
-    base::Result<std::string, diag::Reported> built = build_single_file(
-        ctx, source, object_path, BuildProfile{}, LinkOptions{},
-        EmitMode::Object, pipeline::full_std_selection());
+    base::Result<std::string, diag::Reported> built =
+        build_single_file(ctx, source, object_path, BuildPlan{},
+                          EmitMode::Object, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   const std::string object = read_file(object_path);
@@ -96,8 +95,8 @@ TEST_CASE("A build writes the module as textual IR") {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built =
-        build_single_file(ctx, source, ir_path, BuildProfile{}, LinkOptions{},
-                          EmitMode::LlvmIr, pipeline::full_std_selection());
+        build_single_file(ctx, source, ir_path, BuildPlan{}, EmitMode::LlvmIr,
+                          pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   const std::string ir = read_file(ir_path);
@@ -121,8 +120,8 @@ TEST_CASE("A build writes the module as bitcode") {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built = build_single_file(
-        ctx, source, bitcode_path, BuildProfile{}, LinkOptions{},
-        EmitMode::LlvmBitcode, pipeline::full_std_selection());
+        ctx, source, bitcode_path, BuildPlan{}, EmitMode::LlvmBitcode,
+        pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(tests::is_bitcode_bytes(read_file(bitcode_path)));
@@ -136,9 +135,9 @@ TEST_CASE("The default extension follows the mode") {
   {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
-    base::Result<std::string, diag::Reported> built = build_single_file(
-        ctx, dir.join("main.al"), "", BuildProfile{}, LinkOptions{},
-        EmitMode::LlvmIr, pipeline::full_std_selection());
+    base::Result<std::string, diag::Reported> built =
+        build_single_file(ctx, dir.join("main.al"), "", BuildPlan{},
+                          EmitMode::LlvmIr, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.ll")));
@@ -146,8 +145,8 @@ TEST_CASE("The default extension follows the mode") {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
     base::Result<std::string, diag::Reported> built = build_single_file(
-        ctx, dir.join("main.al"), "", BuildProfile{}, LinkOptions{},
-        EmitMode::LlvmBitcode, pipeline::full_std_selection());
+        ctx, dir.join("main.al"), "", BuildPlan{}, EmitMode::LlvmBitcode,
+        pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.bc")));
@@ -157,9 +156,9 @@ TEST_CASE("The default extension follows the mode") {
   {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
-    base::Result<std::string, diag::Reported> built = build_single_file(
-        ctx, dir.join("main.al"), "", BuildProfile{}, LinkOptions{},
-        EmitMode::Object, pipeline::full_std_selection());
+    base::Result<std::string, diag::Reported> built =
+        build_single_file(ctx, dir.join("main.al"), "", BuildPlan{},
+                          EmitMode::Object, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("main.o")));
@@ -178,9 +177,9 @@ TEST_CASE("A source without an extension still gets an output name") {
   {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
-    base::Result<std::string, diag::Reported> built = build_single_file(
-        ctx, dir.join("noext"), "", BuildProfile{}, LinkOptions{},
-        EmitMode::Object, pipeline::full_std_selection());
+    base::Result<std::string, diag::Reported> built =
+        build_single_file(ctx, dir.join("noext"), "", BuildPlan{},
+                          EmitMode::Object, pipeline::full_std_selection());
     CHECK(built.is_ok());
   }
   CHECK(io::is_file(dir.join("noext.o")));
@@ -192,9 +191,9 @@ TEST_CASE("A source without an extension still gets an output name") {
   if (exe_suffix().empty() && !codegen::host_target().is_wasm()) {
     PipelineContext ctx{i18n::Language::EnUs};
     ctx.backend = LLVM_BACKEND;
-    base::Result<std::string, diag::Reported> refused = build_single_file(
-        ctx, dir.join("noext"), "", BuildProfile{}, LinkOptions{},
-        EmitMode::Executable, pipeline::full_std_selection());
+    base::Result<std::string, diag::Reported> refused =
+        build_single_file(ctx, dir.join("noext"), "", BuildPlan{},
+                          EmitMode::Executable, pipeline::full_std_selection());
     CHECK(refused.is_err());
     const diag::Diagnostic* const only = ctx.bag.at(0);
     CHECK(only != nullptr);
@@ -216,9 +215,9 @@ TEST_CASE("A dot in a directory name is not an extension") {
 
   PipelineContext ctx{i18n::Language::EnUs};
   ctx.backend = LLVM_BACKEND;
-  base::Result<std::string, diag::Reported> built = build_single_file(
-      ctx, dir.join("sub.dir/main.al"), "", BuildProfile{}, LinkOptions{},
-      EmitMode::Object, pipeline::full_std_selection());
+  base::Result<std::string, diag::Reported> built =
+      build_single_file(ctx, dir.join("sub.dir/main.al"), "", BuildPlan{},
+                        EmitMode::Object, pipeline::full_std_selection());
   CHECK(built.is_ok());
   CHECK(io::is_file(dir.join("sub.dir/main.o")));
 }
@@ -269,7 +268,7 @@ TEST_CASE("A package build honours the mode too") {
     }
     base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", BuildProfile{}, LinkOptions{}, one.mode);
+                      "", BuildPlan{}, one.mode);
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join(one.relative)));
     // Every mode lands in the directory the scaffold's own `.gitignore`
@@ -345,9 +344,9 @@ TEST_CASE("A package's module does not depend on how many jobs read it") {
       if (manifest.is_err()) {
         return;
       }
-      base::Result<std::string, diag::Reported> built = build_package(
-          ctx, root_path, std::move(manifest).unwrap(), "alcy.toml", "",
-          BuildProfile{}, LinkOptions{}, EmitMode::LlvmIr);
+      base::Result<std::string, diag::Reported> built =
+          build_package(ctx, root_path, std::move(manifest).unwrap(),
+                        "alcy.toml", "", BuildPlan{}, EmitMode::LlvmIr);
       CHECK(built.is_ok());
       if (built.is_err()) {
         // What the build said, because a refusal here is about the machine as
@@ -435,8 +434,7 @@ TEST_CASE("A package's diagnostics do not depend on how many jobs read it") {
       // The build is expected to fail: the package names three things that
       // are not there. What is compared is what it said about them.
       (void)build_package(ctx, root_path, std::move(manifest).unwrap(),
-                          "alcy.toml", "", BuildProfile{}, LinkOptions{},
-                          EmitMode::LlvmIr);
+                          "alcy.toml", "", BuildPlan{}, EmitMode::LlvmIr);
       std::string said;
       ctx.bag.for_each([&](const diag::Diagnostic& d) {
         said += diag::render(d);
@@ -501,7 +499,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
     }
     base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", BuildProfile{}, LinkOptions{}, EmitMode::Object);
+                      "", BuildPlan{}, EmitMode::Object);
     CHECK(built.is_err());
     CHECK(ctx.bag.has_errors());
     CHECK(!io::is_file(dir.join("proj/out/app.o")));
@@ -523,7 +521,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
     }
     base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", BuildProfile{}, LinkOptions{}, EmitMode::Executable);
+                      "", BuildPlan{}, EmitMode::Executable);
     CHECK(built.is_ok());
     CHECK(!ctx.bag.has_errors());
     CHECK(io::is_file(dir.join("proj/out/app" + std::string(exe_suffix()))));
@@ -571,7 +569,7 @@ TEST_CASE("A suite builds every member into its own out/") {
   }
   base::Result<std::string, diag::Reported> built =
       build_suite(ctx, suite_root, std::move(manifest).unwrap(), "alcy.toml",
-                  "", BuildProfile{}, LinkOptions{}, EmitMode::LlvmIr);
+                  "", BuildPlan{}, EmitMode::LlvmIr);
   CHECK(built.is_ok());
   CHECK(!ctx.bag.has_errors());
   // One out/ for the suite, one directory per member, and the member's

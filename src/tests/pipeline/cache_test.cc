@@ -14,10 +14,9 @@
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/emit_mode.h"
-#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/profile.h"
 #include "pipeline/target.h"
 
 namespace pipeline {
@@ -72,7 +71,7 @@ Built build_in(io::TempDir& dir, std::string_view rel, bool no_cache) {
   ManifestProbe found = std::move(probe).unwrap();
   base::Result<std::string, diag::Reported> res =
       build_package(ctx, found.root, found.manifest, found.manifest_name, "",
-                    BuildProfile{}, LinkOptions{}, EmitMode::IrBinary);
+                    BuildPlan{}, EmitMode::IrBinary);
   if (res.is_err() || ctx.bag.has_errors()) {
     return built;
   }

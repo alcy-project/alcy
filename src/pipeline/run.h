@@ -10,9 +10,8 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
-#include "pipeline/link_options.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/profile.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -41,8 +40,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     std::span<const std::string_view> args,
     AnnounceExec announce = nullptr,
     const void* announce_ctx = nullptr);

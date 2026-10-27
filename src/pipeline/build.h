@@ -15,10 +15,10 @@
 #include "fpag/io/temp_dir.h"
 #include "lowering/lowering.h"
 #include "path/path.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/profile.h"
 #include "pipeline/std_select.h"
 #include "source/source.h"
 
@@ -29,7 +29,7 @@ namespace pipeline {
 base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree,
-    bool optimize,
+    BuildPlan plan,
     bool needs_entry,
     std::string_view entry_name);
 
@@ -54,7 +54,7 @@ base::Result<void, diag::Reported> link_executable(
 base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    BuildProfile profile,
+    BuildPlan plan,
     const io::TempDir& scratch,
     bool is_lib,
     u32 parts);
@@ -63,8 +63,7 @@ base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
     std::string_view input,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode,
     const StdSelection& selection);
 
@@ -75,8 +74,7 @@ base::Result<std::string, diag::Reported> build_single_root(
     PipelineContext& ctx,
     source::FileId root,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode,
     const StdSelection& selection);
 
@@ -86,8 +84,7 @@ base::Result<std::string, diag::Reported> build_package(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode);
 
 // Builds every member of the suite at `root`, each through its own
@@ -100,8 +97,7 @@ base::Result<std::string, diag::Reported> build_suite(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode);
 
 }  // namespace pipeline

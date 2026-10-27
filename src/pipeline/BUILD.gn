@@ -80,6 +80,7 @@ source_set("pipeline") {
     "backend_emit.h",
     "build.cc",
     "build.h",
+    "build_plan.h",
     "cache.cc",
     "cache.h",
     "call_sites.cc",

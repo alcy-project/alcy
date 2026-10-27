@@ -19,11 +19,10 @@
 #include "ir/type.h"
 #include "pipeline/backend_emit.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/emit_mode.h"
-#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/profile.h"
 #include "pipeline/std_select.h"
 
 namespace codegen {
@@ -169,8 +168,8 @@ TEST_CASE("A wasm llvm-ir request reaches LLVM") {
   ctx.target = wasm;
   const std::string ir_path = dir.join("main.ll");
   const base::Result<std::string, diag::Reported> built =
-      build_single_file(ctx, dir.join("main.al"), ir_path, BuildProfile{},
-                        LinkOptions{}, EmitMode::LlvmIr, StdSelection{});
+      build_single_file(ctx, dir.join("main.al"), ir_path, BuildPlan{},
+                        EmitMode::LlvmIr, StdSelection{});
   CHECK(built.is_ok());
   if (built.is_err()) {
     return;
@@ -193,9 +192,9 @@ TEST_CASE("A wasm executable from an object backend is refused") {
   ctx.backend = codegen::Backend::Llvm;
   ctx.target =
       codegen::Target{"wasm32-unknown-emscripten", ir::PointerWidth::W32};
-  const base::Result<std::string, diag::Reported> built = build_single_file(
-      ctx, dir.join("main.al"), dir.join("main.wasm"), BuildProfile{},
-      LinkOptions{}, EmitMode::Executable, StdSelection{});
+  const base::Result<std::string, diag::Reported> built =
+      build_single_file(ctx, dir.join("main.al"), dir.join("main.wasm"),
+                        BuildPlan{}, EmitMode::Executable, StdSelection{});
   CHECK(built.is_err());
   CHECK(ctx.bag.has_errors());
   const diag::Diagnostic* const only = ctx.bag.at(0);

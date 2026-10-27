@@ -20,11 +20,10 @@
 #include "i18n/language.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/check.h"
 #include "pipeline/emit_mode.h"
-#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/profile.h"
 #include "pipeline/spawn.h"
 #include "source/source.h"
 
@@ -912,7 +911,7 @@ TEST_CASE("A generic item a summary cannot spell is named for what it is") {
     }
     const base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", BuildProfile{}, LinkOptions{}, EmitMode::IrBinary);
+                      "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join("dep/out/dep.summary")));
   }
@@ -992,7 +991,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
     }
     const base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", BuildProfile{}, LinkOptions{}, EmitMode::IrBinary);
+                      "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join("dep/out/dep.summary")));
   }
@@ -1016,7 +1015,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
     }
     const base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", BuildProfile{}, LinkOptions{}, EmitMode::Object);
+                      "", BuildPlan{}, EmitMode::Object);
     CHECK(built.is_ok());
     CHECK(io::is_file(dir.join("dep/out/dep.o")));
   }
@@ -1088,7 +1087,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
     }
     const base::Result<std::string, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                      "", BuildProfile{}, LinkOptions{}, EmitMode::Executable);
+                      "", BuildPlan{}, EmitMode::Executable);
     CHECK(built.is_ok());
     CHECK(!ctx.bag.has_errors());
     const std::string exe =

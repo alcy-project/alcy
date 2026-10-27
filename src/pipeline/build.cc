@@ -17,6 +17,7 @@
 #include "codegen/backend.h"
 #include "codegen/target.h"
 #include "config/build_config.h"
+#include "debug/fatal.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/stage.h"
@@ -39,6 +40,7 @@
 #include "overlay/overlay.h"
 #include "path/path.h"
 #include "pipeline/backend_emit.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/cache.h"
 #include "pipeline/call_sites.h"
 #include "pipeline/diag_code.h"
@@ -111,7 +113,7 @@ base::Result<void, diag::Reported> optimize_package(
 base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     PipelineContext& ctx,
     analyzer::ModuleTree tree,
-    bool optimize,
+    BuildPlan plan,
     bool needs_entry,
     std::string_view entry_name) {
   base::Result<lowering::LoweredPackage, diag::Reported> package =
@@ -120,7 +122,7 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  if (optimize_package(ctx, lowered, optimize).is_err() ||
+  if (optimize_package(ctx, lowered, plan.profile.optimize).is_err() ||
       ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -362,6 +364,16 @@ struct Emission {
         .workers = workers,
     };
   }
+
+  // The request, moved out. The tables above must outlive it, so the
+  // emission is consumed where it was built; the constructor is what
+  // makes it engaged.
+  codegen::EmitRequest take_request() {
+    if (!request.has_value()) {
+      UNREACHABLE();
+    }
+    return std::move(*request);
+  }
 };
 
 // The profiler's name for one output kind, so each emission path shows up
@@ -395,7 +407,7 @@ base::Result<void, diag::Reported> emit_package_output(
   Emission emission(ctx, package, profile, kind, is_lib, /*parts=*/1,
                     /*workers=*/1);
   base::Result<std::vector<u8>, codegen::EmitError> bytes =
-      emit_with_backend(ctx.backend, std::move(*emission.request));
+      emit_with_backend(ctx.backend, emission.take_request());
   if (bytes.is_err()) {
     return report_emit_failure(ctx, std::move(bytes).unwrap_err(), kind,
                                output_path);
@@ -413,7 +425,7 @@ u32 codegen_parts(const lowering::LoweredPackage& package) {
 base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,
-    BuildProfile profile,
+    BuildPlan plan,
     const io::TempDir& scratch,
     bool is_lib,
     u32 parts) {
@@ -423,10 +435,10 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     return base::make_err(diag::Reported{});
   }
   // The split emission carries the same tables as the whole one.
-  Emission emission(ctx, package, profile, codegen::OutputKind::Object, is_lib,
-                    parts, ctx.requested_jobs());
+  Emission emission(ctx, package, plan.profile, codegen::OutputKind::Object,
+                    is_lib, parts, ctx.requested_jobs());
   base::Result<std::vector<std::vector<u8>>, codegen::EmitError> emitted =
-      emit_artifacts_with_backend(ctx.backend, std::move(*emission.request));
+      emit_artifacts_with_backend(ctx.backend, emission.take_request());
   if (emitted.is_err()) {
     (void)report_emit_failure(ctx, std::move(emitted).unwrap_err(),
                               codegen::OutputKind::Object, "object");
@@ -656,8 +668,7 @@ base::Result<void, diag::Reported> link_executable(
 base::Result<std::string, diag::Reported> emit_output(
     PipelineContext& ctx,
     lowering::LoweredPackage& lowered,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode,
     const std::string& output_path,
     bool is_lib,
@@ -683,29 +694,31 @@ base::Result<std::string, diag::Reported> emit_output(
   base::Result<void, diag::Reported> written =
       [&]() -> base::Result<void, diag::Reported> {
     if (mode == EmitMode::Object) {
-      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
-                                 codegen::OutputKind::Object, "object");
+      return emit_package_output(ctx, lowered, plan.profile, output_path,
+                                 is_lib, codegen::OutputKind::Object, "object");
     }
     if (mode == EmitMode::LlvmIr) {
-      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
-                                 codegen::OutputKind::Text, "ir");
+      return emit_package_output(ctx, lowered, plan.profile, output_path,
+                                 is_lib, codegen::OutputKind::Text, "ir");
     }
     if (mode == EmitMode::LlvmBitcode) {
-      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
-                                 codegen::OutputKind::Bitcode, "bitcode");
+      return emit_package_output(ctx, lowered, plan.profile, output_path,
+                                 is_lib, codegen::OutputKind::Bitcode,
+                                 "bitcode");
     }
     if (mode == EmitMode::Ir) {
-      return emit_package_ir_text(ctx, lowered, profile, output_path);
+      return emit_package_ir_text(ctx, lowered, plan.profile, output_path);
     }
     if (mode == EmitMode::IrBinary) {
-      return emit_package_ir_binary(ctx, lowered, profile, output_path, is_lib);
+      return emit_package_ir_binary(ctx, lowered, plan.profile, output_path,
+                                    is_lib);
     }
     // Executable: a backend that writes objects hands them to the linker;
     // one whose output is a final module writes that module and stops.
     if (!backend_supports(ctx.backend, codegen::OutputKind::Object,
                           ctx.target)) {
-      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
-                                 codegen::OutputKind::Module, "module");
+      return emit_package_output(ctx, lowered, plan.profile, output_path,
+                                 is_lib, codegen::OutputKind::Module, "module");
     }
     if (ctx.target.is_wasm() && codegen::backend_available(ctx.backend) &&
         !backend_writes_final_module(ctx.backend, ctx.target)) {
@@ -722,7 +735,7 @@ base::Result<std::string, diag::Reported> emit_output(
     }
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     base::Result<std::vector<std::string>, diag::Reported> objects =
-        emit_package_objects(ctx, lowered, profile, scratch, is_lib,
+        emit_package_objects(ctx, lowered, plan, scratch, is_lib,
                              codegen_parts(lowered));
     if (objects.is_err()) {
       return base::make_err(diag::Reported{});
@@ -730,7 +743,7 @@ base::Result<std::string, diag::Reported> emit_output(
     std::vector<std::string> paths = std::move(objects).unwrap();
     // The dependencies a summary answered for bring their own objects.
     paths.insert(paths.end(), linked_objects.begin(), linked_objects.end());
-    return link_executable(ctx, link, paths, output_path);
+    return link_executable(ctx, plan.link, paths, output_path);
   }();
   if (written.is_err()) {
     return base::make_err(std::move(written).unwrap_err());
@@ -744,8 +757,7 @@ base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,
     std::string_view input,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode,
     const StdSelection& selection) {
   base::Result<source::FileId, source::SourceError> file = [&] {
@@ -777,16 +789,14 @@ base::Result<std::string, diag::Reported> build_single_file(
     }
     output_path = std::move(derived).unwrap();
   }
-  return build_single_root(ctx, root, output_path, profile, link, mode,
-                           selection);
+  return build_single_root(ctx, root, output_path, plan, mode, selection);
 }
 
 base::Result<std::string, diag::Reported> build_single_root(
     PipelineContext& ctx,
     source::FileId root,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode,
     const StdSelection& selection) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
@@ -794,16 +804,14 @@ base::Result<std::string, diag::Reported> build_single_root(
   if (tree.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, std::move(tree).unwrap(), profile.optimize,
-                   mode == EmitMode::Executable,
-                   ctx.sources.name(root).value_or(std::string_view{}));
+  base::Result<lowering::LoweredPackage, diag::Reported> package = compile_tree(
+      ctx, std::move(tree).unwrap(), plan, mode == EmitMode::Executable,
+      ctx.sources.name(root).value_or(std::string_view{}));
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return emit_output(ctx, lowered, profile, link, mode, std::string(output),
-                     false, {});
+  return emit_output(ctx, lowered, plan, mode, std::string(output), false, {});
 }
 
 base::Result<std::string, diag::Reported> build_package(
@@ -812,8 +820,7 @@ base::Result<std::string, diag::Reported> build_package(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode) {
   base::Result<std::vector<Artifact>, diag::Reported> targets =
       resolve_artifacts(ctx, root, manifest_file, manifest_name,
@@ -980,13 +987,13 @@ base::Result<std::string, diag::Reported> build_package(
         break;
       }
     }
-    if (optimize_package(ctx, lowered, profile.optimize).is_err() ||
+    if (optimize_package(ctx, lowered, plan.profile.optimize).is_err() ||
         ctx.bag.has_errors()) {
       failed = true;
       break;
     }
     base::Result<std::string, diag::Reported> written = emit_output(
-        ctx, lowered, profile, link, planned_target.mode, planned_target.path,
+        ctx, lowered, plan, planned_target.mode, planned_target.path,
         target.kind == ArtifactKind::Lib, target.linked_objects);
     if (written.is_err() || ctx.bag.has_errors()) {
       failed = true;
@@ -1012,8 +1019,7 @@ base::Result<std::string, diag::Reported> build_suite(
     source::FileId manifest_file,
     std::string_view manifest_name,
     std::string_view output,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     EmitMode mode) {
   const std::optional<std::string_view> bytes =
       ctx.sources.bytes(manifest_file);
@@ -1064,7 +1070,7 @@ base::Result<std::string, diag::Reported> build_suite(
     ManifestProbe member = std::move(probe).unwrap();
     base::Result<std::string, diag::Reported> built =
         build_package(ctx, member.root, member.manifest, member.manifest_name,
-                      {}, profile, link, mode);
+                      {}, plan, mode);
     if (built.is_err()) {
       return base::make_err(diag::Reported{});
     }

@@ -15,6 +15,7 @@
 #include "diag/bag.h"
 #include "fpag/base/result.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/profile.h"
@@ -69,6 +70,7 @@ ResultCode run_build(const CliConfig& config,
   }
   const pipeline::BuildProfile selected = std::move(profile).unwrap();
   resolve_backend_options(config, ctx, selected);
+  const pipeline::BuildPlan plan{.profile = selected, .link = link};
   // A suite directory builds every member; a package directory builds
   // itself (ADR-0057).
   const std::optional<std::string_view> manifest_bytes =
@@ -78,11 +80,11 @@ ResultCode run_build(const CliConfig& config,
       pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite;
   base::Result<std::string, diag::Reported> res =
       suite ? pipeline::build_suite(ctx, found.root, found.manifest,
-                                    found.manifest_name, config.output,
-                                    selected, link, config.emit)
+                                    found.manifest_name, config.output, plan,
+                                    config.emit)
             : pipeline::build_package(ctx, found.root, found.manifest,
-                                      found.manifest_name, config.output,
-                                      selected, link, config.emit);
+                                      found.manifest_name, config.output, plan,
+                                      config.emit);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;

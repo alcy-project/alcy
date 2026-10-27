@@ -23,6 +23,7 @@
 #include "ir/write_input.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
@@ -65,9 +66,9 @@ std::optional<base::Digest128> identity_of(io::TempDir& dir,
   }
   PipelineContext ctx{i18n::Language::EnUs};
   ctx.target = target;
-  const base::Result<std::string, diag::Reported> built = build_single_file(
-      ctx, dir.join("main.al"), "", BuildProfile{}, LinkOptions{},
-      EmitMode::IrBinary, full_std_selection());
+  const base::Result<std::string, diag::Reported> built =
+      build_single_file(ctx, dir.join("main.al"), "", BuildPlan{},
+                        EmitMode::IrBinary, full_std_selection());
   if (built.is_err()) {
     return std::nullopt;
   }
@@ -92,8 +93,8 @@ TEST_CASE("The ir mode writes the lowered package beside the source") {
   CHECK(dir.write_file("main.al", PROGRAM));
   PipelineContext ctx{i18n::Language::EnUs};
   const base::Result<std::string, diag::Reported> built =
-      build_single_file(ctx, dir.join("main.al"), "", BuildProfile{},
-                        LinkOptions{}, EmitMode::Ir, full_std_selection());
+      build_single_file(ctx, dir.join("main.al"), "", BuildPlan{}, EmitMode::Ir,
+                        full_std_selection());
   CHECK(built.is_ok());
   const std::optional<std::string> text = io::read_file(dir.join("main.ir"));
   CHECK(text.has_value());
@@ -110,9 +111,9 @@ TEST_CASE("The ir-bc mode writes the binary form beside the source") {
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_bc_emit_test_");
   CHECK(dir.write_file("main.al", PROGRAM));
   PipelineContext ctx{i18n::Language::EnUs};
-  const base::Result<std::string, diag::Reported> built = build_single_file(
-      ctx, dir.join("main.al"), "", BuildProfile{}, LinkOptions{},
-      EmitMode::IrBinary, full_std_selection());
+  const base::Result<std::string, diag::Reported> built =
+      build_single_file(ctx, dir.join("main.al"), "", BuildPlan{},
+                        EmitMode::IrBinary, full_std_selection());
   CHECK(built.is_ok());
   const std::optional<std::string> bytes = io::read_file(dir.join("main.irb"));
   CHECK(bytes.has_value());
@@ -173,8 +174,8 @@ TEST_CASE("Two 64-bit targets lower one source to the same IR") {
   host_ctx.target =
       codegen::Target{"x86_64-unknown-linux-gnu", ir::PointerWidth::W64};
   const base::Result<std::string, diag::Reported> host_built =
-      build_single_file(host_ctx, dir.join("main.al"), "", BuildProfile{},
-                        LinkOptions{}, EmitMode::Ir, full_std_selection());
+      build_single_file(host_ctx, dir.join("main.al"), "", BuildPlan{},
+                        EmitMode::Ir, full_std_selection());
   CHECK(host_built.is_ok());
   const std::optional<std::string> host_text =
       io::read_file(dir.join("main.ir"));
@@ -183,8 +184,8 @@ TEST_CASE("Two 64-bit targets lower one source to the same IR") {
   cross_ctx.target =
       codegen::Target{"aarch64-unknown-linux-gnu", ir::PointerWidth::W64};
   const base::Result<std::string, diag::Reported> cross_built =
-      build_single_file(cross_ctx, dir.join("main.al"), "", BuildProfile{},
-                        LinkOptions{}, EmitMode::Ir, full_std_selection());
+      build_single_file(cross_ctx, dir.join("main.al"), "", BuildPlan{},
+                        EmitMode::Ir, full_std_selection());
   CHECK(cross_built.is_ok());
   const std::optional<std::string> cross_text =
       io::read_file(dir.join("main.ir"));
@@ -249,18 +250,22 @@ TEST_CASE("The ir mode answers a release build the same artifact") {
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_release_test_");
   CHECK(dir.write_file("main.al", PROGRAM));
   PipelineContext ctx{i18n::Language::EnUs};
-  const base::Result<std::string, diag::Reported> built = build_single_file(
-      ctx, dir.join("main.al"), "", BuildProfile{.optimize = true},
-      LinkOptions{}, EmitMode::Ir, full_std_selection());
+  const base::Result<std::string, diag::Reported> built =
+      build_single_file(ctx, dir.join("main.al"), "",
+                        BuildPlan{.profile = BuildProfile{.optimize = true},
+                                  .link = LinkOptions{}},
+                        EmitMode::Ir, full_std_selection());
   // The unoptimized IR form is the cacheable artifact and does not
   // follow the profile, so a release build is answered, not refused
   // (ADR-0067, amended).
   CHECK(built.is_ok());
 
   PipelineContext binary_ctx{i18n::Language::EnUs};
-  const base::Result<std::string, diag::Reported> binary = build_single_file(
-      binary_ctx, dir.join("main.al"), "", BuildProfile{.optimize = true},
-      LinkOptions{}, EmitMode::IrBinary, full_std_selection());
+  const base::Result<std::string, diag::Reported> binary =
+      build_single_file(binary_ctx, dir.join("main.al"), "",
+                        BuildPlan{.profile = BuildProfile{.optimize = true},
+                                  .link = LinkOptions{}},
+                        EmitMode::IrBinary, full_std_selection());
   CHECK(binary.is_ok());
 }
 
@@ -317,7 +322,7 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
   }
   base::Result<std::string, diag::Reported> built =
       build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
-                    "", BuildProfile{}, LinkOptions{}, EmitMode::IrBinary);
+                    "", BuildPlan{}, EmitMode::IrBinary);
   CHECK(built.is_ok());
   const std::optional<std::string> bytes =
       io::read_file(dir.join("proj/out/app.irb"));
@@ -385,9 +390,9 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
   io::TempDir bin_dir = io::TempDir::create_unique("alcy_ir_summary_bin_test_");
   CHECK(bin_dir.write_file("main.al", PROGRAM));
   PipelineContext bin_ctx{i18n::Language::EnUs};
-  const base::Result<std::string, diag::Reported> bin_built = build_single_file(
-      bin_ctx, bin_dir.join("main.al"), "", BuildProfile{}, LinkOptions{},
-      EmitMode::IrBinary, full_std_selection());
+  const base::Result<std::string, diag::Reported> bin_built =
+      build_single_file(bin_ctx, bin_dir.join("main.al"), "", BuildPlan{},
+                        EmitMode::IrBinary, full_std_selection());
   CHECK(bin_built.is_ok());
   const std::optional<std::string> bin_bytes =
       io::read_file(bin_dir.join("main.irb"));

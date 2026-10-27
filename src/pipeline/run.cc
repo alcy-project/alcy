@@ -19,10 +19,9 @@
 #include "lowering/lowering.h"
 #include "path/path.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/diag_code.h"
-#include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/profile.h"
 #include "pipeline/spawn.h"
 #include "pipeline/target.h"
 #include "source/source.h"
@@ -37,15 +36,14 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
     PipelineContext& ctx,
     lowering::LoweredPackage& lowered,
     std::string_view target,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     std::span<const std::string> linked_objects,
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
   base::Result<std::vector<std::string>, diag::Reported> objects =
-      emit_package_objects(ctx, lowered, profile, scratch, false,
+      emit_package_objects(ctx, lowered, plan, scratch, false,
                            codegen_parts(lowered));
   if (objects.is_err()) {
     return base::make_err(diag::Reported{});
@@ -56,7 +54,7 @@ base::Result<RunOutcome, diag::Reported> link_and_run(
   // The dependencies a summary answered for bring their own objects,
   // as they do for a build.
   paths.insert(paths.end(), linked_objects.begin(), linked_objects.end());
-  if (link_executable(ctx, link, paths, exe_path).is_err()) {
+  if (link_executable(ctx, plan.link, paths, exe_path).is_err()) {
     return base::make_err(diag::Reported{});
   }
   std::vector<std::string> argv;
@@ -90,8 +88,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
-    BuildProfile profile,
-    LinkOptions link,
+    BuildPlan plan,
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
@@ -115,13 +112,13 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, bin.tree, profile.optimize, true, bin.name);
+      compile_tree(ctx, bin.tree, plan, true, bin.name);
   if (package.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, bin.name, profile, link, bin.linked_objects,
-                      args, announce, announce_ctx);
+  return link_and_run(ctx, lowered, bin.name, plan, bin.linked_objects, args,
+                      announce, announce_ctx);
 }
 
 }  // namespace pipeline

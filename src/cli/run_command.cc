@@ -23,6 +23,7 @@
 #include "fpag/term/color_style.h"
 #include "fpag/term/console.h"
 #include "i18n/messages.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
@@ -117,10 +118,11 @@ i32 run_run(const CliConfig& config,
   FdSink err_sink{io::STDERR_FD};
   const Logger err{&FdSink::write, &err_sink};
   const Announcement announcement{announce_options, err};
+  const pipeline::BuildPlan plan{.profile = selected, .link = link};
   base::Result<pipeline::RunOutcome, diag::Reported> result =
       pipeline::run_package(ctx, found.root, found.manifest,
-                            found.manifest_name, selected, link, args,
-                            announce_exec, &announcement);
+                            found.manifest_name, plan, args, announce_exec,
+                            &announcement);
   envelope.trace = trace.take_events();
   if (result.is_err()) {
     return failed;

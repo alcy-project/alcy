@@ -20,6 +20,7 @@
 #include "fpag/io/io_util.h"
 #include "i18n/messages.h"
 #include "pipeline/build.h"
+#include "pipeline/build_plan.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
@@ -121,6 +122,7 @@ ResultCode run_compile(const CliConfig& config,
   }
   const pipeline::BuildProfile profile = std::move(resolved).unwrap();
   resolve_backend_options(config, ctx, profile);
+  const pipeline::BuildPlan plan{.profile = profile, .link = link};
   // Validation guarantees one of these: an input, or the pipe with a
   // named output.
   if (config.stdin_source) {
@@ -137,7 +139,7 @@ ResultCode run_compile(const CliConfig& config,
     const source::FileId root =
         ctx.sources.add_virtual(STDIN_NAME, std::move(text).unwrap());
     base::Result<std::string, diag::Reported> res = pipeline::build_single_root(
-        ctx, root, config.output, profile, link, config.emit, selection);
+        ctx, root, config.output, plan, config.emit, selection);
     envelope.trace = trace.take_events();
     if (res.is_err() || ctx.bag.has_errors()) {
       return failed;
@@ -149,7 +151,7 @@ ResultCode run_compile(const CliConfig& config,
   }
 
   base::Result<std::string, diag::Reported> res = pipeline::build_single_file(
-      ctx, config.input, config.output, profile, link, config.emit, selection);
+      ctx, config.input, config.output, plan, config.emit, selection);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;
