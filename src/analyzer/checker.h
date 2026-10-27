@@ -772,11 +772,6 @@ class Checker {
   void validate_cycles(const ir::Storage& storage);
   const CheckedModule::StaticInfo* lookup_static(u32 module,
                                                  std::string_view name);
-  // The registered-only search: `lookup_static` registers a declaration
-  // the signature sweep has not reached yet, while a const method can
-  // only read what is already there.
-  const CheckedModule::StaticInfo* find_static(u32 module,
-                                               std::string_view name) const;
   // Registers the signature of a non-generic function declared in
   // `module` under `name`, when a use reaches it before the signature
   // sweep has. True when a declaration exists; an already-registered

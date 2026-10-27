@@ -5292,9 +5292,11 @@ void Checker::register_static(u32 module, ast::ItemIdx item) {
        .is_pub = node.is_pub});
 }
 
-const CheckedModule::StaticInfo* Checker::find_static(
+const CheckedModule::StaticInfo* find_static(
+    std::span<const CheckedModule> modules,
+    const ModuleTree& tree,
     u32 module,
-    std::string_view name) const {
+    std::string_view name) {
   for (const CheckedModule::StaticInfo& info : modules[module].statics) {
     if (info.name == name) {
       return &info;
@@ -5316,11 +5318,13 @@ const CheckedModule::StaticInfo* Checker::find_static(
 
 const CheckedModule::StaticInfo* Checker::lookup_static(u32 module,
                                                         std::string_view name) {
-  if (const CheckedModule::StaticInfo* info = find_static(module, name)) {
+  if (const CheckedModule::StaticInfo* info =
+          analyzer::find_static(modules, tree, module, name)) {
     return info;
   }
   ensure_static_named(module, name);
-  if (const CheckedModule::StaticInfo* info = find_static(module, name)) {
+  if (const CheckedModule::StaticInfo* info =
+          analyzer::find_static(modules, tree, module, name)) {
     return info;
   }
   for (const Import& import : tree.modules[module]->imports) {
@@ -5329,7 +5333,7 @@ const CheckedModule::StaticInfo* Checker::lookup_static(u32 module,
     }
     ensure_static_named(import.target_module, import.member);
   }
-  return find_static(module, name);
+  return analyzer::find_static(modules, tree, module, name);
 }
 
 ast::ItemIdx Checker::lookup_generic_fn(u32 module, std::string_view name) {

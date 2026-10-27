@@ -269,6 +269,10 @@ class Lowerer {
   const analyzer::CheckedModule::StaticInfo* lookup_static(
       u32 mod,
       std::string_view name) const;
+  // Whether the function table has room for one more: a package past the
+  // budget is a diagnostic the reader can act on rather than an internal
+  // failure, and both reservation paths share the one number.
+  bool fn_budget_available();
   ir::TypeIdx expr_type(ast::ExprIdx expr);
   const analyzer::CheckedModule::CallTarget* call_target(
       ast::ExprIdx callee) const;

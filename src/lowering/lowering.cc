@@ -519,22 +519,7 @@ const Local* Lowerer::lookup_local(std::string_view name) const {
 const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(
     u32 mod,
     std::string_view name) const {
-  for (const auto& info : pkg.modules[mod].statics) {
-    if (info.name == name) {
-      return &info;
-    }
-  }
-  for (const analyzer::Import& import : pkg.tree.modules[mod]->imports) {
-    if (import.ns != analyzer::Namespace::Value || import.name != name) {
-      continue;
-    }
-    for (const auto& info : pkg.modules[import.target_module].statics) {
-      if (info.name == import.member) {
-        return &info;
-      }
-    }
-  }
-  return nullptr;
+  return analyzer::find_static(pkg.modules, pkg.tree, mod, name);
 }
 
 ir::TypeIdx Lowerer::expr_type(ast::ExprIdx expr) {
@@ -705,6 +690,23 @@ bool Lowerer::try_run_comp_ir(u32 def_module,
   return true;
 }
 
+// The lowering's function budget. A package that needs more is refused
+// with a diagnostic; the number is one so the two reservation paths
+// cannot disagree about the limit.
+constexpr usize MAX_FN_ENTRIES = 8192;
+
+bool Lowerer::fn_budget_available() {
+  if (fns.size() < MAX_FN_ENTRIES) {
+    return true;
+  }
+  const u32 index = bag.emit<i18n::Key::LowerFunctionBudgetExhausted>(
+      diag::Severity::Error, diag::Stage::Lowering,
+      DiagCode::FunctionBudgetExhausted, cur_span_);
+  (void)index;
+  failed = true;
+  return false;
+}
+
 // Enqueues lowering work on first encounter, so a recursive call sees
 // the reserved index and the body may reference itself.
 ir::FunctionIdx Lowerer::fn_index(u32 mod,
@@ -722,13 +724,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   if (found != fn_by_key_.end()) {
     return ir::FunctionIdx(found->second);
   }
-  static constexpr usize MAX_FN_ENTRIES = 8192;
-  if (fns.size() >= MAX_FN_ENTRIES) {
-    const u32 index = bag.emit<i18n::Key::LowerFunctionBudgetExhausted>(
-        diag::Severity::Error, diag::Stage::Lowering,
-        DiagCode::FunctionBudgetExhausted, cur_span_);
-    (void)index;
-    failed = true;
+  if (!fn_budget_available()) {
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
@@ -803,13 +799,7 @@ ir::FunctionIdx Lowerer::closure_fn_index(
       }
     }
   }
-  static constexpr usize MAX_FN_ENTRIES = 8192;
-  if (fns.size() >= MAX_FN_ENTRIES) {
-    const u32 index = bag.emit<i18n::Key::LowerFunctionBudgetExhausted>(
-        diag::Severity::Error, diag::Stage::Lowering,
-        DiagCode::FunctionBudgetExhausted, cur_span_);
-    (void)index;
-    failed = true;
+  if (!fn_budget_available()) {
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));

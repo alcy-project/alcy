@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "comp/comp_value.h"
@@ -178,22 +177,7 @@ void CompEvaluator::clear_failure() {
 const CheckedModule::StaticInfo* CompEvaluator::lookup_static_in(
     u32 mod,
     std::string_view name) const {
-  for (const auto& info : inputs_.modules[mod].statics) {
-    if (info.name == name) {
-      return &info;
-    }
-  }
-  for (const Import& import : inputs_.tree.modules[mod]->imports) {
-    if (import.ns != Namespace::Value || import.name != name) {
-      continue;
-    }
-    for (const auto& info : inputs_.modules[import.target_module].statics) {
-      if (info.name == import.member) {
-        return &info;
-      }
-    }
-  }
-  return nullptr;
+  return find_static(inputs_.modules, inputs_.tree, mod, name);
 }
 
 const CheckedModule::VariantUse* CompEvaluator::variant_use_in(

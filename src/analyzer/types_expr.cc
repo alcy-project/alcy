@@ -512,7 +512,7 @@ bool Checker::expr_comp_known(u32 module,
       // can read, and refusing it here is what keeps the evaluator's own
       // `literal is not comp-evaluable` off a user's path.
       const CheckedModule::StaticInfo* info =
-          find_static(module, segments[0].name);
+          analyzer::find_static(modules, tree, module, segments[0].name);
       return info != nullptr && type_comp_known(info->type);
     }
     case ast::ExprKind::Unary:
@@ -868,7 +868,8 @@ bool Checker::is_const_item(u32 module, ast::PathIdx path) const {
   if (segments.size() != 1) {
     return false;
   }
-  const CheckedModule::StaticInfo* info = find_static(module, segments[0].name);
+  const CheckedModule::StaticInfo* info =
+      analyzer::find_static(modules, tree, module, segments[0].name);
   return info != nullptr && info->is_const && info->init.is_valid();
 }
 
