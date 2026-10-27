@@ -34,6 +34,8 @@ class Server {
   void did_change(const text::JsonValue& params);
   void did_close(const text::JsonValue& params);
   void formatting(const text::JsonValue& id, const text::JsonValue& params);
+  void document_symbol(const text::JsonValue& id,
+                       const text::JsonValue& params);
   void hover(const text::JsonValue& id, const text::JsonValue& params);
   void struct_layout(const text::JsonValue& id, const text::JsonValue& params);
   // The open document a request names, with its position read out.

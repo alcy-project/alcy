@@ -53,6 +53,7 @@ executable("tests") {
     "lsp/frame_test.cc",
     "lsp/layout_test.cc",
     "lsp/server_test.cc",
+    "lsp/symbols_test.cc",
     "opt/opt_test.cc",
     "overlay/overlay_test.cc",
     "parser/desugar_test.cc",

@@ -10,20 +10,10 @@
 #include "fmt/formatter.h"
 #include "fpag/base/numeric.h"
 #include "lsp/document.h"
+#include "lsp/protocol.h"
 #include "text/json.h"
 
 namespace lsp {
-
-namespace {
-
-text::JsonValue position_json(Position position) {
-  text::JsonValue out = text::JsonValue::make_object();
-  out.set("line", text::JsonValue::make_number(position.line));
-  out.set("character", text::JsonValue::make_number(position.character));
-  return out;
-}
-
-}  // namespace
 
 text::JsonValue document_formatting(const Document& document) {
   text::JsonValue edits = text::JsonValue::make_array();

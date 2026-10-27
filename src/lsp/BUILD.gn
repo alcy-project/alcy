@@ -19,8 +19,12 @@ source_set("lsp") {
     "layout.h",
     "lsp.cc",
     "lsp.h",
+    "protocol.cc",
+    "protocol.h",
     "server.cc",
     "server.h",
+    "symbols.cc",
+    "symbols.h",
     "transport.cc",
     "transport.h",
   ]

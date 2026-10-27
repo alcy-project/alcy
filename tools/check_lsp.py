@@ -8,14 +8,15 @@
 The language server is a process an editor talks to over a pipe, so the
 only honest check runs the built binary through a session: the framing,
 the initialize handshake, the diagnostics a didOpen publishes, the edit
-a formatting request returns, and the memory layout an hover carries.
-The script drives one session, parses the framed responses, and asserts
-what each request answered.
+a formatting request returns, the outline a documentSymbol request
+returns, and the memory layout an hover carries. The script drives one
+session, parses the framed responses, and asserts what each request
+answered.
 
 The session opens an unformatted but valid struct and a broken buffer,
 so one run covers the empty-diagnostics case, the reported case, the
-formatter's edit, and the struct layout both the alcy/structLayout
-request and hover return.
+formatter's edit, the outline, and the struct layout both the
+alcy/structLayout request and hover return.
 """
 
 import argparse
@@ -140,7 +141,13 @@ def main() -> int:
                 "position": {"line": 0, "character": 9},
             },
         },
-        {"jsonrpc": "2.0", "id": 5, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "textDocument/documentSymbol",
+            "params": {"textDocument": {"uri": MAIN_URI}},
+        },
+        {"jsonrpc": "2.0", "id": 6, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -173,6 +180,8 @@ def main() -> int:
     capabilities = initialize.get("capabilities", {})
     if capabilities.get("documentFormattingProvider") is not True:
         return fail("initialize did not advertise documentFormattingProvider")
+    if capabilities.get("documentSymbolProvider") is not True:
+        return fail("initialize did not advertise documentSymbolProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -213,7 +222,18 @@ def main() -> int:
     ):
         return fail(f"hover did not carry the layout: {hover!r}")
 
-    if by_id.get(5, {}).get("result", "missing") is not None:
+    symbols = by_id.get(5, {}).get("result")
+    point_symbol = None
+    if isinstance(symbols, list):
+        point_symbol = next((s for s in symbols if s.get("name") == "Point"), None)
+    if point_symbol is None or point_symbol.get("kind") != 23:
+        return fail(f"documentSymbol missed the struct: {symbols!r}")
+    if not any(
+        child.get("name") == "x" for child in (point_symbol.get("children") or [])
+    ):
+        return fail(f"documentSymbol missed the field: {point_symbol!r}")
+
+    if by_id.get(6, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

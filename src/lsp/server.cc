@@ -15,6 +15,7 @@
 #include "lsp/document.h"
 #include "lsp/formatting.h"
 #include "lsp/layout.h"
+#include "lsp/symbols.h"
 #include "lsp/transport.h"
 #include "text/json.h"
 
@@ -139,6 +140,15 @@ void Server::handle_request(const text::JsonValue& message) {
     formatting(*id, *params);
     return;
   }
+  if (method == "textDocument/documentSymbol") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "documentSymbol needs params");
+      return;
+    }
+    document_symbol(*id, *params);
+    return;
+  }
   if (method == "textDocument/hover" || method == "alcy/structLayout") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -201,6 +211,7 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("positionEncoding", make_string("utf-16"));
   capabilities.set("documentFormattingProvider",
                    text::JsonValue::make_bool(true));
+  capabilities.set("documentSymbolProvider", text::JsonValue::make_bool(true));
   capabilities.set("hoverProvider", text::JsonValue::make_bool(true));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
@@ -233,6 +244,22 @@ const Document* Server::open_document_at(const text::JsonValue& params,
   }
   *position = read_position(*raw_position);
   return documents_.find(string_field(*text_document, "uri"));
+}
+
+void Server::document_symbol(const text::JsonValue& id,
+                             const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  if (text_document == nullptr || !text_document->is_object()) {
+    send_error(id, K_INVALID_REQUEST, "documentSymbol needs a text document");
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, document_symbols(*document));
 }
 
 void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
