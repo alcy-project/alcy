@@ -7,6 +7,8 @@
 # target depends on it and the cli links it instead.
 source_set("lsp") {
   sources = [
+    "analysis.cc",
+    "analysis.h",
     "diagnostics.cc",
     "diagnostics.h",
     "document.cc",
@@ -17,6 +19,8 @@ source_set("lsp") {
     "formatting.h",
     "frame.cc",
     "frame.h",
+    "hover.cc",
+    "hover.h",
     "layout.cc",
     "layout.h",
     "lsp.cc",
@@ -29,6 +33,8 @@ source_set("lsp") {
     "symbols.h",
     "transport.cc",
     "transport.h",
+    "typing.cc",
+    "typing.h",
   ]
 
   deps = [

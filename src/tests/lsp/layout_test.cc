@@ -99,4 +99,38 @@ TEST_CASE("The layout JSON carries every field") {
   }
 }
 
+TEST_CASE("An enum layout gives the discriminant and the payload area") {
+  const Document document(
+      "file:///shape.al", "alcy", 1,
+      "enum Shape {\n  Dot,\n  Line(i32),\n  Box(i32, i64),\n}\n");
+  const std::optional<EnumLayout> layout =
+      enum_layout_at(document, Position{0, 6});
+  CHECK(layout.has_value());
+  if (!layout.has_value()) {
+    return;
+  }
+  CHECK(layout->name == "Shape");
+  CHECK(layout->size == 24);
+  CHECK(layout->align == 8);
+  CHECK(layout->discriminant_size == 4);
+  CHECK(layout->payload_offset == 8);
+  CHECK(layout->payload_size == 16);
+  CHECK(layout->payload_align == 8);
+  CHECK(layout->variants.size() == 3);
+  if (layout->variants.size() != 3) {
+    return;
+  }
+  CHECK(layout->variants[0].name == "Dot");
+  CHECK(layout->variants[0].fields.empty());
+  CHECK(layout->variants[1].name == "Line");
+  CHECK(layout->variants[1].fields.size() == 1);
+  CHECK(layout->variants[2].name == "Box");
+  CHECK(layout->variants[2].fields.size() == 2);
+  if (layout->variants[2].fields.size() == 2) {
+    CHECK(layout->variants[2].fields[0].type == "i32");
+    CHECK(layout->variants[2].fields[1].type == "i64");
+    CHECK(layout->variants[2].fields[1].offset == 8);
+  }
+}
+
 }  // namespace lsp

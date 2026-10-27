@@ -12,28 +12,37 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   changes in protocol order, and maps LSP positions to byte offsets.
 - `folding.{h,cc}` folds every multi-line brace pair and every run of
   comments on adjacent lines, from the lossless CST.
+- `analysis.{h,cc}` runs the compiler frontend over one buffer and
+  returns the checked package, the one entry every semantic feature
+  uses.
 - `diagnostics.{h,cc}` runs `linter::lint_source` over one buffer and
   renders the bag as LSP diagnostics, so a compiler error and a lint
   finding arrive from the same pass.
 - `formatting.{h,cc}` returns the `alcy_fmt` edit that canonicalizes a
   buffer, or none when the buffer already has that layout.
-- `layout.{h,cc}` reads a struct's size, alignment, and field offsets
-  from the checked package (`ir::type_layout`), and renders them for
-  hover markdown and for the `alcy/structLayout` request.
+- `hover.{h,cc}` reads the checked package once and renders the
+  declaration under the cursor: a struct or enum layout, a field or
+  variant's place in it, and the type a function, const, or static was
+  decided to have.
+- `layout.{h,cc}` reads a struct's or enum's size, alignment, and
+  field or variant offsets from the checked package (`ir::type_layout`),
+  and renders them for hover markdown and for the `alcy/structLayout`
+  request.
 - `protocol.{h,cc}` holds the JSON a position and a range are spelled
   as, so diagnostics, formatting, and the outline cannot disagree.
 - `symbols.{h,cc}` builds the outline from the compiler's parse: the
   AST's items, with struct fields, enum variants, and impl or spec
   members as children.
+- `typing.{h,cc}` renders a decided type the way source spells it.
 - `server.{h,cc}` routes the methods and owns the session lifecycle;
   `lsp.{h,cc}` is the entry point the cli calls.
 
 The unit suite drives framing, position mapping, diagnostics, the
-layout engine, the outline, and folding directly. `tools/check_lsp.py`
-runs a session against the built binary and asserts the handshake, a
-published diagnostic, a formatting edit, the outline, both kinds of
-fold, and the layout both hover and `alcy/structLayout` return, which
-is the gate CI asks.
+layout engine, hover, the outline, and folding directly.
+`tools/check_lsp.py` runs a session against the built binary and
+asserts the handshake, a published diagnostic, a formatting edit, the
+outline, both kinds of fold, and the layout both hover and
+`alcy/structLayout` return, which is the gate CI asks.
 
 ## Notes
 

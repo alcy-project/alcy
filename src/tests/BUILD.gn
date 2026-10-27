@@ -52,6 +52,7 @@ executable("tests") {
     "lsp/document_test.cc",
     "lsp/folding_test.cc",
     "lsp/frame_test.cc",
+    "lsp/hover_test.cc",
     "lsp/layout_test.cc",
     "lsp/server_test.cc",
     "lsp/symbols_test.cc",

@@ -15,6 +15,7 @@
 #include "lsp/document.h"
 #include "lsp/folding.h"
 #include "lsp/formatting.h"
+#include "lsp/hover.h"
 #include "lsp/layout.h"
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
@@ -296,15 +297,15 @@ void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
     send_result(id, text::JsonValue{});
     return;
   }
-  const std::optional<StructLayout> layout =
-      struct_layout_at(*document, position);
-  if (!layout.has_value()) {
+  const std::optional<std::string> markdown =
+      hover_markdown(*document, position);
+  if (!markdown.has_value()) {
     send_result(id, text::JsonValue{});
     return;
   }
   text::JsonValue contents = text::JsonValue::make_object();
   contents.set("kind", make_string("markdown"));
-  contents.set("value", make_string(struct_layout_markdown(*layout)));
+  contents.set("value", make_string(*markdown));
   text::JsonValue result = text::JsonValue::make_object();
   result.set("contents", std::move(contents));
   send_result(id, std::move(result));
