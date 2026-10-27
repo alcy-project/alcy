@@ -15,13 +15,17 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   finding arrive from the same pass.
 - `formatting.{h,cc}` returns the `alcy_fmt` edit that canonicalizes a
   buffer, or none when the buffer already has that layout.
+- `layout.{h,cc}` reads a struct's size, alignment, and field offsets
+  from the checked package (`ir::type_layout`), and renders them for
+  hover markdown and for the `alcy/structLayout` request.
 - `server.{h,cc}` routes the methods and owns the session lifecycle;
   `lsp.{h,cc}` is the entry point the cli calls.
 
-The unit suite drives framing, position mapping, and diagnostics
-directly. `tools/check_lsp.py` runs a session against the built binary
-and asserts the handshake, a published diagnostic, and a formatting
-edit, which is the gate CI asks.
+The unit suite drives framing, position mapping, diagnostics, and the
+layout engine directly. `tools/check_lsp.py` runs a session against the
+built binary and asserts the handshake, a published diagnostic, a
+formatting edit, and the layout both hover and `alcy/structLayout`
+return, which is the gate CI asks.
 
 ## Notes
 

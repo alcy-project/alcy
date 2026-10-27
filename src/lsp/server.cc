@@ -3,6 +3,7 @@
 
 #include "lsp/server.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -13,6 +14,7 @@
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/formatting.h"
+#include "lsp/layout.h"
 #include "lsp/transport.h"
 #include "text/json.h"
 
@@ -137,6 +139,19 @@ void Server::handle_request(const text::JsonValue& message) {
     formatting(*id, *params);
     return;
   }
+  if (method == "textDocument/hover" || method == "alcy/structLayout") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "a layout query needs params");
+      return;
+    }
+    if (method == "textDocument/hover") {
+      hover(*id, *params);
+    } else {
+      struct_layout(*id, *params);
+    }
+    return;
+  }
   send_error(*id, K_METHOD_NOT_FOUND, "method not found");
 }
 
@@ -186,6 +201,10 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("positionEncoding", make_string("utf-16"));
   capabilities.set("documentFormattingProvider",
                    text::JsonValue::make_bool(true));
+  capabilities.set("hoverProvider", text::JsonValue::make_bool(true));
+  text::JsonValue experimental = text::JsonValue::make_object();
+  experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
+  capabilities.set("experimental", std::move(experimental));
 
   text::JsonValue server_info = text::JsonValue::make_object();
   server_info.set("name", make_string("alcy-lsp"));
@@ -202,6 +221,56 @@ void Server::initialize(const text::JsonValue& id) {
 void Server::shutdown(const text::JsonValue& id) {
   shutdown_ = true;
   send_result(id, text::JsonValue{});
+}
+
+const Document* Server::open_document_at(const text::JsonValue& params,
+                                         Position* position) const {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  const text::JsonValue* raw_position = field(params, "position");
+  if (text_document == nullptr || !text_document->is_object() ||
+      raw_position == nullptr || !raw_position->is_object()) {
+    return nullptr;
+  }
+  *position = read_position(*raw_position);
+  return documents_.find(string_field(*text_document, "uri"));
+}
+
+void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  const std::optional<StructLayout> layout =
+      struct_layout_at(*document, position);
+  if (!layout.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  text::JsonValue contents = text::JsonValue::make_object();
+  contents.set("kind", make_string("markdown"));
+  contents.set("value", make_string(struct_layout_markdown(*layout)));
+  text::JsonValue result = text::JsonValue::make_object();
+  result.set("contents", std::move(contents));
+  send_result(id, std::move(result));
+}
+
+void Server::struct_layout(const text::JsonValue& id,
+                           const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  const std::optional<StructLayout> layout =
+      struct_layout_at(*document, position);
+  if (!layout.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id, struct_layout_json(*layout));
 }
 
 void Server::did_open(const text::JsonValue& params) {

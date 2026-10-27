@@ -34,6 +34,11 @@ class Server {
   void did_change(const text::JsonValue& params);
   void did_close(const text::JsonValue& params);
   void formatting(const text::JsonValue& id, const text::JsonValue& params);
+  void hover(const text::JsonValue& id, const text::JsonValue& params);
+  void struct_layout(const text::JsonValue& id, const text::JsonValue& params);
+  // The open document a request names, with its position read out.
+  const Document* open_document_at(const text::JsonValue& params,
+                                   Position* position) const;
   void publish_diagnostics(const Document& document);
   void publish_empty_diagnostics(std::string_view uri);
   void send_result(const text::JsonValue& id, text::JsonValue result);

@@ -6,8 +6,8 @@
 
 ## Context
 
-Editors want diagnostics, formatting, and the facts the toolchain
-already computes as a buffer is typed. The frontend, the linter, and
+Editors want diagnostics, formatting, the memory layout of a type, and
+the facts the toolchain already computes as a buffer is typed. The frontend, the linter, and
 the formatter are separate modules; a language server that re-read the
 source for itself would answer from a second parser, which is the
 failure mode every editor tool that grew its own has had. The server
@@ -38,6 +38,12 @@ protocol frames and nothing else.
   `alcy_fmt::format`'s canonical layout, and no edit when the buffer
   already has it. The open buffer is the source of truth: the server
   requests incremental changes and never reads the filesystem.
+- A struct's memory layout is `ir::type_layout` and `ir::field_offset`
+  over the checked package, not a second layout model. Hover renders it
+  as markdown when the cursor is on a struct declaration name, and the
+  `alcy/structLayout` request returns the same numbers as JSON for a
+  client or another tool. A generic declaration has no concrete offsets,
+  so the answer says so instead of guessing.
 - The server is single-threaded over one client. `initialize`,
   `initialized`, `shutdown`, and `exit` follow the lifecycle the
   protocol defines; a request before initialize or after shutdown is
@@ -53,7 +59,7 @@ grew the JSON reader its architecture entry already names. The session
 holds only the open documents, so a restart costs one re-read of the
 buffer.
 
-Out of scope for this record: hover, completion, document and workspace
-symbols, definition, incremental or background analysis, a workspace
-index over unopened files, position encodings other than UTF-16, and
-multi-root workspaces.
+Out of scope for this record: hover over expressions, completion,
+document and workspace symbols, definition, incremental or background
+analysis, a workspace index over unopened files, position encodings
+other than UTF-16, and multi-root workspaces.

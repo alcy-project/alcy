@@ -126,9 +126,9 @@ what implements it lives in `src/`.
   over the frontend: no compiler target depends on it, the cli does, and
   its rules, configuration, and entry points are documented in
   `src/linter/README.md` (see ADR-0082). `src/lsp/` is the language
-  server, `alcy lsp`: it publishes the linter's diagnostics and the
-  formatter's edit over JSON-RPC, and re-implements none of the
-  analysis behind them (see ADR-0083). `src/fuzz/` holds the fuzz
+  server, `alcy lsp`: it publishes the linter's diagnostics, the
+  formatter's edit, and the checked struct layouts over JSON-RPC, and
+  re-implements none of the analysis behind them (see ADR-0083). `src/fuzz/` holds the fuzz
   targets, which need libFuzzer and are therefore outside `all`.
   The toolchain's own documentation is in `src/docs/`.
 - `lib/` - the toolchain standard library as source suites

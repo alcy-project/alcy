@@ -7,13 +7,15 @@
 
 The language server is a process an editor talks to over a pipe, so the
 only honest check runs the built binary through a session: the framing,
-the initialize handshake, the diagnostics a didOpen publishes, and the
-edit a formatting request returns. The script drives one session, parses
-the framed responses, and asserts what each request answered.
+the initialize handshake, the diagnostics a didOpen publishes, the edit
+a formatting request returns, and the memory layout an hover carries.
+The script drives one session, parses the framed responses, and asserts
+what each request answered.
 
-The session opens an unformatted but valid program and a broken one, so
-one run covers the empty-diagnostics case and the reported case, and
-asks the formatter for the edit that canonicalizes the first.
+The session opens an unformatted but valid struct and a broken buffer,
+so one run covers the empty-diagnostics case, the reported case, the
+formatter's edit, and the struct layout both the alcy/structLayout
+request and hover return.
 """
 
 import argparse
@@ -120,7 +122,25 @@ def main() -> int:
                 "options": {"tabSize": 2, "insertSpaces": True},
             },
         },
-        {"jsonrpc": "2.0", "id": 3, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "alcy/structLayout",
+            "params": {
+                "textDocument": {"uri": MAIN_URI},
+                "position": {"line": 0, "character": 9},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "textDocument/hover",
+            "params": {
+                "textDocument": {"uri": MAIN_URI},
+                "position": {"line": 0, "character": 9},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 5, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -176,7 +196,24 @@ def main() -> int:
     if edits[0]["newText"] == UNFORMATTED:
         return fail("the formatting edit did not change the buffer")
 
-    if by_id.get(3, {}).get("result", "missing") is not None:
+    layout = by_id.get(3, {}).get("result")
+    if not isinstance(layout, dict) or layout.get("name") != "Point":
+        return fail(f"structLayout did not name the struct: {layout!r}")
+    if layout.get("size") != 4 or layout.get("align") != 4:
+        return fail(f"structLayout gave the wrong shape: {layout!r}")
+    if layout.get("fields") != [
+        {"name": "x", "type": "i32", "offset": 0, "size": 4, "align": 4}
+    ]:
+        return fail(f"structLayout gave the wrong fields: {layout!r}")
+
+    hover = by_id.get(4, {}).get("result")
+    contents = hover.get("contents", {}) if isinstance(hover, dict) else {}
+    if contents.get("kind") != "markdown" or "size **4**" not in contents.get(
+        "value", ""
+    ):
+        return fail(f"hover did not carry the layout: {hover!r}")
+
+    if by_id.get(5, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
