@@ -817,6 +817,120 @@ base::Result<std::string, diag::Reported> build_single_root(
   return emit_output(ctx, lowered, plan, mode, std::string(output), false, {});
 }
 
+// One target of a package build, planned before anything compiles: what
+// it is, the mode it is emitted in (a library's executable request is an
+// object one), and the path its artifact lands at.
+struct PlannedArtifact {
+  Artifact* target;
+  EmitMode mode;
+  std::string path;
+};
+
+// The front half of a target's lifecycle: the cache lookup, the compile
+// that stores the unoptimized package when the build was quiet, and the
+// summary a library leaves beside its artifact before optimization
+// (ADR-0078). Every command that produces an artifact runs this; `check`
+// names no artifact and stops earlier.
+base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
+    PipelineContext& ctx,
+    const PlannedArtifact& planned,
+    const path::Path& root,
+    source::FileId manifest_file) {
+  Artifact& target = *planned.target;
+  const bool is_lib = target.kind == ArtifactKind::Lib;
+  const bool emit_entry =
+      target.kind == ArtifactKind::Bin && planned.mode == EmitMode::Executable;
+  // The cache stores the unoptimized package, so the lookup runs before
+  // the frontend and the store runs before the optimizer: a hit and a
+  // miss optimize, check, and emit the same way.
+  std::optional<lowering::LoweredPackage> cached;
+  std::string cache_dir;
+  std::string entry;
+  if (!ctx.no_cache) {
+    const path::Path out_dir = target.output_dir.has_value()
+                                   ? *target.output_dir
+                                   : root.join(path::DEFAULT_OUT_DIR);
+    const SourceFiles sources = source_file_table(ctx);
+    const std::string_view manifest_bytes =
+        ctx.sources.bytes(manifest_file).value_or(std::string_view{});
+    const ir::FileTable files{.names = sources.names, .hashes = sources.hashes};
+    const base::Digest128 identity =
+        ir::identity_digest(files, ctx.target.width, ctx.version);
+    const base::Digest128 key = cache_key(CacheInputs{
+        .files = files,
+        .width = ctx.target.width,
+        .compiler_version = ctx.version,
+        .manifest = manifest_bytes,
+        .triple = ctx.target.triple,
+        .target_name = target.name,
+        .is_lib = is_lib,
+        .emit_entry = emit_entry,
+        .summary_digests = ctx.summary_digests,
+    });
+    cache_dir = std::string(out_dir.join(".cache").as_view());
+    entry = cache_entry_path(cache_dir, key);
+    cached = cache_load(ctx, entry, identity);
+    ctx.cache_outcome = combine_cache_outcome(
+        ctx.cache_outcome,
+        cached.has_value() ? CacheOutcome::Hit : CacheOutcome::Miss);
+  }
+  if (!cached.has_value()) {
+    base::Result<lowering::LoweredPackage, diag::Reported> package =
+        compile_tree_unoptimized(ctx, target.tree, emit_entry, target.name);
+    if (package.is_err() || ctx.bag.has_errors()) {
+      return base::make_err(diag::Reported{});
+    }
+    // Only a quiet build stores: a hit rebuilds no diagnostics, so a
+    // stored entry stays silent when it is read back.
+    if (!ctx.no_cache && ctx.bag.size() == 0) {
+      lowering::LoweredPackage fresh = std::move(package).unwrap();
+      cache_store(cache_dir, entry, serialize_package_ir(ctx, fresh, is_lib));
+      cached = std::move(fresh);
+    } else {
+      cached = std::move(package).unwrap();
+    }
+  }
+  lowering::LoweredPackage& lowered = *cached;
+  // A library's surface is what a dependent resolves against, so the
+  // build leaves it beside the artifact, before optimization, where the
+  // summary's indices still name the tables it was collected from.
+  if (is_lib && !lowered.summary.empty()) {
+    base::Result<path::Path, path::PathError> output_path =
+        path::Path::from_native(planned.path);
+    if (output_path.is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+    const path::Path sidecar = std::move(output_path)
+                                   .unwrap()
+                                   .parent()
+                                   .join(std::string(target.name) + ".summary");
+    const std::vector<u8> bytes = serialize_package_ir(ctx, lowered, true);
+    const std::span<const u8> view(bytes.data(), bytes.size());
+    if (write_output(ctx, "summary", std::string(sidecar.as_view()), view)
+            .is_err()) {
+      return base::make_err(diag::Reported{});
+    }
+  }
+  return base::make_ok(std::move(lowered));
+}
+
+// The back half of the same lifecycle: the middle end, the emission, and
+// the link. It runs on a lowered package from `lower_target`, which a run
+// may take from the cache as well as a build.
+base::Result<std::string, diag::Reported> emit_target(
+    PipelineContext& ctx,
+    const PlannedArtifact& planned,
+    BuildPlan plan,
+    lowering::LoweredPackage& lowered) {
+  Artifact& target = *planned.target;
+  if (optimize_package(ctx, lowered, plan.profile.optimize).is_err() ||
+      ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  return emit_output(ctx, lowered, plan, planned.mode, planned.path,
+                     target.kind == ArtifactKind::Lib, target.linked_objects);
+}
+
 base::Result<std::string, diag::Reported> build_package(
     PipelineContext& ctx,
     const path::Path& root,
@@ -841,11 +955,6 @@ base::Result<std::string, diag::Reported> build_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  struct PlannedArtifact {
-    Artifact* target;
-    EmitMode mode;
-    std::string path;
-  };
   std::vector<PlannedArtifact> planned;
   planned.reserve(resolved.size());
   for (Artifact& target : resolved) {
@@ -905,99 +1014,15 @@ base::Result<std::string, diag::Reported> build_package(
   bool failed = false;
   std::string first_output;
   for (PlannedArtifact& planned_target : planned) {
-    Artifact& target = *planned_target.target;
-    // The cache stores the unoptimized package, so the lookup runs
-    // before the frontend and the store runs before the optimizer:
-    // a hit and a miss optimize, check, and emit the same way.
-    std::optional<lowering::LoweredPackage> cached;
-    std::string cache_dir;
-    std::string entry;
-    if (!ctx.no_cache) {
-      const path::Path out_dir = target.output_dir.has_value()
-                                     ? *target.output_dir
-                                     : root.join(path::DEFAULT_OUT_DIR);
-      const SourceFiles sources = source_file_table(ctx);
-      const std::string_view manifest_bytes =
-          ctx.sources.bytes(manifest_file).value_or(std::string_view{});
-      const ir::FileTable files{.names = sources.names,
-                                .hashes = sources.hashes};
-      const base::Digest128 identity =
-          ir::identity_digest(files, ctx.target.width, ctx.version);
-      const base::Digest128 key = cache_key(CacheInputs{
-          .files = files,
-          .width = ctx.target.width,
-          .compiler_version = ctx.version,
-          .manifest = manifest_bytes,
-          .triple = ctx.target.triple,
-          .target_name = target.name,
-          .is_lib = target.kind == ArtifactKind::Lib,
-          .emit_entry = target.kind == ArtifactKind::Bin &&
-                        planned_target.mode == EmitMode::Executable,
-          .summary_digests = ctx.summary_digests,
-      });
-      cache_dir = std::string(out_dir.join(".cache").as_view());
-      entry = cache_entry_path(cache_dir, key);
-      cached = cache_load(ctx, entry, identity);
-      ctx.cache_outcome = combine_cache_outcome(
-          ctx.cache_outcome,
-          cached.has_value() ? CacheOutcome::Hit : CacheOutcome::Miss);
-    }
-    if (!cached.has_value()) {
-      base::Result<lowering::LoweredPackage, diag::Reported> package =
-          compile_tree_unoptimized(
-              ctx, target.tree,
-              target.kind == ArtifactKind::Bin &&
-                  planned_target.mode == EmitMode::Executable,
-              target.name);
-      if (package.is_err() || ctx.bag.has_errors()) {
-        failed = true;
-        break;
-      }
-      // Only a quiet build stores: a hit rebuilds no diagnostics, so
-      // a stored entry stays silent when it is read back.
-      if (!ctx.no_cache && ctx.bag.size() == 0) {
-        lowering::LoweredPackage fresh = std::move(package).unwrap();
-        cache_store(
-            cache_dir, entry,
-            serialize_package_ir(ctx, fresh, target.kind == ArtifactKind::Lib));
-        cached = std::move(fresh);
-      } else {
-        cached = std::move(package).unwrap();
-      }
-    }
-    lowering::LoweredPackage& lowered = *cached;
-    // A library's surface is what a dependent resolves against, so the
-    // build leaves it beside the artifact, before optimization, where
-    // the summary's indices still name the tables it was collected from
-    // (ADR-0078).
-    if (target.kind == ArtifactKind::Lib && !lowered.summary.empty()) {
-      base::Result<path::Path, path::PathError> output_path =
-          path::Path::from_native(planned_target.path);
-      if (output_path.is_err()) {
-        failed = true;
-        break;
-      }
-      const path::Path sidecar =
-          std::move(output_path)
-              .unwrap()
-              .parent()
-              .join(std::string(target.name) + ".summary");
-      const std::vector<u8> bytes = serialize_package_ir(ctx, lowered, true);
-      const std::span<const u8> view(bytes.data(), bytes.size());
-      if (write_output(ctx, "summary", std::string(sidecar.as_view()), view)
-              .is_err()) {
-        failed = true;
-        break;
-      }
-    }
-    if (optimize_package(ctx, lowered, plan.profile.optimize).is_err() ||
-        ctx.bag.has_errors()) {
+    base::Result<lowering::LoweredPackage, diag::Reported> lowered =
+        lower_target(ctx, planned_target, root, manifest_file);
+    if (lowered.is_err()) {
       failed = true;
       break;
     }
-    base::Result<std::string, diag::Reported> written = emit_output(
-        ctx, lowered, plan, planned_target.mode, planned_target.path,
-        target.kind == ArtifactKind::Lib, target.linked_objects);
+    lowering::LoweredPackage package = std::move(lowered).unwrap();
+    base::Result<std::string, diag::Reported> written =
+        emit_target(ctx, planned_target, plan, package);
     if (written.is_err() || ctx.bag.has_errors()) {
       failed = true;
       break;
