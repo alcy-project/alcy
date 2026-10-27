@@ -33,47 +33,6 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     bool needs_entry,
     std::string_view entry_name);
 
-// Emits one relocatable object for a lowered package. The module is
-// built, runtime included, and, when the profile optimizes it, put
-// through the O3 pipeline here rather than inside the emission, so that
-// every backend sees the same module. Write failures land in the bag;
-// the output's parent directory is the caller's to have made.
-base::Result<void, diag::Reported> emit_package_object(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib);
-
-// Writes the module as LLVM's textual IR, optimized or not on the same
-// terms as emit_package_object.
-base::Result<void, diag::Reported> emit_package_ir(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib);
-
-// Writes the module as LLVM's bitcode, on the same terms as
-// emit_package_ir.
-base::Result<void, diag::Reported> emit_package_bitcode(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib);
-
-// Writes the program as a final module that needs no link: what a
-// module-emitting backend produces where an object-emitting one would
-// write an object and link it. The unsupported message is the LLVM
-// backend's answer, since it writes objects.
-base::Result<void, diag::Reported> emit_package_module(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib);
-
 // Links the objects into an executable, in the order given. An empty driver
 // in `link` selects the default toolchain driver, and its arguments follow
 // the objects on the command line.
@@ -99,23 +58,6 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     const io::TempDir& scratch,
     bool is_lib,
     u32 parts);
-
-// Emits lowered IR according to the mode: one object, textual IR,
-// bitcode, or an object linked into an executable. Both single-file and
-// package builds end here. Success carries the path written, which the
-// caller cannot work out on its own when the caller left the path
-// empty.
-base::Result<std::string, diag::Reported> emit_output(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& lowered,
-    BuildProfile profile,
-    LinkOptions link,
-    EmitMode mode,
-    const std::string& output_path,
-    bool is_lib,
-    // Objects a link beside this package's own: the dependencies a
-    // summary answered for (ADR-0078).
-    std::span<const std::string> linked_objects = {});
 
 base::Result<std::string, diag::Reported> build_single_file(
     PipelineContext& ctx,

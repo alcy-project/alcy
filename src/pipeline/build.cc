@@ -314,6 +314,68 @@ base::Result<void, diag::Reported> check_emission(PipelineContext& ctx,
   return base::make_ok();
 }
 
+// One emission's inputs, owned as one object: the rendered call sites and
+// the arithmetic overlay live here so the request can borrow them, and the
+// request itself is assembled once rather than per emission path. Built in
+// place, because the request points into its own members.
+struct Emission {
+  std::vector<str::StringPoolId> site_names;
+  overlay::Overlay checks;
+  std::optional<codegen::EmitRequest> request;
+
+  Emission(PipelineContext& ctx,
+           lowering::LoweredPackage& package,
+           BuildProfile profile,
+           codegen::OutputKind kind,
+           bool is_lib,
+           u32 parts,
+           u32 workers) {
+    // The rendered sites serve both the checks' aborts and a backtrace's
+    // call sites; one rendering fills both.
+    if (profile.overflow_checks ||
+        profile.on_panic == pkg::OnPanic::Backtrace) {
+      site_names = render_instr_sites(ctx, package.instr_spans);
+    }
+    // The build's checks ride beside the IR (ADR-0068): one walk turns the
+    // profile into per-instruction entries the backend realizes. A build
+    // with the checks off computes nothing.
+    if (profile.overflow_checks) {
+      checks = overlay::build(*package.storage, true, site_names);
+    }
+    request = codegen::EmitRequest{
+        .storage = std::move(package.storage),
+        .instr_spans = package.instr_spans,
+        .instr_site_names = profile.on_panic == pkg::OnPanic::Backtrace
+                                ? std::span<const str::StringPoolId>(site_names)
+                                : std::span<const str::StringPoolId>{},
+        .strings = &ctx.strings,
+        .bag = &ctx.bag,
+        .target = ctx.target,
+        .emit_entry = !is_lib,
+        .freestanding = ctx.freestanding,
+        .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
+        .optimize = profile.optimize,
+        .overlay = profile.overflow_checks ? &checks : nullptr,
+        .kind = kind,
+        .profiler = ctx.profiler,
+        .parts = parts,
+        .workers = workers,
+    };
+  }
+};
+
+// The profiler's name for one output kind, so each emission path shows up
+// as its own stage.
+std::string_view emission_scope(codegen::OutputKind kind) {
+  switch (kind) {
+    case codegen::OutputKind::Object: return "emit-object";
+    case codegen::OutputKind::Text: return "emit-ir";
+    case codegen::OutputKind::Bitcode: return "emit-bitcode";
+    case codegen::OutputKind::Module: return "emit-wasm";
+  }
+  return "emit";
+}
+
 // Emits one lowered package through the backend the context names. The
 // kind is what the backend is asked for; `what` is the noun a write
 // failure uses ("object", "ir", "wasm module").
@@ -325,45 +387,15 @@ base::Result<void, diag::Reported> emit_package_output(
     bool is_lib,
     codegen::OutputKind kind,
     std::string_view what) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, emission_scope(kind),
+                                           "backend");
   if (check_emission(ctx, kind, is_lib).is_err()) {
     return base::make_err(diag::Reported{});
   }
-  // The rendered sites serve both the checks' aborts and a backtrace's
-  // call sites; one rendering fills both. The table lives in this frame
-  // and the request only borrows it, which lasts exactly as long as the
-  // emission below.
-  const bool want_sites =
-      profile.overflow_checks || profile.on_panic == pkg::OnPanic::Backtrace;
-  std::vector<str::StringPoolId> site_names;
-  if (want_sites) {
-    site_names = render_instr_sites(ctx, package.instr_spans);
-  }
-  // The build's checks ride beside the IR (ADR-0068): one walk turns
-  // the profile into per-instruction entries the backend realizes. A
-  // build with the checks off computes nothing.
-  overlay::Overlay checks;
-  if (profile.overflow_checks) {
-    checks = overlay::build(*package.storage, true, site_names);
-  }
-  codegen::EmitRequest request{
-      .storage = std::move(package.storage),
-      .instr_spans = package.instr_spans,
-      .instr_site_names = profile.on_panic == pkg::OnPanic::Backtrace
-                              ? std::span<const str::StringPoolId>(site_names)
-                              : std::span<const str::StringPoolId>{},
-      .strings = &ctx.strings,
-      .bag = &ctx.bag,
-      .target = ctx.target,
-      .emit_entry = !is_lib,
-      .freestanding = ctx.freestanding,
-      .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
-      .optimize = profile.optimize,
-      .overlay = profile.overflow_checks ? &checks : nullptr,
-      .kind = kind,
-      .profiler = ctx.profiler,
-  };
+  Emission emission(ctx, package, profile, kind, is_lib, /*parts=*/1,
+                    /*workers=*/1);
   base::Result<std::vector<u8>, codegen::EmitError> bytes =
-      emit_with_backend(ctx.backend, std::move(request));
+      emit_with_backend(ctx.backend, std::move(*emission.request));
   if (bytes.is_err()) {
     return report_emit_failure(ctx, std::move(bytes).unwrap_err(), kind,
                                output_path);
@@ -390,43 +422,11 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
   if (check_emission(ctx, codegen::OutputKind::Object, is_lib).is_err()) {
     return base::make_err(diag::Reported{});
   }
-  // The rendered sites serve both the checks' aborts and a backtrace's
-  // call sites; one rendering fills both. The table lives in this frame
-  // and the request only borrows it, which lasts exactly as long as the
-  // emission below.
-  const bool want_sites =
-      profile.overflow_checks || profile.on_panic == pkg::OnPanic::Backtrace;
-  std::vector<str::StringPoolId> site_names;
-  if (want_sites) {
-    site_names = render_instr_sites(ctx, package.instr_spans);
-  }
-  // The build's checks ride beside the IR (ADR-0068); the split
-  // emission carries the same table as the whole one.
-  overlay::Overlay checks;
-  if (profile.overflow_checks) {
-    checks = overlay::build(*package.storage, true, site_names);
-  }
-  codegen::EmitRequest request{
-      .storage = std::move(package.storage),
-      .instr_spans = package.instr_spans,
-      .instr_site_names = profile.on_panic == pkg::OnPanic::Backtrace
-                              ? std::span<const str::StringPoolId>(site_names)
-                              : std::span<const str::StringPoolId>{},
-      .strings = &ctx.strings,
-      .bag = &ctx.bag,
-      .target = ctx.target,
-      .emit_entry = !is_lib,
-      .freestanding = ctx.freestanding,
-      .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
-      .optimize = profile.optimize,
-      .overlay = profile.overflow_checks ? &checks : nullptr,
-      .kind = codegen::OutputKind::Object,
-      .profiler = ctx.profiler,
-      .parts = parts,
-      .workers = ctx.requested_jobs(),
-  };
+  // The split emission carries the same tables as the whole one.
+  Emission emission(ctx, package, profile, codegen::OutputKind::Object, is_lib,
+                    parts, ctx.requested_jobs());
   base::Result<std::vector<std::vector<u8>>, codegen::EmitError> emitted =
-      emit_artifacts_with_backend(ctx.backend, std::move(request));
+      emit_artifacts_with_backend(ctx.backend, std::move(*emission.request));
   if (emitted.is_err()) {
     (void)report_emit_failure(ctx, std::move(emitted).unwrap_err(),
                               codegen::OutputKind::Object, "object");
@@ -445,29 +445,6 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     paths.push_back(path);
   }
   return base::make_ok(std::move(paths));
-}
-
-base::Result<void, diag::Reported> emit_package_object(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib) {
-  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-object",
-                                           "backend");
-  return emit_package_output(ctx, package, profile, output_path, is_lib,
-                             codegen::OutputKind::Object, "object");
-}
-
-base::Result<void, diag::Reported> emit_package_ir(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib) {
-  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-ir", "backend");
-  return emit_package_output(ctx, package, profile, output_path, is_lib,
-                             codegen::OutputKind::Text, "ir");
 }
 
 // What a write input borrows: the file names and address names it points
@@ -612,30 +589,6 @@ base::Result<void, diag::Reported> emit_package_ir_binary(
   return write_output(ctx, "ir binary", output_path, bytes);
 }
 
-base::Result<void, diag::Reported> emit_package_bitcode(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib) {
-  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-bitcode",
-                                           "backend");
-  return emit_package_output(ctx, package, profile, output_path, is_lib,
-                             codegen::OutputKind::Bitcode, "bitcode");
-}
-
-base::Result<void, diag::Reported> emit_package_module(
-    PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    BuildProfile profile,
-    const std::string& output_path,
-    bool is_lib) {
-  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "emit-wasm",
-                                           "backend");
-  return emit_package_output(ctx, package, profile, output_path, is_lib,
-                             codegen::OutputKind::Module, "module");
-}
-
 base::Result<void, diag::Reported> link_executable(
     PipelineContext& ctx,
     LinkOptions link,
@@ -730,13 +683,16 @@ base::Result<std::string, diag::Reported> emit_output(
   base::Result<void, diag::Reported> written =
       [&]() -> base::Result<void, diag::Reported> {
     if (mode == EmitMode::Object) {
-      return emit_package_object(ctx, lowered, profile, output_path, is_lib);
+      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
+                                 codegen::OutputKind::Object, "object");
     }
     if (mode == EmitMode::LlvmIr) {
-      return emit_package_ir(ctx, lowered, profile, output_path, is_lib);
+      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
+                                 codegen::OutputKind::Text, "ir");
     }
     if (mode == EmitMode::LlvmBitcode) {
-      return emit_package_bitcode(ctx, lowered, profile, output_path, is_lib);
+      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
+                                 codegen::OutputKind::Bitcode, "bitcode");
     }
     if (mode == EmitMode::Ir) {
       return emit_package_ir_text(ctx, lowered, profile, output_path);
@@ -748,7 +704,8 @@ base::Result<std::string, diag::Reported> emit_output(
     // one whose output is a final module writes that module and stops.
     if (!backend_supports(ctx.backend, codegen::OutputKind::Object,
                           ctx.target)) {
-      return emit_package_module(ctx, lowered, profile, output_path, is_lib);
+      return emit_package_output(ctx, lowered, profile, output_path, is_lib,
+                                 codegen::OutputKind::Module, "module");
     }
     if (ctx.target.is_wasm() && codegen::backend_available(ctx.backend) &&
         !backend_writes_final_module(ctx.backend, ctx.target)) {
