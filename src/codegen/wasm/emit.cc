@@ -104,14 +104,6 @@ constexpr std::string_view SHIFT_FAILURE = "shift out of range";
 // frame guard reports the reserve's name instead of corrupting.
 constexpr std::string_view STACK_FAILURE = "stack overflow";
 
-#if BUILD_FLAG(IS_DEBUG)
-bool is_terminator(ir::Opcode op) {
-  using O = ir::Opcode;
-  return op == O::Br || op == O::CondBr || op == O::Switch || op == O::Ret ||
-         op == O::Unreachable;
-}
-#endif
-
 // The `main` a binary runs, matching what the analyzer admits and the
 // LLVM backend's wrapper expects.
 bool is_entry_candidate(const ir::Storage& storage,
@@ -684,7 +676,7 @@ Emitter::EmitResult Emitter::emit_block(ir::BlockIdx block_index) {
   }
 #if BUILD_FLAG(IS_DEBUG)
   DCHECK(block.instrs.empty() ||
-         is_terminator(
+         ir::is_terminator(
              storage_.instrs()[block.instrs[block.instrs.size() - 1]].op));
 #endif
   return base::make_ok();

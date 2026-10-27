@@ -183,4 +183,12 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
   }
 }
 
+// The category a control-flow check needs: an instruction that ends its
+// block. The verifier and the emitters ask the same question, so the
+// table lives beside the list it names rather than once per reader.
+constexpr bool is_terminator(const Opcode op) {
+  return op == Opcode::Br || op == Opcode::CondBr || op == Opcode::Switch ||
+         op == Opcode::Ret || op == Opcode::Unreachable;
+}
+
 }  // namespace ir

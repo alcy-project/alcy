@@ -21,11 +21,6 @@ namespace ir {
 
 namespace {
 
-constexpr bool is_terminator(const Opcode op) {
-  return op == Opcode::Br || op == Opcode::CondBr || op == Opcode::Switch ||
-         op == Opcode::Ret || op == Opcode::Unreachable;
-}
-
 // Checks that [head, head + size) lies within a storage of vec_size.
 template <typename Idx>
 constexpr bool range_in_bounds(const Idx head,
