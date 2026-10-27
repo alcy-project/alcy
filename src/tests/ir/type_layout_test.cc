@@ -202,6 +202,33 @@ TEST_CASE("Layout rounds an enum up to its alignment") {
   CHECK(layout_of(storage.state(), pair, PointerWidth::W64).size == 16);
 }
 
+TEST_CASE("Layout gives a referencing option the payload's shape") {
+  StorageBuilder builder;
+  const TypeIdx i32_ty = builder.primitive(TypeTag::I32);
+  const TypeIdx ref = builder.reference_type(i32_ty, false);
+  TypeSeq some;
+  some.push(ref);
+  const EnumVariantTypeIdx carrying =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, some.finish());
+  const TypeSeq none;
+  const EnumVariantTypeIdx fieldless =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, none.finish());
+  const TypeIdx option =
+      builder.enum_type(str::INVALID_STRING_POOL_ID,
+                        EnumVariantTypeIdxRange{carrying, 2}, TypeIdxRange{});
+  Storage storage = std::move(builder).build().unwrap().unwrap();
+
+  // The discriminant lives in the reference's spare null pattern, so
+  // the enum is the reference (ADR-0087).
+  const TypeLayout payload = layout_of(storage.state(), ref, PointerWidth::W64);
+  const TypeLayout layout =
+      layout_of(storage.state(), option, PointerWidth::W64);
+  CHECK(layout.align == payload.align);
+  CHECK(layout.size == payload.size);
+  CHECK(layout.size == 8);
+  (void)fieldless;
+}
+
 TEST_CASE("Layout gives a payload-less enum only its discriminant") {
   StorageBuilder builder;
   TypeSeq none;

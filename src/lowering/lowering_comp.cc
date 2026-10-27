@@ -131,11 +131,21 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
       }
       const ir::TypeIdx slot = enum_slot_type(value.type);
       const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
-      const ir::RegisterIdx tag_reg =
-          emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
-               {to_operand(addr, slot), zero_i32, index_operand(0)});
-      emit_void(ir::Opcode::Store,
-                {disc_operand(value.value.variant), to_operand(tag_reg, slot)});
+      const ir::EnumNiche niche = ir::enum_niche(builder.state(), value.type);
+      if (niche.has) {
+        // The fieldless variant is the payload's spare pattern; the
+        // carrying one is the payload the loop below stores (ADR-0087).
+        if (value.value.variant == niche.fieldless) {
+          emit_void(ir::Opcode::Store,
+                    {null_reference(slot), to_operand(addr, slot)});
+        }
+      } else {
+        const ir::RegisterIdx tag_reg =
+            emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
+                 {to_operand(addr, slot), zero_i32, index_operand(0)});
+        emit_void(ir::Opcode::Store, {disc_operand(value.value.variant),
+                                      to_operand(tag_reg, slot)});
+      }
       if (!payloads.empty() && !is_unit_payload(payloads)) {
         // The payload lives in the slot, the way a constructed variant
         // stores it; a boxed tuple would make every reader of the slot
@@ -150,7 +160,9 @@ Val Lowerer::materialize_comp_value(const CompVal& value, diag::Span span) {
             return Val{size_one, error_type(), false, false};
           }
           const ir::RegisterIdx field_addr =
-              payload_field_addr(slot_addr, fields, static_cast<u32>(i));
+              niche.has ? addr
+                        : payload_field_addr(slot_addr, value.type, fields,
+                                             static_cast<u32>(i));
           emit_void(ir::Opcode::Store,
                     {use_value(lowered), to_operand(field_addr, payloads[i])});
         }

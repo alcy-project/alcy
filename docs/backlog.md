@@ -279,6 +279,11 @@ replaced. The foundations are in `roadmap.md`.
   payload's spare bit patterns in the shared layout, teach construction
   and matching the shape, and pin both sizes in a case.
 
+- [ ] `Option<bool>` is two bytes: the bool niche is promised
+  (ADR-0087) and an `I1` slot has no way to hold the third state. Give
+  a bool-payload niche enum a byte slot, write the spare pattern
+  through it, and pin the size in a case.
+
 - [ ] A generic function's instantiation (`f<Anchored>(x)` or an
   inferred one) is outside the nominal path that checks type arguments
   today, so ADR-0085's "a type argument is Movable" is unenforced

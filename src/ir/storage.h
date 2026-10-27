@@ -94,6 +94,59 @@ inline TypeLayout type_layout(const StorageState& state,
 inline TypeLayout fields_layout(const StorageState& state,
                                 TypeIdxRange fields,
                                 PointerWidth width);
+// The niche an option-shaped enum's discriminant lives in (ADR-0087):
+// exactly two variants, one carrying nothing and one carrying a single
+// reference. The reference's unused null pattern holds the fieldless
+// variant, so a value of the enum is the payload itself. A `bool`
+// payload carries a spare pattern too; it lands here once its storage
+// type can hold one.
+struct EnumNiche {
+  bool has = false;
+  u32 carrying = 0;
+  u32 fieldless = 0;
+  TypeIdx payload = TypeIdx(0);
+};
+
+inline EnumNiche enum_niche(const StorageState& state, TypeIdx idx) {
+  EnumNiche niche;
+  if (!idx.is_valid() || idx.idx >= state.types.size()) {
+    return niche;
+  }
+  const TypeNode& node = state.types[idx];
+  if (node.tag != TypeTag::Enum) {
+    return niche;
+  }
+  const EnumType& shape = state.enum_types[node.as_enum()];
+  if (shape.variants.size() != 2) {
+    return niche;
+  }
+  bool found_carrying = false;
+  for (u32 v = 0; v < 2; ++v) {
+    const TypeIdxRange fields = state
+                                    .enum_variant_types[EnumVariantTypeIdx(
+                                        shape.variants.head().idx + v)]
+                                    .fields;
+    if (fields.size() == 0) {
+      niche.fieldless = v;
+    } else if (fields.size() == 1) {
+      niche.carrying = v;
+      niche.payload = fields[0];
+      found_carrying = true;
+    } else {
+      return niche;
+    }
+  }
+  if (!found_carrying) {
+    return niche;
+  }
+  const TypeTag payload_tag = state.types[niche.payload].tag;
+  if (payload_tag != TypeTag::Ref && payload_tag != TypeTag::MutRef) {
+    return niche;
+  }
+  niche.has = true;
+  return niche;
+}
+
 inline TypeLayout enum_payload_area(const StorageState& state,
                                     TypeIdx idx,
                                     PointerWidth width);
@@ -222,6 +275,13 @@ inline TypeLayout type_layout(const StorageState& state,
       return {element.size * array.count, element.align};
     }
     case TypeTag::Enum: {
+      // A niche-carrying enum is its payload: the discriminant lives in
+      // the payload's spare pattern and takes no room of its own
+      // (ADR-0087).
+      const EnumNiche niche = enum_niche(state, idx);
+      if (niche.has) {
+        return type_layout(state, niche.payload, width);
+      }
       // Discriminant, padded up to the payload area's alignment, then
       // the area itself, and the whole rounded up to the alignment as
       // every other aggregate is. The last step is not cosmetic: an

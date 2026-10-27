@@ -781,6 +781,14 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     const ir::TypeIdx slot = enum_slot_type(use->enum_type);
     const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
+    // A fieldless variant is the payload's spare pattern, so the slot
+    // holds the null reference and there is no discriminant to write
+    // (ADR-0087).
+    if (ir::enum_niche(builder.state(), use->enum_type).has) {
+      emit_void(ir::Opcode::Store,
+                {null_reference(slot), to_operand(addr, slot)});
+      return Val{to_operand(addr, slot), use->enum_type, true, false};
+    }
     const ir::RegisterIdx tag =
         emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
              {to_operand(addr, slot), zero_i32, index_operand(0)});
@@ -906,6 +914,13 @@ ir::TypeIdx Lowerer::enum_slot_type(ir::TypeIdx enum_type) {
   if (cached != enum_slot_types_.end()) {
     return cached->second;
   }
+  // Where the discriminant fits in the payload's spare pattern, the
+  // payload is the whole slot (ADR-0087).
+  const ir::EnumNiche niche = ir::enum_niche(builder.state(), enum_type);
+  if (niche.has) {
+    enum_slot_types_.emplace(enum_type.idx, niche.payload);
+    return niche.payload;
+  }
   const ir::TypeLayout area =
       ir::enum_payload_area(builder.state(), enum_type, width);
   const ir::TypeIdx carrier = payload_carrier(area.align);
@@ -949,11 +964,14 @@ Val Lowerer::lower_variant_construct(
   }
   const ir::TypeIdx slot = enum_slot_type(use->enum_type);
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, slot, {size_one});
-  const ir::RegisterIdx tag =
-      emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
-           {to_operand(addr, slot), zero_i32, index_operand(0)});
-  emit_void(ir::Opcode::Store,
-            {disc_operand(use->variant), to_operand(tag, slot)});
+  const ir::EnumNiche niche = ir::enum_niche(builder.state(), use->enum_type);
+  if (!niche.has) {
+    const ir::RegisterIdx tag =
+        emit(ir::Opcode::GetElementPtr, builder.primitive(ir::TypeTag::I32),
+             {to_operand(addr, slot), zero_i32, index_operand(0)});
+    emit_void(ir::Opcode::Store,
+              {disc_operand(use->variant), to_operand(tag, slot)});
+  }
   if (is_unit_payload(payloads)) {
     // Lower for effects; nothing is stored.
     for (usize i = 0; i < payloads.size(); ++i) {
@@ -976,9 +994,12 @@ Val Lowerer::lower_variant_construct(
       if (failed || terminated_cur()) {
         return stopped_value();
       }
+      // A niche-carrying enum's payload is the slot itself.
       const ir::RegisterIdx field =
-          payload_field_addr(Val{to_operand(addr, slot), slot, true, false},
-                             fields, static_cast<u32>(i));
+          niche.has ? addr
+                    : payload_field_addr(
+                          Val{to_operand(addr, slot), slot, true, false},
+                          use->enum_type, fields, static_cast<u32>(i));
       emit_void(ir::Opcode::Store,
                 {use_value(value), to_operand(field, payloads[i])});
     }
@@ -991,8 +1012,19 @@ Val Lowerer::lower_variant_construct(
 // because the area is a byte array, so a second index would scale by
 // the carrier instead of counting bytes.
 ir::RegisterIdx Lowerer::payload_field_addr(Val slot_addr,
+                                            ir::TypeIdx enum_type,
                                             ir::TypeIdxRange fields,
                                             u32 field) {
+  // A niche-carrying enum's payload is the slot, so the field address
+  // is the slot's own address (ADR-0087). Readers relabel it with the
+  // payload type; the register already carries that label.
+  if (ir::enum_niche(builder.state(), enum_type).has) {
+    const ir::Operand& op = builder.state().operands[slot_addr.op.idx];
+    if (op.is<ir::RegisterIdx>()) {
+      return op.as_register();
+    }
+    return emit(ir::Opcode::TypeCast, slot_addr.type, {slot_addr.op});
+  }
   const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
   const ir::RegisterIdx area = emit(ir::Opcode::GetElementPtr, byte,
                                     {slot_addr.op, zero_i32, index_operand(1)});
@@ -1003,10 +1035,19 @@ ir::RegisterIdx Lowerer::payload_field_addr(Val slot_addr,
 }
 
 ir::RegisterIdx Lowerer::payload_field_slot_addr(Val slot_addr,
+                                                 ir::TypeIdx enum_type,
                                                  ir::TypeIdxRange fields,
                                                  u32 field) {
+  // The payload of a niche-carrying enum is the slot, and the slot's
+  // register already carries the payload's type: the reference is that
+  // address relabelled (ADR-0087).
+  if (ir::enum_niche(builder.state(), enum_type).has) {
+    const ir::TypeIdx ptr = builder.reference_type(fields[field], false);
+    return emit(ir::Opcode::TypeCast, ptr, {slot_addr.op});
+  }
   const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
-  const ir::RegisterIdx at = payload_field_addr(slot_addr, fields, field);
+  const ir::RegisterIdx at =
+      payload_field_addr(slot_addr, enum_type, fields, field);
   const ir::TypeIdx ptr = builder.reference_type(fields[field], false);
   return emit(ir::Opcode::TypeCast, ptr, {to_operand(at, byte)});
 }
@@ -2293,8 +2334,8 @@ bool Lowerer::run_bounds(Val range,
         ir::Opcode::Eq, boolean, {use_value(tag), disc_operand(included_v)});
     const ir::RegisterIdx is_excluded = emit(
         ir::Opcode::Eq, boolean, {use_value(tag), disc_operand(excluded_v)});
-    const ir::RegisterIdx payload_addr =
-        payload_field_addr(slot, variant_fields(bound_ty, included_v), 0);
+    const ir::RegisterIdx payload_addr = payload_field_addr(
+        slot, bound_ty, variant_fields(bound_ty, included_v), 0);
     const ir::RegisterIdx payload =
         emit(ir::Opcode::Load, element, {to_operand(payload_addr, element)});
     if (failed) {
@@ -2425,7 +2466,7 @@ bool Lowerer::store_bound(ast::ExprIdx expr,
     return false;
   }
   const ir::RegisterIdx payload_addr =
-      payload_field_addr(slot, variant_fields(bound_ty, variant), 0);
+      payload_field_addr(slot, bound_ty, variant_fields(bound_ty, variant), 0);
   emit_void(ir::Opcode::Store,
             {use_value(value), to_operand(payload_addr, payloads[0])});
   return !failed;
@@ -2803,12 +2844,49 @@ ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
 
 Val Lowerer::load_disc(Val slot_addr) {
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+  const ir::EnumNiche niche = ir::enum_niche(builder.state(), slot_addr.type);
+  if (niche.has) {
+    // The discriminant is the payload's spell in the spare pattern
+    // (ADR-0087): the fieldless variant when the payload is null, the
+    // carrying one otherwise. The two are one apart, so one apply of
+    // the null test answers.
+    const ir::RegisterIdx loaded =
+        emit(ir::Opcode::Load, niche.payload, {slot_addr.op});
+    const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+    const ir::RegisterIdx is_null = emit(
+        ir::Opcode::Eq, i1,
+        {to_operand(loaded, niche.payload), null_reference(niche.payload)});
+    const ir::RegisterIdx step =
+        emit(ir::Opcode::TypeCast, i32, {to_operand(is_null, i1)});
+    const bool fieldless_first = niche.fieldless < niche.carrying;
+    const ir::RegisterIdx disc = emit(
+        fieldless_first ? ir::Opcode::IntSub : ir::Opcode::IntAdd, i32,
+        {imm_from_u64(ir::TypeTag::I32, i32, static_cast<u64>(niche.carrying)),
+         to_operand(step, i32)});
+    return Val{to_operand(disc, i32), i32, false, false};
+  }
   const ir::RegisterIdx gep =
       emit(ir::Opcode::GetElementPtr, i32,
            {slot_addr.op, zero_i32, index_operand(0)}, {.inbounds = true});
   const ir::RegisterIdx loaded =
       emit(ir::Opcode::Load, i32, {to_operand(gep, i32)});
   return Val{to_operand(loaded, i32), i32, false, false};
+}
+
+// A null reference of the given reference type: the payload's spare
+// pattern, which every fieldless variant of a niche-carrying enum
+// spells (ADR-0087).
+ir::OperandIdx Lowerer::null_reference(ir::TypeIdx ref_type) {
+  // The zero is an integer before it is an address: a Ptr-typed
+  // immutable has no constant form in the emitters, and the integer to
+  // pointer cast is the one both of them carry.
+  const ir::TypeIdx u64 = builder.primitive(ir::TypeTag::U64);
+  const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
+  const ir::RegisterIdx zero =
+      emit(ir::Opcode::TypeCast, ptr, {imm_from_u64(ir::TypeTag::U64, u64, 0)});
+  const ir::RegisterIdx null_ref =
+      emit(ir::Opcode::TypeCast, ref_type, {to_operand(zero, ptr)});
+  return to_operand(null_ref, ref_type);
 }
 
 // Unit payloads (`()` fields) carry no data; construction stores
@@ -2833,11 +2911,12 @@ Val Lowerer::void_value() {
 // payload's bytes, so the field address comes from the offset
 // ir::field_offset publishes.
 Val Lowerer::load_payload_field(Val slot_addr,
+                                ir::TypeIdx enum_type,
                                 ir::TypeIdxRange fields,
                                 u32 field) {
   const ir::TypeIdx field_type = fields[field];
   const ir::RegisterIdx field_gep =
-      payload_field_addr(slot_addr, fields, field);
+      payload_field_addr(slot_addr, enum_type, fields, field);
   const ir::RegisterIdx loaded =
       emit(ir::Opcode::Load, field_type, {to_operand(field_gep, field_type)});
   return Val{to_operand(loaded, field_type), field_type, false, false};
@@ -3206,8 +3285,8 @@ Val Lowerer::lower_spec_ordering(
   // start, its own discriminant first.
   const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
   const ir::TypeIdx byte_ty = builder.primitive(ir::TypeTag::U8);
-  const ir::RegisterIdx ordering_addr =
-      payload_field_addr(slot, variant_fields(option_origin, some), 0);
+  const ir::RegisterIdx ordering_addr = payload_field_addr(
+      slot, option_origin, variant_fields(option_origin, some), 0);
   const ir::RegisterIdx disc_addr =
       emit(ir::Opcode::GetElementPtr, byte_ty,
            {to_operand(ordering_addr, byte_ty), index_operand(0)});
@@ -4047,13 +4126,13 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
               runs_destructor(fields[i])) {
             // The arm discards this payload: end it in place rather than
             // loading a copy nothing owns.
-            const ir::RegisterIdx addr =
-                payload_field_addr(scrut_addr, fields, static_cast<u32>(i));
+            const ir::RegisterIdx addr = payload_field_addr(
+                scrut_addr, scrut_type, fields, static_cast<u32>(i));
             record_drop_in_place(to_operand(addr, fields[i]), fields[i], span);
             continue;
           }
-          Val field =
-              load_payload_field(scrut_addr, fields, static_cast<u32>(i));
+          Val field = load_payload_field(scrut_addr, scrut_type, fields,
+                                         static_cast<u32>(i));
           bind_pattern(elements[i], field);
         }
         return;
@@ -4069,7 +4148,7 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       discard.reserve(payloads.size());
       for (u32 i = 0; i < static_cast<u32>(payloads.size()) && !failed; ++i) {
         const ir::RegisterIdx addr =
-            payload_field_slot_addr(scrut_addr, fields, i);
+            payload_field_slot_addr(scrut_addr, scrut_type, fields, i);
         addrs.push_back(addr);
         discard.push_back(!arm_borrowed_ &&
                           ast.patterns[elements[i]].kind ==
@@ -4739,7 +4818,7 @@ Val Lowerer::lower_question(ast::ExprIdx expr) {
   emit_void(ir::Opcode::Ret, {propagate});
   switch_to(ok_block);
   const Val payload =
-      load_payload_field(addr, variant_fields(scrut_type, 0), 0);
+      load_payload_field(addr, scrut_type, variant_fields(scrut_type, 0), 0);
   emit_br(join_block);
   // Both arms read the discriminant and payload out of this place, so
   // the move lands at the join; placing it earlier would report those

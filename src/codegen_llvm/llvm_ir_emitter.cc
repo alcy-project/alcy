@@ -222,6 +222,14 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
       return builder_->getPtrTy();
     }
     case T::Enum: {
+      // A niche-carrying enum is its payload: the discriminant lives in
+      // the payload's spare pattern and takes no room of its own
+      // (ADR-0087). The layout check below holds the two against each
+      // other, so a missing branch here fails the build.
+      const ir::EnumNiche niche = ir::enum_niche(storage_->state(), idx);
+      if (niche.has) {
+        return type(niche.payload);
+      }
       // A discriminant, then the payload in the slot itself. Keeping the
       // payload here rather than behind a pointer is what lets an enum
       // value outlive the frame that built it.

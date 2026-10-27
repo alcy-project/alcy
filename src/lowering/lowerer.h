@@ -485,15 +485,23 @@ class Lowerer {
   bool reads_through_array_element(ast::ExprIdx expr);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
   Val load_disc(Val slot_addr);
+  // A null reference of the given reference type, spelling the
+  // fieldless variant of a niche-carrying enum (ADR-0087).
+  ir::OperandIdx null_reference(ir::TypeIdx ref_type);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
   Val void_value();
-  Val load_payload_field(Val slot_addr, ir::TypeIdxRange fields, u32 field);
+  Val load_payload_field(Val slot_addr,
+                         ir::TypeIdx enum_type,
+                         ir::TypeIdxRange fields,
+                         u32 field);
   ir::RegisterIdx payload_field_addr(Val slot_addr,
+                                     ir::TypeIdx enum_type,
                                      ir::TypeIdxRange fields,
                                      u32 field);
   // The same address cast to the field's own pointer, so a nested
   // pattern can project into it (a variant reads its discriminant).
   ir::RegisterIdx payload_field_slot_addr(Val slot_addr,
+                                          ir::TypeIdx enum_type,
                                           ir::TypeIdxRange fields,
                                           u32 field);
   ir::TypeIdxRange variant_fields(ir::TypeIdx enum_type, u32 variant);

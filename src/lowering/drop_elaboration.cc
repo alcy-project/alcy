@@ -690,12 +690,45 @@ void DropElaborator::run() {
       // destructible fields are there to end.
       const ir::EnumType& shape = builder.enum_types()[node.as_enum()];
       const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
-      const ir::RegisterIdx disc_addr =
-          pass_emit(seq_of(out), ir::Opcode::GetElementPtr, i32_ty,
-                    {place, zero_i32, index_operand(0)}, span);
-      const ir::RegisterIdx disc =
-          pass_emit(seq_of(out), ir::Opcode::Load, i32_ty,
-                    {to_operand(disc_addr, i32_ty)}, span);
+      // A niche-carrying enum has no discriminant field: the payload's
+      // spell in the spare pattern answers for it (ADR-0087), the way
+      // the lowering's own load does.
+      const ir::EnumNiche niche = ir::enum_niche(builder.state(), type);
+      ir::RegisterIdx disc = ir::RegisterIdx(base::INVALID_IDX);
+      if (niche.has) {
+        const ir::RegisterIdx loaded = pass_emit(seq_of(out), ir::Opcode::Load,
+                                                 niche.payload, {place}, span);
+        const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
+        const ir::TypeIdx u64 = builder.primitive(ir::TypeTag::U64);
+        const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
+        const ir::RegisterIdx zero =
+            pass_emit(seq_of(out), ir::Opcode::TypeCast, ptr,
+                      {imm_from_u64(ir::TypeTag::U64, u64, 0)}, span);
+        const ir::RegisterIdx null_ref =
+            pass_emit(seq_of(out), ir::Opcode::TypeCast, niche.payload,
+                      {to_operand(zero, ptr)}, span);
+        const ir::RegisterIdx is_null =
+            pass_emit(seq_of(out), ir::Opcode::Eq, i1,
+                      {to_operand(loaded, niche.payload),
+                       to_operand(null_ref, niche.payload)},
+                      span);
+        const ir::RegisterIdx step =
+            pass_emit(seq_of(out), ir::Opcode::TypeCast, i32_ty,
+                      {to_operand(is_null, i1)}, span);
+        const bool fieldless_first = niche.fieldless < niche.carrying;
+        disc = pass_emit(
+            seq_of(out),
+            fieldless_first ? ir::Opcode::IntSub : ir::Opcode::IntAdd, i32_ty,
+            {imm_from_u64(ir::TypeTag::I32, i32_ty, niche.carrying),
+             to_operand(step, i32_ty)},
+            span);
+      } else {
+        const ir::RegisterIdx disc_addr =
+            pass_emit(seq_of(out), ir::Opcode::GetElementPtr, i32_ty,
+                      {place, zero_i32, index_operand(0)}, span);
+        disc = pass_emit(seq_of(out), ir::Opcode::Load, i32_ty,
+                         {to_operand(disc_addr, i32_ty)}, span);
+      }
       const u32 exit_index = spawn(out);
       std::vector<u32> variant_blocks(shape.variants.size(), exit_index);
       for (u32 v = 0; v < shape.variants.size(); ++v) {
