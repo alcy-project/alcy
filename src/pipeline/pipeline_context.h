@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -23,7 +24,18 @@
 
 namespace pipeline {
 
+// The dependencies one run has staged (dependencies.h). The table is
+// incomplete here so this header stays free of the loader's types;
+// `staged_dependencies` makes one on first use.
+struct StagedDependencies;
+
 struct PipelineContext {
+  // The dependencies the run has staged, keyed by directory: a suite
+  // build resolves each member's dependencies and the members share
+  // theirs, so a directory is read once per run.
+  std::unique_ptr<StagedDependencies> dependencies;
+  StagedDependencies& staged_dependencies();
+
   mem::Arena arena;
   ast::AstArena ast;
   // The parser lanes the syntax arena was cut into, zero before the
@@ -84,6 +96,7 @@ struct PipelineContext {
   // to spend it can ask for less, the way `ast::AstArena` allows.
   // `name_capacity` caps the name table's distinct names; zero takes its
   // default, and a case that has to spend it asks for less the same way.
+  ~PipelineContext();
   explicit PipelineContext(
       i18n::Language language,
       usize span_capacity = ast::AstArena::DEFAULT_SPAN_CAPACITY,

@@ -277,13 +277,12 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   // Path dependencies load first: a dependency's own manifest names
   // standard-library members, and the selection below covers the
   // whole closure rather than this manifest alone.
-  base::Result<std::vector<LoadedDependency>, diag::Reported> resolved =
+  base::Result<DependencyClosure, diag::Reported> resolved =
       resolve_dependencies(ctx, root, manifest);
   if (resolved.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  const std::vector<LoadedDependency> dependencies =
-      std::move(resolved).unwrap();
+  const DependencyClosure dependencies = std::move(resolved).unwrap();
 
   base::Result<pipeline::DiscoveredSources, diag::Reported> discovered = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "discover",

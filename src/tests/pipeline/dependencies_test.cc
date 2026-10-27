@@ -25,6 +25,7 @@
 #include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/spawn.h"
+#include "pkg/manifest.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -120,6 +121,73 @@ TEST_CASE("Dependencies load a path dependency from source") {
   // The closure checks as one world: the package's file and the
   // dependency's two.
   CHECK(std::move(outcome).unwrap().file_count == 3);
+}
+
+TEST_CASE("Dependencies stage once per run") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_dep_test_");
+  const bool setup = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[[bin]]\nname = \"app\"\npath = \"main.al\"\n\n"
+      "[dependencies]\n\"acme/hash\" = { path = \"vendor/hash\" }\n",
+      {{"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  const bool dep_setup = write_package(
+      dir, "proj/vendor/hash", HASH_MANIFEST,
+      {{"sha2.al", "pub fn digest(x: i32) -> i32 {\n  ret x\n}\n"},
+       {"detail.al", "pub fn helper() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  CHECK(dep_setup);
+  if (!setup || !dep_setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+  base::Result<source::FileId, source::SourceError> manifest_file =
+      ctx.sources.load(root_path.join("alcy.toml").as_view());
+  CHECK(manifest_file.is_ok());
+  if (manifest_file.is_err()) {
+    return;
+  }
+  const source::FileId file = std::move(manifest_file).unwrap();
+  base::Result<pkg::PackageManifest, diag::Reported> parsed =
+      pkg::parse_manifest(ctx.sources.bytes(file).value_or(std::string_view{}),
+                          "alcy.toml", file, ctx.bag, ctx.arena);
+  CHECK(parsed.is_ok());
+  if (parsed.is_err()) {
+    return;
+  }
+  const pkg::PackageManifest manifest = std::move(parsed).unwrap();
+
+  base::Result<DependencyClosure, diag::Reported> first =
+      resolve_dependencies(ctx, root_path, manifest);
+  CHECK(first.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  if (first.is_err()) {
+    return;
+  }
+  const DependencyClosure once = std::move(first).unwrap();
+  CHECK(once.size() == 1);
+  CHECK(once[0].manifest.name == "acme-hash");
+
+  // A second resolution takes the entry the run's table already holds,
+  // which is what lets a suite's members share their dependencies.
+  base::Result<DependencyClosure, diag::Reported> again =
+      resolve_dependencies(ctx, root_path, manifest);
+  CHECK(again.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  if (again.is_err()) {
+    return;
+  }
+  const DependencyClosure twice = std::move(again).unwrap();
+  CHECK(twice.size() == 1);
+  CHECK(&once[0] == &twice[0]);
 }
 
 TEST_CASE("Dependencies resolve a dependency of a dependency") {

@@ -3,6 +3,7 @@
 
 #include "pipeline/pipeline_context.h"
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -17,6 +18,7 @@
 #include "i18n/language.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pipeline/dependencies.h"
 #include "pipeline/diag_code.h"
 
 namespace pipeline {
@@ -71,6 +73,15 @@ constexpr usize DIAGNOSTIC_CAPACITY = 16ull << 20;
 #else
 constexpr usize DIAGNOSTIC_CAPACITY = 2ull << 20;
 #endif
+
+PipelineContext::~PipelineContext() = default;
+
+StagedDependencies& PipelineContext::staged_dependencies() {
+  if (dependencies == nullptr) {
+    dependencies = std::make_unique<StagedDependencies>();
+  }
+  return *dependencies;
+}
 
 PipelineContext::PipelineContext(i18n::Language language,
                                  usize span_capacity,

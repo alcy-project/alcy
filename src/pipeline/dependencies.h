@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <deque>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "analyzer/resolve.h"
@@ -43,6 +46,53 @@ struct LoadedDependency {
   std::string_view object;
 };
 
+// The dependencies one run has staged, keyed by the directory they were
+// read from. A suite build resolves every member's dependencies and the
+// members share theirs, so a directory is read, hashed, and deserialized
+// once per run. Element addresses stay stable: a closure holds pointers
+// into the table while later resolutions append to it.
+struct StagedDependencies {
+  std::deque<LoadedDependency> entries;
+  // One directory's contribution to a closure: its own entry followed by
+  // what its dependencies brought, in traversal order. A resolution that
+  // reaches the directory again takes this instead of reading it.
+  std::unordered_map<std::string, std::vector<const LoadedDependency*>> by_dir;
+};
+
+// The dependencies one resolution reached, in traversal order. An entry
+// lives in the run's table rather than in the closure, so two
+// resolutions that share a dependency share its entry - and its sources
+// are read once.
+class DependencyClosure {
+ public:
+  DependencyClosure() = default;
+  explicit DependencyClosure(std::vector<const LoadedDependency*> entries)
+      : entries_(std::move(entries)) {}
+
+  class Iterator {
+   public:
+    explicit Iterator(const LoadedDependency* const* at) : at_(at) {}
+    const LoadedDependency& operator*() const { return **at_; }
+    Iterator& operator++() {
+      ++at_;
+      return *this;
+    }
+    bool operator!=(const Iterator& other) const { return at_ != other.at_; }
+
+   private:
+    const LoadedDependency* const* at_;
+  };
+
+  Iterator begin() const { return Iterator(entries_.data()); }
+  Iterator end() const { return Iterator(entries_.data() + entries_.size()); }
+  [[nodiscard]] usize size() const { return entries_.size(); }
+  [[nodiscard]] bool empty() const { return entries_.empty(); }
+  const LoadedDependency& operator[](usize i) const { return *entries_[i]; }
+
+ private:
+  std::vector<const LoadedDependency*> entries_;
+};
+
 // The identity a package's manifest name gives: the name a `use`
 // spells, with `-` normalized to `_` the way the modules chapter
 // describes.
@@ -67,9 +117,9 @@ inline std::string package_identity(std::string_view name) {
 // loaded here: they stage from the embedded suite, and a
 // dependency that names one adds it to the selection the caller
 // merges from every manifest the closure holds.
-base::Result<std::vector<LoadedDependency>, diag::Reported>
-resolve_dependencies(PipelineContext& ctx,
-                     const path::Path& root,
-                     const pkg::PackageManifest& manifest);
+base::Result<DependencyClosure, diag::Reported> resolve_dependencies(
+    PipelineContext& ctx,
+    const path::Path& root,
+    const pkg::PackageManifest& manifest);
 
 }  // namespace pipeline

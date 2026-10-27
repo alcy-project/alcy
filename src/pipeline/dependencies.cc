@@ -148,20 +148,6 @@ base::Result<pkg::SuiteManifest, diag::Reported> read_suite_manifest(
   return base::make_ok(manifest);
 }
 
-bool load_path_edge(PipelineContext& ctx,
-                    const path::Path& parent_dir,
-                    const pkg::Dependency& dep,
-                    std::vector<path::Path>& visited,
-                    std::vector<path::Path>& loaded,
-                    std::vector<LoadedDependency>& staged);
-
-// Loads the package at `dir`, the dependency `spec` names,
-// and every path dependency its manifest declares. `visited`
-// holds the directories being resolved, so a directory that
-// names one already on the stack resolves into itself, and
-// `loaded` holds the directories already staged, so a
-// dependency two packages share stages once, behind the one
-// root both edges reach.
 namespace {
 
 // Reads the summary a library build leaves beside its object and spells
@@ -274,16 +260,60 @@ bool load_summary_dependency(PipelineContext& ctx,
 
 }  // namespace
 
+// One resolution in flight: the directories on its stack, where a repeat
+// is a cycle, and the entries it has reached in traversal order. The
+// entries live in the run's table, so two resolutions that share a
+// dependency share its entry.
+struct Resolution {
+  explicit Resolution(StagedDependencies& store) : store(store) {}
+
+  StagedDependencies& store;
+  std::vector<path::Path> visited;
+  std::vector<const LoadedDependency*> entries;
+
+  void add(const LoadedDependency* entry) {
+    for (const LoadedDependency* seen : entries) {
+      if (seen == entry) {
+        return;
+      }
+    }
+    entries.push_back(entry);
+  }
+};
+
+bool load_path_edge(PipelineContext& ctx,
+                    Resolution& resolution,
+                    const path::Path& parent_dir,
+                    const pkg::Dependency& dep,
+                    std::vector<const LoadedDependency*>& contributed);
+
+// Loads the package at `dir`, the dependency `spec` names, and every path
+// dependency its manifest declares. A directory the run already staged is
+// taken from the run's table, subtree and all, so a suite's members do not
+// read their shared dependencies again; `contributed` collects what this
+// edge brought, which is what a later resolution takes on a hit.
+
 bool load_dependency(PipelineContext& ctx,
+                     Resolution& resolution,
                      const path::Path& dir,
                      std::string_view spec,
                      std::string_view suite,
                      std::string_view expected_name,
                      const pkg::SuiteManifest* suite_manifest,
-                     std::vector<path::Path>& visited,
-                     std::vector<path::Path>& loaded,
-                     std::vector<LoadedDependency>& staged) {
-  for (const path::Path& seen : visited) {
+                     std::vector<const LoadedDependency*>& contributed) {
+  StagedDependencies& store = resolution.store;
+  const std::string key(dir.as_view());
+  // A directory the run already staged is taken from the run's table,
+  // subtree and all: a suite's members do not read their shared
+  // dependencies again.
+  if (const auto found = store.by_dir.find(key); found != store.by_dir.end()) {
+    for (const LoadedDependency* entry : found->second) {
+      resolution.add(entry);
+      contributed.push_back(entry);
+    }
+    return true;
+  }
+  for (const path::Path& seen : resolution.visited) {
     if (seen == dir) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencyCycle>(
           diag::Severity::Error, diag::Stage::Pipeline,
@@ -292,12 +322,7 @@ bool load_dependency(PipelineContext& ctx,
       return false;
     }
   }
-  for (const path::Path& seen : loaded) {
-    if (seen == dir) {
-      return true;
-    }
-  }
-  visited.push_back(dir);
+  resolution.visited.push_back(dir);
 
   const path::Path manifest_path = dir.join(pkg::MANIFEST_FILE_NAME);
   base::Result<pkg::PackageManifest, diag::Reported> read =
@@ -355,16 +380,23 @@ bool load_dependency(PipelineContext& ctx,
     dependency.modules = std::move(selection).unwrap();
     dependency.files = std::move(found.files);
   }
-  staged.push_back(std::move(dependency));
-  loaded.push_back(dir);
-
+  // The entry's address is what a closure holds, so the table it lands in
+  // never moves its elements.
+  store.entries.push_back(std::move(dependency));
+  const LoadedDependency* self = &store.entries.back();
+  resolution.add(self);
+  // What this directory contributes to a closure: itself, and what its own
+  // dependencies bring.
+  std::vector<const LoadedDependency*> subtree{self};
   for (u32 i = 0; i < manifest.dependency_count; ++i) {
-    if (!load_path_edge(ctx, dir, manifest.dependencies[i], visited, loaded,
-                        staged)) {
+    if (!load_path_edge(ctx, resolution, dir, manifest.dependencies[i],
+                        subtree)) {
       return false;
     }
   }
-  visited.pop_back();
+  contributed.insert(contributed.end(), subtree.begin(), subtree.end());
+  store.by_dir.emplace(key, std::move(subtree));
+  resolution.visited.pop_back();
   return true;
 }
 
@@ -376,12 +408,11 @@ bool load_dependency(PipelineContext& ctx,
 // sets the package loader shares, so cycles and shared members
 // behave the same across the suite boundary.
 bool load_suite_members(PipelineContext& ctx,
+                        Resolution& resolution,
                         const path::Path& dir,
                         const pkg::Dependency& dep,
-                        std::vector<path::Path>& visited,
-                        std::vector<path::Path>& loaded,
-                        std::vector<LoadedDependency>& staged) {
-  for (const path::Path& seen : visited) {
+                        std::vector<const LoadedDependency*>& contributed) {
+  for (const path::Path& seen : resolution.visited) {
     if (seen == dir) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencyCycle>(
           diag::Severity::Error, diag::Stage::Pipeline,
@@ -434,7 +465,7 @@ bool load_suite_members(PipelineContext& ctx,
   }
   // The suite's closure contains the suite: a member resolving
   // back into this directory is a cycle, not a second load.
-  visited.push_back(dir);
+  resolution.visited.push_back(dir);
   // The suite identity each member's policy carries: `owner/name`, the
   // same spelling a suite specifier uses.
   std::string suite_identity(dep.owner);
@@ -451,13 +482,13 @@ bool load_suite_members(PipelineContext& ctx,
       member_spec.pop_back();
       member_spec += std::string(member);
     }
-    if (!load_dependency(ctx, dir.join(member), member_spec, member_suite,
-                         pkg::suite_member_name(member), &suite, visited,
-                         loaded, staged)) {
+    if (!load_dependency(ctx, resolution, dir.join(member), member_spec,
+                         member_suite, pkg::suite_member_name(member), &suite,
+                         contributed)) {
       return false;
     }
   }
-  visited.pop_back();
+  resolution.visited.pop_back();
   return true;
 }
 
@@ -466,40 +497,49 @@ bool load_suite_members(PipelineContext& ctx,
 // directory loads from source; any other source joins the
 // selection the caller merges, which says why it cannot be read.
 bool load_path_edge(PipelineContext& ctx,
+                    Resolution& resolution,
                     const path::Path& parent_dir,
                     const pkg::Dependency& dep,
-                    std::vector<path::Path>& visited,
-                    std::vector<path::Path>& loaded,
-                    std::vector<LoadedDependency>& staged) {
+                    std::vector<const LoadedDependency*>& contributed) {
   if (dep.source != pkg::DependencySource::Path) {
     return true;
   }
   const path::Path dir = parent_dir.join(dep.path);
   if (dep.suite_glob || !dep.suite.empty()) {
-    return load_suite_members(ctx, dir, dep, visited, loaded, staged);
+    return load_suite_members(ctx, resolution, dir, dep, contributed);
   }
-  return load_dependency(ctx, dir, dep.spec, {}, {}, nullptr, visited, loaded,
-                         staged);
+  return load_dependency(ctx, resolution, dir, dep.spec, {}, {}, nullptr,
+                         contributed);
+}
+
+// The resolution itself: it walks the tables and the run's staged
+// dependencies, and `resolve_dependencies` below is the entry a caller
+// names.
+base::Result<DependencyClosure, diag::Reported> resolve_closure(
+    PipelineContext& ctx,
+    const path::Path& root,
+    const pkg::PackageManifest& manifest) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "dependencies",
+                                           "frontend");
+  Resolution resolution{ctx.staged_dependencies()};
+  resolution.visited.push_back(root);
+  std::vector<const LoadedDependency*> contributed;
+  for (u32 i = 0; i < manifest.dependency_count; ++i) {
+    if (!load_path_edge(ctx, resolution, root, manifest.dependencies[i],
+                        contributed)) {
+      return base::make_err(diag::Reported{});
+    }
+  }
+  return base::make_ok(DependencyClosure(std::move(resolution.entries)));
 }
 
 }  // namespace
 
-base::Result<std::vector<LoadedDependency>, diag::Reported>
-resolve_dependencies(PipelineContext& ctx,
-                     const path::Path& root,
-                     const pkg::PackageManifest& manifest) {
-  std::vector<LoadedDependency> staged;
-  std::vector<path::Path> visited;
-  std::vector<path::Path> loaded;
-  visited.push_back(root);
-  loaded.push_back(root);
-  for (u32 i = 0; i < manifest.dependency_count; ++i) {
-    if (!load_path_edge(ctx, root, manifest.dependencies[i], visited, loaded,
-                        staged)) {
-      return base::make_err(diag::Reported{});
-    }
-  }
-  return base::make_ok(std::move(staged));
+base::Result<DependencyClosure, diag::Reported> resolve_dependencies(
+    PipelineContext& ctx,
+    const path::Path& root,
+    const pkg::PackageManifest& manifest) {
+  return resolve_closure(ctx, root, manifest);
 }
 
 }  // namespace pipeline
