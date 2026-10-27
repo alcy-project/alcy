@@ -6,12 +6,14 @@ source_set("lowering") {
     "diag_code.h",
     "drop_elaboration.cc",
     "drop_elaboration.h",
+    "immediate.h",
     "lowerer.cc",
     "lowerer.h",
     "lowering.cc",
     "lowering.h",
     "lowering_comp.cc",
     "lowering_expr.cc",
+    "niche.h",
   ]
   deps = [
     "//src:base_modules",

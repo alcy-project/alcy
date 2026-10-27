@@ -31,7 +31,9 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "lowering/diag_code.h"
+#include "lowering/immediate.h"
 #include "lowering/lowerer.h"
+#include "lowering/niche.h"
 
 namespace lowering {
 
@@ -696,32 +698,15 @@ void DropElaborator::run() {
       const ir::EnumNiche niche = ir::enum_niche(builder.state(), type);
       ir::RegisterIdx disc = ir::RegisterIdx(base::INVALID_IDX);
       if (niche.has) {
-        const ir::RegisterIdx loaded = pass_emit(seq_of(out), ir::Opcode::Load,
-                                                 niche.payload, {place}, span);
-        const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-        const ir::TypeIdx u64 = builder.primitive(ir::TypeTag::U64);
-        const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
-        const ir::RegisterIdx zero =
-            pass_emit(seq_of(out), ir::Opcode::TypeCast, ptr,
-                      {imm_from_u64(ir::TypeTag::U64, u64, 0)}, span);
-        const ir::RegisterIdx null_ref =
-            pass_emit(seq_of(out), ir::Opcode::TypeCast, niche.payload,
-                      {to_operand(zero, ptr)}, span);
-        const ir::RegisterIdx is_null =
-            pass_emit(seq_of(out), ir::Opcode::Eq, i1,
-                      {to_operand(loaded, niche.payload),
-                       to_operand(null_ref, niche.payload)},
-                      span);
-        const ir::RegisterIdx step =
-            pass_emit(seq_of(out), ir::Opcode::TypeCast, i32_ty,
-                      {to_operand(is_null, i1)}, span);
-        const bool fieldless_first = niche.fieldless < niche.carrying;
-        disc = pass_emit(
-            seq_of(out),
-            fieldless_first ? ir::Opcode::IntSub : ir::Opcode::IntAdd, i32_ty,
-            {imm_from_u64(ir::TypeTag::I32, i32_ty, niche.carrying),
-             to_operand(step, i32_ty)},
-            span);
+        // The same sequence the lowering reads, so the two cannot drift:
+        // the slot's shape and the fieldless spell come from the niche
+        // (ADR-0087).
+        disc = niche_discriminant(builder, niche, place, i32_ty,
+                                  [&](ir::Opcode op, ir::TypeIdx type,
+                                      const std::vector<ir::OperandIdx>& ops) {
+                                    return pass_emit(seq_of(out), op, type, ops,
+                                                     span);
+                                  });
       } else {
         const ir::RegisterIdx disc_addr =
             pass_emit(seq_of(out), ir::Opcode::GetElementPtr, i32_ty,
@@ -1197,26 +1182,6 @@ ir::TypeIdx type_at_path(ir::StorageBuilder& builder,
     }
   }
   return current;
-}
-
-ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
-                            ir::TypeTag tag,
-                            ir::TypeIdx type,
-                            u64 value) {
-  ir::Immutable imm{.type = type, .data = {}};
-  switch (tag) {
-    case ir::TypeTag::I1: imm.data.i1_value = value != 0; break;
-    case ir::TypeTag::I8: imm.data.i8_value = static_cast<i8>(value); break;
-    case ir::TypeTag::I16: imm.data.i16_value = static_cast<i16>(value); break;
-    case ir::TypeTag::I32: imm.data.i32_value = static_cast<i32>(value); break;
-    case ir::TypeTag::I64: imm.data.i64_value = static_cast<i64>(value); break;
-    case ir::TypeTag::U8: imm.data.u8_value = static_cast<u8>(value); break;
-    case ir::TypeTag::U16: imm.data.u16_value = static_cast<u16>(value); break;
-    case ir::TypeTag::U32: imm.data.u32_value = static_cast<u32>(value); break;
-    default: imm.data.u64_value = value; break;
-  }
-  return builder.operand(
-      ir::Operand::from_immutable(builder.immutable(imm), type));
 }
 
 bool runs_destructor(std::span<const u8> needs_drop,

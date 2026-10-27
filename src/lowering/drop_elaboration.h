@@ -123,12 +123,6 @@ void elaborate_drops(const DropElaborationInputs& inputs);
     ir::TypeIdx type,
     std::span<const u32> path);
 
-// An operand holding an integer constant of the given type.
-[[nodiscard]] ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
-                                          ir::TypeTag tag,
-                                          ir::TypeIdx type,
-                                          u64 value);
-
 // Whether a value of the type ends with code: the analyzer's table
 // answers for the types it sized, and a type the lowering interned
 // answers from its structure, following a storage copy back to the

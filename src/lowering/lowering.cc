@@ -56,6 +56,27 @@
 
 namespace lowering {
 
+// An operand holding an integer constant of the given type.
+ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
+                            ir::TypeTag tag,
+                            ir::TypeIdx type,
+                            u64 value) {
+  ir::Immutable imm{.type = type, .data = {}};
+  switch (tag) {
+    case ir::TypeTag::I1: imm.data.i1_value = value != 0; break;
+    case ir::TypeTag::I8: imm.data.i8_value = static_cast<i8>(value); break;
+    case ir::TypeTag::I16: imm.data.i16_value = static_cast<i16>(value); break;
+    case ir::TypeTag::I32: imm.data.i32_value = static_cast<i32>(value); break;
+    case ir::TypeTag::I64: imm.data.i64_value = static_cast<i64>(value); break;
+    case ir::TypeTag::U8: imm.data.u8_value = static_cast<u8>(value); break;
+    case ir::TypeTag::U16: imm.data.u16_value = static_cast<u16>(value); break;
+    case ir::TypeTag::U32: imm.data.u32_value = static_cast<u32>(value); break;
+    default: imm.data.u64_value = value; break;
+  }
+  return builder.operand(
+      ir::Operand::from_immutable(builder.immutable(imm), type));
+}
+
 bool Lowerer::is_block_terminator(ir::Opcode op) {
   return op == ir::Opcode::Br || op == ir::Opcode::CondBr ||
          op == ir::Opcode::Switch || op == ir::Opcode::Ret ||

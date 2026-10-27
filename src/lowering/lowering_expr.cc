@@ -39,7 +39,9 @@
 #include "ir/type_util.h"
 #include "lowering/diag_code.h"
 #include "lowering/drop_elaboration.h"
+#include "lowering/immediate.h"
 #include "lowering/lowerer.h"
+#include "lowering/niche.h"
 #include "source/source.h"
 #include "text/unescape.h"
 
@@ -2852,29 +2854,12 @@ Val Lowerer::load_disc(Val slot_addr) {
   const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
   const ir::EnumNiche niche = ir::enum_niche(builder.state(), slot_addr.type);
   if (niche.has) {
-    // The discriminant is the payload's spell in the spare pattern
-    // (ADR-0087): the fieldless variant when the payload is null, the
-    // carrying one otherwise. The two are one apart, so one apply of
-    // the null test answers.
-    const ir::RegisterIdx loaded =
-        emit(ir::Opcode::Load, niche.slot, {slot_addr.op});
-    const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-    const ir::RegisterIdx is_null =
-        niche.slot == niche.payload
-            ? emit(ir::Opcode::Eq, i1,
-                   {to_operand(loaded, niche.payload),
-                    null_reference(niche.payload)})
-            : emit(ir::Opcode::Gt, i1,
-                   {to_operand(loaded, niche.slot),
-                    imm_from_u64(ir::TypeTag::U8, niche.slot,
-                                 niche.sentinel > 0 ? niche.sentinel - 1 : 0)});
-    const ir::RegisterIdx step =
-        emit(ir::Opcode::TypeCast, i32, {to_operand(is_null, i1)});
-    const bool fieldless_first = niche.fieldless < niche.carrying;
-    const ir::RegisterIdx disc = emit(
-        fieldless_first ? ir::Opcode::IntSub : ir::Opcode::IntAdd, i32,
-        {imm_from_u64(ir::TypeTag::I32, i32, static_cast<u64>(niche.carrying)),
-         to_operand(step, i32)});
+    const ir::RegisterIdx disc =
+        niche_discriminant(builder, niche, slot_addr.op, i32,
+                           [&](ir::Opcode op, ir::TypeIdx type,
+                               const std::vector<ir::OperandIdx>& ops) {
+                             return emit(op, type, ops);
+                           });
     return Val{to_operand(disc, i32), i32, false, false};
   }
   const ir::RegisterIdx gep =
@@ -2899,15 +2884,12 @@ ir::OperandIdx Lowerer::niche_sentinel(const ir::EnumNiche& niche) {
 // pattern, which every fieldless variant of a niche-carrying enum
 // spells (ADR-0087).
 ir::OperandIdx Lowerer::null_reference(ir::TypeIdx ref_type) {
-  // The zero is an integer before it is an address: a Ptr-typed
-  // immutable has no constant form in the emitters, and the integer to
-  // pointer cast is the one both of them carry.
-  const ir::TypeIdx u64 = builder.primitive(ir::TypeTag::U64);
-  const ir::TypeIdx ptr = builder.primitive(ir::TypeTag::Ptr);
-  const ir::RegisterIdx zero =
-      emit(ir::Opcode::TypeCast, ptr, {imm_from_u64(ir::TypeTag::U64, u64, 0)});
   const ir::RegisterIdx null_ref =
-      emit(ir::Opcode::TypeCast, ref_type, {to_operand(zero, ptr)});
+      emit_null_reference(builder, ref_type,
+                          [&](ir::Opcode op, ir::TypeIdx type,
+                              const std::vector<ir::OperandIdx>& ops) {
+                            return emit(op, type, ops);
+                          });
   return to_operand(null_ref, ref_type);
 }
 
