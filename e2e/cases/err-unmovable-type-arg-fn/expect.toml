@@ -1,0 +1,3 @@
+# A type argument is Movable (ADR-0085).
+exit = 4
+contains = ["A type argument is Movable, and this one holds an anchor (ADR-0085)"]

@@ -317,6 +317,23 @@ bool Checker::is_movable(ir::TypeIdx type) const {
       [this](ir::TypeIdx idx) { return type_origin(idx); });
 }
 
+bool Checker::check_type_args_movable(std::span<const ir::TypeIdx> args,
+                                      diag::Span span) {
+  for (const ir::TypeIdx arg : args) {
+    if (!arg.is_valid() || is_error(arg) || tag_of(arg) == ir::TypeTag::Const) {
+      continue;
+    }
+    if (!is_movable(arg)) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableTypeArgument>(
+          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
+          span);
+      (void)index;
+      return false;
+    }
+  }
+  return true;
+}
+
 std::string_view Checker::package_of(u32 module) const {
   const u32 root = tree.module_root(module);
   if (root != NO_PACKAGE_ROOT) {
@@ -5846,6 +5863,11 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
       }
       method_args = std::move(inferred);
     }
+    // ADR-0085: a type argument is Movable, and a method instantiation
+    // binds its own arguments the way a free function's does.
+    if (!check_type_args_movable(method_args, span)) {
+      return nullptr;
+    }
     // The method's own bounds have to hold for the arguments it was
     // spelled with, the way a free function's do (ADR-0028).
     std::vector<std::pair<std::string_view, ir::TypeIdx>> method_bounds;
@@ -6261,6 +6283,11 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
         method_args.push_back(resolved);
       }
       if (!args_ok) {
+        return nullptr;
+      }
+      // ADR-0085: a type argument is Movable, the spec method's own
+      // included.
+      if (!check_type_args_movable(method_args, span)) {
         return nullptr;
       }
       candidate = instantiate_spec_method(entry.module, entry.spec,
@@ -7005,6 +7032,12 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       (void)index;
       return nullptr;
     }
+  }
+  // ADR-0085: a type argument is Movable, whether the turbofish spelled
+  // it or the arguments were inferred, and a function instantiation
+  // binds its own rather than passing through the nominal path.
+  if (!check_type_args_movable(bound, span)) {
+    return nullptr;
   }
   std::vector<std::pair<std::string_view, ir::TypeIdx>> bounds;
   for (usize i = 0; i < params.size() && i < bound.size(); ++i) {

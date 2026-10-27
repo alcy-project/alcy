@@ -377,6 +377,13 @@ class Checker {
   // Whether a value of the type may be moved (ADR-0085): the walk
   // normalizes storage copies through the checker's origin links.
   bool is_movable(ir::TypeIdx type) const;
+  // ADR-0085: a type argument is Movable. A nominal checks its argument
+  // list where it instantiates; a function's or a method's arguments
+  // bind on paths of their own, so each instantiation asks this before
+  // it proceeds. A value argument carries a `Const` type and is not a
+  // type argument.
+  bool check_type_args_movable(std::span<const ir::TypeIdx> args,
+                               diag::Span span);
   // The spec policy of `package`, or nullptr when the tree carries
   // none, which reads as every spec being open.
   const PackagePolicy* policy_of(std::string_view package) const;

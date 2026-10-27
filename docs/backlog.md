@@ -272,8 +272,3 @@ replaced. The foundations are in `roadmap.md`.
   end every time. The build's cache lookup and the run's lowering are
   two paths over the same work, and the run path is the one that has
   no key.
-
-- [ ] A generic function's instantiation (`f<Anchored>(x)` or an
-  inferred one) is outside the nominal path that checks type arguments
-  today, so ADR-0085's "a type argument is Movable" is unenforced
-  there. Check it where a function instantiation binds its arguments.
