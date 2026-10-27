@@ -85,7 +85,10 @@ The applications decided with the rules:
   `TargetMachine` and triple stay inside the LLVM adapter, and
   `platform_*` is reserved for a future `cfg`.
 - **Reserved names** so a later decision cannot collide: `chars`,
-  `graphemes`, `pop_char`, `or_option`, `platform_*`.
+  `graphemes`, `pop_char`, `platform_*`. `or_option` was on this list
+  and the rename took it: `Option`'s option-returning lazy form keeps
+  `or_else`'s old job under the reserved name, so the reservation is
+  spent rather than open.
 
 ## Consequences
 

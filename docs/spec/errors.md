@@ -9,9 +9,12 @@
 - `Result` has variants `Ok(T)` and `Err(E)`; `Option` has `Some(T)`
   and `None`. Both compose as ordinary algebraic types for region
   purposes (field intersection and projection apply unchanged).
-- Core provides `unwrap`, `expect`, `is_ok`, `is_err`, and `or` as
-  ordinary `impl` methods. Combinators requiring closures (`map`,
-  `and_then`) arrive with closures, post-MVP.
+- Core provides the `or` family (`or`, `or_else`, `or_option`,
+  `or_panic_with_message`, `or_panic_with`), the predicates (`is_some`,
+  `is_none`, `is_ok`, `is_err`), and the closure combinators (`map`,
+  `and_then`, `filter`, `ok_or`) as ordinary `impl` methods. No method
+  named `unwrap` or `expect` exists, and none may be added (ADR-0088):
+  a name that can abort says so.
 
 ## The `?` operator
 
