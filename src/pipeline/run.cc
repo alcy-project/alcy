@@ -18,12 +18,12 @@
 #include "i18n/messages.h"
 #include "lowering/lowering.h"
 #include "path/path.h"
+#include "pipeline/artifact.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/spawn.h"
-#include "pipeline/target.h"
 #include "source/source.h"
 
 namespace pipeline {

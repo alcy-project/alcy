@@ -13,11 +13,11 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "pipeline/artifact.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/target.h"
 
 namespace pipeline {
 

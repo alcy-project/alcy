@@ -17,11 +17,11 @@
 #include "fpag/debug/profiler/profile_scope.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pipeline/artifact.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
-#include "pipeline/target.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
 

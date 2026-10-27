@@ -76,6 +76,8 @@ action("embed_std") {
 source_set("pipeline") {
   sources = [
     "$target_gen_dir/embedded_std.cc",
+    "artifact.cc",
+    "artifact.h",
     "backend_emit.cc",
     "backend_emit.h",
     "build.cc",
@@ -118,8 +120,6 @@ source_set("pipeline") {
     "std_select.h",
     "std_stage.cc",
     "std_stage.h",
-    "target.cc",
-    "target.h",
     "vcs.cc",
     "vcs.h",
   ]

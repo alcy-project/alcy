@@ -13,9 +13,9 @@
 #include "cli/trace.h"
 #include "diag/bag.h"
 #include "fpag/base/result.h"
+#include "pipeline/artifact.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/target.h"
 #include "pkg/manifest.h"
 
 namespace cli {

@@ -17,8 +17,8 @@
 #include "linter/config.h"
 #include "linter/lint.h"
 #include "path/path.h"
+#include "pipeline/artifact.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/target.h"
 #include "pkg/manifest.h"
 
 namespace cli {

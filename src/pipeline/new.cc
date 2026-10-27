@@ -20,9 +20,9 @@
 #include "fpag/io/io_util.h"
 #include "i18n/messages.h"
 #include "path/path.h"
+#include "pipeline/artifact.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/pipeline_context.h"
-#include "pipeline/target.h"
 #include "pipeline/vcs.h"
 #include "pkg/manifest.h"
 
