@@ -12,6 +12,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "lsp/completion.h"
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/folding.h"
@@ -20,6 +21,7 @@
 #include "lsp/layout.h"
 #include "lsp/navigation.h"
 #include "lsp/protocol.h"
+#include "lsp/signature.h"
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
 #include "text/json.h"
@@ -177,6 +179,20 @@ void Server::handle_request(const text::JsonValue& message) {
     }
     return;
   }
+  if (method == "textDocument/completion" ||
+      method == "textDocument/signatureHelp") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "a completion query needs params");
+      return;
+    }
+    if (method == "textDocument/completion") {
+      completion(*id, *params);
+    } else {
+      signature(*id, *params);
+    }
+    return;
+  }
   if (method == "textDocument/hover" || method == "alcy/structLayout") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -244,6 +260,18 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("hoverProvider", text::JsonValue::make_bool(true));
   capabilities.set("definitionProvider", text::JsonValue::make_bool(true));
   capabilities.set("referencesProvider", text::JsonValue::make_bool(true));
+  text::JsonValue completion_options = text::JsonValue::make_object();
+  text::JsonValue completion_triggers = text::JsonValue::make_array();
+  completion_triggers.push(make_string("."));
+  completion_triggers.push(make_string(":"));
+  completion_options.set("triggerCharacters", std::move(completion_triggers));
+  capabilities.set("completionProvider", std::move(completion_options));
+  text::JsonValue signature_options = text::JsonValue::make_object();
+  text::JsonValue signature_triggers = text::JsonValue::make_array();
+  signature_triggers.push(make_string("("));
+  signature_triggers.push(make_string(","));
+  signature_options.set("triggerCharacters", std::move(signature_triggers));
+  capabilities.set("signatureHelpProvider", std::move(signature_options));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
   capabilities.set("experimental", std::move(experimental));
@@ -373,6 +401,28 @@ void Server::references(const text::JsonValue& id,
     result.push(location_json(*document, site));
   }
   send_result(id, std::move(result));
+}
+
+void Server::completion(const text::JsonValue& id,
+                        const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, completion_items(*document, position));
+}
+
+void Server::signature(const text::JsonValue& id,
+                       const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id, signature_help(*document, position));
 }
 
 void Server::struct_layout(const text::JsonValue& id,

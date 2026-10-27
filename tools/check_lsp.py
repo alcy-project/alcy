@@ -10,15 +10,17 @@ only honest check runs the built binary through a session: the framing,
 the initialize handshake, the diagnostics a didOpen publishes, the edit
 a formatting request returns, the outline a documentSymbol request
 returns, the folds a foldingRange request returns, the definition and
-references a navigation request returns, and the memory layout an hover
+references a navigation request returns, the completion items and the
+signature help a call answers with, and the memory layout an hover
 carries. The script drives one session, parses the framed responses,
 and asserts what each request answered.
 
 The session opens an unformatted but valid struct, a broken buffer, a
 multi-line buffer with a comment run, and a buffer with a call, so one
 run covers the empty-diagnostics case, the reported case, the
-formatter's edit, the outline, both kinds of fold, navigation, and the
-struct layout both the alcy/structLayout request and hover return.
+formatter's edit, the outline, both kinds of fold, navigation,
+completion and signature help, and the struct layout both the
+alcy/structLayout request and hover return.
 """
 
 import argparse
@@ -206,7 +208,25 @@ def main() -> int:
                 "context": {"includeDeclaration": False},
             },
         },
-        {"jsonrpc": "2.0", "id": 9, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "textDocument/signatureHelp",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 9},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "textDocument/completion",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 7},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 11, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -247,6 +267,10 @@ def main() -> int:
         return fail("initialize did not advertise definitionProvider")
     if capabilities.get("referencesProvider") is not True:
         return fail("initialize did not advertise referencesProvider")
+    if not isinstance(capabilities.get("completionProvider"), dict):
+        return fail("initialize did not advertise completionProvider")
+    if not isinstance(capabilities.get("signatureHelpProvider"), dict):
+        return fail("initialize did not advertise signatureHelpProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -331,7 +355,20 @@ def main() -> int:
     if references[0].get("range", {}).get("start") != {"line": 4, "character": 6}:
         return fail(f"references pointed elsewhere: {references!r}")
 
-    if by_id.get(9, {}).get("result", "missing") is not None:
+    signature = by_id.get(9, {}).get("result")
+    if not isinstance(signature, dict):
+        return fail(f"signatureHelp answered nothing: {signature!r}")
+    signature_label = (signature.get("signatures") or [{}])[0].get("label")
+    if signature_label != "fn id(i32) -> i32":
+        return fail(f"signatureHelp gave the wrong label: {signature_label!r}")
+
+    completion = by_id.get(10, {}).get("result")
+    items = completion.get("items") if isinstance(completion, dict) else None
+    labels = {item.get("label") for item in (items or [])}
+    if "id" not in labels:
+        return fail(f"completion missed the function: {completion!r}")
+
+    if by_id.get(11, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
