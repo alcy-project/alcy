@@ -21,6 +21,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "lsp/analysis.h"
+#include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/layout.h"
 #include "lsp/typing.h"
@@ -32,23 +33,6 @@ namespace {
 
 bool span_contains(diag::Span span, usize offset) {
   return span.offset <= offset && offset < span.offset + span.length;
-}
-
-diag::Span name_span(const ast::AstArena& ast, const ast::ItemNode& item) {
-  using K = ast::ItemKind;
-  switch (item.kind) {
-    case K::Struct: return item.payload.get<ast::ItemStruct>().name.span;
-    case K::Enum: return item.payload.get<ast::ItemEnum>().name.span;
-    case K::Fn: return item.payload.get<ast::ItemFn>().name.span;
-    case K::Intrinsic: return item.payload.get<ast::ItemIntrinsic>().name.span;
-    case K::Static: return item.payload.get<ast::ItemStatic>().name.span;
-    case K::Const: return item.payload.get<ast::ItemConst>().name.span;
-    case K::Spec: return item.payload.get<ast::ItemSpec>().name.span;
-    case K::Impl: return ast.types[item.payload.get<ast::ItemImpl>().type].span;
-    case K::Extern:
-    case K::Use: return item.span;
-  }
-  return item.span;
 }
 
 std::string signature_markdown(const pipeline::PipelineContext& context,
@@ -312,7 +296,7 @@ std::optional<std::string> hover_markdown(const Document& document,
         case K::Fn:
         case K::Intrinsic: {
           const std::string_view name = item.name();
-          if (!span_contains(name_span(context.ast, item), offset)) {
+          if (!span_contains(item_name_span(context.ast, item), offset)) {
             break;
           }
           const analyzer::CheckedModule::FnSig* signature =
@@ -327,7 +311,7 @@ std::optional<std::string> hover_markdown(const Document& document,
         case K::Static:
         case K::Const: {
           const std::string_view name = item.name();
-          if (!span_contains(name_span(context.ast, item), offset)) {
+          if (!span_contains(item_name_span(context.ast, item), offset)) {
             break;
           }
           const analyzer::CheckedModule::StaticInfo* info =

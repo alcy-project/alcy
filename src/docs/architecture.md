@@ -129,7 +129,9 @@ what implements it lives in `src/`.
   server, `alcy lsp`: it publishes the linter's diagnostics, the
   formatter's edit, the checked struct layouts, the compiler AST's
   outline, and the CST's folds over JSON-RPC, and re-implements none of
-  the analysis behind them (see ADR-0083, ADR-0084). `src/fuzz/` holds
+  the analysis behind them, and definition and references read the
+  checker's recorded resolutions rather than resolving a name again
+  (see ADR-0083, ADR-0084, ADR-0085). `src/fuzz/` holds
   the fuzz targets, which need libFuzzer and are therefore outside
   `all`.
   The toolchain's own documentation is in `src/docs/`.

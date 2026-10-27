@@ -15,6 +15,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
 - `analysis.{h,cc}` runs the compiler frontend over one buffer and
   returns the checked package, the one entry every semantic feature
   uses.
+- `ast_query.{h,cc}` names the span a declaration's name occupies,
+  shared by hover and navigation.
 - `diagnostics.{h,cc}` runs `linter::lint_source` over one buffer and
   renders the bag as LSP diagnostics, so a compiler error and a lint
   finding arrive from the same pass.
@@ -28,6 +30,10 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   field or variant offsets from the checked package (`ir::type_layout`),
   and renders them for hover markdown and for the `alcy/structLayout`
   request.
+- `navigation.{h,cc}` answers definition and references from the
+  checker's recorded resolutions (ADR-0085): a use resolves to the
+  declaration the checker bound, and the AST supplies a declaration's
+  own name when the cursor sits on it.
 - `protocol.{h,cc}` holds the JSON a position and a range are spelled
   as, so diagnostics, formatting, and the outline cannot disagree.
 - `symbols.{h,cc}` builds the outline from the compiler's parse: the
@@ -38,11 +44,12 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   `lsp.{h,cc}` is the entry point the cli calls.
 
 The unit suite drives framing, position mapping, diagnostics, the
-layout engine, hover, the outline, and folding directly.
+layout engine, hover, navigation, the outline, and folding directly.
 `tools/check_lsp.py` runs a session against the built binary and
 asserts the handshake, a published diagnostic, a formatting edit, the
-outline, both kinds of fold, and the layout both hover and
-`alcy/structLayout` return, which is the gate CI asks.
+outline, both kinds of fold, a definition and its references, and the
+layout both hover and `alcy/structLayout` return, which is the gate CI
+asks.
 
 ## Notes
 

@@ -111,13 +111,19 @@ bool Checker::bind_pattern(u32 module,
   switch (node.kind) {
     case ast::PatternKind::Wildcard: return false;
     case ast::PatternKind::Ident: {
-      scopes.back().push_back({node.payload.ident.name.name,
-                               borrow_binding(type, by_ref), false, comp});
+      scopes.back().push_back({.name = node.payload.ident.name.name,
+                               .type = borrow_binding(type, by_ref),
+                               .is_mut = false,
+                               .comp_known = comp,
+                               .span = node.payload.ident.name.span});
       return false;
     }
     case ast::PatternKind::MutIdent: {
-      scopes.back().push_back({node.payload.mut_ident.name.name,
-                               borrow_binding(type, by_ref), true, comp});
+      scopes.back().push_back({.name = node.payload.mut_ident.name.name,
+                               .type = borrow_binding(type, by_ref),
+                               .is_mut = true,
+                               .comp_known = comp,
+                               .span = node.payload.mut_ident.name.span});
       return false;
     }
     case ast::PatternKind::Literal: {
@@ -1391,17 +1397,23 @@ ir::TypeIdx Checker::check_closure(u32 module,
   // other modes own their place in the environment and may write it.
   for (usize i = 0; i < entries.size(); ++i) {
     const CaptureEntry& entry = entries[i];
-    scopes.back().push_back({entry.name, entry.type,
-                             entry.mode != ast::CaptureMode::Shared, false,
-                             static_cast<u32>(i)});
+    scopes.back().push_back({.name = entry.name,
+                             .type = entry.type,
+                             .is_mut = entry.mode != ast::CaptureMode::Shared,
+                             .comp_known = false,
+                             .capture = static_cast<u32>(i),
+                             .span = entry.span});
   }
   for (usize i = 0; i < closure.params.size(); ++i) {
     const ast::ClosureParam& param = closure.params[i];
     if (param.is_wildcard) {
       continue;
     }
-    scopes.back().push_back(
-        {param.name.name, param_types[i], param.is_mut, false});
+    scopes.back().push_back({.name = param.name.name,
+                             .type = param_types[i],
+                             .is_mut = param.is_mut,
+                             .comp_known = false,
+                             .span = param.name.span});
   }
   closure_bounds.push_back({scopes.size() - 1, std::move(entries)});
   const ir::TypeIdx* body_expected = has_expected_sig ? &expected_ret : nullptr;

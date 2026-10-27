@@ -312,6 +312,8 @@ class Checker {
     // Index into the innermost closure's capture list when this local
     // is a capture binding, or NO_CAPTURE otherwise.
     u32 capture = NO_CAPTURE;
+    // The name the binding wrote, so a use can point back at it.
+    diag::Span span{};
   };
   // The capture index that names no capture binding.
   static constexpr u32 NO_CAPTURE = 0xFFFFFFFFu;
@@ -1044,8 +1046,11 @@ class Checker {
     const CheckedModule::FnSig* function = nullptr;
     const CheckedModule::MethodInfo* method = nullptr;
     NominalEntry* enom = nullptr;
+    const CheckedModule::StaticInfo* object = nullptr;
     ast::ItemIdx generic_item = ast::ItemIdx::invalid();
     u32 variant = 0;
+    // The declaration the path named, when the resolution found one.
+    diag::Span declaration{};
   };
   // `type_args` carries a turbofish from the enclosing expression path,
   // and `call_args` the arguments when the path is a call's callee, so a
@@ -1053,12 +1058,22 @@ class Checker {
   // does not pin on its own. Both are empty for a path read as a value.
   // `expr` is the expression the path was written at; a value-parameter
   // resolution records its splice for lowering under that expression.
+  bool resolve_value_path_impl(u32 module,
+                               ast::ExprIdx expr,
+                               ast::PathIdx path,
+                               std::span<const ast::TypeIdx> type_args,
+                               std::span<const ast::ExprIdx> call_args,
+                               PathValue& out);
   bool resolve_value_path(u32 module,
                           ast::ExprIdx expr,
                           ast::PathIdx path,
                           std::span<const ast::TypeIdx> type_args,
                           std::span<const ast::ExprIdx> call_args,
                           PathValue& out);
+  // The declaration a resolved value path named, or an empty span.
+  diag::Span declaration_of(const PathValue& value) const;
+  // The name span of a named item, or an empty span.
+  diag::Span item_name_span(ast::ItemIdx item) const;
   bool resolve_variant_path(u32 module, ast::PathIdx path, PathValue& out);
   std::vector<ir::TypeIdx> variant_payloads(const PathValue& resolved,
                                             ir::TypeIdx enum_type,

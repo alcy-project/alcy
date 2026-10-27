@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lsp/document.h"
 #include "text/json.h"
@@ -17,5 +18,8 @@ text::JsonValue position_json(Position position);
 // A range covering [offset, offset + length) in the document. The two
 // ends are converted through the document's own position index.
 text::JsonValue range_json(const Document& document, u32 offset, u32 length);
+
+// A location in this document for a span the checker recorded.
+text::JsonValue location_json(const Document& document, diag::Span span);
 
 }  // namespace lsp

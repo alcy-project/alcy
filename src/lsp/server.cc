@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "lsp/diagnostics.h"
@@ -17,6 +18,8 @@
 #include "lsp/formatting.h"
 #include "lsp/hover.h"
 #include "lsp/layout.h"
+#include "lsp/navigation.h"
+#include "lsp/protocol.h"
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
 #include "text/json.h"
@@ -160,6 +163,20 @@ void Server::handle_request(const text::JsonValue& message) {
     document_symbol(*id, *params);
     return;
   }
+  if (method == "textDocument/definition" ||
+      method == "textDocument/references") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "navigation needs params");
+      return;
+    }
+    if (method == "textDocument/definition") {
+      definition(*id, *params);
+    } else {
+      references(*id, *params);
+    }
+    return;
+  }
   if (method == "textDocument/hover" || method == "alcy/structLayout") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -225,6 +242,8 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("documentSymbolProvider", text::JsonValue::make_bool(true));
   capabilities.set("foldingRangeProvider", text::JsonValue::make_bool(true));
   capabilities.set("hoverProvider", text::JsonValue::make_bool(true));
+  capabilities.set("definitionProvider", text::JsonValue::make_bool(true));
+  capabilities.set("referencesProvider", text::JsonValue::make_bool(true));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
   capabilities.set("experimental", std::move(experimental));
@@ -308,6 +327,51 @@ void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
   contents.set("value", make_string(*markdown));
   text::JsonValue result = text::JsonValue::make_object();
   result.set("contents", std::move(contents));
+  send_result(id, std::move(result));
+}
+
+void Server::definition(const text::JsonValue& id,
+                        const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  const std::optional<diag::Span> location = definition_at(*document, position);
+  if (!location.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id, location_json(*document, *location));
+}
+
+void Server::references(const text::JsonValue& id,
+                        const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  bool include_declaration = true;
+  if (const text::JsonValue* context = field(params, "context");
+      context != nullptr && context->is_object()) {
+    if (const text::JsonValue* include = context->find("includeDeclaration");
+        include != nullptr && include->is_bool()) {
+      include_declaration = include->as_bool();
+    }
+  }
+  text::JsonValue result = text::JsonValue::make_array();
+  if (include_declaration) {
+    if (const std::optional<diag::Span> location =
+            definition_at(*document, position)) {
+      result.push(location_json(*document, *location));
+    }
+  }
+  for (const diag::Span site : references_at(*document, position)) {
+    result.push(location_json(*document, site));
+  }
   send_result(id, std::move(result));
 }
 

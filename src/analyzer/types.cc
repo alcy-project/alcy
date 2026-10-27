@@ -3051,6 +3051,9 @@ ir::TypeIdx Checker::resolve_type(u32 module,
                              target_name)) {
         return error_type();
       }
+      // The checker resolved this name; record where it pointed, so
+      // navigation reads the resolution instead of repeating it.
+      modules[module].references.push_back({node.span, entry->span});
       const usize param_count = nominal_params(*entry).size();
       const usize arg_count = node.payload.get<ast::TypePath>().args.size();
       if (param_count == 0) {
@@ -5196,6 +5199,7 @@ void Checker::register_static(u32 module, ast::ItemIdx item) {
                                      : node.payload.get<ast::ItemStatic>().init;
   modules[module].statics.push_back(
       {.name = name.name,
+       .item = item,
        .type = resolve_type(module, type, nullptr),
        .init = init,
        .is_const = is_const,
@@ -7341,16 +7345,83 @@ CheckedModule::FnSig& Checker::add_function(u32 module,
   return target.functions.back();
 }
 
-// Resolves an expression path to its value meaning. Locals shadow
-// everything and value parameters shadow module items; nominal type
-// names resolve to Kind::Type so callers can report "found type"
-// instead of "unknown".
+diag::Span Checker::item_name_span(ast::ItemIdx item) const {
+  if (!item.is_valid()) {
+    return {};
+  }
+  const ast::ItemNode& node = ast.items[item];
+  switch (node.kind) {
+    case ast::ItemKind::Fn: return node.payload.get<ast::ItemFn>().name.span;
+    case ast::ItemKind::Intrinsic:
+      return node.payload.get<ast::ItemIntrinsic>().name.span;
+    case ast::ItemKind::Static:
+      return node.payload.get<ast::ItemStatic>().name.span;
+    case ast::ItemKind::Const:
+      return node.payload.get<ast::ItemConst>().name.span;
+    default: return {};
+  }
+}
+
+diag::Span Checker::declaration_of(const PathValue& value) const {
+  using Kind = PathValue::Kind;
+  switch (value.kind) {
+    case Kind::Local: return value.declaration;
+    case Kind::Static:
+      return value.object == nullptr ? diag::Span{}
+                                     : item_name_span(value.object->item);
+    case Kind::Function:
+      return value.function == nullptr ? diag::Span{}
+                                       : item_name_span(value.function->item);
+    case Kind::AssocFunction:
+      return value.method == nullptr ? diag::Span{}
+                                     : item_name_span(value.method->item);
+    case Kind::GenericFn: return item_name_span(value.generic_item);
+    case Kind::UnitVariant:
+    case Kind::TupleVariant: {
+      if (value.enom == nullptr) {
+        return {};
+      }
+      const ast::ItemNode& decl = ast.items[value.enom->item];
+      return decl.payload.get<ast::ItemEnum>()
+          .variants[value.variant]
+          .name.span;
+    }
+    case Kind::Type:
+      return value.enom == nullptr ? diag::Span{} : value.enom->span;
+    case Kind::ValueParam: return {};
+  }
+  return {};
+}
+
+// Resolves an expression path and records the reference, so the
+// language server reads the checker's resolution rather than repeating
+// it. The impl below does the resolution.
 bool Checker::resolve_value_path(u32 module,
                                  ast::ExprIdx expr,
                                  ast::PathIdx path,
                                  std::span<const ast::TypeIdx> type_args,
                                  std::span<const ast::ExprIdx> call_args,
                                  PathValue& out) {
+  if (!resolve_value_path_impl(module, expr, path, type_args, call_args, out)) {
+    return false;
+  }
+  const diag::Span declaration = declaration_of(out);
+  if (declaration.length != 0) {
+    modules[module].references.push_back({ast.paths[path].span, declaration});
+  }
+  return true;
+}
+
+// Resolves an expression path to its value meaning. Locals shadow
+// everything and value parameters shadow module items; nominal type
+// names resolve to Kind::Type so callers can report "found type"
+// instead of "unknown".
+bool Checker::resolve_value_path_impl(u32 module,
+                                      ast::ExprIdx expr,
+                                      ast::PathIdx path,
+                                      std::span<const ast::TypeIdx> type_args,
+                                      std::span<const ast::ExprIdx> call_args,
+                                      PathValue& out) {
   const ast::Path& node = ast.paths[path];
   if (node.segments.empty()) {
     return false;
@@ -7375,6 +7446,7 @@ bool Checker::resolve_value_path(u32 module,
       }
       out.kind = PathValue::Kind::Local;
       out.type = local->type;
+      out.declaration = local->span;
       return true;
     }
     // A value parameter is an ordinary value of its annotation type;
@@ -7404,6 +7476,7 @@ bool Checker::resolve_value_path(u32 module,
     if (const CheckedModule::StaticInfo* info = lookup_static(module, name)) {
       out.kind = PathValue::Kind::Static;
       out.type = info->type;
+      out.object = info;
       return true;
     }
     if (const CheckedModule::FnSig* fn = lookup_function(module, name)) {
@@ -7432,8 +7505,9 @@ bool Checker::resolve_value_path(u32 module,
       }
       return true;
     }
-    if (find_nominal_in_scope(module, name) != nullptr) {
+    if (NominalEntry* entry = find_nominal_in_scope(module, name)) {
       out.kind = PathValue::Kind::Type;
+      out.enom = entry;
       return true;
     }
     emit_unresolved(bag, DiagCode::UnknownValue, node.span, std_hints, "value",
@@ -7458,6 +7532,7 @@ bool Checker::resolve_value_path(u32 module,
         }
         out.kind = PathValue::Kind::Static;
         out.type = info->type;
+        out.object = info;
         return true;
       }
       if (const CheckedModule::FnSig* fn = lookup_function(target, member)) {

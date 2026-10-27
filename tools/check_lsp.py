@@ -9,15 +9,16 @@ The language server is a process an editor talks to over a pipe, so the
 only honest check runs the built binary through a session: the framing,
 the initialize handshake, the diagnostics a didOpen publishes, the edit
 a formatting request returns, the outline a documentSymbol request
-returns, the folds a foldingRange request returns, and the memory
-layout an hover carries. The script drives one session, parses the
-framed responses, and asserts what each request answered.
+returns, the folds a foldingRange request returns, the definition and
+references a navigation request returns, and the memory layout an hover
+carries. The script drives one session, parses the framed responses,
+and asserts what each request answered.
 
-The session opens an unformatted but valid struct, a broken buffer, and
-a multi-line buffer with a comment run, so one run covers the
-empty-diagnostics case, the reported case, the formatter's edit, the
-outline, both kinds of fold, and the struct layout both the
-alcy/structLayout request and hover return.
+The session opens an unformatted but valid struct, a broken buffer, a
+multi-line buffer with a comment run, and a buffer with a call, so one
+run covers the empty-diagnostics case, the reported case, the
+formatter's edit, the outline, both kinds of fold, navigation, and the
+struct layout both the alcy/structLayout request and hover return.
 """
 
 import argparse
@@ -32,6 +33,7 @@ from utils.paths import project_root_dir
 MAIN_URI = "file:///main.al"
 BROKEN_URI = "file:///broken.al"
 FOLD_URI = "file:///fold.al"
+NAV_URI = "file:///nav.al"
 
 # Lint-clean but not canonical: the diagnostics answer is empty while
 # the formatter still has a rewrite to return, so one buffer drives both
@@ -41,6 +43,9 @@ BROKEN = "fn main( -> i32 {\n}\n"
 # A comment run and two brace pairs on different lines, so one
 # foldingRange answer exercises both kinds of fold.
 FOLD = "// one\n// two\nfn main() -> i32 {\n  if true {\n    ret 0\n  }\n  ret 1\n}\n"
+# A named function called once, so definition and references both point
+# at the declaration and the call.
+NAV = "fn id(x: i32) -> i32 {\n  ret x\n}\nfn main() -> i32 {\n  ret id(1)\n}\n"
 
 
 def alcy_binary(build_subdir: str) -> Path:
@@ -133,6 +138,18 @@ def main() -> int:
         },
         {
             "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": NAV_URI,
+                    "languageId": "alcy",
+                    "version": 1,
+                    "text": NAV,
+                }
+            },
+        },
+        {
+            "jsonrpc": "2.0",
             "id": 2,
             "method": "textDocument/formatting",
             "params": {
@@ -170,7 +187,26 @@ def main() -> int:
             "method": "textDocument/foldingRange",
             "params": {"textDocument": {"uri": FOLD_URI}},
         },
-        {"jsonrpc": "2.0", "id": 7, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "textDocument/definition",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 7},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "textDocument/references",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 0, "character": 4},
+                "context": {"includeDeclaration": False},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 9, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -207,6 +243,10 @@ def main() -> int:
         return fail("initialize did not advertise documentSymbolProvider")
     if capabilities.get("foldingRangeProvider") is not True:
         return fail("initialize did not advertise foldingRangeProvider")
+    if capabilities.get("definitionProvider") is not True:
+        return fail("initialize did not advertise definitionProvider")
+    if capabilities.get("referencesProvider") is not True:
+        return fail("initialize did not advertise referencesProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -279,7 +319,19 @@ def main() -> int:
     if comment_fold is None or comment_fold.get("kind") != "comment":
         return fail(f"foldingRange missed the comment run: {folds!r}")
 
-    if by_id.get(7, {}).get("result", "missing") is not None:
+    definition = by_id.get(7, {}).get("result")
+    if not isinstance(definition, dict):
+        return fail(f"definition answered nothing: {definition!r}")
+    if definition.get("range", {}).get("start") != {"line": 0, "character": 3}:
+        return fail(f"definition pointed elsewhere: {definition!r}")
+
+    references = by_id.get(8, {}).get("result")
+    if not isinstance(references, list) or len(references) != 1:
+        return fail(f"references did not find the call: {references!r}")
+    if references[0].get("range", {}).get("start") != {"line": 4, "character": 6}:
+        return fail(f"references pointed elsewhere: {references!r}")
+
+    if by_id.get(9, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

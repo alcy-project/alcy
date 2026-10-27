@@ -14,6 +14,7 @@
 #include "ast/ast.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
+#include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -153,6 +154,9 @@ struct CheckedModule {
   std::deque<MethodInfo> methods;
   struct StaticInfo {
     std::string_view name;
+    // The declaration this entry describes, so a reference can name
+    // the span the source wrote.
+    ast::ItemIdx item = ast::ItemIdx::invalid();
     ir::TypeIdx type;
     // Initializer for const inlining (invalid for statics in lowering).
     ast::ExprIdx init;
@@ -340,6 +344,15 @@ struct CheckedModule {
     u32 inst = NO_INST;
   };
   std::vector<VariantUse> variants;
+  // One name reference the checker resolved, with the declaration it
+  // resolved to, both as source spans. The language server reads these
+  // so definition and references answer from the checker's own
+  // resolution instead of resolving the name a second time.
+  struct Reference {
+    diag::Span site;
+    diag::Span declaration;
+  };
+  std::vector<Reference> references;
 };
 
 // One instantiation of a generic function or intrinsic: the type
