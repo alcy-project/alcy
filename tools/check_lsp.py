@@ -9,13 +9,14 @@ The language server is a process an editor talks to over a pipe, so the
 only honest check runs the built binary through a session: the framing,
 the initialize handshake, the diagnostics a didOpen publishes, the edit
 a formatting request returns, the outline a documentSymbol request
-returns, and the memory layout an hover carries. The script drives one
-session, parses the framed responses, and asserts what each request
-answered.
+returns, the folds a foldingRange request returns, and the memory
+layout an hover carries. The script drives one session, parses the
+framed responses, and asserts what each request answered.
 
-The session opens an unformatted but valid struct and a broken buffer,
-so one run covers the empty-diagnostics case, the reported case, the
-formatter's edit, the outline, and the struct layout both the
+The session opens an unformatted but valid struct, a broken buffer, and
+a multi-line buffer with a comment run, so one run covers the
+empty-diagnostics case, the reported case, the formatter's edit, the
+outline, both kinds of fold, and the struct layout both the
 alcy/structLayout request and hover return.
 """
 
@@ -30,12 +31,16 @@ from utils.paths import project_root_dir
 
 MAIN_URI = "file:///main.al"
 BROKEN_URI = "file:///broken.al"
+FOLD_URI = "file:///fold.al"
 
 # Lint-clean but not canonical: the diagnostics answer is empty while
 # the formatter still has a rewrite to return, so one buffer drives both
 # assertions.
 UNFORMATTED = "struct  Point{x:i32}"
 BROKEN = "fn main( -> i32 {\n}\n"
+# A comment run and two brace pairs on different lines, so one
+# foldingRange answer exercises both kinds of fold.
+FOLD = "// one\n// two\nfn main() -> i32 {\n  if true {\n    ret 0\n  }\n  ret 1\n}\n"
 
 
 def alcy_binary(build_subdir: str) -> Path:
@@ -116,6 +121,18 @@ def main() -> int:
         },
         {
             "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": FOLD_URI,
+                    "languageId": "alcy",
+                    "version": 1,
+                    "text": FOLD,
+                }
+            },
+        },
+        {
+            "jsonrpc": "2.0",
             "id": 2,
             "method": "textDocument/formatting",
             "params": {
@@ -147,7 +164,13 @@ def main() -> int:
             "method": "textDocument/documentSymbol",
             "params": {"textDocument": {"uri": MAIN_URI}},
         },
-        {"jsonrpc": "2.0", "id": 6, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "textDocument/foldingRange",
+            "params": {"textDocument": {"uri": FOLD_URI}},
+        },
+        {"jsonrpc": "2.0", "id": 7, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -182,6 +205,8 @@ def main() -> int:
         return fail("initialize did not advertise documentFormattingProvider")
     if capabilities.get("documentSymbolProvider") is not True:
         return fail("initialize did not advertise documentSymbolProvider")
+    if capabilities.get("foldingRangeProvider") is not True:
+        return fail("initialize did not advertise foldingRangeProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -233,7 +258,28 @@ def main() -> int:
     ):
         return fail(f"documentSymbol missed the field: {point_symbol!r}")
 
-    if by_id.get(6, {}).get("result", "missing") is not None:
+    folds = by_id.get(6, {}).get("result")
+
+    def has_fold(start: int, end: int) -> bool:
+        return any(
+            fold.get("startLine") == start and fold.get("endLine") == end
+            for fold in (folds or [])
+        )
+
+    if not has_fold(2, 7):
+        return fail(f"foldingRange missed the function body: {folds!r}")
+    comment_fold = next(
+        (
+            fold
+            for fold in (folds or [])
+            if fold.get("startLine") == 0 and fold.get("endLine") == 1
+        ),
+        None,
+    )
+    if comment_fold is None or comment_fold.get("kind") != "comment":
+        return fail(f"foldingRange missed the comment run: {folds!r}")
+
+    if by_id.get(7, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

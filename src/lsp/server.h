@@ -34,6 +34,7 @@ class Server {
   void did_change(const text::JsonValue& params);
   void did_close(const text::JsonValue& params);
   void formatting(const text::JsonValue& id, const text::JsonValue& params);
+  void folding_range(const text::JsonValue& id, const text::JsonValue& params);
   void document_symbol(const text::JsonValue& id,
                        const text::JsonValue& params);
   void hover(const text::JsonValue& id, const text::JsonValue& params);

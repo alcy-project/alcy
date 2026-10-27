@@ -10,6 +10,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   pair and buffers the reads.
 - `document.{h,cc}` holds the open buffers, applies incremental
   changes in protocol order, and maps LSP positions to byte offsets.
+- `folding.{h,cc}` folds every multi-line brace pair and every run of
+  comments on adjacent lines, from the lossless CST.
 - `diagnostics.{h,cc}` runs `linter::lint_source` over one buffer and
   renders the bag as LSP diagnostics, so a compiler error and a lint
   finding arrive from the same pass.
@@ -27,10 +29,11 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   `lsp.{h,cc}` is the entry point the cli calls.
 
 The unit suite drives framing, position mapping, diagnostics, the
-layout engine, and the outline directly. `tools/check_lsp.py` runs a
-session against the built binary and asserts the handshake, a published
-diagnostic, a formatting edit, the outline, and the layout both hover
-and `alcy/structLayout` return, which is the gate CI asks.
+layout engine, the outline, and folding directly. `tools/check_lsp.py`
+runs a session against the built binary and asserts the handshake, a
+published diagnostic, a formatting edit, the outline, both kinds of
+fold, and the layout both hover and `alcy/structLayout` return, which
+is the gate CI asks.
 
 ## Notes
 

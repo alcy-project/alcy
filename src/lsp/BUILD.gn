@@ -11,6 +11,8 @@ source_set("lsp") {
     "diagnostics.h",
     "document.cc",
     "document.h",
+    "folding.cc",
+    "folding.h",
     "formatting.cc",
     "formatting.h",
     "frame.cc",
@@ -31,6 +33,7 @@ source_set("lsp") {
 
   deps = [
     "//src:alcy_lib",
+    "//src/cst",
     "//src/fmt:alcy_fmt",
     "//src/linter",
   ]
