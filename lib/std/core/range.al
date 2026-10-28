@@ -117,7 +117,17 @@ impl<T> Iterator < T > for RangeIter<T> {
     if self.end.done_after(v, self.stride) {
       self.done = true
     } else {
-      self.current = self.current + self.stride
+      stepped := wrapping_add(self.current, self.stride)
+      if stepped < self.current {
+        // The step would leave the type, so the value just yielded is
+        // the last one and the cursor is spent. An open end has no
+        // bound to test against, so it reaches this where a bounded
+        // one stops before the step; its last value is yielded either
+        // way, which is what lets the body stop there.
+        self.done = true
+      } else {
+        self.current = stepped
+      }
     }
     ret Option::Some(v)
   }

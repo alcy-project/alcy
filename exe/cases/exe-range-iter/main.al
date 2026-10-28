@@ -67,6 +67,44 @@ fn main() -> i32 {
   if n != 55 {
     ret 8
   }
+  // An open end reaches the width's maximum as well: the last value is
+  // yielded and the cursor is spent, so a body can stop at the maximum
+  // rather than the step past it overshooting first.
+  mut top := 0
+  mut top_last := 0
+  for i in 2147483640..{
+    top_last = i
+    top = top + 1
+    if top > 20 {
+      ret 12
+    }
+  }
+  if top != 8 {
+    ret 13
+  }
+  if top_last != 2147483647 {
+    ret 14
+  }
+  mut wide_end := 0
+  for i in 18446744073709551613u64..{
+    wide_end = wide_end + 1
+    if wide_end > 20 {
+      ret 15
+    }
+  }
+  if wide_end != 3 {
+    ret 16
+  }
+  mut strided := 0
+  for i in (2147483644..).step_by(2) {
+    strided = strided + 1
+    if strided > 20 {
+      ret 17
+    }
+  }
+  if strided != 2 {
+    ret 18
+  }
   // A spent cursor stays spent.
   r := 1..<4
   mut it := r.into_iter()
