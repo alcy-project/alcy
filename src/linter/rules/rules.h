@@ -71,15 +71,6 @@ struct EmptyLoop {
   static void run(LintContext& ctx);
 };
 
-struct NeedlessReturn {
-  static constexpr std::string_view ID = "needless-return";
-  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
-  static constexpr LintCode CODE = LintCode::NeedlessReturn;
-  static constexpr std::string_view SUMMARY =
-      "a return that ends a function body";
-  static void run(LintContext& ctx);
-};
-
 // Rules over expressions.
 struct DoubleNegation {
   static constexpr std::string_view ID = "double-negation";

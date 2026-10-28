@@ -155,12 +155,6 @@ TEST_CASE("nested-if reports an if whose only statement is an if") {
   CHECK(findings_for(run.ctx.bag, "nested-if") == 1);
 }
 
-TEST_CASE("needless-return reports a tail return") {
-  Run run;
-  run("fn main() -> i32 {\n  ret 0\n}\n", default_config(run.ctx));
-  CHECK(findings_for(run.ctx.bag, "needless-return") == 1);
-}
-
 TEST_CASE("unreachable-code reports the statement after a break") {
   Run run;
   // The rule is off by default because lowering warns about the same

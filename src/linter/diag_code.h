@@ -26,11 +26,10 @@ enum class LintCode : u8 {
   DoubleNegation = 14,
   SelfComparison = 15,
   NestedIf = 16,
-  NeedlessReturn = 17,
-  MissingDocs = 18,
-  TooManyArguments = 19,
-  EmptyLoop = 20,
-  Shadow = 21,
+  MissingDocs = 17,
+  TooManyArguments = 18,
+  EmptyLoop = 19,
+  Shadow = 20,
 };
 
 }  // namespace linter

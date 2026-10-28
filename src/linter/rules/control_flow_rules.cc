@@ -128,35 +128,6 @@ void check_loop(LintContext& ctx, ast::ExprIdx expr) {
   }
 }
 
-void check_needless_return(LintContext& ctx, ast::ItemIdx item) {
-  const ast::ItemNode& node = ctx.ast.items[item];
-  if (node.kind != ast::ItemKind::Fn) {
-    return;
-  }
-  const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
-  if (!fn.body.is_valid()) {
-    return;
-  }
-  const ast::Block& body = ctx.ast.blocks[fn.body];
-  // A body either ends on a tail expression, which is how a value is
-  // written without a return, or on a statement. A return in either
-  // position is the one the reader does not need.
-  ast::ExprIdx tail = body.value;
-  if (!tail.is_valid() && !body.statements.empty()) {
-    const ast::StmtNode& last = ctx.ast.stmts[body.statements.back()];
-    if (last.kind == ast::StmtKind::Expr) {
-      tail = last.payload.get<ast::StmtExpr>().value;
-    }
-  }
-  if (!tail.is_valid()) {
-    return;
-  }
-  const ast::ExprNode& ret = ctx.ast.exprs[tail];
-  if (ret.kind == ast::ExprKind::Return) {
-    ctx.report<i18n::Key::LintNeedlessReturn>(ret.span);
-  }
-}
-
 }  // namespace
 
 void UnreachableCode::run(LintContext& ctx) {
@@ -169,10 +140,6 @@ void WhileTrue::run(LintContext& ctx) {
 
 void EmptyLoop::run(LintContext& ctx) {
   for_each_expr(ctx, &check_loop);
-}
-
-void NeedlessReturn::run(LintContext& ctx) {
-  for_each_item(ctx, &check_needless_return);
 }
 
 }  // namespace linter::rules

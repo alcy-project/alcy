@@ -44,7 +44,6 @@ change the exit code.
 | `unreachable-code` | allow | a statement after control leaves the block |
 | `while-true` | warn | `while true`, which a `loop` states better |
 | `empty-loop` | warn | a `loop` with an empty body |
-| `needless-return` | warn | a `ret` that ends a function body |
 | `double-negation` | warn | an operator applied to itself |
 | `self-comparison` | warn | a comparison whose operands are one expression |
 | `nested-if` | warn | an `if` whose only statement is another `if` |

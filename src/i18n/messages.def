@@ -544,7 +544,6 @@
   F(LintDoubleNegation, "double negation is a no-op") \
   F(LintEmptyLoop, "this loop has an empty body") \
   F(LintMissingDocs, "public item {} is missing a documentation comment") \
-  F(LintNeedlessReturn, "unnecessary return at the end of the function") \
   F(LintNestedIf, "nested if can be collapsed into a single condition") \
   F(LintSelfComparison, "comparison of a value with itself") \
   F(LintShadow, "binding shadows an earlier binding: {}") \
