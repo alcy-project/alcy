@@ -275,7 +275,26 @@ def main() -> int:
                 "positions": [{"line": 4, "character": 7}],
             },
         },
-        {"jsonrpc": "2.0", "id": 17, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 17,
+            "method": "textDocument/prepareRename",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 7},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 18,
+            "method": "textDocument/rename",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 7},
+                "newName": "ident",
+            },
+        },
+        {"jsonrpc": "2.0", "id": 19, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -330,6 +349,9 @@ def main() -> int:
         return fail("initialize did not advertise documentHighlightProvider")
     if capabilities.get("selectionRangeProvider") is not True:
         return fail("initialize did not advertise selectionRangeProvider")
+    rename = capabilities.get("renameProvider")
+    if not isinstance(rename, dict) or rename.get("prepareProvider") is not True:
+        return fail("initialize did not advertise renameProvider")
     if not isinstance(capabilities.get("diagnosticProvider"), dict):
         return fail("initialize did not advertise diagnosticProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
@@ -472,7 +494,18 @@ def main() -> int:
     if depth < 3:
         return fail(f"selectionRange did not grow past the word: {selections!r}")
 
-    if by_id.get(17, {}).get("result", "missing") is not None:
+    prepare = by_id.get(17, {}).get("result")
+    if not isinstance(prepare, dict) or prepare.get("placeholder") != "id":
+        return fail(f"prepareRename did not name id: {prepare!r}")
+
+    renamed = by_id.get(18, {}).get("result")
+    rename_edits = (
+        renamed.get("changes", {}).get(NAV_URI) if isinstance(renamed, dict) else None
+    )
+    if not isinstance(rename_edits, list) or len(rename_edits) < 2:
+        return fail(f"rename did not edit both occurrences: {renamed!r}")
+
+    if by_id.get(19, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

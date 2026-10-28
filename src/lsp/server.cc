@@ -26,6 +26,7 @@
 #include "lsp/layout.h"
 #include "lsp/navigation.h"
 #include "lsp/protocol.h"
+#include "lsp/rename.h"
 #include "lsp/selection.h"
 #include "lsp/semantic_tokens.h"
 #include "lsp/signature.h"
@@ -42,6 +43,7 @@ constexpr i32 PARSE_ERROR = -32700;
 constexpr i32 INVALID_REQUEST = -32600;
 constexpr i32 METHOD_NOT_FOUND = -32601;
 constexpr i32 SERVER_NOT_INITIALIZED = -32002;
+constexpr i32 INVALID_PARAMS = -32602;
 
 const text::JsonValue* field(const text::JsonValue& object,
                              std::string_view key) {
@@ -204,6 +206,24 @@ void Server::handle_request(const text::JsonValue& message) {
     diagnostic(*id, *params);
     return;
   }
+  if (method == "textDocument/prepareRename") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "prepareRename needs params");
+      return;
+    }
+    prepare_rename(*id, *params);
+    return;
+  }
+  if (method == "textDocument/rename") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "rename needs params");
+      return;
+    }
+    rename(*id, *params);
+    return;
+  }
   if (method == "textDocument/selectionRange") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -345,6 +365,9 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("documentHighlightProvider",
                    text::JsonValue::make_bool(true));
   capabilities.set("selectionRangeProvider", text::JsonValue::make_bool(true));
+  text::JsonValue rename_provider = text::JsonValue::make_object();
+  rename_provider.set("prepareProvider", text::JsonValue::make_bool(true));
+  capabilities.set("renameProvider", std::move(rename_provider));
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(false));
@@ -574,6 +597,49 @@ void Server::diagnostic(const text::JsonValue& id,
     return;
   }
   send_result(id, document_diagnostic_report(*document));
+}
+
+void Server::prepare_rename(const text::JsonValue& id,
+                            const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  const std::optional<RenameTarget> target =
+      rename_target(*document, cache_.get(*document), position);
+  if (!target.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  text::JsonValue result = text::JsonValue::make_object();
+  result.set("range",
+             range_json(*document, target->span.offset, target->span.length));
+  result.set("placeholder", text::JsonValue::make_string(target->name));
+  send_result(id, std::move(result));
+}
+
+void Server::rename(const text::JsonValue& id, const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  const text::JsonValue* new_name = field(params, "newName");
+  if (new_name == nullptr || !new_name->is_string() ||
+      !is_rename_identifier(new_name->as_string())) {
+    send_error(id, INVALID_PARAMS, "newName is not an identifier");
+    return;
+  }
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  const std::optional<text::JsonValue> edit = workspace_rename(
+      *document, cache_.get(*document), position, new_name->as_string());
+  if (!edit.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id, *edit);
 }
 
 void Server::selection_range(const text::JsonValue& id,

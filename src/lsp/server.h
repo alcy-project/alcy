@@ -47,6 +47,8 @@ class Server {
                             const text::JsonValue& params);
   void selection_range(const text::JsonValue& id,
                        const text::JsonValue& params);
+  void prepare_rename(const text::JsonValue& id, const text::JsonValue& params);
+  void rename(const text::JsonValue& id, const text::JsonValue& params);
   void inlay_hint(const text::JsonValue& id, const text::JsonValue& params);
   void code_action(const text::JsonValue& id, const text::JsonValue& params);
   void document_highlight(const text::JsonValue& id,
