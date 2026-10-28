@@ -6,6 +6,7 @@
 #include <string>
 
 #include "doctest/doctest.h"
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "text/json.h"
 
@@ -29,7 +30,8 @@ const text::JsonValue* find_hint(const text::JsonValue& hints,
 TEST_CASE("A binding without a type shows the inferred type") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn f() -> i32 {\n  x := 1\n  ret x\n}\n");
-  const text::JsonValue hints = inlay_hints(document);
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue hints = inlay_hints(document, analysis);
   CHECK(hints.is_array());
   CHECK(hints.as_array().size() == 1);
   const text::JsonValue* hint = find_hint(hints, ": i32");
@@ -55,7 +57,8 @@ TEST_CASE("A binding without a type shows the inferred type") {
 TEST_CASE("A struct shows its size and each field its offset") {
   const Document document("file:///main.al", "alcy", 1,
                           "struct Point {\n  x: i32,\n  y: i64,\n}\n");
-  const text::JsonValue hints = inlay_hints(document);
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue hints = inlay_hints(document, analysis);
   CHECK(hints.as_array().size() == 3);
   CHECK(find_hint(hints, "size 16, align 8") != nullptr);
   CHECK(find_hint(hints, "offset 0") != nullptr);
@@ -65,7 +68,8 @@ TEST_CASE("A struct shows its size and each field its offset") {
 TEST_CASE("An enum shows its size") {
   const Document document("file:///main.al", "alcy", 1,
                           "enum Shape {\n  A(i32),\n}\n");
-  const text::JsonValue hints = inlay_hints(document);
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue hints = inlay_hints(document, analysis);
   CHECK(hints.as_array().size() == 1);
   CHECK(find_hint(hints, "size 8, align 4") != nullptr);
 }

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "doctest/doctest.h"
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 
 namespace lsp {
@@ -17,7 +18,8 @@ std::optional<std::string> hover(const std::string& text,
                                  u32 line,
                                  u32 character) {
   const Document document("file:///main.al", "alcy", 1, text);
-  return hover_markdown(document, Position{line, character});
+  const DocumentAnalysis analysis(document);
+  return hover_markdown(document, analysis, Position{line, character});
 }
 
 }  // namespace

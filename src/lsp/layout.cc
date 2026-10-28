@@ -12,11 +12,8 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
-#include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "i18n/language.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "lsp/analysis.h"
@@ -109,11 +106,11 @@ const analyzer::CheckedModule::EnumInfo* choose_enum(
 
 }  // namespace
 
-std::optional<StructLayout> struct_layout_of(
-    const pipeline::PipelineContext& context,
-    const analyzer::CheckedPackage& package,
-    std::string_view source,
-    ast::ItemIdx item_index) {
+std::optional<StructLayout> struct_layout_of(const DocumentAnalysis& analysis,
+                                             std::string_view source,
+                                             ast::ItemIdx item_index) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
   const ast::ItemNode& item = context.ast.items[item_index];
   if (item.kind != ast::ItemKind::Struct) {
     return std::nullopt;
@@ -165,11 +162,11 @@ std::optional<StructLayout> struct_layout_of(
   return layout;
 }
 
-std::optional<EnumLayout> enum_layout_of(
-    const pipeline::PipelineContext& context,
-    const analyzer::CheckedPackage& package,
-    std::string_view source,
-    ast::ItemIdx item_index) {
+std::optional<EnumLayout> enum_layout_of(const DocumentAnalysis& analysis,
+                                         std::string_view source,
+                                         ast::ItemIdx item_index) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
   const ast::ItemNode& item = context.ast.items[item_index];
   if (item.kind != ast::ItemKind::Enum) {
     return std::nullopt;
@@ -244,16 +241,15 @@ std::optional<EnumLayout> enum_layout_of(
 }
 
 std::optional<StructLayout> struct_layout_at(const Document& document,
+                                             const DocumentAnalysis& analysis,
                                              Position position) {
-  const usize offset = document.index().byte_offset(document.text(), position);
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  source::FileId root = source::UNKNOWN_FILE;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document, &root);
-  if (checked.is_err()) {
+  if (!analysis.ok()) {
     return std::nullopt;
   }
-  const analyzer::CheckedPackage& package = checked.value();
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const source::FileId root = analysis.root();
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
   for (const analyzer::ModuleNode* module : package.tree.modules) {
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
@@ -261,7 +257,36 @@ std::optional<StructLayout> struct_layout_at(const Document& document,
           item.payload.get<ast::ItemStruct>().name.span.file == root &&
           span_contains(item.payload.get<ast::ItemStruct>().name.span,
                         offset)) {
-        return struct_layout_of(context, package, document.text(), index);
+        return struct_layout_of(analysis, document.text(), index);
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<StructLayout> struct_layout_at(const Document& document,
+                                             Position position) {
+  const DocumentAnalysis analysis(document);
+  return struct_layout_at(document, analysis, position);
+}
+
+std::optional<EnumLayout> enum_layout_at(const Document& document,
+                                         const DocumentAnalysis& analysis,
+                                         Position position) {
+  if (!analysis.ok()) {
+    return std::nullopt;
+  }
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const source::FileId root = analysis.root();
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  for (const analyzer::ModuleNode* module : package.tree.modules) {
+    for (const ast::ItemIdx index : module->items) {
+      const ast::ItemNode& item = context.ast.items[index];
+      if (item.kind == ast::ItemKind::Enum &&
+          item.payload.get<ast::ItemEnum>().name.span.file == root &&
+          span_contains(item.payload.get<ast::ItemEnum>().name.span, offset)) {
+        return enum_layout_of(analysis, document.text(), index);
       }
     }
   }
@@ -270,26 +295,8 @@ std::optional<StructLayout> struct_layout_at(const Document& document,
 
 std::optional<EnumLayout> enum_layout_at(const Document& document,
                                          Position position) {
-  const usize offset = document.index().byte_offset(document.text(), position);
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  source::FileId root = source::UNKNOWN_FILE;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document, &root);
-  if (checked.is_err()) {
-    return std::nullopt;
-  }
-  const analyzer::CheckedPackage& package = checked.value();
-  for (const analyzer::ModuleNode* module : package.tree.modules) {
-    for (const ast::ItemIdx index : module->items) {
-      const ast::ItemNode& item = context.ast.items[index];
-      if (item.kind == ast::ItemKind::Enum &&
-          item.payload.get<ast::ItemEnum>().name.span.file == root &&
-          span_contains(item.payload.get<ast::ItemEnum>().name.span, offset)) {
-        return enum_layout_of(context, package, document.text(), index);
-      }
-    }
-  }
-  return std::nullopt;
+  const DocumentAnalysis analysis(document);
+  return enum_layout_at(document, analysis, position);
 }
 
 std::string struct_layout_markdown(const StructLayout& layout) {

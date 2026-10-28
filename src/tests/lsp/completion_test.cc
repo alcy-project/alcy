@@ -6,6 +6,7 @@
 #include <string>
 
 #include "doctest/doctest.h"
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "text/json.h"
 
@@ -40,7 +41,9 @@ const text::JsonValue* find_item(const text::JsonValue& list,
 
 TEST_CASE("Completion offers a declared struct for its prefix") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
-  const text::JsonValue list = completion_items(document, Position{0, 12});
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{0, 12});
   const text::JsonValue* point = find_item(list, "Point");
   CHECK(point != nullptr);
   if (point != nullptr) {
@@ -55,7 +58,9 @@ TEST_CASE("Completion offers a declared struct for its prefix") {
 
 TEST_CASE("Completion offers a function for its prefix") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
-  const text::JsonValue list = completion_items(document, Position{4, 7});
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{4, 7});
   const text::JsonValue* add = find_item(list, "add");
   CHECK(add != nullptr);
   if (add != nullptr) {
@@ -69,7 +74,9 @@ TEST_CASE("Completion offers a function for its prefix") {
 
 TEST_CASE("Completion offers a keyword for its prefix") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
-  const text::JsonValue list = completion_items(document, Position{4, 5});
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{4, 5});
   const text::JsonValue* item = find_item(list, "ret");
   CHECK(item != nullptr);
   if (item != nullptr) {

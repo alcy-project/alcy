@@ -8,11 +8,10 @@
 #include <string_view>
 #include <vector>
 
-#include "analyzer/types.h"
 #include "ast/ast.h"
 #include "fpag/base/numeric.h"
+#include "lsp/analysis.h"
 #include "lsp/document.h"
-#include "pipeline/pipeline_context.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -63,26 +62,29 @@ struct EnumLayout {
 };
 
 // The layout of the struct or enum declaration whose name contains
-// position. Each runs the frontend, so a caller that already holds a
-// checked package uses the _of form below.
+// position, read from an analysis the caller already holds.
+std::optional<StructLayout> struct_layout_at(const Document& document,
+                                             const DocumentAnalysis& analysis,
+                                             Position position);
+std::optional<EnumLayout> enum_layout_at(const Document& document,
+                                         const DocumentAnalysis& analysis,
+                                         Position position);
+
+// The same, running the frontend here. A caller inside a request holds
+// an analysis and uses the form above instead.
 std::optional<StructLayout> struct_layout_at(const Document& document,
                                              Position position);
 std::optional<EnumLayout> enum_layout_at(const Document& document,
                                          Position position);
 
-// The same over a checked package the caller already holds, with the
-// source the package was built from. Hover runs the frontend once and
-// reads every layout through these.
-std::optional<StructLayout> struct_layout_of(
-    const pipeline::PipelineContext& context,
-    const analyzer::CheckedPackage& package,
-    std::string_view source,
-    ast::ItemIdx item);
-std::optional<EnumLayout> enum_layout_of(
-    const pipeline::PipelineContext& context,
-    const analyzer::CheckedPackage& package,
-    std::string_view source,
-    ast::ItemIdx item);
+// The layout of the declaration itself, for a caller that already found
+// the item. Hover and the requests read every layout through these.
+std::optional<StructLayout> struct_layout_of(const DocumentAnalysis& analysis,
+                                             std::string_view source,
+                                             ast::ItemIdx item);
+std::optional<EnumLayout> enum_layout_of(const DocumentAnalysis& analysis,
+                                         std::string_view source,
+                                         ast::ItemIdx item);
 
 // Markdown for a hover: the size and alignment, then a table of fields
 // or variants.

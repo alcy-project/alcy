@@ -12,6 +12,8 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "lsp/analysis.h"
+#include "lsp/analysis_cache.h"
 #include "lsp/completion.h"
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
@@ -355,8 +357,9 @@ void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
     send_result(id, text::JsonValue{});
     return;
   }
+  const DocumentAnalysis& analysis = cache_.get(*document);
   const std::optional<std::string> markdown =
-      hover_markdown(*document, position);
+      hover_markdown(*document, analysis, position);
   if (!markdown.has_value()) {
     send_result(id, text::JsonValue{});
     return;
@@ -377,7 +380,9 @@ void Server::definition(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  const std::optional<diag::Span> location = definition_at(*document, position);
+  const DocumentAnalysis& analysis = cache_.get(*document);
+  const std::optional<diag::Span> location =
+      definition_at(*document, analysis, position);
   if (!location.has_value()) {
     send_result(id, text::JsonValue{});
     return;
@@ -401,14 +406,15 @@ void Server::references(const text::JsonValue& id,
       include_declaration = include->as_bool();
     }
   }
+  const DocumentAnalysis& analysis = cache_.get(*document);
   text::JsonValue result = text::JsonValue::make_array();
   if (include_declaration) {
     if (const std::optional<diag::Span> location =
-            definition_at(*document, position)) {
+            definition_at(*document, analysis, position)) {
       result.push(location_json(*document, *location));
     }
   }
-  for (const diag::Span site : references_at(*document, position)) {
+  for (const diag::Span site : references_at(*document, analysis, position)) {
     result.push(location_json(*document, site));
   }
   send_result(id, std::move(result));
@@ -422,7 +428,7 @@ void Server::completion(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, completion_items(*document, position));
+  send_result(id, completion_items(*document, cache_.get(*document), position));
 }
 
 void Server::signature(const text::JsonValue& id,
@@ -433,7 +439,7 @@ void Server::signature(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  send_result(id, signature_help(*document, position));
+  send_result(id, signature_help(*document, cache_.get(*document), position));
 }
 
 void Server::inlay_hint(const text::JsonValue& id,
@@ -449,7 +455,7 @@ void Server::inlay_hint(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, inlay_hints(*document));
+  send_result(id, inlay_hints(*document, cache_.get(*document)));
 }
 
 void Server::struct_layout(const text::JsonValue& id,
@@ -461,7 +467,7 @@ void Server::struct_layout(const text::JsonValue& id,
     return;
   }
   const std::optional<StructLayout> layout =
-      struct_layout_at(*document, position);
+      struct_layout_at(*document, cache_.get(*document), position);
   if (!layout.has_value()) {
     send_result(id, text::JsonValue{});
     return;
@@ -513,6 +519,7 @@ void Server::did_close(const text::JsonValue& params) {
   }
   const std::string_view uri = string_field(*text_document, "uri");
   documents_.close(uri);
+  cache_.erase(uri);
   publish_empty_diagnostics(uri);
 }
 

@@ -12,11 +12,8 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
-#include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
@@ -194,16 +191,15 @@ std::string type_reference_markdown(const pipeline::PipelineContext& context,
 }  // namespace
 
 std::optional<std::string> hover_markdown(const Document& document,
+                                          const DocumentAnalysis& analysis,
                                           Position position) {
-  const usize offset = document.index().byte_offset(document.text(), position);
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  source::FileId root = source::UNKNOWN_FILE;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document, &root);
-  if (checked.is_err()) {
+  if (!analysis.ok()) {
     return std::nullopt;
   }
-  const analyzer::CheckedPackage& package = checked.value();
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
   const std::string_view source = document.text();
 
   for (const analyzer::ModuleNode* module : package.tree.modules) {
@@ -219,7 +215,7 @@ std::optional<std::string> hover_markdown(const Document& document,
               item.payload.get<ast::ItemStruct>();
           if (span_contains(declaration.name.span, offset)) {
             const std::optional<StructLayout> layout =
-                struct_layout_of(context, package, source, index);
+                struct_layout_of(analysis, source, index);
             if (!layout.has_value()) {
               return std::nullopt;
             }
@@ -230,7 +226,7 @@ std::optional<std::string> hover_markdown(const Document& document,
               continue;
             }
             const std::optional<StructLayout> layout =
-                struct_layout_of(context, package, source, index);
+                struct_layout_of(analysis, source, index);
             if (!layout.has_value() || i >= layout->fields.size()) {
               return std::nullopt;
             }
@@ -246,7 +242,7 @@ std::optional<std::string> hover_markdown(const Document& document,
           const ast::ItemEnum& declaration = item.payload.get<ast::ItemEnum>();
           if (span_contains(declaration.name.span, offset)) {
             const std::optional<EnumLayout> layout =
-                enum_layout_of(context, package, source, index);
+                enum_layout_of(analysis, source, index);
             if (!layout.has_value()) {
               return std::nullopt;
             }
@@ -257,7 +253,7 @@ std::optional<std::string> hover_markdown(const Document& document,
               continue;
             }
             const std::optional<EnumLayout> layout =
-                enum_layout_of(context, package, source, index);
+                enum_layout_of(analysis, source, index);
             if (!layout.has_value() || i >= layout->variants.size()) {
               return std::nullopt;
             }

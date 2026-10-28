@@ -9,6 +9,8 @@ source_set("lsp") {
   sources = [
     "analysis.cc",
     "analysis.h",
+    "analysis_cache.cc",
+    "analysis_cache.h",
     "ast_query.cc",
     "ast_query.h",
     "completion.cc",

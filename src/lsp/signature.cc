@@ -12,11 +12,8 @@
 
 #include "analyzer/types.h"
 #include "ast/ast.h"
-#include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
@@ -115,16 +112,16 @@ std::string signature_label(const pipeline::PipelineContext& context,
 
 }  // namespace
 
-text::JsonValue signature_help(const Document& document, Position position) {
-  const usize offset = document.index().byte_offset(document.text(), position);
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  source::FileId root = source::UNKNOWN_FILE;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document, &root);
-  if (checked.is_err()) {
+text::JsonValue signature_help(const Document& document,
+                               const DocumentAnalysis& analysis,
+                               Position position) {
+  if (!analysis.ok()) {
     return {};
   }
-  const analyzer::CheckedPackage& package = checked.value();
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const pipeline::PipelineContext& context = analysis.context();
+  const source::FileId root = analysis.root();
+  const analyzer::CheckedPackage& package = analysis.package();
 
   const std::optional<CallSite> site = call_at(context, offset, root);
   if (!site.has_value()) {

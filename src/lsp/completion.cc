@@ -11,10 +11,7 @@
 #include <vector>
 
 #include "analyzer/types.h"
-#include "diag/bag.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
@@ -131,16 +128,15 @@ bool starts_with(std::string_view value, std::string_view prefix) {
 
 }  // namespace
 
-text::JsonValue completion_items(const Document& document, Position position) {
+text::JsonValue completion_items(const Document& document,
+                                 const DocumentAnalysis& analysis,
+                                 Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   const std::string_view prefix = prefix_at(document.text(), offset);
 
-  pipeline::PipelineContext context{i18n::Language::EnUs};
   std::vector<Item> items;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document);
-  if (checked.is_ok()) {
-    collect(context, checked.value(), &items);
+  if (analysis.ok()) {
+    collect(analysis.context(), analysis.package(), &items);
   }
   for (const char* keyword : K_KEYWORDS) {
     items.push_back(Item{keyword, "", K_KEYWORD});

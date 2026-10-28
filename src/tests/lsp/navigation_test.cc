@@ -9,6 +9,7 @@
 
 #include "diag/span.h"
 #include "doctest/doctest.h"
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 
 namespace lsp {
@@ -41,8 +42,9 @@ Position position_of(const Document& document, diag::Span span) {
 
 TEST_CASE("A call resolves to the function declaration") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
+  const DocumentAnalysis analysis(document);
   const std::optional<diag::Span> span =
-      definition_at(document, Position{13, 8});
+      definition_at(document, analysis, Position{13, 8});
   CHECK(span.has_value());
   if (span.has_value()) {
     const Position start = position_of(document, *span);
@@ -53,7 +55,9 @@ TEST_CASE("A call resolves to the function declaration") {
 
 TEST_CASE("A function's references are its call sites") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
-  const std::vector<diag::Span> sites = references_at(document, Position{4, 4});
+  const DocumentAnalysis analysis(document);
+  const std::vector<diag::Span> sites =
+      references_at(document, analysis, Position{4, 4});
   CHECK(sites.size() == 1);
   if (sites.size() == 1) {
     const Position start = position_of(document, sites[0]);
@@ -64,8 +68,9 @@ TEST_CASE("A function's references are its call sites") {
 
 TEST_CASE("A type reference resolves to the declaration") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
+  const DocumentAnalysis analysis(document);
   const std::optional<diag::Span> span =
-      definition_at(document, Position{8, 12});
+      definition_at(document, analysis, Position{8, 12});
   CHECK(span.has_value());
   if (span.has_value()) {
     const Position start = position_of(document, *span);
@@ -76,8 +81,9 @@ TEST_CASE("A type reference resolves to the declaration") {
 
 TEST_CASE("A local use resolves to its binding") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
+  const DocumentAnalysis analysis(document);
   const std::optional<diag::Span> span =
-      definition_at(document, Position{14, 6});
+      definition_at(document, analysis, Position{14, 6});
   CHECK(span.has_value());
   if (span.has_value()) {
     const Position start = position_of(document, *span);
@@ -89,8 +95,9 @@ TEST_CASE("A local use resolves to its binding") {
 TEST_CASE("Nothing at a comment answers nothing") {
   const Document document("file:///main.al", "alcy", 1,
                           "// nothing here\nfn main() -> i32 {\n  ret 0\n}\n");
-  CHECK(!definition_at(document, Position{0, 5}).has_value());
-  CHECK(references_at(document, Position{0, 5}).empty());
+  const DocumentAnalysis analysis(document);
+  CHECK(!definition_at(document, analysis, Position{0, 5}).has_value());
+  CHECK(references_at(document, analysis, Position{0, 5}).empty());
 }
 
 }  // namespace lsp

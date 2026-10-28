@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "fpag/base/numeric.h"
+#include "lsp/analysis_cache.h"
 #include "lsp/document.h"
 #include "lsp/transport.h"
 #include "text/json.h"
@@ -57,6 +58,7 @@ class Server {
 
   Transport& transport_;
   DocumentStore documents_;
+  AnalysisCache cache_;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;

@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 
 namespace lsp {
@@ -18,6 +19,7 @@ namespace lsp {
 // The frontend runs once per call, and every layout and type is read
 // from that one checked package.
 std::optional<std::string> hover_markdown(const Document& document,
+                                          const DocumentAnalysis& analysis,
                                           Position position);
 
 }  // namespace lsp

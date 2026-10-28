@@ -4,6 +4,7 @@
 #include "lsp/signature.h"
 
 #include "doctest/doctest.h"
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "text/json.h"
 
@@ -23,7 +24,9 @@ const char* const SOURCE =
 
 TEST_CASE("Signature help names the call and starts at the first parameter") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
-  const text::JsonValue result = signature_help(document, Position{4, 10});
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue result =
+      signature_help(document, analysis, Position{4, 10});
   CHECK(result.is_object());
   if (!result.is_object()) {
     return;
@@ -47,7 +50,9 @@ TEST_CASE("Signature help names the call and starts at the first parameter") {
 
 TEST_CASE("Signature help follows the argument the cursor is in") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
-  const text::JsonValue result = signature_help(document, Position{4, 13});
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue result =
+      signature_help(document, analysis, Position{4, 13});
   CHECK(result.is_object());
   if (!result.is_object()) {
     return;
@@ -61,7 +66,8 @@ TEST_CASE("Signature help follows the argument the cursor is in") {
 
 TEST_CASE("Signature help outside a call answers nothing") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
-  CHECK(!signature_help(document, Position{1, 5}).is_object());
+  const DocumentAnalysis analysis(document);
+  CHECK(!signature_help(document, analysis, Position{1, 5}).is_object());
 }
 
 }  // namespace lsp

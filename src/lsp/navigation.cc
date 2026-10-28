@@ -9,11 +9,8 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
-#include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "i18n/language.h"
 #include "lsp/analysis.h"
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
@@ -117,16 +114,15 @@ std::optional<diag::Span> declaration_name_at(
 }  // namespace
 
 std::optional<diag::Span> definition_at(const Document& document,
+                                        const DocumentAnalysis& analysis,
                                         Position position) {
-  const usize offset = document.index().byte_offset(document.text(), position);
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  source::FileId root = source::UNKNOWN_FILE;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document, &root);
-  if (checked.is_err()) {
+  if (!analysis.ok()) {
     return std::nullopt;
   }
-  const analyzer::CheckedPackage& package = checked.value();
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
@@ -140,16 +136,15 @@ std::optional<diag::Span> definition_at(const Document& document,
 }
 
 std::vector<diag::Span> references_at(const Document& document,
+                                      const DocumentAnalysis& analysis,
                                       Position position) {
-  const usize offset = document.index().byte_offset(document.text(), position);
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  source::FileId root = source::UNKNOWN_FILE;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document, &root);
-  if (checked.is_err()) {
+  if (!analysis.ok()) {
     return {};
   }
-  const analyzer::CheckedPackage& package = checked.value();
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
 
   std::optional<diag::Span> declaration;
   for (const analyzer::CheckedModule& module : package.modules) {

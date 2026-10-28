@@ -12,9 +12,11 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   changes in protocol order, and maps LSP positions to byte offsets.
 - `folding.{h,cc}` folds every multi-line brace pair and every run of
   comments on adjacent lines, from the lossless CST.
-- `analysis.{h,cc}` runs the compiler frontend over one buffer and
-  returns the checked package, the one entry every semantic feature
-  uses.
+- `analysis.{h,cc}` owns one checked reading of a buffer: the frontend
+  context and the package it produced. Every semantic feature reads it
+  through a `DocumentAnalysis`.
+- `analysis_cache.{h,cc}` keys those readings by URI and version, so a
+  request for a buffer that did not change reuses the previous one.
 - `ast_query.{h,cc}` names the span a declaration's name occupies,
   shared by hover and navigation.
 - `completion.{h,cc}` offers the names the checked package holds, plus
@@ -52,7 +54,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
 
 The unit suite drives framing, position mapping, diagnostics, the
 layout engine, hover, inlay hints, navigation, completion, signature
-help, the outline, and folding directly. `tools/check_lsp.py` runs a
+help, the cache, the outline, and folding directly.
+`tools/check_lsp.py` runs a
 session against the built binary and asserts the handshake, a published
 diagnostic, a formatting edit, the outline, both kinds of fold, a
 definition and its references, a completion and a signature, an inlay
@@ -73,9 +76,9 @@ simple side of that trade; a future incremental index belongs behind
 the same interface.
 
 Diagnostics run the linter's single-source entry, which runs the
-frontend the rules need and then the rules. Caching per-document
-analysis is future work behind the same request path, not a second
-analysis path.
+frontend the rules need and then the rules. The semantic features share
+one cached reading instead; pointing the linter's rules at that reading
+is a later step, not a second analysis path.
 
 The checked package also holds the standard library, whose spans
 belong to other files. A feature compares a span against the cursor

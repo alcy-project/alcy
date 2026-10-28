@@ -13,11 +13,8 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
-#include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
-#include "fpag/base/result.h"
-#include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "lsp/analysis.h"
@@ -44,10 +41,11 @@ struct Hint {
 };
 
 // A binding that wrote no type shows the type the initializer decided.
-void collect_binding_hints(const pipeline::PipelineContext& context,
-                           const analyzer::CheckedPackage& package,
-                           source::FileId root,
+void collect_binding_hints(const DocumentAnalysis& analysis,
                            std::vector<Hint>* out) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
   context.ast.stmts.for_each_node([&](const ast::StmtIdx index) {
     const ast::StmtNode& statement = context.ast.stmts[index];
     if (statement.span.file != root || statement.kind != ast::StmtKind::Decl) {
@@ -79,11 +77,12 @@ void collect_binding_hints(const pipeline::PipelineContext& context,
   });
 }
 
-void collect_layout_hints(const pipeline::PipelineContext& context,
-                          const analyzer::CheckedPackage& package,
+void collect_layout_hints(const DocumentAnalysis& analysis,
                           std::string_view source,
-                          source::FileId root,
                           std::vector<Hint>* out) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
   for (const analyzer::ModuleNode* module : package.tree.modules) {
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
@@ -92,7 +91,7 @@ void collect_layout_hints(const pipeline::PipelineContext& context,
       }
       if (item.kind == ast::ItemKind::Struct) {
         const std::optional<StructLayout> layout =
-            struct_layout_of(context, package, source, index);
+            struct_layout_of(analysis, source, index);
         if (!layout.has_value() || layout->generic) {
           continue;
         }
@@ -116,7 +115,7 @@ void collect_layout_hints(const pipeline::PipelineContext& context,
         }
       } else if (item.kind == ast::ItemKind::Enum) {
         const std::optional<EnumLayout> layout =
-            enum_layout_of(context, package, source, index);
+            enum_layout_of(analysis, source, index);
         if (!layout.has_value() || layout->generic) {
           continue;
         }
@@ -133,19 +132,14 @@ void collect_layout_hints(const pipeline::PipelineContext& context,
 
 }  // namespace
 
-text::JsonValue inlay_hints(const Document& document) {
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  source::FileId root = source::UNKNOWN_FILE;
-  base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      analyze_document(context, document, &root);
-  if (checked.is_err()) {
+text::JsonValue inlay_hints(const Document& document,
+                            const DocumentAnalysis& analysis) {
+  if (!analysis.ok()) {
     return text::JsonValue::make_array();
   }
-  const analyzer::CheckedPackage& package = checked.value();
-
   std::vector<Hint> hints;
-  collect_binding_hints(context, package, root, &hints);
-  collect_layout_hints(context, package, document.text(), root, &hints);
+  collect_binding_hints(analysis, &hints);
+  collect_layout_hints(analysis, document.text(), &hints);
   std::sort(hints.begin(), hints.end(),
             [](const Hint& left, const Hint& right) {
               if (left.offset != right.offset) {
