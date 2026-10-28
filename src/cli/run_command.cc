@@ -124,6 +124,9 @@ i32 run_run(const CliConfig& config,
                             found.manifest_name, plan, args, announce_exec,
                             &announcement);
   envelope.trace = trace.take_events();
+  // A run lowers through the same lifecycle a build does, so its cache
+  // outcome is the same report.
+  envelope.cache = ctx.cache_outcome;
   if (result.is_err()) {
     return failed;
   }
