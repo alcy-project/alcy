@@ -159,6 +159,38 @@ TEST_CASE("A method declaration's references include the call") {
   }
 }
 
+TEST_CASE("A variable's type definition is its struct declaration") {
+  const Document document("file:///main.al", "alcy", 1, SOURCE);
+  const DocumentAnalysis analysis(document);
+  const std::optional<diag::Span> span =
+      type_definition_at(document, analysis, Position{9, 6});
+  CHECK(span.has_value());
+  if (span.has_value()) {
+    const Position start = position_of(document, *span);
+    CHECK(start.line == 0);
+    CHECK(start.character == 7);
+  }
+}
+
+TEST_CASE("A written type definition is its declaration") {
+  const Document document("file:///main.al", "alcy", 1, SOURCE);
+  const DocumentAnalysis analysis(document);
+  const std::optional<diag::Span> span =
+      type_definition_at(document, analysis, Position{8, 11});
+  CHECK(span.has_value());
+  if (span.has_value()) {
+    const Position start = position_of(document, *span);
+    CHECK(start.line == 0);
+    CHECK(start.character == 7);
+  }
+}
+
+TEST_CASE("A primitive has no type definition") {
+  const Document document("file:///main.al", "alcy", 1, SOURCE);
+  const DocumentAnalysis analysis(document);
+  CHECK(!type_definition_at(document, analysis, Position{5, 6}).has_value());
+}
+
 TEST_CASE("Nothing at a comment answers nothing") {
   const Document document("file:///main.al", "alcy", 1,
                           "// nothing here\nfn main() -> i32 {\n  ret 0\n}\n");

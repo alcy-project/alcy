@@ -97,46 +97,6 @@ std::string_view span_text(std::string_view source, diag::Span span) {
   return source.substr(span.offset, span.length);
 }
 
-// The smallest type or expression whose span holds the cursor: the one
-// the position is written inside, not the statement around it.
-std::optional<ast::TypeIdx> innermost_type(
-    const pipeline::PipelineContext& context,
-    usize offset,
-    source::FileId root) {
-  std::optional<ast::TypeIdx> best;
-  usize best_length = 0;
-  context.ast.types.for_each_node([&](const ast::TypeIdx index) {
-    const diag::Span span = context.ast.types[index].span;
-    if (span.file != root || !span_contains(span, offset)) {
-      return;
-    }
-    if (!best.has_value() || span.length < best_length) {
-      best = index;
-      best_length = span.length;
-    }
-  });
-  return best;
-}
-
-std::optional<ast::ExprIdx> innermost_expr(
-    const pipeline::PipelineContext& context,
-    usize offset,
-    source::FileId root) {
-  std::optional<ast::ExprIdx> best;
-  usize best_length = 0;
-  context.ast.exprs.for_each_node([&](const ast::ExprIdx index) {
-    const diag::Span span = context.ast.exprs[index].span;
-    if (span.file != root || !span_contains(span, offset)) {
-      return;
-    }
-    if (!best.has_value() || span.length < best_length) {
-      best = index;
-      best_length = span.length;
-    }
-  });
-  return best;
-}
-
 // One line naming a type's size and alignment, or nothing for a type
 // that has no layout until an argument is known.
 std::string layout_line(const pipeline::PipelineContext& context,

@@ -48,6 +48,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   own name when the cursor sits on it.
 - `rename.{h,cc}` renames the name under the cursor, editing the
   segments the checker named.
+- `navigation.{h,cc}` also answers the declaration of a value's type,
+  so a variable of struct type jumps to the struct.
 - `selection.{h,cc}` grows a selection from the word under the cursor
   through the syntax nodes the compiler parsed to the whole buffer.
 - `semantic_tokens.{h,cc}` classifies every token the lossless lexer

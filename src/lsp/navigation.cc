@@ -4,6 +4,7 @@
 #include "lsp/navigation.h"
 
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "analyzer/resolve.h"
@@ -11,6 +12,9 @@
 #include "ast/ast.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "ir/common.h"
+#include "ir/storage.h"
+#include "ir/type.h"
 #include "lsp/analysis.h"
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
@@ -28,6 +32,64 @@ bool span_contains(diag::Span span, usize offset) {
 bool same_span(diag::Span left, diag::Span right) {
   return left.file == right.file && left.offset == right.offset &&
          left.length == right.length;
+}
+
+// The declaration of a named type, when its name is the one the checker
+// registered and the declaration is in the root file.
+std::optional<diag::Span> declaration_of_name(
+    const pipeline::PipelineContext& context,
+    const analyzer::CheckedPackage& package,
+    source::FileId root,
+    std::string_view name) {
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::StructInfo& info : module.structs) {
+      if (!info.item.is_valid()) {
+        continue;
+      }
+      const ast::ItemStruct& declaration =
+          context.ast.items[info.item].payload.get<ast::ItemStruct>();
+      if (declaration.name.name == name && declaration.name.span.file == root) {
+        return item_name_span(context.ast, context.ast.items[info.item]);
+      }
+    }
+    for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
+      if (!info.item.is_valid()) {
+        continue;
+      }
+      const ast::ItemEnum& declaration =
+          context.ast.items[info.item].payload.get<ast::ItemEnum>();
+      if (declaration.name.name == name && declaration.name.span.file == root) {
+        return item_name_span(context.ast, context.ast.items[info.item]);
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+// The declaration of a checked type, looking through a reference. A
+// primitive or a tuple has no declaration to jump to.
+std::optional<diag::Span> declaration_of_type(
+    const pipeline::PipelineContext& context,
+    const analyzer::CheckedPackage& package,
+    source::FileId root,
+    ir::TypeIdx type) {
+  const ir::StorageState& state = package.types->state();
+  ir::TypeNode node = state.types[type];
+  if (node.tag == ir::TypeTag::Ref || node.tag == ir::TypeTag::MutRef) {
+    type = state.ref_types[node.as_ref()].pointee;
+    node = state.types[type];
+  }
+  if (node.tag == ir::TypeTag::Struct) {
+    return declaration_of_name(
+        context, package, root,
+        context.strings.get(state.struct_types[node.as_struct()].name));
+  }
+  if (node.tag == ir::TypeTag::Enum) {
+    return declaration_of_name(
+        context, package, root,
+        context.strings.get(state.enum_types[node.as_enum()].name));
+  }
+  return std::nullopt;
 }
 
 // A binding's name, which the package does not table because it lives
@@ -133,6 +195,46 @@ std::optional<diag::Span> definition_at(const Document& document,
     }
   }
   return declaration_name_at(context, package, offset, root);
+}
+
+std::optional<diag::Span> type_definition_at(const Document& document,
+                                             const DocumentAnalysis& analysis,
+                                             Position position) {
+  if (!analysis.ok()) {
+    return std::nullopt;
+  }
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
+  if (const std::optional<ast::ExprIdx> expr =
+          innermost_expr(context, offset, root);
+      expr.has_value()) {
+    if (const std::optional<ir::TypeIdx> type =
+            checked_expr_type(package, *expr);
+        type.has_value()) {
+      const std::optional<diag::Span> declaration =
+          declaration_of_type(context, package, root, *type);
+      if (declaration.has_value()) {
+        return declaration;
+      }
+    }
+  }
+  if (const std::optional<ast::TypeIdx> type =
+          innermost_type(context, offset, root);
+      type.has_value()) {
+    const ast::TypeNode& node = context.ast.types[*type];
+    if (node.kind == ast::TypeKind::Path) {
+      const ast::TypePath& path = node.payload.get<ast::TypePath>();
+      if (path.path != ast::PathIdx::invalid() &&
+          !context.ast.paths[path.path].segments.empty()) {
+        return declaration_of_name(
+            context, package, root,
+            context.ast.paths[path.path].segments.back().name);
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 std::vector<diag::Span> references_at(const Document& document,

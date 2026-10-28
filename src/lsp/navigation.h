@@ -26,4 +26,11 @@ std::vector<diag::Span> references_at(const Document& document,
                                       const DocumentAnalysis& analysis,
                                       Position position);
 
+// The declaration of the type of the value or written type at position:
+// a variable of struct type answers with the struct declaration. A type
+// the language defines, such as a primitive, answers nothing.
+std::optional<diag::Span> type_definition_at(const Document& document,
+                                             const DocumentAnalysis& analysis,
+                                             Position position);
+
 }  // namespace lsp

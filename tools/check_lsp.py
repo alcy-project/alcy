@@ -36,6 +36,7 @@ MAIN_URI = "file:///main.al"
 BROKEN_URI = "file:///broken.al"
 FOLD_URI = "file:///fold.al"
 NAV_URI = "file:///nav.al"
+TYPE_URI = "file:///type.al"
 
 # Lint-clean but not canonical: the diagnostics answer is empty while
 # the formatter still has a rewrite to return, so one buffer drives both
@@ -48,6 +49,9 @@ FOLD = "// one\n// two\nfn main() -> i32 {\n  if true {\n    ret 0\n  }\n  ret 1
 # A named function called once, so definition and references both point
 # at the declaration and the call.
 NAV = "fn id(x: i32) -> i32 {\n  ret x\n}\nfn main() -> i32 {\n  ret id(1)\n}\n"
+# A value of struct type, so a type definition request has a value whose
+# checked type names a declaration.
+TYPE = "struct Point {\n  x: i32,\n}\n\nfn take(p: Point) -> i32 {\n  ret p.x\n}\n"
 
 
 def alcy_binary(build_subdir: str) -> Path:
@@ -147,6 +151,18 @@ def main() -> int:
                     "languageId": "alcy",
                     "version": 1,
                     "text": NAV,
+                }
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": TYPE_URI,
+                    "languageId": "alcy",
+                    "version": 1,
+                    "text": TYPE,
                 }
             },
         },
@@ -294,7 +310,16 @@ def main() -> int:
                 "newName": "ident",
             },
         },
-        {"jsonrpc": "2.0", "id": 19, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 19,
+            "method": "textDocument/typeDefinition",
+            "params": {
+                "textDocument": {"uri": TYPE_URI},
+                "position": {"line": 5, "character": 6},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 20, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -349,6 +374,8 @@ def main() -> int:
         return fail("initialize did not advertise documentHighlightProvider")
     if capabilities.get("selectionRangeProvider") is not True:
         return fail("initialize did not advertise selectionRangeProvider")
+    if capabilities.get("typeDefinitionProvider") is not True:
+        return fail("initialize did not advertise typeDefinitionProvider")
     rename = capabilities.get("renameProvider")
     if not isinstance(rename, dict) or rename.get("prepareProvider") is not True:
         return fail("initialize did not advertise renameProvider")
@@ -505,7 +532,14 @@ def main() -> int:
     if not isinstance(rename_edits, list) or len(rename_edits) < 2:
         return fail(f"rename did not edit both occurrences: {renamed!r}")
 
-    if by_id.get(19, {}).get("result", "missing") is not None:
+    typed = by_id.get(19, {}).get("result")
+    typed_start = (
+        typed.get("range", {}).get("start") if isinstance(typed, dict) else None
+    )
+    if not isinstance(typed_start, dict) or typed_start.get("line") != 0:
+        return fail(f"typeDefinition did not name Point: {typed!r}")
+
+    if by_id.get(20, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
