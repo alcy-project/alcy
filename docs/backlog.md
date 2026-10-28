@@ -3,6 +3,21 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
+- [ ] A suite's manifest is read once per suite edge, not once per
+  closure: the staged-dependency table keys directories that loaded as
+  packages, and the suite root - which loads no package - is not in
+  it, so two edges into one suite read and re-parse its manifest. The
+  entry the table keeps is a dependency subtree; a suite root has
+  none.
+
+- [ ] The run-after-build cache hit is the promise the run cache
+  makes, and nothing pins it across processes: the key covers the
+  loaded-file table, so a build and a run that load different
+  auxiliary files (toolchain, profiles, a suite manifest) silently
+  miss instead of hitting. A test that builds in one process and runs
+  in another, asserting the JSON `cache` field, would name the
+  failure.
+
 - [ ] A reference stored into a longer-lived place outlives its
   referent: `mut r: &i32 := &0; { n := 5; r = &n; } *r` compiles, and
   so does the same store through a struct field or an `if` arm, which
