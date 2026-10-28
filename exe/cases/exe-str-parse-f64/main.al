@@ -45,10 +45,12 @@ fn main() -> i32 {
   }
   // Past 2^53 an integral value keeps its integer part: the split
   // leaves one rounding, where the single division left two.
-  if "9007199254740980.0".parse_f64().unwrap() != 9007199254740980.0 {
+  exact := "9007199254740980.0".parse_f64().or_panic_with_message("expected a value")
+  if exact != 9007199254740980.0 {
     ret 14
   }
-  if "9007199254740993.0".parse_f64().unwrap() != 9007199254740992.0 {
+  rounded := "9007199254740993.0".parse_f64().or_panic_with_message("expected a value")
+  if rounded != 9007199254740992.0 {
     ret 15
   }
   ret 0

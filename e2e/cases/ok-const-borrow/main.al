@@ -22,7 +22,7 @@ fn main() -> i32 {
   if str_len(GREETING.trim()) != 5 {
     ret 1
   }
-  if !(GREETING.slice(1, 4) == "hel") {
+  if !(GREETING.byte_slice(1, 4) == "hel") {
     ret 2
   }
   if ORIGIN.sum() != 7 {
