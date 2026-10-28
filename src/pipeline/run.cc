@@ -22,6 +22,7 @@
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
 #include "pipeline/diag_code.h"
+#include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/spawn.h"
 #include "source/source.h"
@@ -30,33 +31,14 @@ namespace pipeline {
 
 namespace {
 
-// Links lowered IR in a scratch directory and executes it with
-// inherited stdio, forwarding args to the program.
-base::Result<RunOutcome, diag::Reported> link_and_run(
+// Executes a linked program with inherited stdio, forwarding args to it.
+base::Result<RunOutcome, diag::Reported> execute(
     PipelineContext& ctx,
-    lowering::LoweredPackage& lowered,
+    const std::string& exe_path,
     std::string_view target,
-    BuildPlan plan,
-    std::span<const std::string> linked_objects,
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx) {
-  io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
-  base::Result<std::vector<std::string>, diag::Reported> objects =
-      emit_package_objects(ctx, lowered, plan, scratch, false,
-                           codegen_parts(lowered));
-  if (objects.is_err()) {
-    return base::make_err(diag::Reported{});
-  }
-  const std::string exe_path =
-      scratch.join(std::string("main") + std::string(exe_suffix()));
-  std::vector<std::string> paths = std::move(objects).unwrap();
-  // The dependencies a summary answered for bring their own objects,
-  // as they do for a build.
-  paths.insert(paths.end(), linked_objects.begin(), linked_objects.end());
-  if (link_executable(ctx, plan.link, paths, exe_path).is_err()) {
-    return base::make_err(diag::Reported{});
-  }
   std::vector<std::string> argv;
   argv.reserve(args.size() + 1);
   argv.emplace_back(exe_path);
@@ -111,14 +93,25 @@ base::Result<RunOutcome, diag::Reported> run_package(
   if (!check_entry_point(ctx, bin)) {
     return base::make_err(diag::Reported{});
   }
-  base::Result<lowering::LoweredPackage, diag::Reported> package =
-      compile_tree(ctx, bin.tree, plan, true, bin.name);
-  if (package.is_err() || ctx.bag.has_errors()) {
+  // The executable lands in a scratch directory the run owns: a run
+  // leaves no artifact behind, and the front half of the lifecycle is the
+  // one a build runs - cache included, so a run after a build rebuilds
+  // nothing.
+  io::TempDir scratch = io::TempDir::create_unique("alcy_run_");
+  const std::string exe_path =
+      scratch.join(std::string("main") + std::string(exe_suffix()));
+  const PlannedArtifact planned{&bin, EmitMode::Executable, exe_path};
+  base::Result<lowering::LoweredPackage, diag::Reported> lowered =
+      lower_target(ctx, planned, root, manifest_file);
+  if (lowered.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  lowering::LoweredPackage lowered = std::move(package).unwrap();
-  return link_and_run(ctx, lowered, bin.name, plan, bin.linked_objects, args,
-                      announce, announce_ctx);
+  lowering::LoweredPackage package = std::move(lowered).unwrap();
+  if (emit_target(ctx, planned, plan, package).is_err() ||
+      ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  return execute(ctx, exe_path, bin.name, args, announce, announce_ctx);
 }
 
 }  // namespace pipeline

@@ -245,11 +245,6 @@ replaced. The foundations are in `roadmap.md`.
   compiler's version string does not identify the binary that wrote an
   entry: two builds of one dirty tree share every key.
 
-- [ ] `alcy run` compiles without the cache, so a run pays the front
-  end every time. The build's cache lookup and the run's lowering are
-  two paths over the same work, and the run path is the one that has
-  no key.
-
 - [ ] A reference to a slice is fat, so an option over one carries a
   discriminant (ADR-0087 promises no niche there). The data pointer's
   null pattern is still spare: teach the niche a fat null - a null pair

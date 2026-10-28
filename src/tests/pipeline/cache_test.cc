@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "diag/bag.h"
 #include "doctest/doctest.h"
@@ -88,6 +89,49 @@ Built build_once(io::TempDir& dir, bool no_cache) {
 bool write_package(io::TempDir& dir, std::string_view program) {
   return dir.write_file("proj/alcy.toml", MANIFEST) &&
          dir.write_file("proj/main.al", program);
+}
+
+TEST_CASE("A run's lowering takes the entry a build stored") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cache_run_test_");
+  CHECK(write_package(dir, PROGRAM));
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<ManifestProbe, diag::Reported> probe =
+      require_package_manifest(ctx, dir.join("proj"), false);
+  CHECK(probe.is_ok());
+  if (probe.is_err()) {
+    return;
+  }
+  ManifestProbe found = std::move(probe).unwrap();
+  // The build lowers the executable and stores it.
+  CHECK(build_package(ctx, found.root, found.manifest, found.manifest_name, "",
+                      BuildPlan{}, EmitMode::Executable)
+            .is_ok());
+  CHECK(ctx.cache_outcome == CacheOutcome::Miss);
+
+  // The front half a run walks is the one the build walked: the same
+  // target in the same mode, so a run after a build rebuilds nothing. A
+  // run names a scratch executable instead of an output path, which the
+  // key does not read.
+  base::Result<std::vector<Artifact>, diag::Reported> targets =
+      resolve_artifacts(ctx, found.root, found.manifest, found.manifest_name,
+                        ArtifactScope::BinOnly);
+  CHECK(targets.is_ok());
+  if (targets.is_err()) {
+    return;
+  }
+  std::vector<Artifact> resolved = std::move(targets).unwrap();
+  CHECK(resolved.size() == 1);
+  if (resolved.empty()) {
+    return;
+  }
+  ctx.cache_outcome = CacheOutcome::Off;
+  const PlannedArtifact planned{&resolved.front(), EmitMode::Executable,
+                                "scratch/app"};
+  base::Result<lowering::LoweredPackage, diag::Reported> lowered =
+      lower_target(ctx, planned, found.root, found.manifest);
+  CHECK(lowered.is_ok());
+  CHECK(!ctx.bag.has_errors());
+  CHECK(ctx.cache_outcome == CacheOutcome::Hit);
 }
 
 TEST_CASE("A second build hits the cache and answers the same bytes") {

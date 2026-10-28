@@ -15,6 +15,7 @@
 #include "fpag/io/temp_dir.h"
 #include "lowering/lowering.h"
 #include "path/path.h"
+#include "pipeline/artifact.h"
 #include "pipeline/build_plan.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
@@ -77,6 +78,34 @@ base::Result<std::string, diag::Reported> build_single_root(
     BuildPlan plan,
     EmitMode mode,
     const StdSelection& selection);
+
+// One target of a package build, planned before anything compiles: what
+// it is, the mode it is emitted in (a library's executable request is an
+// object one), and the path its artifact lands at.
+struct PlannedArtifact {
+  Artifact* target;
+  EmitMode mode;
+  std::string path;
+};
+
+// The front half of a target's lifecycle: the cache lookup, the compile
+// that stores the unoptimized package when the build was quiet, and the
+// summary a library leaves beside its artifact before optimization
+// (ADR-0078). A build and a run both start here; `check` names no
+// artifact and stops earlier.
+base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
+    PipelineContext& ctx,
+    const PlannedArtifact& planned,
+    const path::Path& root,
+    source::FileId manifest_file);
+
+// The back half of the same lifecycle: the middle end, the emission, and
+// the link. Success names the path written.
+base::Result<std::string, diag::Reported> emit_target(
+    PipelineContext& ctx,
+    const PlannedArtifact& planned,
+    BuildPlan plan,
+    lowering::LoweredPackage& lowered);
 
 base::Result<std::string, diag::Reported> build_package(
     PipelineContext& ctx,

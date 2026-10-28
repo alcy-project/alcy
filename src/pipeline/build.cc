@@ -817,15 +817,6 @@ base::Result<std::string, diag::Reported> build_single_root(
   return emit_output(ctx, lowered, plan, mode, std::string(output), false, {});
 }
 
-// One target of a package build, planned before anything compiles: what
-// it is, the mode it is emitted in (a library's executable request is an
-// object one), and the path its artifact lands at.
-struct PlannedArtifact {
-  Artifact* target;
-  EmitMode mode;
-  std::string path;
-};
-
 // The front half of a target's lifecycle: the cache lookup, the compile
 // that stores the unoptimized package when the build was quiet, and the
 // summary a library leaves beside its artifact before optimization
