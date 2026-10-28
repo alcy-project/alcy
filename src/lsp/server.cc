@@ -25,6 +25,7 @@
 #include "lsp/layout.h"
 #include "lsp/navigation.h"
 #include "lsp/protocol.h"
+#include "lsp/semantic_tokens.h"
 #include "lsp/signature.h"
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
@@ -183,6 +184,15 @@ void Server::handle_request(const text::JsonValue& message) {
     }
     return;
   }
+  if (method == "textDocument/semanticTokens/full") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "semanticTokens needs params");
+      return;
+    }
+    semantic_tokens_full(*id, *params);
+    return;
+  }
   if (method == "textDocument/codeAction") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -296,6 +306,13 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("signatureHelpProvider", std::move(signature_options));
   capabilities.set("inlayHintProvider", text::JsonValue::make_bool(true));
   capabilities.set("codeActionProvider", text::JsonValue::make_bool(true));
+  text::JsonValue semantic = text::JsonValue::make_object();
+  text::JsonValue legend = text::JsonValue::make_object();
+  legend.set("tokenTypes", semantic_token_types());
+  legend.set("tokenModifiers", text::JsonValue::make_array());
+  semantic.set("legend", std::move(legend));
+  semantic.set("full", text::JsonValue::make_bool(true));
+  capabilities.set("semanticTokensProvider", std::move(semantic));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
   capabilities.set("experimental", std::move(experimental));
@@ -491,6 +508,22 @@ void Server::code_action(const text::JsonValue& id,
   }
   send_result(
       id, code_actions(*document, read_position(*start), read_position(*end)));
+}
+
+void Server::semantic_tokens_full(const text::JsonValue& id,
+                                  const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  if (text_document == nullptr || !text_document->is_object()) {
+    send_result(id, semantic_tokens_empty());
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  if (document == nullptr) {
+    send_result(id, semantic_tokens_empty());
+    return;
+  }
+  send_result(id, semantic_tokens(*document, cache_.get(*document)));
 }
 
 void Server::struct_layout(const text::JsonValue& id,

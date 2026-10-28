@@ -39,6 +39,8 @@ source_set("lsp") {
     "navigation.h",
     "protocol.cc",
     "protocol.h",
+    "semantic_tokens.cc",
+    "semantic_tokens.h",
     "server.cc",
     "server.h",
     "signature.cc",

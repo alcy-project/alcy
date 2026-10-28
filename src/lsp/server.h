@@ -43,6 +43,8 @@ class Server {
   void references(const text::JsonValue& id, const text::JsonValue& params);
   void completion(const text::JsonValue& id, const text::JsonValue& params);
   void signature(const text::JsonValue& id, const text::JsonValue& params);
+  void semantic_tokens_full(const text::JsonValue& id,
+                            const text::JsonValue& params);
   void inlay_hint(const text::JsonValue& id, const text::JsonValue& params);
   void code_action(const text::JsonValue& id, const text::JsonValue& params);
   void struct_layout(const text::JsonValue& id, const text::JsonValue& params);

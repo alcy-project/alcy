@@ -245,7 +245,13 @@ def main() -> int:
                 "context": {"diagnostics": []},
             },
         },
-        {"jsonrpc": "2.0", "id": 13, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 13,
+            "method": "textDocument/semanticTokens/full",
+            "params": {"textDocument": {"uri": MAIN_URI}},
+        },
+        {"jsonrpc": "2.0", "id": 14, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -294,6 +300,8 @@ def main() -> int:
         return fail("initialize did not advertise inlayHintProvider")
     if capabilities.get("codeActionProvider") is not True:
         return fail("initialize did not advertise codeActionProvider")
+    if not isinstance(capabilities.get("semanticTokensProvider"), dict):
+        return fail("initialize did not advertise semanticTokensProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -406,7 +414,14 @@ def main() -> int:
     if not isinstance(actions[0].get("edit"), dict):
         return fail(f"codeAction carried no edit: {actions!r}")
 
-    if by_id.get(13, {}).get("result", "missing") is not None:
+    tokens = by_id.get(13, {}).get("result")
+    token_data = tokens.get("data") if isinstance(tokens, dict) else None
+    if not isinstance(token_data, list) or not token_data:
+        return fail(f"semanticTokens returned no data: {tokens!r}")
+    if len(token_data) % 5 != 0:
+        return fail(f"semanticTokens data is not five per token: {tokens!r}")
+
+    if by_id.get(14, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

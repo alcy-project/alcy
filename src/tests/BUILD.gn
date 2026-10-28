@@ -59,6 +59,7 @@ executable("tests") {
     "lsp/inlay_hints_test.cc",
     "lsp/layout_test.cc",
     "lsp/navigation_test.cc",
+    "lsp/semantic_tokens_test.cc",
     "lsp/server_test.cc",
     "lsp/signature_test.cc",
     "lsp/symbols_test.cc",
