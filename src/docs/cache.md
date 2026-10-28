@@ -16,9 +16,10 @@ resolution, checking, and lowering; discovery still loads the sources
 (the key hashes them, and the backend reads spans through them), and
 the optimizer, the backend, and the link run exactly as after a miss.
 
-`check` keeps no cache: its report is the result. `run` inherits the
-cache through the build it wraps. Single-file `compile` has no
-manifest and never consults.
+`check` keeps no cache: its report is the result. `run` walks the
+front half a build walks - the same lookup and the same
+store-on-quiet-miss - so a run after a build hits the entry the build
+wrote. Single-file `compile` has no manifest and never consults.
 
 ## The key
 
@@ -27,9 +28,10 @@ sources, the pointer width, and the compiler version; the XXH3-128 of
 the manifest's bytes; and the named target triple. An entry's name is
 the key's 32 hex digits plus `.irb`.
 
-Only a quiet build stores: a build that reported any diagnostic writes
-no entry, so a hit rebuilds no diagnostics and never changes what an
-envelope reports. A `--no-cache` build neither looks nor stores.
+Only a quiet lowering stores: a lowering that reported any diagnostic
+writes no entry, so a hit rebuilds no diagnostics and never changes
+what an envelope reports. A `--no-cache` invocation neither looks nor
+stores, and `check` keeps no cache at all: its report is the result.
 
 ## On disk
 

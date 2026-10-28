@@ -90,7 +90,9 @@ base::Result<RunOutcome, diag::Reported> run_package(
     return base::make_err(diag::Reported{});
   }
   // The executable lands in a scratch directory the run owns: a run
-  // leaves no artifact behind, and the front half of the lifecycle is the
+  // leaves no artifact of its own behind - the cache entry the lowering
+  // stores is the build's shape, keyed the same way - and the front half
+  // of the lifecycle is the
   // one a build runs - cache included, so a run after a build rebuilds
   // nothing.
   io::TempDir scratch = io::TempDir::create_unique("alcy_run_");

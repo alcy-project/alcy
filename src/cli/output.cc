@@ -535,7 +535,7 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   out += R"(,"outcome":)";
   append_json_string(out, outcome_name(envelope.outcome));
   // Always present like the statistics: a reader indexes one shape on
-  // every command, and only `build` ever answers anything but off.
+  // every command, and `check` is the only verb that answers off.
   out += R"(,"cache":)";
   switch (envelope.cache) {
     case pipeline::CacheOutcome::Hit: append_json_string(out, "hit"); break;
