@@ -3,6 +3,21 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
+- [ ] The return-escape rule exempts a loan by its root's type tag: a
+  `str`-typed root is a view, so a loan rooted at one is taken to ride
+  the buffer the view reads. The tag cannot tell that loan from one a
+  `&u` spelling creates on the view's own slot, so `fn leak() -> &str {
+  u := "abc"; ret &u }` compiles and hands the frame's two words back -
+  main refuses it with EF003, and the exemption landed with the
+  str-view loans (`ddeb3e40`) because the std's own bodies rebuild a
+  local `str` from a parameter and hand it back. The provenance the
+  rule needs - whether the loan names the buffer the view reads or the
+  view's own slot - is what the store/load chain through the local's
+  alloca does not carry; the two shapes a fix takes are a loan born at
+  a borrow of the slot refused at the return, or the view's buffer
+  provenance carried through the copy. `ret &GREETING` for a `str`
+  const is the same hole through the const temporary.
+
 - [ ] A suite's manifest is read once per suite edge, not once per
   closure: the staged-dependency table keys directories that loaded as
   packages, and the suite root - which loads no package - is not in
