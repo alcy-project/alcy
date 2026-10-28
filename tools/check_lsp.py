@@ -266,7 +266,16 @@ def main() -> int:
             "method": "textDocument/diagnostic",
             "params": {"textDocument": {"uri": BROKEN_URI}},
         },
-        {"jsonrpc": "2.0", "id": 16, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 16,
+            "method": "textDocument/selectionRange",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "positions": [{"line": 4, "character": 7}],
+            },
+        },
+        {"jsonrpc": "2.0", "id": 17, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -319,6 +328,8 @@ def main() -> int:
         return fail("initialize did not advertise semanticTokensProvider")
     if capabilities.get("documentHighlightProvider") is not True:
         return fail("initialize did not advertise documentHighlightProvider")
+    if capabilities.get("selectionRangeProvider") is not True:
+        return fail("initialize did not advertise selectionRangeProvider")
     if not isinstance(capabilities.get("diagnosticProvider"), dict):
         return fail("initialize did not advertise diagnosticProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
@@ -450,7 +461,18 @@ def main() -> int:
     if not pull.get("items"):
         return fail(f"diagnostic reported a broken buffer clean: {pull!r}")
 
-    if by_id.get(16, {}).get("result", "missing") is not None:
+    selections = by_id.get(16, {}).get("result")
+    if not isinstance(selections, list) or len(selections) != 1:
+        return fail(f"selectionRange answered the wrong count: {selections!r}")
+    depth = 0
+    node = selections[0]
+    while isinstance(node, dict) and "range" in node:
+        depth += 1
+        node = node.get("parent")
+    if depth < 3:
+        return fail(f"selectionRange did not grow past the word: {selections!r}")
+
+    if by_id.get(17, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

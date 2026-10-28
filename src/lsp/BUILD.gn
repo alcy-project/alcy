@@ -41,6 +41,8 @@ source_set("lsp") {
     "navigation.h",
     "protocol.cc",
     "protocol.h",
+    "selection.cc",
+    "selection.h",
     "semantic_tokens.cc",
     "semantic_tokens.h",
     "server.cc",

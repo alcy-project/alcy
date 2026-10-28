@@ -26,6 +26,7 @@
 #include "lsp/layout.h"
 #include "lsp/navigation.h"
 #include "lsp/protocol.h"
+#include "lsp/selection.h"
 #include "lsp/semantic_tokens.h"
 #include "lsp/signature.h"
 #include "lsp/symbols.h"
@@ -203,6 +204,15 @@ void Server::handle_request(const text::JsonValue& message) {
     diagnostic(*id, *params);
     return;
   }
+  if (method == "textDocument/selectionRange") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "selectionRange needs params");
+      return;
+    }
+    selection_range(*id, *params);
+    return;
+  }
   if (method == "textDocument/semanticTokens/full") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -334,6 +344,7 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("semanticTokensProvider", std::move(semantic));
   capabilities.set("documentHighlightProvider",
                    text::JsonValue::make_bool(true));
+  capabilities.set("selectionRangeProvider", text::JsonValue::make_bool(true));
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(false));
@@ -563,6 +574,30 @@ void Server::diagnostic(const text::JsonValue& id,
     return;
   }
   send_result(id, document_diagnostic_report(*document));
+}
+
+void Server::selection_range(const text::JsonValue& id,
+                             const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  const text::JsonValue* list = field(params, "positions");
+  if (text_document == nullptr || list == nullptr || !list->is_array()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  std::vector<Position> positions;
+  for (const text::JsonValue& item : list->as_array()) {
+    if (item.is_object()) {
+      positions.push_back(read_position(item));
+    }
+  }
+  send_result(id,
+              selection_ranges(*document, cache_.get(*document), positions));
 }
 
 void Server::semantic_tokens_full(const text::JsonValue& id,

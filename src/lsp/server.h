@@ -45,6 +45,8 @@ class Server {
   void signature(const text::JsonValue& id, const text::JsonValue& params);
   void semantic_tokens_full(const text::JsonValue& id,
                             const text::JsonValue& params);
+  void selection_range(const text::JsonValue& id,
+                       const text::JsonValue& params);
   void inlay_hint(const text::JsonValue& id, const text::JsonValue& params);
   void code_action(const text::JsonValue& id, const text::JsonValue& params);
   void document_highlight(const text::JsonValue& id,

@@ -46,6 +46,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   checker's recorded resolutions (ADR-0085): a use resolves to the
   declaration the checker bound, and the AST supplies a declaration's
   own name when the cursor sits on it.
+- `selection.{h,cc}` grows a selection from the word under the cursor
+  through the syntax nodes the compiler parsed to the whole buffer.
 - `semantic_tokens.{h,cc}` classifies every token the lossless lexer
   reads; an identifier's kind is what the checker resolved it to.
 - `signature.{h,cc}` reads the call the cursor sits in, follows the
@@ -61,8 +63,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
 
 The unit suite drives framing, position mapping, diagnostics, the
 layout engine, hover, inlay hints, navigation, completion, signature
-help, the cache, a quick fix, semantic tokens, highlights, the outline,
-and folding directly.
+help, the cache, a quick fix, semantic tokens, highlights, selection
+ranges, the outline, and folding directly.
 `tools/check_lsp.py` runs a
 session against the built binary and asserts the handshake, a published
 diagnostic, a formatting edit, the outline, both kinds of fold, a
