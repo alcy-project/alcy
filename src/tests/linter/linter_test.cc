@@ -205,4 +205,22 @@ TEST_CASE("an unknown level is a config error") {
   CHECK(ctx.bag.has_errors());
 }
 
+TEST_CASE("needless-return offers a machine-applicable repair") {
+  Run run;
+  run("fn main() -> i32 {\n  ret 1\n}\n", default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "needless-return") == 1);
+  const diag::Fix* fix = nullptr;
+  run.ctx.bag.for_each([&](const diag::Diagnostic& finding) {
+    if (finding.check_name == "needless-return") {
+      fix = finding.fix;
+    }
+  });
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement.empty());
+    // The repair covers the keyword and the space before the value.
+    CHECK(fix->span.length == 4);
+  }
+}
+
 }  // namespace linter

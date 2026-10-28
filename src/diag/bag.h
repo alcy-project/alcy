@@ -170,6 +170,12 @@ class DiagBag {
                                               Span span,
                                               std::string_view message);
 
+  // Attaches a machine-applicable repair to a previously emitted
+  // diagnostic, copying its replacement into the arena. Fails when the
+  // index does not name an emitted entry; a repair the arena cannot hold
+  // is dropped, like a label.
+  base::Result<void, BagError> attach_fix(u32 index, Fix replacement);
+
   // Checked lookup: returns nullptr when `index` does not name an emitted
   // diagnostic.
   const Diagnostic* at(u32 index) const {

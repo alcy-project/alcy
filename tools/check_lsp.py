@@ -232,7 +232,20 @@ def main() -> int:
             "method": "textDocument/inlayHint",
             "params": {"textDocument": {"uri": MAIN_URI}},
         },
-        {"jsonrpc": "2.0", "id": 12, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "textDocument/codeAction",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "range": {
+                    "start": {"line": 4, "character": 0},
+                    "end": {"line": 4, "character": 12},
+                },
+                "context": {"diagnostics": []},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 13, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -279,6 +292,8 @@ def main() -> int:
         return fail("initialize did not advertise signatureHelpProvider")
     if capabilities.get("inlayHintProvider") is not True:
         return fail("initialize did not advertise inlayHintProvider")
+    if capabilities.get("codeActionProvider") is not True:
+        return fail("initialize did not advertise codeActionProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -383,7 +398,15 @@ def main() -> int:
     ):
         return fail(f"inlayHint missed the layout: {hints!r}")
 
-    if by_id.get(12, {}).get("result", "missing") is not None:
+    actions = by_id.get(12, {}).get("result")
+    if not isinstance(actions, list) or not actions:
+        return fail(f"codeAction offered nothing: {actions!r}")
+    if actions[0].get("kind") != "quickfix":
+        return fail(f"codeAction was not a quick fix: {actions!r}")
+    if not isinstance(actions[0].get("edit"), dict):
+        return fail(f"codeAction carried no edit: {actions!r}")
+
+    if by_id.get(13, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

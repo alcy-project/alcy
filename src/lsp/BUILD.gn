@@ -13,6 +13,8 @@ source_set("lsp") {
     "analysis_cache.h",
     "ast_query.cc",
     "ast_query.h",
+    "code_actions.cc",
+    "code_actions.h",
     "completion.cc",
     "completion.h",
     "diagnostics.cc",

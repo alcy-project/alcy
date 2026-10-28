@@ -25,6 +25,15 @@ struct Label {
   std::string_view message;
 };
 
+// A machine-applicable repair to the source: replace the bytes the span
+// covers with the replacement, which is empty to delete them. A producer
+// attaches one only when it is sure of the repair, because a client
+// applies it without asking.
+struct Fix {
+  Span span;
+  std::string_view replacement;
+};
+
 // A single diagnostic: severity, numeric code, message, one
 // primary span, and any number of secondary labels. All strings are views;
 // message bytes live in arena storage owned by DiagBag (or are static), and
@@ -52,6 +61,9 @@ struct Diagnostic {
   // Arena-owned array, possibly empty (labels == nullptr when empty).
   const Label* labels = nullptr;
   u32 label_count = 0;
+  // A machine-applicable repair, or null when the finding offers none.
+  // Arena-owned, like a label's message.
+  const Fix* fix = nullptr;
 };
 
 // A message with no span and no code: a complaint about a command line, a

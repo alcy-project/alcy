@@ -14,6 +14,7 @@
 #include "fpag/base/result.h"
 #include "lsp/analysis.h"
 #include "lsp/analysis_cache.h"
+#include "lsp/code_actions.h"
 #include "lsp/completion.h"
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
@@ -182,6 +183,15 @@ void Server::handle_request(const text::JsonValue& message) {
     }
     return;
   }
+  if (method == "textDocument/codeAction") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "codeAction needs params");
+      return;
+    }
+    code_action(*id, *params);
+    return;
+  }
   if (method == "textDocument/inlayHint") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -285,6 +295,7 @@ void Server::initialize(const text::JsonValue& id) {
   signature_options.set("triggerCharacters", std::move(signature_triggers));
   capabilities.set("signatureHelpProvider", std::move(signature_options));
   capabilities.set("inlayHintProvider", text::JsonValue::make_bool(true));
+  capabilities.set("codeActionProvider", text::JsonValue::make_bool(true));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
   capabilities.set("experimental", std::move(experimental));
@@ -456,6 +467,30 @@ void Server::inlay_hint(const text::JsonValue& id,
     return;
   }
   send_result(id, inlay_hints(*document, cache_.get(*document)));
+}
+
+void Server::code_action(const text::JsonValue& id,
+                         const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  if (text_document == nullptr || !text_document->is_object()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  const text::JsonValue* range = field(params, "range");
+  if (document == nullptr || range == nullptr || !range->is_object()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const text::JsonValue* start = range->find("start");
+  const text::JsonValue* end = range->find("end");
+  if (start == nullptr || end == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(
+      id, code_actions(*document, read_position(*start), read_position(*end)));
 }
 
 void Server::struct_layout(const text::JsonValue& id,

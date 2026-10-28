@@ -90,6 +90,7 @@ u32 DiagBag::push(Severity severity,
   slot.primary_span = primary;
   slot.labels = nullptr;
   slot.label_count = 0;
+  slot.fix = nullptr;
   if (severity == Severity::Error) {
     ++error_count_;
   } else if (severity == Severity::Warning) {
@@ -159,6 +160,25 @@ base::Result<void, BagError> DiagBag::label_composed(u32 index,
     return base::make_ok();
   }
   return label(index, {Label{span, owned}});
+}
+
+base::Result<void, BagError> DiagBag::attach_fix(u32 index, Fix replacement) {
+  if (index >= size_) {
+    return base::make_err(BagError::InvalidIndex);
+  }
+  const usize needed = sizeof(Fix) + replacement.replacement.size();
+  if (!has_room_for(needed, alignof(Fix))) {
+    // A repair is an offer, not the finding; dropping it leaves the
+    // diagnostic whole.
+    return base::make_ok();
+  }
+  Fix* const mem = static_cast<Fix*>(arena_->alloc(sizeof(Fix), alignof(Fix)));
+  if (mem == nullptr) {
+    return base::make_ok();
+  }
+  *mem = Fix{replacement.span, intern(replacement.replacement)};
+  entries_[index].fix = mem;
+  return base::make_ok();
 }
 
 namespace {
@@ -321,6 +341,15 @@ void DiagBag::merge(const DiagBag& other) {
     entries_[at].labels = labels;
     entries_[at].label_count = from.label_count;
     entries_[at].check_name = from.check_name;
+  }
+  for (u32 i = 0; i < other.size_; ++i) {
+    const Diagnostic& from = other.entries_[i];
+    if (i >= size_ || from.fix == nullptr) {
+      continue;
+    }
+    // The replacement is a view into the other bag's arena, so it is
+    // copied here; the span itself is source bytes and crosses as-is.
+    (void)attach_fix(i, Fix{from.fix->span, from.fix->replacement});
   }
   // What the other bag could not hold crosses too: the count is what a
   // caller reports, and an error among them still fails this bag.
