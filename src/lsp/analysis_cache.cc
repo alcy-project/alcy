@@ -9,7 +9,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include "fpag/base/numeric.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
 

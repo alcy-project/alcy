@@ -4,7 +4,6 @@
 #include "lsp/diagnostics.h"
 
 #include <string>
-#include <string_view>
 #include <utility>
 
 #include "diag/bag.h"

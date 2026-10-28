@@ -7,7 +7,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"

@@ -14,6 +14,7 @@
 #include "ast/ast.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "lsp/analysis.h"

@@ -3,7 +3,10 @@
 
 #include "lsp/lsp.h"
 
-#if defined(_WIN32)
+#include "config/build_config.h"
+#include "fpag/base/numeric.h"
+
+#if BUILD_FLAG(IS_OS_WIN)
 #include <fcntl.h>
 #include <io.h>
 #endif
@@ -14,7 +17,7 @@
 namespace lsp {
 
 i32 run(const RunOptions& options) {
-#if defined(_WIN32)
+#if BUILD_FLAG(IS_OS_WIN)
   // The frame's CRLF is protocol, not line ending: a console in text mode
   // would translate every one of them and desynchronize the peer.
   _setmode(options.input_fd, _O_BINARY);

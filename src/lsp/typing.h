@@ -5,7 +5,6 @@
 
 #include <string>
 
-#include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"

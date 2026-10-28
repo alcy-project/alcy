@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "fmt/formatter.h"
-#include "fpag/base/numeric.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "text/json.h"

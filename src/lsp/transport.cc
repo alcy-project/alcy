@@ -7,7 +7,9 @@
 #include <string>
 #include <string_view>
 
-#if defined(_WIN32)
+#include "config/build_config.h"
+
+#if BUILD_FLAG(IS_OS_WIN)
 #include <io.h>
 #else
 #include <unistd.h>
@@ -23,11 +25,11 @@ namespace {
 constexpr usize K_CHUNK_SIZE = 8192;
 
 isize read_once(i32 fd, void* buffer, usize size) {
-#if defined(_WIN32)
+#if BUILD_FLAG(IS_OS_WIN)
   return static_cast<isize>(_read(fd, buffer, static_cast<u32>(size)));
 #else
   for (;;) {
-    const ssize_t count = ::read(fd, buffer, size);
+    const isize count = ::read(fd, buffer, size);
     if (count < 0 && errno == EINTR) {
       continue;
     }
@@ -37,11 +39,11 @@ isize read_once(i32 fd, void* buffer, usize size) {
 }
 
 isize write_once(i32 fd, const void* buffer, usize size) {
-#if defined(_WIN32)
+#if BUILD_FLAG(IS_OS_WIN)
   return static_cast<isize>(_write(fd, buffer, static_cast<u32>(size)));
 #else
   for (;;) {
-    const ssize_t count = ::write(fd, buffer, size);
+    const isize count = ::write(fd, buffer, size);
     if (count < 0 && errno == EINTR) {
       continue;
     }
