@@ -251,7 +251,22 @@ def main() -> int:
             "method": "textDocument/semanticTokens/full",
             "params": {"textDocument": {"uri": MAIN_URI}},
         },
-        {"jsonrpc": "2.0", "id": 14, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 14,
+            "method": "textDocument/documentHighlight",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 7},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 15,
+            "method": "textDocument/diagnostic",
+            "params": {"textDocument": {"uri": BROKEN_URI}},
+        },
+        {"jsonrpc": "2.0", "id": 16, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -302,6 +317,10 @@ def main() -> int:
         return fail("initialize did not advertise codeActionProvider")
     if not isinstance(capabilities.get("semanticTokensProvider"), dict):
         return fail("initialize did not advertise semanticTokensProvider")
+    if capabilities.get("documentHighlightProvider") is not True:
+        return fail("initialize did not advertise documentHighlightProvider")
+    if not isinstance(capabilities.get("diagnosticProvider"), dict):
+        return fail("initialize did not advertise diagnosticProvider")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -421,7 +440,17 @@ def main() -> int:
     if len(token_data) % 5 != 0:
         return fail(f"semanticTokens data is not five per token: {tokens!r}")
 
-    if by_id.get(14, {}).get("result", "missing") is not None:
+    highlights = by_id.get(14, {}).get("result")
+    if not isinstance(highlights, list) or len(highlights) < 2:
+        return fail(f"documentHighlight missed the occurrences: {highlights!r}")
+
+    pull = by_id.get(15, {}).get("result")
+    if not isinstance(pull, dict) or pull.get("kind") != "full":
+        return fail(f"diagnostic was not a full report: {pull!r}")
+    if not pull.get("items"):
+        return fail(f"diagnostic reported a broken buffer clean: {pull!r}")
+
+    if by_id.get(16, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

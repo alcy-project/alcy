@@ -20,6 +20,7 @@
 #include "lsp/document.h"
 #include "lsp/folding.h"
 #include "lsp/formatting.h"
+#include "lsp/highlights.h"
 #include "lsp/hover.h"
 #include "lsp/inlay_hints.h"
 #include "lsp/layout.h"
@@ -184,6 +185,24 @@ void Server::handle_request(const text::JsonValue& message) {
     }
     return;
   }
+  if (method == "textDocument/documentHighlight") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "documentHighlight needs params");
+      return;
+    }
+    document_highlight(*id, *params);
+    return;
+  }
+  if (method == "textDocument/diagnostic") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, K_INVALID_REQUEST, "diagnostic needs params");
+      return;
+    }
+    diagnostic(*id, *params);
+    return;
+  }
   if (method == "textDocument/semanticTokens/full") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -313,6 +332,14 @@ void Server::initialize(const text::JsonValue& id) {
   semantic.set("legend", std::move(legend));
   semantic.set("full", text::JsonValue::make_bool(true));
   capabilities.set("semanticTokensProvider", std::move(semantic));
+  capabilities.set("documentHighlightProvider",
+                   text::JsonValue::make_bool(true));
+  text::JsonValue diagnostic_provider = text::JsonValue::make_object();
+  diagnostic_provider.set("interFileDependencies",
+                          text::JsonValue::make_bool(false));
+  diagnostic_provider.set("workspaceDiagnostics",
+                          text::JsonValue::make_bool(false));
+  capabilities.set("diagnosticProvider", std::move(diagnostic_provider));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
   capabilities.set("experimental", std::move(experimental));
@@ -508,6 +535,34 @@ void Server::code_action(const text::JsonValue& id,
   }
   send_result(
       id, code_actions(*document, read_position(*start), read_position(*end)));
+}
+
+void Server::document_highlight(const text::JsonValue& id,
+                                const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id,
+              document_highlights(*document, cache_.get(*document), position));
+}
+
+void Server::diagnostic(const text::JsonValue& id,
+                        const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  if (text_document == nullptr || !text_document->is_object()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id, document_diagnostic_report(*document));
 }
 
 void Server::semantic_tokens_full(const text::JsonValue& id,

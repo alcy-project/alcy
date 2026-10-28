@@ -67,4 +67,11 @@ text::JsonValue document_diagnostics(const Document& document) {
   return diagnostics;
 }
 
+text::JsonValue document_diagnostic_report(const Document& document) {
+  text::JsonValue report = text::JsonValue::make_object();
+  report.set("kind", text::JsonValue::make_string("full"));
+  report.set("items", document_diagnostics(document));
+  return report;
+}
+
 }  // namespace lsp

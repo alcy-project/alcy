@@ -47,6 +47,9 @@ class Server {
                             const text::JsonValue& params);
   void inlay_hint(const text::JsonValue& id, const text::JsonValue& params);
   void code_action(const text::JsonValue& id, const text::JsonValue& params);
+  void document_highlight(const text::JsonValue& id,
+                          const text::JsonValue& params);
+  void diagnostic(const text::JsonValue& id, const text::JsonValue& params);
   void struct_layout(const text::JsonValue& id, const text::JsonValue& params);
   // The open document a request names, with its position read out.
   const Document* open_document_at(const text::JsonValue& params,

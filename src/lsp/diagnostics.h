@@ -13,4 +13,9 @@ namespace lsp {
 // of the text it passed rather than of a cached parse.
 text::JsonValue document_diagnostics(const Document& document);
 
+// The pull-model report for one document: a full report whose items are
+// the same diagnostics the push model publishes, so a client that pulls
+// and one that listens see one answer.
+text::JsonValue document_diagnostic_report(const Document& document);
+
 }  // namespace lsp

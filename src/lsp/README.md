@@ -22,6 +22,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
 - `code_actions.{h,cc}` returns the lint repairs that intersect a
   range as quick fixes, reading the repair the linter attached to its
   finding.
+- `highlights.{h,cc}` marks the declaration and every resolved use of
+  the name under the cursor.
 - `completion.{h,cc}` offers the names the checked package holds, plus
   the language's keywords, filtered by the prefix the cursor typed.
 - `diagnostics.{h,cc}` runs `linter::lint_source` over one buffer and
@@ -59,8 +61,8 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
 
 The unit suite drives framing, position mapping, diagnostics, the
 layout engine, hover, inlay hints, navigation, completion, signature
-help, the cache, a quick fix, semantic tokens, the outline, and folding
-directly.
+help, the cache, a quick fix, semantic tokens, highlights, the outline,
+and folding directly.
 `tools/check_lsp.py` runs a
 session against the built binary and asserts the handshake, a published
 diagnostic, a formatting edit, the outline, both kinds of fold, a
