@@ -130,9 +130,6 @@ replaced. The foundations are in `roadmap.md`.
   last slot now, rather than failing at an unspecified internal span;
   raising the budget itself waits for the indexing.
 
-- [ ] Split `Lowerer`: comp evaluation, format expansion, and AST-to-IR
-  lowering share one class with a large public surface.
-
 - [ ] Borrow-pass scratch sized by the program, not the function: the
   arrays are allocated at package size and each function clears only the
   entries it names. The final pass's per-worker memory cost is why

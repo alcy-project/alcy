@@ -3,15 +3,16 @@
 
 source_set("lowering") {
   sources = [
+    "comp_lowering.cc",
     "diag_code.h",
     "drop_elaboration.cc",
     "drop_elaboration.h",
+    "fmt_lowering.cc",
     "immediate.h",
     "lowerer.cc",
     "lowerer.h",
     "lowering.cc",
     "lowering.h",
-    "lowering_comp.cc",
     "lowering_expr.cc",
     "niche.h",
   ]

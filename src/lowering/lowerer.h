@@ -626,56 +626,91 @@ class Lowerer {
   // the evaluator reads through, and the reporting back into its own
   // diagnostic stage.
   using CompFlow = comp::CompFlow;
-  bool comp_evaluate(u32 mod, ast::ExprIdx expr, CompVal& out);
-  // One const item's initializer, evaluated at a use site: item scope,
-  // so no comp binding of the caller is visible.
-  bool comp_evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out);
-  // Binds one evaluated comp value to a pattern while the lowering
-  // publishes comp arguments and declarations.
-  bool comp_bind_pattern(u32 mod,
-                         ast::PatternIdx pattern,
-                         const CompVal& value,
-                         CompScope& scope,
-                         diag::Span span);
-  void report_comp_failure();
-  Val materialize_comp_value(const CompVal& value, diag::Span span);
-  struct FmtState {
-    ir::RegisterIdx off_addr = ir::RegisterIdx::invalid();
-    ir::RegisterIdx tot_addr = ir::RegisterIdx::invalid();
-    ir::OperandIdx capacity = ir::OperandIdx::invalid();
+  // The comp evaluation: what the checker marked `comp`, evaluated while
+  // lowering. It reads the owner's state - the evaluator, the current
+  // instantiation, the persistent comp bindings - so it is a
+  // collaborator inside the class rather than a second owner, and the
+  // surface the rest of the lowering names is these four methods.
+  class Comp {
+   public:
+    explicit Comp(Lowerer& owner) : owner_(owner) {}
+
+    // Top-level comp evaluation: the evaluator gets the current
+    // instantiation as its seed and the persistent comp bindings as the
+    // outer scope; a failure is reported where the lowering reports.
+    bool evaluate(u32 mod, ast::ExprIdx expr, CompVal& out);
+    // One const item's initializer, evaluated at a use site: item scope,
+    // so no comp binding of the caller is visible.
+    bool evaluate_item(u32 mod, ast::ExprIdx init, CompVal& out);
+    // Binds one evaluated comp value to a pattern while the lowering
+    // publishes comp arguments and declarations.
+    bool bind_pattern(u32 mod,
+                      ast::PatternIdx pattern,
+                      const CompVal& value,
+                      CompScope& scope,
+                      diag::Span span);
+    // The value a comp result becomes: an immediate, a string constant,
+    // or a whole tuple built field by field.
+    Val materialize(const CompVal& value, diag::Span span);
+
+   private:
+    // Reports the evaluator's last failure through the lowering's own
+    // diagnostics.
+    void report_failure();
+
+    Lowerer& owner_;
   };
-  // Whether every placeholder's argument is convertible and every
-  // `{:.N}` precision names a float; reports the reason when not.
-  bool check_fmt_arguments(diag::Span span,
-                           const analyzer::FmtTemplate& parsed,
-                           const std::vector<ir::TypeIdx>& elem_types);
-  bool emit_fmt_pieces(diag::Span span,
-                       const std::vector<analyzer::FmtPiece>& pieces,
-                       ir::OperandIdx tup_op,
-                       const std::vector<ir::TypeIdx>& elem_types,
-                       std::span<const ast::ExprIdx> arg_exprs,
-                       ir::OperandIdx dst_base,
-                       ir::OperandIdx capacity,
-                       FmtState& state,
-                       bool measure_only);
-  // Lowers a variadic call's remaining arguments into the tuple the
-  // expansion reads (ADR-0055): one field per argument, allocated and
-  // stored like a tuple literal. `first` is the index of the first
-  // collected argument; an empty rest yields `()` and no tuple.
-  bool lower_rest_tuple(std::span<const ast::ExprIdx> args,
-                        usize first,
-                        diag::Span span,
-                        Val& out,
-                        std::vector<ir::TypeIdx>& elem_types,
-                        std::vector<ir::TypeIdx>& arg_types);
-  Val lower_fmt_write(ast::ExprIdx expr,
-                      const analyzer::CheckedModule::FnSig& sig);
-  Val lower_fmt_format(ast::ExprIdx expr,
-                       const analyzer::CheckedModule::FnSig& sig);
-  // `io::print`/`io::println`: format into a heap buffer and hand it to
-  // the standard-output hook (ADR-0055).
-  Val lower_io_print(ast::ExprIdx expr,
+  Comp comp_lowering_{*this};
+  // The format and `io` expansion: `fmt`'s format strings and the
+  // `io::print` family, expanded into the copy sequences ADR-0055
+  // describes. The second collaborator, built the way Comp is.
+  class Fmt {
+   public:
+    explicit Fmt(Lowerer& owner) : owner_(owner) {}
+
+    Val lower_write(ast::ExprIdx expr,
+                    const analyzer::CheckedModule::FnSig& sig);
+    Val lower_format(ast::ExprIdx expr,
                      const analyzer::CheckedModule::FnSig& sig);
+    // `io::print`/`io::println`: format into a heap buffer and hand it
+    // to the standard-output hook (ADR-0055).
+    Val lower_print(ast::ExprIdx expr,
+                    const analyzer::CheckedModule::FnSig& sig);
+
+   private:
+    struct State {
+      ir::RegisterIdx off_addr = ir::RegisterIdx::invalid();
+      ir::RegisterIdx tot_addr = ir::RegisterIdx::invalid();
+      ir::OperandIdx capacity = ir::OperandIdx::invalid();
+    };
+    // Whether every placeholder's argument is convertible and every
+    // `{:.N}` precision names a float; reports the reason when not.
+    bool check_arguments(diag::Span span,
+                         const analyzer::FmtTemplate& parsed,
+                         const std::vector<ir::TypeIdx>& elem_types);
+    bool emit_pieces(diag::Span span,
+                     const std::vector<analyzer::FmtPiece>& pieces,
+                     ir::OperandIdx tup_op,
+                     const std::vector<ir::TypeIdx>& elem_types,
+                     std::span<const ast::ExprIdx> arg_exprs,
+                     ir::OperandIdx dst_base,
+                     ir::OperandIdx capacity,
+                     State& state,
+                     bool measure_only);
+    // Lowers a variadic call's remaining arguments into the tuple the
+    // expansion reads (ADR-0055): one field per argument, allocated and
+    // stored like a tuple literal. `first` is the index of the first
+    // collected argument; an empty rest yields `()` and no tuple.
+    bool lower_rest_tuple(std::span<const ast::ExprIdx> args,
+                          usize first,
+                          diag::Span span,
+                          Val& out,
+                          std::vector<ir::TypeIdx>& elem_types,
+                          std::vector<ir::TypeIdx>& arg_types);
+
+    Lowerer& owner_;
+  };
+  Fmt fmt_lowering_{*this};
   Val lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_literal_zero(ir::TypeIdx type, diag::Span span);
   void lower_stmt(ast::StmtIdx stmt);

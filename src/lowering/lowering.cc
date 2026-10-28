@@ -1095,8 +1095,8 @@ void Lowerer::lower_fn(const FnEntry& entry) {
       const CompVal& arg = entry.comp_args[comp_arg_at++];
       CompScope scope;
       scope.frames.emplace_back();
-      if (!comp_bind_pattern(mod, params[i].pattern, arg, scope,
-                             fn.name.span)) {
+      if (!comp_lowering_.bind_pattern(mod, params[i].pattern, arg, scope,
+                                       fn.name.span)) {
         return;
       }
       for (auto& binding : scope.frames.back()) {

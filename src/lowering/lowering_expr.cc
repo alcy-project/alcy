@@ -731,7 +731,7 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     // Comp bindings never take runtime addresses; splice the value.
     for (usize i = comp_scope_.size(); i-- > 0;) {
       if (comp_scope_[i].first == name) {
-        return materialize_comp_value(comp_scope_[i].second, node.span);
+        return comp_lowering_.materialize(comp_scope_[i].second, node.span);
       }
     }
     if (const auto* info = lookup_static(module, name)) {
@@ -750,10 +750,10 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         // Anything else is a compile-time value: evaluate the
         // initializer and splice it.
         CompVal value;
-        if (!comp_evaluate_item(module, info->init, value)) {
+        if (!comp_lowering_.evaluate_item(module, info->init, value)) {
           return Val{size_one, error_type(), false, false};
         }
-        return materialize_comp_value(value, node.span);
+        return comp_lowering_.materialize(value, node.span);
       }
       unsupported(node.span, "static item in lowering");
       return Val{size_one, error_type(), false, false};
@@ -1339,21 +1339,21 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_extern_call(expr, sig);
   }
   if (sig.name == "write" && pkg.tree.is_staged_item("fmt", sig.item)) {
-    return lower_fmt_write(expr, sig);
+    return fmt_lowering_.lower_write(expr, sig);
   }
   if (sig.name == "format" && pkg.tree.is_staged_item("fmt", sig.item)) {
-    return lower_fmt_format(expr, sig);
+    return fmt_lowering_.lower_format(expr, sig);
   }
   if ((sig.name == "print" || sig.name == "println" || sig.name == "eprint" ||
        sig.name == "eprintln") &&
       pkg.tree.is_staged_item("io", sig.item)) {
-    return lower_io_print(expr, sig);
+    return fmt_lowering_.lower_print(expr, sig);
   }
   const std::vector<u32> comp = comp_positions(sig.item);
   std::vector<CompVal> comp_args;
   for (u32 pos : comp) {
     CompVal arg;
-    if (!comp_evaluate(module, call.args[pos], arg)) {
+    if (!comp_lowering_.evaluate(module, call.args[pos], arg)) {
       return Val{size_one, error_type(), false, false};
     }
     comp_args.push_back(std::move(arg));
@@ -1421,7 +1421,7 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   std::vector<CompVal> comp_args;
   for (u32 pos : comp) {
     CompVal arg;
-    if (!comp_evaluate(module, args[pos], arg)) {
+    if (!comp_lowering_.evaluate(module, args[pos], arg)) {
       return Val{size_one, error_type(), false, false};
     }
     comp_args.push_back(std::move(arg));
@@ -3056,7 +3056,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   std::vector<CompVal> comp_args;
   for (u32 pos : comp) {
     CompVal arg;
-    if (!comp_evaluate(module, method_args[pos - 1], arg)) {
+    if (!comp_lowering_.evaluate(module, method_args[pos - 1], arg)) {
       return Val{size_one, error_type(), false, false};
     }
     comp_args.push_back(std::move(arg));
@@ -5128,10 +5128,10 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         return lower_block(block.block, expected);
       }
       CompVal evaluated;
-      if (!comp_evaluate(module, expr, evaluated)) {
+      if (!comp_lowering_.evaluate(module, expr, evaluated)) {
         return Val{size_one, error_type(), false, false};
       }
-      return materialize_comp_value(evaluated, node.span);
+      return comp_lowering_.materialize(evaluated, node.span);
     }
     case ast::ExprKind::Return: {
       const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
@@ -5195,7 +5195,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       const ast::StmtDecl& decl = node.payload.get<ast::StmtDecl>();
       if (decl.is_const) {
         CompVal evaluated;
-        if (!comp_evaluate(module, decl.init, evaluated)) {
+        if (!comp_lowering_.evaluate(module, decl.init, evaluated)) {
           return;
         }
         // Comp bindings never take runtime addresses: runtime reads
@@ -5203,8 +5203,8 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         // value for later comp evaluation here.
         CompScope scope;
         scope.frames.emplace_back();
-        if (!comp_bind_pattern(module, decl.pattern, evaluated, scope,
-                               node.span)) {
+        if (!comp_lowering_.bind_pattern(module, decl.pattern, evaluated, scope,
+                                         node.span)) {
           return;
         }
         for (auto& binding : scope.frames.back()) {
