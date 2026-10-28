@@ -301,8 +301,21 @@ bool load_dependency(PipelineContext& ctx,
   const std::string key(dir.as_view());
   // A directory the run already staged is taken from the run's table,
   // subtree and all: a suite's members do not read their shared
-  // dependencies again.
+  // dependencies again. The staged entry answers to the suite its
+  // first edge spelled, and the table is keyed by the directory alone,
+  // so an edge that spells another suite - a plain path where a suite
+  // member was staged, or the reverse - would leave one identity
+  // answering for two. A directory is one package; the closure names
+  // it one way.
   if (const auto found = store.by_dir.find(key); found != store.by_dir.end()) {
+    if (found->second.front()->suite != suite) {
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineDependencySuiteAmbiguous>(
+              DiagCode::DependencySuiteMismatch, dir.as_view(),
+              found->second.front()->suite, suite);
+      (void)index;
+      return false;
+    }
     for (const LoadedDependency* entry : found->second) {
       resolution.add(entry);
       contributed.push_back(entry);
@@ -396,9 +409,9 @@ bool load_dependency(PipelineContext& ctx,
 // member the suite lists for a glob, or the one member a
 // three-segment specifier names. The suite's owner and name must
 // be the ones the specifier names, and each member loads as a
-// package through its own manifest, behind the visited and loaded
-// sets the package loader shares, so cycles and shared members
-// behave the same across the suite boundary.
+// package through its own manifest, behind the visited set and the
+// staged-dependency table the package loader shares, so cycles and
+// shared members behave the same across the suite boundary.
 bool load_suite_members(PipelineContext& ctx,
                         Resolution& resolution,
                         const path::Path& dir,
