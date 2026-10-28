@@ -8,9 +8,7 @@
 #include <vector>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -67,11 +65,7 @@ class Lexer {
   // read. The message is a catalog key, so the wording lives in one
   // place and the code stays with the check that found it.
   template <i18n::Key K, diag::DiagnosticId Id>
-  void emit_error(std::vector<Token>& out,
-                  usize start,
-                  usize length,
-                  diag::Stage stage,
-                  Id id);
+  void emit_error(std::vector<Token>& out, usize start, usize length, Id id);
 
   std::string_view bytes_;
   source::FileId file_;
@@ -84,10 +78,9 @@ template <i18n::Key K, diag::DiagnosticId Id>
 void Lexer::emit_error(std::vector<Token>& out,
                        usize start,
                        usize length,
-                       diag::Stage stage,
                        Id id) {
   const diag::Span span = span_at(start, length);
-  (void)bag_.emit<K>(diag::Severity::Error, stage, id, span);
+  (void)bag_.emit<K>(id, span);
   out.push_back(Token{.kind = TokenKind::Error, .span = span});
 }
 

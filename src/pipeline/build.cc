@@ -19,8 +19,6 @@
 #include "config/build_config.h"
 #include "debug/fatal.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -77,8 +75,7 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree_unoptimized(
   }
   if (!has_main) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineNoEntryPoint>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoEntryPoint,
-        entry_name);
+        DiagCode::NoEntryPoint, entry_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -100,7 +97,7 @@ base::Result<void, diag::Reported> optimize_package(
       opt::optimize(std::move(package.storage));
   if (optimized.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineOptimizeFailed>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::OptimizeFailed);
+        DiagCode::OptimizeFailed);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -184,8 +181,7 @@ base::Result<std::string, diag::Reported> default_output_path(
   std::string suffix = suffix_for(ctx.target, mode);
   if (suffix.empty()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotDeriveOutput>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoOutputName,
-        target);
+        DiagCode::NoOutputName, target);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -211,27 +207,24 @@ base::Result<void, diag::Reported> report_emit_failure(
   switch (error) {
     case codegen::EmitError::UnknownTarget: {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineUnknownTarget>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::UnknownTarget,
-          ctx.target.triple);
+          DiagCode::UnknownTarget, ctx.target.triple);
       (void)index;
       break;
     }
     case codegen::EmitError::CannotOptimize: {
-      const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotOptimize>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError);
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineCannotOptimize>(DiagCode::IoError);
       (void)index;
       break;
     }
     case codegen::EmitError::NoOptimizer: {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendNoOptimizer>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoOptimizer,
-          codegen::backend_name(ctx.backend));
+          DiagCode::NoOptimizer, codegen::backend_name(ctx.backend));
       (void)index;
       break;
     }
     case codegen::EmitError::Unsupported: {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendUnsupported>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::UnsupportedOutput, codegen::backend_name(ctx.backend));
       (void)index;
       break;
@@ -239,13 +232,11 @@ base::Result<void, diag::Reported> report_emit_failure(
     case codegen::EmitError::CannotEmit: {
       if (kind == codegen::OutputKind::Module) {
         const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotEmitModule>(
-            diag::Severity::Error, diag::Stage::Pipeline,
             DiagCode::CannotEmitModule, output_path);
         (void)index;
       } else {
         const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotEmitObject>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-            output_path);
+            DiagCode::IoError, output_path);
         (void)index;
       }
       break;
@@ -263,8 +254,7 @@ base::Result<void, diag::Reported> write_output(PipelineContext& ctx,
                                                 std::span<const u8> bytes) {
   if (!io::write_file(bytes, output_path)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotWrite>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, what,
-        output_path);
+        DiagCode::IoError, what, output_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -280,21 +270,19 @@ base::Result<void, diag::Reported> check_emission(PipelineContext& ctx,
                                                   codegen::OutputKind kind,
                                                   bool is_lib) {
   if (ctx.backend == codegen::Backend::None) {
-    const u32 index = ctx.bag.emit<i18n::Key::PipelineNoBackend>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoBackend);
+    const u32 index =
+        ctx.bag.emit<i18n::Key::PipelineNoBackend>(DiagCode::NoBackend);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   if (!codegen::backend_available(ctx.backend)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendNotBuilt>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoBackend,
-        codegen::backend_name(ctx.backend));
+        DiagCode::NoBackend, codegen::backend_name(ctx.backend));
     (void)index;
     return base::make_err(diag::Reported{});
   }
   if (!backend_supports(ctx.backend, kind, ctx.target)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendUnsupported>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         DiagCode::UnsupportedOutput, codegen::backend_name(ctx.backend));
     (void)index;
     return base::make_err(diag::Reported{});
@@ -307,7 +295,6 @@ base::Result<void, diag::Reported> check_emission(PipelineContext& ctx,
     const std::string_view arch = triple.substr(0, triple.find('-'));
     if (arch != "x86_64" && arch != "aarch64" && arch != "riscv64") {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineFreestandingTarget>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::UnsupportedOutput, ctx.target.triple);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -653,15 +640,14 @@ base::Result<void, diag::Reported> link_executable(
   base::Result<i32, SpawnError> linked = run_command(argv);
   if (linked.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRunSystemCompiler>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::LinkError);
+        DiagCode::LinkError);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   const i32 code = std::move(linked).unwrap();
   if (code != 0) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineLinkFailed>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::LinkError,
-        exe_path);
+        DiagCode::LinkError, exe_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -684,8 +670,7 @@ base::Result<std::string, diag::Reported> emit_output(
       path::Path::from_native(output_path);
   if (parsed.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidOutputPath>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        output_path);
+        DiagCode::IoError, output_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -731,7 +716,6 @@ base::Result<std::string, diag::Reported> emit_output(
       // name the ways to get a wasm executable instead.
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineWasmExecutableNeedsModule>(
-              diag::Severity::Error, diag::Stage::Pipeline,
               DiagCode::UnsupportedOutput, codegen::backend_name(ctx.backend));
       (void)index;
       return base::make_err(diag::Reported{});
@@ -771,13 +755,11 @@ base::Result<std::string, diag::Reported> build_single_file(
     const source::SourceError reason = std::move(file).unwrap_err();
     if (reason == source::SourceError::NotRegular) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineSourceNotRegular>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::SourceNotRegular, input);
       (void)index;
     } else {
-      const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          input);
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineCannotRead>(DiagCode::IoError, input);
       (void)index;
     }
     return base::make_err(diag::Reported{});
@@ -941,8 +923,7 @@ base::Result<std::string, diag::Reported> build_package(
     // One `-o` cannot name two artifacts.
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineMultipleTargetsWithOutput>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-            output);
+            DiagCode::NoTargets, output);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -994,8 +975,7 @@ base::Result<std::string, diag::Reported> build_package(
       const Artifact& bin = one.kind == ArtifactKind::Lib ? other : one;
       const Artifact& lib = one.kind == ArtifactKind::Lib ? one : other;
       const u32 index = ctx.bag.emit<i18n::Key::PipelineTargetOutputsCollide>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-          bin.name, lib.name, planned[i].path);
+          DiagCode::NoTargets, bin.name, lib.name, planned[i].path);
       (void)index;
       return base::make_err(diag::Reported{});
     }
@@ -1044,8 +1024,7 @@ base::Result<std::string, diag::Reported> build_suite(
       ctx.sources.bytes(manifest_file);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        manifest_name);
+        DiagCode::IoError, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -1065,8 +1044,7 @@ base::Result<std::string, diag::Reported> build_suite(
   }
   if (suite.package_count == 0) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteEmpty>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-        manifest_name);
+        DiagCode::NoTargets, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -1074,8 +1052,7 @@ base::Result<std::string, diag::Reported> build_suite(
     // One `-o` cannot name every member's artifact.
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineMultipleTargetsWithOutput>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-            output);
+            DiagCode::NoTargets, output);
     (void)index;
     return base::make_err(diag::Reported{});
   }

@@ -9,9 +9,7 @@
 #include <utility>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
@@ -97,8 +95,7 @@ base::Result<PackageManifest, diag::Reported> semantic_error(
   // Semantic errors name the manifest in the message and carry no span;
   // only syntax errors have a position to report.
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
-      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
-      filename, message);
+      DiagCode::ManifestSemanticError, filename, message);
   (void)index;
   return base::make_err(diag::Reported{});
 }
@@ -121,7 +118,6 @@ base::Result<std::string_view, diag::Reported> dep_string(
   const auto value = it->second.value<std::string_view>();
   if (!value.has_value() || value->empty()) {
     bag.emit<i18n::Key::PkgDependencyEmptyString>(
-        diag::Severity::Error, diag::Stage::Pkg,
         DiagCode::ManifestSemanticError, filename, dep, field);
     return base::make_err(diag::Reported{});
   }
@@ -135,8 +131,7 @@ base::Result<T, diag::Reported> manifest_field_error(diag::DiagBag& bag,
                                                      std::string_view filename,
                                                      std::string_view message) {
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
-      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
-      filename, message);
+      DiagCode::ManifestSemanticError, filename, message);
   (void)index;
   return base::make_err(diag::Reported{});
 }
@@ -237,9 +232,8 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     std::string_view spec,
     const toml::node& node) {
   if (!node.is_table()) {
-    bag.emit<i18n::Key::PkgDependencyNotATable>(
-        diag::Severity::Error, diag::Stage::Pkg,
-        DiagCode::ManifestSemanticError, filename, spec);
+    bag.emit<i18n::Key::PkgDependencyNotATable>(DiagCode::ManifestSemanticError,
+                                                filename, spec);
     return base::make_err(diag::Reported{});
   }
   const toml::table& table = *node.as_table();
@@ -263,7 +257,6 @@ base::Result<Dependency, diag::Reported> parse_dependency(
   }
   if (parts < 1 || parts > 3) {
     bag.emit<i18n::Key::PkgDependencyBadSpecifier>(
-        diag::Severity::Error, diag::Stage::Pkg,
         DiagCode::ManifestSemanticError, filename, spec);
     return base::make_err(diag::Reported{});
   }
@@ -271,7 +264,6 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     const bool glob_here = segments[i] == "*";
     if (segments[i].empty() || (glob_here && !(i == 2 && parts == 3))) {
       bag.emit<i18n::Key::PkgDependencyBadSpecifier>(
-          diag::Severity::Error, diag::Stage::Pkg,
           DiagCode::ManifestSemanticError, filename, spec);
       return base::make_err(diag::Reported{});
     }
@@ -286,7 +278,6 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     }
     if (!has_path) {
       bag.emit<i18n::Key::PkgDependencyNeedsPath>(
-          diag::Severity::Error, diag::Stage::Pkg,
           DiagCode::ManifestSemanticError, filename, spec);
       return base::make_err(diag::Reported{});
     }
@@ -345,7 +336,6 @@ base::Result<Dependency, diag::Reported> parse_dependency(
         field != "branch" && field != "tag" && field != "rev" &&
         field != "registry") {
       bag.emit<i18n::Key::PkgDependencyUnknownField>(
-          diag::Severity::Error, diag::Stage::Pkg,
           DiagCode::ManifestSemanticError, filename, spec, field);
       return base::make_err(diag::Reported{});
     }
@@ -355,13 +345,11 @@ base::Result<Dependency, diag::Reported> parse_dependency(
       (has_branch ? 1u : 0u) + (has_tag ? 1u : 0u) + (has_rev ? 1u : 0u);
   if (refs > 1) {
     bag.emit<i18n::Key::PkgDependencyTooManyRefs>(
-        diag::Severity::Error, diag::Stage::Pkg,
         DiagCode::ManifestSemanticError, filename, spec);
     return base::make_err(diag::Reported{});
   }
   if (refs > 0 && !has_git) {
     bag.emit<i18n::Key::PkgDependencyRefWithoutRemote>(
-        diag::Severity::Error, diag::Stage::Pkg,
         DiagCode::ManifestSemanticError, filename, spec);
     return base::make_err(diag::Reported{});
   }
@@ -369,7 +357,6 @@ base::Result<Dependency, diag::Reported> parse_dependency(
   // `version` it would be two sources at once.
   if (has_version && (has_git || has_path)) {
     bag.emit<i18n::Key::PkgDependencyTooManySources>(
-        diag::Severity::Error, diag::Stage::Pkg,
         DiagCode::ManifestSemanticError, filename, spec);
     return base::make_err(diag::Reported{});
   }
@@ -379,7 +366,6 @@ base::Result<Dependency, diag::Reported> parse_dependency(
         parse_version_req(version_text);
     if (parsed.is_err()) {
       bag.emit<i18n::Key::PkgDependencyBadVersion>(
-          diag::Severity::Error, diag::Stage::Pkg,
           DiagCode::ManifestSemanticError, filename, spec);
       return base::make_err(diag::Reported{});
     }
@@ -399,9 +385,8 @@ base::Result<Dependency, diag::Reported> parse_dependency(
       }
     }
     if (!pinned && pre_minor) {
-      bag.emit<i18n::Key::PkgDependencyPreMinor>(
-          diag::Severity::Warning, diag::Stage::Pkg,
-          DiagCode::PreMinorRequirement, filename, spec);
+      bag.emit<i18n::Key::PkgDependencyPreMinor>(DiagCode::PreMinorRequirement,
+                                                 filename, spec);
     }
   }
   Dependency dep{
@@ -597,8 +582,7 @@ void report_manifest_error(ManifestError error,
       break;
   }
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
-      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
-      name, detail);
+      DiagCode::ManifestSemanticError, name, detail);
   (void)index;
 }
 
@@ -677,8 +661,7 @@ void report_suite_error(SuiteError error,
       break;
   }
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
-      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
-      name, detail);
+      DiagCode::ManifestSemanticError, name, detail);
   (void)index;
 }
 
@@ -714,8 +697,7 @@ void report_inherit_error(InheritError error,
       break;
   }
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
-      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
-      name, detail);
+      DiagCode::ManifestSemanticError, name, detail);
   (void)index;
 }
 
@@ -726,8 +708,8 @@ diag::Reported toml_syntax_error(diag::DiagBag& bag,
                                  source::FileId file,
                                  const toml::parse_error& error) {
   const u32 index = bag.emit<i18n::Key::PkgTomlSyntaxError>(
-      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSyntaxError,
-      toml_span(bytes, file, error.source()), error.description());
+      DiagCode::ManifestSyntaxError, toml_span(bytes, file, error.source()),
+      error.description());
   (void)index;
   return diag::Reported{};
 }
@@ -739,8 +721,7 @@ base::Result<SuiteManifest, diag::Reported> suite_semantic_error(
   // Same shape as semantic_error, for the suite parser: semantic errors
   // name the manifest in the message and carry no span.
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
-      diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSemanticError,
-      filename, message);
+      DiagCode::ManifestSemanticError, filename, message);
   (void)index;
   return base::make_err(diag::Reported{});
 }
@@ -1033,7 +1014,6 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
       if (field == "suite-only") {
         if (!node.is_array()) {
           const u32 index = bag.emit<i18n::Key::PkgSpecSuiteOnlyNotStrings>(
-              diag::Severity::Error, diag::Stage::Pkg,
               DiagCode::ManifestSemanticError, filename);
           (void)index;
           return base::make_err(diag::Reported{});
@@ -1050,7 +1030,6 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
           const auto text = entry.value<std::string_view>();
           if (!text.has_value() || text->empty()) {
             const u32 index = bag.emit<i18n::Key::PkgSpecSuiteOnlyNotStrings>(
-                diag::Severity::Error, diag::Stage::Pkg,
                 DiagCode::ManifestSemanticError, filename);
             (void)index;
             return base::make_err(diag::Reported{});
@@ -1064,7 +1043,6 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
           }
           if (duplicate) {
             const u32 index = bag.emit<i18n::Key::PkgSpecSuiteOnlyDuplicate>(
-                diag::Severity::Error, diag::Stage::Pkg,
                 DiagCode::ManifestSemanticError, filename, *text);
             (void)index;
             return base::make_err(diag::Reported{});
@@ -1080,7 +1058,6 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
         // implement (`implement = ["PartialEq"]`).
         if (!node.is_array()) {
           const u32 index = bag.emit<i18n::Key::PkgSpecImplementNotStrings>(
-              diag::Severity::Error, diag::Stage::Pkg,
               DiagCode::ManifestSemanticError, filename);
           (void)index;
           return base::make_err(diag::Reported{});
@@ -1097,7 +1074,6 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
           const auto text = entry.value<std::string_view>();
           if (!text.has_value() || text->empty()) {
             const u32 index = bag.emit<i18n::Key::PkgSpecImplementNotStrings>(
-                diag::Severity::Error, diag::Stage::Pkg,
                 DiagCode::ManifestSemanticError, filename);
             (void)index;
             return base::make_err(diag::Reported{});
@@ -1111,7 +1087,6 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
           }
           if (duplicate) {
             const u32 index = bag.emit<i18n::Key::PkgSpecImplementDuplicate>(
-                diag::Severity::Error, diag::Stage::Pkg,
                 DiagCode::ManifestSemanticError, filename, *text);
             (void)index;
             return base::make_err(diag::Reported{});
@@ -1123,7 +1098,6 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
         continue;
       }
       const u32 index = bag.emit<i18n::Key::PkgSpecUnknownKey>(
-          diag::Severity::Error, diag::Stage::Pkg,
           DiagCode::ManifestSemanticError, filename, field);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -1296,7 +1270,6 @@ base::Result<Dependency, diag::Reported> parse_dependency_flag(
     std::string_view value = trim_flag(body.substr(eq + 1));
     if (value.empty()) {
       bag.emit<i18n::Key::PkgDependencyNotASpecifier>(
-          diag::Severity::Error, diag::Stage::Pkg,
           DiagCode::ManifestSemanticError, filename, fragment);
       return base::make_err(diag::Reported{});
     }
@@ -1316,8 +1289,7 @@ base::Result<Dependency, diag::Reported> parse_dependency_flag(
       toml::parse("[dependencies]\n" + table + "\n", filename);
   if (!parsed) {
     bag.emit<i18n::Key::PkgDependencyDoesNotParse>(
-        diag::Severity::Error, diag::Stage::Pkg, DiagCode::ManifestSyntaxError,
-        filename, fragment);
+        DiagCode::ManifestSyntaxError, filename, fragment);
     return base::make_err(diag::Reported{});
   }
   const toml::table& root = parsed.table();
@@ -1325,14 +1297,12 @@ base::Result<Dependency, diag::Reported> parse_dependency_flag(
   if (deps_it == root.end() || !deps_it->second.is_table() ||
       deps_it->second.as_table()->empty()) {
     bag.emit<i18n::Key::PkgDependencyNotASpecifier>(
-        diag::Severity::Error, diag::Stage::Pkg,
         DiagCode::ManifestSemanticError, filename, fragment);
     return base::make_err(diag::Reported{});
   }
   const toml::table* const deps = deps_it->second.as_table();
   if (deps->size() != 1) {
     bag.emit<i18n::Key::PkgDependencyTooManyEntries>(
-        diag::Severity::Error, diag::Stage::Pkg,
         DiagCode::ManifestSemanticError, filename, fragment);
     return base::make_err(diag::Reported{});
   }

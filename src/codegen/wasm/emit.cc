@@ -19,9 +19,7 @@
 #include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/str/string_pool_id.h"
@@ -144,7 +142,6 @@ Emitter::EmitResult Emitter::unsupported(diag::Span span,
                                          std::string_view what) {
   if (!failed_) {
     (void)bag_->emit<i18n::Key::CodegenWasmUnsupported>(
-        diag::Severity::Error, diag::Stage::CodegenNative,
         codegen::DiagCode::Unsupported, span, what);
     failed_ = true;
   }

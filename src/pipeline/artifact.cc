@@ -23,9 +23,7 @@
 #include "ast/ast.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -64,8 +62,7 @@ bool check_entry_point(PipelineContext& ctx, const Artifact& target) {
     return true;
   }
   const u32 index = ctx.bag.emit<i18n::Key::PipelineNoEntryPoint>(
-      diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoEntryPoint,
-      target.name);
+      DiagCode::NoEntryPoint, target.name);
   (void)index;
   return false;
 }
@@ -78,8 +75,8 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
                                            "frontend");
   base::Result<path::Path, path::PathError> dir = path::Path::from_native(raw);
   if (dir.is_err()) {
-    const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidTarget>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, raw);
+    const u32 index =
+        ctx.bag.emit<i18n::Key::PipelineInvalidTarget>(DiagCode::IoError, raw);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -95,25 +92,22 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
       if (current) {
         const u32 index = ctx.bag.emit<
             i18n::Key::PipelineNoManifestWithFileHintInCurrentDirectory>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoManifest);
+            DiagCode::NoManifest);
         (void)index;
       } else {
         const u32 index =
             ctx.bag.emit<i18n::Key::PipelineNoManifestWithFileHint>(
-                diag::Severity::Error, diag::Stage::Pipeline,
                 DiagCode::NoManifest, raw);
         (void)index;
       }
     } else if (current) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineNoManifestInCurrentDirectory>(
-              diag::Severity::Error, diag::Stage::Pipeline,
               DiagCode::NoManifest);
       (void)index;
     } else {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoManifest,
-          raw);
+          DiagCode::NoManifest, raw);
       (void)index;
     }
     return base::make_err(diag::Reported{});
@@ -334,7 +328,6 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
     if (identities[i] == manifest.name) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineDependencyClashesWithPackage>(
-              diag::Severity::Error, diag::Stage::Pipeline,
               DiagCode::DependencyIdentityClash, identities[i]);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -343,7 +336,6 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       if (identities[i] == identities[j]) {
         const u32 index =
             ctx.bag.emit<i18n::Key::PipelineDependencyClashesWithDependency>(
-                diag::Severity::Error, diag::Stage::Pipeline,
                 DiagCode::DependencyIdentityClash, identities[i]);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -353,7 +345,6 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       if (identities[i] == member) {
         const u32 index =
             ctx.bag.emit<i18n::Key::PipelineDependencyClashesWithStdMember>(
-                diag::Severity::Error, diag::Stage::Pipeline,
                 DiagCode::DependencyIdentityClash, identities[i],
                 identities[i]);
         (void)index;
@@ -539,10 +530,8 @@ base::Result<Artifact, diag::Reported> resolve_target(
     const u32 index =
         kind == ArtifactKind::Lib
             ? ctx.bag.emit<i18n::Key::PipelineLibArtifactNotDiscovered>(
-                  diag::Severity::Error, diag::Stage::Pipeline,
                   DiagCode::NoTargets, target_path)
             : ctx.bag.emit<i18n::Key::PipelineBinArtifactNotDiscovered>(
-                  diag::Severity::Error, diag::Stage::Pipeline,
                   DiagCode::NoTargets, target_path);
     (void)index;
     return base::make_err(diag::Reported{});
@@ -576,7 +565,6 @@ base::Result<Artifact, diag::Reported> resolve_target(
       if (prior.id != entry.id && prior.name == name) {
         const u32 index =
             ctx.bag.emit<i18n::Key::PipelineModuleSharedByTwoFiles>(
-                diag::Severity::Error, diag::Stage::Pipeline,
                 DiagCode::NoTargets, diag::Span{}, name, input);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -588,10 +576,8 @@ base::Result<Artifact, diag::Reported> resolve_target(
     const u32 index =
         kind == ArtifactKind::Lib
             ? ctx.bag.emit<i18n::Key::PipelineLibArtifactNotSelected>(
-                  diag::Severity::Error, diag::Stage::Pipeline,
                   DiagCode::NoTargets, target_path)
             : ctx.bag.emit<i18n::Key::PipelineBinArtifactNotSelected>(
-                  diag::Severity::Error, diag::Stage::Pipeline,
                   DiagCode::NoTargets, target_path);
     (void)index;
     return base::make_err(diag::Reported{});
@@ -645,8 +631,7 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
       ctx.sources.bytes(manifest_file);
   if (!manifest_bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        manifest_name);
+        DiagCode::IoError, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -677,8 +662,7 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
   } else if (manifest.version_from_suite || manifest.owner_from_suite ||
              manifest.license_from_suite) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInheritsWithoutSuite>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoManifest,
-        manifest_name);
+        DiagCode::NoManifest, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -691,16 +675,14 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
   }
   if (manifest.bin_count == 0 && manifest.lib == nullptr) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoTarget>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-        manifest_name);
+        DiagCode::NoTargets, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   if (manifest.bin_count > 1) {
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineManifestTooManyBinArtifacts>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-            manifest_name, manifest.bin_count);
+            DiagCode::NoTargets, manifest_name, manifest.bin_count);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -768,8 +750,7 @@ base::Result<pkg::Toolchain, diag::Reported> load_toolchain(
   const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PkgToolchainNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        path.as_view());
+        DiagCode::IoError, path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }

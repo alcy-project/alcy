@@ -13,9 +13,11 @@ text of every message it can print.
   codes carry more than one wording. The ordinal is an index into every
   catalog and means nothing outside this module, so the enum is as wide
   as the catalog needs it to be.
-- `messages.def` holds the texts. It is a list, not a table: the key
-  enum, every language's table, and the completeness check are all
-  generated from it, so they cannot disagree.
+- `messages.def` holds the texts and, per message, the severity and
+  the phase it is reported with. It is a list, not a table: the key
+  enum, every language's table, the severity/phase table, and the
+  completeness check are all generated from it, so they cannot
+  disagree.
 - `format_to<K>` composes a message and checks the format string of
   *every* catalog against the call site's arguments at compile time. A
   missing translation is a build error.
@@ -28,8 +30,13 @@ text of every message it can print.
 ## Adding a message
 
 1. Add the entry to `messages.def` under its module's section, named
-   after what is wrong. The diagnostic code stays at the call site.
-2. Emit it with `DiagBag::emit<Key::Name>(severity, code, args...)`.
+   after what is wrong, with the severity and the phase it is reported
+   with. The diagnostic code stays at the call site.
+2. Emit it with `DiagBag::emit<Key::Name>(code, args...)`; a message
+   reported at a place takes its span before the arguments
+   (`emit<Key::Name>(code, span, args...)`). A lint uses
+   `emit_named<Key::Name>(severity, code, check_name, span, args...)`,
+   because a rule's level is its configuration's.
 
 Changing a text is step 1 alone. Renaming a key invalidates every
 translation of it, so a name is not changed to tidy up.

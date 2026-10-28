@@ -13,8 +13,6 @@
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
@@ -130,7 +128,6 @@ ResultCode run_compile(const CliConfig& config,
     if (text.is_err()) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineCannotReadStandardInput>(
-              diag::Severity::Error, diag::Stage::Pipeline,
               pipeline::DiagCode::IoError);
       (void)index;
       return failed;

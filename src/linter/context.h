@@ -14,7 +14,6 @@
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
@@ -118,8 +117,8 @@ struct LintContext {
     const diag::Severity severity = level == LintLevel::Deny
                                         ? diag::Severity::Error
                                         : diag::Severity::Warning;
-    return bag.emit_named<K>(severity, diag::Stage::Lint, rule->code, rule->id,
-                             span, std::forward<Args>(args)...);
+    return bag.emit_named<K>(severity, rule->code, rule->id, span,
+                             std::forward<Args>(args)...);
   }
 
   // Attaches a note to a finding already reported, pointing at a second

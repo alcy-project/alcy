@@ -12,9 +12,7 @@
 #include "borrow/diag_code.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -941,8 +939,7 @@ class Checker {
     for (const Place& gone : moved) {
       if (overlaps(gone, place)) {
         const u32 index = bag.emit<i18n::Key::BorrowUseAfterMove>(
-            diag::Severity::Error, diag::Stage::Borrow, DiagCode::UseAfterMove,
-            span, addr_name(place.root), action);
+            DiagCode::UseAfterMove, span, addr_name(place.root), action);
         (void)index;
         return;
       }
@@ -1283,8 +1280,7 @@ class Checker {
               }
             }
             const u32 index = bag.emit<i18n::Key::BorrowConflict>(
-                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
-                span, addr_name(place.root));
+                DiagCode::Conflict, span, addr_name(place.root));
             (void)index;
             break;
           }
@@ -1310,7 +1306,6 @@ class Checker {
         }
         if (borrowed) {
           const u32 index = bag.emit<i18n::Key::BorrowMoveOutOfBorrow>(
-              diag::Severity::Error, diag::Stage::Borrow,
               DiagCode::MoveOutOfBorrow, span, addr_name(place.root));
           (void)index;
           break;
@@ -1328,7 +1323,6 @@ class Checker {
                                               : ir::TypeIdx(found->second);
                                  })) {
           const u32 index = bag.emit<i18n::Key::BorrowUnmovableMoved>(
-              diag::Severity::Error, diag::Stage::Borrow,
               DiagCode::UnmovableMoved, span, addr_name(place.root));
           (void)index;
           break;
@@ -1343,7 +1337,6 @@ class Checker {
             continue;
           }
           const u32 index = bag.emit<i18n::Key::BorrowMoveInvalidatesBorrow>(
-              diag::Severity::Error, diag::Stage::Borrow,
               DiagCode::UseAfterMove, span, addr_name(place.root));
           (void)index;
           break;
@@ -1405,8 +1398,7 @@ class Checker {
           }
           if (exclusive || loan.exclusive) {
             const u32 index = bag.emit<i18n::Key::BorrowConflict>(
-                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
-                span, addr_name(place.root));
+                DiagCode::Conflict, span, addr_name(place.root));
             (void)index;
             break;
           }
@@ -1450,7 +1442,6 @@ class Checker {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
-                diag::Severity::Error, diag::Stage::Borrow,
                 DiagCode::AssignBorrowed, span, addr_name(place.root));
             (void)index;
             break;
@@ -1474,8 +1465,7 @@ class Checker {
           const u32 root = loans[loan].place.root;
           if (!is_param_root(root, fn)) {
             const u32 index = bag.emit<i18n::Key::BorrowReturnsLocalReference>(
-                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Escape,
-                span, addr_name(root));
+                DiagCode::Escape, span, addr_name(root));
             (void)index;
             break;
           }
@@ -1529,8 +1519,7 @@ class Checker {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowConflict>(
-                diag::Severity::Error, diag::Stage::Borrow, DiagCode::Conflict,
-                span, addr_name(reserved.place.root));
+                DiagCode::Conflict, span, addr_name(reserved.place.root));
             (void)index;
             break;
           }

@@ -15,10 +15,8 @@
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fmt/format.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -66,47 +64,42 @@ namespace lowering {
 
 void Lowerer::unsupported(diag::Span span, std::string_view what) {
   const u32 index = bag.emit<i18n::Key::LowerUnsupportedConstruct>(
-      diag::Severity::Error, diag::Stage::Lowering, DiagCode::Unsupported, span,
-      what);
+      DiagCode::Unsupported, span, what);
   (void)index;
   failed = true;
 }
 
 void Lowerer::internal(diag::Span span, std::string_view what) {
-  const u32 index = bag.emit<i18n::Key::LowerInternalError>(
-      diag::Severity::Error, diag::Stage::Lowering, DiagCode::Internal, span,
-      what);
+  const u32 index =
+      bag.emit<i18n::Key::LowerInternalError>(DiagCode::Internal, span, what);
   (void)index;
   failed = true;
 }
 
 void Lowerer::comp_overflow(diag::Span span) {
-  const u32 index = bag.emit<i18n::Key::LowerCompOverflow>(
-      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompOverflow,
-      span);
+  const u32 index =
+      bag.emit<i18n::Key::LowerCompOverflow>(DiagCode::CompOverflow, span);
   (void)index;
   failed = true;
 }
 
 void Lowerer::comp_div_zero(diag::Span span) {
-  const u32 index = bag.emit<i18n::Key::LowerCompDivisionByZero>(
-      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompDivZero,
-      span);
+  const u32 index =
+      bag.emit<i18n::Key::LowerCompDivisionByZero>(DiagCode::CompDivZero, span);
   (void)index;
   failed = true;
 }
 
 void Lowerer::comp_oob(diag::Span span) {
   const u32 index = bag.emit<i18n::Key::LowerCompOutOfBounds>(
-      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompOutOfBounds,
-      span);
+      DiagCode::CompOutOfBounds, span);
   (void)index;
   failed = true;
 }
 
 void Lowerer::comp_budget(diag::Span span) {
-  const u32 index = bag.emit<i18n::Key::LowerCompBudget>(
-      diag::Severity::Error, diag::Stage::Lowering, DiagCode::CompBudget, span);
+  const u32 index =
+      bag.emit<i18n::Key::LowerCompBudget>(DiagCode::CompBudget, span);
   (void)index;
   failed = true;
 }
@@ -629,7 +622,6 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
       // and carries no such hazard.
       if (guard_arm_ && !is_copy(init.type)) {
         const u32 index = bag.emit<i18n::Key::LowerGuardMovesBinding>(
-            diag::Severity::Error, diag::Stage::Lowering,
             DiagCode::GuardMovesBinding, node.span, name);
         (void)index;
         failed = true;
@@ -4847,9 +4839,8 @@ bool Lowerer::report_nesting(diag::Span span) {
     return true;
   }
   reported_too_deep_ = true;
-  const u32 index = bag.emit<i18n::Key::ParserNestingTooDeep>(
-      diag::Severity::Error, diag::Stage::Lowering, DiagCode::TooDeep, span,
-      nesting_.limit());
+  const u32 index = bag.emit<i18n::Key::LowerNestingTooDeep>(
+      DiagCode::TooDeep, span, nesting_.limit());
   (void)index;
   return true;
 }
@@ -4881,7 +4872,6 @@ Val Lowerer::lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (moved.is_valid() && runs_destructor(moved) &&
       reads_through_array_element(expr)) {
     const u32 index = bag.emit<i18n::Key::LowerMoveOutOfElement>(
-        diag::Severity::Error, diag::Stage::Lowering,
         DiagCode::MoveOutOfElement, ast.exprs[expr].span);
     (void)index;
     return Val{size_one, error_type(), false, false};
@@ -5358,8 +5348,7 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
     }
     if (!reachable) {
       const u32 index = bag.emit<i18n::Key::LowerUnreachableStatement>(
-          diag::Severity::Warning, diag::Stage::Lowering, DiagCode::Unreachable,
-          ast.stmts[stmt].span);
+          DiagCode::Unreachable, ast.stmts[stmt].span);
       (void)index;
       continue;
     }
@@ -5396,7 +5385,6 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
         if (local != nullptr &&
             static_cast<usize>(local - locals.data()) >= mark) {
           const u32 index = bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
-              diag::Severity::Error, diag::Stage::Lowering,
               DiagCode::BlockReferenceEscapes, node.span, segments[0].name);
           (void)index;
           failed = true;
@@ -5417,8 +5405,7 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
     }
   } else if (!reachable && node.value.is_valid()) {
     const u32 index = bag.emit<i18n::Key::LowerUnreachableExpression>(
-        diag::Severity::Warning, diag::Stage::Lowering, DiagCode::Unreachable,
-        ast.exprs[node.value].span);
+        DiagCode::Unreachable, ast.exprs[node.value].span);
     (void)index;
   }
   const bool bad = failed || terminated_cur();

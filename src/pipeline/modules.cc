@@ -14,9 +14,7 @@
 
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -104,7 +102,6 @@ base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> select_modules(
     }
     if (selected_names.contains(name)) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleSelectedTwice>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::InvalidModuleSelection, diag::Span{}, name);
       (void)index;
       return false;
@@ -137,7 +134,6 @@ base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> select_modules(
     }
     if (found == source::UNKNOWN_FILE) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleIncludeHasNoFile>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::InvalidModuleSelection, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -151,7 +147,6 @@ base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> select_modules(
     if (!relative_to(candidate.as_view(), root.as_view(), relative)) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineModuleIncludeEscapesPackage>(
-              diag::Severity::Error, diag::Stage::Pipeline,
               DiagCode::InvalidModuleSelection, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -160,7 +155,6 @@ base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> select_modules(
     if (name.empty()) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineModuleIncludeNotAModulePath>(
-              diag::Severity::Error, diag::Stage::Pipeline,
               DiagCode::InvalidModuleSelection, diag::Span{}, entry);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -196,7 +190,6 @@ base::Result<std::vector<analyzer::ModuleInput>, diag::Reported> select_modules(
       continue;
     }
     const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleNotSelected>(
-        diag::Severity::Warning, diag::Stage::Pipeline,
         DiagCode::UnselectedFile,
         ctx.sources.name(id).value_or(std::string_view{"[unknown file]"}));
     (void)index;

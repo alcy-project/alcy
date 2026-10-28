@@ -26,7 +26,6 @@
 #include "diag/diagnostic.h"
 #include "diag/render.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fmt/format.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/limits.h"
@@ -324,7 +323,6 @@ Val Lowerer::materialize(Val v) {
   // and a reference is a pointer: moving it transfers no value.
   if (v.borrowed && !is_copy(v.type) && !ir::is_pointer_type(tag_of(v.type))) {
     const u32 index = bag.emit<i18n::Key::LowerMoveOutOfBorrow>(
-        diag::Severity::Error, diag::Stage::Lowering,
         DiagCode::ValueOutOfBorrow, cur_span_);
     (void)index;
   }
@@ -450,7 +448,6 @@ void Lowerer::record_move_event(Val v) {
         locals[local_index].type, std::span<const u32>(path.data(), i));
     if (type_has_custom_drop(prefix)) {
       const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
-          diag::Severity::Error, diag::Stage::Lowering,
           DiagCode::MoveOutOfDestructor, cur_span_, locals[local_index].name);
       (void)index;
       return;
@@ -483,7 +480,6 @@ str::StringPoolId Lowerer::report_name_table_exhausted() {
   if (!name_table_exhausted_) {
     name_table_exhausted_ = true;
     const u32 index = bag.emit<i18n::Key::LowerNameTableExhausted>(
-        diag::Severity::Error, diag::Stage::Lowering,
         DiagCode::NameTableExhausted, cur_span_);
     (void)index;
   }
@@ -700,7 +696,6 @@ bool Lowerer::fn_budget_available() {
     return true;
   }
   const u32 index = bag.emit<i18n::Key::LowerFunctionBudgetExhausted>(
-      diag::Severity::Error, diag::Stage::Lowering,
       DiagCode::FunctionBudgetExhausted, cur_span_);
   (void)index;
   failed = true;
@@ -1867,8 +1862,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   if (built.is_err()) {
     const ir::VerificationError error = std::move(built).unwrap_err();
     const u32 index = bag.emit<i18n::Key::LowerIrVerificationFailed>(
-        diag::Severity::Error, diag::Stage::Lowering, DiagCode::Internal,
-        diag::Span{});
+        DiagCode::Internal, diag::Span{});
     (void)index;
     const diag::Diagnostic diag = ir::to_diagnostic(error);
     fmt::memory_buffer rendered;
@@ -1915,8 +1909,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
       }
     }
     const u32 index = bag.emit<i18n::Key::LowerCompEngineMismatch>(
-        diag::Severity::Error, diag::Stage::Lowering, DiagCode::Internal,
-        diag::Span{}, run.name);
+        DiagCode::Internal, diag::Span{}, run.name);
     (void)index;
     return base::make_err(diag::Reported{});
   }

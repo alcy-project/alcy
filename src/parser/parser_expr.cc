@@ -10,9 +10,7 @@
 #include "ast/ast.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -85,7 +83,6 @@ ast::ExprIdx Parser::parse_range() {
     }
     if (kind == lexer::TokenKind::DotDot) {
       const u32 index = bag_.emit<i18n::Key::ParserRangeEndNeedsBound>(
-          diag::Severity::Error, diag::Stage::Parser,
           DiagCode::RangeEndUnspelled, op);
       (void)index;
       return ast::ExprIdx::invalid();
@@ -94,8 +91,7 @@ ast::ExprIdx Parser::parse_range() {
     // `..<` and `..=` promise an endpoint; without one the range
     // would silently read as the unbounded `..`.
     const u32 index = bag_.emit<i18n::Key::ParserRangeBoundRequired>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::RangeEndUnspelled,
-        op);
+        DiagCode::RangeEndUnspelled, op);
     (void)index;
     return ast::ExprIdx::invalid();
   }
@@ -486,8 +482,7 @@ ast::ExprIdx Parser::parse_postfix() {
         (peek_kind(1) == lexer::TokenKind::LParen ||
          peek_kind(1) == lexer::TokenKind::LBracket)) {
       const u32 index = bag_.emit<i18n::Key::ParserMacroCallSpelling>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-          peek().span);
+          DiagCode::Spelling, peek().span);
       (void)index;
       advance();  // `!`
       continue;
@@ -883,9 +878,8 @@ std::optional<ast::CondIdx> Parser::parse_spelled_condition() {
   if (!matched) {
     return std::nullopt;
   }
-  const u32 index = bag_.emit<i18n::Key::ParserIfLetSpelling>(
-      diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-      start.span);
+  const u32 index =
+      bag_.emit<i18n::Key::ParserIfLetSpelling>(DiagCode::Spelling, start.span);
   (void)index;
   advance();  // `let`
   const ast::PatternIdx pattern = parse_pattern();
@@ -1456,8 +1450,7 @@ ast::ExprIdx Parser::parse_array_literal() {
   }
   if (check(lexer::TokenKind::RBracket)) {
     const u32 index = bag_.emit<i18n::Key::AnalyzerArrayLiteralWithoutCount>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        peek().span);
+        DiagCode::UnexpectedToken, peek().span);
     (void)index;
     return ast::ExprIdx::invalid();
   }
@@ -1529,8 +1522,7 @@ ast::ExprIdx Parser::parse_unsafe_block() {
   }
   if (!check(lexer::TokenKind::LBrace)) {
     const u32 index = bag_.emit<i18n::Key::ParserUnsafeWithoutBlock>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        peek().span);
+        DiagCode::UnexpectedToken, peek().span);
     (void)index;
     return ast::ExprIdx::invalid();
   }
@@ -1556,8 +1548,7 @@ ast::ExprIdx Parser::parse_comp_block() {
   }
   if (!check(lexer::TokenKind::LBrace)) {
     const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnBindings>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        peek().span);
+        DiagCode::UnexpectedToken, peek().span);
     (void)index;
     return ast::ExprIdx::invalid();
   }

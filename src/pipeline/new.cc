@@ -11,8 +11,6 @@
 #include <vector>
 
 #include "config/build_config.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fmt/format.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -202,15 +200,13 @@ bool suite_accepts_member(PipelineContext& ctx,
     const std::string_view listed = suite.manifest.packages[i];
     if (listed == member) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteAlreadyHasMember>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          spelling, member);
+          DiagCode::IoError, spelling, member);
       (void)index;
       return false;
     }
     if (pkg::suite_member_name(listed) == pkg::suite_member_name(member)) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteHasMemberNamed>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          spelling, pkg::suite_member_name(member));
+          DiagCode::IoError, spelling, pkg::suite_member_name(member));
       (void)index;
       return false;
     }
@@ -229,8 +225,7 @@ bool append_member(PipelineContext& ctx,
       !write_text_file(manifest_path.as_view(), edited)) {
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineCannotUpdateSuiteManifest>(
-            diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-            member, manifest_path.as_view());
+            DiagCode::IoError, member, manifest_path.as_view());
     (void)index;
     return false;
   }
@@ -258,8 +253,7 @@ bool write_package_files(PipelineContext& ctx,
     io::FileHandle probe;
     if (probe.open(path.c_str(), io::FileAccess::Read)) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelinePathExists>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          path.as_view());
+          DiagCode::IoError, path.as_view());
       (void)index;
       return false;
     }
@@ -307,8 +301,7 @@ path = "main.al")",
       (writes_ignore &&
        !write_text_file(ignore_path.as_view(), GIT_IGNORE_TEXT))) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreatePackageFiles>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        package_dir.as_view());
+        DiagCode::IoError, package_dir.as_view());
     (void)index;
     return false;
   }
@@ -333,8 +326,7 @@ bool write_suite_files(PipelineContext& ctx,
     io::FileHandle probe;
     if (probe.open(path.c_str(), io::FileAccess::Read)) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelinePathExists>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          path.as_view());
+          DiagCode::IoError, path.as_view());
       (void)index;
       return false;
     }
@@ -357,8 +349,7 @@ packages = []
       (writes_ignore &&
        !write_text_file(ignore_path.as_view(), GIT_IGNORE_TEXT))) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateSuiteFiles>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        suite_dir.as_view());
+        DiagCode::IoError, suite_dir.as_view());
     (void)index;
     return false;
   }
@@ -379,8 +370,7 @@ bool parse_suite_spec(PipelineContext& ctx,
     name_part = spec.substr(slash + 1);
     if (owner_part.empty() || name_part.find('/') != std::string_view::npos) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidSuiteName>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          spec);
+          DiagCode::IoError, spec);
       (void)index;
       return false;
     }
@@ -388,7 +378,7 @@ bool parse_suite_spec(PipelineContext& ctx,
   if (!valid_package_name(name_part) ||
       (!owner_part.empty() && !valid_package_name(owner_part))) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidSuiteName>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, spec);
+        DiagCode::IoError, spec);
     (void)index;
     return false;
   }
@@ -420,7 +410,7 @@ NewResult create_new_package(PipelineContext& ctx,
       path::Path::from_native(input);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreatePackage>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
+        DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -428,7 +418,7 @@ NewResult create_new_package(PipelineContext& ctx,
   const std::string_view name = dir_basename(package_dir.as_view());
   if (!valid_package_name(name)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidPackageName>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
+        DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -460,7 +450,7 @@ NewResult init_package(PipelineContext& ctx, std::string_view input, Vcs vcs) {
       path::Path::from_native(input);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotInitPackage>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
+        DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -479,7 +469,7 @@ NewResult init_package(PipelineContext& ctx, std::string_view input, Vcs vcs) {
   }
   if (!valid_package_name(name)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotDerivePackageName>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
+        DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -521,7 +511,7 @@ NewResult create_new_suite(PipelineContext& ctx,
   base::Result<path::Path, path::PathError> root = path::Path::from_native(dir);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateSuite>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
+        DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }
@@ -544,7 +534,7 @@ NewResult init_suite(PipelineContext& ctx,
       path::Path::from_native(input);
   if (root.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateSuite>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, input);
+        DiagCode::IoError, input);
     (void)index;
     return base::make_err(0);
   }

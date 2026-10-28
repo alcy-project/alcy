@@ -11,8 +11,6 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -46,12 +44,10 @@ base::Result<LintOutcome, diag::Reported> report_load_failure(
     std::string_view target) {
   if (reason == source::SourceError::NotRegular) {
     const u32 index = bag.emit<i18n::Key::PipelineSourceNotRegular>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         pipeline::DiagCode::SourceNotRegular, target);
     (void)index;
   } else {
     const u32 index = bag.emit<i18n::Key::PipelineCannotRead>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         pipeline::DiagCode::IoError, target);
     (void)index;
   }
@@ -190,7 +186,6 @@ base::Result<LintOutcome, diag::Reported> lint_suite(
       ctx.sources.bytes(manifest_file);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         pipeline::DiagCode::IoError, manifest_name);
     (void)index;
     return fail();
@@ -211,7 +206,6 @@ base::Result<LintOutcome, diag::Reported> lint_suite(
   }
   if (suite.package_count == 0) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteEmpty>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         pipeline::DiagCode::NoTargets, manifest_name);
     (void)index;
     return fail();

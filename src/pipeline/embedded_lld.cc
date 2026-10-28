@@ -17,8 +17,6 @@
 
 #if defined(ALCY_EMBEDDED_LLD)
 #include "codegen/target.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "i18n/messages.h"
 #include "lld/Common/Driver.h"
@@ -181,8 +179,7 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
   }();
   if (linked.retCode != 0) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineLinkFailed>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::LinkError,
-        exe_path);
+        DiagCode::LinkError, exe_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }

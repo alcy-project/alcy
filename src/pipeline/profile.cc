@@ -8,8 +8,6 @@
 #include <utility>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -60,8 +58,7 @@ base::Result<pkg::Profiles, diag::Reported> load_profiles(
       return base::make_ok(pkg::Profiles{});
     }
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        path.as_view());
+        DiagCode::IoError, path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -69,8 +66,7 @@ base::Result<pkg::Profiles, diag::Reported> load_profiles(
   const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PkgProfileNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        path.as_view());
+        DiagCode::IoError, path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -92,8 +88,7 @@ base::Result<BuildProfile, diag::Reported> resolve_profile(
   }
   if (table == nullptr && !is_builtin(name)) {
     const u32 index = bag.emit<i18n::Key::PipelineUnknownProfile>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::UnknownProfile,
-        name);
+        DiagCode::UnknownProfile, name);
     (void)index;
     return base::make_err(diag::Reported{});
   }

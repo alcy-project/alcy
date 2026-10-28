@@ -12,8 +12,6 @@
 
 #include "config/build_config.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/file_handle.h"
@@ -129,7 +127,7 @@ base::Result<DiscoveredSources, diag::Reported> discover_sources(
   base::Result<path::Path, path::PathError> root = path::Path::from_native(dir);
   if (root.is_err()) {
     const u32 index = bag.emit<i18n::Key::PipelineInvalidSourceDirectory>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, dir);
+        DiagCode::IoError, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -137,13 +135,13 @@ base::Result<DiscoveredSources, diag::Reported> discover_sources(
   std::vector<path::Path> paths;
   if (!walk_sources(root_path, paths)) {
     const u32 index = bag.emit<i18n::Key::PipelineSourceDirectoryInaccessible>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, dir);
+        DiagCode::IoError, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   if (paths.empty()) {
-    const u32 index = bag.emit<i18n::Key::PipelineNoSourceFiles>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, dir);
+    const u32 index =
+        bag.emit<i18n::Key::PipelineNoSourceFiles>(DiagCode::IoError, dir);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -156,8 +154,7 @@ base::Result<DiscoveredSources, diag::Reported> discover_sources(
         sources.load(path.as_view());
     if (loaded.is_err()) {
       const u32 index = bag.emit<i18n::Key::PipelineCannotReadSource>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          path.as_view());
+          DiagCode::IoError, path.as_view());
       (void)index;
       return base::make_err(diag::Reported{});
     }

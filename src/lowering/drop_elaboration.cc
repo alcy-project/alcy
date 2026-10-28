@@ -17,9 +17,7 @@
 #include <vector>
 
 #include "analyzer/types.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
@@ -843,7 +841,6 @@ void DropElaborator::run() {
       // sites name a binding, the explicit end does not.
       if (local < locals.size()) {
         const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
-            diag::Severity::Warning, diag::Stage::Lowering,
             DiagCode::DropUnplaced, span, locals[local].name);
         (void)index;
       }

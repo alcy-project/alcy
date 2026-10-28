@@ -10,9 +10,7 @@
 #include <vector>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -279,8 +277,7 @@ void Lexer::skip_trivia(std::vector<Token>& out) {
       }
       if (depth > 0) {
         emit_error<i18n::Key::LexerUnterminatedBlockComment>(
-            out, start, pos_ - start, diag::Stage::Lexer,
-            DiagCode::UnterminatedBlockComment);
+            out, start, pos_ - start, DiagCode::UnterminatedBlockComment);
       }
     } else {
       break;
@@ -397,13 +394,11 @@ void Lexer::lex_number(std::vector<Token>& out) {
         advance();
       }
       emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
-                                                diag::Stage::Lexer,
                                                 DiagCode::InvalidNumber);
       return;
     }
     if (trailing_underscore && !is_alpha(peek())) {
       emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
-                                                diag::Stage::Lexer,
                                                 DiagCode::InvalidNumber);
       return;
     }
@@ -412,7 +407,6 @@ void Lexer::lex_number(std::vector<Token>& out) {
         advance();
       }
       emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
-                                                diag::Stage::Lexer,
                                                 DiagCode::InvalidNumber);
       return;
     }
@@ -457,7 +451,6 @@ void Lexer::lex_number(std::vector<Token>& out) {
     }
     if (bytes_[pos_ - 1] == '_' && !is_alpha(peek())) {
       emit_error<i18n::Key::LexerInvalidNumber>(out, start, pos_ - start,
-                                                diag::Stage::Lexer,
                                                 DiagCode::InvalidNumber);
       return;
     }
@@ -519,7 +512,6 @@ void Lexer::lex_string(std::vector<Token>& out) {
               // formatter then rewrites it into something else.
               const diag::Span span = span_at(pos_, i + 1 - pos_);
               (void)bag_.emit<i18n::Key::LexerUnicodeEscapeNotScalar>(
-                  diag::Severity::Error, diag::Stage::Lexer,
                   DiagCode::InvalidEscape, span);
             }
             pos_ = i + 1;
@@ -542,13 +534,12 @@ void Lexer::lex_string(std::vector<Token>& out) {
   }
   if (!terminated) {
     emit_error<i18n::Key::LexerUnterminatedString>(
-        out, start, pos_ - start, diag::Stage::Lexer,
-        DiagCode::UnterminatedString);
+        out, start, pos_ - start, DiagCode::UnterminatedString);
     return;
   }
   if (bad_escape) {
-    emit_error<i18n::Key::LexerInvalidEscapeInString>(
-        out, start, pos_ - start, diag::Stage::Lexer, DiagCode::InvalidEscape);
+    emit_error<i18n::Key::LexerInvalidEscapeInString>(out, start, pos_ - start,
+                                                      DiagCode::InvalidEscape);
     return;
   }
   last_significant_ = TokenKind::String;
@@ -610,18 +601,17 @@ void Lexer::lex_char(std::vector<Token>& out) {
   }
   if (!terminated) {
     emit_error<i18n::Key::LexerUnterminatedCharacter>(
-        out, start, pos_ - start, diag::Stage::Lexer,
-        DiagCode::UnterminatedChar);
+        out, start, pos_ - start, DiagCode::UnterminatedChar);
     return;
   }
   if (empty) {
-    emit_error<i18n::Key::LexerEmptyCharacter>(
-        out, start, pos_ - start, diag::Stage::Lexer, DiagCode::InvalidChar);
+    emit_error<i18n::Key::LexerEmptyCharacter>(out, start, pos_ - start,
+                                               DiagCode::InvalidChar);
     return;
   }
   if (bad_escape) {
     emit_error<i18n::Key::LexerInvalidEscapeInCharacter>(
-        out, start, pos_ - start, diag::Stage::Lexer, DiagCode::InvalidEscape);
+        out, start, pos_ - start, DiagCode::InvalidEscape);
     return;
   }
   last_significant_ = TokenKind::Char;
@@ -797,8 +787,8 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
     if (pos_ + scalar > bytes_.size()) {
       scalar = bytes_.size() - pos_;
     }
-    emit_error<i18n::Key::LexerInvalidCharacter>(
-        out, start, scalar, diag::Stage::Lexer, DiagCode::InvalidChar);
+    emit_error<i18n::Key::LexerInvalidCharacter>(out, start, scalar,
+                                                 DiagCode::InvalidChar);
     advance(scalar);
     return;
   }
@@ -815,8 +805,8 @@ void Lexer::tokenize(std::vector<Token>& out) {
     }
     const char c = peek();
     if (c == '\0') {
-      emit_error<i18n::Key::LexerInvalidCharacter>(
-          out, pos_, 1, diag::Stage::Lexer, DiagCode::InvalidChar);
+      emit_error<i18n::Key::LexerInvalidCharacter>(out, pos_, 1,
+                                                   DiagCode::InvalidChar);
       advance();
     } else if (is_alpha(c) || c == '_') {
       lex_identifier(out);

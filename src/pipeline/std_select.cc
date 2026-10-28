@@ -9,8 +9,6 @@
 #include <vector>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
 #include "pipeline/diag_code.h"
@@ -68,13 +66,11 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       }
       if (dep.source == pkg::DependencySource::Unspecified) {
         const u32 index = bag.emit<i18n::Key::PipelineDependencyNamesNoSource>(
-            diag::Severity::Error, diag::Stage::Pipeline,
             DiagCode::NotImplemented, dep.spec);
         (void)index;
         return base::make_err(diag::Reported{});
       }
       const u32 index = bag.emit<i18n::Key::PipelineDependencyNeedsFetcher>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -83,7 +79,6 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
     // always a mistake rather than a pin.
     if (dep.source != pkg::DependencySource::Unspecified) {
       const u32 index = bag.emit<i18n::Key::PipelineDependencyIsEmbeddedStd>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -95,21 +90,18 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
       // `alcy/core` are misspellings with an obvious fix each, and a
       // name that is not a member has no fix to offer.
       if (dep.member == STD_SUITE) {
-        const u32 index = bag.emit<i18n::Key::PipelineStdIsASuite>(
-            diag::Severity::Error, diag::Stage::Pipeline,
-            DiagCode::NotImplemented);
+        const u32 index =
+            bag.emit<i18n::Key::PipelineStdIsASuite>(DiagCode::NotImplemented);
         (void)index;
         return base::make_err(diag::Reported{});
       }
       if (find_member(dep.member) != nullptr) {
         const u32 index = bag.emit<i18n::Key::PipelineDependencyIsAStdMember>(
-            diag::Severity::Error, diag::Stage::Pipeline,
             DiagCode::NotImplemented, dep.spec, dep.member);
         (void)index;
         return base::make_err(diag::Reported{});
       }
       const u32 index = bag.emit<i18n::Key::PipelineDependencyNotAStdMember>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -121,7 +113,6 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
     }
     if (find_member(dep.member) == nullptr) {
       const u32 index = bag.emit<i18n::Key::PipelineDependencyNotAStdMember>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::NotImplemented, dep.spec);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -137,7 +128,6 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
         // A glob overlapping a named member would stage it twice over:
         // one spelling has to go.
         const u32 index = bag.emit<i18n::Key::PipelineDependencyOverlaps>(
-            diag::Severity::Error, diag::Stage::Pipeline,
             DiagCode::NotImplemented, glob_spec, member);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -175,7 +165,6 @@ base::Result<StdSelection, diag::Reported> resolve_std_selection(
   if (!missing.empty()) {
     for (const auto& entry : missing) {
       const u32 index = bag.emit<i18n::Key::PipelineStdPackageRequiresSuite>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::NotImplemented, entry.first, entry.second);
       (void)index;
     }

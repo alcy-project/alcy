@@ -9,8 +9,6 @@
 #include <utility>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
@@ -48,7 +46,6 @@ base::Result<ProfileSettings, diag::Reported> parse_settings(
       const auto flag = node.value<bool>();
       if (!flag.has_value()) {
         const u32 index = bag.emit<i18n::Key::PkgProfileOptimizeNotBool>(
-            diag::Severity::Error, diag::Stage::Pkg,
             DiagCode::ProfileSemanticError, filename);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -61,7 +58,6 @@ base::Result<ProfileSettings, diag::Reported> parse_settings(
           text.has_value() ? on_panic_from_name(*text) : std::nullopt;
       if (!value.has_value()) {
         const u32 index = bag.emit<i18n::Key::PkgProfileOnPanicUnknown>(
-            diag::Severity::Error, diag::Stage::Pkg,
             DiagCode::ProfileSemanticError, filename);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -72,7 +68,6 @@ base::Result<ProfileSettings, diag::Reported> parse_settings(
       const auto flag = node.value<bool>();
       if (!flag.has_value()) {
         const u32 index = bag.emit<i18n::Key::PkgProfileOverflowChecksNotBool>(
-            diag::Severity::Error, diag::Stage::Pkg,
             DiagCode::ProfileSemanticError, filename);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -116,8 +111,7 @@ base::Result<Profiles, diag::Reported> parse_profile(std::string_view bytes,
     // message names the file rather than pointing into it.
     const toml::parse_error& error = result.error();
     const u32 index = bag.emit<i18n::Key::PkgProfileTomlSyntaxError>(
-        diag::Severity::Error, diag::Stage::Pkg, DiagCode::ProfileSyntaxError,
-        filename, error.description());
+        DiagCode::ProfileSyntaxError, filename, error.description());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -131,7 +125,6 @@ base::Result<Profiles, diag::Reported> parse_profile(std::string_view bytes,
   for (const auto& [key, node] : root) {
     if (!node.is_table()) {
       const u32 index = bag.emit<i18n::Key::PkgProfileKeyNotTable>(
-          diag::Severity::Error, diag::Stage::Pkg,
           DiagCode::ProfileSemanticError, filename, key.str());
       (void)index;
       return base::make_err(diag::Reported{});

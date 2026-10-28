@@ -13,9 +13,7 @@
 #include "ast/ast.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -60,8 +58,7 @@ class Desugarer {
     if (!reported_too_deep_) {
       reported_too_deep_ = true;
       const u32 index = bag.emit<i18n::Key::ParserNestingTooDeep>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::TooDeep, span,
-          nesting_.limit());
+          DiagCode::TooDeep, span, nesting_.limit());
       (void)index;
     }
     return true;
@@ -122,8 +119,7 @@ class Desugarer {
         return existing->fresh;
       }
       const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::AlreadyBound,
-          ident.span, ident.name);
+          DiagCode::AlreadyBound, ident.span, ident.name);
       (void)index;
       return ident.name;
     }
@@ -374,8 +370,7 @@ class Desugarer {
       }
       if (mismatch) {
         const u32 index =
-            bag.emit<i18n::Key::AnalyzerOrPatternBindsDifferentNames>(
-                diag::Severity::Error, diag::Stage::Parser,
+            bag.emit<i18n::Key::ParserOrPatternBindsDifferentNames>(
                 DiagCode::OrPatternMismatch, node.span);
         (void)index;
       }
@@ -391,8 +386,7 @@ class Desugarer {
       }
       if (clash) {
         const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
-            diag::Severity::Error, diag::Stage::Parser, DiagCode::AlreadyBound,
-            node.span, binding.orig);
+            DiagCode::AlreadyBound, node.span, binding.orig);
         (void)index;
         continue;
       }

@@ -16,9 +16,7 @@
 #include "codegen/target.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/json.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/language.h"
@@ -98,7 +96,6 @@ void report_emit_failure(pipeline::PipelineContext& ctx) {
     return;
   }
   (void)ctx.bag.emit<i18n::Key::PipelineBackendUnsupported>(
-      diag::Severity::Error, diag::Stage::Pipeline,
       pipeline::DiagCode::UnsupportedOutput,
       codegen::backend_name(ctx.backend));
 }

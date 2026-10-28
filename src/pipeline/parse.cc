@@ -18,9 +18,7 @@
 #include "base/for_each.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "diag/worker_bags.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -71,7 +69,6 @@ bool parse_one(PipelineContext& ctx,
   const auto refuse = [&] {
     bag.truncate(mark);
     const u32 index = bag.emit<i18n::Key::PipelineSpanArenaExhausted>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         DiagCode::SpanArenaExhausted, diag::Span{file.id, 0, 0},
         ctx.ast.spans.capacity());
     (void)index;
@@ -131,7 +128,6 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
     const std::optional<std::string_view> content = ctx.sources.bytes(id);
     if (!name.has_value() || !content.has_value()) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineUnknownSourceFile>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::UnknownSourceFile);
       (void)index;
       return base::make_err(diag::Reported{});
@@ -140,7 +136,6 @@ base::Result<ParsedFiles, diag::Reported> parse_files(
         path::Path::from_native(*name);
     if (canonical.is_err()) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineInvalidSourcePath>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::InvalidSourcePath);
       (void)index;
       return base::make_err(diag::Reported{});

@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "diag/diagnostic.h"
+#include "diag/message_meta.h"
 #include "diag/span.h"
 #include "diag/stage.h"
 #include "fmt/core.h"
@@ -69,30 +70,25 @@ class DiagBag {
   DiagBag(const DiagBag&) = delete;
   DiagBag& operator=(const DiagBag&) = delete;
 
-  // Composes a message from the catalog and appends the diagnostic.
-  // Every catalog's format string for K is checked against Args... at
-  // compile time, so a translation that does not fit the call site is a
-  // build error rather than a diagnostic printed wrong.
+  // Composes a message from the catalog and appends the diagnostic. The
+  // severity and the phase are the message's own facts - the catalog
+  // carries them - so a call site names the message, the code tooling
+  // matches on, and the arguments. Every catalog's format string for K is
+  // checked against Args... at compile time, so a translation that does
+  // not fit the call site is a build error rather than a diagnostic
+  // printed wrong.
   template <i18n::Key K, DiagnosticId Id, typename... Args>
-  u32 emit(Severity severity, Stage stage, Id id, Args&&... args) {
-    fmt::memory_buffer out;
-    i18n::format_to<K>(std::back_inserter(out), language_,
-                       std::forward<Args>(args)...);
-    return push(severity, Code{stage, static_cast<u8>(id)}, {}, false,
-                {out.data(), out.size()});
+  u32 emit(Id id, Args&&... args) {
+    const MessageMeta meta = MESSAGE_META[static_cast<u16>(K)];
+    return emit_with<K>(meta.severity, meta.stage, static_cast<u8>(id), {},
+                        false, std::forward<Args>(args)...);
   }
 
   template <i18n::Key K, DiagnosticId Id, typename... Args>
-  u32 emit(Severity severity,
-           Stage stage,
-           Id id,
-           Span primary,
-           Args&&... args) {
-    fmt::memory_buffer out;
-    i18n::format_to<K>(std::back_inserter(out), language_,
-                       std::forward<Args>(args)...);
-    return push(severity, Code{stage, static_cast<u8>(id)}, primary, true,
-                {out.data(), out.size()});
+  u32 emit(Id id, Span primary, Args&&... args) {
+    const MessageMeta meta = MESSAGE_META[static_cast<u16>(K)];
+    return emit_with<K>(meta.severity, meta.stage, static_cast<u8>(id), primary,
+                        true, std::forward<Args>(args)...);
   }
 
   // The same, naming the check the message came from. Only a lint has a
@@ -100,9 +96,10 @@ class DiagBag {
   // and the code a rule also carries is what a machine matches. The name
   // is not copied, so it must outlive the bag; every rule names itself
   // with a string literal.
+  // A lint's severity is its configuration's, not the catalog's: a rule
+  // the manifest may promote or silence keeps that choice at the site.
   template <i18n::Key K, DiagnosticId Id, typename... Args>
   u32 emit_named(Severity severity,
-                 Stage stage,
                  Id id,
                  std::string_view check_name,
                  Span primary,
@@ -110,8 +107,9 @@ class DiagBag {
     fmt::memory_buffer out;
     i18n::format_to<K>(std::back_inserter(out), language_,
                        std::forward<Args>(args)...);
-    const u32 index = push(severity, Code{stage, static_cast<u8>(id)}, primary,
-                           true, {out.data(), out.size()});
+    const MessageMeta meta = MESSAGE_META[static_cast<u16>(K)];
+    const u32 index = push(severity, Code{meta.stage, static_cast<u8>(id)},
+                           primary, true, {out.data(), out.size()});
     if (index < size_) {
       entries_[index].check_name = check_name;
     }
@@ -240,6 +238,22 @@ class DiagBag {
            Span primary,
            bool has_primary,
            std::string_view message);
+
+  // Composes K's message and appends it: the one body the public
+  // emitters share, with the primary span and its flag spelled out.
+  template <i18n::Key K, typename... Args>
+  u32 emit_with(Severity severity,
+                Stage stage,
+                u8 id,
+                Span primary,
+                bool has_primary,
+                Args&&... args) {
+    fmt::memory_buffer out;
+    i18n::format_to<K>(std::back_inserter(out), language_,
+                       std::forward<Args>(args)...);
+    return push(severity, Code{stage, id}, primary, has_primary,
+                {out.data(), out.size()});
+  }
 
   // Copies bytes into the arena and returns a view of the copy. The
   // caller has checked that they fit.

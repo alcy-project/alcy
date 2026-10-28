@@ -22,9 +22,7 @@
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -101,7 +99,6 @@ void Checker::register_nominals() {
         // The wrapper is compiler-owned; a declaration under the same
         // name would make the spelling resolve two ways.
         const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinType>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::DuplicateDefinition, span, name);
         (void)index;
         continue;
@@ -113,14 +110,12 @@ void Checker::register_nominals() {
         // reserved to the package that declares them: a range always
         // constructs that one declaration.
         const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinType>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::ReservedName, span, name);
         (void)index;
         continue;
       }
       if (duplicate) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::DuplicateDefinition, span, name);
         (void)index;
         continue;
@@ -163,14 +158,12 @@ void Checker::validate_generic_annotations() {
         if (ast.types[annotation].kind == ast::TypeKind::Primitive) {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerValueParameterTypeNotInteger>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::TypeMismatch, param.name.span, param.name.name);
           (void)index;
           continue;
         }
         if (ast.types[annotation].kind != ast::TypeKind::Path) {
           const u32 index = bag.emit<i18n::Key::AnalyzerBoundNotASpec>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::SpecSuperBadTarget, ast.types[annotation].span,
               param.name.name);
           (void)index;
@@ -184,7 +177,6 @@ void Checker::validate_generic_annotations() {
             segments.empty() ? std::string_view{} : segments.back().name;
         if (segments.empty() || bound_spec(module, name) == U32_MAX) {
           const u32 index = bag.emit<i18n::Key::AnalyzerBoundUnknownSpec>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::SpecSuperBadTarget, ast.types[annotation].span, name);
           (void)index;
         }
@@ -258,7 +250,6 @@ void Checker::validate_variadic_parameters() {
         continue;
       }
       const u32 index = bag.emit<i18n::Key::AnalyzerVariadicNotExpanded>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, ast.patterns[param.pattern].span);
       (void)index;
     }
@@ -325,8 +316,7 @@ bool Checker::check_type_args_movable(std::span<const ir::TypeIdx> args,
     }
     if (!is_movable(arg)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableTypeArgument>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
-          span);
+          DiagCode::UnmovableType, span);
       (void)index;
       return false;
     }
@@ -581,7 +571,6 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
   }
   const auto wrong = [&]() {
     const u32 index = bag.emit<i18n::Key::AnalyzerSpecCanonicalShape>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::SpecCanonicalShape, declaration.name.span,
         declaration.name.name);
     (void)index;
@@ -759,14 +748,12 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
   const ast::ItemSpec& spec = node.payload.get<ast::ItemSpec>();
   if (find_nominal(module, spec.name.name) != nullptr) {
     const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);
     (void)index;
     return;
   }
   if (find_spec(module, spec.name.name) != nullptr) {
     const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::DuplicateDefinition, spec.name.span, spec.name.name);
     (void)index;
     return;
@@ -775,7 +762,6 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
     for (usize j = 0; j < i; ++j) {
       if (spec.methods[j].name.name == spec.methods[i].name.name) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::DuplicateDefinition, spec.methods[i].name.span,
             spec.methods[i].name.name);
         (void)index;
@@ -784,7 +770,6 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
     }
     if (spec.methods[i].is_unsafe) {
       const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeMethodUnsupported>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, spec.methods[i].name.span,
           spec.methods[i].name.name);
       (void)index;
@@ -1312,7 +1297,6 @@ bool Checker::check_declared_bounds(
       if (!builtin_display &&
           !implements_spec(*bound_type, spec, spec_args, module)) {
         const u32 index = bag.emit<i18n::Key::AnalyzerTypeBoundNotSatisfied>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::InvalidOperation, span, type_name(*bound_type),
             specs[spec].name);
         (void)index;
@@ -1345,7 +1329,6 @@ void Checker::check_superspecs() {
         spelling = segments.back().name;
         if (!super_path.args.empty()) {
           const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperArguments>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::SpecSuperBadTarget, super_node.span, entry.name);
           (void)index;
           continue;
@@ -1370,7 +1353,6 @@ void Checker::check_superspecs() {
     }
     if (target == nullptr) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperUnknown>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::SpecSuperBadTarget, super_node.span, spelling);
       (void)index;
       continue;
@@ -1394,7 +1376,6 @@ void Checker::check_superspecs() {
     }
     if (node != NO_SUPER && state[node] == 1) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperCycle>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::SpecSuperCycle, specs[node].span, specs[node].name);
       (void)index;
     }
@@ -1421,7 +1402,6 @@ void Checker::check_superspecs() {
     }
     if (!satisfied) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecSuperMissing>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::SpecSuperMissing, entry.span, specs[entry.spec].name,
           specs[super].name);
       (void)index;
@@ -1520,7 +1500,6 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     for (std::string_view declared : method_names) {
       if (declared == name.name) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::DuplicateDefinition, name.span, name.name);
         (void)index;
         return;
@@ -1558,8 +1537,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   }
   if (spec_entry == nullptr) {
     const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-        spec_node.span, "spec", spec_spelling);
+        DiagCode::UnknownType, spec_node.span, "spec", spec_spelling);
     (void)index;
     return;
   }
@@ -1599,8 +1577,8 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       }
       if (!same_package && !same_suite && !listed) {
         const u32 index = bag.emit<i18n::Key::AnalyzerSpecSealed>(
-            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::SpecSealed,
-            spec_node.span, spec_entry->name, declaring->package);
+            DiagCode::SpecSealed, spec_node.span, spec_entry->name,
+            declaring->package);
         (void)index;
         return;
       }
@@ -1624,9 +1602,8 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     const ast::TypePath& spec_path = spec_node.payload.get<ast::TypePath>();
     if (spec_path.args.size() != declaration.params.size()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
-          spec_node.span, spec_entry->name, declaration.params.size(),
-          declaration.params.size() == 1 ? "" : "s");
+          DiagCode::ArityMismatch, spec_node.span, spec_entry->name,
+          declaration.params.size(), declaration.params.size() == 1 ? "" : "s");
       (void)index;
       return;
     }
@@ -1683,8 +1660,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     // `impl PartialEq for i32` the standard library's own.
     if (!sealed) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-          target_node.span);
+          DiagCode::UnknownType, target_node.span);
       (void)index;
       return;
     }
@@ -1709,7 +1685,6 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       default: {
         const u32 index =
             bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
-                diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::UnknownType, target_node.span);
         (void)index;
         return;
@@ -1722,8 +1697,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     // may target it: byte comparison is the core suite's to give.
     if (!sealed) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-          target_node.span);
+          DiagCode::UnknownType, target_node.span);
       (void)index;
       return;
     }
@@ -1755,8 +1729,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   }
   if (target_entry == nullptr && !primitive_target) {
     const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-        target_node.span);
+        DiagCode::UnknownType, target_node.span);
     (void)index;
     return;
   }
@@ -1767,7 +1740,6 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   if (primitive_target) {
     if (!tree.modules[module]->is_staged) {
       const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::ImplOutsideItsHome, target_node.span, target_display);
       (void)index;
       return;
@@ -1775,7 +1747,6 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   } else if (package_of(module) != package_of(target_entry->module) &&
              package_of(module) != package_of(spec_entry->module)) {
     const u32 index = bag.emit<i18n::Key::AnalyzerImplOutsideItsHome>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::ImplOutsideItsHome, spec_node.span, target_entry->name,
         package_of(target_entry->module), spec_entry->name,
         package_of(spec_entry->module));
@@ -1793,8 +1764,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     const ast::TypePath& target_path = target_node.payload.get<ast::TypePath>();
     if (target_path.args.size() != nominal_params(*target_entry).size()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
-          target_node.span, target_entry->name,
+          DiagCode::ArityMismatch, target_node.span, target_entry->name,
           nominal_params(*target_entry).size(),
           nominal_params(*target_entry).size() == 1 ? "" : "s");
       (void)index;
@@ -1825,7 +1795,6 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
         }
         if (!direct) {
           const u32 index = bag.emit<i18n::Key::AnalyzerSpecTargetNotDirect>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::GenericArguments, arg_node.span);
           (void)index;
           return;
@@ -1864,7 +1833,6 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     if (existing.spec == spec_index &&
         spec_targets_overlap(existing.target, target)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerConflictingSpecImpl>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::DuplicateDefinition, node.span, spec_entry->name,
           target_entry != nullptr ? target_entry->name : target_display);
       (void)index;
@@ -1890,7 +1858,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     }
     if (!declared) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecUnknownMethod>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
+          DiagCode::UnknownValue,
           method_node.payload.get<ast::ItemFn>().name.span, name,
           spec_entry->name);
       (void)index;
@@ -1900,8 +1868,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     // parameters is implemented by one that declares as many.
     if (!arity_ok) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecSignatureMismatch>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-          method_node.span, name, spec_entry->name);
+          DiagCode::TypeMismatch, method_node.span, name, spec_entry->name);
       (void)index;
       return;
     }
@@ -1917,8 +1884,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     }
     if (!implemented) {
       const u32 index = bag.emit<i18n::Key::AnalyzerMissingSpecMethod>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityError,
-          node.span, method.name.name, spec_entry->name);
+          DiagCode::ArityError, node.span, method.name.name, spec_entry->name);
       (void)index;
       return;
     }
@@ -1953,8 +1919,8 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
                          module, stand_ins, declared_params, declared_ret,
                          declared_receiver)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecUnknownMethod>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
-          method_fn.name.span, method_fn.name.name, spec_entry->name);
+          DiagCode::UnknownValue, method_fn.name.span, method_fn.name.name,
+          spec_entry->name);
       (void)index;
       return;
     }
@@ -1985,8 +1951,8 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     }
     if (!matches) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecSignatureMismatch>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-          ast.items[method_item].span, method_fn.name.name, spec_entry->name);
+          DiagCode::TypeMismatch, ast.items[method_item].span,
+          method_fn.name.name, spec_entry->name);
       (void)index;
       return;
     }
@@ -2005,7 +1971,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     if (!spec_method_sig(spec_index, name, spec_args, self_type, module, {},
                          declared_params, declared_ret, declared_receiver)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecUnknownMethod>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
+          DiagCode::UnknownValue,
           method_node.payload.get<ast::ItemFn>().name.span, name,
           spec_entry->name);
       (void)index;
@@ -2034,8 +2000,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     }
     if (!matches) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecSignatureMismatch>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-          method_node.span, name, spec_entry->name);
+          DiagCode::TypeMismatch, method_node.span, name, spec_entry->name);
       (void)index;
       return;
     }
@@ -2098,7 +2063,6 @@ ir::TypeIdx Checker::primitive_type(ast::PrimitiveKind kind, diag::Span span) {
     case PK::I128:
     case PK::U128: {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeNotSupported>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::UnsupportedType, span);
       (void)index;
       return error_type();
@@ -2270,7 +2234,6 @@ str::StringPoolId Checker::intern_name(std::string_view name) {
   if (!name_table_exhausted_) {
     name_table_exhausted_ = true;
     const u32 index = bag.emit<i18n::Key::AnalyzerNameTableExhausted>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::NameTableExhausted, diag::Span{});
     (void)index;
   }
@@ -2539,8 +2502,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       nominal_params(nominals[nominal]);
   if (args.size() != params.size()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
-        span, nominals[nominal].name, params.size(),
+        DiagCode::ArityMismatch, span, nominals[nominal].name, params.size(),
         params.size() == 1 ? "" : "s");
     (void)index;
     return error_type();
@@ -2560,8 +2522,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     }
     if (!is_error(args[i]) && !is_movable(args[i])) {
       const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableTypeArgument>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
-          span);
+          DiagCode::UnmovableType, span);
       (void)index;
       return error_type();
     }
@@ -2575,8 +2536,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     }
     if (is_error(args[i]) || tag_of(args[i]) != ir::TypeTag::Const) {
       const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentExpected>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-          span, params[i].name.name);
+          DiagCode::TypeMismatch, span, params[i].name.name);
       (void)index;
       return error_type();
     }
@@ -2762,14 +2722,12 @@ bool Checker::walk_module_prefix(u32 module,
       if (current == NO_MODULE) {
         if (head == "super" || head == "crate") {
           const u32 index = bag.emit<i18n::Key::AnalyzerPathHeadNotSupported>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::SpellingSuggestion, segments[0].span, head);
           (void)index;
           return false;
         }
         const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
-            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-            ast.paths[path].span, what, head);
+            DiagCode::UnknownType, ast.paths[path].span, what, head);
         (void)index;
         return false;
       }
@@ -2779,8 +2737,7 @@ bool Checker::walk_module_prefix(u32 module,
     current = find_child_module(current, segments[i].name);
     if (current == NO_MODULE) {
       const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-          ast.paths[path].span, what, segments[i].name);
+          DiagCode::UnknownType, ast.paths[path].span, what, segments[i].name);
       (void)index;
       return false;
     }
@@ -2835,8 +2792,7 @@ bool Checker::resolve_value_argument(u32 module,
                                      u64& out) {
   const auto reject_expected = [&] {
     const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentExpected>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-        span, param);
+        DiagCode::TypeMismatch, span, param);
     (void)index;
     return false;
   };
@@ -2846,7 +2802,6 @@ bool Checker::resolve_value_argument(u32 module,
         ast.literals[node.payload.get<ast::TypeValue>().literal];
     if (literal.is_negative) {
       const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentNotInteger>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, span);
       (void)index;
       return false;
@@ -2880,7 +2835,6 @@ bool Checker::resolve_value_argument(u32 module,
     }
     if (!info->is_const || !info->init.is_valid()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerValueArgumentNotInteger>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, span);
       (void)index;
       return false;
@@ -2896,8 +2850,8 @@ bool Checker::resolve_value_argument(u32 module,
       find_nominal_in_scope(module, member) != nullptr) {
     return reject_expected();
   }
-  emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue, span,
-                  std_hints, "value", member);
+  emit_unresolved(bag, DiagCode::UnknownValue, span, std_hints, "value",
+                  member);
   return false;
 }
 
@@ -2915,7 +2869,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
   // refuse them here rather than let one reach lowering as a view.
   if (node.kind == ast::TypeKind::OwnFunc) {
     const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionUnsupported>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidOperation, node.span);
     (void)index;
     return error_type();
@@ -2925,8 +2878,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       // A literal is parsed in argument lists only; reaching a type
       // position means the declaration takes a type there.
       const u32 index = bag.emit<i18n::Key::AnalyzerValueCannotBeType>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-          node.span);
+          DiagCode::TypeMismatch, node.span);
       (void)index;
       return error_type();
     }
@@ -2974,8 +2926,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       // reference, which is the wrong guidance for a pointer.
       if (ast.types[ptr.inner].kind == ast::TypeKind::Slice) {
         const u32 index = bag.emit<i18n::Key::AnalyzerRawPointerNeedsSized>(
-            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-            node.span);
+            DiagCode::UnknownType, node.span);
         (void)index;
         return error_type();
       }
@@ -3002,7 +2953,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       if (!behind_ref) {
         const u32 index =
             bag.emit<i18n::Key::AnalyzerUnsizedTypeNeedsReference>(
-                diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::UnknownType, node.span);
         (void)index;
         return error_type();
@@ -3016,7 +2966,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         if (name == "Self") {
           if (self == nullptr) {
             const u32 index = bag.emit<i18n::Key::AnalyzerSelfOutsideImpl>(
-                diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::UnknownType, node.span);
             (void)index;
             return error_type();
@@ -3024,7 +2973,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           if (!node.payload.get<ast::TypePath>().args.empty()) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerGenericArgumentsUnsupported>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
                     DiagCode::GenericArguments, node.span);
             (void)index;
             return error_type();
@@ -3037,7 +2985,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
             if (!node.payload.get<ast::TypePath>().args.empty()) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerGenericArgumentsUnsupported>(
-                      diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::GenericArguments, node.span);
               (void)index;
               return error_type();
@@ -3048,7 +2995,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         // A value parameter names no type, whatever else is in scope.
         if (value_param(name) != nullptr) {
           const u32 index = bag.emit<i18n::Key::AnalyzerValueParameterAsType>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::UnknownType, node.span, name);
           (void)index;
           return error_type();
@@ -3057,7 +3003,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           const auto& args = node.payload.get<ast::TypePath>().args;
           if (args.size() != 1) {
             const u32 index = bag.emit<i18n::Key::AnalyzerMaybeUninitArity>(
-                diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::GenericArguments, node.span);
             (void)index;
             return error_type();
@@ -3091,15 +3036,13 @@ ir::TypeIdx Checker::resolve_type(u32 module,
             std_hint_package(std_hints, target_name);
         if (!package.empty()) {
           const u32 index = bag.emit<i18n::Key::AnalyzerTypeInStandardLibrary>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::UnknownType, node.span, target_name, target_name,
               package);
           (void)index;
           return error_type();
         }
         const u32 index = bag.emit<i18n::Key::AnalyzerUnknownType>(
-            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-            node.span, target_name);
+            DiagCode::UnknownType, node.span, target_name);
         (void)index;
         return error_type();
       }
@@ -3114,7 +3057,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         if (arg_count != 0) {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerGenericArgumentsUnsupported>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::GenericArguments, node.span);
           (void)index;
           return error_type();
@@ -3123,7 +3065,6 @@ ir::TypeIdx Checker::resolve_type(u32 module,
       }
       if (arg_count != param_count) {
         const u32 index = bag.emit<i18n::Key::AnalyzerArityMismatch>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::ArityMismatch, node.span, target_name, param_count,
             param_count == 1 ? "" : "s");
         (void)index;
@@ -3210,10 +3151,8 @@ bool Checker::check_intrinsic_signature(u32 module,
     const u32 index =
         intrinsic.is_unsafe
             ? bag.emit<i18n::Key::AnalyzerIntrinsicUnexpectedUnsafe>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::InvalidOperation, intrinsic.name.span, name)
             : bag.emit<i18n::Key::AnalyzerIntrinsicMissingUnsafe>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::InvalidOperation, intrinsic.name.span, name);
     (void)index;
     return false;
@@ -3228,7 +3167,6 @@ bool Checker::check_intrinsic_signature(u32 module,
   ir::TypeIdx expected_ret = builder.primitive(ir::TypeTag::Void);
   const auto wrong = [&]() {
     const u32 index = bag.emit<i18n::Key::AnalyzerIntrinsicSignature>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidOperation, intrinsic.name.span, name);
     (void)index;
     return false;
@@ -3496,7 +3434,6 @@ void Checker::process_module(u32 module) {
   };
   const auto duplicate_value = [this](const ast::Ident& name) {
     const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::DuplicateDefinition, name.span, name.name);
     (void)index;
   };
@@ -3581,7 +3518,6 @@ void Checker::process_module(u32 module) {
         value_names.push_back(intrinsic.name.name);
         if (!is_known_intrinsic(intrinsic.name.name)) {
           const u32 index = bag.emit<i18n::Key::AnalyzerUnknownIntrinsic>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::UnknownIntrinsic, intrinsic.name.span,
               intrinsic.name.name);
           (void)index;
@@ -3619,7 +3555,6 @@ void Checker::process_module(u32 module) {
           if (param.is_comp) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerCompParameterOnIntrinsic>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
                     DiagCode::InvalidComp, ast.patterns[param.pattern].span);
             (void)index;
             break;
@@ -3654,7 +3589,6 @@ void Checker::process_module(u32 module) {
           value_names.push_back(fn.name.name);
           if (!fn.generic.empty()) {
             const u32 index = bag.emit<i18n::Key::AnalyzerExternGeneric>(
-                diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::GenericArguments, fn.name.span, fn.name.name);
             (void)index;
             continue;
@@ -3665,7 +3599,6 @@ void Checker::process_module(u32 module) {
             if (param.is_comp) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerExternCompParameter>(
-                      diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::InvalidComp, ast.patterns[param.pattern].span);
               (void)index;
               abi_ok = false;
@@ -3675,7 +3608,6 @@ void Checker::process_module(u32 module) {
             if (!is_error(type) && !extern_abi_type_ok(tag_of(type), false)) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerExternTypeNotSupported>(
-                      diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::UnsupportedType, ast.types[param.type].span,
                       pretty_tag(tag_of(type)));
               (void)index;
@@ -3690,7 +3622,6 @@ void Checker::process_module(u32 module) {
             if (!is_error(ret) && !extern_abi_type_ok(tag_of(ret), true)) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerExternTypeNotSupported>(
-                      diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::UnsupportedType, ast.types[fn.return_type].span,
                       pretty_tag(tag_of(ret)));
               (void)index;
@@ -3752,7 +3683,6 @@ void Checker::process_module(u32 module) {
               node.payload.get<ast::ItemImpl>().params.empty()) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerGenericImplUnsupported>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
                     DiagCode::GenericArguments, self_node.span);
             (void)index;
           } else {
@@ -3771,7 +3701,6 @@ void Checker::process_module(u32 module) {
               if (package_of(module) != package_of(entry->module)) {
                 const u32 index =
                     bag.emit<i18n::Key::AnalyzerInherentImplOutsideItsType>(
-                        diag::Severity::Error, diag::Stage::Analyzer,
                         DiagCode::ImplOutsideItsHome, self_node.span,
                         target_name, package_of(entry->module));
                 (void)index;
@@ -3787,7 +3716,6 @@ void Checker::process_module(u32 module) {
             } else if (resolved) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerInherentImplNeedsNominalType>(
-                      diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::UnknownType, self_node.span);
               (void)index;
             }
@@ -3798,7 +3726,6 @@ void Checker::process_module(u32 module) {
           if (!tree.modules[module]->is_staged) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
                     DiagCode::ImplOutsideItsHome, self_node.span, "str");
             (void)index;
             break;
@@ -3812,7 +3739,6 @@ void Checker::process_module(u32 module) {
           if (!tree.modules[module]->is_staged) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
                     DiagCode::ImplOutsideItsHome, self_node.span, "[T]");
             (void)index;
             break;
@@ -3832,7 +3758,6 @@ void Checker::process_module(u32 module) {
         } else {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerInherentImplNeedsNominalType>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::UnknownType, self_node.span);
           (void)index;
         }
@@ -3914,7 +3839,6 @@ bool Checker::check_drop_signature(u32 module,
                      tag_of(sig.ret) == ir::TypeTag::Void;
   if (!valid) {
     const u32 index = bag.emit<i18n::Key::AnalyzerBadDestructorSignature>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::BadDropSignature, name.span);
     (void)index;
     return false;
@@ -3930,8 +3854,7 @@ bool Checker::check_drop_signature(u32 module,
     // to end, so a destructor on it is refused. Any other type may
     // declare one, and the declaration makes it move-only.
     const u32 index = bag.emit<i18n::Key::AnalyzerViewCannotHaveDestructor>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::DropOnCopy,
-        name.span);
+        DiagCode::DropOnCopy, name.span);
     (void)index;
     return false;
   }
@@ -4476,14 +4399,14 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
                                       : ir::TypeIdx::invalid();
   if (uninit_side.is_valid()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerUninitializedValueUsed>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-        span, pretty_tag(tag_of(uninit_side == expected ? actual : expected)));
+        DiagCode::TypeMismatch, span,
+        pretty_tag(tag_of(uninit_side == expected ? actual : expected)));
     (void)index;
     return error_type();
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerTypeMismatchExpectedFound>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-      span, what, type_display(expected), type_display(actual));
+      DiagCode::TypeMismatch, span, what, type_display(expected),
+      type_display(actual));
   (void)index;
   return error_type();
 }
@@ -4620,8 +4543,7 @@ bool Checker::classify_suffix(std::string_view spelling,
     return true;
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerUnsupportedLiteralSuffix>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnsupportedType,
-      span, suffix);
+      DiagCode::UnsupportedType, span, suffix);
   (void)index;
   tag = TT::Error;
   return true;
@@ -4678,7 +4600,6 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
     }
     case LK::Char: {
       const u32 index = bag.emit<i18n::Key::AnalyzerCharacterLiteralDeferred>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::UnsupportedType, lit.span);
       (void)index;
       return error_type();
@@ -4693,7 +4614,6 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       }
       if (is_float) {
         const u32 index = bag.emit<i18n::Key::AnalyzerFloatSuffixOnInteger>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::TypeMismatch, lit.span);
         (void)index;
         return error_type();
@@ -4705,7 +4625,6 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
         if (!int_literal_fits(lit.spelling, wanted, negative)) {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerIntegerLiteralOutOfRange>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::TypeMismatch, lit.span);
           (void)index;
           return error_type();
@@ -4717,7 +4636,6 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       // type truncated silently to a different number.
       if (!int_literal_fits(lit.spelling, tag, negative)) {
         const u32 index = bag.emit<i18n::Key::AnalyzerIntegerLiteralOutOfRange>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::TypeMismatch, lit.span);
         (void)index;
         return error_type();
@@ -4738,7 +4656,6 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       }
       if (has_suffix && !is_float_tag(tag)) {
         const u32 index = bag.emit<i18n::Key::AnalyzerIntegerSuffixOnFloat>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::TypeMismatch, lit.span);
         (void)index;
         return error_type();
@@ -4764,8 +4681,7 @@ void Checker::validate_cycles(const ir::Storage& storage) {
     std::vector<ir::TypeIdx> stack;
     if (has_value_cycle(entry.type, stack, storage)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerRecursiveType>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::RecursiveType,
-          entry.span, entry.name);
+          DiagCode::RecursiveType, entry.span, entry.name);
       (void)index;
     }
   }
@@ -4776,8 +4692,8 @@ void Checker::validate_cycles(const ir::Storage& storage) {
     std::vector<ir::TypeIdx> stack;
     if (has_value_cycle(instance.type, stack, storage)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerRecursiveType>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::RecursiveType,
-          nominals[instance.nominal].span, nominals[instance.nominal].name);
+          DiagCode::RecursiveType, nominals[instance.nominal].span,
+          nominals[instance.nominal].name);
       (void)index;
     }
   }
@@ -4806,8 +4722,7 @@ bool Checker::const_array_length(u32 module,
     for (usize i = type_params.size(); i > 0; --i) {
       if (type_params[i - 1].first == name) {
         const u32 index = bag.emit<i18n::Key::AnalyzerTypeParameterAsValue>(
-            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownType,
-            span, name);
+            DiagCode::UnknownType, span, name);
         (void)index;
         return false;
       }
@@ -4824,7 +4739,6 @@ bool Checker::const_array_length(u32 module,
   }
   if (info == nullptr || !info->is_const || !info->init.is_valid()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerArrayLengthNotConst>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidOperation, span);
     (void)index;
     return false;
@@ -4847,9 +4761,7 @@ bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
     return true;
   }
   const auto wrong = [&] {
-    const u32 index =
-        bag.emit<not_const_key>(diag::Severity::Error, diag::Stage::Analyzer,
-                                DiagCode::InvalidOperation, span);
+    const u32 index = bag.emit<not_const_key>(DiagCode::InvalidOperation, span);
     (void)index;
     return false;
   };
@@ -4889,7 +4801,6 @@ bool Checker::ensure_const_checked(const CheckedModule::StaticInfo& info) {
   }
   if (const_init_in_progress_.contains(key)) {
     const u32 index = bag.emit<i18n::Key::AnalyzerConstCycle>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidOperation, ast.exprs[info.init].span, info.name);
     (void)index;
     return false;
@@ -5459,8 +5370,7 @@ bool Checker::find_variant(u32 module,
   }
   if (matches.size() > 1) {
     const u32 index = bag.emit<i18n::Key::AnalyzerAmbiguousVariant>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
-        span, name);
+        DiagCode::UnknownValue, span, name);
     (void)index;
     return false;
   }
@@ -5527,8 +5437,7 @@ bool Checker::check_item_access(u32 from,
     return true;
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerPrivateItem>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::PrivateAccess,
-      span, name);
+      DiagCode::PrivateAccess, span, name);
   (void)index;
   return false;
 }
@@ -5543,8 +5452,7 @@ bool Checker::check_field_access(u32 from,
     return true;
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerPrivateField>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::PrivateAccess,
-      span, field, owner);
+      DiagCode::PrivateAccess, span, field, owner);
   (void)index;
   return false;
 }
@@ -5734,7 +5642,6 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
       }
       if (type_args.size() != spelled_count && !type_args.empty()) {
         const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::ArityMismatch, span, name, spelled_count,
             spelled_count == 1 ? "" : "s");
         (void)index;
@@ -5860,7 +5767,6 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
       if (!complete) {
         const u32 index =
             bag.emit<i18n::Key::AnalyzerCannotInferMethodTypeArguments>(
-                diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::NotCompKnown, span, name, name);
         (void)index;
         return nullptr;
@@ -6220,8 +6126,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
     }
     if (match != nullptr) {
       const u32 index = bag.emit<i18n::Key::AnalyzerAmbiguousMethod>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
-          span, name);
+          DiagCode::UnknownValue, span, name);
       (void)index;
       return nullptr;
     }
@@ -6401,10 +6306,8 @@ bool Checker::check_own_fn_witness(u32 module,
   auto reject = [&]() {
     const u32 index = declared.is_return
                           ? bag.emit<i18n::Key::AnalyzerOwnFunctionReturn>(
-                                diag::Severity::Error, diag::Stage::Analyzer,
                                 DiagCode::TypeMismatch, span, declared.display)
                           : bag.emit<i18n::Key::AnalyzerOwnFunctionWitness>(
-                                diag::Severity::Error, diag::Stage::Analyzer,
                                 DiagCode::TypeMismatch, span, declared.display);
     (void)index;
     return false;
@@ -6788,8 +6691,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
       // callers from meeting the stand-in, and the report says why.
       modules[module].functions[sig_index].ret = error_type();
       const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionReturnMissing>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::NotCompKnown,
-          pending.span, fn_name(item));
+          DiagCode::NotCompKnown, pending.span, fn_name(item));
       (void)index;
     }
   }
@@ -6840,10 +6742,8 @@ bool Checker::bind_argument_slot(u32 module,
     const u32 index =
         declared.through_raw
             ? bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsPointer>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::InvalidOperation, span, callee)
             : bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsReference>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::InvalidOperation, span, callee);
     (void)index;
     return false;
@@ -6854,7 +6754,6 @@ bool Checker::bind_argument_slot(u32 module,
     bound_type = uninit_payload(bound_type);
     if (!bound_type.is_valid()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsUninit>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, span, callee);
       (void)index;
       return false;
@@ -6872,7 +6771,6 @@ bool Checker::bind_argument_slot(u32 module,
               .element;
     } else {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeArgumentNeedsSequence>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, span, callee);
       (void)index;
       return false;
@@ -6912,8 +6810,8 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   }
   if (explicit_args.size() != spelled && !explicit_args.empty()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArityMismatch,
-        span, fn_name(item), spelled, spelled == 1 ? "" : "s");
+        DiagCode::ArityMismatch, span, fn_name(item), spelled,
+        spelled == 1 ? "" : "s");
     (void)index;
     return nullptr;
   }
@@ -7022,7 +6920,6 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       continue;
     }
     const u32 index = bag.emit<i18n::Key::AnalyzerCannotInferValueArgument>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidOperation, span, params[i].name.name, fn_name(item),
         fn_name(item));
     (void)index;
@@ -7031,7 +6928,6 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   for (const ir::TypeIdx arg : bound) {
     if (!arg.is_valid()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerCannotInferTypeArguments>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::InvalidOperation, span, fn_name(item), fn_name(item));
       (void)index;
       return nullptr;
@@ -7203,7 +7099,6 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
         entry->ret = error_type();
         modules[impl_module].functions[method_sig_index].ret = error_type();
         const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionReturnMissing>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::NotCompKnown, pending.span, name);
         (void)index;
       }
@@ -7303,8 +7198,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     if (!matches) {
       const SpecEntry& entry = specs[spec];
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecSignatureMismatch>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::TypeMismatch,
-          method_node.span, name, entry.name);
+          DiagCode::TypeMismatch, method_node.span, name, entry.name);
       (void)index;
       type_params = std::move(outer_scope);
       value_params = std::move(outer_values);
@@ -7457,7 +7351,6 @@ bool Checker::resolve_value_path(u32 module,
         ClosureBound& bound = closure_bounds.back();
         if (scope_of(name) < bound.scope) {
           const u32 index = bag.emit<i18n::Key::AnalyzerNotCaptured>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::InvalidCapture, node.segments[0].span, name);
           (void)index;
         } else if (local->capture != NO_CAPTURE &&
@@ -7528,8 +7421,8 @@ bool Checker::resolve_value_path(u32 module,
       out.kind = PathValue::Kind::Type;
       return true;
     }
-    emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue,
-                    node.span, std_hints, "value", name);
+    emit_unresolved(bag, DiagCode::UnknownValue, node.span, std_hints, "value",
+                    name);
     return false;
   }
   if (node.segments.size() == 2) {
@@ -7623,8 +7516,8 @@ bool Checker::resolve_value_path(u32 module,
                        : PathValue::Kind::TupleVariant;
         return true;
       }
-      emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue,
-                      node.span, std_hints, "value", member);
+      emit_unresolved(bag, DiagCode::UnknownValue, node.span, std_hints,
+                      "value", member);
       return false;
     }
     // Nominal prefix: `Enum::Variant` or `Type::assoc`.
@@ -7702,7 +7595,6 @@ bool Checker::resolve_value_path(u32 module,
         if (!owner_args) {
           const u32 index =
               bag.emit<i18n::Key::AnalyzerAssociatedFunctionNeedsTypeArguments>(
-                  diag::Severity::Error, diag::Stage::Analyzer,
                   DiagCode::GenericArguments, node.span, head, head, member);
           (void)index;
           return false;
@@ -7731,7 +7623,6 @@ bool Checker::resolve_value_path(u32 module,
         }
       } else if (owner_args) {
         const u32 index = bag.emit<i18n::Key::AnalyzerUnexpectedTypeArguments>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::GenericArguments, node.span, head);
         (void)index;
         return false;
@@ -7796,14 +7687,12 @@ bool Checker::resolve_value_path(u32 module,
     if (!package.empty()) {
       const u32 index =
           bag.emit<i18n::Key::AnalyzerUnresolvedValueInStandardLibrary>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::UnknownValue, node.span, head, member, known, package);
       (void)index;
       return false;
     }
     const u32 index = bag.emit<i18n::Key::AnalyzerUnresolvedValue>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnknownValue,
-        node.span, head, member);
+        DiagCode::UnknownValue, node.span, head, member);
     (void)index;
     return false;
   }
@@ -7840,8 +7729,8 @@ bool Checker::resolve_value_path(u32 module,
     out.generic_item = generic;
     return true;
   }
-  emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue, node.span,
-                  std_hints, "value", member);
+  emit_unresolved(bag, DiagCode::UnknownValue, node.span, std_hints, "value",
+                  member);
   return false;
 }
 
@@ -7949,8 +7838,8 @@ NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
         ast.items[nominal->item].kind == ast::ItemKind::Struct) {
       return nominal;
     }
-    emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue,
-                    node.span, std_hints, "struct", node.segments[0].name);
+    emit_unresolved(bag, DiagCode::UnknownValue, node.span, std_hints, "struct",
+                    node.segments[0].name);
     return nullptr;
   }
   u32 target = NO_MODULE;
@@ -7967,8 +7856,8 @@ NominalEntry* Checker::resolve_struct_path(u32 module, ast::PathIdx path) {
     }
     return nominal;
   }
-  emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnknownValue, node.span,
-                  std_hints, "struct", node.segments.back().name);
+  emit_unresolved(bag, DiagCode::UnknownValue, node.span, std_hints, "struct",
+                  node.segments.back().name);
   return nullptr;
 }
 
@@ -8050,8 +7939,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
       self != nullptr && node.payload.get<ast::ItemFn>().name.name == "drop";
   if (!is_destructor && !is_error(fn_ret) && !is_movable(fn_ret)) {
     const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableParameter>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
-        node.payload.get<ast::ItemFn>().name.span);
+        DiagCode::UnmovableType, node.payload.get<ast::ItemFn>().name.span);
     (void)index;
   }
   in_fn = true;
@@ -8067,8 +7955,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     const ir::TypeIdx type = resolve_type(module, param.type, self);
     if (!is_destructor && !is_error(type) && !is_movable(type)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableParameter>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::UnmovableType,
-          ast.patterns[param.pattern].span);
+          DiagCode::UnmovableType, ast.patterns[param.pattern].span);
       (void)index;
     }
     bind_comp_known = param.is_comp;
@@ -8077,7 +7964,6 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     if (refutable) {
       const u32 index =
           bag.emit<i18n::Key::AnalyzerRefutablePatternInParameter>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::RefutableLet, ast.patterns[param.pattern].span);
       (void)index;
     }
@@ -8103,8 +7989,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
                                   ? ast.exprs[ast.blocks[body].value].span
                                   : ast.blocks[body].span;
       const u32 index = bag.emit<i18n::Key::AnalyzerReturnNeedsRet>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::BadReturn,
-          span, pretty_tag(tag_of(fn_ret)));
+          DiagCode::BadReturn, span, pretty_tag(tag_of(fn_ret)));
       (void)index;
     }
   }
@@ -8119,8 +8004,7 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
   const ast::ItemNode& node = ast.items[fn];
   if (!node.payload.get<ast::ItemFn>().params.empty()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerMainTakesParameters>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::BadReturn,
-        node.span);
+        DiagCode::BadReturn, node.span);
     (void)index;
   }
   ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
@@ -8151,8 +8035,7 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
     }
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerMainReturnType>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::BadReturn,
-      node.span);
+      DiagCode::BadReturn, node.span);
   (void)index;
 }
 
@@ -8242,7 +8125,6 @@ void Checker::check_bodies() {
             if (contains_mut_ref(declared, visited)) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerStaticHoldsMutableRef>(
-                      diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::InvalidOperation, ast.types[type].span, name);
               (void)index;
             }
@@ -8293,7 +8175,6 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   if (base::Result<void, ModuleTreeError> verified = verify_module_tree(tree);
       verified.is_err()) {
     const u32 index = bag.emit<i18n::Key::CodegenInvalidModuleTree>(
-        diag::Severity::Error, diag::Stage::Analyzer,
         DiagCode::InvalidModuleTree,
         describe_module_tree_error(std::move(verified).unwrap_err()));
     (void)index;
@@ -8302,8 +8183,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   if (base::Result<void, ast::VerificationError> verified =
           ast::verify_file(ast);
       verified.is_err()) {
-    const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
-        diag::Severity::Error, diag::Stage::Analyzer,
+    const u32 index = bag.emit<i18n::Key::AnalyzerInvalidSyntaxTree>(
         DiagCode::InvalidModuleTree,
         ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
@@ -8434,7 +8314,6 @@ base::Result<CheckedPackage, diag::Reported> check_package(
       }
       if (!declared) {
         const u32 index = bag.emit<i18n::Key::AnalyzerSpecSealUnknown>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::SpecSealUnknown, diag::Span{}, sealed_name,
             policy.package);
         (void)index;
@@ -8466,8 +8345,8 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     const ir::VerificationError error = std::move(built).unwrap_err();
     const u32 index =
         bag.emit<i18n::Key::AnalyzerCheckedTypesFailedVerification>(
-            diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidIr,
-            diag::Span{}, ir::format_as(error.kind), error.index);
+            DiagCode::InvalidIr, diag::Span{}, ir::format_as(error.kind),
+            error.index);
     (void)index;
     return base::make_err(diag::Reported{});
   }

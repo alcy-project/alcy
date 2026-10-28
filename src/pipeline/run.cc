@@ -10,8 +10,6 @@
 #include <vector>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
@@ -55,8 +53,7 @@ base::Result<RunOutcome, diag::Reported> execute(
   base::Result<i32, SpawnError> executed = run_command(argv);
   if (executed.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotExecute>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::LinkError,
-        exe_path);
+        DiagCode::LinkError, exe_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -84,8 +81,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
   if (resolved.empty()) {
     // A library builds but never runs: there is no entry to execute.
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoBinToRun>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-        manifest_name);
+        DiagCode::NoTargets, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }

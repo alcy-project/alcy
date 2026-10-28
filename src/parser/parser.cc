@@ -13,9 +13,7 @@
 #include "ast/verify.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
@@ -174,8 +172,7 @@ void Parser::skip_insignificant() {
       const diag::Span span = tokens_[pos_].span;
       const std::string_view spelling = bytes_.substr(span.offset, span.length);
       const u32 index = bag_.emit<i18n::Key::ParserReservedName>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::ReservedWord,
-          span, spelling);
+          DiagCode::ReservedWord, span, spelling);
       (void)index;
       ++pos_;
       continue;
@@ -208,15 +205,14 @@ bool Parser::expect(lexer::TokenKind kind, std::string_view what) {
   }
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedFoundEndOfFile>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        span_from(pos_), what);
+        DiagCode::UnexpectedToken, span_from(pos_), what);
     (void)index;
     return false;
   }
   const diag::Span span = peek().span;
   const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
-      diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-      span, what, bytes_.substr(span.offset, span.length));
+      DiagCode::UnexpectedToken, span, what,
+      bytes_.substr(span.offset, span.length));
   (void)index;
   return false;
 }
@@ -386,7 +382,6 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
           lexer::verify_token_stream(tokens_, file_, bytes_);
       verified.is_err()) {
     const u32 index = bag_.emit<i18n::Key::ParserInvalidTokenStream>(
-        diag::Severity::Error, diag::Stage::Parser,
         DiagCode::InvalidTokenStream,
         lexer::describe_token_stream_error(std::move(verified).unwrap_err()));
     (void)index;
@@ -426,7 +421,7 @@ base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
           ast::verify_file(ast);
       verified.is_err()) {
     const u32 index = bag.emit<i18n::Key::ParserInvalidSyntaxTree>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::InvalidAst,
+        DiagCode::InvalidAst,
         ast::describe_verification_error(std::move(verified).unwrap_err()));
     (void)index;
     return base::make_err(diag::Reported{});
@@ -447,32 +442,28 @@ std::optional<ast::ItemIdx> Parser::parse_spelled_item(bool is_pub,
   if ((word == "func" || word == "def" || word == "function") &&
       peek_kind(1) == K::Ident) {
     const u32 index = bag_.emit<i18n::Key::ParserFnItemSpelling>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-        start.span);
+        DiagCode::Spelling, start.span);
     (void)index;
     advance();
     return parse_fn(is_pub, is_unsafe, is_comp, /*keyword_consumed=*/true);
   }
   if (word == "trait" && peek_kind(1) == K::Ident) {
     const u32 index = bag_.emit<i18n::Key::ParserSpecItemSpelling>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-        start.span);
+        DiagCode::Spelling, start.span);
     (void)index;
     advance();
     return parse_spec(is_pub, /*keyword_consumed=*/true);
   }
   if (word == "import" && peek_kind(1) == K::Ident) {
     const u32 index = bag_.emit<i18n::Key::ParserUseItemSpelling>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-        start.span);
+        DiagCode::Spelling, start.span);
     (void)index;
     advance();
     return parse_use(is_pub, /*keyword_consumed=*/true);
   }
   if (word == "mod") {
     const u32 index = bag_.emit<i18n::Key::ParserModuleFromManifest>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-        start.span);
+        DiagCode::Spelling, start.span);
     (void)index;
     while (!at_end() && !check(K::Semicolon) && !check(K::RBrace)) {
       advance();
@@ -498,8 +489,7 @@ ast::ItemIdx Parser::parse_item() {
   const bool is_comp = match(lexer::TokenKind::Comp);
   const auto refuse_comp_unsafe = [&] {
     const u32 index = bag_.emit<i18n::Key::ParserCompUnsafeCombination>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        comp_token.span);
+        DiagCode::UnexpectedToken, comp_token.span);
     (void)index;
     return ast::ItemIdx::invalid();
   };
@@ -518,8 +508,7 @@ ast::ItemIdx Parser::parse_item() {
   }
   if (is_comp && peek_kind() != lexer::TokenKind::Fn) {
     const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnFunctions>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        comp_token.span);
+        DiagCode::UnexpectedToken, comp_token.span);
     (void)index;
     return ast::ItemIdx::invalid();
   }
@@ -530,8 +519,7 @@ ast::ItemIdx Parser::parse_item() {
       return true;
     }
     const u32 index = bag_.emit<i18n::Key::ParserUnsafeOnlyOnFunctions>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        peek().span);
+        DiagCode::UnexpectedToken, peek().span);
     (void)index;
     return false;
   };
@@ -558,15 +546,13 @@ ast::ItemIdx Parser::parse_item() {
   }
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFoundEndOfFile>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        span_from(pos_));
+        DiagCode::UnexpectedToken, span_from(pos_));
     (void)index;
     return ast::ItemIdx::invalid();
   }
   const diag::Span span = peek().span;
   const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFound>(
-      diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-      span, bytes_.substr(span.offset, span.length));
+      DiagCode::UnexpectedToken, span, bytes_.substr(span.offset, span.length));
   (void)index;
   return ast::ItemIdx::invalid();
 }
@@ -737,8 +723,7 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
       if (ref_self_parameter_shape()) {
         const lexer::Token amp = peek();
         const u32 index = bag_.emit<i18n::Key::ParserRefSelfParameter>(
-            diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-            amp.span);
+            DiagCode::Spelling, amp.span);
         (void)index;
         advance();  // `&`
         const bool is_mut = peek_kind() == lexer::TokenKind::Mut;
@@ -760,7 +745,6 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
           // name binds them and only the compiler expands the call.
           if (ast_.patterns[pattern].kind != ast::PatternKind::Ident) {
             const u32 index = bag_.emit<i18n::Key::ParserVariadicParameter>(
-                diag::Severity::Error, diag::Stage::Parser,
                 DiagCode::UnexpectedToken, ast_.patterns[pattern].span);
             (void)index;
             return false;
@@ -778,7 +762,6 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
       if (is_variadic) {
         if (check(lexer::TokenKind::Comma)) {
           const u32 index = bag_.emit<i18n::Key::ParserVariadicParameter>(
-              diag::Severity::Error, diag::Stage::Parser,
               DiagCode::UnexpectedToken, ast_.patterns[pattern].span);
           (void)index;
           return false;
@@ -895,8 +878,7 @@ ast::ItemIdx Parser::parse_extern(bool is_pub) {
   }
   if (!check(lexer::TokenKind::String)) {
     const u32 index = bag_.emit<i18n::Key::ParserExternNeedsConvention>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        peek().span);
+        DiagCode::UnexpectedToken, peek().span);
     (void)index;
     return ast::ItemIdx::invalid();
   }
@@ -906,8 +888,7 @@ ast::ItemIdx Parser::parse_extern(bool is_pub) {
   advance();
   if (raw != "\"C\"") {
     const u32 index = bag_.emit<i18n::Key::ParserExternConvention>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-        convention_span);
+        DiagCode::UnexpectedToken, convention_span);
     (void)index;
     return ast::ItemIdx::invalid();
   }
@@ -1083,7 +1064,6 @@ bool Parser::parse_generic_params(std::vector<ast::GenericParam>& params) {
     for (const ast::GenericParam& existing : params) {
       if (existing.name.name == name.name) {
         const u32 index = bag_.emit<i18n::Key::ParserDuplicateTypeParameter>(
-            diag::Severity::Error, diag::Stage::Parser,
             DiagCode::UnexpectedToken, name.span, name.name);
         (void)index;
         return false;
@@ -1145,8 +1125,8 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (ast_.types[type].kind != ast::TypeKind::Path) {
       const diag::Span span = ast_.types[type].span;
       const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-          span, "a spec", bytes_.substr(span.offset, span.length));
+          DiagCode::UnexpectedToken, span, "a spec",
+          bytes_.substr(span.offset, span.length));
       (void)index;
       return ast::ItemIdx::invalid();
     }
@@ -1404,8 +1384,7 @@ bool Parser::parse_decimal_u64(u64* out) {
     }
     if (c < '0' || c > '9') {
       const u32 index = bag_.emit<i18n::Key::ParserArrayLengthNotDecimal>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-          span);
+          DiagCode::UnexpectedToken, span);
       (void)index;
       return false;
     }
@@ -1414,8 +1393,7 @@ bool Parser::parse_decimal_u64(u64* out) {
     const u64 digit = static_cast<u64>(c - '0');
     if (value > (~0ull - digit) / 10) {
       const u32 index = bag_.emit<i18n::Key::ParserArrayLengthTooLarge>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-          span);
+          DiagCode::UnexpectedToken, span);
       (void)index;
       return false;
     }
@@ -1432,8 +1410,7 @@ bool Parser::nesting_exhausted(diag::Span span) {
   if (!reported_too_deep_) {
     reported_too_deep_ = true;
     const u32 index = bag_.emit<i18n::Key::ParserNestingTooDeep>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::TooDeep, span,
-        nesting_.limit());
+        DiagCode::TooDeep, span, nesting_.limit());
     (void)index;
   }
   return true;
@@ -1454,8 +1431,7 @@ void Parser::check_header_brace() {
     return;
   }
   const u32 index = bag_.emit<i18n::Key::ParserBlockBraceOnHeader>(
-      diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-      peek().span);
+      DiagCode::UnexpectedToken, peek().span);
   (void)index;
 }
 
@@ -1546,8 +1522,7 @@ ast::BlockIdx Parser::parse_block() {
     if (!match(lexer::TokenKind::Semicolon) &&
         !check(lexer::TokenKind::RBrace) && !at_end()) {
       const u32 index = bag_.emit<i18n::Key::ParserExpectedSemicolon>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::UnexpectedToken,
-          peek().span);
+          DiagCode::UnexpectedToken, peek().span);
       (void)index;
       synchronize();
     }
@@ -1577,13 +1552,11 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
     if (after == K::Mut || after == K::Ident || after == K::Underscore) {
       if (word == "let") {
         const u32 index = bag_.emit<i18n::Key::ParserLetSpelling>(
-            diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-            start.span);
+            DiagCode::Spelling, start.span);
         (void)index;
       } else {
         const u32 index = bag_.emit<i18n::Key::ParserVarSpelling>(
-            diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-            start.span);
+            DiagCode::Spelling, start.span);
         (void)index;
       }
       keyword = true;
@@ -1592,15 +1565,13 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
   } else if (start.kind == K::Mut && peek_kind(1) == K::Ident &&
              peek_kind(2) == K::Eq) {
     const u32 index = bag_.emit<i18n::Key::ParserMutDeclarationSpelling>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-        start.span);
+        DiagCode::Spelling, start.span);
     (void)index;
     matched = true;
   } else if (is_primitive_type_token(start.kind) && peek_kind(1) == K::Ident &&
              (peek_kind(2) == K::Eq || peek_kind(2) == K::ColonEq)) {
     const u32 index = bag_.emit<i18n::Key::ParserTypeFirstDeclarationSpelling>(
-        diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-        start.span);
+        DiagCode::Spelling, start.span);
     (void)index;
     matched = true;
     type_first = true;
@@ -1640,8 +1611,7 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
     }
     if (matched) {
       const u32 index = bag_.emit<i18n::Key::ParserTypedDeclarationSpelling>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-          start.span);
+          DiagCode::Spelling, start.span);
       (void)index;
     }
   }
@@ -1714,8 +1684,7 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_return(usize mark) {
     default: return std::nullopt;
   }
   const u32 index = bag_.emit<i18n::Key::ParserReturnSpelling>(
-      diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-      start.span);
+      DiagCode::Spelling, start.span);
   (void)index;
   advance();  // `return`
   const ast::ExprIdx value = parse_expr();
@@ -1772,8 +1741,7 @@ ast::StmtIdx Parser::parse_stmt() {
     const bool comp_decl = match(lexer::TokenKind::Comp);
     if (comp_decl) {
       const u32 index = bag_.emit<i18n::Key::ParserCompDeclarationSpelling>(
-          diag::Severity::Error, diag::Stage::Parser, DiagCode::Spelling,
-          comp_token.span);
+          DiagCode::Spelling, comp_token.span);
       (void)index;
     }
     const bool is_const = match(lexer::TokenKind::Const) || comp_decl;

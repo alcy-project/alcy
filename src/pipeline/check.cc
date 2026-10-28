@@ -10,8 +10,6 @@
 
 #include "analyzer/resolve.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -62,13 +60,11 @@ base::Result<CheckOutcome, diag::Reported> check_single_file(
     const source::SourceError reason = std::move(file).unwrap_err();
     if (reason == source::SourceError::NotRegular) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineSourceNotRegular>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::SourceNotRegular, input);
       (void)index;
     } else {
-      const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRead>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          input);
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineCannotRead>(DiagCode::IoError, input);
       (void)index;
     }
     return fail();
@@ -152,8 +148,7 @@ base::Result<CheckOutcome, diag::Reported> check_suite(
       ctx.sources.bytes(manifest_file);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        manifest_name);
+        DiagCode::IoError, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -173,8 +168,7 @@ base::Result<CheckOutcome, diag::Reported> check_suite(
   }
   if (suite.package_count == 0) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteEmpty>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-        manifest_name);
+        DiagCode::NoTargets, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }

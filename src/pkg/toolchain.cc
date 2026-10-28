@@ -6,8 +6,6 @@
 #include <string_view>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
@@ -43,8 +41,7 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
     // message names the file rather than pointing into it.
     const toml::parse_error& error = result.error();
     const u32 index = bag.emit<i18n::Key::PkgToolchainTomlSyntaxError>(
-        diag::Severity::Error, diag::Stage::Pkg, DiagCode::ToolchainSyntaxError,
-        filename, error.description());
+        DiagCode::ToolchainSyntaxError, filename, error.description());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -58,7 +55,6 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
       const auto flag = node.value<bool>();
       if (!flag.has_value()) {
         const u32 index = bag.emit<i18n::Key::PkgToolchainFreestandingNotBool>(
-            diag::Severity::Error, diag::Stage::Pkg,
             DiagCode::ToolchainSemanticError, filename);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -70,7 +66,6 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
       const auto text = node.value<std::string_view>();
       if (!text.has_value()) {
         const u32 index = bag.emit<i18n::Key::PkgToolchainLinkerNotAString>(
-            diag::Severity::Error, diag::Stage::Pkg,
             DiagCode::ToolchainSemanticError, filename);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -81,7 +76,6 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
     if (name == "link-args") {
       if (!node.is_array()) {
         const u32 index = bag.emit<i18n::Key::PkgToolchainLinkArgsNotStrings>(
-            diag::Severity::Error, diag::Stage::Pkg,
             DiagCode::ToolchainSemanticError, filename);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -104,7 +98,6 @@ base::Result<Toolchain, diag::Reported> parse_toolchain(
       const auto text = entry.value<std::string_view>();
       if (!text.has_value()) {
         const u32 index = bag.emit<i18n::Key::PkgToolchainLinkArgsNotStrings>(
-            diag::Severity::Error, diag::Stage::Pkg,
             DiagCode::ToolchainSemanticError, filename);
         (void)index;
         return base::make_err(diag::Reported{});

@@ -9,6 +9,7 @@ source_set("diag") {
     "diagnostic.h",
     "json.cc",
     "json.h",
+    "message_meta.h",
     "render.cc",
     "render.h",
     "span.cc",

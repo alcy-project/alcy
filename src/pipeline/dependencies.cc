@@ -14,8 +14,6 @@
 #include "analyzer/summary.h"
 #include "base/hash.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -52,8 +50,7 @@ base::Result<ManifestBytes, diag::Reported> load_manifest_bytes(
       ctx.sources.load(manifest_path.as_view());
   if (file.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineNoManifest>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoManifest,
-        dir.as_view());
+        DiagCode::NoManifest, dir.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -61,8 +58,7 @@ base::Result<ManifestBytes, diag::Reported> load_manifest_bytes(
   const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNotLoaded>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-        manifest_path.as_view());
+        DiagCode::IoError, manifest_path.as_view());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -316,7 +312,6 @@ bool load_dependency(PipelineContext& ctx,
   for (const path::Path& seen : resolution.visited) {
     if (seen == dir) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencyCycle>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::DependencyCycle, dir.as_view());
       (void)index;
       return false;
@@ -336,14 +331,12 @@ bool load_dependency(PipelineContext& ctx,
   // without one is, not a package the loader reads anyway.
   if (manifest.bin_count == 0 && manifest.lib == nullptr) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoTarget>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::NoTargets,
-        manifest.name);
+        DiagCode::NoTargets, manifest.name);
     (void)index;
     return false;
   }
   if (!is_module_segment(manifest.name)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencyBadName>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         DiagCode::DependencyBadName, spec, manifest.name);
     (void)index;
     return false;
@@ -353,7 +346,6 @@ bool load_dependency(PipelineContext& ctx,
   if (!expected_name.empty() && manifest.name != expected_name) {
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineDependencyMemberNameMismatch>(
-            diag::Severity::Error, diag::Stage::Pipeline,
             DiagCode::DependencySuiteMismatch, spec, manifest.name,
             expected_name);
     (void)index;
@@ -415,7 +407,6 @@ bool load_suite_members(PipelineContext& ctx,
   for (const path::Path& seen : resolution.visited) {
     if (seen == dir) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencyCycle>(
-          diag::Severity::Error, diag::Stage::Pipeline,
           DiagCode::DependencyCycle, dir.as_view());
       (void)index;
       return false;
@@ -430,7 +421,6 @@ bool load_suite_members(PipelineContext& ctx,
   const pkg::SuiteManifest suite = std::move(read).unwrap();
   if (suite.owner != dep.owner || suite.name != dep.suite) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencySuiteMismatch>(
-        diag::Severity::Error, diag::Stage::Pipeline,
         DiagCode::DependencySuiteMismatch, dep.spec, dep.owner, dep.suite,
         dir.as_view(), suite.owner, suite.name);
     (void)index;
@@ -455,7 +445,6 @@ bool load_suite_members(PipelineContext& ctx,
     if (listed.empty()) {
       const u32 index =
           ctx.bag.emit<i18n::Key::PipelineDependencyNotASuiteMember>(
-              diag::Severity::Error, diag::Stage::Pipeline,
               DiagCode::DependencySuiteMismatch, dep.spec, dep.owner,
               dep.suite);
       (void)index;

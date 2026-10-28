@@ -15,9 +15,7 @@
 #include "analyzer/diag_code.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
@@ -130,8 +128,7 @@ class Resolver {
     }
     out_of_arena = true;
     const u32 index = bag.emit<i18n::Key::AnalyzerArenaExhausted>(
-        diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ArenaExhausted,
-        diag::Span{}, ast.spans.capacity());
+        DiagCode::ArenaExhausted, diag::Span{}, ast.spans.capacity());
     (void)index;
   }
 
@@ -195,8 +192,7 @@ class Resolver {
       // The root file was not among the inputs, so there is nothing to
       // attach a tree to. A checked index would read out of bounds.
       const u32 index = bag.emit<i18n::Key::AnalyzerRootFileNotAModuleInput>(
-          diag::Severity::Error, diag::Stage::Analyzer, DiagCode::InvalidPath,
-          diag::Span{});
+          DiagCode::InvalidPath, diag::Span{});
       (void)index;
       return;
     }
@@ -220,7 +216,6 @@ class Resolver {
     for (const FileData& file : file_data) {
       if (file.module == NO_MODULE) {
         const u32 index = bag.emit<i18n::Key::AnalyzerSourceFileHasNoModule>(
-            diag::Severity::Warning, diag::Stage::Analyzer,
             DiagCode::UnreachableFile, file.path);
         (void)index;
       }
@@ -280,7 +275,6 @@ class Resolver {
         children_by_name_[parent].emplace(module_name(child), child);
       } else if (leaf) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::DuplicateModule, diag::Span{}, slash_name);
         (void)index;
         return;
@@ -343,7 +337,6 @@ class Resolver {
         module_roots_[child] = dependency;
       } else if (leaf) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::DuplicateModule, diag::Span{}, slash_name);
         (void)index;
         return;
@@ -374,7 +367,6 @@ class Resolver {
       // hand: two packages behind one spelling cannot both be right.
       if (root_module != NO_MODULE) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::DuplicateModule, diag::Span{}, dependency.identity);
         (void)index;
         return false;
@@ -559,7 +551,6 @@ class Resolver {
     }
     if (exports_state[module] == 1) {
       const u32 index = bag.emit<i18n::Key::PkgDependencyCycleInReExports>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::UnresolvedImport,
           modules[module]->items.empty()
               ? diag::Span{}
@@ -604,7 +595,6 @@ class Resolver {
                                           : local_modules[module],
                  name)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerConflictsWithLocalItem>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::AmbiguousImport, use_node.span, name);
       (void)index;
       return;
@@ -612,7 +602,6 @@ class Resolver {
     for (const Import& prior : module_imports[module]) {
       if (prior.ns == ns && prior.name == name) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateImport>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::AmbiguousImport, use_node.span, name);
         (void)index;
         return;
@@ -698,7 +687,6 @@ class Resolver {
     }
     if (segments.size() < 2) {
       const u32 index = bag.emit<i18n::Key::AnalyzerImportNotQualified>(
-          diag::Severity::Error, diag::Stage::Analyzer,
           DiagCode::UnresolvedImport, node.span);
       (void)index;
       return;
@@ -745,21 +733,20 @@ class Resolver {
         // name nothing here; say what the root is (ADR-0060).
         if (head == "super" || head == "crate") {
           const u32 index = bag.emit<i18n::Key::AnalyzerPathHeadNotSupported>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::SpellingSuggestion, path.segments[0].span, head);
           (void)index;
           return;
         }
-        emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
-                        node.span, std_hints_, "import", head);
+        emit_unresolved(bag, DiagCode::UnresolvedImport, node.span, std_hints_,
+                        "import", head);
         return;
       }
     }
     for (usize i = 1; i + 1 < segments.size(); ++i) {
       current = find_child_module(current, segments[i]);
       if (current == NO_MODULE) {
-        emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
-                        node.span, std_hints_, "import", segments[i]);
+        emit_unresolved(bag, DiagCode::UnresolvedImport, node.span, std_hints_,
+                        "import", segments[i]);
         return;
       }
     }
@@ -814,7 +801,6 @@ class Resolver {
         if (!private_seen) {
           private_seen = true;
           const u32 index = bag.emit<i18n::Key::AnalyzerPrivateItem>(
-              diag::Severity::Error, diag::Stage::Analyzer,
               DiagCode::PrivateAccess, node.span, member);
           (void)index;
         }
@@ -836,7 +822,6 @@ class Resolver {
           if (!private_seen) {
             private_seen = true;
             const u32 index = bag.emit<i18n::Key::AnalyzerPrivateItem>(
-                diag::Severity::Error, diag::Stage::Analyzer,
                 DiagCode::PrivateAccess, node.span, member);
             (void)index;
           }
@@ -853,13 +838,12 @@ class Resolver {
       // yet.
       if (is_generic_item(modules[current]->summary_generic_names, member)) {
         const u32 index = bag.emit<i18n::Key::AnalyzerGenericItemUnavailable>(
-            diag::Severity::Error, diag::Stage::Analyzer,
             DiagCode::GenericItemUnavailable, node.span, member);
         (void)index;
         return;
       }
-      emit_unresolved(bag, diag::Stage::Analyzer, DiagCode::UnresolvedImport,
-                      node.span, std_hints_, "import", member);
+      emit_unresolved(bag, DiagCode::UnresolvedImport, node.span, std_hints_,
+                      "import", member);
     }
   }
 
@@ -933,7 +917,6 @@ class Resolver {
             // would silently overwrite the earlier module's items.
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerDuplicatePreludeModule>(
-                    diag::Severity::Error, diag::Stage::Analyzer,
                     DiagCode::DuplicateModule,
                     file.id == source::UNKNOWN_FILE ? diag::Span{}
                                                     : diag::Span{file.id, 0, 0},
@@ -1128,8 +1111,7 @@ bool emit_withheld_module(std::span<const PackageRoot> roots,
     }
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerExportWithheld>(
-      diag::Severity::Error, diag::Stage::Analyzer, DiagCode::ExportWithheld,
-      span, package.identity, module_path);
+      DiagCode::ExportWithheld, span, package.identity, module_path);
   (void)index;
   return true;
 }

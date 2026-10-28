@@ -26,7 +26,7 @@ namespace i18n {
 // ordinal, and a catalog of a few hundred entries is the design.
 // NOLINTNEXTLINE(performance-enum-size)
 enum class Key : u16 {
-#define ALCY_I18N_ENUMERATOR(Name, Text) Name,
+#define ALCY_I18N_ENUMERATOR(Name, Severity, Stage, Text) Name,
   ALCY_I18N_FOREACH_KEY_EN_US(ALCY_I18N_ENUMERATOR)
 #undef ALCY_I18N_ENUMERATOR
       Count,
@@ -42,9 +42,9 @@ struct Entry {
   std::string_view text;
 };
 
-#define ALCY_I18N_TEXT_CASE(Name, Text) \
+#define ALCY_I18N_TEXT_CASE(Name, Severity, Stage, Text) \
   case Key::Name: return Text;
-#define ALCY_I18N_ENTRY(Name, Text) Entry{Key::Name, Text},
+#define ALCY_I18N_ENTRY(Name, Severity, Stage, Text) Entry{Key::Name, Text},
 
 // One catalog per language, generated from that language's list: the
 // text of one message as a compile-time constant, and the whole

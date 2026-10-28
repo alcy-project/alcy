@@ -19,548 +19,547 @@
 // retype one: every catalog is parsed against the call site's
 // arguments at compile time.
 
-#ifndef ALCY_I18N_MESSAGES_DEF_
-#define ALCY_I18N_MESSAGES_DEF_
-
 #define ALCY_I18N_FOREACH_KEY_EN_US(F) \
   /* lexer */ \
-  F(LexerEmptyCharacter, "Empty character literal") \
-  F(LexerInvalidCharacter, "Invalid character") \
-  F(LexerInvalidEscapeInCharacter, "Invalid escape in character literal") \
-  F(LexerInvalidEscapeInString, "Invalid escape in string literal") \
-  F(LexerInvalidNumber, "Invalid number literal") \
-  F(LexerUnicodeEscapeNotScalar, "A \\u{{...}} escape must name a Unicode scalar value") \
-  F(LexerUnterminatedBlockComment, "Unterminated block comment") \
-  F(LexerUnterminatedCharacter, "Unterminated character literal") \
-  F(LexerUnterminatedString, "Unterminated string literal") \
+  F(LexerEmptyCharacter, Error, Lexer, "Empty character literal") \
+  F(LexerInvalidCharacter, Error, Lexer, "Invalid character") \
+  F(LexerInvalidEscapeInCharacter, Error, Lexer, "Invalid escape in character literal") \
+  F(LexerInvalidEscapeInString, Error, Lexer, "Invalid escape in string literal") \
+  F(LexerInvalidNumber, Error, Lexer, "Invalid number literal") \
+  F(LexerUnicodeEscapeNotScalar, Error, Lexer, "A \\u{{...}} escape must name a Unicode scalar value") \
+  F(LexerUnterminatedBlockComment, Error, Lexer, "Unterminated block comment") \
+  F(LexerUnterminatedCharacter, Error, Lexer, "Unterminated character literal") \
+  F(LexerUnterminatedString, Error, Lexer, "Unterminated string literal") \
   /* parser */ \
-  F(ArgCommand, "Command") \
-  F(ArgCommands, "Commands") \
-  F(ArgDefault, "(default: {})") \
-  F(ArgDuplicateOption, "The argument '{}' was provided more than once") \
-  F(ArgFlagTakesNoValue, "Flag '{}' takes no value") \
-  F(ArgHelpOption, "Print help message") \
-  F(ArgInvalidArgCount, "Invalid arg count provided: {}") \
-  F(ArgInvalidChoice, "Invalid choice for argument '{}': '{}'") \
-  F(ArgInvalidValue, "Invalid value for argument '{}': '{}'") \
-  F(ArgMissingRequiredArgument, "The required argument '{}' was not provided") \
-  F(ArgMissingValueForOption, "A value is required for '{}' but none was supplied") \
-  F(ArgNullMatchesPointer, "Output matches pointer is null") \
-  F(ArgOptions, "Options") \
-  F(ArgRequired, "[required]") \
-  F(ArgTryHelp, "For more information, try '{} --help'.") \
-  F(ArgUnknownLongOption, "Unexpected argument '--{}' found") \
-  F(ArgUnknownShortOption, "Unexpected argument '-{}' found") \
-  F(ArgUsage, "Usage") \
-  F(ArgValueName, "value") \
-  F(ArgVersionOption, "Print version information") \
-  F(ParserArrayLengthNotDecimal, "Array length must be decimal") \
-  F(ParserArrayLengthTooLarge, "Array length is too large") \
-  F(ParserBlockBraceOnHeader, "A block's `{{` must stay on its header line") \
-  F(ParserCompDeclarationSpelling, "`comp` marks parameters and blocks; write the declaration as `const x := ...`") \
-  F(ParserCompOnlyOnBindings, "Comp evaluation is only allowed on parameters and blocks") \
-  F(ParserCompOnlyOnFunctions, "`comp` marks a function in item position") \
-  F(ParserCompUnsafeCombination, "`comp` and `unsafe` do not combine yet") \
-  F(ParserDuplicateTypeParameter, "Duplicate type parameter '{}'") \
-  F(ParserExpectedFound, "Expected {}, found `{}`") \
-  F(ParserExpectedFoundEndOfFile, "Expected {}, found end of file") \
-  F(ParserExpectedItemFound, "Expected item, found `{}`") \
-  F(ParserExpectedItemFoundEndOfFile, "Expected item, found end of file") \
-  F(ParserExpectedSemicolon, "Expected `;`") \
-  F(ParserExpectedValueFoundType, "Expected a value, found a type") \
-  F(ParserFnItemSpelling, "`fn` declares a function") \
-  F(ParserIfLetSpelling, "a condition binds with `:=`: write `if PAT := EXPR`") \
-  F(ParserExternConvention, "Only the \"C\" calling convention is supported") \
-  F(ParserExternNeedsConvention, "`extern` needs a convention string (`extern \"C\"`)") \
-  F(ParserInvalidSyntaxTree, "Internal error: invalid syntax tree: {}") \
-  F(ParserInvalidTokenStream, "Internal error: invalid token stream: {}") \
-  F(ParserLetSpelling, "`let` is not a keyword; declare with `x := ...` (`mut x := ...` when mutable)") \
-  F(ParserMacroCallSpelling, "alcy has no macros; call `name(...)`") \
-  F(ParserModuleFromManifest, "modules are declared in `alcy.toml`; there is no `mod`") \
-  F(ParserMutDeclarationSpelling, "a mutable declaration is `mut x := ...`; `=` only reassigns") \
-  F(ParserNameAlreadyBound, "Name `{}` is already bound in this scope") \
-  F(ParserNestingTooDeep, "Nesting is deeper than the limit of {}") \
-  F(ParserRangeBoundRequired, "`..<` and `..=` describe an endpoint, so one must follow") \
-  F(ParserRangeEndNeedsBound, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
-  F(ParserRefSelfParameter, "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)") \
-  F(ParserReservedName, "Name `{}` is reserved for future use") \
-  F(ParserReturnSpelling, "`ret` returns; write `ret ...`") \
-  F(ParserSpecItemSpelling, "`spec` declares a capability; `impl Spec for Type` opts a type in") \
-  F(ParserTypeFirstDeclarationSpelling, "a declaration puts the type after the name: `x: T := ...`") \
-  F(ParserTypedDeclarationSpelling, "a typed declaration is `x: T := ...`; `=` only reassigns") \
-  F(ParserUnsafeOnlyOnFunctions, "`unsafe` applies to functions") \
-  F(ParserUnsafeWithoutBlock, "`unsafe` must open a block (`unsafe {{ ... }}`)") \
-  F(ParserUseItemSpelling, "`use` imports a path") \
-  F(ParserVariadicParameter, "a variadic parameter is a plain name and the last one (`args: ..`)") \
-  F(ParserVarSpelling, "`var` is not a keyword; declare with `x := ...`") \
+  F(ArgCommand, Note, Pipeline, "Command") \
+  F(ArgCommands, Note, Pipeline, "Commands") \
+  F(ArgDefault, Note, Pipeline, "(default: {})") \
+  F(ArgDuplicateOption, Note, Pipeline, "The argument '{}' was provided more than once") \
+  F(ArgFlagTakesNoValue, Note, Pipeline, "Flag '{}' takes no value") \
+  F(ArgHelpOption, Note, Pipeline, "Print help message") \
+  F(ArgInvalidArgCount, Note, Pipeline, "Invalid arg count provided: {}") \
+  F(ArgInvalidChoice, Note, Pipeline, "Invalid choice for argument '{}': '{}'") \
+  F(ArgInvalidValue, Note, Pipeline, "Invalid value for argument '{}': '{}'") \
+  F(ArgMissingRequiredArgument, Note, Pipeline, "The required argument '{}' was not provided") \
+  F(ArgMissingValueForOption, Note, Pipeline, "A value is required for '{}' but none was supplied") \
+  F(ArgNullMatchesPointer, Note, Pipeline, "Output matches pointer is null") \
+  F(ArgOptions, Note, Pipeline, "Options") \
+  F(ArgRequired, Note, Pipeline, "[required]") \
+  F(ArgTryHelp, Note, Pipeline, "For more information, try '{} --help'.") \
+  F(ArgUnknownLongOption, Note, Pipeline, "Unexpected argument '--{}' found") \
+  F(ArgUnknownShortOption, Note, Pipeline, "Unexpected argument '-{}' found") \
+  F(ArgUsage, Note, Pipeline, "Usage") \
+  F(ArgValueName, Note, Pipeline, "value") \
+  F(ArgVersionOption, Note, Pipeline, "Print version information") \
+  F(ParserArrayLengthNotDecimal, Error, Parser, "Array length must be decimal") \
+  F(ParserArrayLengthTooLarge, Error, Parser, "Array length is too large") \
+  F(ParserBlockBraceOnHeader, Error, Parser, "A block's `{{` must stay on its header line") \
+  F(ParserCompDeclarationSpelling, Error, Parser, "`comp` marks parameters and blocks; write the declaration as `const x := ...`") \
+  F(ParserCompOnlyOnBindings, Error, Parser, "Comp evaluation is only allowed on parameters and blocks") \
+  F(ParserCompOnlyOnFunctions, Error, Parser, "`comp` marks a function in item position") \
+  F(ParserCompUnsafeCombination, Error, Parser, "`comp` and `unsafe` do not combine yet") \
+  F(ParserDuplicateTypeParameter, Error, Parser, "Duplicate type parameter '{}'") \
+  F(ParserExpectedFound, Error, Parser, "Expected {}, found `{}`") \
+  F(ParserExpectedFoundEndOfFile, Error, Parser, "Expected {}, found end of file") \
+  F(ParserExpectedItemFound, Error, Parser, "Expected item, found `{}`") \
+  F(ParserExpectedItemFoundEndOfFile, Error, Parser, "Expected item, found end of file") \
+  F(ParserExpectedSemicolon, Error, Parser, "Expected `;`") \
+  F(ParserExpectedValueFoundType, Error, Analyzer, "Expected a value, found a type") \
+  F(ParserFnItemSpelling, Error, Parser, "`fn` declares a function") \
+  F(ParserIfLetSpelling, Error, Parser, "a condition binds with `:=`: write `if PAT := EXPR`") \
+  F(ParserExternConvention, Error, Parser, "Only the \"C\" calling convention is supported") \
+  F(ParserExternNeedsConvention, Error, Parser, "`extern` needs a convention string (`extern \"C\"`)") \
+  F(ParserInvalidSyntaxTree, Error, Parser, "Internal error: invalid syntax tree: {}") \
+  F(AnalyzerInvalidSyntaxTree, Error, Analyzer, "Internal error: invalid syntax tree: {}") \
+  F(ParserInvalidTokenStream, Error, Parser, "Internal error: invalid token stream: {}") \
+  F(ParserLetSpelling, Error, Parser, "`let` is not a keyword; declare with `x := ...` (`mut x := ...` when mutable)") \
+  F(ParserMacroCallSpelling, Error, Parser, "alcy has no macros; call `name(...)`") \
+  F(ParserModuleFromManifest, Error, Parser, "modules are declared in `alcy.toml`; there is no `mod`") \
+  F(ParserMutDeclarationSpelling, Error, Parser, "a mutable declaration is `mut x := ...`; `=` only reassigns") \
+  F(ParserNameAlreadyBound, Error, Parser, "Name `{}` is already bound in this scope") \
+  F(ParserNestingTooDeep, Error, Parser, "Nesting is deeper than the limit of {}") \
+  F(AnalyzerNestingTooDeep, Error, Analyzer, "Nesting is deeper than the limit of {}") \
+  F(ParserRangeBoundRequired, Error, Parser, "`..<` and `..=` describe an endpoint, so one must follow") \
+  F(ParserRangeEndNeedsBound, Error, Parser, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
+  F(ParserRefSelfParameter, Error, Parser, "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)") \
+  F(ParserReservedName, Error, Parser, "Name `{}` is reserved for future use") \
+  F(ParserReturnSpelling, Error, Parser, "`ret` returns; write `ret ...`") \
+  F(ParserSpecItemSpelling, Error, Parser, "`spec` declares a capability; `impl Spec for Type` opts a type in") \
+  F(ParserTypeFirstDeclarationSpelling, Error, Parser, "a declaration puts the type after the name: `x: T := ...`") \
+  F(ParserTypedDeclarationSpelling, Error, Parser, "a typed declaration is `x: T := ...`; `=` only reassigns") \
+  F(ParserUnsafeOnlyOnFunctions, Error, Parser, "`unsafe` applies to functions") \
+  F(ParserUnsafeWithoutBlock, Error, Parser, "`unsafe` must open a block (`unsafe {{ ... }}`)") \
+  F(ParserUseItemSpelling, Error, Parser, "`use` imports a path") \
+  F(ParserVariadicParameter, Error, Parser, "a variadic parameter is a plain name and the last one (`args: ..`)") \
+  F(ParserVarSpelling, Error, Parser, "`var` is not a keyword; declare with `x := ...`") \
   /* analyzer */ \
-  F(AnalyzerAmbiguousMethod, "Ambiguous method '{}'") \
-  F(AnalyzerAmbiguousVariant, "Ambiguous variant '{}'") \
-  F(AnalyzerArenaExhausted, "The {} bytes of arena the compiler reserves for the syntax tree cannot hold this package") \
-  F(AnalyzerArgumentsNotTuple, "Arguments must be a tuple") \
-  F(AnalyzerArityMismatch, "The call to '{}' expects {} argument{}") \
-  F(AnalyzerArrayArity, "Array expects {} elements, found {}") \
-  F(AnalyzerArrayIndexNotInteger, "Array index must be an integer") \
-  F(AnalyzerArrayLengthNotConst, "Array length must be a constant integer value") \
-  F(AnalyzerArrayLiteralWithoutCount, "Array literal needs elements or a repeat count") \
-  F(AnalyzerArrayRepeatArity, "Array expects {} elements, found repeat of {}") \
-  F(AnalyzerArrayRepeatTooLarge, "Array repeat count {} exceeds the limit of {}") \
-  F(AnalyzerArrayRunNeedsBorrow, "A run of a fixed array must be borrowed (`&a[..]`)") \
-  F(AnalyzerAssignThroughShared, "Cannot assign through a shared reference") \
-  F(AnalyzerAssignToImmutable, "Cannot assign to an immutable binding") \
-  F(AnalyzerMutMethodNeedsMut, "Cannot call '{}' on an immutable binding; declare it `mut`") \
-  F(AnalyzerAssociatedFunctionAsMethod, "Associated function '{}' called as a method") \
-  F(AnalyzerAssociatedFunctionNeedsTypeArguments, "Calling '{}' needs type arguments to name an associated function; write '{}::<T>::{}'") \
-  F(AnalyzerBadDestructorSignature, "Destructor must be 'fn drop(self: Self)' returning nothing") \
-  F(AnalyzerBreakOutsideLoop, "Break outside of a loop") \
-  F(AnalyzerBufferNotMutableSlice, "Buffer must be `&mut [u8]`") \
-  F(AnalyzerBuiltinType, "The name `{}` is a built-in type") \
-  F(AnalyzerCallArityMismatch, "The call to '{}' expects {} argument{}, found {}") \
-  F(AnalyzerCallNonPath, "Cannot call a non-path expression") \
-  F(AnalyzerCalleeNeedsArguments, "Callee needs arguments") \
-  F(AnalyzerCaptureCompBinding, "Cannot capture '{}'; a comp binding has no runtime storage") \
-  F(AnalyzerCaptureDuplicate, "Capture '{}' is already in the list") \
-  F(AnalyzerCaptureNeedsMut, "Cannot capture '{}' mutably; declare the binding `mut`") \
-  F(AnalyzerCaptureNotVisible, "Capture '{}' is not visible here; the enclosing closure must capture it too") \
-  F(AnalyzerCaptureUnknown, "Cannot capture '{}'; it is not a local in scope") \
-  F(AnalyzerCaptureUnused, "Capture '{}' is never used") \
-  F(AnalyzerCannotAssignToRun, "Cannot assign to a run; a run is a view, not a place") \
-  F(AnalyzerCannotDereference, "Cannot dereference '{}'") \
-  F(AnalyzerCannotIndex, "Cannot index '{}'") \
-  F(AnalyzerCannotIndexWithRange, "Cannot index '{}' with a range") \
-  F(AnalyzerCannotInferType, "Cannot infer the generic type; add an annotation") \
-  F(AnalyzerCannotInferTypeArguments, "Cannot infer the type arguments of '{}'; add them with '{}::<T>(...)'") \
-  F(AnalyzerCannotInferMethodTypeArguments, "Cannot infer the type arguments of method '{}'; spell them as 'x.{}::<T>(...)'") \
-  F(AnalyzerCannotInferValueArgument, "Cannot infer the value argument for parameter '{}' of '{}'; add it with '{}::<...>(...)'") \
-  F(AnalyzerCharacterLiteralDeferred, "Character literals need the core Char type (deferred)") \
-  F(AnalyzerCheckedTypesFailedVerification, "Internal error: checked types failed verification ({} at index {})") \
-  F(AnalyzerClosureArityMismatch, "Closure expects {} parameter{}, found {}") \
-  F(AnalyzerClosureParamNeedsAnnotation, "Cannot infer the type of parameter '{}'; add an annotation") \
-  F(AnalyzerCompArgument, "Comp evaluation argument must be comp-known") \
-  F(AnalyzerCompAssignPlace, "Comp assignment place is not comp-known") \
-  F(AnalyzerCompAssignValue, "Comp assignment value is not comp-known") \
-  F(AnalyzerCompBlockValue, "Comp block value is not comp-known") \
-  F(AnalyzerCompCondition, "Comp condition is not comp-known") \
-  F(AnalyzerCompConditionInitializer, "Comp condition initializer is not comp-known") \
-  F(AnalyzerConditionAlwaysMatches, "This pattern always matches; write a plain condition or a refutable pattern") \
-  F(AnalyzerCompFunctionOutsideComp, "Function '{}' is a `comp fn`; it can only be used during compilation") \
-  F(AnalyzerCompMatchScrutinee, "Comp match scrutinee is not comp-known") \
-  F(AnalyzerCompParameterArgument, "Argument for `comp` parameter must be comp-known") \
-  F(AnalyzerCompParameterOnIntrinsic, "Comp parameters on intrinsics are not supported") \
-  F(AnalyzerCompoundAssignNeedsNumeric, "Compound assignment needs a numeric place") \
-  F(AnalyzerConflictingSpecImpl, "Conflicting implementation of '{}' for '{}'") \
-  F(AnalyzerConflictsWithLocalItem, "Import `{}` conflicts with a local item") \
-  F(AnalyzerConstBindingReassigned, "Cannot reassign a const value") \
-  F(AnalyzerConstCycle, "Const '{}' is defined in terms of itself") \
-  F(AnalyzerConstDeclarationInitializer, "Const declaration initializer is not comp-known") \
-  F(AnalyzerContinueOutsideLoop, "Continue outside of a loop") \
-  F(AnalyzerViewCannotHaveDestructor, "A view has nothing to end, so it cannot have a destructor") \
-  F(AnalyzerDeclarationSpelling, "no local or item named '{}'; if this declares, write '{} := ...'") \
-  F(AnalyzerDuplicateDefinition, "Duplicate definition of '{}'") \
-  F(AnalyzerDuplicateField, "Field '{}' is initialized more than once") \
-  F(AnalyzerDuplicateImport, "Module `{}` is imported more than once") \
-  F(AnalyzerDuplicateModule, "Module '{}' is declared more than once") \
-  F(AnalyzerDuplicatePreludeModule, "Prelude module '{}' is declared more than once") \
-  F(AnalyzerExportWithheld, "Package '{}' does not export module '{}'") \
-  F(AnalyzerExternCompParameter, "Comp parameters on external functions are not supported") \
-  F(AnalyzerExternGeneric, "External function '{}' cannot be generic") \
-  F(AnalyzerExternTypeNotSupported, "Type '{}' cannot cross a C boundary yet") \
-  F(AnalyzerFatReferenceComparison, "Cannot compare references to an unsized value") \
-  F(AnalyzerFloatRangeDoesNotIterate, "Float ranges do not iterate; a `for` loop needs an integer range") \
-  F(AnalyzerFloatSuffixOnInteger, "Float suffix on an integer literal") \
-  F(AnalyzerForRequiresIterator, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
-  F(AnalyzerFormatArity, "Intrinsic 'format' expects a format string, found {} arguments") \
-  F(AnalyzerFormatConversionExplicit, "Write the fixed-point conversion explicitly: `{}`") \
-  F(AnalyzerFormatInCompEvaluation, "Intrinsic 'format' is not allowed in comp evaluation") \
-  F(AnalyzerFormatPlaceholderArity, "Format string has {} placeholder{} for {} argument{}") \
-  F(AnalyzerFormatPrecisionNotFloat, "A format precision applies to floats only") \
-  F(AnalyzerFormatStringNotCompKnown, "Format string must be comp-known") \
-  F(AnalyzerGenericArgumentsUnsupported, "Generic arguments are not supported") \
-  F(AnalyzerGenericItemUnavailable, "Item '{}' is generic; a summary does not carry a generic item's body yet") \
-  F(AnalyzerGenericImplUnsupported, "Generic impl blocks are not supported") \
-  F(AnalyzerIfWithoutElse, "If without else yields '()'") \
-  F(AnalyzerImportNotQualified, "Imports must be module-qualified (`self::foo`)") \
-  F(AnalyzerInherentImplNeedsNominalType, "Inherent impl requires a nominal type") \
-  F(AnalyzerUnmovableParameter, "A parameter or return is Movable, and this type holds an anchor (ADR-0085)") \
-  F(AnalyzerUnmovableTypeArgument, "A type argument is Movable, and this one holds an anchor (ADR-0085)") \
-  F(AnalyzerBuiltinImplOutsideItsSuite, "A builtin type belongs to the staged suite: '{}' cannot be implemented here") \
-  F(AnalyzerImplOutsideItsHome, "An implementation lives where the type or the spec lives: '{}' is declared in package '{}' and '{}' in package '{}'") \
-  F(AnalyzerInherentImplOutsideItsType, "An inherent implementation lives where the type does: '{}' is declared in package '{}'") \
-  F(AnalyzerIntegerLiteralOutOfRange, "Integer literal is out of range for its type") \
-  F(AnalyzerIntegerSuffixOnFloat, "Integer suffix on a float literal") \
-  F(AnalyzerIntrinsicMissingUnsafe, "Intrinsic '{}' is unsafe; declare it `unsafe`") \
-  F(AnalyzerIntrinsicSignature, "Intrinsic '{}' has the wrong signature") \
-  F(AnalyzerIntrinsicUnexpectedUnsafe, "Intrinsic '{}' is not unsafe; remove `unsafe`") \
-  F(AnalyzerInvalidBinaryOperand, "Invalid binary operand '{}'") \
-  F(AnalyzerInvalidCast, "Invalid cast from '{}' to '{}'") \
-  F(AnalyzerInvalidFormatString, "Invalid format string") \
-  F(AnalyzerInvalidUnaryOperand, "Invalid unary operand '{}'") \
-  F(AnalyzerMainReturnType, "Function 'main' must return '()', 'i32', or a two-variant enum whose first variant holds '()'") \
-  F(AnalyzerMainTakesParameters, "Function 'main' must take no parameters") \
-  F(AnalyzerMatchMissingVariant, "Non-exhaustive match: missing '{}'") \
-  F(AnalyzerMatchNotCovered, "Non-exhaustive match: '{}' not covered") \
-  F(AnalyzerMatchNotExhaustive, "Non-exhaustive match: add a wildcard arm") \
-  F(AnalyzerMatchNotExhaustiveInteger, "Non-exhaustive integer match: add a wildcard arm") \
-  F(AnalyzerMatchNotExhaustiveStruct, "Non-exhaustive struct match: add a wildcard arm") \
-  F(AnalyzerMatchNotExhaustiveTuple, "Non-exhaustive tuple match: add a wildcard arm") \
-  F(AnalyzerMaybeUninitArity, "Type 'MaybeUninit' takes one type argument") \
-  F(AnalyzerMissingField, "Missing field '{}'") \
-  F(AnalyzerMissingOperatorSpec, "Type does not implement the '{}' spec") \
-  F(AnalyzerMissingSpecMethod, "Missing method '{}' in implementation of '{}'") \
-  F(AnalyzerNameTableExhausted, "The compiler's name table cannot hold the names this package declares") \
-  F(AnalyzerNoFields, "No fields on '{}'") \
-  F(AnalyzerNotAnAssignablePlace, "Cannot assign to this place") \
-  F(AnalyzerNotCallable, "Not callable") \
-  F(AnalyzerNotCaptured, "Use of '{}' is not captured; add it to the capture list") \
-  F(AnalyzerNotTupleVariant, "Not a tuple variant") \
-  F(AnalyzerOrPatternBindsDifferentNames, "Or-pattern alternatives must bind the same names") \
-  F(AnalyzerOwnFunctionReturn, "The returned value does not carry the `fn(...)` signature of '{}'") \
-  F(AnalyzerOwnFunctionReturnMissing, "The body of '{}' never carries the `fn(...)` signature its return type declares") \
-  F(AnalyzerOwnFunctionUnsupported, "Owning function types are not supported here yet") \
-  F(AnalyzerOwnFunctionWitness, "Argument for owning function parameter '{}' does not match its `fn(...)` signature") \
-  F(AnalyzerPathHeadNotSupported, "`{}` is not a path head; the package root is `package::`") \
-  F(AnalyzerPowerNotImplemented, "The '**' operator is not implemented yet") \
-  F(AnalyzerPrintArity, "'{}' expects a format string, found {} arguments") \
-  F(AnalyzerPrintInCompEvaluation, "'{}' is not allowed in comp evaluation") \
-  F(AnalyzerPrivateField, "Field '{}' of '{}' is private; the module that declares the struct can open it with `pub`") \
-  F(AnalyzerPrivateItem, "Item '{}' is private; the module that declares it can open it with `pub`") \
-  F(AnalyzerRangeEndpointNotInteger, "A range index must have an integer endpoint type") \
-  F(AnalyzerRangeEndpointTypeMismatch, "Type mismatch in range endpoints: '{}' vs '{}'") \
-  F(AnalyzerRangeExpressionsDeferred, "range expressions arrive post-MVP") \
-  F(AnalyzerRangeNeedsStdCore, "Range expressions need the `core` standard library package") \
-  F(AnalyzerRawPointerNeedsSized, "A raw pointer is thin, so its pointee must be sized") \
-  F(AnalyzerReceiverTypeMismatch, "Type mismatch in receiver") \
-  F(AnalyzerRecursiveType, "Recursive type '{}' without indirection") \
-  F(AnalyzerReferencePatternType, "Reference pattern on a non-reference type") \
-  F(AnalyzerRefutablePatternInDeclaration, "Refutable pattern in declaration; use match") \
-  F(AnalyzerRefutablePatternInFor, "Refutable pattern in `for`; use `loop`") \
-  F(AnalyzerRefutablePatternInParameter, "Refutable pattern in function parameter") \
-  F(AnalyzerReturnCrossesCompBlock, "A 'ret' must not cross a comp block boundary") \
-  F(AnalyzerReturnNeedsRet, "A function returning '{}' must end every path with 'ret'") \
-  F(AnalyzerReturnOutsideFunction, "A 'ret' outside of a function") \
-  F(AnalyzerRootFileNotAModuleInput, "Root file is not among the module inputs") \
-  F(AnalyzerSelfOutsideImpl, "Self outside of an impl block") \
-  F(AnalyzerSourceFileHasNoModule, "Source file '{}' has no module") \
-  F(AnalyzerSpecCanonicalShape, "Spec '{}' must keep the compiler's operator shape") \
-  F(AnalyzerSpecRequiresNominalTarget, "Spec implementation requires a nominal type") \
-  F(AnalyzerSpecSealed, "Spec '{}' is sealed by package '{}'; implementing it from outside needs the [spec] implement key") \
-  F(AnalyzerSpecSealUnknown, "Manifest seals spec '{}', which package '{}' does not declare") \
-  F(AnalyzerSpecSignatureMismatch, "Method '{}' does not match the declaration in '{}'") \
-  F(AnalyzerSpecSuperArguments, "Super-spec of '{}' takes arguments; generic supers are not supported yet") \
-  F(AnalyzerSpecSuperCycle, "Super-spec chain of '{}' forms a cycle") \
-  F(AnalyzerStringPatternDeferred, "String literal patterns are deferred; compare with '==' instead") \
-  F(AnalyzerSpecSuperMissing, "Implementing '{}' needs an implementation of '{}'") \
-  F(AnalyzerSpecSuperUnknown, "Super-spec '{}' must name a spec in scope") \
-  F(AnalyzerSpecTargetNotDirect, "Spec implementation target must name its type parameters directly") \
-  F(AnalyzerSpecUnknownMethod, "Method '{}' is not one of '{}'") \
-  F(AnalyzerStaticHoldsMutableRef, "Static '{}' must not contain '&mut'") \
-  F(AnalyzerStaticReadInCompEvaluation, "Statics with storage cannot be read in comp evaluation") \
-  F(AnalyzerStringNotInScope, "Type 'String' is not in scope") \
-  F(AnalyzerStructNotInMatchedType, "Struct is not a member of the matched type") \
-  F(AnalyzerTryNeedsEnclosingFunction, "A '?' needs an enclosing function returning the same enum") \
-  F(AnalyzerTryNeedsEnumOperand, "A '?' needs an enum operand") \
-  F(AnalyzerTryNeedsSuccessFailure, "A '?' needs an enum with a success and a failure variant") \
-  F(AnalyzerTryNeedsValueVariant, "A '?' needs a first variant carrying a value") \
-  F(AnalyzerTryTypeMismatch, "The '?' type does not match the function return type") \
-  F(AnalyzerTuplePatternArity, "Tuple pattern has {} elements, type has {}") \
-  F(AnalyzerBoundNotASpec, "Bound '{}' does not name a spec") \
-  F(AnalyzerBoundUnknownSpec, "Bound '{}' names no spec") \
-  F(AnalyzerTypeBoundNotSatisfied, "Type '{}' does not implement '{}', which the bound requires") \
-  F(AnalyzerTypeArgumentNeedsPointer, "Type `{}` needs a pointer to bind its type argument") \
-  F(AnalyzerTypeArgumentNeedsReference, "Type `{}` needs a reference to bind its type argument") \
-  F(AnalyzerTypeArgumentNeedsSequence, "Type `{}` needs an array or a slice to bind its type argument") \
-  F(AnalyzerTypeArgumentNeedsUninit, "Type `{}` needs uninitialized storage to bind its type argument") \
-  F(AnalyzerTypeArityMismatch, "Type '{}' expects {} type argument{}") \
-  F(AnalyzerTypeInStandardLibrary, "Type '{}' is not found; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
-  F(AnalyzerTypeMismatch, "Type mismatch in {}: '{}' vs '{}'") \
-  F(AnalyzerTypeMismatchExpectedFound, "Type mismatch in {}: expected '{}', found '{}'") \
-  F(AnalyzerTypeNotSupported, "Type is not supported in MVP") \
-  F(AnalyzerTypeParameterAsValue, "Type parameter '{}' cannot be used as a value") \
-  F(AnalyzerUnexpectedTypeArguments, "Type '{}' takes no type arguments") \
-  F(AnalyzerUninitializedValueUsed, "Uninitialized value used as '{}'; release it with 'uninit_assume' once written") \
-  F(AnalyzerUnknownField, "Unknown field '{}'") \
-  F(AnalyzerUnknownIntrinsic, "Unknown intrinsic '{}'") \
-  F(AnalyzerUnknownMethod, "No method '{}'") \
-  F(AnalyzerUnknownTupleField, "Unknown tuple field '{}'") \
-  F(AnalyzerUnknownType, "Unknown type '{}'") \
-  F(AnalyzerUnresolved, "Unresolved {} '{}'") \
-  F(AnalyzerUnresolvedInStandardLibrary, "Unresolved {} '{}'; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
-  F(AnalyzerUnresolvedValue, "Unresolved value '{}::{}'") \
-  F(AnalyzerUnresolvedValueInStandardLibrary, "Unresolved value '{}::{}'; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
-  F(AnalyzerUnsafeCall, "Call to unsafe function '{}' requires an `unsafe {{ ... }}` block") \
-  F(AnalyzerUnsafeFunctionValue, "Unsafe function '{}' cannot be used as a value yet") \
-  F(AnalyzerUnsafeMethodUnsupported, "Unsafe methods are not implemented yet") \
-  F(AnalyzerUnsafeOperation, "{} requires an `unsafe {{ ... }}` block") \
-  F(AnalyzerUnsizedTypeNeedsReference, "Unsized type `[T]` must be behind a reference (`&[T]`)") \
-  F(AnalyzerUnsupportedLiteralSuffix, "Unsupported literal suffix '{}'") \
-  F(AnalyzerUnusedValue, "Unused non-() value; discard it explicitly with `_ := ...`") \
-  F(AnalyzerValueArgumentExpected, "Expected a value argument for parameter '{}'") \
-  F(AnalyzerValueArgumentNotInteger, "Value argument must be a non-negative constant integer value") \
-  F(AnalyzerValueCannotBeType, "A value argument cannot be used as a type") \
-  F(AnalyzerValueParameterAsType, "Value parameter '{}' cannot be used as a type") \
-  F(AnalyzerValueParameterHasNoAddress, "Value parameter '{}' has no address") \
-  F(AnalyzerValueParameterTypeNotInteger, "Value parameter '{}' must have an integer type") \
-  F(AnalyzerVariadicNotExpanded, "A variadic parameter may only appear on a compiler-expanded function") \
-  F(AnalyzerVariantCallArity, "Variant expects {} argument{}, found {}") \
-  F(AnalyzerVariantFieldArity, "Variant expects {} field{}, pattern has {}") \
-  F(AnalyzerVariantNotInMatchedType, "Variant is not a member of the matched type") \
-  F(AnalyzerViewIsAlreadyReference, "A view is already a reference; re-slice it without `&`") \
-  F(AnalyzerWriteArity, "Intrinsic 'write' expects a format string and a buffer, found {} arguments") \
-  F(AnalyzerWriteInCompEvaluation, "Intrinsic 'write' is not allowed in comp evaluation") \
-  F(AnalyzerWriteOutcomeNotInScope, "Type 'WriteOutcome' is not in scope") \
+  F(AnalyzerAmbiguousMethod, Error, Analyzer, "Ambiguous method '{}'") \
+  F(AnalyzerAmbiguousVariant, Error, Analyzer, "Ambiguous variant '{}'") \
+  F(AnalyzerArenaExhausted, Error, Analyzer, "The {} bytes of arena the compiler reserves for the syntax tree cannot hold this package") \
+  F(AnalyzerArgumentsNotTuple, Error, Analyzer, "Arguments must be a tuple") \
+  F(AnalyzerArityMismatch, Error, Analyzer, "The call to '{}' expects {} argument{}") \
+  F(AnalyzerArrayArity, Error, Analyzer, "Array expects {} elements, found {}") \
+  F(AnalyzerArrayIndexNotInteger, Error, Analyzer, "Array index must be an integer") \
+  F(AnalyzerArrayLengthNotConst, Error, Analyzer, "Array length must be a constant integer value") \
+  F(AnalyzerArrayLiteralWithoutCount, Error, Analyzer, "Array literal needs elements or a repeat count") \
+  F(AnalyzerArrayRepeatArity, Error, Analyzer, "Array expects {} elements, found repeat of {}") \
+  F(AnalyzerArrayRepeatTooLarge, Error, Analyzer, "Array repeat count {} exceeds the limit of {}") \
+  F(AnalyzerArrayRunNeedsBorrow, Error, Analyzer, "A run of a fixed array must be borrowed (`&a[..]`)") \
+  F(AnalyzerAssignThroughShared, Error, Analyzer, "Cannot assign through a shared reference") \
+  F(AnalyzerAssignToImmutable, Error, Analyzer, "Cannot assign to an immutable binding") \
+  F(AnalyzerMutMethodNeedsMut, Error, Analyzer, "Cannot call '{}' on an immutable binding; declare it `mut`") \
+  F(AnalyzerAssociatedFunctionAsMethod, Error, Analyzer, "Associated function '{}' called as a method") \
+  F(AnalyzerAssociatedFunctionNeedsTypeArguments, Error, Analyzer, "Calling '{}' needs type arguments to name an associated function; write '{}::<T>::{}'") \
+  F(AnalyzerBadDestructorSignature, Error, Analyzer, "Destructor must be 'fn drop(self: Self)' returning nothing") \
+  F(AnalyzerBreakOutsideLoop, Error, Analyzer, "Break outside of a loop") \
+  F(AnalyzerBufferNotMutableSlice, Error, Analyzer, "Buffer must be `&mut [u8]`") \
+  F(AnalyzerBuiltinType, Error, Analyzer, "The name `{}` is a built-in type") \
+  F(AnalyzerCallArityMismatch, Error, Analyzer, "The call to '{}' expects {} argument{}, found {}") \
+  F(AnalyzerCallNonPath, Error, Analyzer, "Cannot call a non-path expression") \
+  F(AnalyzerCalleeNeedsArguments, Error, Analyzer, "Callee needs arguments") \
+  F(AnalyzerCaptureCompBinding, Error, Analyzer, "Cannot capture '{}'; a comp binding has no runtime storage") \
+  F(AnalyzerCaptureDuplicate, Error, Analyzer, "Capture '{}' is already in the list") \
+  F(AnalyzerCaptureNeedsMut, Error, Analyzer, "Cannot capture '{}' mutably; declare the binding `mut`") \
+  F(AnalyzerCaptureNotVisible, Error, Analyzer, "Capture '{}' is not visible here; the enclosing closure must capture it too") \
+  F(AnalyzerCaptureUnknown, Error, Analyzer, "Cannot capture '{}'; it is not a local in scope") \
+  F(AnalyzerCaptureUnused, Error, Analyzer, "Capture '{}' is never used") \
+  F(AnalyzerCannotAssignToRun, Error, Analyzer, "Cannot assign to a run; a run is a view, not a place") \
+  F(AnalyzerCannotDereference, Error, Analyzer, "Cannot dereference '{}'") \
+  F(AnalyzerCannotIndex, Error, Analyzer, "Cannot index '{}'") \
+  F(AnalyzerCannotIndexWithRange, Error, Analyzer, "Cannot index '{}' with a range") \
+  F(AnalyzerCannotInferType, Error, Analyzer, "Cannot infer the generic type; add an annotation") \
+  F(AnalyzerCannotInferTypeArguments, Error, Analyzer, "Cannot infer the type arguments of '{}'; add them with '{}::<T>(...)'") \
+  F(AnalyzerCannotInferMethodTypeArguments, Error, Analyzer, "Cannot infer the type arguments of method '{}'; spell them as 'x.{}::<T>(...)'") \
+  F(AnalyzerCannotInferValueArgument, Error, Analyzer, "Cannot infer the value argument for parameter '{}' of '{}'; add it with '{}::<...>(...)'") \
+  F(AnalyzerCharacterLiteralDeferred, Error, Analyzer, "Character literals need the core Char type (deferred)") \
+  F(AnalyzerCheckedTypesFailedVerification, Error, Analyzer, "Internal error: checked types failed verification ({} at index {})") \
+  F(AnalyzerClosureArityMismatch, Error, Analyzer, "Closure expects {} parameter{}, found {}") \
+  F(AnalyzerClosureParamNeedsAnnotation, Error, Analyzer, "Cannot infer the type of parameter '{}'; add an annotation") \
+  F(AnalyzerCompArgument, Error, Analyzer, "Comp evaluation argument must be comp-known") \
+  F(AnalyzerCompAssignPlace, Error, Analyzer, "Comp assignment place is not comp-known") \
+  F(AnalyzerCompAssignValue, Error, Analyzer, "Comp assignment value is not comp-known") \
+  F(AnalyzerCompBlockValue, Error, Analyzer, "Comp block value is not comp-known") \
+  F(AnalyzerCompCondition, Error, Analyzer, "Comp condition is not comp-known") \
+  F(AnalyzerCompConditionInitializer, Error, Analyzer, "Comp condition initializer is not comp-known") \
+  F(AnalyzerConditionAlwaysMatches, Error, Analyzer, "This pattern always matches; write a plain condition or a refutable pattern") \
+  F(AnalyzerCompFunctionOutsideComp, Error, Analyzer, "Function '{}' is a `comp fn`; it can only be used during compilation") \
+  F(AnalyzerCompMatchScrutinee, Error, Analyzer, "Comp match scrutinee is not comp-known") \
+  F(AnalyzerCompParameterArgument, Error, Analyzer, "Argument for `comp` parameter must be comp-known") \
+  F(AnalyzerCompParameterOnIntrinsic, Error, Analyzer, "Comp parameters on intrinsics are not supported") \
+  F(AnalyzerCompoundAssignNeedsNumeric, Error, Analyzer, "Compound assignment needs a numeric place") \
+  F(AnalyzerConflictingSpecImpl, Error, Analyzer, "Conflicting implementation of '{}' for '{}'") \
+  F(AnalyzerConflictsWithLocalItem, Error, Analyzer, "Import `{}` conflicts with a local item") \
+  F(AnalyzerConstBindingReassigned, Error, Analyzer, "Cannot reassign a const value") \
+  F(AnalyzerConstCycle, Error, Analyzer, "Const '{}' is defined in terms of itself") \
+  F(AnalyzerConstDeclarationInitializer, Error, Analyzer, "Const declaration initializer is not comp-known") \
+  F(AnalyzerContinueOutsideLoop, Error, Analyzer, "Continue outside of a loop") \
+  F(AnalyzerViewCannotHaveDestructor, Error, Analyzer, "A view has nothing to end, so it cannot have a destructor") \
+  F(AnalyzerDeclarationSpelling, Error, Analyzer, "no local or item named '{}'; if this declares, write '{} := ...'") \
+  F(AnalyzerDuplicateDefinition, Error, Analyzer, "Duplicate definition of '{}'") \
+  F(AnalyzerDuplicateField, Error, Analyzer, "Field '{}' is initialized more than once") \
+  F(AnalyzerDuplicateImport, Error, Analyzer, "Module `{}` is imported more than once") \
+  F(AnalyzerDuplicateModule, Error, Analyzer, "Module '{}' is declared more than once") \
+  F(AnalyzerDuplicatePreludeModule, Error, Analyzer, "Prelude module '{}' is declared more than once") \
+  F(AnalyzerExportWithheld, Error, Analyzer, "Package '{}' does not export module '{}'") \
+  F(AnalyzerExternCompParameter, Error, Analyzer, "Comp parameters on external functions are not supported") \
+  F(AnalyzerExternGeneric, Error, Analyzer, "External function '{}' cannot be generic") \
+  F(AnalyzerExternTypeNotSupported, Error, Analyzer, "Type '{}' cannot cross a C boundary yet") \
+  F(AnalyzerFatReferenceComparison, Error, Analyzer, "Cannot compare references to an unsized value") \
+  F(AnalyzerFloatRangeDoesNotIterate, Error, Analyzer, "Float ranges do not iterate; a `for` loop needs an integer range") \
+  F(AnalyzerFloatSuffixOnInteger, Error, Analyzer, "Float suffix on an integer literal") \
+  F(AnalyzerForRequiresIterator, Error, Analyzer, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \
+  F(AnalyzerFormatArity, Error, Analyzer, "Intrinsic 'format' expects a format string, found {} arguments") \
+  F(AnalyzerFormatConversionExplicit, Warning, Analyzer, "Write the fixed-point conversion explicitly: `{}`") \
+  F(AnalyzerFormatInCompEvaluation, Error, Analyzer, "Intrinsic 'format' is not allowed in comp evaluation") \
+  F(AnalyzerFormatPlaceholderArity, Error, Analyzer, "Format string has {} placeholder{} for {} argument{}") \
+  F(AnalyzerFormatPrecisionNotFloat, Error, Analyzer, "A format precision applies to floats only") \
+  F(AnalyzerFormatStringNotCompKnown, Error, Analyzer, "Format string must be comp-known") \
+  F(AnalyzerGenericArgumentsUnsupported, Error, Analyzer, "Generic arguments are not supported") \
+  F(AnalyzerGenericItemUnavailable, Error, Analyzer, "Item '{}' is generic; a summary does not carry a generic item's body yet") \
+  F(AnalyzerGenericImplUnsupported, Error, Analyzer, "Generic impl blocks are not supported") \
+  F(AnalyzerIfWithoutElse, Error, Analyzer, "If without else yields '()'") \
+  F(AnalyzerImportNotQualified, Error, Analyzer, "Imports must be module-qualified (`self::foo`)") \
+  F(AnalyzerInherentImplNeedsNominalType, Error, Analyzer, "Inherent impl requires a nominal type") \
+  F(AnalyzerUnmovableParameter, Error, Analyzer, "A parameter or return is Movable, and this type holds an anchor (ADR-0085)") \
+  F(AnalyzerUnmovableTypeArgument, Error, Analyzer, "A type argument is Movable, and this one holds an anchor (ADR-0085)") \
+  F(AnalyzerBuiltinImplOutsideItsSuite, Error, Analyzer, "A builtin type belongs to the staged suite: '{}' cannot be implemented here") \
+  F(AnalyzerImplOutsideItsHome, Error, Analyzer, "An implementation lives where the type or the spec lives: '{}' is declared in package '{}' and '{}' in package '{}'") \
+  F(AnalyzerInherentImplOutsideItsType, Error, Analyzer, "An inherent implementation lives where the type does: '{}' is declared in package '{}'") \
+  F(AnalyzerIntegerLiteralOutOfRange, Error, Analyzer, "Integer literal is out of range for its type") \
+  F(AnalyzerIntegerSuffixOnFloat, Error, Analyzer, "Integer suffix on a float literal") \
+  F(AnalyzerIntrinsicMissingUnsafe, Error, Analyzer, "Intrinsic '{}' is unsafe; declare it `unsafe`") \
+  F(AnalyzerIntrinsicSignature, Error, Analyzer, "Intrinsic '{}' has the wrong signature") \
+  F(AnalyzerIntrinsicUnexpectedUnsafe, Error, Analyzer, "Intrinsic '{}' is not unsafe; remove `unsafe`") \
+  F(AnalyzerInvalidBinaryOperand, Error, Analyzer, "Invalid binary operand '{}'") \
+  F(AnalyzerInvalidCast, Error, Analyzer, "Invalid cast from '{}' to '{}'") \
+  F(AnalyzerInvalidFormatString, Error, Analyzer, "Invalid format string") \
+  F(AnalyzerInvalidUnaryOperand, Error, Analyzer, "Invalid unary operand '{}'") \
+  F(AnalyzerMainReturnType, Error, Analyzer, "Function 'main' must return '()', 'i32', or a two-variant enum whose first variant holds '()'") \
+  F(AnalyzerMainTakesParameters, Error, Analyzer, "Function 'main' must take no parameters") \
+  F(AnalyzerMatchMissingVariant, Error, Analyzer, "Non-exhaustive match: missing '{}'") \
+  F(AnalyzerMatchNotCovered, Error, Analyzer, "Non-exhaustive match: '{}' not covered") \
+  F(AnalyzerMatchNotExhaustive, Error, Analyzer, "Non-exhaustive match: add a wildcard arm") \
+  F(AnalyzerMatchNotExhaustiveInteger, Error, Analyzer, "Non-exhaustive integer match: add a wildcard arm") \
+  F(AnalyzerMatchNotExhaustiveStruct, Error, Analyzer, "Non-exhaustive struct match: add a wildcard arm") \
+  F(AnalyzerMatchNotExhaustiveTuple, Error, Analyzer, "Non-exhaustive tuple match: add a wildcard arm") \
+  F(AnalyzerMaybeUninitArity, Error, Analyzer, "Type 'MaybeUninit' takes one type argument") \
+  F(AnalyzerMissingField, Error, Analyzer, "Missing field '{}'") \
+  F(AnalyzerMissingOperatorSpec, Error, Analyzer, "Type does not implement the '{}' spec") \
+  F(AnalyzerMissingSpecMethod, Error, Analyzer, "Missing method '{}' in implementation of '{}'") \
+  F(AnalyzerNameTableExhausted, Error, Analyzer, "The compiler's name table cannot hold the names this package declares") \
+  F(AnalyzerNoFields, Error, Analyzer, "No fields on '{}'") \
+  F(AnalyzerNotAnAssignablePlace, Error, Analyzer, "Cannot assign to this place") \
+  F(AnalyzerNotCallable, Error, Analyzer, "Not callable") \
+  F(AnalyzerNotCaptured, Error, Analyzer, "Use of '{}' is not captured; add it to the capture list") \
+  F(AnalyzerNotTupleVariant, Error, Analyzer, "Not a tuple variant") \
+  F(AnalyzerOrPatternBindsDifferentNames, Error, Analyzer, "Or-pattern alternatives must bind the same names") \
+  F(ParserOrPatternBindsDifferentNames, Error, Parser, "Or-pattern alternatives must bind the same names") \
+  F(AnalyzerOwnFunctionReturn, Error, Analyzer, "The returned value does not carry the `fn(...)` signature of '{}'") \
+  F(AnalyzerOwnFunctionReturnMissing, Error, Analyzer, "The body of '{}' never carries the `fn(...)` signature its return type declares") \
+  F(AnalyzerOwnFunctionUnsupported, Error, Analyzer, "Owning function types are not supported here yet") \
+  F(AnalyzerOwnFunctionWitness, Error, Analyzer, "Argument for owning function parameter '{}' does not match its `fn(...)` signature") \
+  F(AnalyzerPathHeadNotSupported, Error, Analyzer, "`{}` is not a path head; the package root is `package::`") \
+  F(AnalyzerPowerNotImplemented, Error, Analyzer, "The '**' operator is not implemented yet") \
+  F(AnalyzerPrintArity, Error, Analyzer, "'{}' expects a format string, found {} arguments") \
+  F(AnalyzerPrintInCompEvaluation, Error, Analyzer, "'{}' is not allowed in comp evaluation") \
+  F(AnalyzerPrivateField, Error, Analyzer, "Field '{}' of '{}' is private; the module that declares the struct can open it with `pub`") \
+  F(AnalyzerPrivateItem, Error, Analyzer, "Item '{}' is private; the module that declares it can open it with `pub`") \
+  F(AnalyzerRangeEndpointNotInteger, Error, Analyzer, "A range index must have an integer endpoint type") \
+  F(AnalyzerRangeEndpointTypeMismatch, Error, Analyzer, "Type mismatch in range endpoints: '{}' vs '{}'") \
+  F(AnalyzerRangeExpressionsDeferred, Error, Analyzer, "range expressions arrive post-MVP") \
+  F(AnalyzerRangeNeedsStdCore, Error, Analyzer, "Range expressions need the `core` standard library package") \
+  F(AnalyzerRawPointerNeedsSized, Error, Analyzer, "A raw pointer is thin, so its pointee must be sized") \
+  F(AnalyzerReceiverTypeMismatch, Error, Analyzer, "Type mismatch in receiver") \
+  F(AnalyzerRecursiveType, Error, Analyzer, "Recursive type '{}' without indirection") \
+  F(AnalyzerReferencePatternType, Error, Analyzer, "Reference pattern on a non-reference type") \
+  F(AnalyzerRefutablePatternInDeclaration, Error, Analyzer, "Refutable pattern in declaration; use match") \
+  F(AnalyzerRefutablePatternInFor, Error, Analyzer, "Refutable pattern in `for`; use `loop`") \
+  F(AnalyzerRefutablePatternInParameter, Error, Analyzer, "Refutable pattern in function parameter") \
+  F(AnalyzerReturnCrossesCompBlock, Error, Analyzer, "A 'ret' must not cross a comp block boundary") \
+  F(AnalyzerReturnNeedsRet, Error, Analyzer, "A function returning '{}' must end every path with 'ret'") \
+  F(AnalyzerReturnOutsideFunction, Error, Analyzer, "A 'ret' outside of a function") \
+  F(AnalyzerRootFileNotAModuleInput, Error, Analyzer, "Root file is not among the module inputs") \
+  F(AnalyzerSelfOutsideImpl, Error, Analyzer, "Self outside of an impl block") \
+  F(AnalyzerSourceFileHasNoModule, Warning, Analyzer, "Source file '{}' has no module") \
+  F(AnalyzerSpecCanonicalShape, Error, Analyzer, "Spec '{}' must keep the compiler's operator shape") \
+  F(AnalyzerSpecRequiresNominalTarget, Error, Analyzer, "Spec implementation requires a nominal type") \
+  F(AnalyzerSpecSealed, Error, Analyzer, "Spec '{}' is sealed by package '{}'; implementing it from outside needs the [spec] implement key") \
+  F(AnalyzerSpecSealUnknown, Error, Analyzer, "Manifest seals spec '{}', which package '{}' does not declare") \
+  F(AnalyzerSpecSignatureMismatch, Error, Analyzer, "Method '{}' does not match the declaration in '{}'") \
+  F(AnalyzerSpecSuperArguments, Error, Analyzer, "Super-spec of '{}' takes arguments; generic supers are not supported yet") \
+  F(AnalyzerSpecSuperCycle, Error, Analyzer, "Super-spec chain of '{}' forms a cycle") \
+  F(AnalyzerStringPatternDeferred, Error, Analyzer, "String literal patterns are deferred; compare with '==' instead") \
+  F(AnalyzerSpecSuperMissing, Error, Analyzer, "Implementing '{}' needs an implementation of '{}'") \
+  F(AnalyzerSpecSuperUnknown, Error, Analyzer, "Super-spec '{}' must name a spec in scope") \
+  F(AnalyzerSpecTargetNotDirect, Error, Analyzer, "Spec implementation target must name its type parameters directly") \
+  F(AnalyzerSpecUnknownMethod, Error, Analyzer, "Method '{}' is not one of '{}'") \
+  F(AnalyzerStaticHoldsMutableRef, Error, Analyzer, "Static '{}' must not contain '&mut'") \
+  F(AnalyzerStaticReadInCompEvaluation, Error, Analyzer, "Statics with storage cannot be read in comp evaluation") \
+  F(AnalyzerStringNotInScope, Error, Analyzer, "Type 'String' is not in scope") \
+  F(AnalyzerStructNotInMatchedType, Error, Analyzer, "Struct is not a member of the matched type") \
+  F(AnalyzerTryNeedsEnclosingFunction, Error, Analyzer, "A '?' needs an enclosing function returning the same enum") \
+  F(AnalyzerTryNeedsEnumOperand, Error, Analyzer, "A '?' needs an enum operand") \
+  F(AnalyzerTryNeedsSuccessFailure, Error, Analyzer, "A '?' needs an enum with a success and a failure variant") \
+  F(AnalyzerTryNeedsValueVariant, Error, Analyzer, "A '?' needs a first variant carrying a value") \
+  F(AnalyzerTryTypeMismatch, Error, Analyzer, "The '?' type does not match the function return type") \
+  F(AnalyzerTuplePatternArity, Error, Analyzer, "Tuple pattern has {} elements, type has {}") \
+  F(AnalyzerBoundNotASpec, Error, Analyzer, "Bound '{}' does not name a spec") \
+  F(AnalyzerBoundUnknownSpec, Error, Analyzer, "Bound '{}' names no spec") \
+  F(AnalyzerTypeBoundNotSatisfied, Error, Analyzer, "Type '{}' does not implement '{}', which the bound requires") \
+  F(AnalyzerTypeArgumentNeedsPointer, Error, Analyzer, "Type `{}` needs a pointer to bind its type argument") \
+  F(AnalyzerTypeArgumentNeedsReference, Error, Analyzer, "Type `{}` needs a reference to bind its type argument") \
+  F(AnalyzerTypeArgumentNeedsSequence, Error, Analyzer, "Type `{}` needs an array or a slice to bind its type argument") \
+  F(AnalyzerTypeArgumentNeedsUninit, Error, Analyzer, "Type `{}` needs uninitialized storage to bind its type argument") \
+  F(AnalyzerTypeArityMismatch, Error, Analyzer, "Type '{}' expects {} type argument{}") \
+  F(AnalyzerTypeInStandardLibrary, Error, Analyzer, "Type '{}' is not found; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
+  F(AnalyzerTypeMismatch, Error, Analyzer, "Type mismatch in {}: '{}' vs '{}'") \
+  F(AnalyzerTypeMismatchExpectedFound, Error, Analyzer, "Type mismatch in {}: expected '{}', found '{}'") \
+  F(AnalyzerTypeNotSupported, Error, Analyzer, "Type is not supported in MVP") \
+  F(AnalyzerTypeParameterAsValue, Error, Analyzer, "Type parameter '{}' cannot be used as a value") \
+  F(AnalyzerUnexpectedTypeArguments, Error, Analyzer, "Type '{}' takes no type arguments") \
+  F(AnalyzerUninitializedValueUsed, Error, Analyzer, "Uninitialized value used as '{}'; release it with 'uninit_assume' once written") \
+  F(AnalyzerUnknownField, Error, Analyzer, "Unknown field '{}'") \
+  F(AnalyzerUnknownIntrinsic, Error, Analyzer, "Unknown intrinsic '{}'") \
+  F(AnalyzerUnknownMethod, Error, Analyzer, "No method '{}'") \
+  F(AnalyzerUnknownTupleField, Error, Analyzer, "Unknown tuple field '{}'") \
+  F(AnalyzerUnknownType, Error, Analyzer, "Unknown type '{}'") \
+  F(AnalyzerUnresolved, Error, Analyzer, "Unresolved {} '{}'") \
+  F(AnalyzerUnresolvedInStandardLibrary, Error, Analyzer, "Unresolved {} '{}'; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
+  F(AnalyzerUnresolvedValue, Error, Analyzer, "Unresolved value '{}::{}'") \
+  F(AnalyzerUnresolvedValueInStandardLibrary, Error, Analyzer, "Unresolved value '{}::{}'; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
+  F(AnalyzerUnsafeCall, Error, Analyzer, "Call to unsafe function '{}' requires an `unsafe {{ ... }}` block") \
+  F(AnalyzerUnsafeFunctionValue, Error, Analyzer, "Unsafe function '{}' cannot be used as a value yet") \
+  F(AnalyzerUnsafeMethodUnsupported, Error, Analyzer, "Unsafe methods are not implemented yet") \
+  F(AnalyzerUnsafeOperation, Error, Analyzer, "{} requires an `unsafe {{ ... }}` block") \
+  F(AnalyzerUnsizedTypeNeedsReference, Error, Analyzer, "Unsized type `[T]` must be behind a reference (`&[T]`)") \
+  F(AnalyzerUnsupportedLiteralSuffix, Error, Analyzer, "Unsupported literal suffix '{}'") \
+  F(AnalyzerUnusedValue, Warning, Analyzer, "Unused non-() value; discard it explicitly with `_ := ...`") \
+  F(AnalyzerValueArgumentExpected, Error, Analyzer, "Expected a value argument for parameter '{}'") \
+  F(AnalyzerValueArgumentNotInteger, Error, Analyzer, "Value argument must be a non-negative constant integer value") \
+  F(AnalyzerValueCannotBeType, Error, Analyzer, "A value argument cannot be used as a type") \
+  F(AnalyzerValueParameterAsType, Error, Analyzer, "Value parameter '{}' cannot be used as a type") \
+  F(AnalyzerValueParameterHasNoAddress, Error, Analyzer, "Value parameter '{}' has no address") \
+  F(AnalyzerValueParameterTypeNotInteger, Error, Analyzer, "Value parameter '{}' must have an integer type") \
+  F(AnalyzerVariadicNotExpanded, Error, Analyzer, "A variadic parameter may only appear on a compiler-expanded function") \
+  F(AnalyzerVariantCallArity, Error, Analyzer, "Variant expects {} argument{}, found {}") \
+  F(AnalyzerVariantFieldArity, Error, Analyzer, "Variant expects {} field{}, pattern has {}") \
+  F(AnalyzerVariantNotInMatchedType, Error, Analyzer, "Variant is not a member of the matched type") \
+  F(AnalyzerViewIsAlreadyReference, Error, Analyzer, "A view is already a reference; re-slice it without `&`") \
+  F(AnalyzerWriteArity, Error, Analyzer, "Intrinsic 'write' expects a format string and a buffer, found {} arguments") \
+  F(AnalyzerWriteInCompEvaluation, Error, Analyzer, "Intrinsic 'write' is not allowed in comp evaluation") \
+  F(AnalyzerWriteOutcomeNotInScope, Error, Analyzer, "Type 'WriteOutcome' is not in scope") \
   /* lower */ \
-  F(LowerDestructorNotRun, "Destructor for '{}' is not run: it is reached through a variant or an array, so declare 'fn drop(self: Self)' to end it") \
-  F(LowerInternalError, "Internal lowering error: {}") \
-  F(LowerBlockReferenceEscapes, "Reference to local '{}' escapes the block that declares it") \
-  F(LowerCompEngineMismatch, "Internal error: the comp engines disagree on '{}'") \
-  F(LowerCompOverflow, "Integer overflow in constant evaluation") \
-  F(LowerCompDivisionByZero, "Division by zero in constant evaluation") \
-  F(LowerCompOutOfBounds, "Index out of bounds in constant evaluation") \
-  F(LowerCompBudget, "Constant evaluation exhausted its budget") \
-  F(LowerFunctionBudgetExhausted, "The compiler's function budget cannot hold the specialized functions this package needs") \
-  F(LowerGuardMovesBinding, "A guard cannot bind '{}' by value: a false guard falls through to the next arm after the value is taken") \
-  F(LowerIrVerificationFailed, "Lowered IR failed verification") \
-  F(LowerMoveOutOfBorrow, "Cannot move a non-`Copy` value out of a reference") \
-  F(LowerMoveOutOfDestructor, "Cannot move a field out of '{}'; its type implements `drop`") \
-  F(LowerMoveOutOfElement, "Moving a non-`Copy` value out from under an array's element is not implemented yet") \
-  F(LowerNameTableExhausted, "The compiler's name table cannot hold the names this package interns") \
-  F(LowerUnreachableExpression, "Unreachable expression") \
-  F(LowerUnreachableStatement, "Unreachable statement") \
-  F(LowerUnsupportedConstruct, "Construct '{}' is not supported in this lowering slice") \
+  F(LowerNestingTooDeep, Error, Lowering, "Nesting is deeper than the limit of {}") \
+  F(LowerDestructorNotRun, Warning, Lowering, "Destructor for '{}' is not run: it is reached through a variant or an array, so declare 'fn drop(self: Self)' to end it") \
+  F(LowerInternalError, Error, Lowering, "Internal lowering error: {}") \
+  F(LowerBlockReferenceEscapes, Error, Lowering, "Reference to local '{}' escapes the block that declares it") \
+  F(LowerCompEngineMismatch, Error, Lowering, "Internal error: the comp engines disagree on '{}'") \
+  F(LowerCompOverflow, Error, Lowering, "Integer overflow in constant evaluation") \
+  F(LowerCompDivisionByZero, Error, Lowering, "Division by zero in constant evaluation") \
+  F(LowerCompOutOfBounds, Error, Lowering, "Index out of bounds in constant evaluation") \
+  F(LowerCompBudget, Error, Lowering, "Constant evaluation exhausted its budget") \
+  F(LowerFunctionBudgetExhausted, Error, Lowering, "The compiler's function budget cannot hold the specialized functions this package needs") \
+  F(LowerGuardMovesBinding, Error, Lowering, "A guard cannot bind '{}' by value: a false guard falls through to the next arm after the value is taken") \
+  F(LowerIrVerificationFailed, Error, Lowering, "Lowered IR failed verification") \
+  F(LowerMoveOutOfBorrow, Error, Lowering, "Cannot move a non-`Copy` value out of a reference") \
+  F(LowerMoveOutOfDestructor, Error, Lowering, "Cannot move a field out of '{}'; its type implements `drop`") \
+  F(LowerMoveOutOfElement, Error, Lowering, "Moving a non-`Copy` value out from under an array's element is not implemented yet") \
+  F(LowerNameTableExhausted, Error, Lowering, "The compiler's name table cannot hold the names this package interns") \
+  F(LowerUnreachableExpression, Warning, Lowering, "Unreachable expression") \
+  F(LowerUnreachableStatement, Warning, Lowering, "Unreachable statement") \
+  F(LowerUnsupportedConstruct, Error, Lowering, "Construct '{}' is not supported in this lowering slice") \
   /* borrow */ \
-  F(BorrowAssignWhileBorrowed, "Cannot assign to '{}' while borrowed") \
-  F(BorrowConflict, "Conflicting borrows of '{}'") \
-  F(BorrowMoveInvalidatesBorrow, "Move of '{}' invalidates an outstanding borrow") \
-  F(BorrowMoveOutOfBorrow, "Cannot move out of '{}'; it is borrowed") \
-  F(BorrowUnmovableMoved, "A value holding an anchor is never moved: '{}' lives where it was built (ADR-0085)") \
-  F(BorrowReturnsLocalReference, "Returns reference to local '{}'") \
-  F(BorrowUseAfterMove, "Use of moved '{}' in {}") \
+  F(BorrowAssignWhileBorrowed, Error, Borrow, "Cannot assign to '{}' while borrowed") \
+  F(BorrowConflict, Error, Borrow, "Conflicting borrows of '{}'") \
+  F(BorrowMoveInvalidatesBorrow, Error, Borrow, "Move of '{}' invalidates an outstanding borrow") \
+  F(BorrowMoveOutOfBorrow, Error, Borrow, "Cannot move out of '{}'; it is borrowed") \
+  F(BorrowUnmovableMoved, Error, Borrow, "A value holding an anchor is never moved: '{}' lives where it was built (ADR-0085)") \
+  F(BorrowReturnsLocalReference, Error, Borrow, "Returns reference to local '{}'") \
+  F(BorrowUseAfterMove, Error, Borrow, "Use of moved '{}' in {}") \
   /* codegen */ \
-  F(CodegenArgumentNotFormattable, "Argument is not formattable") \
-  F(CodegenInvalidModuleTree, "Internal error: invalid module tree: {}") \
-  F(CodegenWasmUnsupported, "Construct '{}' is not supported in the wasm backend") \
+  F(CodegenArgumentNotFormattable, Error, Analyzer, "Argument is not formattable") \
+  F(CodegenInvalidModuleTree, Error, Analyzer, "Internal error: invalid module tree: {}") \
+  F(CodegenWasmUnsupported, Error, CodegenNative, "Construct '{}' is not supported in the wasm backend") \
   /* pkg */ \
-  F(PkgDependencyBadSpecifier, "Manifest '{}': dependency '{}' is not of the form name, owner/name, or owner/suite/package") \
-  F(PkgDependencyBadVersion, "Manifest '{}': dependency '{}' needs a version of the form 1.2.3, 1.2.x, or 1.x") \
-  F(PkgDependencyCycleInReExports, "Dependency cycle in re-exports") \
-  F(PkgDependencyDoesNotParse, "Manifest '{}': dependency '{}' does not parse") \
-  F(PkgDependencyEmptyString, "Manifest '{}': dependency '{}' needs '{}' to be a non-empty string") \
-  F(PkgDependencyNeedsPath, "Manifest '{}': dependency '{}' needs {{ path = ... }}") \
-  F(PkgDependencyNotASpecifier, "Manifest '{}': dependency '{}' must be a specifier or `specifier = {{ ... }}`") \
-  F(PkgDependencyNotATable, "Manifest '{}': dependency '{}' must be a table") \
-  F(PkgDependencyPreMinor, "Manifest '{}': dependency '{}' requires a pre-1.0 version; a minor may break it") \
-  F(PkgDependencyRefWithoutRemote, "Manifest '{}': dependency '{}' names a ref without a git remote") \
-  F(PkgDependencyTooManyEntries, "Manifest '{}': dependency '{}' names more than one entry") \
-  F(PkgDependencyTooManyRefs, "Manifest '{}': dependency '{}' names more than one of branch, tag, rev") \
-  F(PkgDependencyTooManySources, "Manifest '{}': dependency '{}' names more than one source") \
-  F(PkgDependencyUnknownField, "Manifest '{}': dependency '{}' has an unknown field '{}'") \
-  F(PkgManifestInvalid, "Manifest '{}': {}") \
-  F(PkgProfileKeyNotTable, "Profile '{}': key '{}' is not a profile table") \
-  F(PkgProfileNotLoaded, "Profile '{}' is not a loaded file") \
-  F(PkgProfileOnPanicUnknown, "Profile '{}': on-panic must be 'abort' or 'backtrace'") \
-  F(PkgProfileOptimizeNotBool, "Profile '{}': optimize must be a bool") \
-  F(PkgProfileOverflowChecksNotBool, "Profile '{}': overflow-checks must be a bool") \
-  F(PkgProfileTomlSyntaxError, "Profile '{}': TOML syntax error: {}") \
-  F(PkgSpecImplementDuplicate, "Manifest '{}': duplicate [spec] implement entry '{}'") \
-  F(PkgSpecImplementNotStrings, "Manifest '{}': [spec] implement must be a list of strings") \
-  F(PkgSpecSuiteOnlyDuplicate, "Manifest '{}': duplicate [spec] suite-only entry '{}'") \
-  F(PkgSpecSuiteOnlyNotStrings, "Manifest '{}': [spec] suite-only must be a list of strings") \
-  F(PkgSpecUnknownKey, "Manifest '{}': unknown key in [spec]: '{}'") \
-  F(PkgTomlSyntaxError, "TOML syntax error: {}") \
-  F(PkgToolchainFreestandingNotBool, "Toolchain '{}': freestanding must be a bool") \
-  F(PkgToolchainLinkArgsNotStrings, "Toolchain '{}': link-args must be a list of strings") \
-  F(PkgToolchainLinkerNotAString, "Toolchain '{}': linker must be a string") \
-  F(PkgToolchainNotLoaded, "Toolchain '{}' is not a loaded file") \
-  F(PkgToolchainTomlSyntaxError, "Toolchain '{}': TOML syntax error: {}") \
+  F(PkgDependencyBadSpecifier, Error, Pkg, "Manifest '{}': dependency '{}' is not of the form name, owner/name, or owner/suite/package") \
+  F(PkgDependencyBadVersion, Error, Pkg, "Manifest '{}': dependency '{}' needs a version of the form 1.2.3, 1.2.x, or 1.x") \
+  F(PkgDependencyCycleInReExports, Error, Analyzer, "Dependency cycle in re-exports") \
+  F(PkgDependencyDoesNotParse, Error, Pkg, "Manifest '{}': dependency '{}' does not parse") \
+  F(PkgDependencyEmptyString, Error, Pkg, "Manifest '{}': dependency '{}' needs '{}' to be a non-empty string") \
+  F(PkgDependencyNeedsPath, Error, Pkg, "Manifest '{}': dependency '{}' needs {{ path = ... }}") \
+  F(PkgDependencyNotASpecifier, Error, Pkg, "Manifest '{}': dependency '{}' must be a specifier or `specifier = {{ ... }}`") \
+  F(PkgDependencyNotATable, Error, Pkg, "Manifest '{}': dependency '{}' must be a table") \
+  F(PkgDependencyPreMinor, Warning, Pkg, "Manifest '{}': dependency '{}' requires a pre-1.0 version; a minor may break it") \
+  F(PkgDependencyRefWithoutRemote, Error, Pkg, "Manifest '{}': dependency '{}' names a ref without a git remote") \
+  F(PkgDependencyTooManyEntries, Error, Pkg, "Manifest '{}': dependency '{}' names more than one entry") \
+  F(PkgDependencyTooManyRefs, Error, Pkg, "Manifest '{}': dependency '{}' names more than one of branch, tag, rev") \
+  F(PkgDependencyTooManySources, Error, Pkg, "Manifest '{}': dependency '{}' names more than one source") \
+  F(PkgDependencyUnknownField, Error, Pkg, "Manifest '{}': dependency '{}' has an unknown field '{}'") \
+  F(PkgManifestInvalid, Error, Pkg, "Manifest '{}': {}") \
+  F(PkgProfileKeyNotTable, Error, Pkg, "Profile '{}': key '{}' is not a profile table") \
+  F(PkgProfileNotLoaded, Error, Pipeline, "Profile '{}' is not a loaded file") \
+  F(PkgProfileOnPanicUnknown, Error, Pkg, "Profile '{}': on-panic must be 'abort' or 'backtrace'") \
+  F(PkgProfileOptimizeNotBool, Error, Pkg, "Profile '{}': optimize must be a bool") \
+  F(PkgProfileOverflowChecksNotBool, Error, Pkg, "Profile '{}': overflow-checks must be a bool") \
+  F(PkgProfileTomlSyntaxError, Error, Pkg, "Profile '{}': TOML syntax error: {}") \
+  F(PkgSpecImplementDuplicate, Error, Pkg, "Manifest '{}': duplicate [spec] implement entry '{}'") \
+  F(PkgSpecImplementNotStrings, Error, Pkg, "Manifest '{}': [spec] implement must be a list of strings") \
+  F(PkgSpecSuiteOnlyDuplicate, Error, Pkg, "Manifest '{}': duplicate [spec] suite-only entry '{}'") \
+  F(PkgSpecSuiteOnlyNotStrings, Error, Pkg, "Manifest '{}': [spec] suite-only must be a list of strings") \
+  F(PkgSpecUnknownKey, Error, Pkg, "Manifest '{}': unknown key in [spec]: '{}'") \
+  F(PkgTomlSyntaxError, Error, Pkg, "TOML syntax error: {}") \
+  F(PkgToolchainFreestandingNotBool, Error, Pkg, "Toolchain '{}': freestanding must be a bool") \
+  F(PkgToolchainLinkArgsNotStrings, Error, Pkg, "Toolchain '{}': link-args must be a list of strings") \
+  F(PkgToolchainLinkerNotAString, Error, Pkg, "Toolchain '{}': linker must be a string") \
+  F(PkgToolchainNotLoaded, Error, Pipeline, "Toolchain '{}' is not a loaded file") \
+  F(PkgToolchainTomlSyntaxError, Error, Pkg, "Toolchain '{}': TOML syntax error: {}") \
   /* pipeline */ \
-  F(PipelineBackendNoOptimizer, "The '{}' backend does not optimize; build with a profile that does not") \
-  F(PipelineBackendNotBuilt, "The '{}' backend is not part of this build of the compiler") \
-  F(PipelineBackendUnsupported, "The '{}' backend cannot write this output") \
-  F(PipelineBinArtifactNotDiscovered, "Bin artifact '{}' was not discovered") \
-  F(PipelineBinArtifactNotSelected, "Bin artifact '{}' is not in [modules]") \
-  F(PipelineCannotCreateDirectory, "Cannot create directory '{}'") \
-  F(PipelineCannotCreatePackage, "Cannot create package '{}'") \
-  F(PipelineCannotCreatePackageFiles, "Cannot create package files: '{}'") \
-  F(PipelineCannotCreateSuite, "Cannot create suite '{}'") \
-  F(PipelineCannotCreateSuiteFiles, "Cannot create suite files: '{}'") \
-  F(PipelineCannotDeriveOutput, "Cannot name the output for '{}'; pass -o") \
-  F(PipelineCannotDerivePackageName, "Cannot derive a package name from '{}'; use [A-Za-z0-9_-] only") \
-  F(PipelineCannotEmitModule, "Cannot emit module '{}'") \
-  F(PipelineCannotEmitObject, "Cannot emit object '{}'") \
-  F(PipelineCannotExecute, "Cannot execute '{}'") \
-  F(PipelineCannotInitPackage, "Cannot init package '{}'") \
-  F(PipelineCannotOptimize, "Cannot optimize the module") \
-  F(PipelineCannotRead, "Cannot read '{}'") \
-  F(PipelineCannotReadSource, "Cannot read source file '{}'") \
-  F(PipelineCannotReadStandardInput, "Cannot read standard input") \
-  F(PipelineCannotRunSystemCompiler, "Cannot run the system compiler") \
-  F(PipelineCannotUpdateSuiteManifest, "Cannot add member '{}' to '{}'; add it to [suite] packages by hand") \
-  F(PipelineCannotWrite, "Cannot write {} '{}'") \
-  F(PipelineDependencyBadName, "Dependency '{}' is named '{}', which is not one module path") \
-  F(PipelineDependencyClashesWithDependency, "Two dependencies are named '{}'; rename one of them") \
-  F(PipelineDependencyClashesWithPackage, "Dependency '{}' is named like the package that depends on it; rename one of them") \
-  F(PipelineDependencyClashesWithStdMember, "Dependency '{}' is named like the standard library package alcy/std/{}; rename one of them") \
-  F(PipelineDependencyCycle, "Dependency cycle through '{}'") \
-  F(PipelineDependencyIsAStdMember, "Dependency '{}' is a member of alcy/std; write \"alcy/std/{}\"") \
-  F(PipelineDependencyIsEmbeddedStd, "Dependency '{}' is part of the embedded standard library, which takes no source") \
-  F(PipelineDependencyMemberNameMismatch, "Dependency '{}' declares package '{}', but its suite lists it as '{}'") \
-  F(PipelineDependencyNamesNoSource, "Dependency '{}' names no source; give one of path, version, git") \
-  F(PipelineDependencyNeedsFetcher, "Dependency '{}' needs a fetcher the resolver does not have yet") \
-  F(PipelineDependencyNotAStdMember, "Dependency '{}' is not a member of alcy/std") \
-  F(PipelineDependencyNotASuiteMember, "Dependency '{}' is not a member of suite '{}/{}'") \
-  F(PipelineDependencyOverlaps, "Dependency '{}' overlaps '{}'; the default suite globs 'alcy/std/*', so name a package or a member, not both") \
-  F(PipelineDependencySuiteMismatch, "Dependency '{}' names suite '{}/{}', but '{}' holds suite '{}/{}'") \
-  F(PipelineFreestandingTarget, "A freestanding build is not implemented for target '{}' yet") \
-  F(PipelineInheritsWithoutSuite, "Manifest '{}' inherits from a suite, but no suite encloses it") \
-  F(PipelineInvalidOutputPath, "Invalid output path '{}'") \
-  F(PipelineInvalidPackageName, "Invalid package name '{}'; use [A-Za-z0-9_-] only") \
-  F(PipelineInvalidSourceDirectory, "Invalid source directory '{}'") \
-  F(PipelineInvalidSourcePath, "Invalid source path for file") \
-  F(PipelineInvalidSuiteName, "Invalid suite name '{}'; write <name> or <owner>/<name>") \
-  F(PipelineInvalidTarget, "Invalid target '{}'") \
-  F(PipelineLibArtifactNotDiscovered, "Lib artifact '{}' was not discovered") \
-  F(PipelineLibArtifactNotSelected, "Lib artifact '{}' is not in [modules]") \
-  F(PipelineLinkFailed, "Linking '{}' failed") \
-  F(PipelineManifestNoBinToRun, "Manifest '{}' declares no [[bin]] target to run") \
-  F(PipelineManifestNoTarget, "Manifest '{}' declares no [[bin]] or [lib] targets") \
-  F(PipelineManifestNotLoaded, "Manifest '{}' is not a loaded file") \
-  F(PipelineManifestTooManyBinArtifacts, "Manifest '{}' declares {} [[bin]] artifacts; only one is supported") \
-  F(PipelineModuleIncludeEscapesPackage, "Manifest [modules] include '{}' resolves outside the package") \
-  F(PipelineModuleIncludeHasNoFile, "Manifest [modules] include '{}' has no file") \
-  F(PipelineModuleIncludeNotAModulePath, "Manifest [modules] include '{}' is not a module path") \
-  F(PipelineModuleNotSelected, "Source file '{}' is not in [modules]") \
-  F(PipelineModuleSelectedTwice, "Module '{}' is selected by more than one file") \
-  F(PipelineModuleSharedByTwoFiles, "Module '{}' is shared by two files relative to the target's directory '{}'") \
-  F(PipelineMultipleTargetsWithOutput, "Cannot write multiple targets to '{}'; omit -o") \
-  F(PipelineNoEntryPoint, "Binary '{}' declares no free `main`") \
-  F(PipelineNoManifest, "No manifest found at '{}'; add alcy.toml") \
-  F(PipelineNoManifestInCurrentDirectory, "No manifest found at current directory; add alcy.toml") \
-  F(PipelineNoManifestWithFileHint, "No manifest found at '{}'; pass a file with --file or add alcy.toml") \
-  F(PipelineNoManifestWithFileHintInCurrentDirectory, "No manifest found at current directory; pass a file with --file or add alcy.toml") \
-  F(PipelineNoSourceFiles, "No source files found under '{}'") \
-  F(PipelineOptimizeFailed, "Optimized IR failed verification") \
-  F(PipelinePathExists, "Path '{}' already exists; refusing to overwrite") \
-  F(PipelineSpanArenaExhausted, "Parsing this input needs more than the {} bytes of arena the compiler reserves for syntax") \
-  F(PipelineSourceDirectoryInaccessible, "Source directory '{}' is not accessible") \
-  F(PipelineSourceNotRegular, "Source '{}' is not a regular file; a pipe reaches the compiler through `compile --stdin`") \
-  F(PipelineStdIsASuite, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
-  F(PipelineStdPackageRequiresSuite, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
-  F(PipelineSuiteEmpty, "Suite '{}' lists no members") \
-  F(PipelineSuiteIsNotAProgram, "Suite '{}' names several programs; run one member") \
-  F(PipelineSuiteAlreadyHasMember, "Suite '{}' already lists member '{}'") \
-  F(PipelineSuiteHasMemberNamed, "Suite '{}' already has a member named '{}'") \
-  F(PipelineTargetOutputsCollide, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
-  F(PipelineNoBackend, "This build of the compiler has no code generation backend") \
-  F(PipelineUnknownProfile, "Unknown profile '{}'; the built-in profiles are debug and release, and .alcy/profile.toml defines the rest") \
-  F(PipelineUnknownTarget, "Cannot build for target '{}'; the compiler was not built with that backend") \
-  F(PipelineUnknownSourceFile, "Unknown file id for a source input") \
-  F(PipelineWasmExecutableNeedsModule, "A wasm executable is one final module; the '{}' backend writes an object instead. Use --emit=object, or --backend=direct-wasm") \
+  F(PipelineBackendNoOptimizer, Error, Pipeline, "The '{}' backend does not optimize; build with a profile that does not") \
+  F(PipelineBackendNotBuilt, Error, Pipeline, "The '{}' backend is not part of this build of the compiler") \
+  F(PipelineBackendUnsupported, Error, Pipeline, "The '{}' backend cannot write this output") \
+  F(PipelineBinArtifactNotDiscovered, Error, Pipeline, "Bin artifact '{}' was not discovered") \
+  F(PipelineBinArtifactNotSelected, Error, Pipeline, "Bin artifact '{}' is not in [modules]") \
+  F(PipelineCannotCreateDirectory, Error, Pipeline, "Cannot create directory '{}'") \
+  F(PipelineCannotCreatePackage, Error, Pipeline, "Cannot create package '{}'") \
+  F(PipelineCannotCreatePackageFiles, Error, Pipeline, "Cannot create package files: '{}'") \
+  F(PipelineCannotCreateSuite, Error, Pipeline, "Cannot create suite '{}'") \
+  F(PipelineCannotCreateSuiteFiles, Error, Pipeline, "Cannot create suite files: '{}'") \
+  F(PipelineCannotDeriveOutput, Error, Pipeline, "Cannot name the output for '{}'; pass -o") \
+  F(PipelineCannotDerivePackageName, Error, Pipeline, "Cannot derive a package name from '{}'; use [A-Za-z0-9_-] only") \
+  F(PipelineCannotEmitModule, Error, Pipeline, "Cannot emit module '{}'") \
+  F(PipelineCannotEmitObject, Error, Pipeline, "Cannot emit object '{}'") \
+  F(PipelineCannotExecute, Error, Pipeline, "Cannot execute '{}'") \
+  F(PipelineCannotInitPackage, Error, Pipeline, "Cannot init package '{}'") \
+  F(PipelineCannotOptimize, Error, Pipeline, "Cannot optimize the module") \
+  F(PipelineCannotRead, Error, Pipeline, "Cannot read '{}'") \
+  F(PipelineCannotReadSource, Error, Pipeline, "Cannot read source file '{}'") \
+  F(PipelineCannotReadStandardInput, Error, Pipeline, "Cannot read standard input") \
+  F(PipelineCannotRunSystemCompiler, Error, Pipeline, "Cannot run the system compiler") \
+  F(PipelineCannotUpdateSuiteManifest, Error, Pipeline, "Cannot add member '{}' to '{}'; add it to [suite] packages by hand") \
+  F(PipelineCannotWrite, Error, Pipeline, "Cannot write {} '{}'") \
+  F(PipelineDependencyBadName, Error, Pipeline, "Dependency '{}' is named '{}', which is not one module path") \
+  F(PipelineDependencyClashesWithDependency, Error, Pipeline, "Two dependencies are named '{}'; rename one of them") \
+  F(PipelineDependencyClashesWithPackage, Error, Pipeline, "Dependency '{}' is named like the package that depends on it; rename one of them") \
+  F(PipelineDependencyClashesWithStdMember, Error, Pipeline, "Dependency '{}' is named like the standard library package alcy/std/{}; rename one of them") \
+  F(PipelineDependencyCycle, Error, Pipeline, "Dependency cycle through '{}'") \
+  F(PipelineDependencyIsAStdMember, Error, Pipeline, "Dependency '{}' is a member of alcy/std; write \"alcy/std/{}\"") \
+  F(PipelineDependencyIsEmbeddedStd, Error, Pipeline, "Dependency '{}' is part of the embedded standard library, which takes no source") \
+  F(PipelineDependencyMemberNameMismatch, Error, Pipeline, "Dependency '{}' declares package '{}', but its suite lists it as '{}'") \
+  F(PipelineDependencyNamesNoSource, Error, Pipeline, "Dependency '{}' names no source; give one of path, version, git") \
+  F(PipelineDependencyNeedsFetcher, Error, Pipeline, "Dependency '{}' needs a fetcher the resolver does not have yet") \
+  F(PipelineDependencyNotAStdMember, Error, Pipeline, "Dependency '{}' is not a member of alcy/std") \
+  F(PipelineDependencyNotASuiteMember, Error, Pipeline, "Dependency '{}' is not a member of suite '{}/{}'") \
+  F(PipelineDependencyOverlaps, Error, Pipeline, "Dependency '{}' overlaps '{}'; the default suite globs 'alcy/std/*', so name a package or a member, not both") \
+  F(PipelineDependencySuiteMismatch, Error, Pipeline, "Dependency '{}' names suite '{}/{}', but '{}' holds suite '{}/{}'") \
+  F(PipelineFreestandingTarget, Error, Pipeline, "A freestanding build is not implemented for target '{}' yet") \
+  F(PipelineInheritsWithoutSuite, Error, Pipeline, "Manifest '{}' inherits from a suite, but no suite encloses it") \
+  F(PipelineInvalidOutputPath, Error, Pipeline, "Invalid output path '{}'") \
+  F(PipelineInvalidPackageName, Error, Pipeline, "Invalid package name '{}'; use [A-Za-z0-9_-] only") \
+  F(PipelineInvalidSourceDirectory, Error, Pipeline, "Invalid source directory '{}'") \
+  F(PipelineInvalidSourcePath, Error, Pipeline, "Invalid source path for file") \
+  F(PipelineInvalidSuiteName, Error, Pipeline, "Invalid suite name '{}'; write <name> or <owner>/<name>") \
+  F(PipelineInvalidTarget, Error, Pipeline, "Invalid target '{}'") \
+  F(PipelineLibArtifactNotDiscovered, Error, Pipeline, "Lib artifact '{}' was not discovered") \
+  F(PipelineLibArtifactNotSelected, Error, Pipeline, "Lib artifact '{}' is not in [modules]") \
+  F(PipelineLinkFailed, Error, Pipeline, "Linking '{}' failed") \
+  F(PipelineManifestNoBinToRun, Error, Pipeline, "Manifest '{}' declares no [[bin]] target to run") \
+  F(PipelineManifestNoTarget, Error, Pipeline, "Manifest '{}' declares no [[bin]] or [lib] targets") \
+  F(PipelineManifestNotLoaded, Error, Pipeline, "Manifest '{}' is not a loaded file") \
+  F(PipelineManifestTooManyBinArtifacts, Error, Pipeline, "Manifest '{}' declares {} [[bin]] artifacts; only one is supported") \
+  F(PipelineModuleIncludeEscapesPackage, Error, Pipeline, "Manifest [modules] include '{}' resolves outside the package") \
+  F(PipelineModuleIncludeHasNoFile, Error, Pipeline, "Manifest [modules] include '{}' has no file") \
+  F(PipelineModuleIncludeNotAModulePath, Error, Pipeline, "Manifest [modules] include '{}' is not a module path") \
+  F(PipelineModuleNotSelected, Warning, Pipeline, "Source file '{}' is not in [modules]") \
+  F(PipelineModuleSelectedTwice, Error, Pipeline, "Module '{}' is selected by more than one file") \
+  F(PipelineModuleSharedByTwoFiles, Error, Pipeline, "Module '{}' is shared by two files relative to the target's directory '{}'") \
+  F(PipelineMultipleTargetsWithOutput, Error, Pipeline, "Cannot write multiple targets to '{}'; omit -o") \
+  F(PipelineNoEntryPoint, Error, Pipeline, "Binary '{}' declares no free `main`") \
+  F(PipelineNoManifest, Error, Pipeline, "No manifest found at '{}'; add alcy.toml") \
+  F(PipelineNoManifestInCurrentDirectory, Error, Pipeline, "No manifest found at current directory; add alcy.toml") \
+  F(PipelineNoManifestWithFileHint, Error, Pipeline, "No manifest found at '{}'; pass a file with --file or add alcy.toml") \
+  F(PipelineNoManifestWithFileHintInCurrentDirectory, Error, Pipeline, "No manifest found at current directory; pass a file with --file or add alcy.toml") \
+  F(PipelineNoSourceFiles, Error, Pipeline, "No source files found under '{}'") \
+  F(PipelineOptimizeFailed, Error, Pipeline, "Optimized IR failed verification") \
+  F(PipelinePathExists, Error, Pipeline, "Path '{}' already exists; refusing to overwrite") \
+  F(PipelineSpanArenaExhausted, Error, Pipeline, "Parsing this input needs more than the {} bytes of arena the compiler reserves for syntax") \
+  F(PipelineSourceDirectoryInaccessible, Error, Pipeline, "Source directory '{}' is not accessible") \
+  F(PipelineSourceNotRegular, Error, Pipeline, "Source '{}' is not a regular file; a pipe reaches the compiler through `compile --stdin`") \
+  F(PipelineStdIsASuite, Error, Pipeline, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
+  F(PipelineStdPackageRequiresSuite, Error, Pipeline, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
+  F(PipelineSuiteEmpty, Error, Pipeline, "Suite '{}' lists no members") \
+  F(PipelineSuiteIsNotAProgram, Error, Pipeline, "Suite '{}' names several programs; run one member") \
+  F(PipelineSuiteAlreadyHasMember, Error, Pipeline, "Suite '{}' already lists member '{}'") \
+  F(PipelineSuiteHasMemberNamed, Error, Pipeline, "Suite '{}' already has a member named '{}'") \
+  F(PipelineTargetOutputsCollide, Error, Pipeline, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
+  F(PipelineNoBackend, Error, Pipeline, "This build of the compiler has no code generation backend") \
+  F(PipelineUnknownProfile, Error, Pipeline, "Unknown profile '{}'; the built-in profiles are debug and release, and .alcy/profile.toml defines the rest") \
+  F(PipelineUnknownTarget, Error, Pipeline, "Cannot build for target '{}'; the compiler was not built with that backend") \
+  F(PipelineUnknownSourceFile, Error, Pipeline, "Unknown file id for a source input") \
+  F(PipelineWasmExecutableNeedsModule, Error, Pipeline, "A wasm executable is one final module; the '{}' backend writes an object instead. Use --emit=object, or --backend=direct-wasm") \
   /* cli */ \
-  F(CliAbout, "alcy language compiler") \
-  F(CliBackendHelp, "Which code generation backend writes the machine code: llvm (the default where it was built in), or direct-wasm for alcy's own wasm emitter.") \
-  F(CliBuildAbout, "Build a package directory") \
-  F(CliBuildOutputHelp, "Where the output goes. Empty picks the package's out/ directory.") \
-  F(CliBuildTakesDirectory, "The `build` command takes a package directory; use `compile` for a file") \
-  F(CliCacheHit, "cache hit") \
-  F(CliCacheMiss, "cache miss") \
-  F(CliBytePlural, "bytes") \
-  F(CliByteSingular, "byte") \
-  F(CliCheckAbout, "Check a package without emitting code") \
-  F(CliCheckFileHelp, "Check one source file instead of a package directory.") \
-  F(CliCheckFileOrInput, "The `check` command takes a directory or `--file`, not both") \
-  F(CliColorHelp, "Color mode for logging and diagnostics") \
-  F(CliCompileAbout, "Compile a single source file") \
-  F(CliCompileLinkArgsHelp, "Argument for the link driver, after the objects. Repeatable, one argument each.") \
-  F(CliCompileLinkerHelp, "System linker driver for executable builds.") \
-  F(CliCompileNeedsInput, "The `compile` command needs a file input or `--stdin`") \
-  F(CliCompileOutputHelp, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
-  F(CliDepsHelp, "A dependency on top of the default suite (`alcy/std/*`), as a package specifier or `specifier = {{ ... }}`. The default already globs every member; repeatable.") \
-  F(CliDepsOnlyForCompile, "The `--no-std` and `--deps` flags only mean anything for `compile`") \
-  F(CliDidYouMean, "{} (did you mean '{}'?)") \
-  F(CliEmitHelp, "What to write: executable (default), object, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
-  F(CliFilePlural, "files") \
-  F(CliFileSingular, "file") \
-  F(CliFmtAbout, "Format source files") \
-  F(CliFmtCheckHelp, "Report the files whose layout would change, without writing them.") \
-  F(CliFmtNotFormatted, "'{}' needs formatting") \
-  F(CliFmtReadFailed, "Cannot read '{}'") \
-  F(CliFmtWriteFailed, "Cannot write '{}'") \
-  F(CliFunctionPlural, "functions") \
-  F(CliFunctionSingular, "function") \
-  F(CliInitAbout, "Create a package in an existing directory") \
-  F(CliInvalidConfiguration, "Invalid configuration") \
-  F(CliJsonHelp, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, check, and lint.") \
-  F(CliJobsHelp, "How many threads read the source at once. Reading files is the only part of a run spread over them; everything after it is one thread. One by default, because a threaded read leaves the passes that read what it built to find nodes in an order that costs them more than the read saves.") \
-  F(CliJsonOnlyForResultVerbs, "`--json` only means anything for `build`, `compile`, `check`, and `lint`") \
-  F(CliLangHelp, "Language for every message this run prints. Taken from this flag alone: the locale the shell exports is not consulted, so the same command line reports the same text on every machine.") \
-  F(CliLinkArgsOverrideHelp, "Argument for the link driver, after the objects. Repeatable, one argument each; overrides .alcy/toolchain.toml.") \
-  F(CliLinkerOverrideHelp, "System linker driver for executable builds. Overrides .alcy/toolchain.toml.") \
-  F(CliMemoryPeak, "{} peak") \
-  F(CliModulePlural, "modules") \
-  F(CliModuleSingular, "module") \
-  F(CliNewAbout, "Create a new package") \
-  F(CliNoStdHelp, "Start with no standard library instead of the default suite. Add back with --deps.") \
-  F(CliNoCacheHelp, "Skip the build cache for this invocation: no lookup and no store.") \
-  F(CliNoSubcommand, "No subcommand given") \
-  F(CliOnPanicHelp, "What a panic does before it aborts: abort (the default) writes the message, and backtrace also names the frames it can walk. Overrides the selected profile's on-panic.") \
-  F(CliOptimizeHelp, "Whether the middle end and the release passes run: on or off. Overrides the selected profile's optimize.") \
-  F(CliOverflowChecksHelp, "Whether the source arithmetic aborts on overflow: on or off. Overrides the selected profile's overflow-checks.") \
-  F(CliPackageAddedToSuite, " (added to suite {})") \
-  F(CliPackageCreatedAt, "'{}' in {}") \
-  F(CliProfileHelp, "Build profile to use: debug (the default), release, or one that .alcy/profile.toml defines.") \
-  F(CliProgramArgsOnlyForRun, "Program arguments are only accepted by `run`") \
-  F(CliReleaseHelp, "Build with optimizations. The same as --profile release.") \
-  F(CliReleaseWithProfile, "`--release` is the same as `--profile release`; give one or the other") \
-  F(CliRunAbout, "Build and run a package directory") \
-  F(CliRunTakesDirectory, "The `run` command takes a package directory; use `compile` for a file") \
-  F(CliStdinHelp, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
-  F(CliStdinNeedsOutput, "Compiling from standard input needs `-o` to name the output") \
-  F(CliStdinTakesNoInput, "The `--stdin` flag takes no input") \
-  F(CliSuiteHelp, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
-  F(CliTargetHelp, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
-  F(CliTimeTraceHelp, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
-  F(CliUnknownSubcommand, "Unknown subcommand '{}'; see '{} --help'") \
-  F(CliVcsHelp, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \
-  F(CliVerbBuilt, "Built") \
-  F(CliVerbChecked, "Checked") \
-  F(CliVerbCompiled, "Compiled") \
-  F(CliVerbCreatedPackage, "Created package") \
-  F(CliVerbCreatedSuite, "Created suite") \
-  F(CliVerbFailed, "Failed") \
-  F(CliVerbFormatted, "Formatted") \
-  F(CliVerbRan, "Ran") \
+  F(CliAbout, Note, Pipeline, "alcy language compiler") \
+  F(CliBackendHelp, Note, Pipeline, "Which code generation backend writes the machine code: llvm (the default where it was built in), or direct-wasm for alcy's own wasm emitter.") \
+  F(CliBuildAbout, Note, Pipeline, "Build a package directory") \
+  F(CliBuildOutputHelp, Note, Pipeline, "Where the output goes. Empty picks the package's out/ directory.") \
+  F(CliBuildTakesDirectory, Note, Pipeline, "The `build` command takes a package directory; use `compile` for a file") \
+  F(CliCacheHit, Note, Pipeline, "cache hit") \
+  F(CliCacheMiss, Note, Pipeline, "cache miss") \
+  F(CliBytePlural, Note, Pipeline, "bytes") \
+  F(CliByteSingular, Note, Pipeline, "byte") \
+  F(CliCheckAbout, Note, Pipeline, "Check a package without emitting code") \
+  F(CliCheckFileHelp, Note, Pipeline, "Check one source file instead of a package directory.") \
+  F(CliCheckFileOrInput, Note, Pipeline, "The `check` command takes a directory or `--file`, not both") \
+  F(CliColorHelp, Note, Pipeline, "Color mode for logging and diagnostics") \
+  F(CliCompileAbout, Note, Pipeline, "Compile a single source file") \
+  F(CliCompileLinkArgsHelp, Note, Pipeline, "Argument for the link driver, after the objects. Repeatable, one argument each.") \
+  F(CliCompileLinkerHelp, Note, Pipeline, "System linker driver for executable builds.") \
+  F(CliCompileNeedsInput, Note, Pipeline, "The `compile` command needs a file input or `--stdin`") \
+  F(CliCompileOutputHelp, Note, Pipeline, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
+  F(CliDepsHelp, Note, Pipeline, "A dependency on top of the default suite (`alcy/std/*`), as a package specifier or `specifier = {{ ... }}`. The default already globs every member; repeatable.") \
+  F(CliDepsOnlyForCompile, Note, Pipeline, "The `--no-std` and `--deps` flags only mean anything for `compile`") \
+  F(CliDidYouMean, Note, Pipeline, "{} (did you mean '{}'?)") \
+  F(CliEmitHelp, Note, Pipeline, "What to write: executable (default), object, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
+  F(CliFilePlural, Note, Pipeline, "files") \
+  F(CliFileSingular, Note, Pipeline, "file") \
+  F(CliFmtAbout, Note, Pipeline, "Format source files") \
+  F(CliFmtCheckHelp, Note, Pipeline, "Report the files whose layout would change, without writing them.") \
+  F(CliFmtNotFormatted, Note, Pipeline, "'{}' needs formatting") \
+  F(CliFmtReadFailed, Note, Pipeline, "Cannot read '{}'") \
+  F(CliFmtWriteFailed, Note, Pipeline, "Cannot write '{}'") \
+  F(CliFunctionPlural, Note, Pipeline, "functions") \
+  F(CliFunctionSingular, Note, Pipeline, "function") \
+  F(CliInitAbout, Note, Pipeline, "Create a package in an existing directory") \
+  F(CliInvalidConfiguration, Note, Pipeline, "Invalid configuration") \
+  F(CliJsonHelp, Note, Pipeline, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, check, and lint.") \
+  F(CliJobsHelp, Note, Pipeline, "How many threads read the source at once. Reading files is the only part of a run spread over them; everything after it is one thread. One by default, because a threaded read leaves the passes that read what it built to find nodes in an order that costs them more than the read saves.") \
+  F(CliJsonOnlyForResultVerbs, Note, Pipeline, "`--json` only means anything for `build`, `compile`, `check`, and `lint`") \
+  F(CliLangHelp, Note, Pipeline, "Language for every message this run prints. Taken from this flag alone: the locale the shell exports is not consulted, so the same command line reports the same text on every machine.") \
+  F(CliLinkArgsOverrideHelp, Note, Pipeline, "Argument for the link driver, after the objects. Repeatable, one argument each; overrides .alcy/toolchain.toml.") \
+  F(CliLinkerOverrideHelp, Note, Pipeline, "System linker driver for executable builds. Overrides .alcy/toolchain.toml.") \
+  F(CliMemoryPeak, Note, Pipeline, "{} peak") \
+  F(CliModulePlural, Note, Pipeline, "modules") \
+  F(CliModuleSingular, Note, Pipeline, "module") \
+  F(CliNewAbout, Note, Pipeline, "Create a new package") \
+  F(CliNoStdHelp, Note, Pipeline, "Start with no standard library instead of the default suite. Add back with --deps.") \
+  F(CliNoCacheHelp, Note, Pipeline, "Skip the build cache for this invocation: no lookup and no store.") \
+  F(CliNoSubcommand, Note, Pipeline, "No subcommand given") \
+  F(CliOnPanicHelp, Note, Pipeline, "What a panic does before it aborts: abort (the default) writes the message, and backtrace also names the frames it can walk. Overrides the selected profile's on-panic.") \
+  F(CliOptimizeHelp, Note, Pipeline, "Whether the middle end and the release passes run: on or off. Overrides the selected profile's optimize.") \
+  F(CliOverflowChecksHelp, Note, Pipeline, "Whether the source arithmetic aborts on overflow: on or off. Overrides the selected profile's overflow-checks.") \
+  F(CliPackageAddedToSuite, Note, Pipeline, " (added to suite {})") \
+  F(CliPackageCreatedAt, Note, Pipeline, "'{}' in {}") \
+  F(CliProfileHelp, Note, Pipeline, "Build profile to use: debug (the default), release, or one that .alcy/profile.toml defines.") \
+  F(CliProgramArgsOnlyForRun, Note, Pipeline, "Program arguments are only accepted by `run`") \
+  F(CliReleaseHelp, Note, Pipeline, "Build with optimizations. The same as --profile release.") \
+  F(CliReleaseWithProfile, Note, Pipeline, "`--release` is the same as `--profile release`; give one or the other") \
+  F(CliRunAbout, Note, Pipeline, "Build and run a package directory") \
+  F(CliRunTakesDirectory, Note, Pipeline, "The `run` command takes a package directory; use `compile` for a file") \
+  F(CliStdinHelp, Note, Pipeline, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
+  F(CliStdinNeedsOutput, Note, Pipeline, "Compiling from standard input needs `-o` to name the output") \
+  F(CliStdinTakesNoInput, Note, Pipeline, "The `--stdin` flag takes no input") \
+  F(CliSuiteHelp, Note, Pipeline, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
+  F(CliTargetHelp, Note, Pipeline, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
+  F(CliTimeTraceHelp, Note, Pipeline, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
+  F(CliUnknownSubcommand, Note, Pipeline, "Unknown subcommand '{}'; see '{} --help'") \
+  F(CliVcsHelp, Note, Pipeline, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \
+  F(CliVerbBuilt, Note, Pipeline, "Built") \
+  F(CliVerbChecked, Note, Pipeline, "Checked") \
+  F(CliVerbCompiled, Note, Pipeline, "Compiled") \
+  F(CliVerbCreatedPackage, Note, Pipeline, "Created package") \
+  F(CliVerbCreatedSuite, Note, Pipeline, "Created suite") \
+  F(CliVerbFailed, Note, Pipeline, "Failed") \
+  F(CliVerbFormatted, Note, Pipeline, "Formatted") \
+  F(CliVerbRan, Note, Pipeline, "Ran") \
   /* linter */ \
-  F(CliLintAbout, "Check a package for lint findings") \
-  F(CliLintFileHelp, "Lint a single source file instead of a package directory.") \
-  F(CliLintFindingPlural, "findings") \
-  F(CliLintFindingSingular, "finding") \
-  F(CliVerbLinted, "Linted") \
-  F(LintConfigLevelNotString, "the level of lint rule '{}' in {} must be a string") \
-  F(LintConfigOptionNotInteger, "the max-args option of lint rule '{}' in {} must be an integer") \
-  F(LintConfigRuleNotTable, "lint rule '{}' in {} must be a level string or a table") \
-  F(LintConfigSyntaxError, "cannot parse {}: {}") \
-  F(LintConfigUnknownLevel, "unknown lint level '{}' in {}") \
-  F(LintConfigUnknownRule, "unknown lint rule '{}' in {}") \
-  F(LintDoubleNegation, "double negation is a no-op") \
-  F(LintEmptyLoop, "this loop has an empty body") \
-  F(LintMissingDocs, "public item {} is missing a documentation comment") \
-  F(LintNestedIf, "nested if can be collapsed into a single condition") \
-  F(LintSelfComparison, "comparison of a value with itself") \
-  F(LintShadow, "binding shadows an earlier binding: {}") \
-  F(LintTooManyArguments, "function {} takes {} parameters, more than the {} allowed") \
-  F(LintUnreachableCode, "unreachable statement") \
-  F(LintUnusedMut, "variable does not need to be mutable: {}") \
-  F(LintUnusedParameter, "unused parameter: {}") \
-  F(LintUnusedVariable, "unused variable: {}") \
-  F(LintUnusedVariableHelp, "if this is intentional, prefix the name with an underscore") \
-  F(LintWhileTrue, "while true is a loop that never ends") \
-  F(LintWhileTrueHelp, "use a loop expression instead") \
+  F(CliLintAbout, Note, Pipeline, "Check a package for lint findings") \
+  F(CliLintFileHelp, Note, Pipeline, "Lint a single source file instead of a package directory.") \
+  F(CliLintFindingPlural, Note, Pipeline, "findings") \
+  F(CliLintFindingSingular, Note, Pipeline, "finding") \
+  F(CliVerbLinted, Note, Pipeline, "Linted") \
+  F(LintConfigLevelNotString, Error, Lint, "the level of lint rule '{}' in {} must be a string") \
+  F(LintConfigOptionNotInteger, Error, Lint, "the max-args option of lint rule '{}' in {} must be an integer") \
+  F(LintConfigRuleNotTable, Error, Lint, "lint rule '{}' in {} must be a level string or a table") \
+  F(LintConfigSyntaxError, Error, Lint, "cannot parse {}: {}") \
+  F(LintConfigUnknownLevel, Error, Lint, "unknown lint level '{}' in {}") \
+  F(LintConfigUnknownRule, Error, Lint, "unknown lint rule '{}' in {}") \
+  F(LintDoubleNegation, Warning, Lint, "double negation is a no-op") \
+  F(LintEmptyLoop, Warning, Lint, "this loop has an empty body") \
+  F(LintMissingDocs, Warning, Lint, "public item {} is missing a documentation comment") \
+  F(LintNestedIf, Warning, Lint, "nested if can be collapsed into a single condition") \
+  F(LintSelfComparison, Warning, Lint, "comparison of a value with itself") \
+  F(LintShadow, Warning, Lint, "binding shadows an earlier binding: {}") \
+  F(LintTooManyArguments, Warning, Lint, "function {} takes {} parameters, more than the {} allowed") \
+  F(LintUnreachableCode, Warning, Lint, "unreachable statement") \
+  F(LintUnusedMut, Warning, Lint, "variable does not need to be mutable: {}") \
+  F(LintUnusedParameter, Warning, Lint, "unused parameter: {}") \
+  F(LintUnusedVariable, Warning, Lint, "unused variable: {}") \
+  F(LintUnusedVariableHelp, Warning, Lint, "if this is intentional, prefix the name with an underscore") \
+  F(LintWhileTrue, Warning, Lint, "while true is a loop that never ends") \
+  F(LintWhileTrueHelp, Warning, Lint, "use a loop expression instead") \
   /* diagnostic renderer */ \
-  F(RenderDiagnosticsDroppedPlural, "{} diagnostics were dropped: the compiler ran out of memory for them") \
-  F(RenderDiagnosticsDroppedSingular, "{} diagnostic was dropped: the compiler ran out of memory for it") \
-  F(RenderSeverityError, "error") \
-  F(RenderSeverityNote, "note") \
-  F(RenderSeverityWarning, "warning") \
-  F(RenderUnknownFile, "[unknown file]")
-
-#endif  // ALCY_I18N_MESSAGES_DEF_
+  F(RenderDiagnosticsDroppedPlural, Note, Pipeline, "{} diagnostics were dropped: the compiler ran out of memory for them") \
+  F(RenderDiagnosticsDroppedSingular, Note, Pipeline, "{} diagnostic was dropped: the compiler ran out of memory for it") \
+  F(RenderSeverityError, Note, Pipeline, "error") \
+  F(RenderSeverityNote, Note, Pipeline, "note") \
+  F(RenderSeverityWarning, Note, Pipeline, "warning") \
+  F(RenderUnknownFile, Note, Pipeline, "[unknown file]")

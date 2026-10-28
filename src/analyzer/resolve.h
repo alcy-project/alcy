@@ -10,9 +10,7 @@
 
 #include "ast/ast.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
 #include "diag/span.h"
-#include "diag/stage.h"
 #include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -307,7 +305,6 @@ inline std::string_view std_hint_package(std::span<const StdHint> hints,
 // package exactly what to add; anything else reads the plain message.
 template <diag::DiagnosticId Id>
 inline void emit_unresolved(diag::DiagBag& bag,
-                            diag::Stage stage,
                             Id id,
                             diag::Span span,
                             std::span<const StdHint> hints,
@@ -316,12 +313,12 @@ inline void emit_unresolved(diag::DiagBag& bag,
   const std::string_view package = std_hint_package(hints, name);
   if (!package.empty()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerUnresolvedInStandardLibrary>(
-        diag::Severity::Error, stage, id, span, kind, name, name, package);
+        id, span, kind, name, name, package);
     (void)index;
     return;
   }
-  const u32 index = bag.emit<i18n::Key::AnalyzerUnresolved>(
-      diag::Severity::Error, stage, id, span, kind, name);
+  const u32 index =
+      bag.emit<i18n::Key::AnalyzerUnresolved>(id, span, kind, name);
   (void)index;
 }
 

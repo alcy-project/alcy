@@ -10,8 +10,6 @@
 
 #include "config/build_config.h"
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
@@ -47,15 +45,14 @@ base::Result<void, diag::Reported> ensure_directories(PipelineContext& ctx,
     }
     if (!io::create_directory(std::string(prefix))) {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateDirectory>(
-          diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError,
-          prefix);
+          DiagCode::IoError, prefix);
       (void)index;
       return base::make_err(diag::Reported{});
     }
   }
   if (!io::create_directory(std::string(path))) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotCreateDirectory>(
-        diag::Severity::Error, diag::Stage::Pipeline, DiagCode::IoError, path);
+        DiagCode::IoError, path);
     (void)index;
     return base::make_err(diag::Reported{});
   }

@@ -8,8 +8,6 @@
 #include <string_view>
 
 #include "diag/bag.h"
-#include "diag/diagnostic.h"
-#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
@@ -61,8 +59,7 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
     // names the file rather than pointing into it.
     const toml::parse_error& error = result.error();
     const u32 index = bag.emit<i18n::Key::LintConfigSyntaxError>(
-        diag::Severity::Error, diag::Stage::Lint, LintCode::ConfigSyntaxError,
-        filename, error.description());
+        LintCode::ConfigSyntaxError, filename, error.description());
     (void)index;
     return base::make_err(diag::Reported{});
   }
@@ -89,7 +86,6 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
       LintLevel level = LintLevel::Warn;
       if (!read_level(node, level)) {
         const u32 index = bag.emit<i18n::Key::LintConfigUnknownLevel>(
-            diag::Severity::Error, diag::Stage::Lint,
             LintCode::ConfigSemanticError,
             node.value<std::string_view>().value_or(""), filename);
         (void)index;
@@ -106,7 +102,6 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
     if (name == "rules") {
       if (!node.is_table()) {
         const u32 index = bag.emit<i18n::Key::LintConfigRuleNotTable>(
-            diag::Severity::Error, diag::Stage::Lint,
             LintCode::ConfigSemanticError, name, filename);
         (void)index;
         return base::make_err(diag::Reported{});
@@ -124,7 +119,6 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
     const u32 index = rule_index(key.str());
     if (index == NO_RULE) {
       const u32 emitted = bag.emit<i18n::Key::LintConfigUnknownRule>(
-          diag::Severity::Error, diag::Stage::Lint,
           LintCode::ConfigSemanticError, key.str(), filename);
       (void)emitted;
       return base::make_err(diag::Reported{});
@@ -133,7 +127,6 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
       LintLevel level = settings[index].level;
       if (!read_level(node, level)) {
         const u32 emitted = bag.emit<i18n::Key::LintConfigUnknownLevel>(
-            diag::Severity::Error, diag::Stage::Lint,
             LintCode::ConfigSemanticError,
             node.value<std::string_view>().value_or(""), filename);
         (void)emitted;
@@ -144,7 +137,6 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
     }
     if (!node.is_table()) {
       const u32 emitted = bag.emit<i18n::Key::LintConfigRuleNotTable>(
-          diag::Severity::Error, diag::Stage::Lint,
           LintCode::ConfigSemanticError, key.str(), filename);
       (void)emitted;
       return base::make_err(diag::Reported{});
@@ -156,7 +148,6 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
         LintLevel level = settings[index].level;
         if (!option.is_string() || !read_level(option, level)) {
           const u32 emitted = bag.emit<i18n::Key::LintConfigUnknownLevel>(
-              diag::Severity::Error, diag::Stage::Lint,
               LintCode::ConfigSemanticError,
               option.value<std::string_view>().value_or(""), filename);
           (void)emitted;
@@ -169,7 +160,6 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
         const std::optional<i64> value = option.value<i64>();
         if (!value.has_value() || *value < 1) {
           const u32 emitted = bag.emit<i18n::Key::LintConfigOptionNotInteger>(
-              diag::Severity::Error, diag::Stage::Lint,
               LintCode::ConfigSemanticError, key.str(), filename);
           (void)emitted;
           return base::make_err(diag::Reported{});
