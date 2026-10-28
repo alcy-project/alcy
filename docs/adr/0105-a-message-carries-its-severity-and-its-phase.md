@@ -28,7 +28,7 @@ site names the message, the code tooling matches on, and the
 arguments.**
 
 - `messages.def` entries are `F(Name, Severity, Stage, Text)`.
-  `i18n::detail::KEY_META` is generated from the same list, so the two
+  `diag::MESSAGE_META` is generated from the same list, so the two
   cannot disagree, and `DiagBag::emit<K>(code, [span,] args...)` reads
   it for the severity and the phase.
 - **The code stays at the call site.** It is the identity a machine
@@ -38,20 +38,24 @@ arguments.**
 - **A lint's severity stays at the site too.** A rule's level is its
   configuration's (`allow`, `warn`, `deny`), not the catalog's, so
   `emit_named` takes the severity and reads only the phase.
-- Three keys that two phases spelled alike are split, because a
+- Four keys that two phases spelled alike are split, because a
   message belongs to the phase that prints it:
   `Parser`/`AnalyzerInvalidSyntaxTree`,
-  `Parser`/`AnalyzerNestingTooDeep`, and
+  `Parser`/`AnalyzerNestingTooDeep`,
+  `Parser`/`AnalyzerArrayLiteralWithoutCount`, and
   `Analyzer`/`ParserOrPatternBindsDifferentNames`; the lowering's own
-  nesting message is `LowerNestingTooDeep`.
+  nesting message is `LowerNestingTooDeep`. A fourth shared spelling
+  survived the sweep that named the first three: the array-literal
+  count, which the parser refuses before the analyzer's own check runs
+  and whose catalog row said Analyzer.
 - A message only the cli renders carries `Note` and the pipeline
   phase, which nothing emits and so nothing reads.
 
 ## Consequences
 
-- A call site is shorter and says only what the site decides: 459
-  sites lost two arguments each, and the phase can no longer drift
-  from the message that reports it.
+- A call site is shorter and says only what the site decides: the
+  swept sites lost two arguments each, and the phase can no longer
+  drift from the message that reports it.
 - Changing which phase reports a message is a catalog edit, not a
   sweep over its call sites.
 - `emit<K>` requires a constant key: a key a helper takes as a

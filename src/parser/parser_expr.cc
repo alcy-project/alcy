@@ -1449,7 +1449,7 @@ ast::ExprIdx Parser::parse_array_literal() {
     return ast::ExprIdx::invalid();
   }
   if (check(lexer::TokenKind::RBracket)) {
-    const u32 index = bag_.emit<i18n::Key::AnalyzerArrayLiteralWithoutCount>(
+    const u32 index = bag_.emit<i18n::Key::ParserArrayLiteralWithoutCount>(
         DiagCode::UnexpectedToken, peek().span);
     (void)index;
     return ast::ExprIdx::invalid();

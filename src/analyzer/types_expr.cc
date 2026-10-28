@@ -973,7 +973,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       return error_type();
     }
     case PathValue::Kind::Type: {
-      const u32 index = bag.emit<i18n::Key::ParserExpectedValueFoundType>(
+      const u32 index = bag.emit<i18n::Key::AnalyzerExpectedValueFoundType>(
           DiagCode::InvalidOperation, span);
       (void)index;
       return error_type();

@@ -53,6 +53,7 @@
   F(ArgVersionOption, Note, Pipeline, "Print version information") \
   F(ParserArrayLengthNotDecimal, Error, Parser, "Array length must be decimal") \
   F(ParserArrayLengthTooLarge, Error, Parser, "Array length is too large") \
+  F(ParserArrayLiteralWithoutCount, Error, Parser, "Array literal needs elements or a repeat count") \
   F(ParserBlockBraceOnHeader, Error, Parser, "A block's `{{` must stay on its header line") \
   F(ParserCompDeclarationSpelling, Error, Parser, "`comp` marks parameters and blocks; write the declaration as `const x := ...`") \
   F(ParserCompOnlyOnBindings, Error, Parser, "Comp evaluation is only allowed on parameters and blocks") \
@@ -64,7 +65,6 @@
   F(ParserExpectedItemFound, Error, Parser, "Expected item, found `{}`") \
   F(ParserExpectedItemFoundEndOfFile, Error, Parser, "Expected item, found end of file") \
   F(ParserExpectedSemicolon, Error, Parser, "Expected `;`") \
-  F(ParserExpectedValueFoundType, Error, Analyzer, "Expected a value, found a type") \
   F(ParserFnItemSpelling, Error, Parser, "`fn` declares a function") \
   F(ParserIfLetSpelling, Error, Parser, "a condition binds with `:=`: write `if PAT := EXPR`") \
   F(ParserExternConvention, Error, Parser, "Only the \"C\" calling convention is supported") \
@@ -160,6 +160,7 @@
   F(AnalyzerDuplicateImport, Error, Analyzer, "Module `{}` is imported more than once") \
   F(AnalyzerDuplicateModule, Error, Analyzer, "Module '{}' is declared more than once") \
   F(AnalyzerDuplicatePreludeModule, Error, Analyzer, "Prelude module '{}' is declared more than once") \
+  F(AnalyzerExpectedValueFoundType, Error, Analyzer, "Expected a value, found a type") \
   F(AnalyzerExportWithheld, Error, Analyzer, "Package '{}' does not export module '{}'") \
   F(AnalyzerExternCompParameter, Error, Analyzer, "Comp parameters on external functions are not supported") \
   F(AnalyzerExternGeneric, Error, Analyzer, "External function '{}' cannot be generic") \
