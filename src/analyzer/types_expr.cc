@@ -3800,11 +3800,10 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           if (segments.size() == 1 &&
               lookup_local(segments[0].name) == nullptr) {
             const CheckedModule::StaticInfo* info =
-                find_static(module, segments[0].name);
+                find_static(modules, tree, module, segments[0].name);
             if (info != nullptr && info->is_const) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerNotAnAssignablePlace>(
-                      diag::Severity::Error, diag::Stage::Analyzer,
                       DiagCode::BadAssignment, segments[0].span);
               (void)index;
               return error_type();
