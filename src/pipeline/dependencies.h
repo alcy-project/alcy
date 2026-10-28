@@ -86,7 +86,6 @@ class DependencyClosure {
   Iterator begin() const { return Iterator(entries_.data()); }
   Iterator end() const { return Iterator(entries_.data() + entries_.size()); }
   [[nodiscard]] usize size() const { return entries_.size(); }
-  [[nodiscard]] bool empty() const { return entries_.empty(); }
   const LoadedDependency& operator[](usize i) const { return *entries_[i]; }
 
  private:

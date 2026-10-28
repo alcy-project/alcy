@@ -390,13 +390,6 @@ struct CheckedPackage {
   std::vector<u8> not_movable;
 };
 
-// Resolves every type position in the package to interned TypeIdx:
-// nominal definitions (structs, enums), signatures, and generic
-// instantiations. Reports unknown, duplicate, recursive, and malformed
-// types, then checks bodies.
-//
-// `strings` is the compilation's interner: the storage this returns holds ids
-// into it, and lowering and codegen read them back out of it.
 // The static a value path names in `module`: a declaration there, or
 // one the module's imports re-export in the value namespace. The
 // checker, the lowering, and the comp evaluator ask the same question,
@@ -407,6 +400,13 @@ const CheckedModule::StaticInfo* find_static(
     u32 module,
     std::string_view name);
 
+// Resolves every type position in the package to interned TypeIdx:
+// nominal definitions (structs, enums), signatures, and generic
+// instantiations. Reports unknown, duplicate, recursive, and malformed
+// types, then checks bodies.
+//
+// `strings` is the compilation's interner: the storage this returns holds ids
+// into it, and lowering and codegen read them back out of it.
 base::Result<CheckedPackage, diag::Reported> check_package(
     const ModuleTree& tree,
     ir::PointerWidth width,

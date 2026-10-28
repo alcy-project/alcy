@@ -799,11 +799,12 @@ base::Result<std::string, diag::Reported> build_single_root(
   return emit_output(ctx, lowered, plan, mode, std::string(output), false, {});
 }
 
-// The front half of a target's lifecycle: the cache lookup, the compile
-// that stores the unoptimized package when the build was quiet, and the
-// summary a library leaves beside its artifact before optimization
-// (ADR-0078). Every command that produces an artifact runs this; `check`
-// names no artifact and stops earlier.
+// The front half of a target's lifecycle - the cache lookup, the compile
+// that stores the unoptimized package when the lowering was quiet, and
+// the summary a library leaves beside its artifact before optimization
+// (ADR-0078). The build's target loop and the run path both walk this;
+// single-file `compile` lowers through `build_single_root` instead, and
+// `check` names no artifact and stops earlier.
 base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
     PipelineContext& ctx,
     const PlannedArtifact& planned,

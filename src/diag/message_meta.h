@@ -20,8 +20,8 @@ namespace diag {
 // prints it. A message only the cli renders carries `Note` and the
 // pipeline phase, which nothing emits and so nothing reads.
 struct MessageMeta {
-  Severity severity = Severity::Error;
-  Stage stage = Stage::Pipeline;
+  Severity severity;
+  Stage stage;
 };
 
 // One row per key, in key order, generated from the same list the key
