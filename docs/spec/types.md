@@ -17,8 +17,10 @@
   not to the module (ADR-0065, ADR-0068), so one lowered program
   serves every profile; `wrapping_add`, `wrapping_sub`, and
   `wrapping_mul` name the wrapping forms for code that wants them in
-  every profile. A constant expression is always evaluated checked,
-  so an overflow or a zero divisor there is an error.
+  every profile. A constant expression is evaluated at compile time
+  and never follows the profile: an overflow in `+`, `-`, and `*` and
+  a zero divisor are errors there, while an overshift and a signed
+  `MIN / -1` keep the defined results above (ADR-0065).
 - Casts: a cast between a float and an integer truncates toward zero,
   and a value the destination cannot hold saturates - its minimum below
   the destination's range and its maximum above it, with NaN becoming

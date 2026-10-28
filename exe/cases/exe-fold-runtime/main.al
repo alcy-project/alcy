@@ -77,6 +77,8 @@ const K15: i32 = 1000 * 1000
 
 const K16: i32 = (0 - 5) - 1
 
+const K17: i32 = ((0 - 2147483647) - 1) % (0 - 1)
+
 fn main() -> i32 {
   mut bad := 0
   if K1 != d(0 - 7, 2) {
@@ -125,6 +127,9 @@ fn main() -> i32 {
     bad = bad + 1
   }
   if K16 != sub(sub(0, 5), 1) {
+    bad = bad + 1
+  }
+  if K17 != m(sub(sub(0, 2147483647), 1), 0 - 1) {
     bad = bad + 1
   }
   ret bad
