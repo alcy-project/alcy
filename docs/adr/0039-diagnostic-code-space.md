@@ -58,9 +58,14 @@ answer for neither.
 
 `DiagCode` is an `enum class : u16` per component, in that component's own
 header, listing its checks in the order they were assigned. `DiagBag::emit`
-takes a `diag::Stage` and an enumerator, constrained to be an enum, so the
-narrowing happens once inside `emit` and a bare number at a call site does
-not compile. `ir` has no enum: its code is the `VerificationErrorKind`'s
+takes an enumerator, constrained to be an enum, so the narrowing happens
+once inside `emit` and a bare number at a call site does not compile.
+
+**Amended: 2026-10-28, the stage rides the message.** This record gave
+`emit` the stage; ADR-0105 moved the stage and the severity into the
+message's catalog entry, because both were facts about the message
+rather than about the site. The per-component `DiagCode` space is
+untouched, and the code stays at the call site. `ir` has no enum: its code is the `VerificationErrorKind`'s
 ordinal plus one, so a kind and its code cannot drift apart.
 
 `--json` reports a code as `{"stage": "analyzer", "local_id": 16}` rather

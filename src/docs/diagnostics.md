@@ -80,8 +80,10 @@ before every commit to be worth having; saying what a check means is not
 something a program can do.
 
 `diag::Code` is a pair and not a number, so nothing in the compiler can
-do arithmetic on a code or invent one: `DiagBag::emit` takes a component
-and an enumerator, and the enumerator is what a call site names.
+do arithmetic on a code or invent one: `DiagBag::emit` takes the
+enumerator a call site names, and the component and the severity come
+from the message's catalog entry (ADR-0105), so a code a site reports is
+the pair the catalog spelled for it.
 
 ## Notes on the numbering that is gone
 

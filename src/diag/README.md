@@ -13,10 +13,13 @@ Diagnostics: spans, the diagnostic bag, and rendering.
 
 ## Entry points
 
-- `DiagBag::emit<i18n::Key::Name>(severity, code, [span,] args...)` ->
-  bag index. Never fails. The message comes from the catalog, and the
-  bag's `Language` decides which text of it. Every catalog's format
-  string is checked against the arguments at compile time.
+- `DiagBag::emit<i18n::Key::Name>(code, [span,] args...)` ->
+  bag index. Never fails. The message, its severity, and its phase come
+  from the catalog (`diag::MESSAGE_META`), and the bag's `Language`
+  decides which text of it. Every catalog's format string is checked
+  against the arguments at compile time. The linter's
+  `emit_named<K>(severity, code, ...)` keeps the severity at the site,
+  because a rule's level is its configuration's.
 - `DiagBag::emit_untranslated(severity, code, [span,] format, args...)` ->
   the same, for a test that needs a wording of its own. Nothing the
   compiler reports goes through it.

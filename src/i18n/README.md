@@ -11,8 +11,10 @@ text of every message it can print.
 - `Key` is one identity per message, named by the message rather than by
   the diagnostic code it is reported under, because several registered
   codes carry more than one wording. The ordinal is an index into every
-  catalog and means nothing outside this module, so the enum is as wide
-  as the catalog needs it to be.
+  catalog and into `diag::MESSAGE_META`, which is where a message's
+  severity and phase live; the enum is as wide as the catalog needs it
+  to be. A message two phases spell alike is two keys - one per phase -
+  so the catalog's severity and phase stay a function of the key.
 - `messages.def` holds the texts and, per message, the severity and
   the phase it is reported with. It is a list, not a table: the key
   enum, every language's table, the severity/phase table, and the
