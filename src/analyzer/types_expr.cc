@@ -254,11 +254,13 @@ bool Checker::bind_pattern(u32 module,
         u32 index = 0;
         bool found = false;
         bool is_pub = false;
+        diag::Span declaration{};
         for (const ast::ItemStructField& decl_field :
              decl.payload.get<ast::ItemStruct>().fields) {
           if (decl_field.name.name == field.name.name) {
             found = true;
             is_pub = decl_field.is_pub;
+            declaration = decl_field.name.span;
             break;
           }
           ++index;
@@ -270,6 +272,7 @@ bool Checker::bind_pattern(u32 module,
           bind_error_idents(module, field.pattern);
           continue;
         }
+        modules[module].references.push_back({field.name.span, declaration});
         (void)check_field_access(module, nominal->module, is_pub,
                                  field.name.span, field.name.name,
                                  nominal->name);
@@ -1907,6 +1910,14 @@ ir::TypeIdx Checker::check_method_call(u32 module,
     }
     return error_type();
   }
+  if (method->item.is_valid()) {
+    const ast::ItemNode& method_item = ast.items[method->item];
+    if (method_item.kind == ast::ItemKind::Fn) {
+      modules[module].references.push_back(
+          {node.payload.get<ast::ExprMethodCall>().name.span,
+           method_item.payload.get<ast::ItemFn>().name.span});
+    }
+  }
   if (method->receiver == CheckedModule::ReceiverKind::None) {
     const u32 index = bag.emit<i18n::Key::AnalyzerAssociatedFunctionAsMethod>(
         DiagCode::InvalidOperation,
@@ -2055,11 +2066,13 @@ ir::TypeIdx Checker::check_field(u32 module,
     // A missing name on a resolved owner must not index past the end.
     bool named = false;
     bool is_pub = false;
+    diag::Span declaration{};
     for (const ast::ItemStructField& decl_field :
          ast.items[owner->item].payload.get<ast::ItemStruct>().fields) {
       if (decl_field.name.name == field_name.name) {
         named = true;
         is_pub = decl_field.is_pub;
+        declaration = decl_field.name.span;
         break;
       }
     }
@@ -2069,6 +2082,7 @@ ir::TypeIdx Checker::check_field(u32 module,
       (void)index;
       return error_type();
     }
+    modules[module].references.push_back({field_name.span, declaration});
     if (!check_field_access(module, owner->module, is_pub, field_name.span,
                             field_name.name, owner->name)) {
       return error_type();
@@ -2194,11 +2208,13 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
     u32 index = 0;
     bool found = false;
     bool is_pub = false;
+    diag::Span declaration{};
     for (const ast::ItemStructField& decl_field :
          decl.payload.get<ast::ItemStruct>().fields) {
       if (decl_field.name.name == field.name.name) {
         found = true;
         is_pub = decl_field.is_pub;
+        declaration = decl_field.name.span;
         break;
       }
       ++index;
@@ -2210,6 +2226,7 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
       check_expr(module, field.value, nullptr);
       continue;
     }
+    modules[module].references.push_back({field.name.span, declaration});
     (void)check_field_access(module, nominal->module, is_pub, field.name.span,
                              field.name.name, nominal->name);
     if (seen[index]) {

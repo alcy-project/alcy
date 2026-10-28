@@ -42,7 +42,6 @@ when analysis fails, so a buffer being edited still highlights.
 Positions and lengths are UTF-16 code units, converted through the
 document's position index like every other feature.
 
-Coverage is what the checker records. A field reached through a dot is
-not a path the reference table holds, so it is not colored in this
-record; adding it is a change at the place field access resolves, not a
-heuristic here.
+Coverage is what the checker records. A name reached through a dot is
+colored as the field or method the checker resolved, because the member
+site carries a reference like any other name (ADR-0090).

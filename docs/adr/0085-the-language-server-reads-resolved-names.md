@@ -51,11 +51,8 @@ instantiations. The table grows with every checked instantiation, like
 the other side tables; the LSP de-duplicates identical sites when it
 answers.
 
-Coverage is what the checker resolves through a path today: items
-(functions, types, statics, consts), enum variants, methods, and
-bindings. Member accesses using field syntax and method calls on a
-value are not names the checker resolves through a path, so they are
-not recorded; a field or method definition needs its own record at the
-place resolution happens, in a later record. The table does not replace
-the lowering tables: lowering still reads the entries it was built
-against, and this record is additive.
+Coverage is what the checker resolves: items (functions, types,
+statics, consts), enum variants, methods, and bindings through a path,
+plus field and method access recorded at the member site (ADR-0090).
+The table does not replace the lowering tables: lowering still reads
+the entries it was built against, and this record is additive.

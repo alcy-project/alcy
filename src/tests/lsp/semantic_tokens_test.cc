@@ -105,6 +105,19 @@ TEST_CASE("A comment is classified even when analysis fails") {
   CHECK(type_at(tokens, 1, 0) == 11);  // fn
 }
 
+TEST_CASE("A field read and a method call carry their kinds") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "struct Point {\n  x: i32,\n}\n\nimpl Point {\n  fn "
+                          "get(self: Self) -> i32 {\n"
+                          "    ret self.x\n  }\n}\n\nfn take(p: Point) -> i32 "
+                          "{\n  ret p.get()\n}\n");
+  const DocumentAnalysis analysis(document);
+  const std::vector<Decoded> tokens =
+      decode(semantic_tokens(document, analysis));
+  CHECK(type_at(tokens, 6, 13) == 7);   // self.x
+  CHECK(type_at(tokens, 11, 8) == 10);  // p.get()
+}
+
 TEST_CASE("A multi-line comment becomes one token per line") {
   const Document document(
       "file:///main.al", "alcy", 1,

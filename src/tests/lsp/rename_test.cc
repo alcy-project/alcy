@@ -109,6 +109,30 @@ TEST_CASE("A local renames its binding and its use") {
   CHECK(has_edit(edits, 2, 6));
 }
 
+TEST_CASE("A field renames its declaration and its read") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "struct Point {\n  x: i32,\n}\nfn take(p: Point) -> i32 {\n"
+      "  ret p.x\n}\n");
+  const DocumentAnalysis analysis(document);
+  const std::optional<text::JsonValue> edit =
+      workspace_rename(document, analysis, Position{4, 8}, "y");
+  CHECK(edit.has_value());
+  if (!edit.has_value()) {
+    return;
+  }
+  const std::vector<Edit> edits = edits_of(*edit);
+  CHECK(edits.size() == 2);
+  if (edits.size() == 2) {
+    CHECK(edits[0].text == "y");
+    CHECK(edits[1].text == "y");
+    CHECK(edits[0].line == 1);
+    CHECK(edits[0].character == 2);
+    CHECK(edits[1].line == 4);
+    CHECK(edits[1].character == 8);
+  }
+}
+
 TEST_CASE("A comment has no rename target") {
   const Document document("file:///main.al", "alcy", 1,
                           "// nothing\nfn main() -> i32 {\n  ret 0\n}\n");
