@@ -25,27 +25,13 @@ namespace lsp {
 
 namespace {
 
-// LSP SymbolKind values, named so the switch below reads as a mapping
-// rather than as a column of numbers.
-constexpr f64 K_METHOD = 6;
-constexpr f64 K_FIELD = 8;
-constexpr f64 K_ENUM = 10;
-constexpr f64 K_INTERFACE = 11;
-constexpr f64 K_FUNCTION = 12;
-constexpr f64 K_VARIABLE = 13;
-constexpr f64 K_CONSTANT = 14;
-constexpr f64 K_OBJECT = 19;
-constexpr f64 K_ENUM_MEMBER = 22;
-constexpr f64 K_STRUCT = 23;
-constexpr f64 K_MODULE = 2;
-
 text::JsonValue make_symbol(std::string name,
-                            f64 kind,
+                            SymbolKind kind,
                             text::JsonValue range,
                             text::JsonValue selection) {
   text::JsonValue out = text::JsonValue::make_object();
   out.set("name", text::JsonValue::make_string(std::move(name)));
-  out.set("kind", text::JsonValue::make_number(kind));
+  out.set("kind", text::JsonValue::make_number(static_cast<f64>(kind)));
   out.set("range", std::move(range));
   out.set("selectionRange", std::move(selection));
   return out;
@@ -103,13 +89,13 @@ text::JsonValue item_symbol(const Document& document,
   switch (item.kind) {
     case K::Fn: {
       const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
-      return make_symbol(std::string(fn.name.name), K_FUNCTION,
+      return make_symbol(std::string(fn.name.name), SymbolKind::Function,
                          range_of(document, item.span),
                          range_of(document, fn.name.span));
     }
     case K::Intrinsic: {
       const ast::ItemIntrinsic& fn = item.payload.get<ast::ItemIntrinsic>();
-      return make_symbol(std::string(fn.name.name), K_FUNCTION,
+      return make_symbol(std::string(fn.name.name), SymbolKind::Function,
                          range_of(document, item.span),
                          range_of(document, fn.name.span));
     }
@@ -117,27 +103,28 @@ text::JsonValue item_symbol(const Document& document,
       text::JsonValue children = text::JsonValue::make_array();
       for (const ast::ItemExternFn& fn :
            item.payload.get<ast::ItemExtern>().fns) {
-        children.push(make_symbol(std::string(fn.name.name), K_FUNCTION,
+        children.push(make_symbol(std::string(fn.name.name),
+                                  SymbolKind::Function,
                                   range_of(document, fn.name.span),
                                   range_of(document, fn.name.span)));
       }
-      return with_children(
-          make_symbol("<extern>", K_OBJECT, range_of(document, item.span),
-                      range_of(document, item.span)),
-          std::move(children));
+      return with_children(make_symbol("<extern>", SymbolKind::Object,
+                                       range_of(document, item.span),
+                                       range_of(document, item.span)),
+                           std::move(children));
     }
     case K::Struct: {
       const ast::ItemStruct& declaration = item.payload.get<ast::ItemStruct>();
       text::JsonValue children = text::JsonValue::make_array();
       for (const ast::ItemStructField& field : declaration.fields) {
         children.push(make_symbol(
-            std::string(field.name.name), K_FIELD,
+            std::string(field.name.name), SymbolKind::Field,
             range_of(document,
                      join(field.name.span, type_span(ast, field.type))),
             range_of(document, field.name.span)));
       }
       return with_children(
-          make_symbol(std::string(declaration.name.name), K_STRUCT,
+          make_symbol(std::string(declaration.name.name), SymbolKind::Struct,
                       range_of(document, item.span),
                       range_of(document, declaration.name.span)),
           std::move(children));
@@ -146,12 +133,13 @@ text::JsonValue item_symbol(const Document& document,
       const ast::ItemEnum& declaration = item.payload.get<ast::ItemEnum>();
       text::JsonValue children = text::JsonValue::make_array();
       for (const ast::ItemEnumVariant& variant : declaration.variants) {
-        children.push(make_symbol(std::string(variant.name.name), K_ENUM_MEMBER,
+        children.push(make_symbol(std::string(variant.name.name),
+                                  SymbolKind::EnumMember,
                                   range_of(document, variant.name.span),
                                   range_of(document, variant.name.span)));
       }
       return with_children(
-          make_symbol(std::string(declaration.name.name), K_ENUM,
+          make_symbol(std::string(declaration.name.name), SymbolKind::Enum,
                       range_of(document, item.span),
                       range_of(document, declaration.name.span)),
           std::move(children));
@@ -169,7 +157,8 @@ text::JsonValue item_symbol(const Document& document,
         children.push(item_symbol(document, ast, method));
       }
       return with_children(
-          make_symbol(std::move(name), K_OBJECT, range_of(document, item.span),
+          make_symbol(std::move(name), SymbolKind::Object,
+                      range_of(document, item.span),
                       range_of(document, type_span(ast, declaration.type))),
           std::move(children));
     }
@@ -177,26 +166,27 @@ text::JsonValue item_symbol(const Document& document,
       const ast::ItemSpec& declaration = item.payload.get<ast::ItemSpec>();
       text::JsonValue children = text::JsonValue::make_array();
       for (const ast::SpecMethod& method : declaration.methods) {
-        children.push(make_symbol(std::string(method.name.name), K_METHOD,
+        children.push(make_symbol(std::string(method.name.name),
+                                  SymbolKind::Method,
                                   range_of(document, method.name.span),
                                   range_of(document, method.name.span)));
       }
       return with_children(
-          make_symbol(std::string(declaration.name.name), K_INTERFACE,
+          make_symbol(std::string(declaration.name.name), SymbolKind::Interface,
                       range_of(document, item.span),
                       range_of(document, declaration.name.span)),
           std::move(children));
     }
     case K::Static: {
       const ast::ItemStatic& declaration = item.payload.get<ast::ItemStatic>();
-      return make_symbol(std::string(declaration.name.name), K_VARIABLE,
-                         range_of(document, item.span),
+      return make_symbol(std::string(declaration.name.name),
+                         SymbolKind::Variable, range_of(document, item.span),
                          range_of(document, declaration.name.span));
     }
     case K::Const: {
       const ast::ItemConst& declaration = item.payload.get<ast::ItemConst>();
-      return make_symbol(std::string(declaration.name.name), K_CONSTANT,
-                         range_of(document, item.span),
+      return make_symbol(std::string(declaration.name.name),
+                         SymbolKind::Constant, range_of(document, item.span),
                          range_of(document, declaration.name.span));
     }
     case K::Use: {
@@ -213,7 +203,7 @@ text::JsonValue item_symbol(const Document& document,
           selection = path.segments.back().span;
         }
       }
-      return make_symbol(std::move(name), K_MODULE,
+      return make_symbol(std::move(name), SymbolKind::Module,
                          range_of(document, item.span),
                          range_of(document, selection));
     }

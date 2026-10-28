@@ -37,10 +37,10 @@ namespace lsp {
 namespace {
 
 // JSON-RPC and LSP error codes that cross the wire.
-constexpr i32 K_PARSE_ERROR = -32700;
-constexpr i32 K_INVALID_REQUEST = -32600;
-constexpr i32 K_METHOD_NOT_FOUND = -32601;
-constexpr i32 K_SERVER_NOT_INITIALIZED = -32002;
+constexpr i32 PARSE_ERROR = -32700;
+constexpr i32 INVALID_REQUEST = -32600;
+constexpr i32 METHOD_NOT_FOUND = -32601;
+constexpr i32 SERVER_NOT_INITIALIZED = -32002;
 
 const text::JsonValue* field(const text::JsonValue& object,
                              std::string_view key) {
@@ -106,12 +106,12 @@ void Server::handle(std::string_view payload) {
   base::Result<text::JsonValue, text::JsonError> parsed =
       text::parse_json(payload);
   if (parsed.is_err()) {
-    send_error(text::JsonValue{}, K_PARSE_ERROR, "parse error");
+    send_error(text::JsonValue{}, PARSE_ERROR, "parse error");
     return;
   }
   const text::JsonValue& message = parsed.value();
   if (!message.is_object()) {
-    send_error(text::JsonValue{}, K_INVALID_REQUEST, "invalid request");
+    send_error(text::JsonValue{}, INVALID_REQUEST, "invalid request");
     return;
   }
   if (field(message, "id") != nullptr) {
@@ -125,7 +125,7 @@ void Server::handle_request(const text::JsonValue& message) {
   const text::JsonValue* id = field(message, "id");
   const std::string_view method = string_field(message, "method");
   if (method.empty()) {
-    send_error(*id, K_INVALID_REQUEST, "request has no method");
+    send_error(*id, INVALID_REQUEST, "request has no method");
     return;
   }
   if (method == "initialize") {
@@ -133,11 +133,11 @@ void Server::handle_request(const text::JsonValue& message) {
     return;
   }
   if (!initialized_) {
-    send_error(*id, K_SERVER_NOT_INITIALIZED, "server not initialized");
+    send_error(*id, SERVER_NOT_INITIALIZED, "server not initialized");
     return;
   }
   if (shutdown_) {
-    send_error(*id, K_INVALID_REQUEST, "server is shutting down");
+    send_error(*id, INVALID_REQUEST, "server is shutting down");
     return;
   }
   if (method == "shutdown") {
@@ -147,7 +147,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/formatting") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "formatting needs params");
+      send_error(*id, INVALID_REQUEST, "formatting needs params");
       return;
     }
     formatting(*id, *params);
@@ -156,7 +156,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/foldingRange") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "foldingRange needs params");
+      send_error(*id, INVALID_REQUEST, "foldingRange needs params");
       return;
     }
     folding_range(*id, *params);
@@ -165,7 +165,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/documentSymbol") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "documentSymbol needs params");
+      send_error(*id, INVALID_REQUEST, "documentSymbol needs params");
       return;
     }
     document_symbol(*id, *params);
@@ -175,7 +175,7 @@ void Server::handle_request(const text::JsonValue& message) {
       method == "textDocument/references") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "navigation needs params");
+      send_error(*id, INVALID_REQUEST, "navigation needs params");
       return;
     }
     if (method == "textDocument/definition") {
@@ -188,7 +188,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/documentHighlight") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "documentHighlight needs params");
+      send_error(*id, INVALID_REQUEST, "documentHighlight needs params");
       return;
     }
     document_highlight(*id, *params);
@@ -197,7 +197,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/diagnostic") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "diagnostic needs params");
+      send_error(*id, INVALID_REQUEST, "diagnostic needs params");
       return;
     }
     diagnostic(*id, *params);
@@ -206,7 +206,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/semanticTokens/full") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "semanticTokens needs params");
+      send_error(*id, INVALID_REQUEST, "semanticTokens needs params");
       return;
     }
     semantic_tokens_full(*id, *params);
@@ -215,7 +215,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/codeAction") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "codeAction needs params");
+      send_error(*id, INVALID_REQUEST, "codeAction needs params");
       return;
     }
     code_action(*id, *params);
@@ -224,7 +224,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/inlayHint") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "inlayHint needs params");
+      send_error(*id, INVALID_REQUEST, "inlayHint needs params");
       return;
     }
     inlay_hint(*id, *params);
@@ -234,7 +234,7 @@ void Server::handle_request(const text::JsonValue& message) {
       method == "textDocument/signatureHelp") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "a completion query needs params");
+      send_error(*id, INVALID_REQUEST, "a completion query needs params");
       return;
     }
     if (method == "textDocument/completion") {
@@ -247,7 +247,7 @@ void Server::handle_request(const text::JsonValue& message) {
   if (method == "textDocument/hover" || method == "alcy/structLayout") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
-      send_error(*id, K_INVALID_REQUEST, "a layout query needs params");
+      send_error(*id, INVALID_REQUEST, "a layout query needs params");
       return;
     }
     if (method == "textDocument/hover") {
@@ -257,7 +257,7 @@ void Server::handle_request(const text::JsonValue& message) {
     }
     return;
   }
-  send_error(*id, K_METHOD_NOT_FOUND, "method not found");
+  send_error(*id, METHOD_NOT_FOUND, "method not found");
 }
 
 void Server::handle_notification(const text::JsonValue& message) {
@@ -289,7 +289,7 @@ void Server::handle_notification(const text::JsonValue& message) {
 
 void Server::initialize(const text::JsonValue& id) {
   if (initialized_) {
-    send_error(id, K_INVALID_REQUEST, "server is already initialized");
+    send_error(id, INVALID_REQUEST, "server is already initialized");
     return;
   }
   text::JsonValue sync = text::JsonValue::make_object();
@@ -377,7 +377,7 @@ void Server::folding_range(const text::JsonValue& id,
                            const text::JsonValue& params) {
   const text::JsonValue* text_document = field(params, "textDocument");
   if (text_document == nullptr || !text_document->is_object()) {
-    send_error(id, K_INVALID_REQUEST, "foldingRange needs a text document");
+    send_error(id, INVALID_REQUEST, "foldingRange needs a text document");
     return;
   }
   const Document* document =
@@ -393,7 +393,7 @@ void Server::document_symbol(const text::JsonValue& id,
                              const text::JsonValue& params) {
   const text::JsonValue* text_document = field(params, "textDocument");
   if (text_document == nullptr || !text_document->is_object()) {
-    send_error(id, K_INVALID_REQUEST, "documentSymbol needs a text document");
+    send_error(id, INVALID_REQUEST, "documentSymbol needs a text document");
     return;
   }
   const Document* document =
@@ -650,13 +650,13 @@ void Server::formatting(const text::JsonValue& id,
                         const text::JsonValue& params) {
   const text::JsonValue* text_document = field(params, "textDocument");
   if (text_document == nullptr || !text_document->is_object()) {
-    send_error(id, K_INVALID_REQUEST, "formatting needs a text document");
+    send_error(id, INVALID_REQUEST, "formatting needs a text document");
     return;
   }
   const Document* document =
       documents_.find(string_field(*text_document, "uri"));
   if (document == nullptr) {
-    send_error(id, K_INVALID_REQUEST, "document is not open");
+    send_error(id, INVALID_REQUEST, "document is not open");
     return;
   }
   send_result(id, document_formatting(*document));

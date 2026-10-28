@@ -26,11 +26,14 @@ namespace {
 // compiler's notes are information; it has no hint.
 f64 severity_number(diag::Severity severity) {
   switch (severity) {
-    case diag::Severity::Error: return 1;
-    case diag::Severity::Warning: return 2;
-    case diag::Severity::Note: return 3;
+    case diag::Severity::Error:
+      return static_cast<f64>(DiagnosticSeverity::Error);
+    case diag::Severity::Warning:
+      return static_cast<f64>(DiagnosticSeverity::Warning);
+    case diag::Severity::Note:
+      return static_cast<f64>(DiagnosticSeverity::Information);
   }
-  return 1;
+  return static_cast<f64>(DiagnosticSeverity::Error);
 }
 
 }  // namespace

@@ -30,10 +30,6 @@ namespace lsp {
 
 namespace {
 
-// LSP InlayHintKind: the only kind alcy emits is Type. A layout hint is
-// alcy-specific and carries no standard kind.
-constexpr f64 K_TYPE = 1;
-
 struct Hint {
   usize offset = 0;
   std::string label;
@@ -158,7 +154,8 @@ text::JsonValue inlay_hints(const Document& document,
                               document.text(), hint.offset)));
     entry.set("label", text::JsonValue::make_string(hint.label));
     if (hint.is_type) {
-      entry.set("kind", text::JsonValue::make_number(K_TYPE));
+      entry.set("kind", text::JsonValue::make_number(
+                            static_cast<f64>(InlayHintKind::Type)));
     }
     entry.set("paddingLeft", text::JsonValue::make_bool(true));
     entry.set("paddingRight", text::JsonValue::make_bool(true));

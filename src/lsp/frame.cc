@@ -14,9 +14,9 @@ namespace lsp {
 
 namespace {
 
-constexpr std::string_view K_HEADER_TERMINATOR = "\r\n\r\n";
-constexpr std::string_view K_LINE_TERMINATOR = "\r\n";
-constexpr std::string_view K_CONTENT_LENGTH = "content-length";
+constexpr std::string_view HEADER_TERMINATOR = "\r\n\r\n";
+constexpr std::string_view LINE_TERMINATOR = "\r\n";
+constexpr std::string_view CONTENT_LENGTH = "content-length";
 
 std::string_view trim(std::string_view text) {
   usize begin = 0;
@@ -71,7 +71,7 @@ bool parse_length(std::string_view digits, usize* out) {
 }  // namespace
 
 FrameHeader scan_frame_header(std::string_view buffer) {
-  const usize terminator = buffer.find(K_HEADER_TERMINATOR);
+  const usize terminator = buffer.find(HEADER_TERMINATOR);
   if (terminator == std::string_view::npos) {
     return FrameHeader{};
   }
@@ -79,7 +79,7 @@ FrameHeader scan_frame_header(std::string_view buffer) {
   std::string_view content_length;
   usize line_start = 0;
   for (;;) {
-    const usize line_end = header.find(K_LINE_TERMINATOR, line_start);
+    const usize line_end = header.find(LINE_TERMINATOR, line_start);
     const std::string_view line =
         line_end == std::string_view::npos
             ? header.substr(line_start)
@@ -88,20 +88,20 @@ FrameHeader scan_frame_header(std::string_view buffer) {
     if (colon == std::string_view::npos) {
       return FrameHeader{FrameStatus::Malformed, 0, 0};
     }
-    if (equals_ignore_case(trim(line.substr(0, colon)), K_CONTENT_LENGTH)) {
+    if (equals_ignore_case(trim(line.substr(0, colon)), CONTENT_LENGTH)) {
       content_length = trim(line.substr(colon + 1));
     }
     if (line_end == std::string_view::npos) {
       break;
     }
-    line_start = line_end + K_LINE_TERMINATOR.size();
+    line_start = line_end + LINE_TERMINATOR.size();
   }
   usize parsed = 0;
   if (!parse_length(content_length, &parsed)) {
     return FrameHeader{FrameStatus::Malformed, 0, 0};
   }
   return FrameHeader{FrameStatus::Complete,
-                     terminator + K_HEADER_TERMINATOR.size(), parsed};
+                     terminator + HEADER_TERMINATOR.size(), parsed};
 }
 
 void append_frame(std::string& out, std::string_view payload) {

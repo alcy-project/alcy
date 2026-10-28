@@ -22,7 +22,7 @@ namespace lsp {
 
 namespace {
 
-constexpr usize K_CHUNK_SIZE = 8192;
+constexpr usize CHUNK_SIZE = 8192;
 
 isize read_once(i32 fd, void* buffer, usize size) {
 #if BUILD_FLAG(IS_OS_WIN)
@@ -62,7 +62,7 @@ bool Transport::read_more() {
     buffer_.erase(0, start_);
     start_ = 0;
   }
-  char chunk[K_CHUNK_SIZE];
+  char chunk[CHUNK_SIZE];
   const isize count = read_once(input_fd_, chunk, sizeof(chunk));
   if (count <= 0) {
     eof_ = true;

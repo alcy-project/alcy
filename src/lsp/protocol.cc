@@ -3,6 +3,9 @@
 
 #include "lsp/protocol.h"
 
+#include <span>
+#include <string_view>
+
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lsp/document.h"
@@ -31,6 +34,25 @@ text::JsonValue location_json(const Document& document, diag::Span span) {
   out.set("uri", text::JsonValue::make_string(document.uri()));
   out.set("range", range_json(document, span.offset, span.length));
   return out;
+}
+
+namespace {
+
+constexpr std::string_view TOKEN_TYPE_NAMES[] = {
+    "namespace", "type",     "struct",   "enum",       "typeParameter",
+    "parameter", "variable", "property", "enumMember", "function",
+    "method",    "keyword",  "modifier", "comment",    "string",
+    "number",    "operator"};
+
+static_assert(
+    sizeof(TOKEN_TYPE_NAMES) / sizeof(TOKEN_TYPE_NAMES[0]) ==
+        static_cast<usize>(SemanticTokenType::Count),
+    "the semantic token legend and SemanticTokenType are out of step");
+
+}  // namespace
+
+std::span<const std::string_view> semantic_token_type_names() {
+  return TOKEN_TYPE_NAMES;
 }
 
 }  // namespace lsp

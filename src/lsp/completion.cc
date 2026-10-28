@@ -17,6 +17,7 @@
 #include "ir/type.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
+#include "lsp/protocol.h"
 #include "lsp/typing.h"
 #include "pipeline/pipeline_context.h"
 #include "text/json.h"
@@ -25,17 +26,7 @@ namespace lsp {
 
 namespace {
 
-// LSP CompletionItemKind values this server emits.
-constexpr f64 K_METHOD = 2;
-constexpr f64 K_FUNCTION = 3;
-constexpr f64 K_VARIABLE = 6;
-constexpr f64 K_ENUM = 13;
-constexpr f64 K_KEYWORD = 14;
-constexpr f64 K_ENUM_MEMBER = 20;
-constexpr f64 K_CONSTANT = 21;
-constexpr f64 K_STRUCT = 22;
-
-const char* const K_KEYWORDS[] = {
+const char* const KEYWORDS[] = {
     "as",     "break",  "comp", "const",  "continue", "else",      "enum",
     "extern", "false",  "fn",   "if",     "impl",     "intrinsic", "let",
     "loop",   "match",  "mut",  "pub",    "ret",      "self",      "spec",
@@ -45,7 +36,7 @@ const char* const K_KEYWORDS[] = {
 struct Item {
   std::string label;
   std::string detail;
-  f64 kind = K_VARIABLE;
+  CompletionItemKind kind = CompletionItemKind::Variable;
 };
 
 std::string_view prefix_at(std::string_view text, usize offset) {
@@ -91,32 +82,36 @@ void collect(const pipeline::PipelineContext& context,
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
       out->push_back(Item{std::string(fn.name),
                           function_detail(context, package, fn.params, fn.ret),
-                          fn.is_method ? K_METHOD : K_FUNCTION});
+                          fn.is_method ? CompletionItemKind::Method
+                                       : CompletionItemKind::Function});
     }
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
       out->push_back(
           Item{std::string(method.name),
                function_detail(context, package, method.params, method.ret),
-               K_METHOD});
+               CompletionItemKind::Method});
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
       const ir::TypeNode& type = state.types[named.type];
       out->push_back(Item{std::string(named.name),
                           type_name(state, context.strings, named.type),
-                          type.tag == ir::TypeTag::Enum ? K_ENUM : K_STRUCT});
+                          type.tag == ir::TypeTag::Enum
+                              ? CompletionItemKind::Enum
+                              : CompletionItemKind::Struct});
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
       for (const std::string_view variant : info.variants) {
         out->push_back(
             Item{std::string(variant),
                  std::string(info.name) + "::" + std::string(variant),
-                 K_ENUM_MEMBER});
+                 CompletionItemKind::EnumMember});
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
       out->push_back(Item{std::string(info.name),
                           type_name(state, context.strings, info.type),
-                          info.is_const ? K_CONSTANT : K_VARIABLE});
+                          info.is_const ? CompletionItemKind::Constant
+                                        : CompletionItemKind::Variable});
     }
   }
 }
@@ -138,8 +133,8 @@ text::JsonValue completion_items(const Document& document,
   if (analysis.ok()) {
     collect(analysis.context(), analysis.package(), &items);
   }
-  for (const char* keyword : K_KEYWORDS) {
-    items.push_back(Item{keyword, "", K_KEYWORD});
+  for (const char* keyword : KEYWORDS) {
+    items.push_back(Item{keyword, "", CompletionItemKind::Keyword});
   }
 
   std::sort(items.begin(), items.end(),
@@ -159,7 +154,8 @@ text::JsonValue completion_items(const Document& document,
     }
     text::JsonValue entry = text::JsonValue::make_object();
     entry.set("label", text::JsonValue::make_string(item.label));
-    entry.set("kind", text::JsonValue::make_number(item.kind));
+    entry.set("kind",
+              text::JsonValue::make_number(static_cast<f64>(item.kind)));
     if (!item.detail.empty()) {
       entry.set("detail", text::JsonValue::make_string(item.detail));
     }

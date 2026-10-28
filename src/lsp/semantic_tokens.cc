@@ -18,6 +18,7 @@
 #include "lsp/analysis.h"
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
+#include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 #include "text/json.h"
@@ -26,33 +27,11 @@ namespace lsp {
 
 namespace {
 
-// The legend order below is the wire format, so these indices have to
-// match the array semantic_token_types() builds.
-constexpr u32 K_TYPE = 1;
-constexpr u32 K_STRUCT = 2;
-constexpr u32 K_ENUM = 3;
-constexpr u32 K_VARIABLE = 6;
-constexpr u32 K_PROPERTY = 7;
-constexpr u32 K_ENUM_MEMBER = 8;
-constexpr u32 K_FUNCTION = 9;
-constexpr u32 K_METHOD = 10;
-constexpr u32 K_KEYWORD = 11;
-constexpr u32 K_COMMENT = 13;
-constexpr u32 K_STRING = 14;
-constexpr u32 K_NUMBER = 15;
-constexpr u32 K_OPERATOR = 16;
-
-constexpr std::string_view K_TOKEN_TYPES[] = {
-    "namespace", "type",     "struct",   "enum",       "typeParameter",
-    "parameter", "variable", "property", "enumMember", "function",
-    "method",    "keyword",  "modifier", "comment",    "string",
-    "number",    "operator"};
-
 u64 span_key(diag::Span span) {
   return (static_cast<u64>(span.offset) << 32) | static_cast<u64>(span.length);
 }
 
-std::optional<u32> literal_type(lexer::TokenKind kind) {
+std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
   switch (kind) {
     case lexer::TokenKind::I8:
     case lexer::TokenKind::I16:
@@ -69,12 +48,12 @@ std::optional<u32> literal_type(lexer::TokenKind kind) {
     case lexer::TokenKind::F32:
     case lexer::TokenKind::F64:
     case lexer::TokenKind::Bool:
-    case lexer::TokenKind::Str: return K_TYPE;
+    case lexer::TokenKind::Str: return SemanticTokenType::Type;
     case lexer::TokenKind::Integer:
-    case lexer::TokenKind::Float: return K_NUMBER;
+    case lexer::TokenKind::Float: return SemanticTokenType::Number;
     case lexer::TokenKind::String:
-    case lexer::TokenKind::Char: return K_STRING;
-    case lexer::TokenKind::DocComment: return K_COMMENT;
+    case lexer::TokenKind::Char: return SemanticTokenType::String;
+    case lexer::TokenKind::DocComment: return SemanticTokenType::Comment;
     default: return std::nullopt;
   }
 }
@@ -170,12 +149,12 @@ bool is_operator(lexer::TokenKind kind) {
 // The kinds the checker attached to names, addressable by the span a
 // name occupies, the end of a path, or the name itself.
 struct SymbolKinds {
-  std::unordered_map<u64, u32> by_span;
-  std::unordered_map<u32, u32> by_path_end;
-  std::unordered_map<std::string_view, u32> by_name;
+  std::unordered_map<u64, SemanticTokenType> by_span;
+  std::unordered_map<u32, SemanticTokenType> by_path_end;
+  std::unordered_map<std::string_view, SemanticTokenType> by_name;
 };
 
-void add_span(SymbolKinds& kinds, diag::Span span, u32 type) {
+void add_span(SymbolKinds& kinds, diag::Span span, SemanticTokenType type) {
   if (span.length != 0) {
     kinds.by_span.emplace(span_key(span), type);
   }
@@ -190,10 +169,12 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       if (!fn.item.is_valid()) {
         continue;
       }
+      const SemanticTokenType type = fn.is_method ? SemanticTokenType::Method
+                                                  : SemanticTokenType::Function;
       const diag::Span name = item_name_span(ast, ast.items[fn.item]);
-      add_span(kinds, name, fn.is_method ? K_METHOD : K_FUNCTION);
+      add_span(kinds, name, type);
       if (name.file == root) {
-        kinds.by_name.emplace(fn.name, fn.is_method ? K_METHOD : K_FUNCTION);
+        kinds.by_name.emplace(fn.name, type);
       }
     }
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
@@ -201,8 +182,8 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
         continue;
       }
       const diag::Span name = item_name_span(ast, ast.items[method.item]);
-      add_span(kinds, name, K_METHOD);
-      kinds.by_name.emplace(method.name, K_METHOD);
+      add_span(kinds, name, SemanticTokenType::Method);
+      kinds.by_name.emplace(method.name, SemanticTokenType::Method);
     }
     for (const analyzer::CheckedModule::StructInfo& info : module.structs) {
       if (!info.item.is_valid()) {
@@ -210,12 +191,12 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       }
       const ast::ItemNode& item = ast.items[info.item];
       const diag::Span name = item_name_span(ast, item);
-      add_span(kinds, name, K_STRUCT);
+      add_span(kinds, name, SemanticTokenType::Struct);
       kinds.by_name.emplace(item.payload.get<ast::ItemStruct>().name.name,
-                            K_STRUCT);
+                            SemanticTokenType::Struct);
       for (const ast::ItemStructField& field :
            item.payload.get<ast::ItemStruct>().fields) {
-        add_span(kinds, field.name.span, K_PROPERTY);
+        add_span(kinds, field.name.span, SemanticTokenType::Property);
       }
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
@@ -223,20 +204,21 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
         continue;
       }
       const ast::ItemNode& item = ast.items[info.item];
-      add_span(kinds, item_name_span(ast, item), K_ENUM);
-      kinds.by_name.emplace(info.name, K_ENUM);
+      add_span(kinds, item_name_span(ast, item), SemanticTokenType::Enum);
+      kinds.by_name.emplace(info.name, SemanticTokenType::Enum);
       const ast::ItemEnum& declaration = item.payload.get<ast::ItemEnum>();
       for (const ast::ItemEnumVariant& variant : declaration.variants) {
-        add_span(kinds, variant.name.span, K_ENUM_MEMBER);
-        kinds.by_name.emplace(variant.name.name, K_ENUM_MEMBER);
+        add_span(kinds, variant.name.span, SemanticTokenType::EnumMember);
+        kinds.by_name.emplace(variant.name.name, SemanticTokenType::EnumMember);
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
       if (!info.item.is_valid()) {
         continue;
       }
-      add_span(kinds, item_name_span(ast, ast.items[info.item]), K_VARIABLE);
-      kinds.by_name.emplace(info.name, K_VARIABLE);
+      add_span(kinds, item_name_span(ast, ast.items[info.item]),
+               SemanticTokenType::Variable);
+      kinds.by_name.emplace(info.name, SemanticTokenType::Variable);
     }
   }
   for (const analyzer::CheckedModule& module : package.modules) {
@@ -246,9 +228,10 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
         continue;
       }
       const auto declared = kinds.by_span.find(span_key(reference.declaration));
-      const u32 type =
-          declared == kinds.by_span.end() ? K_VARIABLE : declared->second;
-      add_span(kinds, reference.declaration, K_VARIABLE);
+      const SemanticTokenType type = declared == kinds.by_span.end()
+                                         ? SemanticTokenType::Variable
+                                         : declared->second;
+      add_span(kinds, reference.declaration, SemanticTokenType::Variable);
       add_span(kinds, reference.site, type);
       kinds.by_path_end.emplace(reference.site.offset + reference.site.length,
                                 type);
@@ -256,9 +239,9 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
   }
 }
 
-std::optional<u32> classify_identifier(const SymbolKinds& kinds,
-                                       std::string_view source,
-                                       diag::Span span) {
+std::optional<SemanticTokenType> classify_identifier(const SymbolKinds& kinds,
+                                                     std::string_view source,
+                                                     diag::Span span) {
   const u64 key = span_key(span);
   const auto exact = kinds.by_span.find(key);
   if (exact != kinds.by_span.end()) {
@@ -280,7 +263,7 @@ std::optional<u32> classify_identifier(const SymbolKinds& kinds,
 
 text::JsonValue semantic_token_types() {
   text::JsonValue types = text::JsonValue::make_array();
-  for (const std::string_view type : K_TOKEN_TYPES) {
+  for (const std::string_view type : semantic_token_type_names()) {
     types.push(text::JsonValue::make_string(std::string(type)));
   }
   return types;
@@ -304,7 +287,7 @@ text::JsonValue semantic_tokens(const Document& document,
   u32 previous_line = 0;
   u32 previous_character = 0;
   bool first = true;
-  const auto emit = [&](Position start, u32 length, u32 type) {
+  const auto emit = [&](Position start, u32 length, SemanticTokenType type) {
     if (length == 0) {
       return;
     }
@@ -317,7 +300,8 @@ text::JsonValue semantic_tokens(const Document& document,
     data.push(text::JsonValue::make_number(static_cast<f64>(delta_line)));
     data.push(text::JsonValue::make_number(static_cast<f64>(delta_character)));
     data.push(text::JsonValue::make_number(static_cast<f64>(length)));
-    data.push(text::JsonValue::make_number(static_cast<f64>(type)));
+    data.push(
+        text::JsonValue::make_number(static_cast<f64>(static_cast<u8>(type))));
     data.push(text::JsonValue::make_number(0));
     previous_line = start.line;
     previous_character = start.character;
@@ -325,7 +309,7 @@ text::JsonValue semantic_tokens(const Document& document,
   };
   // A token cannot cross a line on the wire, so a block comment or a
   // multi-line string is emitted one line at a time.
-  const auto emit_span = [&](diag::Span span, u32 type) {
+  const auto emit_span = [&](diag::Span span, SemanticTokenType type) {
     const usize end = static_cast<usize>(span.offset) + span.length;
     usize begin = span.offset;
     while (begin < end) {
@@ -352,30 +336,32 @@ text::JsonValue semantic_tokens(const Document& document,
     span.offset = lexeme.offset;
     span.length = lexeme.length;
     if (lexeme.kind == cst::Lexeme::Kind::Comment) {
-      emit_span(span, K_COMMENT);
+      emit_span(span, SemanticTokenType::Comment);
       continue;
     }
     if (lexeme.synthetic_semi) {
       continue;
     }
     if (lexeme.token == lexer::TokenKind::Ident) {
-      const std::optional<u32> type = classify_identifier(kinds, source, span);
+      const std::optional<SemanticTokenType> type =
+          classify_identifier(kinds, source, span);
       if (type.has_value()) {
         emit_span(span, *type);
       }
       continue;
     }
     if (is_keyword(lexeme.token)) {
-      emit_span(span, K_KEYWORD);
+      emit_span(span, SemanticTokenType::Keyword);
       continue;
     }
-    if (const std::optional<u32> literal = literal_type(lexeme.token);
+    if (const std::optional<SemanticTokenType> literal =
+            literal_type(lexeme.token);
         literal.has_value()) {
       emit_span(span, *literal);
       continue;
     }
     if (is_operator(lexeme.token)) {
-      emit_span(span, K_OPERATOR);
+      emit_span(span, SemanticTokenType::Operator);
     }
   }
 

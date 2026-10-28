@@ -18,14 +18,11 @@ namespace lsp {
 
 namespace {
 
-// LSP DocumentHighlightKind: 1 text, 2 read, 3 write. The reference
-// table keeps no read/write distinction, so every occurrence is text.
-constexpr f64 K_TEXT = 1;
-
 void add(text::JsonValue* list, const Document& document, diag::Span span) {
   text::JsonValue highlight = text::JsonValue::make_object();
   highlight.set("range", range_json(document, span.offset, span.length));
-  highlight.set("kind", text::JsonValue::make_number(K_TEXT));
+  highlight.set("kind", text::JsonValue::make_number(
+                            static_cast<f64>(DocumentHighlightKind::Text)));
   list->push(std::move(highlight));
 }
 
