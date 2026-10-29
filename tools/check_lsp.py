@@ -44,8 +44,11 @@ TYPE_URI = "file:///type.al"
 UNFORMATTED = "struct  Point{x:i32}"
 BROKEN = "fn main( -> i32 {\n}\n"
 # A comment run and two brace pairs on different lines, so one
-# foldingRange answer exercises both kinds of fold.
-FOLD = "// one\n// two\nfn main() -> i32 {\n  if true {\n    ret 0\n  }\n  ret 1\n}\n"
+# foldingRange answer exercises both kinds of fold. The loop is the
+# document whose while-true finding carries the smoke's quick fix.
+FOLD = (
+    "// one\n// two\nfn main() -> i32 {\n  while true {\n    ret 0\n  }\n  ret 1\n}\n"
+)
 # A named function called once, so definition and references both point
 # at the declaration and the call.
 NAV = "fn id(x: i32) -> i32 {\n  ret x\n}\nfn main() -> i32 {\n  ret id(1)\n}\n"
@@ -253,10 +256,10 @@ def main() -> int:
             "id": 12,
             "method": "textDocument/codeAction",
             "params": {
-                "textDocument": {"uri": NAV_URI},
+                "textDocument": {"uri": FOLD_URI},
                 "range": {
-                    "start": {"line": 4, "character": 0},
-                    "end": {"line": 4, "character": 12},
+                    "start": {"line": 3, "character": 2},
+                    "end": {"line": 3, "character": 14},
                 },
                 "context": {"diagnostics": []},
             },
