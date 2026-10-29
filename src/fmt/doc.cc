@@ -51,7 +51,12 @@ bool fits(const Doc& doc, usize remaining) {
           }
           remaining -= node.text.size();
         } else {
-          remaining = node.text.size() - newline - 1;
+          // The line ends inside this text, and whatever follows lands
+          // on a fresh line under either rendering, so the group's
+          // decision cannot move it: the measure stops here. Measuring
+          // across the break would let bytes the decision cannot move
+          // force a break over bytes it can.
+          return true;
         }
         break;
       }

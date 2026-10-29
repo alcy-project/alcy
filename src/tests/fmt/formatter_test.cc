@@ -357,6 +357,21 @@ TEST_CASE("A hungry scalar that swallowed a tab keeps the line count") {
   CHECK(idempotent(source, narrow));
 }
 
+TEST_CASE("A gap a dropped semicolon leaves does not break the line") {
+  // An error that eats the separator after it takes the chunk boundary
+  // with it, so the pass over the layout reads one chunk where the
+  // source had two, and the pinned gap between the error and the code
+  // carries newlines into the middle of a flow. A group measured across
+  // those newlines broke where the source's own pass fit; the measure
+  // stops at the break, and the line the source fit stays put.
+  const std::string source = std::string("\x00'\n;0&1+\n\n");
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, default_format_config()));
+  CHECK(idempotent(source, narrow));
+}
+
 TEST_CASE("Deeply nested input does not exhaust the stack") {
   std::string source;
   for (usize i = 0; i < 600; ++i) {
