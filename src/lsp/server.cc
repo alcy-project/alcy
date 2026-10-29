@@ -891,7 +891,8 @@ void Server::diagnostic(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  send_result(id, document_diagnostic_report(*document));
+  send_result(id, diagnostics_.pull(*document,
+                                    string_field(params, "previousResultId")));
 }
 
 void Server::workspace_diagnostic(const text::JsonValue& id) {
@@ -1083,6 +1084,7 @@ void Server::did_close(const text::JsonValue& params) {
   documents_.close(uri);
   cache_.erase(uri);
   tokens_.erase(uri);
+  diagnostics_.erase(uri);
   publish_empty_diagnostics(uri);
 }
 

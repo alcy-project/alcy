@@ -4,6 +4,7 @@
 #include "lsp/diagnostics.h"
 
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "diag/bag.h"
@@ -75,6 +76,30 @@ text::JsonValue document_diagnostic_report(const Document& document) {
   report.set("kind", text::JsonValue::make_string("full"));
   report.set("items", document_diagnostics(document));
   return report;
+}
+
+text::JsonValue DiagnosticsCache::pull(const Document& document,
+                                       std::string_view previous_result_id) {
+  const std::string& uri = document.uri();
+  const auto found = entries_.find(uri);
+  if (found != entries_.end() && found->second.version == document.version() &&
+      !previous_result_id.empty() &&
+      found->second.result_id == previous_result_id) {
+    text::JsonValue report = text::JsonValue::make_object();
+    report.set("kind", text::JsonValue::make_string("unchanged"));
+    report.set("resultId",
+               text::JsonValue::make_string(found->second.result_id));
+    return report;
+  }
+  const std::string id = std::to_string(next_id_++);
+  entries_.insert_or_assign(uri, Entry{id, document.version()});
+  text::JsonValue report = document_diagnostic_report(document);
+  report.set("resultId", text::JsonValue::make_string(id));
+  return report;
+}
+
+void DiagnosticsCache::erase(std::string_view uri) {
+  entries_.erase(std::string(uri));
 }
 
 text::JsonValue workspace_diagnostic_report(const DocumentStore& documents) {

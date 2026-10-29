@@ -8,6 +8,7 @@
 
 #include "fpag/base/numeric.h"
 #include "lsp/analysis_cache.h"
+#include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/semantic_tokens.h"
 #include "lsp/transport.h"
@@ -96,6 +97,7 @@ class Server {
   DocumentStore documents_;
   AnalysisCache cache_;
   SemanticTokensCache tokens_;
+  DiagnosticsCache diagnostics_;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;
