@@ -56,10 +56,13 @@ EditOutcome apply_edits(std::string_view original,
   for (const TextEdit& edit : edits) {
     ordered.push_back(&edit);
   }
-  std::sort(ordered.begin(), ordered.end(),
-            [](const TextEdit* left, const TextEdit* right) {
-              return left->offset < right->offset;
-            });
+  // Stable, so two repairs at one offset keep the order the rules
+  // emitted them in rather than whichever the sort happens to leave
+  // first.
+  std::stable_sort(ordered.begin(), ordered.end(),
+                   [](const TextEdit* left, const TextEdit* right) {
+                     return left->offset < right->offset;
+                   });
 
   EditOutcome out;
   out.text.reserve(original.size());
