@@ -25,6 +25,16 @@ bool exempt_name(std::string_view name) {
   return name == "main" || name == "self" || name == "Self" || name == "new";
 }
 
+// One private signature the rule may report. The roots are the entry
+// point and the public surface; everything they reach is live, and a
+// signature no recorded call names is the finding.
+struct Candidate {
+  u32 module;
+  u32 index;
+  ast::ItemIdx item;
+  std::string_view name;
+};
+
 }  // namespace
 
 void DeadCode::run(LintContext& ctx) {
@@ -33,6 +43,13 @@ void DeadCode::run(LintContext& ctx) {
   // reached, so no path resolution happens here. An edge is a call that
   // was checked; a dynamic dispatch through a spec is an edge to every
   // implementation the checker recorded, which is what the table holds.
+  //
+  // The checker keys its targets by callee and instantiation, not by
+  // the function the call sits in, so liveness is per callee: a
+  // signature is live when any call anywhere names it. That keeps a
+  // helper chain live when only its head is called from a dead caller,
+  // which under-reports rather than invents a chain the rule cannot
+  // prove.
   const analyzer::CheckedPackage& package = ctx.package;
 
   // The signatures that own a declared item, per module. A signature
@@ -40,12 +57,6 @@ void DeadCode::run(LintContext& ctx) {
   // the goal package alone: staged toolchain sources and path
   // dependencies have their own callers, and lint.toml does not
   // configure them.
-  struct Candidate {
-    u32 module;
-    u32 index;
-    ast::ItemIdx item;
-    std::string_view name;
-  };
   std::vector<Candidate> candidates;
   for (u32 module = 0; module < package.modules.size(); ++module) {
     if (!lintable(ctx.package.tree, module)) {
@@ -73,23 +84,27 @@ void DeadCode::run(LintContext& ctx) {
     return;
   }
 
-  // Whether a call target names a candidate. A target's (module, index)
+  // Whether a call target names a signature. A target's (module, index)
   // pair is the resolution the checker recorded; a method call and a
-  // bare call share the table.
-  auto is_called = [&package](u32 module, u32 index) {
-    for (const analyzer::CheckedModule& checked : package.modules) {
-      for (const analyzer::CheckedModule::CallTarget& target :
-           checked.call_targets) {
-        if (target.module == module && target.index == index) {
-          return true;
-        }
+  // bare call share the table. One pass over the targets marks what a
+  // call reaches, so the candidate loop is a lookup rather than a scan
+  // per signature.
+  std::vector<std::vector<char>> called(package.modules.size());
+  for (u32 module = 0; module < package.modules.size(); ++module) {
+    called[module].assign(package.modules[module].functions.size(), 0);
+  }
+  for (const analyzer::CheckedModule& checked : package.modules) {
+    for (const analyzer::CheckedModule::CallTarget& target :
+         checked.call_targets) {
+      if (target.module < called.size() &&
+          target.index < called[target.module].size()) {
+        called[target.module][target.index] = 1;
       }
     }
-    return false;
-  };
+  }
 
   for (const Candidate& candidate : candidates) {
-    if (is_called(candidate.module, candidate.index)) {
+    if (called[candidate.module][candidate.index] != 0) {
       continue;
     }
     const ast::ItemNode& node = ctx.ast.items[candidate.item];
