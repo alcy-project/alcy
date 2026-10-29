@@ -32,6 +32,7 @@
 #include "lsp/signature.h"
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
+#include "lsp/workspace_symbols.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -204,6 +205,15 @@ void Server::handle_request(const text::JsonValue& message) {
       return;
     }
     implementation(*id, *params);
+    return;
+  }
+  if (method == "workspace/symbol") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "workspace/symbol needs params");
+      return;
+    }
+    workspace_symbol(*id, *params);
     return;
   }
   if (method == "textDocument/documentHighlight") {
@@ -388,6 +398,7 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("renameProvider", std::move(rename_provider));
   capabilities.set("typeDefinitionProvider", text::JsonValue::make_bool(true));
   capabilities.set("implementationProvider", text::JsonValue::make_bool(true));
+  capabilities.set("workspaceSymbolProvider", text::JsonValue::make_bool(true));
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(false));
@@ -514,6 +525,11 @@ void Server::type_definition(const text::JsonValue& id,
     return;
   }
   send_result(id, location_json(*document, *location));
+}
+
+void Server::workspace_symbol(const text::JsonValue& id,
+                              const text::JsonValue& params) {
+  send_result(id, workspace_symbols(documents_, string_field(params, "query")));
 }
 
 void Server::implementation(const text::JsonValue& id,

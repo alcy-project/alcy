@@ -57,6 +57,8 @@ source_set("lsp") {
     "transport.h",
     "typing.cc",
     "typing.h",
+    "workspace_symbols.cc",
+    "workspace_symbols.h",
   ]
 
   deps = [

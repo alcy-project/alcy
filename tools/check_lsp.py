@@ -352,7 +352,13 @@ def main() -> int:
                 "position": {"line": 4, "character": 6},
             },
         },
-        {"jsonrpc": "2.0", "id": 21, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 21,
+            "method": "workspace/symbol",
+            "params": {"query": "Point"},
+        },
+        {"jsonrpc": "2.0", "id": 22, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -411,6 +417,8 @@ def main() -> int:
         return fail("initialize did not advertise typeDefinitionProvider")
     if capabilities.get("implementationProvider") is not True:
         return fail("initialize did not advertise implementationProvider")
+    if capabilities.get("workspaceSymbolProvider") is not True:
+        return fail("initialize did not advertise workspaceSymbolProvider")
     rename = capabilities.get("renameProvider")
     if not isinstance(rename, dict) or rename.get("prepareProvider") is not True:
         return fail("initialize did not advertise renameProvider")
@@ -583,7 +591,14 @@ def main() -> int:
     if not isinstance(impl_start, dict) or impl_start.get("line") != 7:
         return fail(f"implementation missed the impl method: {implementations!r}")
 
-    if by_id.get(21, {}).get("result", "missing") is not None:
+    workspace = by_id.get(21, {}).get("result")
+    if not isinstance(workspace, list) or not any(
+        isinstance(symbol, dict) and symbol.get("name") == "Point"
+        for symbol in workspace
+    ):
+        return fail(f"workspace/symbol missed Point: {workspace!r}")
+
+    if by_id.get(22, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
