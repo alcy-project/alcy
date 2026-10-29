@@ -78,6 +78,7 @@ complete gate.
 | `lossy-cast` | allow | a cast that narrows the value's scalar type |
 | `bool-comparison` | warn | a bool compared with a true or false literal |
 | `dead-code` | allow | a function no call in the package reaches |
+| `unused-field` | allow | a struct field no expression reads |
 | `missing-docs` | allow | a `pub` item without a doc comment |
 | `too-many-arguments` | warn | a function above `max-args` parameters |
 | `unused-import` | warn | an import no path in the module names |
