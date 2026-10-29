@@ -393,7 +393,13 @@ def main() -> int:
                 }
             },
         },
-        {"jsonrpc": "2.0", "id": 24, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 24,
+            "method": "textDocument/codeLens",
+            "params": {"textDocument": {"uri": NAV_URI}},
+        },
+        {"jsonrpc": "2.0", "id": 25, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -456,6 +462,8 @@ def main() -> int:
         return fail("initialize did not advertise workspaceSymbolProvider")
     if capabilities.get("callHierarchyProvider") is not True:
         return fail("initialize did not advertise callHierarchyProvider")
+    if not isinstance(capabilities.get("codeLensProvider"), dict):
+        return fail("initialize did not advertise codeLensProvider")
     rename = capabilities.get("renameProvider")
     if not isinstance(rename, dict) or rename.get("prepareProvider") is not True:
         return fail("initialize did not advertise renameProvider")
@@ -649,7 +657,14 @@ def main() -> int:
     if incoming[0].get("from", {}).get("name") != "main":
         return fail(f"incomingCalls named the wrong caller: {incoming!r}")
 
-    if by_id.get(24, {}).get("result", "missing") is not None:
+    lenses = by_id.get(24, {}).get("result")
+    if not isinstance(lenses, list) or not any(
+        isinstance(lens, dict) and lens.get("command", {}).get("title") == "1 reference"
+        for lens in lenses
+    ):
+        return fail(f"codeLens missed the reference count: {lenses!r}")
+
+    if by_id.get(25, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

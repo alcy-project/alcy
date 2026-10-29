@@ -48,6 +48,8 @@ of the compiler (ADR-0107), so it owns no analysis of its own:
   own name when the cursor sits on it.
 - `call_hierarchy.{h,cc}` walks the call sites the checker recorded,
   so incoming and outgoing calls are its own reading.
+- `code_lens.{h,cc}` counts each declaration's references in one pass
+  over the reference table.
 - `workspace_symbols.{h,cc}` searches every open document's outline,
   so quick open spans the buffers the client holds.
 - `rename.{h,cc}` renames the name under the cursor, editing the

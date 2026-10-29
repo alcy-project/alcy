@@ -17,6 +17,8 @@ source_set("lsp") {
     "call_hierarchy.h",
     "code_actions.cc",
     "code_actions.h",
+    "code_lens.cc",
+    "code_lens.h",
     "completion.cc",
     "completion.h",
     "diagnostics.cc",

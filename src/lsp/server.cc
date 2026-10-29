@@ -16,6 +16,7 @@
 #include "lsp/analysis_cache.h"
 #include "lsp/call_hierarchy.h"
 #include "lsp/code_actions.h"
+#include "lsp/code_lens.h"
 #include "lsp/completion.h"
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
@@ -206,6 +207,15 @@ void Server::handle_request(const text::JsonValue& message) {
       return;
     }
     implementation(*id, *params);
+    return;
+  }
+  if (method == "textDocument/codeLens") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "codeLens needs params");
+      return;
+    }
+    code_lens(*id, *params);
     return;
   }
   if (method == "textDocument/prepareCallHierarchy") {
@@ -428,6 +438,7 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("implementationProvider", text::JsonValue::make_bool(true));
   capabilities.set("workspaceSymbolProvider", text::JsonValue::make_bool(true));
   capabilities.set("callHierarchyProvider", text::JsonValue::make_bool(true));
+  capabilities.set("codeLensProvider", text::JsonValue::make_object());
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(false));
@@ -554,6 +565,22 @@ void Server::type_definition(const text::JsonValue& id,
     return;
   }
   send_result(id, location_json(*document, *location));
+}
+
+void Server::code_lens(const text::JsonValue& id,
+                       const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  if (text_document == nullptr || !text_document->is_object()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, code_lenses(*document, cache_.get(*document)));
 }
 
 void Server::call_hierarchy_prepare(const text::JsonValue& id,
