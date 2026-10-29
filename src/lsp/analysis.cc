@@ -58,14 +58,21 @@ DocumentAnalysis::DocumentAnalysis(const Document& document)
 std::optional<ir::TypeIdx> checked_expr_type(
     const analyzer::CheckedPackage& package,
     ast::ExprIdx expr) {
+  // The plain answer first: the keyed query the checker maintains
+  // answers for the spelling the source wrote (ADR-0109).
+  for (const analyzer::CheckedModule& module : package.modules) {
+    if (const analyzer::CheckedModule::ExprType* entry =
+            module.expr_type_of(expr, analyzer::NO_INST)) {
+      return entry->type;
+    }
+  }
+  // An expression checked under several instantiations: the first
+  // recorded answer, which the server de-duplicates on.
   std::optional<ir::TypeIdx> fallback;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::ExprType& entry : module.expr_types) {
       if (entry.expr != expr) {
         continue;
-      }
-      if (entry.inst == analyzer::NO_INST) {
-        return entry.type;
       }
       if (!fallback.has_value()) {
         fallback = entry.type;
