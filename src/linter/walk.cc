@@ -164,9 +164,15 @@ void walk_expr(LintContext& ctx, ast::ExprIdx expr, const Visitor& visitor) {
       }
       break;
     }
-    case K::Field:
-      walk_expr(ctx, node.payload.get<ast::ExprField>().receiver, visitor);
+    case K::Field: {
+      const ast::ExprField& e = node.payload.get<ast::ExprField>();
+      // A projection reads the field it names.
+      if (visitor.field_read != nullptr) {
+        visitor.field_read(ctx, e.name.name);
+      }
+      walk_expr(ctx, e.receiver, visitor);
       break;
+    }
     case K::Index: {
       const ast::ExprIndex& e = node.payload.get<ast::ExprIndex>();
       walk_expr(ctx, e.receiver, visitor);
@@ -282,6 +288,10 @@ void walk_pattern(LintContext& ctx,
       const ast::PatternStruct& p = node.payload.strukt;
       call_path(visitor, ctx, p.path);
       for (const ast::FieldPattern& field : p.fields) {
+        // A destructuring pattern reads every field it names.
+        if (visitor.field_read != nullptr) {
+          visitor.field_read(ctx, field.name.name);
+        }
         walk_pattern(ctx, field.pattern, visitor);
       }
       break;

@@ -34,6 +34,7 @@ source_set("linter") {
     "rules/control_flow_rules.cc",
     "rules/dead_code_rules.cc",
     "rules/expression_rules.cc",
+    "rules/field_rules.cc",
     "rules/import_rules.cc",
     "rules/item_rules.cc",
     "rules/rules.cc",

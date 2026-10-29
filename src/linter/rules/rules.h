@@ -190,4 +190,17 @@ struct UnusedImport {
   static void run(LintContext& ctx);
 };
 
+// A module rule: field reads recorded during the walk. A struct field
+// no expression reads - the constructor's own initializer does not
+// count - is reported.
+struct UnusedField {
+  static constexpr std::string_view ID = "unused-field";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Allow;
+  static constexpr LintCode CODE = LintCode::UnusedField;
+  static constexpr std::string_view SUMMARY =
+      "a struct field no expression reads";
+  static constexpr bool READS_FIELD_USAGE = true;
+  static void run(LintContext& ctx);
+};
+
 }  // namespace linter::rules

@@ -26,6 +26,7 @@
 namespace linter {
 
 struct BindingIndex;
+struct FieldUsage;
 struct NameUsage;
 
 // What one rule run reads. The context is rebuilt for each module, so a
@@ -73,6 +74,9 @@ struct LintContext {
   // walk when an enabled rule reads it. Null when no enabled rule does.
   // The engine writes it; a rule only reads it.
   NameUsage* usage_index = nullptr;
+  // The field names the module reads, recorded by the same walk. Null
+  // when no enabled rule reads it.
+  FieldUsage* field_usage = nullptr;
   // The rules the engine's single walk dispatches expressions, items,
   // and blocks to, in registry order. Engine plumbing; a rule does not
   // read these.

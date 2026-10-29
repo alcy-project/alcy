@@ -16,4 +16,12 @@ struct NameUsage {
   std::vector<std::string_view> names;
 };
 
+// The field names the module reads, in traversal order: a `.name`
+// projection on any expression, and a destructuring pattern's field.
+// A constructor's initializer names are writes, not reads, so they are
+// not recorded; that is the distinction unused-field reports on.
+struct FieldUsage {
+  std::vector<std::string_view> names;
+};
+
 }  // namespace linter

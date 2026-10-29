@@ -4,6 +4,7 @@
 #include "linter/engine.h"
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "analyzer/resolve.h"
@@ -70,6 +71,13 @@ void collect_path(LintContext& ctx, ast::PathIdx path) {
   }
 }
 
+// The field-usage table rides the same walk as the path heads.
+void collect_field_read(LintContext& ctx, std::string_view name) {
+  if (ctx.field_usage != nullptr) {
+    ctx.field_usage->names.push_back(name);
+  }
+}
+
 }  // namespace
 
 bool lintable(const analyzer::ModuleTree& tree, u32 module) {
@@ -103,6 +111,7 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
   std::vector<const Rule*> run_rules;
   bool needs_bindings = false;
   bool needs_usage = false;
+  bool needs_field_usage = false;
   for (u32 index = 0; index < static_cast<u32>(all.size()); ++index) {
     if (config.setting(index).level == LintLevel::Allow) {
       continue;
@@ -110,6 +119,7 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
     const Rule& rule = all[index];
     needs_bindings = needs_bindings || rule.reads_bindings;
     needs_usage = needs_usage || rule.reads_usage;
+    needs_field_usage = needs_field_usage || rule.reads_field_usage;
     if (rule.check_expr != nullptr) {
       expr_rules.push_back(&rule);
     } else if (rule.check_item != nullptr) {
@@ -139,6 +149,7 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
 
   BindingIndex bindings;
   NameUsage usage;
+  FieldUsage fields;
   for (u32 module = 0; module < package.tree.modules.size(); ++module) {
     if (!lintable(package.tree, module)) {
       continue;
@@ -146,6 +157,7 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
     lint.module = module;
     lint.binding_index = nullptr;
     lint.usage_index = nullptr;
+    lint.field_usage = nullptr;
     if (needs_bindings) {
       collect_bindings(lint, bindings);
       lint.binding_index = &bindings;
@@ -166,10 +178,17 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
         lint.usage_index = &usage;
       }
     }
-    if (walk || usage_here) {
+    if (needs_field_usage) {
+      fields.names.clear();
+      lint.field_usage = &fields;
+    }
+    if (walk || usage_here || lint.field_usage != nullptr) {
       Visitor module_visitor = visitor;
       if (usage_here) {
         module_visitor.path = &collect_path;
+      }
+      if (lint.field_usage != nullptr) {
+        module_visitor.field_read = &collect_field_read;
       }
       walk_module(lint, module_visitor);
     }

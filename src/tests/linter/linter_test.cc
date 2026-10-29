@@ -452,6 +452,48 @@ TEST_CASE("ignore silences an unused import") {
   }
 }
 
+TEST_CASE("unused-field reports a field no expression reads") {
+  Run run;
+  run("struct P { used: i32, unused: i32 }\n\n"
+      "fn main() -> i32 {\n  p := P { used: 1, unused: 2 }\n  ret p.used\n}\n",
+      config_from(run.ctx, "[rules]\nunused-field = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-field") == 1);
+}
+
+TEST_CASE("unused-field leaves a read field alone") {
+  Run run;
+  run("struct P { a: i32, b: i32 }\n\n"
+      "fn main() -> i32 {\n  p := P { a: 1, b: 2 }\n  ret p.a + p.b\n}\n",
+      config_from(run.ctx, "[rules]\nunused-field = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-field") == 0);
+}
+
+TEST_CASE("unused-field counts a destructuring pattern as a read") {
+  Run run;
+  run("struct P { a: i32, b: i32 }\n\n"
+      "fn f(p: P) -> i32 {\n"
+      "  ret match p { P { a, b } => a + b }\n}\n\n"
+      "fn main() -> i32 {\n  ret f(P { a: 1, b: 2 })\n}\n",
+      config_from(run.ctx, "[rules]\nunused-field = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-field") == 0);
+}
+
+TEST_CASE("unused-field leaves a pub struct and pub field alone") {
+  Run run;
+  run("pub struct P { pub used: i32, spare: i32 }\n\n"
+      "fn main() -> i32 {\n  p := P { used: 1, spare: 2 }\n  ret p.used\n}\n",
+      config_from(run.ctx, "[rules]\nunused-field = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-field") == 1);
+}
+
+TEST_CASE("unused-field is off until it is asked for") {
+  Run run;
+  run("struct P { used: i32, unused: i32 }\n\n"
+      "fn main() -> i32 {\n  p := P { used: 1, unused: 2 }\n  ret p.used\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-field") == 0);
+}
+
 TEST_CASE("dead-code reports an uncalled private function") {
   Run run;
   run("fn main() -> i32 {\n  ret 0\n}\n\n"

@@ -34,6 +34,12 @@ concept ReadsUsage = requires {
   { R::READS_USAGE } -> std::convertible_to<bool>;
 } && R::READS_USAGE;
 
+// A rule that reads the module's field-usage table declares the fact.
+template <typename R>
+concept ReadsFieldUsage = requires {
+  { R::READS_FIELD_USAGE } -> std::convertible_to<bool>;
+} && R::READS_FIELD_USAGE;
+
 // The identity every rule carries.
 template <typename R>
 concept RuleIdentity = requires {
@@ -94,6 +100,8 @@ struct Rule {
   // Whether the rule reads the name-usage table the engine records
   // during the same walk.
   bool reads_usage = false;
+  // Whether the rule reads the field-usage table.
+  bool reads_field_usage = false;
 };
 
 template <RuleType R>
@@ -121,6 +129,7 @@ constexpr Rule rule_row() {
   }
   rule.reads_bindings = ReadsBindings<R>;
   rule.reads_usage = ReadsUsage<R>;
+  rule.reads_field_usage = ReadsFieldUsage<R>;
   return rule;
 }
 

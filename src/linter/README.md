@@ -92,6 +92,13 @@ false positive is preferred to one that guesses: `unused-mut` counts a
 method receiver as a write, because the syntax does not say whether the
 receiver is taken newly exclusively.
 
+`unused-field` reads the field names the walk records. A field is read
+when a projection or a destructuring pattern names it; the
+constructor's initializer is a write and does not count, which is the
+question the rule answers. A `pub` field is the package's surface and
+is never reported; the struct's own `pub` does not make every field
+one.
+
 `dead-code` reads the checker's call graph, not the source: a finding
 is a private function whose (module, signature) pair no recorded call
 target names. The entry point, `pub` declarations, and spec

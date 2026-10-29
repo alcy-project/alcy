@@ -23,6 +23,10 @@ struct Visitor {
   // paths, the type paths, the structurally named patterns and struct
   // literals, and a fixed array's length path.
   void (*path)(LintContext&, ast::PathIdx) = nullptr;
+  // Every field name the module reads: a projection and a destructuring
+  // pattern's field. A constructor's initializer is a write and is not
+  // reported here.
+  void (*field_read)(LintContext&, std::string_view) = nullptr;
 };
 
 // Walks the module being checked: every item and the types its signature

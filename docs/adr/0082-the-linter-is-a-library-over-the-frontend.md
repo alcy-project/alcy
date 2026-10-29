@@ -88,4 +88,7 @@ A later revision added `dead-code`, which reads the checker's call
 target table rather than the source: reachability is the resolution the
 analyzer already did, restricted to the goal package and its entry
 point, with `pub` declarations and spec implementations kept out of the
-question.
+question. It added `unused-field` beside it, which reads the field
+names the same walk records - a projection or a destructuring pattern,
+not the constructor's initializer - so the read and the write are told
+apart by the node that names the field.

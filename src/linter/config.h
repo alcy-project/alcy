@@ -11,6 +11,7 @@
 #include "fpag/base/result.h"
 #include "fpag/mem/arena.h"
 #include "linter/level.h"
+#include "linter/rule.h"
 #include "source/source.h"
 
 namespace linter {
@@ -47,11 +48,17 @@ struct LintConfig {
   bool borrow_checks = true;
 
   // The setting for the rule at the given index in the registry. An
-  // index past the table reads the default, which is what a config
-  // parsed before the registry grew would want.
+  // index past the table reads the rule's own default: a config that
+  // names nothing - the lsp's, or a test's - is not a config that
+  // turned every rule up to `level`, and a rule registered after this
+  // table was parsed is configured by its default.
   [[nodiscard]] RuleSetting setting(u32 index) const {
     if (index < rules.size()) {
       return rules[index];
+    }
+    const std::span<const Rule> all = all_rules();
+    if (index < all.size()) {
+      return RuleSetting{.level = all[index].default_level, .ignore = {}};
     }
     return RuleSetting{.level = default_level, .ignore = {}};
   }
