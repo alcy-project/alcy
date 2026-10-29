@@ -14,7 +14,7 @@ fn main() -> i32 {
   v.push(1)
   v.push(2)
   v.push(3)
-  if count::<VecIter<i32>>(v.iter()) != 3 {
+  if count::<VecIter<i32>, i32>(v.iter()) != 3 {
     ret 1
   }
 

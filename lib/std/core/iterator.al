@@ -22,7 +22,7 @@ pub struct MapIter<I, T, U> {
   pub f: (T) -> U,
 }
 
-impl<I, T, U> Iterator < U > for MapIter<I, T, U> {
+impl<I: Iterator<T>, T, U> Iterator < U > for MapIter<I, T, U> {
   fn next(mut self: &mut Self) -> Option<U> {
     ret match self.iter.next() {
       Option::Some(v) => Option::Some((self.f)(v)),
@@ -38,7 +38,7 @@ pub struct FilterIter<I, T> {
   pub f: (T) -> bool,
 }
 
-impl<I, T> Iterator < T > for FilterIter<I, T> {
+impl<I: Iterator<T>, T> Iterator < T > for FilterIter<I, T> {
   fn next(mut self: &mut Self) -> Option<T> {
     ret match self.iter.next() {
       Option::Some(v) => if (self.f)(v) {
@@ -59,7 +59,7 @@ pub struct EnumerateIter<I, E> {
   pub index: usize,
 }
 
-impl<I, E> Iterator < (usize, E) > for EnumerateIter<I, E> {
+impl<I: Iterator<E>, E> Iterator < (usize, E) > for EnumerateIter<I, E> {
   fn next(mut self: &mut Self) -> Option<(usize, E)> {
     ret match self.iter.next() {
       Option::Some(v) => {
@@ -78,7 +78,7 @@ pub struct TakeIter<I, T> {
   pub remaining: usize,
 }
 
-impl<I, T> Iterator < T > for TakeIter<I, T> {
+impl<I: Iterator<T>, T> Iterator < T > for TakeIter<I, T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if self.remaining == 0 {
       ret Option::None
@@ -96,7 +96,7 @@ pub struct SkipIter<I, T> {
   pub started: bool,
 }
 
-impl<I, T> Iterator < T > for SkipIter<I, T> {
+impl<I: Iterator<T>, T> Iterator < T > for SkipIter<I, T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if !self.started {
       self.started = true
@@ -115,7 +115,7 @@ impl<I, T> Iterator < T > for SkipIter<I, T> {
 // Consumes the iterator into one value, one step at a time. The
 // iterator's type and the element type are the call's to spell
 // (`fold::<I, T, A>(iter, init, f)`).
-pub fn fold<I, T, A>(mut iter: I, init: A, f: (A, T) -> A) -> A {
+pub fn fold<I: Iterator<T>, T, A>(mut iter: I, init: A, f: (A, T) -> A) -> A {
   mut acc := init
   loop {
     match iter.next() {
@@ -128,9 +128,10 @@ pub fn fold<I, T, A>(mut iter: I, init: A, f: (A, T) -> A) -> A {
   ret acc
 }
 
-// How many values the iterator yields. The element type does not
-// appear, so `count::<I>(iter)` is enough.
-pub fn count<I>(mut iter: I) -> usize {
+// How many values the iterator yields. The element type comes from
+// the bound, so `count::<I, T>(iter)` spells both and a call with no
+// turbofish infers both.
+pub fn count<I: Iterator<T>, T>(mut iter: I) -> usize {
   mut n := 0 as usize
   loop {
     match iter.next() {
@@ -145,7 +146,7 @@ pub fn count<I>(mut iter: I) -> usize {
 
 // Whether any value passes. The element is consumed by the predicate,
 // so the call spells both (`any::<I, T>(iter, f)`).
-pub fn any<I, T>(mut iter: I, f: (T) -> bool) -> bool {
+pub fn any<I: Iterator<T>, T>(mut iter: I, f: (T) -> bool) -> bool {
   mut found := false
   loop {
     match iter.next() {
@@ -162,7 +163,7 @@ pub fn any<I, T>(mut iter: I, f: (T) -> bool) -> bool {
 }
 
 // Whether every value passes.
-pub fn all<I, T>(mut iter: I, f: (T) -> bool) -> bool {
+pub fn all<I: Iterator<T>, T>(mut iter: I, f: (T) -> bool) -> bool {
   mut every := true
   loop {
     match iter.next() {
@@ -179,7 +180,7 @@ pub fn all<I, T>(mut iter: I, f: (T) -> bool) -> bool {
 }
 
 // The position of the first value that passes, counting from zero.
-pub fn position<I, T>(mut iter: I, f: (T) -> bool) -> Option<usize> {
+pub fn position<I: Iterator<T>, T>(mut iter: I, f: (T) -> bool) -> Option<usize> {
   mut found: Option<usize> := Option::None
   mut at := 0 as usize
   loop {
@@ -198,7 +199,7 @@ pub fn position<I, T>(mut iter: I, f: (T) -> bool) -> Option<usize> {
 }
 
 // The first value that passes.
-pub fn find<I, T>(mut iter: I, f: (T) -> bool) -> Option<T> {
+pub fn find<I: Iterator<T>, T>(mut iter: I, f: (T) -> bool) -> Option<T> {
   mut found: Option<T> := Option::None
   loop {
     match iter.next() {
@@ -215,7 +216,7 @@ pub fn find<I, T>(mut iter: I, f: (T) -> bool) -> Option<T> {
 }
 
 // The last value, or `None` when the iterator is empty.
-pub fn last<I, T>(mut iter: I) -> Option<T> {
+pub fn last<I: Iterator<T>, T>(mut iter: I) -> Option<T> {
   mut found: Option<T> := Option::None
   loop {
     match iter.next() {
@@ -228,9 +229,9 @@ pub fn last<I, T>(mut iter: I) -> Option<T> {
   ret found
 }
 
-// Pushes every value into a container the caller owns. The target's
-// element type is what the call spells (`collect_into::<I, T>(iter,
-// out)`), which is the part `collect` would ask a bound for.
+// Pushes every value into a container the caller owns. The element
+// type comes from the bound (`collect_into::<I, T>(iter, out)`), the
+// way `collect` asks it.
 // The adapters' constructors. The element type comes from the bound
 // (`I: Iterator<T>`), so a call spells only the predicate or the count
 // (`filter(v.iter(), (x: &i32) -> *x > 1)`); `map` waits for the
@@ -262,7 +263,7 @@ pub fn collect<I: Iterator<T>, T>(mut iter: I) -> Vec<T> {
   ret out
 }
 
-pub fn collect_into<I, T>(mut iter: I, out: &mut Vec<T>) {
+pub fn collect_into<I: Iterator<T>, T>(mut iter: I, out: &mut Vec<T>) {
   loop {
     match iter.next() {
       Option::Some(v) => {

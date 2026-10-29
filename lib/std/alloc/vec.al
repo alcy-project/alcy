@@ -157,19 +157,6 @@ impl<T> Vec<T> {
     }
   }
 
-  // Whether some element equals `value`, compared the way `==`
-  // compares two elements.
-  pub fn contains(self: &Self, value: &T) -> bool {
-    mut i := 0 as usize
-    while i < self.len {
-      if *self.at(i).or_panic_with_message("the index is within the vec") == *value {
-        ret true
-      }
-      i = i + 1
-    }
-    ret false
-  }
-
   // A left fold: `acc` starts the state and `step` carries it across
   // every element in order.
   pub fn fold<A>(self: &Self, acc: A, step: (A, &T) -> A) -> A {
@@ -425,6 +412,25 @@ impl<T> Vec<T> {
   // Consumes the vector; the cursor owns what is left.
   pub fn into_iter(self: Vec<T>) -> VecIntoIter<T> {
     ret VecIntoIter { v: self, pos: 0 }
+  }
+}
+
+// Equality has to exist for `contains` to compare elements, so the
+// method sits in a block that says so: `v.contains(&x)` on a
+// `Vec<Plain>` names `Plain` at the call rather than a line in here
+// (ADR-0028).
+impl<T: PartialEq> Vec<T> {
+  // Whether some element equals `value`, compared the way `==`
+  // compares two elements.
+  pub fn contains(self: &Self, value: &T) -> bool {
+    mut i := 0 as usize
+    while i < self.len {
+      if *self.at(i).or_panic_with_message("the index is within the vec") == *value {
+        ret true
+      }
+      i = i + 1
+    }
+    ret false
   }
 }
 
