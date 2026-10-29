@@ -60,16 +60,19 @@ class CompilerFixture {
   // only after preparing the ones before it, and the check is there so
   // that asking wrongly stops the run instead of reading nothing.
   const analyzer::ModuleTree& tree() const {
+    // The optional's emptiness is the caller's precondition, which the
+    // debug check names; the static analyzer cannot see the ordering
+    // the cases keep, so each dereference is marked.
     DCHECK(tree_.has_value());
-    return *tree_;
+    return *tree_;  // NOLINT(bugprone-unchecked-optional-access)
   }
   const analyzer::CheckedPackage& checked() const {
     DCHECK(checked_.has_value());
-    return *checked_;
+    return *checked_;  // NOLINT(bugprone-unchecked-optional-access)
   }
   const lowering::LoweredPackage& lowered() const {
     DCHECK(lowered_.has_value());
-    return *lowered_;
+    return *lowered_;  // NOLINT(bugprone-unchecked-optional-access)
   }
 
   // The bag the stages wrote to. Borrow checking takes one by reference
@@ -82,12 +85,20 @@ class CompilerFixture {
   // while it builds a module.
   ir::SymbolTable& strings() { return ctx_.strings; }
 
+  // The context the stages ran in, for a case that drives a later phase
+  // through the same entry the pipeline takes. The stages consume what
+  // they are handed, so only a case whose subject reads the context
+  // rather than extends it may take this.
+  pipeline::PipelineContext& context() { return ctx_; }
+
   // Hands over the verified storage, consuming the proof: the emitter
   // takes it by value, so one emission consumes it and a second needs a
   // package built again.
   ir::VerifiedStorage take_storage() {
     DCHECK(lowered_.has_value());
-    return std::move(*lowered_).storage;
+    // See tree() for why the dereference is marked.
+    return std::move(*lowered_)
+        .storage;  // NOLINT(bugprone-unchecked-optional-access)
   }
 
  private:

@@ -34,6 +34,8 @@ source_set("bench_cases") {
   sources = [
     "case_frontend.cc",
     "case_frontend.h",
+    "case_linter.cc",
+    "case_linter.h",
     "case_pipeline.cc",
     "case_pipeline.h",
     "fixture.cc",
@@ -52,6 +54,9 @@ source_set("bench_cases") {
   deps = [
     ":bench",
     "//src:alcy_lib",
+
+    # The lint case drives the linter engine over a checked package.
+    "//src/linter",
   ]
 
   # The cases include the engine's headers, and the driver includes the

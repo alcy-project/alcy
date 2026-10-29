@@ -10,8 +10,8 @@ the design.
   budget), rejecting noise rather than averaging it away.
 - `statistics.cc` pools samples; a report carries the spread, not only
   the median.
-- `case_frontend.cc`, `case_pipeline.cc`, and `case_codegen.cc` are the
-  fixtures and cases the smoke run exercises.
+- `case_frontend.cc`, `case_linter.cc`, `case_pipeline.cc`, and
+  `case_codegen.cc` are the fixtures and cases the smoke run exercises.
 - `tools/run_benchmarks.py` drives it; the CI job runs `smoke`.
 
 Cases are measured through the same public entries a user's build would
