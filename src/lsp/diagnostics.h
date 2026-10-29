@@ -18,4 +18,8 @@ text::JsonValue document_diagnostics(const Document& document);
 // and one that listens see one answer.
 text::JsonValue document_diagnostic_report(const Document& document);
 
+// The pull-model report for every open document: one full report per
+// document, each tagged with its URI and version.
+text::JsonValue workspace_diagnostic_report(const DocumentStore& documents);
+
 }  // namespace lsp

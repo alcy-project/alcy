@@ -77,4 +77,19 @@ text::JsonValue document_diagnostic_report(const Document& document) {
   return report;
 }
 
+text::JsonValue workspace_diagnostic_report(const DocumentStore& documents) {
+  text::JsonValue items = text::JsonValue::make_array();
+  for (const auto& entry : documents.documents()) {
+    const Document& document = entry.second;
+    text::JsonValue report = document_diagnostic_report(document);
+    report.set("uri", text::JsonValue::make_string(document.uri()));
+    report.set("version", text::JsonValue::make_number(
+                              static_cast<f64>(document.version())));
+    items.push(std::move(report));
+  }
+  text::JsonValue out = text::JsonValue::make_object();
+  out.set("items", std::move(items));
+  return out;
+}
+
 }  // namespace lsp

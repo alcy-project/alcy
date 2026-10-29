@@ -263,6 +263,10 @@ void Server::handle_request(const text::JsonValue& message) {
     document_highlight(*id, *params);
     return;
   }
+  if (method == "workspace/diagnostic") {
+    workspace_diagnostic(*id);
+    return;
+  }
   if (method == "textDocument/diagnostic") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -443,7 +447,7 @@ void Server::initialize(const text::JsonValue& id) {
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(false));
   diagnostic_provider.set("workspaceDiagnostics",
-                          text::JsonValue::make_bool(false));
+                          text::JsonValue::make_bool(true));
   capabilities.set("diagnosticProvider", std::move(diagnostic_provider));
   text::JsonValue experimental = text::JsonValue::make_object();
   experimental.set("alcy/structLayout", text::JsonValue::make_bool(true));
@@ -769,6 +773,10 @@ void Server::diagnostic(const text::JsonValue& id,
     return;
   }
   send_result(id, document_diagnostic_report(*document));
+}
+
+void Server::workspace_diagnostic(const text::JsonValue& id) {
+  send_result(id, workspace_diagnostic_report(documents_));
 }
 
 void Server::prepare_rename(const text::JsonValue& id,

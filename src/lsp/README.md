@@ -71,6 +71,8 @@ of the compiler (ADR-0107), so it owns no analysis of its own:
   AST's items, with struct fields, enum variants, and impl or spec
   members as children.
 - `typing.{h,cc}` renders a decided type the way source spells it.
+- `diagnostics.{h,cc}` answers one document's pull report and the
+  workspace report over every open document.
 - `server.{h,cc}` routes the methods and owns the session lifecycle;
   `lsp.{h,cc}` is the entry point the cli calls.
 

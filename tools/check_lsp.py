@@ -405,7 +405,8 @@ def main() -> int:
             "method": "textDocument/inlayHint",
             "params": {"textDocument": {"uri": NAV_URI}},
         },
-        {"jsonrpc": "2.0", "id": 26, "method": "shutdown", "params": None},
+        {"jsonrpc": "2.0", "id": 26, "method": "workspace/diagnostic", "params": {}},
+        {"jsonrpc": "2.0", "id": 27, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -475,6 +476,11 @@ def main() -> int:
         return fail("initialize did not advertise renameProvider")
     if not isinstance(capabilities.get("diagnosticProvider"), dict):
         return fail("initialize did not advertise diagnosticProvider")
+    if (
+        capabilities.get("diagnosticProvider", {}).get("workspaceDiagnostics")
+        is not True
+    ):
+        return fail("initialize did not advertise workspaceDiagnostics")
     if initialize.get("serverInfo", {}).get("name") != "alcy-lsp":
         return fail("initialize did not report the server name")
 
@@ -677,7 +683,19 @@ def main() -> int:
     ):
         return fail(f"inlayHint missed the parameter name: {parameter_hints!r}")
 
-    if by_id.get(26, {}).get("result", "missing") is not None:
+    workspace_pull = by_id.get(26, {}).get("result")
+    workspace_items = (
+        workspace_pull.get("items") if isinstance(workspace_pull, dict) else None
+    )
+    if not isinstance(workspace_items, list) or not any(
+        isinstance(item, dict) and item.get("uri") == BROKEN_URI and item.get("items")
+        for item in workspace_items
+    ):
+        return fail(
+            f"workspace/diagnostic missed the broken buffer: {workspace_pull!r}"
+        )
+
+    if by_id.get(27, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
