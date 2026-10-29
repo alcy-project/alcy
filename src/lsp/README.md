@@ -46,6 +46,8 @@ of the compiler (ADR-0107), so it owns no analysis of its own:
   checker's recorded resolutions (ADR-0109): a use resolves to the
   declaration the checker bound, and the AST supplies a declaration's
   own name when the cursor sits on it.
+- `call_hierarchy.{h,cc}` walks the call sites the checker recorded,
+  so incoming and outgoing calls are its own reading.
 - `workspace_symbols.{h,cc}` searches every open document's outline,
   so quick open spans the buffers the client holds.
 - `rename.{h,cc}` renames the name under the cursor, editing the

@@ -14,6 +14,7 @@
 #include "fpag/base/result.h"
 #include "lsp/analysis.h"
 #include "lsp/analysis_cache.h"
+#include "lsp/call_hierarchy.h"
 #include "lsp/code_actions.h"
 #include "lsp/completion.h"
 #include "lsp/diagnostics.h"
@@ -205,6 +206,33 @@ void Server::handle_request(const text::JsonValue& message) {
       return;
     }
     implementation(*id, *params);
+    return;
+  }
+  if (method == "textDocument/prepareCallHierarchy") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "prepareCallHierarchy needs params");
+      return;
+    }
+    call_hierarchy_prepare(*id, *params);
+    return;
+  }
+  if (method == "callHierarchy/incomingCalls") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "incomingCalls needs params");
+      return;
+    }
+    call_hierarchy_incoming(*id, *params);
+    return;
+  }
+  if (method == "callHierarchy/outgoingCalls") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "outgoingCalls needs params");
+      return;
+    }
+    call_hierarchy_outgoing(*id, *params);
     return;
   }
   if (method == "workspace/symbol") {
@@ -399,6 +427,7 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("typeDefinitionProvider", text::JsonValue::make_bool(true));
   capabilities.set("implementationProvider", text::JsonValue::make_bool(true));
   capabilities.set("workspaceSymbolProvider", text::JsonValue::make_bool(true));
+  capabilities.set("callHierarchyProvider", text::JsonValue::make_bool(true));
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(false));
@@ -525,6 +554,52 @@ void Server::type_definition(const text::JsonValue& id,
     return;
   }
   send_result(id, location_json(*document, *location));
+}
+
+void Server::call_hierarchy_prepare(const text::JsonValue& id,
+                                    const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(
+      id, prepare_call_hierarchy(*document, cache_.get(*document), position));
+}
+
+void Server::call_hierarchy_incoming(const text::JsonValue& id,
+                                     const text::JsonValue& params) {
+  const text::JsonValue* item = field(params, "item");
+  const text::JsonValue* uri =
+      item != nullptr && item->is_object() ? field(*item, "uri") : nullptr;
+  if (uri == nullptr || !uri->is_string()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document = documents_.find(uri->as_string());
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, incoming_calls(*document, cache_.get(*document), *item));
+}
+
+void Server::call_hierarchy_outgoing(const text::JsonValue& id,
+                                     const text::JsonValue& params) {
+  const text::JsonValue* item = field(params, "item");
+  const text::JsonValue* uri =
+      item != nullptr && item->is_object() ? field(*item, "uri") : nullptr;
+  if (uri == nullptr || !uri->is_string()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document = documents_.find(uri->as_string());
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, outgoing_calls(*document, cache_.get(*document), *item));
 }
 
 void Server::workspace_symbol(const text::JsonValue& id,

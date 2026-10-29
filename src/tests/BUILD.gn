@@ -50,6 +50,7 @@ executable("tests") {
     "lowering/ir_interpreter_test.cc",
     "lowering/lowering_fixture.h",
     "lsp/analysis_cache_test.cc",
+    "lsp/call_hierarchy_test.cc",
     "lsp/code_actions_test.cc",
     "lsp/completion_test.cc",
     "lsp/diagnostics_test.cc",

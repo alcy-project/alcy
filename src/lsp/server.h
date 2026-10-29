@@ -54,6 +54,12 @@ class Server {
   void implementation(const text::JsonValue& id, const text::JsonValue& params);
   void workspace_symbol(const text::JsonValue& id,
                         const text::JsonValue& params);
+  void call_hierarchy_prepare(const text::JsonValue& id,
+                              const text::JsonValue& params);
+  void call_hierarchy_incoming(const text::JsonValue& id,
+                               const text::JsonValue& params);
+  void call_hierarchy_outgoing(const text::JsonValue& id,
+                               const text::JsonValue& params);
   void inlay_hint(const text::JsonValue& id, const text::JsonValue& params);
   void code_action(const text::JsonValue& id, const text::JsonValue& params);
   void document_highlight(const text::JsonValue& id,

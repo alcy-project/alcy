@@ -358,7 +358,42 @@ def main() -> int:
             "method": "workspace/symbol",
             "params": {"query": "Point"},
         },
-        {"jsonrpc": "2.0", "id": 22, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 22,
+            "method": "textDocument/prepareCallHierarchy",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 7},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 23,
+            "method": "callHierarchy/incomingCalls",
+            "params": {
+                "item": {
+                    "name": "id",
+                    "kind": 12,
+                    "uri": NAV_URI,
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end": {"line": 2, "character": 1},
+                    },
+                    "selectionRange": {
+                        "start": {"line": 0, "character": 3},
+                        "end": {"line": 0, "character": 5},
+                    },
+                    "data": {
+                        "nameOffset": 3,
+                        "nameLength": 2,
+                        "rangeOffset": 0,
+                        "rangeLength": 32,
+                    },
+                }
+            },
+        },
+        {"jsonrpc": "2.0", "id": 24, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -419,6 +454,8 @@ def main() -> int:
         return fail("initialize did not advertise implementationProvider")
     if capabilities.get("workspaceSymbolProvider") is not True:
         return fail("initialize did not advertise workspaceSymbolProvider")
+    if capabilities.get("callHierarchyProvider") is not True:
+        return fail("initialize did not advertise callHierarchyProvider")
     rename = capabilities.get("renameProvider")
     if not isinstance(rename, dict) or rename.get("prepareProvider") is not True:
         return fail("initialize did not advertise renameProvider")
@@ -598,7 +635,21 @@ def main() -> int:
     ):
         return fail(f"workspace/symbol missed Point: {workspace!r}")
 
-    if by_id.get(22, {}).get("result", "missing") is not None:
+    hierarchy = by_id.get(22, {}).get("result")
+    if (
+        not isinstance(hierarchy, list)
+        or not hierarchy
+        or hierarchy[0].get("name") != "id"
+    ):
+        return fail(f"prepareCallHierarchy missed id: {hierarchy!r}")
+
+    incoming = by_id.get(23, {}).get("result")
+    if not isinstance(incoming, list) or len(incoming) != 1:
+        return fail(f"incomingCalls missed the caller: {incoming!r}")
+    if incoming[0].get("from", {}).get("name") != "main":
+        return fail(f"incomingCalls named the wrong caller: {incoming!r}")
+
+    if by_id.get(24, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
