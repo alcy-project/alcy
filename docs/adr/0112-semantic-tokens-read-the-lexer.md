@@ -1,4 +1,4 @@
-# ADR-0088: Semantic tokens read the lexer and the checker's names
+# ADR-0112: Semantic tokens read the lexer and the checker's names
 
 - Subject: the compiler
 - Status: Accepted
@@ -44,4 +44,4 @@ document's position index like every other feature.
 
 Coverage is what the checker records. A name reached through a dot is
 colored as the field or method the checker resolved, because the member
-site carries a reference like any other name (ADR-0090).
+site carries a reference like any other name (ADR-0114).

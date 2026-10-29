@@ -1,4 +1,4 @@
-# ADR-0084: The language server reads the compiler's AST
+# ADR-0108: The language server reads the compiler's AST
 
 - Subject: the compiler
 - Status: Accepted
@@ -27,7 +27,7 @@ need them.
   between them, which only the lossless tree keeps.
 - Neither tree grows the other's information. cst/ does not learn
   grammar or names, which would be a second parser beside the first,
-  the failure mode ADR-0081 and ADR-0083 both refuse. ast/ does not
+  the failure mode ADR-0081 and ADR-0107 both refuse. ast/ does not
   learn trivia, which would put comment bytes and whitespace on the
   compiler's hot path for the editor's benefit.
 - A semantic feature reads the checked package, not a second reading of

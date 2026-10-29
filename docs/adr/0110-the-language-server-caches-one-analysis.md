@@ -1,4 +1,4 @@
-# ADR-0086: The language server caches one analysis per document version
+# ADR-0110: The language server caches one analysis per document version
 
 - Subject: the compiler
 - Status: Accepted
@@ -11,7 +11,7 @@ navigation, completion, signature help, and inlay hints each built a
 fresh pipeline context and checked the buffer again. That is the
 dominant cost of a request, and completion runs on nearly every
 keystroke, so the same bytes were parsed and checked many times without
-changing. ADR-0084 named the fix -- cache the parse and the checked
+changing. ADR-0108 named the fix -- cache the parse and the checked
 package per document version -- and left it until the features that
 need it existed.
 

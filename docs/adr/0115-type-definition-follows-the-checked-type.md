@@ -1,4 +1,4 @@
-# ADR-0091: Type definition follows the checked type
+# ADR-0115: Type definition follows the checked type
 
 - Subject: the compiler
 - Status: Accepted

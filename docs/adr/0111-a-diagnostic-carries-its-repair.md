@@ -1,4 +1,4 @@
-# ADR-0087: A diagnostic carries the repair its producer knows
+# ADR-0111: A diagnostic carries the repair its producer knows
 
 - Subject: the compiler
 - Status: Accepted
@@ -11,7 +11,7 @@ whose repair is mechanical, the compiler knows the exact bytes to
 change. Deriving that edit in the language server would mean the server
 reading the finding's span and deciding, on its own, what the rule
 meant -- a second reading of what the linter already knew, and one that
-could disagree with it. ADR-0084 and ADR-0085 settle the same question
+could disagree with it. ADR-0108 and ADR-0109 settle the same question
 for names: the tool that decided the fact is the tool that reports it.
 
 ## Decision
@@ -26,9 +26,12 @@ for names: the tool that decided the fact is the tool that reports it.
   finding whole, exactly as a label is.
 - The language server maps the repairs to CodeActions. It reads the
   repair the finding carries; it does not decide what the repair is.
-- A rule with no sure repair carries none. needless-return is the
-  first: it deletes the keyword and the space before the value, leaving
-  the value as the body's tail.
+- A rule with no sure repair carries none. needless-return was the
+  first and went away when ADR-0059's mandatory `ret` made a trailing
+  return the language's own rule rather than a lint finding; while-true
+  carries one now, swapping the keyword and the condition for `loop`
+  when the bytes are exactly that, and a spread or parenthesized
+  condition gets the finding without the offer.
 
 ## Consequences
 

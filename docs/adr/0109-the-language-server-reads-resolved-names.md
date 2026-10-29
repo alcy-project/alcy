@@ -1,4 +1,4 @@
-# ADR-0085: The language server reads the checker's resolved names
+# ADR-0109: The language server reads the checker's resolved names
 
 - Subject: the compiler
 - Status: Accepted
@@ -12,7 +12,7 @@ the scope stack for locals, reads imports and module prefixes for items,
 matches the receiver for methods, and unpacks enum paths for variants.
 None of that is a pure function of a name and a file, so the language
 server cannot recompute it without becoming a second resolver beside the
-checker -- the failure ADR-0081 and ADR-0083 refuse for parsers, for the
+checker -- the failure ADR-0081 and ADR-0107 refuse for parsers, for the
 same reason: two implementations drift, and the editor's answer stops
 matching the compiler's.
 
@@ -53,6 +53,6 @@ answers.
 
 Coverage is what the checker resolves: items (functions, types,
 statics, consts), enum variants, methods, and bindings through a path,
-plus field and method access recorded at the member site (ADR-0090).
+plus field and method access recorded at the member site (ADR-0114).
 The table does not replace the lowering tables: lowering still reads
 the entries it was built against, and this record is additive.

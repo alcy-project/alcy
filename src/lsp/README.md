@@ -2,7 +2,7 @@
 
 The language server: `alcy lsp` speaks LSP over standard input and
 output. The module is a library over the toolchain rather than a stage
-of the compiler (ADR-0083), so it owns no analysis of its own:
+of the compiler (ADR-0107), so it owns no analysis of its own:
 
 - `frame.{h,cc}` is the base protocol: a `Content-Length` header and
   a JSON-RPC payload per frame.
@@ -43,7 +43,7 @@ of the compiler (ADR-0083), so it owns no analysis of its own:
   and renders them for hover markdown and for the `alcy/structLayout`
   request.
 - `navigation.{h,cc}` answers definition and references from the
-  checker's recorded resolutions (ADR-0085): a use resolves to the
+  checker's recorded resolutions (ADR-0109): a use resolves to the
   declaration the checker bound, and the AST supplies a declaration's
   own name when the cursor sits on it.
 - `rename.{h,cc}` renames the name under the cursor, editing the
@@ -102,7 +102,7 @@ another module would answer for it.
 ## Plan
 
 The features land one at a time, each reusing the parse or the analysis
-an earlier one already built (ADR-0084). A syntax feature reads the
+an earlier one already built (ADR-0108). A syntax feature reads the
 compiler's AST, a trivia feature reads `cst/`, and a semantic feature
 reads the checked package through an analyzer query.
 
