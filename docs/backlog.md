@@ -88,12 +88,15 @@ replaced. The foundations are in `roadmap.md`.
   a number; find the deep path, or budget the stack, before the
   headroom runs out the same way.
 
-- [ ] The closure implements the Fn spec (ADR-0116): `core` declares
-  `spec Fn<P, R>`, every closure nominal's impl is the body the
-  lowering registers, and `fn(P) -> R` in a signature is sugar for the
-  bound. The hand-rolled machinery the record retires - OwnFnBound,
-  check_own_fn_witness, the stand-in, the witness records - goes as the
-  parametric check lands (ADR-0079 slice two).
+- [ ] The closure's parametric half (ADR-0116, ADR-0079 slice two):
+  the spelling is bound to `core`'s `Fn` by identity, a hand-spelled
+  `Fn` bound instantiates, and a call on a closure nominal is a direct
+  call to the function its literal registered. What remains is the
+  once-checked body: the literal interns its captures under the
+  declaration's type parameters, the return slot binds once instead of
+  per instantiation, the stand-in and the per-instantiation witness
+  record retire, and a call the parameter's type decides records a
+  dispatch the specialization resolves (ADR-0080).
 
 - [ ] The generic boundary in a summary: a `needs_body` row is
   omitted, so a dependent that names a generic item reads "Unresolved
