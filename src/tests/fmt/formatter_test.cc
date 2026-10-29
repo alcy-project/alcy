@@ -339,6 +339,24 @@ TEST_CASE("A statement an unterminated comment follows keeps its layout") {
   CHECK(idempotent(source, narrow));
 }
 
+TEST_CASE("A hungry scalar that swallowed a tab keeps the line count") {
+  // A UTF-8 lead takes the bytes it promised, blanks included, and the
+  // span's tail rides in the gap the source put around the error -- but
+  // a tail at the end of a chunk has no gap to ride in, so the layout
+  // writes its own line break there. A span that kept the newline it
+  // absorbed would read back having swallowed that break and grow by a
+  // line on every pass; dropping it keeps the second pass where the
+  // first one stood.
+  const std::string source = std::string(
+      "\xf6\xf6\xff\xff\xff\xff\xff\xff\xffRRR\xff\xff\xf6\xf6\xf6\t\n"
+      "\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6");
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, default_format_config()));
+  CHECK(idempotent(source, narrow));
+}
+
 TEST_CASE("Deeply nested input does not exhaust the stack") {
   std::string source;
   for (usize i = 0; i < 600; ++i) {
