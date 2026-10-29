@@ -94,15 +94,12 @@ own: where the specialization pass sits relative to the borrow pass, a
 generic body being borrowed once or once per specialization. How a call
 on a parameter resolves is ADR-0080.
 
-One case does not fit the decision, and it is named here rather than
-left to be found. A generic whose signature names an owning function
-type cannot be checked once: the closure's witness is per instantiation
-(ADR-0075), so the type the body returns is not the type the
-declaration names, and a body checked against the declaration's own
-signature would be checked against a type that does not exist. Such a
-generic stays checked per instantiation, and therefore does not cross a
-package boundary until the closure's type can carry its own parameters.
-The backlog carries that.
+One case did not fit the decision as it landed: a generic whose
+signature names an owning function type, whose witness was per
+instantiation (ADR-0075). ADR-0116 closes it - the closure implements the Fn spec its signature
+names, the literal binds the return slot once, and the specialization
+derives the concrete impl - and the caveat is the work that record
+carries into ADR-0079's second slice.
 
 ## Staged landing
 

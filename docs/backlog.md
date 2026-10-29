@@ -88,12 +88,12 @@ replaced. The foundations are in `roadmap.md`.
   a number; find the deep path, or budget the stack, before the
   headroom runs out the same way.
 
-- [ ] A generic whose signature names an owning function type cannot be
-  checked once, because the closure's witness is per instantiation
-  (ADR-0075): the type the body returns is not the type the declaration
-  names. Making the closure's type carry its own parameters is what
-  would let such a generic be checked once, and cross a package
-  boundary with the rest.
+- [ ] The closure implements the Fn spec (ADR-0116): `core` declares
+  `spec Fn<P, R>`, every closure nominal's impl is the body the
+  lowering registers, and `fn(P) -> R` in a signature is sugar for the
+  bound. The hand-rolled machinery the record retires - OwnFnBound,
+  check_own_fn_witness, the stand-in, the witness records - goes as the
+  parametric check lands (ADR-0079 slice two).
 
 - [ ] The generic boundary in a summary: a `needs_body` row is
   omitted, so a dependent that names a generic item reads "Unresolved
