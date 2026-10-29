@@ -263,6 +263,7 @@ class Builder {
                            : BraceRole::Literal;
     group.offset = opener.offset;
     group.length = opener.length;
+    group.newlines_before = opener.newlines_before;
     ++pos_;
     ++depth_;
     group.kids.push_back(build_sequence(matching_closer(opener.token)));

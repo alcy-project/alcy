@@ -40,15 +40,17 @@ std::string_view error_text(std::string_view source, const cst::Node& node) {
     text.remove_suffix(1);
   }
   const usize span_end = node.offset + node.length;
-  // A trailing newline the source followed with another newline is the
-  // line's own break, which the layout writes itself: a span that kept
-  // the byte reads back having swallowed the layout's break, and the
-  // text grows by a line on every pass. A newline the source followed
-  // with code stays, because the span ends where the lexer stopped it
-  // and the bytes past the break name the next token.
+  // Trailing newlines the source followed with another newline are the
+  // line's own breaks, which the layout writes itself: a span that kept
+  // them reads back having swallowed the layout's break, and the text
+  // grows by a line on every pass. A newline the source followed with
+  // code stays, because the span ends where the lexer stopped it and
+  // the bytes past the break name the next token.
   if (!text.empty() && text.back() == '\n' &&
       (span_end >= source.size() || source[span_end] == '\n')) {
-    text.remove_suffix(1);
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
+      text.remove_suffix(1);
+    }
   }
   if (source.find_first_not_of(" \t\r\n", span_end) == std::string_view::npos) {
     // Nothing but blanks follow the span, so the tail of the layout

@@ -372,6 +372,37 @@ TEST_CASE("A gap a dropped semicolon leaves does not break the line") {
   CHECK(idempotent(source, narrow));
 }
 
+TEST_CASE("Code an error precedes across a newline keeps its indent") {
+  // The error's span eats the layout's break and indent, so the
+  // semicolon the next pass inserts there is not the one this pass saw,
+  // and a chunk boundary that rode on it would move with it: the code
+  // after the error starts a chunk of its own, and the braces an
+  // unclosed delimiter left open hold their line wherever the pass
+  // started from.
+  const std::string source = std::string(
+      "{{\x8aZZ\xf5\n\n\n\n\n\n\n\n\x1a\x00\x00\x00\x00\x00\x00\x00\n\n\n\n{{");
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, default_format_config()));
+  CHECK(idempotent(source, narrow));
+}
+
+TEST_CASE("A carriage return an error span ends in does not survive") {
+  // The lexer reads \r as trivia and the renderer trims blanks before a
+  // break, so a span that ends in one never reads back the same unless
+  // the layout drops it with the newlines it sits between.
+  const std::string source = std::string(
+      "{sp\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\r\n\n\n\n\n\n\n"
+      "\xf5\xf5\xf5\xf5\xf5\xf5\xf5?\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5"
+      "\xf5\xf5\xf5\xf5\xf5\xf5");
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, default_format_config()));
+  CHECK(idempotent(source, narrow));
+}
+
 TEST_CASE("Deeply nested input does not exhaust the stack") {
   std::string source;
   for (usize i = 0; i < 600; ++i) {
