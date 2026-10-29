@@ -399,7 +399,13 @@ def main() -> int:
             "method": "textDocument/codeLens",
             "params": {"textDocument": {"uri": NAV_URI}},
         },
-        {"jsonrpc": "2.0", "id": 25, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 25,
+            "method": "textDocument/inlayHint",
+            "params": {"textDocument": {"uri": NAV_URI}},
+        },
+        {"jsonrpc": "2.0", "id": 26, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -664,7 +670,14 @@ def main() -> int:
     ):
         return fail(f"codeLens missed the reference count: {lenses!r}")
 
-    if by_id.get(25, {}).get("result", "missing") is not None:
+    parameter_hints = by_id.get(25, {}).get("result")
+    if not any(
+        isinstance(hint, dict) and hint.get("label") == "x:"
+        for hint in (parameter_hints or [])
+    ):
+        return fail(f"inlayHint missed the parameter name: {parameter_hints!r}")
+
+    if by_id.get(26, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

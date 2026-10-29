@@ -65,6 +65,29 @@ TEST_CASE("A struct shows its size and each field its offset") {
   CHECK(find_hint(hints, "offset 8") != nullptr);
 }
 
+TEST_CASE("A call shows the parameter name before its argument") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn area(w: i32, h: i32) -> i32 {\n  ret w\n}\nfn "
+                          "main() -> i32 {\n  ret area(2, 3)\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue hints = inlay_hints(document, analysis);
+  const text::JsonValue* width = find_hint(hints, "w:");
+  CHECK(width != nullptr);
+  CHECK(find_hint(hints, "h:") != nullptr);
+  if (width != nullptr) {
+    CHECK(width->find("kind")->as_number() == 2.0);
+  }
+}
+
+TEST_CASE("An argument that names its parameter gets no hint") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn id(x: i32) -> i32 {\n  ret x\n}\nfn main() -> "
+                          "i32 {\n  x := 1\n  ret id(x)\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue hints = inlay_hints(document, analysis);
+  CHECK(find_hint(hints, "x:") == nullptr);
+}
+
 TEST_CASE("An enum shows its size") {
   const Document document("file:///main.al", "alcy", 1,
                           "enum Shape {\n  A(i32),\n}\n");
