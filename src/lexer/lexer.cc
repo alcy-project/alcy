@@ -320,6 +320,14 @@ TokenKind Lexer::peek_next_kind() const {
           ++i;
         }
       }
+      // A block comment the source never closed is a token the real
+      // lexer reports, not trivia that ends the file: the suppression
+      // test has to see it, or a statement the newline terminates
+      // loses the `;`, and the layout reads the gap differently on the
+      // pass over its own output.
+      if (depth > 0) {
+        return TokenKind::Error;
+      }
       continue;
     }
     break;

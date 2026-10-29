@@ -257,6 +257,19 @@ TEST_CASE("Lexer recovers from invalid characters") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("A statement an unterminated comment ends still gets its semi") {
+  Fixture f;
+  // The comment the source never closed is a token the real lexer
+  // reports, not the end of the file: the newline in front of it
+  // terminates the statement, and the semi the insertion writes is
+  // what keeps a layout over the source and a layout over that
+  // layout's own output in agreement.
+  CHECK(check_kinds("a\n/*x", f.bag,
+                    {TokenKind::Ident, TokenKind::Semicolon, TokenKind::Error,
+                     TokenKind::Eof}));
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Token stream verification accepts lexer output") {
   Fixture f;
   constexpr std::string_view bytes = "fn main() {}\n";

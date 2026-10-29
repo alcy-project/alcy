@@ -325,6 +325,20 @@ TEST_CASE("A wide variety of inputs is idempotent and error tolerant") {
                           });
 }
 
+TEST_CASE("A statement an unterminated comment follows keeps its layout") {
+  // The comment the source never closed is a token the lexer reports,
+  // so the newline in front of it still terminates the statement: the
+  // expression's line reads the same on the pass over its own output.
+  // The stray scalar and the reserved hash ride along because the
+  // smallest reproducer carried them.
+  const std::string source = std::string("+#\xdbvv;/*#");
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, default_format_config()));
+  CHECK(idempotent(source, narrow));
+}
+
 TEST_CASE("Deeply nested input does not exhaust the stack") {
   std::string source;
   for (usize i = 0; i < 600; ++i) {
