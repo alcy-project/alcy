@@ -28,6 +28,9 @@ const ir::TypeNode* type_node(const LintContext& ctx, ir::TypeIdx type);
 // Whether the checked type is one of the two floating-point types.
 bool is_float_type(const LintContext& ctx, ir::TypeIdx type);
 
+// Whether the checked type is bool.
+bool is_bool_type(const LintContext& ctx, ir::TypeIdx type);
+
 // Whether the checked type is a shared reference.
 bool is_shared_reference(const LintContext& ctx, ir::TypeIdx type);
 

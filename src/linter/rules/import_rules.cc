@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -91,6 +92,10 @@ void UnusedImport::run(LintContext& ctx) {
     // An underscore alias imports for resolution's sake, not for a name
     // the module reads.
     if (name.empty() || name == "_") {
+      continue;
+    }
+    const std::span<const std::string_view> ignore = ctx.setting().ignore;
+    if (std::find(ignore.begin(), ignore.end(), name) != ignore.end()) {
       continue;
     }
     const bool from_path = std::binary_search(used.begin(), used.end(), name);

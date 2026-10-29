@@ -27,15 +27,16 @@ level = "warn"
 
 [rules]
 # A string is the level; a table adds that rule's options.
-unused-variable = "deny"
+unused-variable = { level = "deny", ignore = ["i", "j"] }
 missing-docs = "allow"
 too-many-arguments = { level = "warn", max-args = 5 }
 ```
 
 An unknown rule name or level is an error: both are typos. Unknown keys
-are ignored, like the other `.alcy/` files (ADR-0019). A `deny` finding
-is an error, so `alcy lint` exits non-zero; a `warn` finding does not
-change the exit code.
+are ignored, like the other `.alcy/` files (ADR-0019). `ignore` lists
+names the rule must not report; the binding rules and `unused-import`
+read it. A `deny` finding is an error, so `alcy lint` exits non-zero;
+a `warn` finding does not change the exit code.
 
 ## Fixing
 
@@ -75,6 +76,7 @@ complete gate.
 | `float-equality` | allow | an equality test on floating-point values |
 | `needless-borrow` | warn | a borrow of a dereference that is the reference |
 | `lossy-cast` | allow | a cast that narrows the value's scalar type |
+| `bool-comparison` | warn | a bool compared with a true or false literal |
 | `missing-docs` | allow | a `pub` item without a doc comment |
 | `too-many-arguments` | warn | a function above `max-args` parameters |
 | `unused-import` | warn | an import no path in the module names |
@@ -99,10 +101,11 @@ The type-based rules read the analyzer's recorded types, not the
 source spelling. `types.h` answers what type an expression was checked
 at and whether that type is a float or a shared reference; a cast whose
 two types are the same, an equality over a float, `&*r` over a shared
-reference, and a cast from a wider integer or float are the findings. `useless-cast` and `needless-borrow`
-also offer a machine-applicable repair (`ctx.fix`) when the expression
-they would put in place binds tightly enough that the regrouping cannot
-change the meaning.
+reference, a cast from a wider integer or float, and a bool compared
+with a true or false literal are the findings. `useless-cast`,
+`needless-borrow`, and `bool-comparison` also offer a machine-applicable
+repair (`ctx.fix`) when the expression they would put in place binds
+tightly enough that the regrouping cannot change the meaning.
 
 ## Adding a rule
 

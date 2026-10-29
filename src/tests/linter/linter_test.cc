@@ -95,7 +95,8 @@ constexpr std::string_view IMPORT_MANIFEST =
 
 std::optional<u32> unused_imports(io::TempDir& dir,
                                   std::string_view util,
-                                  std::string_view main) {
+                                  std::string_view main,
+                                  std::string_view config_toml = {}) {
   if (!dir.write_file("proj/alcy.toml", IMPORT_MANIFEST) ||
       !dir.write_file("proj/util.al", util) ||
       !dir.write_file("proj/main.al", main)) {
@@ -113,8 +114,8 @@ std::optional<u32> unused_imports(io::TempDir& dir,
   if (manifest.is_err()) {
     return std::nullopt;
   }
-  base::Result<LintConfig, diag::Reported> config =
-      parse_lint_config("", "<test>", source::UNKNOWN_FILE, ctx.bag, ctx.arena);
+  base::Result<LintConfig, diag::Reported> config = parse_lint_config(
+      config_toml, "<test>", source::UNKNOWN_FILE, ctx.bag, ctx.arena);
   if (config.is_err()) {
     return std::nullopt;
   }
@@ -306,6 +307,40 @@ TEST_CASE("lossy-cast reports a narrowing cast when asked") {
   CHECK(findings_for(asked.ctx.bag, "lossy-cast") == 1);
 }
 
+TEST_CASE("bool-comparison simplifies a literal comparison") {
+  Run run;
+  run("fn main() -> i32 {\n  b := true\n  if b == true {\n    ret 1\n  }\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "bool-comparison") == 1);
+  const diag::Fix* fix = fix_for(run.ctx.bag, "bool-comparison");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "b");
+  }
+}
+
+TEST_CASE("bool-comparison negates a false comparison") {
+  Run run;
+  run("fn main() -> i32 {\n  b := true\n  if b == false {\n    ret 1\n  }\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "bool-comparison") == 1);
+  const diag::Fix* fix = fix_for(run.ctx.bag, "bool-comparison");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "!b");
+  }
+}
+
+TEST_CASE("bool-comparison leaves an integer comparison alone") {
+  Run run;
+  run("fn main() -> i32 {\n  n := 1\n  if n == 1 {\n    ret 1\n  }\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "bool-comparison") == 0);
+}
+
 TEST_CASE("unreachable-code reports the statement after a break") {
   Run run;
   // The rule is off by default because lowering warns about the same
@@ -380,6 +415,41 @@ TEST_CASE("a non-boolean borrow-checks is a config error") {
                         source::UNKNOWN_FILE, ctx.bag, ctx.arena);
   CHECK(parsed.is_err());
   CHECK(ctx.bag.has_errors());
+}
+
+TEST_CASE("ignore silences a name a rule would report") {
+  Run run;
+  const std::string_view source =
+      "fn main() -> i32 {\n  unused := 1\n  ret 0\n}\n";
+  run(source, config_from(run.ctx,
+                          "[rules]\nunused-variable = { level = \"warn\", "
+                          "ignore = [\"unused\"] }\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 0);
+  Run control;
+  control(source, default_config(control.ctx));
+  CHECK(findings_for(control.ctx.bag, "unused-variable") == 1);
+}
+
+TEST_CASE("a non-array ignore is a config error") {
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<LintConfig, diag::Reported> parsed =
+      parse_lint_config("[rules]\nunused-variable = { ignore = \"unused\" }\n",
+                        "lint.toml", source::UNKNOWN_FILE, ctx.bag, ctx.arena);
+  CHECK(parsed.is_err());
+  CHECK(ctx.bag.has_errors());
+}
+
+TEST_CASE("ignore silences an unused import") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_linter_import_ignore_");
+  const std::optional<u32> unused = unused_imports(
+      dir, "pub fn helper() -> i32 {\n  ret 1\n}\n",
+      "use self::util::helper\n\nfn main() -> i32 {\n  ret 0\n}\n",
+      "[rules]\nunused-import = { level = \"warn\", "
+      "ignore = [\"helper\"] }\n");
+  CHECK(unused.has_value());
+  if (unused.has_value()) {
+    CHECK(*unused == 0);
+  }
 }
 
 TEST_CASE("while-true offers a machine-applicable repair") {

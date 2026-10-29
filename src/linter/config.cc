@@ -3,6 +3,7 @@
 
 #include "linter/config.h"
 
+#include <cstring>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -45,6 +46,49 @@ bool read_level(const toml::node& node, LintLevel& out) {
   return true;
 }
 
+// Copies a name into the arena so the setting outlives the parse
+// buffer.
+std::string_view copy_string(mem::Arena& arena, std::string_view text) {
+  if (text.empty()) {
+    return {};
+  }
+  char* const mem = static_cast<char*>(arena.alloc(text.size(), alignof(char)));
+  if (mem == nullptr) {
+    return {};
+  }
+  std::memcpy(mem, text.data(), text.size());
+  return {mem, text.size()};
+}
+
+// Reads an ignore array into the arena. Nullopt for a value that is not
+// an array of strings, which the caller reports.
+std::optional<std::span<const std::string_view>> read_ignore(
+    const toml::node& node,
+    mem::Arena& arena) {
+  const toml::array* const array = node.as_array();
+  if (array == nullptr) {
+    return std::nullopt;
+  }
+  if (array->empty()) {
+    return std::span<const std::string_view>{};
+  }
+  std::string_view* const names = static_cast<std::string_view*>(arena.alloc(
+      sizeof(std::string_view) * array->size(), alignof(std::string_view)));
+  if (names == nullptr) {
+    return std::nullopt;
+  }
+  usize count = 0;
+  for (const toml::node& element : *array) {
+    const std::optional<std::string_view> text =
+        element.value<std::string_view>();
+    if (!text.has_value()) {
+      return std::nullopt;
+    }
+    names[count++] = copy_string(arena, *text);
+  }
+  return std::span<const std::string_view>(names, count);
+}
+
 }  // namespace
 
 base::Result<LintConfig, diag::Reported> parse_lint_config(
@@ -73,6 +117,7 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
   for (usize i = 0; i < registered.size(); ++i) {
     settings[i].level = registered[i].default_level;
     settings[i].max_args = 0;
+    settings[i].ignore = {};
   }
 
   LintConfig config;
@@ -176,6 +221,18 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
           return base::make_err(diag::Reported{});
         }
         settings[index].max_args = static_cast<u32>(*value);
+        continue;
+      }
+      if (option_name == "ignore") {
+        const std::optional<std::span<const std::string_view>> names =
+            read_ignore(option, arena);
+        if (!names.has_value()) {
+          const u32 emitted = bag.emit<i18n::Key::LintConfigIgnoreNotStrings>(
+              LintCode::ConfigSemanticError, key.str(), filename);
+          (void)emitted;
+          return base::make_err(diag::Reported{});
+        }
+        settings[index].ignore = *names;
         continue;
       }
     }

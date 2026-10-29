@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "ast/ast.h"
@@ -216,6 +217,77 @@ void check_lossy_cast(LintContext& ctx, ast::ExprIdx expr) {
                                        ir::type_to_str(to->tag));
 }
 
+// The value a bool literal spells, or nullopt for anything else.
+std::optional<bool> bool_literal(const LintContext& ctx, ast::ExprIdx expr) {
+  if (!expr.is_valid()) {
+    return std::nullopt;
+  }
+  const ast::ExprNode& node = ctx.ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Literal) {
+    return std::nullopt;
+  }
+  const ast::Literal& literal =
+      ctx.ast.literals[node.payload.get<ast::ExprLiteral>().value];
+  if (literal.kind != ast::LiteralKind::Bool) {
+    return std::nullopt;
+  }
+  if (literal.spelling == "true") {
+    return true;
+  }
+  if (literal.spelling == "false") {
+    return false;
+  }
+  return std::nullopt;
+}
+
+void check_bool_comparison(LintContext& ctx, ast::ExprIdx expr) {
+  const ast::ExprNode& node = ctx.ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Binary) {
+    return;
+  }
+  const ast::ExprBinary& binary = node.payload.get<ast::ExprBinary>();
+  if (binary.op != ast::BinaryOp::Eq && binary.op != ast::BinaryOp::NotEq) {
+    return;
+  }
+  // One side is the literal and the other the value; the comparison is
+  // symmetric, so either spelling simplifies the same way.
+  std::optional<bool> literal = bool_literal(ctx, binary.lhs);
+  ast::ExprIdx other = binary.rhs;
+  if (!literal.has_value()) {
+    literal = bool_literal(ctx, binary.rhs);
+    other = binary.lhs;
+  }
+  if (!literal.has_value() || !other.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& value = ctx.ast.exprs[other];
+  // Two literals are a constant, not a comparison of a value.
+  if (value.kind == ast::ExprKind::Literal) {
+    return;
+  }
+  const std::optional<ir::TypeIdx> type = expression_type(ctx, other);
+  if (!type.has_value() || !is_bool_type(ctx, *type)) {
+    return;
+  }
+  // x == true and x != false are x; x != true and x == false are !x.
+  const bool negate = *literal != (binary.op == ast::BinaryOp::Eq);
+  const u32 finding = ctx.report<i18n::Key::LintBoolComparison>(node.span);
+  if (!binds_tightly(value.kind)) {
+    return;
+  }
+  const std::optional<std::string_view> text = source_of(ctx, value);
+  if (!text.has_value()) {
+    return;
+  }
+  if (!negate) {
+    ctx.fix(finding, node.span, *text);
+    return;
+  }
+  std::string replacement = "!";
+  replacement.append(*text);
+  ctx.fix(finding, node.span, replacement);
+}
+
 }  // namespace
 
 void UselessCast::check_expr(LintContext& ctx, ast::ExprIdx expr) {
@@ -232,6 +304,10 @@ void NeedlessBorrow::check_expr(LintContext& ctx, ast::ExprIdx expr) {
 
 void LossyCast::check_expr(LintContext& ctx, ast::ExprIdx expr) {
   check_lossy_cast(ctx, expr);
+}
+
+void BoolComparison::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_bool_comparison(ctx, expr);
 }
 
 }  // namespace linter::rules

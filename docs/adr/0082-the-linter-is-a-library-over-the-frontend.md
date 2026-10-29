@@ -35,9 +35,11 @@ that grew its own parser has had.
   Rendering, `--json`, colour, and the exit code are the compiler
   diag/cli machinery, so lint output and compiler output cannot drift.
 - `.alcy/lint.toml` holds a top-level `level`, a `[rules]` table, and
-  `borrow-checks`. A rule is named by its id (`unused-variable`); an unknown id or an
-  unknown level is an error, because both are typos a reader wants to
-  hear about. Only the goal package's `.alcy/` is read, and only the
+  `borrow-checks`. A rule is named by its id (`unused-variable`); an
+  unknown id or an unknown level is an error, because both are typos a
+  reader wants to hear about. A rule's table also carries the options
+  its check reads: `max-args` for the parameter limit and `ignore` for
+  the rules that filter by name. Only the goal package's `.alcy/` is read, and only the
   goal package modules are linted: staged standard-library sources and
   path dependencies are skipped.
 - A rule is a type: the id, default level, code, and summary as
@@ -78,6 +80,6 @@ a project opts into. `unreachable-code` is also opt-in, because the
 lowering pass already warns about the same expression (WD003) and the
 lint exists for a caller that lints without lowering.
 
-Out of scope for this record: per-rule option schemas beyond the one
-`max-args` field, plugin or dynamically loaded rules, and linting
-dependencies.
+Out of scope for this record: per-rule option schemas beyond the
+`max-args` and `ignore` options, plugin or dynamically loaded rules,
+and linting dependencies.

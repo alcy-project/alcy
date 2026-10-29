@@ -543,6 +543,7 @@
   F(CliLintFindingPlural, Note, Pipeline, "findings") \
   F(CliLintFindingSingular, Note, Pipeline, "finding") \
   F(CliVerbLinted, Note, Pipeline, "Linted") \
+  F(LintConfigIgnoreNotStrings, Error, Lint, "the ignore option of lint rule '{}' in {} must be an array of strings") \
   F(LintConfigLevelNotString, Error, Lint, "the level of lint rule '{}' in {} must be a string") \
   F(LintConfigBorrowChecksNotBool, Error, Lint, "the borrow-checks key in {} must be a boolean") \
   F(LintConfigOptionNotInteger, Error, Lint, "the max-args option of lint rule '{}' in {} must be an integer") \
@@ -551,6 +552,7 @@
   F(LintConfigUnknownLevel, Error, Lint, "unknown lint level '{}' in {}") \
   F(LintConfigUnknownRule, Error, Lint, "unknown lint rule '{}' in {}") \
   F(LintFixWriteFailed, Error, Lint, "cannot write the repair to {}") \
+  F(LintBoolComparison, Warning, Lint, "this comparison can be simplified") \
   F(LintDoubleNegation, Warning, Lint, "double negation is a no-op") \
   F(LintEmptyLoop, Warning, Lint, "this loop has an empty body") \
   F(LintFloatEquality, Warning, Lint, "comparing floating-point values for equality is exact; use an ordering or an epsilon") \

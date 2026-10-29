@@ -139,6 +139,15 @@ struct LossyCast {
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
+struct BoolComparison {
+  static constexpr std::string_view ID = "bool-comparison";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
+  static constexpr LintCode CODE = LintCode::BoolComparison;
+  static constexpr std::string_view SUMMARY =
+      "a comparison of a bool with a literal";
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
+};
+
 // Rules over item declarations.
 struct MissingDocs {
   static constexpr std::string_view ID = "missing-docs";

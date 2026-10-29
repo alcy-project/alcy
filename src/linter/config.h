@@ -26,9 +26,11 @@ struct RuleSetting {
   LintLevel level = LintLevel::Warn;
   // The most parameters a declaration may carry before
   // too-many-arguments reports it. Zero keeps the rule's own default.
-  // One field serves one optional rule knob; a rule that grows a second
-  // gets a typed options struct rather than another unused field here.
   u32 max_args = 0;
+  // Names the rule must not report, from the ignore option. The views
+  // are arena-owned by the caller and live as long as the run; empty
+  // means the rule filters nothing.
+  std::span<const std::string_view> ignore;
 };
 
 // The resolved configuration for one invocation: a default level and
@@ -51,7 +53,7 @@ struct LintConfig {
     if (index < rules.size()) {
       return rules[index];
     }
-    return RuleSetting{.level = default_level};
+    return RuleSetting{.level = default_level, .ignore = {}};
   }
 };
 
