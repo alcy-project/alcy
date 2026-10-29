@@ -519,13 +519,14 @@ static bool is_mut_slice_of_u8(const ast::AstArena& ast, ast::TypeIdx type) {
 }
 
 bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
-  // The compiler owns the operator specs (ADR-0053): their declared
-  // shape is part of the operator's meaning, so a staged declaration
-  // that does not match the canonical shape is an error rather than a
-  // different operator. Index and IndexMut take `<I, O>` and one
-  // method, PartialEq has one `eq` method over `&Self`, the
-  // arithmetic specs one by-value method named after the operator, and
-  // Eq is a marker over PartialEq that declares nothing.
+  // The compiler owns the operators' and the closure capability's
+  // specs (ADR-0053, ADR-0116): their declared shape is part of the
+  // meaning, so a staged declaration that does not match the canonical
+  // shape is an error rather than a different operator. Index and
+  // IndexMut take `<I, O>` and one method, PartialEq has one `eq`
+  // method over `&Self`, the arithmetic specs one by-value method
+  // named after the operator, Eq is a marker over PartialEq that
+  // declares nothing, and Fn is the one callable shape.
   enum class Shape : u8 {
     Index,
     IndexMut,
@@ -536,6 +537,7 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
     Arithmetic,
     Negation,
     Marker,
+    Callable,
   };
   struct Canonical {
     std::string_view spec;
@@ -558,6 +560,7 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
       {"Rem", Shape::Arithmetic, "rem"},
       {"Neg", Shape::Negation, "neg"},
       {"Eq", Shape::Marker, {}},
+      {"Fn", Shape::Callable, {}},
   };
   const Canonical* canonical = nullptr;
   for (const Canonical& candidate : CANONICAL) {
@@ -580,6 +583,31 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
     // No parameters and no methods: the super-spec carries the
     // requirement the marker stands for.
     if (!declaration.params.empty() || !declaration.methods.empty()) {
+      return wrong();
+    }
+    return true;
+  }
+  if (canonical->shape == Shape::Callable) {
+    // `spec Fn<P, R> { fn call(self: &Self, args: P) -> R; }`: `P` is
+    // the parameters as one tuple and `R` the return slot, so one
+    // spec covers every arity (ADR-0116).
+    if (declaration.params.size() != 2 || declaration.methods.size() != 1) {
+      return wrong();
+    }
+    const ast::SpecMethod& method = declaration.methods[0];
+    if (method.name.name != "call" || method.is_unsafe ||
+        !method.generic.empty() || method.params.size() != 2) {
+      return wrong();
+    }
+    if (!is_ref_to(ast, method.params[0].type, false, "Self")) {
+      return wrong();
+    }
+    if (bare_path_name(ast, method.params[1].type) !=
+        declaration.params[0].name.name) {
+      return wrong();
+    }
+    if (bare_path_name(ast, method.return_type) !=
+        declaration.params[1].name.name) {
       return wrong();
     }
     return true;

@@ -242,7 +242,7 @@
   F(AnalyzerRootFileNotAModuleInput, Error, Analyzer, "Root file is not among the module inputs") \
   F(AnalyzerSelfOutsideImpl, Error, Analyzer, "Self outside of an impl block") \
   F(AnalyzerSourceFileHasNoModule, Warning, Analyzer, "Source file '{}' has no module") \
-  F(AnalyzerSpecCanonicalShape, Error, Analyzer, "Spec '{}' must keep the compiler's operator shape") \
+  F(AnalyzerSpecCanonicalShape, Error, Analyzer, "Spec '{}' must keep the shape the compiler requires") \
   F(AnalyzerSpecRequiresNominalTarget, Error, Analyzer, "Spec implementation requires a nominal type") \
   F(AnalyzerSpecSealed, Error, Analyzer, "Spec '{}' is sealed by package '{}'; implementing it from outside needs the [spec] implement key") \
   F(AnalyzerSpecSealUnknown, Error, Analyzer, "Manifest seals spec '{}', which package '{}' does not declare") \

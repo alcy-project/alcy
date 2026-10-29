@@ -11,6 +11,7 @@ license = "Apache-2.0 WITH LLVM-exception"
 include = [
   "prelude",
   "anchor",
+  "callable",
   "iterator",
   "mem",
   "option",
@@ -29,6 +30,7 @@ include = [
 export = [
   "prelude",
   "anchor",
+  "callable",
   "iterator",
   "mem",
   "option",
@@ -44,7 +46,8 @@ export = [
 
 # Specs only this suite may implement (ADR-0053). Indexing and
 # equality are operators, so their capabilities are the compiler's,
-# not a user's; arithmetic joins them.
+# not a user's; arithmetic joins them, and so does calling
+# (ADR-0116).
 [spec]
 suite-only = [
   "Index",
@@ -59,4 +62,5 @@ suite-only = [
   "Div",
   "Rem",
   "Neg",
+  "Fn",
 ]

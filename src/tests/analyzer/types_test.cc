@@ -2888,8 +2888,8 @@ TEST_CASE("Check rejects a non-canonical display spec") {
       check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
                  {{"fmt", "fmt.al"}});
   CHECK(!result.package.has_value());
-  CHECK(has_message(f.bag,
-                    "Spec 'Display' must keep the compiler's operator shape"));
+  CHECK(has_message(
+      f.bag, "Spec 'Display' must keep the shape the compiler requires"));
 }
 
 // A bound says what a parameter answers, and a call instantiates only
@@ -4257,8 +4257,8 @@ TEST_CASE("Check rejects a non-canonical arithmetic spec") {
       check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
                  {{"core", "ops.al"}});
   CHECK(!result.package.has_value());
-  CHECK(
-      has_message(f.bag, "Spec 'Add' must keep the compiler's operator shape"));
+  CHECK(has_message(f.bag,
+                    "Spec 'Add' must keep the shape the compiler requires"));
 }
 
 // The comparison operators reach `PartialOrd`, whose result wraps the
@@ -4358,7 +4358,7 @@ TEST_CASE("Check rejects a non-canonical comparison spec") {
                  {{"core", "cmp.al"}});
   CHECK(!result.package.has_value());
   CHECK(has_message(
-      f.bag, "Spec 'PartialOrd' must keep the compiler's operator shape"));
+      f.bag, "Spec 'PartialOrd' must keep the shape the compiler requires"));
 }
 
 TEST_CASE("Check reports a seal that names no declared spec") {
@@ -4591,7 +4591,7 @@ TEST_CASE("Check rejects a core operator spec off the canonical shape") {
     return;
   }
   CHECK(f.bag.at(0)->message ==
-        "Spec 'Index' must keep the compiler's operator shape");
+        "Spec 'Index' must keep the shape the compiler requires");
 }
 
 TEST_CASE("Check rejects a core equality spec off the canonical shape") {
@@ -4615,7 +4615,7 @@ TEST_CASE("Check rejects a core equality spec off the canonical shape") {
     return;
   }
   CHECK(f.bag.at(0)->message ==
-        "Spec 'PartialEq' must keep the compiler's operator shape");
+        "Spec 'PartialEq' must keep the shape the compiler requires");
 }
 
 TEST_CASE("Check rejects a core index spec with a non-reference result") {
@@ -4639,7 +4639,47 @@ TEST_CASE("Check rejects a core index spec with a non-reference result") {
     return;
   }
   CHECK(f.bag.at(0)->message ==
-        "Spec 'Index' must keep the compiler's operator shape");
+        "Spec 'Index' must keep the shape the compiler requires");
+}
+
+TEST_CASE("Check accepts a canonical core callable spec") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"specs.al",
+             "pub spec Fn<P, R> {\n  fn call(self: &Self, args: P) -> R;\n}\n"},
+            {"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "specs.al"}}, {}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a core callable spec off the canonical shape") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"specs.al",
+             "pub spec Fn<P, R> {\n  fn call(self: Self, args: P) -> R;\n}\n"},
+            {"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_with_policies(dir, "main.al", {{"core", "specs.al"}}, {}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Spec 'Fn' must keep the shape the compiler requires");
 }
 
 TEST_CASE("Check reads an array length from a const item") {

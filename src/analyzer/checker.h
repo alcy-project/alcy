@@ -399,8 +399,8 @@ class Checker {
   // in the same module, duplicate methods, and method-level type
   // parameters, which arrive with bounds.
   void register_spec(u32 module, ast::ItemIdx item);
-  // Verifies a staged operator spec against the compiler's canonical
-  // table (ADR-0053); true for every other spec.
+  // Verifies a staged compiler-owned spec against the canonical table
+  // (ADR-0053, ADR-0116); true for every other spec.
   bool check_operator_spec(const ast::ItemSpec& declaration);
   // Registers one `impl S for T`: resolves the spec and the target,
   // enforces coherence, and checks the methods against the declared

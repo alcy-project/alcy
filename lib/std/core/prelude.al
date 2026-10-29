@@ -11,6 +11,7 @@
 // docs/adr/0016-suites-and-the-std-split.md.
 
 pub use package::anchor::Anchor;
+pub use package::callable::Fn;
 pub use package::cmp::Eq;
 pub use package::cmp::Ordering;
 pub use package::cmp::Ord;
