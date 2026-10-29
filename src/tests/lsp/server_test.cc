@@ -132,7 +132,7 @@ TEST_CASE("A clean buffer reports nothing and a broken one reports") {
 
 TEST_CASE("A lint finding is published as a diagnostic") {
   const Document document("file:///main.al", "alcy", 1,
-                          "fn main() -> i32 {\n  ret 0\n}\n");
+                          "fn main() -> i32 {\n  unused := 1\n  ret 0\n}\n");
   const text::JsonValue diagnostics = document_diagnostics(document);
   CHECK(diagnostics.is_array());
   CHECK(!diagnostics.as_array().empty());

@@ -11,11 +11,14 @@
 
 namespace lsp {
 
-TEST_CASE("A needless return offers one quick fix") {
-  const Document document("file:///main.al", "alcy", 1,
-                          "fn main() -> i32 {\n  ret 1\n}\n");
+TEST_CASE("A while-true finding offers one quick fix") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "fn main() -> i32 {\n  mut n := 0\n  while true {\n"
+      "    n = n + 1\n    if n > 3 {\n      break\n    }\n  }\n"
+      "  ret n\n}\n");
   const text::JsonValue actions =
-      code_actions(document, Position{1, 0}, Position{1, 7});
+      code_actions(document, Position{2, 2}, Position{2, 12});
   CHECK(actions.is_array());
   CHECK(actions.as_array().size() == 1);
   if (actions.as_array().empty()) {
@@ -59,7 +62,7 @@ TEST_CASE("A needless return offers one quick fix") {
     }
   }
   if (replacement != nullptr) {
-    CHECK(replacement->as_string().empty());
+    CHECK(replacement->as_string() == "loop");
   }
 }
 

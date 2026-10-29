@@ -114,6 +114,26 @@ void check_while(LintContext& ctx, ast::ExprIdx expr) {
   }
   const u32 finding = ctx.report<i18n::Key::LintWhileTrue>(node.span);
   ctx.label<i18n::Key::LintWhileTrueHelp>(finding, node.span);
+  // The repair is sure only when the text the swap covers is exactly
+  // the keyword and the condition: a spread or parenthesized `true`
+  // would leave bytes the swap does not own behind (ADR-0111 - a repair
+  // is the rule's assertion that it knows the bytes it replaces).
+  const std::optional<std::string_view> bytes =
+      ctx.sources.bytes(node.span.file);
+  if (!bytes.has_value()) {
+    return;
+  }
+  const std::string_view text = *bytes;
+  const usize begin = node.span.offset;
+  const usize end = value.span.offset + value.span.length;
+  if (begin > text.size() || end > text.size() || end < begin ||
+      text.substr(begin, end - begin) != "while true") {
+    return;
+  }
+  ctx.fix(finding,
+          diag::Span{node.span.file, static_cast<u32>(begin),
+                     static_cast<u32>(end - begin)},
+          "loop");
 }
 
 void check_loop(LintContext& ctx, ast::ExprIdx expr) {

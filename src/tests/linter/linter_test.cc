@@ -205,21 +205,24 @@ TEST_CASE("an unknown level is a config error") {
   CHECK(ctx.bag.has_errors());
 }
 
-TEST_CASE("needless-return offers a machine-applicable repair") {
+TEST_CASE("while-true offers a machine-applicable repair") {
   Run run;
-  run("fn main() -> i32 {\n  ret 1\n}\n", default_config(run.ctx));
-  CHECK(findings_for(run.ctx.bag, "needless-return") == 1);
+  run("fn main() -> i32 {\n  mut n := 0\n  while true {\n"
+      "    n = n + 1\n    if n > 3 {\n      break\n    }\n  }\n"
+      "  ret n\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "while-true") == 1);
   const diag::Fix* fix = nullptr;
   run.ctx.bag.for_each([&](const diag::Diagnostic& finding) {
-    if (finding.check_name == "needless-return") {
+    if (finding.check_name == "while-true") {
       fix = finding.fix;
     }
   });
   CHECK(fix != nullptr);
   if (fix != nullptr) {
-    CHECK(fix->replacement.empty());
-    // The repair covers the keyword and the space before the value.
-    CHECK(fix->span.length == 4);
+    CHECK(fix->replacement == "loop");
+    // The repair covers the keyword and the condition it replaces.
+    CHECK(fix->span.length == 10);
   }
 }
 
