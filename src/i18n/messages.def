@@ -544,6 +544,7 @@
   F(CliLintFindingSingular, Note, Pipeline, "finding") \
   F(CliVerbLinted, Note, Pipeline, "Linted") \
   F(LintConfigLevelNotString, Error, Lint, "the level of lint rule '{}' in {} must be a string") \
+  F(LintConfigBorrowChecksNotBool, Error, Lint, "the borrow-checks key in {} must be a boolean") \
   F(LintConfigOptionNotInteger, Error, Lint, "the max-args option of lint rule '{}' in {} must be an integer") \
   F(LintConfigRuleNotTable, Error, Lint, "lint rule '{}' in {} must be a level string or a table") \
   F(LintConfigSyntaxError, Error, Lint, "cannot parse {}: {}") \

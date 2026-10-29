@@ -8,7 +8,6 @@
 #include "i18n/messages.h"
 #include "linter/context.h"
 #include "linter/rules/rules.h"
-#include "linter/walk.h"
 
 namespace linter::rules {
 
@@ -180,16 +179,16 @@ void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
 
 }  // namespace
 
-void DoubleNegation::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_double_negation);
+void DoubleNegation::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_double_negation(ctx, expr);
 }
 
-void SelfComparison::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_self_comparison);
+void SelfComparison::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_self_comparison(ctx, expr);
 }
 
-void NestedIf::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_nested_if);
+void NestedIf::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_nested_if(ctx, expr);
 }
 
 }  // namespace linter::rules

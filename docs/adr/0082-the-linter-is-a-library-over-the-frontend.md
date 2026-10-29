@@ -26,28 +26,34 @@ that grew its own parser has had.
   lowering, over a resolved tree (`pipeline::analyze_tree`). Rules read
   the AST and the checked package, then the linter finishes the
   frontend (lower and borrow-check) so a program the compiler would
-  refuse is not reported lint-clean.
+  refuse is not reported lint-clean. The tail is skipped when the
+  configuration sets borrow-checks = false, which trades the borrow
+  verdict for about half the run; the rules never read it.
 - A finding is a `diag::Diagnostic` with `Stage::Lint`, the rule name in
   `check_name`, and the rule code beside it. A rule configures to
   `allow`, `warn`, or `deny`; `deny` composes an error the run fails on.
   Rendering, `--json`, colour, and the exit code are the compiler
   diag/cli machinery, so lint output and compiler output cannot drift.
-- `.alcy/lint.toml` holds a top-level `level` and a `[rules]` table. A
-  rule is named by its id (`unused-variable`); an unknown id or an
+- `.alcy/lint.toml` holds a top-level `level`, a `[rules]` table, and
+  `borrow-checks`. A rule is named by its id (`unused-variable`); an unknown id or an
   unknown level is an error, because both are typos a reader wants to
   hear about. Only the goal package's `.alcy/` is read, and only the
   goal package modules are linted: staged standard-library sources and
   path dependencies are skipped.
 - A rule is a type: the id, default level, code, and summary as
-  static members, and the check as a static `run`, defined in
-  `linter/rules/`. A concept holds every rule to that shape, and
-  the registry folds the type list into the runtime table the
-  engine iterates and lint.toml resolves against - the dispatch is
-  one function pointer per rule, generated rather than
-  hand-maintained. There is no virtual dispatch, matching the
-  compiler no-runtime-polymorphism rule. The type list's order is
-  the index the parsed configuration is aligned with, so a rule is
-  appended and never inserted.
+  static members, and exactly one check shape - a whole-module `run`,
+  or a `check_expr` / `check_item` hook the engine's shared traversal
+  dispatches to - defined in `linter/rules/`. A concept holds every
+  rule to that shape, and the registry folds the type list into the
+  runtime table the engine iterates and lint.toml resolves against -
+  the dispatch is one function pointer per rule, generated rather than
+  hand-maintained. The engine builds one active list per node family
+  and one binding table per module: expressions and items are each
+  walked once, and the binding walk runs only when an enabled rule
+  reads it. There is no virtual dispatch, matching the compiler
+  no-runtime-polymorphism rule. The type list's order is the index the
+  parsed configuration is aligned with, so a rule is appended and never
+  inserted.
 - `alcy lint --fix` writes the repairs a rule attached and lints again,
   up to four passes. A repair is the rule's assertion that it knows the
   bytes it replaces; the client applies it without asking. An edit that
@@ -60,7 +66,10 @@ that grew its own parser has had.
 The linter gets the frontend, the diagnostic renderer, the source
 snippet, and the JSON envelope for free. The frontend grew one seam,
 `analyze_tree`, which build and check now also compose; a new rule is
-a type under `linter/rules/` and one line in the registry's list.
+a type under `linter/rules/` and one line in the registry's list. The
+rules over a module share their walks, so the lint phase stays small
+beside the frontend, and the frontend's tail can be traded for speed
+without touching a rule.
 
 `missing-docs` and `shadow` default to `allow`: they are style choices
 a project opts into. `unreachable-code` is also opt-in, because the

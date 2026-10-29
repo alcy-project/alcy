@@ -5,6 +5,7 @@
 
 #include <iterator>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <utility>
 
@@ -23,6 +24,8 @@
 #include "source/source.h"
 
 namespace linter {
+
+struct BindingIndex;
 
 // What one rule run reads. The context is rebuilt for each module, so a
 // rule addresses the module it is checking through this rather than
@@ -61,6 +64,14 @@ struct LintContext {
   // The module being checked, and its file. A rule that walks the
   // package loops the modules itself and does not read these.
   u32 module = 0;
+  // The module's binding table, built once by the engine when an
+  // enabled rule reads it. Null when no enabled rule does, so a rule
+  // that asks for it either finds the answer or is not running.
+  const BindingIndex* binding_index = nullptr;
+  // The rules the engine's single expression and item walks dispatch
+  // to, in registry order. Engine plumbing; a rule does not read these.
+  std::span<const Rule*> active_expr;
+  std::span<const Rule*> active_item;
 
   [[nodiscard]] const ast::ItemNode& item_node(ast::ItemIdx id) const {
     return ast.items[id];

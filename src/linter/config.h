@@ -38,6 +38,11 @@ struct RuleSetting {
 struct LintConfig {
   LintLevel default_level = LintLevel::Warn;
   std::span<const RuleSetting> rules;
+  // Whether the frontend's lowering and borrow tail runs after the
+  // rules. The rules read the analyzed package and do not need it; the
+  // tail is what makes a lint run reject a program the compiler would.
+  // False trades that verdict for about half the run.
+  bool borrow_checks = true;
 
   // The setting for the rule at the given index in the registry. An
   // index past the table reads the default, which is what a config

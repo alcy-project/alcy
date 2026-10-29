@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string_view>
+#include <vector>
 
 #include "ast/ast.h"
 #include "diag/span.h"
@@ -36,17 +37,18 @@ struct BindingUse {
   bool is_shadowed = false;
 };
 
-// Called once per binding, after the scope that declares it closes, so
-// the counters are final.
-using BindingCallback = void (*)(void* self, LintContext&, const BindingUse&);
+// The bindings one module declares, in the order their scopes closed.
+// Built once per module and read by every rule that asks for it, so the
+// three rules over a name walk the syntax once between them rather than
+// once each.
+struct BindingIndex {
+  std::vector<BindingUse> bindings;
+};
 
-// Walks one item's body and reports every binding it declares. An item
-// that declares no body (a struct, a use) reports nothing. Closures
-// nested in a function report their own bindings, so one call covers the
-// whole subtree.
-void analyze_bindings(LintContext& ctx,
-                      ast::ItemIdx item,
-                      void* self,
-                      BindingCallback visit);
+// Collects every binding the module's own items declare, clearing the
+// index first. An item that declares no body (a struct, a use) adds
+// nothing; closures nested in a function add their own bindings, so one
+// call covers the module.
+void collect_bindings(LintContext& ctx, BindingIndex& index);
 
 }  // namespace linter

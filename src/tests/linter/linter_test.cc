@@ -89,13 +89,20 @@ struct Run {
 
   Run() : ctx(i18n::Language::EnUs) {}
 
-  void operator()(std::string_view source, const LintConfig& config) {
+  // Runs without asserting success, for a case that checks the failure
+  // itself.
+  bool attempt(std::string_view source, const LintConfig& config) {
     base::Result<LintOutcome, diag::Reported> result =
         lint_source(ctx, "test.al", source, config);
-    CHECK(result.is_ok());
-    if (result.is_ok()) {
-      outcome = std::move(result).unwrap();
+    if (result.is_err()) {
+      return false;
     }
+    outcome = std::move(result).unwrap();
+    return true;
+  }
+
+  void operator()(std::string_view source, const LintConfig& config) {
+    CHECK(attempt(source, config));
   }
 };
 
@@ -265,6 +272,32 @@ TEST_CASE("an unknown level is a config error") {
   pipeline::PipelineContext ctx{i18n::Language::EnUs};
   base::Result<LintConfig, diag::Reported> parsed =
       parse_lint_config("[rules]\nunused-variable = \"loud\"\n", "lint.toml",
+                        source::UNKNOWN_FILE, ctx.bag, ctx.arena);
+  CHECK(parsed.is_err());
+  CHECK(ctx.bag.has_errors());
+}
+
+TEST_CASE("borrow-checks = false lints a program the borrow pass refuses") {
+  const std::string_view source =
+      "fn main() -> i32 {\n"
+      "  mut n := 7\n"
+      "  unused := 1\n"
+      "  r := &n\n"
+      "  m := &mut n\n"
+      "  *m = 1\n"
+      "  ret *r\n"
+      "}\n";
+  Run strict;
+  CHECK(!strict.attempt(source, default_config(strict.ctx)));
+  Run fast;
+  CHECK(fast.attempt(source, config_from(fast.ctx, "borrow-checks = false\n")));
+  CHECK(findings_for(fast.ctx.bag, "unused-variable") == 1);
+}
+
+TEST_CASE("a non-boolean borrow-checks is a config error") {
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<LintConfig, diag::Reported> parsed =
+      parse_lint_config("borrow-checks = \"yes\"\n", "lint.toml",
                         source::UNKNOWN_FILE, ctx.bag, ctx.arena);
   CHECK(parsed.is_err());
   CHECK(ctx.bag.has_errors());

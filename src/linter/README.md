@@ -19,6 +19,9 @@ is configured, and only its own modules are linted: staged standard
 library sources and path dependencies are skipped.
 
 ```toml
+# Run lowering and the borrow check after the rules (default true).
+# borrow-checks = true
+
 # The level a rule not named below uses. One of allow, warn, deny.
 level = "warn"
 
@@ -43,6 +46,16 @@ left for a later pass, and the run stops after four. The final pass runs
 on the rewritten files, so the findings it prints describe the bytes on
 disk, and a denied finding a repair removed does not fail the run. A
 file that cannot be written is reported and ends the pass loop.
+
+## Performance
+
+A run is the frontend, the rules, and, unless borrow-checks is false,
+the lowering and borrow tail. The rules on a module share one expression
+walk, one item walk, and one binding table; the binding table is built
+only when an enabled rule reads it. The tail is most of the cost and the
+rules do not need it, so borrow-checks = false stops after analysis for
+a faster edit loop. The run then does not report a borrow error, and
+alcy check remains the complete gate.
 
 ## Rules
 
@@ -85,8 +98,10 @@ change the meaning.
 ## Adding a rule
 
 1. Define the rule as a type in `rules/rules.h` - the id lint.toml
-   addresses, the default level, the code, the summary, and a static
-   `run` - and implement `run` under `rules/`. A rule reads
+   addresses, the default level, the code, and the summary - and one
+   check shape: a whole-module `run`, or a `check_expr` / `check_item`
+   hook the engine's shared walk dispatches to. Implement it under
+   `rules/`. A rule reads
    `LintContext` - the checked package, the AST, the sources, and the
    resolved setting - and reports through
    `ctx.report<Key>(span, args...)`, which composes the catalog message
@@ -105,16 +120,17 @@ change the meaning.
 ## Layout
 
 - `lint.h` / `lint.cc`: the entry points and the file/config loading.
-- `engine.h` / `engine.cc`: runs every enabled rule over the goal
-  package modules and counts what it emitted.
+- `engine.h` / `engine.cc`: builds the active rule lists and the
+  per-module binding table, dispatches the shared walks, and counts what
+  the rules emitted.
 - `rule.h` / `rule.cc`: the rule table.
 - `config.h` / `config.cc`: `.alcy/lint.toml`.
 - `context.h`: what one rule run reads and how it reports.
 - `walk.h` / `walk.cc`: one traversal with callbacks, for rules that
   only inspect nodes.
-- `bindings.h` / `bindings.cc`: the scope-resolving pass that says how
-  often a name is read and written; `unused-variable`, `unused-mut`,
-  and `shadow` read it.
+- `bindings.h` / `bindings.cc`: the scope-resolving pass that builds
+  one binding table per module; `unused-variable`, `unused-mut`, and
+  `shadow` read it.
 - `types.h` / `types.cc`: the checked-type query the type-based rules
   read, including the conservative answer for a generic body.
 - `fix.h` / `fix.cc`: collecting a pass's repairs and applying one

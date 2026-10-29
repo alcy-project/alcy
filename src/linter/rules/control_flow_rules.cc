@@ -157,12 +157,12 @@ void UnreachableCode::run(LintContext& ctx) {
   for_each_block(ctx, &check_block);
 }
 
-void WhileTrue::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_while);
+void WhileTrue::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_while(ctx, expr);
 }
 
-void EmptyLoop::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_loop);
+void EmptyLoop::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_loop(ctx, expr);
 }
 
 }  // namespace linter::rules

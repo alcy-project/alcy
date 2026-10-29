@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -25,8 +26,7 @@ namespace {
 // names cannot do without it.
 class Analyzer {
  public:
-  Analyzer(LintContext& ctx, void* self, BindingCallback visit)
-      : ctx_(ctx), self_(self), visit_(visit) {}
+  Analyzer(LintContext& ctx, BindingIndex& out) : ctx_(ctx), out_(out) {}
 
   void run_item(ast::ItemIdx item) {
     if (!item.is_valid()) {
@@ -57,7 +57,7 @@ class Analyzer {
       return;
     }
     for (const u32 index : scopes_.back()) {
-      visit_(self_, ctx_, bindings_[index]);
+      out_.bindings.push_back(bindings_[index]);
     }
     scopes_.pop_back();
   }
@@ -402,20 +402,19 @@ class Analyzer {
   }
 
   LintContext& ctx_;
-  void* self_;
-  BindingCallback visit_;
+  BindingIndex& out_;
   std::vector<BindingUse> bindings_;
   std::vector<std::vector<u32>> scopes_;
 };
 
 }  // namespace
 
-void analyze_bindings(LintContext& ctx,
-                      ast::ItemIdx item,
-                      void* self,
-                      BindingCallback visit) {
-  Analyzer analyzer(ctx, self, visit);
-  analyzer.run_item(item);
+void collect_bindings(LintContext& ctx, BindingIndex& index) {
+  index.bindings.clear();
+  for (const ast::ItemIdx item : ctx.module_node().items) {
+    Analyzer analyzer(ctx, index);
+    analyzer.run_item(item);
+  }
 }
 
 }  // namespace linter

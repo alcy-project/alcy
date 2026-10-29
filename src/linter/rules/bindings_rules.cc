@@ -3,7 +3,6 @@
 
 #include <string_view>
 
-#include "ast/ast.h"
 #include "fpag/base/numeric.h"
 #include "i18n/messages.h"
 #include "linter/bindings.h"
@@ -33,7 +32,7 @@ std::string_view source_spelling(std::string_view name) {
   return dollar == std::string_view::npos ? name : name.substr(0, dollar);
 }
 
-void report_unused(void*, LintContext& ctx, const BindingUse& binding) {
+void report_unused(LintContext& ctx, const BindingUse& binding) {
   if (binding.reads != 0 || skipped_name(binding.name)) {
     return;
   }
@@ -47,7 +46,7 @@ void report_unused(void*, LintContext& ctx, const BindingUse& binding) {
   ctx.label<i18n::Key::LintUnusedVariableHelp>(finding, binding.span);
 }
 
-void report_unused_mut(void*, LintContext& ctx, const BindingUse& binding) {
+void report_unused_mut(LintContext& ctx, const BindingUse& binding) {
   // A binding no one reads is unused-variable's finding; reporting the
   // mut beside it says the same thing twice.
   if (!binding.is_mut || binding.reads == 0 || binding.mutations != 0 ||
@@ -58,7 +57,7 @@ void report_unused_mut(void*, LintContext& ctx, const BindingUse& binding) {
                                        source_spelling(binding.name));
 }
 
-void report_shadow(void*, LintContext& ctx, const BindingUse& binding) {
+void report_shadow(LintContext& ctx, const BindingUse& binding) {
   if (!binding.is_shadowed || skipped_name(binding.name)) {
     return;
   }
@@ -69,20 +68,29 @@ void report_shadow(void*, LintContext& ctx, const BindingUse& binding) {
 }  // namespace
 
 void UnusedVariable::run(LintContext& ctx) {
-  for (const ast::ItemIdx item : ctx.module_node().items) {
-    analyze_bindings(ctx, item, nullptr, report_unused);
+  if (ctx.binding_index == nullptr) {
+    return;
+  }
+  for (const BindingUse& binding : ctx.binding_index->bindings) {
+    report_unused(ctx, binding);
   }
 }
 
 void UnusedMut::run(LintContext& ctx) {
-  for (const ast::ItemIdx item : ctx.module_node().items) {
-    analyze_bindings(ctx, item, nullptr, report_unused_mut);
+  if (ctx.binding_index == nullptr) {
+    return;
+  }
+  for (const BindingUse& binding : ctx.binding_index->bindings) {
+    report_unused_mut(ctx, binding);
   }
 }
 
 void Shadow::run(LintContext& ctx) {
-  for (const ast::ItemIdx item : ctx.module_node().items) {
-    analyze_bindings(ctx, item, nullptr, report_shadow);
+  if (ctx.binding_index == nullptr) {
+    return;
+  }
+  for (const BindingUse& binding : ctx.binding_index->bindings) {
+    report_shadow(ctx, binding);
   }
 }
 

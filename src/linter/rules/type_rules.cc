@@ -12,7 +12,6 @@
 #include "linter/context.h"
 #include "linter/rules/rules.h"
 #include "linter/types.h"
-#include "linter/walk.h"
 
 namespace linter::rules {
 
@@ -219,20 +218,20 @@ void check_lossy_cast(LintContext& ctx, ast::ExprIdx expr) {
 
 }  // namespace
 
-void UselessCast::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_useless_cast);
+void UselessCast::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_useless_cast(ctx, expr);
 }
 
-void FloatEquality::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_float_equality);
+void FloatEquality::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_float_equality(ctx, expr);
 }
 
-void NeedlessBorrow::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_needless_borrow);
+void NeedlessBorrow::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_needless_borrow(ctx, expr);
 }
 
-void LossyCast::run(LintContext& ctx) {
-  for_each_expr(ctx, &check_lossy_cast);
+void LossyCast::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_lossy_cast(ctx, expr);
 }
 
 }  // namespace linter::rules

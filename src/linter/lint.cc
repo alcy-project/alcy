@@ -72,7 +72,16 @@ base::Result<LintOutcome, diag::Reported> lint_root(
     return fail();
   }
   analyzer::CheckedPackage package = std::move(checked).unwrap();
+  const usize staged = package.tree.staged_modules;
+  const usize module_count =
+      package.modules.size() > staged ? package.modules.size() - staged : 0;
   const LintStats stats = run_lints(ctx, package, config);
+  if (!config.borrow_checks) {
+    return base::make_ok(LintOutcome{.file_count = 1,
+                                     .module_count = module_count,
+                                     .warning_count = stats.warnings,
+                                     .error_count = stats.errors});
+  }
   // Lowering and the borrow check run after the rules so a program the
   // compiler would refuse is not reported lint-clean. Their errors are
   // new; the findings already in the bag are not theirs to judge.
@@ -154,18 +163,24 @@ base::Result<LintOutcome, diag::Reported> lint_package(
       continue;
     }
     analyzer::CheckedPackage package = std::move(checked).unwrap();
+    const usize staged = package.tree.staged_modules;
+    const usize module_count =
+        package.modules.size() > staged ? package.modules.size() - staged : 0;
     const LintStats stats = run_lints(ctx, package, config);
+    total.file_count += target.file_count;
+    total.warning_count += stats.warnings;
+    total.error_count += stats.errors;
+    if (!config.borrow_checks) {
+      total.module_count += module_count;
+      continue;
+    }
     base::Result<pipeline::FrontendOutput, diag::Reported> finished =
         pipeline::finish_frontend(ctx, std::move(package));
     if (finished.is_err()) {
       ok = false;
       continue;
     }
-    const pipeline::FrontendOutput out = std::move(finished).unwrap();
-    total.file_count += target.file_count;
-    total.module_count += out.module_count;
-    total.warning_count += stats.warnings;
-    total.error_count += stats.errors;
+    total.module_count += std::move(finished).unwrap().module_count;
   }
   // Several targets analyze shared modules, so one finding can be
   // reported once per tree; the run renders it once.

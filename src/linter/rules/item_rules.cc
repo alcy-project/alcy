@@ -6,7 +6,6 @@
 #include "i18n/messages.h"
 #include "linter/context.h"
 #include "linter/rules/rules.h"
-#include "linter/walk.h"
 
 namespace linter::rules {
 
@@ -64,12 +63,12 @@ void check_too_many_arguments(LintContext& ctx, ast::ItemIdx item) {
 
 }  // namespace
 
-void MissingDocs::run(LintContext& ctx) {
-  for_each_item(ctx, &check_missing_docs);
+void MissingDocs::check_item(LintContext& ctx, ast::ItemIdx item) {
+  check_missing_docs(ctx, item);
 }
 
-void TooManyArguments::run(LintContext& ctx) {
-  for_each_item(ctx, &check_too_many_arguments);
+void TooManyArguments::check_item(LintContext& ctx, ast::ItemIdx item) {
+  check_too_many_arguments(ctx, item);
 }
 
 }  // namespace linter::rules

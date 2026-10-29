@@ -22,6 +22,7 @@ struct UnusedVariable {
   static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
   static constexpr LintCode CODE = LintCode::UnusedVariable;
   static constexpr std::string_view SUMMARY = "a binding no expression reads";
+  static constexpr bool READS_BINDINGS = true;
   static void run(LintContext& ctx);
 };
 
@@ -31,6 +32,7 @@ struct UnusedMut {
   static constexpr LintCode CODE = LintCode::UnusedMut;
   static constexpr std::string_view SUMMARY =
       "a mut binding that is never written";
+  static constexpr bool READS_BINDINGS = true;
   static void run(LintContext& ctx);
 };
 
@@ -40,6 +42,7 @@ struct Shadow {
   static constexpr LintCode CODE = LintCode::Shadow;
   static constexpr std::string_view SUMMARY =
       "a binding that shadows one in an enclosing scope";
+  static constexpr bool READS_BINDINGS = true;
   static void run(LintContext& ctx);
 };
 
@@ -60,7 +63,7 @@ struct WhileTrue {
   static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
   static constexpr LintCode CODE = LintCode::WhileTrue;
   static constexpr std::string_view SUMMARY = "a while over the literal true";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 struct EmptyLoop {
@@ -68,7 +71,7 @@ struct EmptyLoop {
   static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
   static constexpr LintCode CODE = LintCode::EmptyLoop;
   static constexpr std::string_view SUMMARY = "a loop whose body is empty";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 // Rules over expressions.
@@ -77,7 +80,7 @@ struct DoubleNegation {
   static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
   static constexpr LintCode CODE = LintCode::DoubleNegation;
   static constexpr std::string_view SUMMARY = "an operator applied to itself";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 struct SelfComparison {
@@ -86,7 +89,7 @@ struct SelfComparison {
   static constexpr LintCode CODE = LintCode::SelfComparison;
   static constexpr std::string_view SUMMARY =
       "a comparison whose operands are the same expression";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 struct NestedIf {
@@ -95,7 +98,7 @@ struct NestedIf {
   static constexpr LintCode CODE = LintCode::NestedIf;
   static constexpr std::string_view SUMMARY =
       "an if whose only statement is another if";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 // Rules over the checked types: the analyzer's answer for an
@@ -106,7 +109,7 @@ struct UselessCast {
   static constexpr LintCode CODE = LintCode::UselessCast;
   static constexpr std::string_view SUMMARY =
       "a cast to the type the value already has";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 struct FloatEquality {
@@ -115,7 +118,7 @@ struct FloatEquality {
   static constexpr LintCode CODE = LintCode::FloatEquality;
   static constexpr std::string_view SUMMARY =
       "an equality test on floating-point values";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 struct NeedlessBorrow {
@@ -124,7 +127,7 @@ struct NeedlessBorrow {
   static constexpr LintCode CODE = LintCode::NeedlessBorrow;
   static constexpr std::string_view SUMMARY =
       "a borrow of a dereference that is the reference itself";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 struct LossyCast {
@@ -133,7 +136,7 @@ struct LossyCast {
   static constexpr LintCode CODE = LintCode::LossyCast;
   static constexpr std::string_view SUMMARY =
       "a cast that narrows the value's scalar type";
-  static void run(LintContext& ctx);
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 // Rules over item declarations.
@@ -143,7 +146,7 @@ struct MissingDocs {
   static constexpr LintCode CODE = LintCode::MissingDocs;
   static constexpr std::string_view SUMMARY =
       "a public item without a doc comment";
-  static void run(LintContext& ctx);
+  static void check_item(LintContext& ctx, ast::ItemIdx item);
 };
 
 struct TooManyArguments {
@@ -152,7 +155,7 @@ struct TooManyArguments {
   static constexpr LintCode CODE = LintCode::TooManyArguments;
   static constexpr std::string_view SUMMARY =
       "a function taking more parameters than the limit";
-  static void run(LintContext& ctx);
+  static void check_item(LintContext& ctx, ast::ItemIdx item);
 };
 
 }  // namespace linter::rules

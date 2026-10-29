@@ -99,6 +99,17 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
       }
       continue;
     }
+    if (name == "borrow-checks") {
+      const std::optional<bool> flag = node.value<bool>();
+      if (!flag.has_value()) {
+        const u32 index = bag.emit<i18n::Key::LintConfigBorrowChecksNotBool>(
+            LintCode::ConfigSemanticError, filename);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+      config.borrow_checks = *flag;
+      continue;
+    }
     if (name == "rules") {
       if (!node.is_table()) {
         const u32 index = bag.emit<i18n::Key::LintConfigRuleNotTable>(
