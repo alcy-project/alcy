@@ -1,0 +1,3 @@
+# A shared reference cannot yield an owned value: the copy is refused.
+exit = 4
+contains = ["Cannot move a non-`Copy` value out of a reference"]

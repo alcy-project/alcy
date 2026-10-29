@@ -1,0 +1,4 @@
+# The implementation declares a type parameter the spec method does not,
+# so its signature cannot match the declaration.
+exit = 4
+contains = ["does not match the declaration"]
