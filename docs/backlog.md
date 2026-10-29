@@ -222,6 +222,25 @@ replaced. The foundations are in `roadmap.md`.
   bounds; `keys()` traversal and `Vec` sorting moved to the roadmap's
   iteration and operator items.
 
+- [ ] Set algebra: `union_with` and `intersection` build a new set from
+  two, and the cases for them were written before either existed. The
+  set carries `insert`, `remove`, `contains`, `is_subset` and
+  `extend` over `str` keys, and a builder returns `bool`, which a
+  statement discards with a warning. The two operations want the same
+  answer: whether a builder's result is the caller's to ignore.
+
+- [ ] `String::insert_str` at a byte index, which `insert_byte` does for
+  one byte. The index must be a character boundary, and nothing yet
+  spells that refusal, so the operation waits on the boundary check
+  `str` slicing shares.
+
+- [ ] A spec method's declared bound is never checked at the call. The
+  declaration says `fn check<U: PartialEq>`, an implementation may
+  leave the bound out, and `spec_method_sig` binds the method's type
+  parameters to the call's arguments without asking whether those
+  arguments satisfy what the declaration requires. `check_declared_bounds`
+  is the pass that would answer it.
+
 - [ ] A value's type is named in three places, and a place is not a
   value: a register's row, the operand that names it, and the
   lowering's own value each carry a type, and the verifier compares
