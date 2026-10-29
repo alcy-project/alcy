@@ -22,6 +22,8 @@ source_set("linter") {
     "diag_code.h",
     "engine.cc",
     "engine.h",
+    "fix.cc",
+    "fix.h",
     "level.cc",
     "level.h",
     "lint.cc",

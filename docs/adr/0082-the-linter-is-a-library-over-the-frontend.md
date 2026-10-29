@@ -48,6 +48,12 @@ that grew its own parser has had.
   compiler no-runtime-polymorphism rule. The type list's order is
   the index the parsed configuration is aligned with, so a rule is
   appended and never inserted.
+- `alcy lint --fix` writes the repairs a rule attached and lints again,
+  up to four passes. A repair is the rule's assertion that it knows the
+  bytes it replaces; the client applies it without asking. An edit that
+  overlaps one already applied is skipped, a file that cannot be written
+  is reported, and the final pass reports the bytes on disk, so a denied
+  finding the repair removed does not fail the run.
 
 ## Consequences
 
@@ -61,6 +67,6 @@ a project opts into. `unreachable-code` is also opt-in, because the
 lowering pass already warns about the same expression (WD003) and the
 lint exists for a caller that lints without lowering.
 
-Out of scope for this record: `--fix` and machine-applicable
-edits, per-rule option schemas beyond the one `max-args` field, plugin
-or dynamically loaded rules, and linting dependencies.
+Out of scope for this record: per-rule option schemas beyond the one
+`max-args` field, plugin or dynamically loaded rules, and linting
+dependencies.

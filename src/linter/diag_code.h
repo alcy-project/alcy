@@ -18,6 +18,7 @@ namespace linter {
 enum class LintCode : u8 {
   ConfigSyntaxError = 1,
   ConfigSemanticError = 2,
+  FixWriteFailed = 3,
 
   UnusedVariable = 10,
   UnusedMut = 11,

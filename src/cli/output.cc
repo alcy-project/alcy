@@ -308,6 +308,12 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
       append_count(subject, envelope.lint_count,
                    i18n::text<Key::CliLintFindingSingular>(language),
                    i18n::text<Key::CliLintFindingPlural>(language));
+      if (envelope.fix_count > 0) {
+        subject += ", ";
+        append_count(subject, envelope.fix_count,
+                     i18n::text<Key::CliLintFixSingular>(language),
+                     i18n::text<Key::CliLintFixPlural>(language));
+      }
       return subject;
     }
     case Outcome::Built:
@@ -569,6 +575,8 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   append_json_number(out, envelope.function_count);
   out += R"(,"findings":)";
   append_json_number(out, envelope.lint_count);
+  out += R"(,"fixes":)";
+  append_json_number(out, envelope.fix_count);
   out += R"(,"output_bytes":)";
   append_json_number(out, envelope.output_bytes);
   out += R"(,"wall_ns":)";

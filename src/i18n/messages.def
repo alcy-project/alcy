@@ -537,6 +537,9 @@
   F(CliLintAbout, Note, Pipeline, "Check a package for lint findings") \
   F(CliLspAbout, Note, Pipeline, "Serve the language server over standard input and output") \
   F(CliLintFileHelp, Note, Pipeline, "Lint a single source file instead of a package directory.") \
+  F(CliLintFixHelp, Note, Pipeline, "Apply the repairs a rule is sure of, then report what remains.") \
+  F(CliLintFixSingular, Note, Pipeline, "fix") \
+  F(CliLintFixPlural, Note, Pipeline, "fixes") \
   F(CliLintFindingPlural, Note, Pipeline, "findings") \
   F(CliLintFindingSingular, Note, Pipeline, "finding") \
   F(CliVerbLinted, Note, Pipeline, "Linted") \
@@ -546,6 +549,7 @@
   F(LintConfigSyntaxError, Error, Lint, "cannot parse {}: {}") \
   F(LintConfigUnknownLevel, Error, Lint, "unknown lint level '{}' in {}") \
   F(LintConfigUnknownRule, Error, Lint, "unknown lint rule '{}' in {}") \
+  F(LintFixWriteFailed, Error, Lint, "cannot write the repair to {}") \
   F(LintDoubleNegation, Warning, Lint, "double negation is a no-op") \
   F(LintEmptyLoop, Warning, Lint, "this loop has an empty body") \
   F(LintFloatEquality, Warning, Lint, "comparing floating-point values for equality is exact; use an ordering or an epsilon") \

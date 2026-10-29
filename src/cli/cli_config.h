@@ -106,6 +106,9 @@ struct CliConfig {
   // fmt was asked to report the files whose layout would change rather
   // than write them.
   bool fmt_check = false;
+  // lint was asked to apply the repairs a rule is sure of, then report
+  // what remains.
+  bool lint_fix = false;
   // The files fmt was pointed at, in command-line order. Empty reads
   // standard input and writes standard output. Views borrow argv storage
   // like input.

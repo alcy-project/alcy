@@ -686,6 +686,92 @@ i32 run_build_on(io::TempDir& dir, std::string_view rel) {
   return run_build_with(dir, rel, {});
 }
 
+i32 run_lint_with(io::TempDir& dir,
+                  std::string_view rel,
+                  std::span<const std::string_view> extra) {
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "lint"};
+  for (const std::string_view argument : extra) {
+    storage.emplace_back(argument);
+  }
+  storage.push_back(target);
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& argument : storage) {
+    argv.push_back(argument.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+i32 run_lint_on(io::TempDir& dir, std::string_view rel) {
+  return run_lint_with(dir, rel, {});
+}
+
+constexpr std::string_view LINT_FIX_PROGRAM =
+    "fn main() -> i32 {\n"
+    "  mut n := 0\n"
+    "  while true {\n"
+    "    n = n + 1\n"
+    "    if n > 3 {\n"
+    "      break\n"
+    "    }\n"
+    "  }\n"
+    "  ret n\n"
+    "}\n";
+
+TEST_CASE("Lint --fix rewrites the repair a rule is sure of") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_lint_fix_");
+  const bool setup = write_package(dir, "proj", LINT_FIX_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    const std::vector<std::string_view> args{"--fix"};
+    CHECK(run_lint_with(dir, "proj", std::span<const std::string_view>(args)) ==
+          0);
+  }
+  const std::string fixed = io::read_file(dir.join("proj/main.al"));
+  CHECK(fixed.find("while true") == std::string::npos);
+  CHECK(fixed.find("loop") != std::string::npos);
+}
+
+TEST_CASE("Lint --fix clears a denied finding it repairs") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_lint_fix_deny_");
+  const bool setup = write_package(dir, "proj", LINT_FIX_PROGRAM) &&
+                     write_all(dir, "proj/.alcy/lint.toml",
+                               "[rules]\nwhile-true = \"deny\"\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    const std::vector<std::string_view> args{"--fix"};
+    CHECK(run_lint_with(dir, "proj", std::span<const std::string_view>(args)) ==
+          0);
+  }
+  const std::string fixed = io::read_file(dir.join("proj/main.al"));
+  CHECK(fixed.find("while true") == std::string::npos);
+}
+
+TEST_CASE("Lint without --fix leaves the source alone") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_lint_no_fix_");
+  const bool setup = write_package(dir, "proj", LINT_FIX_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    CHECK(run_lint_on(dir, "proj") == 0);
+  }
+  const std::string unchanged = io::read_file(dir.join("proj/main.al"));
+  CHECK(unchanged.find("while true") != std::string::npos);
+  CHECK(unchanged.find("loop") == std::string::npos);
+}
+
 #if ALCY_TEST_LINKS
 TEST_CASE("Build reads the linker from toolchain.toml") {
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_build_linker_");

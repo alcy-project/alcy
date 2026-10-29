@@ -109,6 +109,7 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   // here means the default, not an error to report a second time.
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
   c.fmt_check = matches.get<bool>("check").unwrap_or(c.fmt_check);
+  c.lint_fix = matches.get<bool>("fix").unwrap_or(c.lint_fix);
   c.file = matches.get<std::string_view>("file").unwrap_or(c.file);
   c.emit = matches.get<pipeline::EmitMode>("emit").unwrap_or(
       pipeline::EmitMode::Executable);
@@ -458,6 +459,10 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("file")
                        .help(usage.text(i18n::Key::CliLintFileHelp))
                        .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("fix")
+                       .help(usage.text(i18n::Key::CliLintFixHelp))
+                       .is_flag(true)
                        .build())
           .build());
   builder.add_subcommand(

@@ -1,10 +1,13 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <array>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -12,6 +15,7 @@
 #include "fpag/base/result.h"
 #include "i18n/language.h"
 #include "linter/config.h"
+#include "linter/fix.h"
 #include "linter/lint.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
@@ -284,6 +288,58 @@ TEST_CASE("while-true offers a machine-applicable repair") {
     CHECK(fix->replacement == "loop");
     // The repair covers the keyword and the condition it replaces.
     CHECK(fix->span.length == 10);
+  }
+}
+
+TEST_CASE("apply_edits rewrites non-overlapping spans") {
+  const std::string_view original = "abcdef";
+  const std::array<TextEdit, 2> edits = {
+      TextEdit{.offset = 1, .length = 2, .replacement = "X"},
+      TextEdit{.offset = 4, .length = 1, .replacement = ""},
+  };
+  const EditOutcome out =
+      apply_edits(original, std::span<const TextEdit>(edits));
+  CHECK(out.text == "aXdf");
+  CHECK(out.applied == 2);
+}
+
+TEST_CASE("apply_edits drops an edit that overlaps an earlier one") {
+  const std::string_view original = "abcdef";
+  // The second edit starts inside the first; applying it would write
+  // bytes neither repair chose.
+  const std::array<TextEdit, 2> edits = {
+      TextEdit{.offset = 1, .length = 3, .replacement = "X"},
+      TextEdit{.offset = 2, .length = 2, .replacement = "Y"},
+  };
+  const EditOutcome out =
+      apply_edits(original, std::span<const TextEdit>(edits));
+  CHECK(out.text == "aXef");
+  CHECK(out.applied == 1);
+}
+
+TEST_CASE("apply_edits drops an edit outside the file") {
+  const std::string_view original = "abc";
+  const std::array<TextEdit, 1> edits = {
+      TextEdit{.offset = 4, .length = 1, .replacement = "X"},
+  };
+  const EditOutcome out =
+      apply_edits(original, std::span<const TextEdit>(edits));
+  CHECK(out.text == "abc");
+  CHECK(out.applied == 0);
+}
+
+TEST_CASE("collect_fixes names the file and the repair") {
+  Run run;
+  run("fn main() -> i32 {\n  while true {\n    break\n  }\n  ret 0\n}\n",
+      default_config(run.ctx));
+  const std::vector<FileEdits> files = collect_fixes(run.ctx);
+  CHECK(files.size() == 1);
+  if (files.size() == 1) {
+    CHECK(files[0].path == "test.al");
+    CHECK(files[0].edits.size() == 1);
+    if (!files[0].edits.empty()) {
+      CHECK(files[0].edits[0].replacement == "loop");
+    }
   }
 }
 

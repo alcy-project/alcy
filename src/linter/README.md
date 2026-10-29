@@ -34,6 +34,16 @@ are ignored, like the other `.alcy/` files (ADR-0019). A `deny` finding
 is an error, so `alcy lint` exits non-zero; a `warn` finding does not
 change the exit code.
 
+## Fixing
+
+`alcy lint --fix` applies the repairs the rules are sure of and then
+reports what remains. A pass lints, writes each file's non-overlapping
+repairs, and lints again; a repair that overlaps one already applied is
+left for a later pass, and the run stops after four. The final pass runs
+on the rewritten files, so the findings it prints describe the bytes on
+disk, and a denied finding a repair removed does not fail the run. A
+file that cannot be written is reported and ends the pass loop.
+
 ## Rules
 
 | Id | Default | Reports |
@@ -107,4 +117,6 @@ change the meaning.
   and `shadow` read it.
 - `types.h` / `types.cc`: the checked-type query the type-based rules
   read, including the conservative answer for a generic body.
+- `fix.h` / `fix.cc`: collecting a pass's repairs and applying one
+  file's edits, which `--fix` drives.
 - `rules/`: the rule implementations and their shared declarations.
