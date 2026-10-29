@@ -130,6 +130,9 @@ class Lowerer {
     ir::TypeIdx func = ir::TypeIdx::invalid();
     ir::FunctionIdx fn = ir::FunctionIdx(base::INVALID_IDX);
   };
+  // Whether a resolved closure entry carries the code a call needs:
+  // the registered function and the signature a view coerces to.
+  bool closure_has_code(const ClosureEntry* entry) const;
   std::vector<ClosureEntry> closure_entries_;
   // Reservation order matches lowering order (FIFO worklist), so
   // reserved indexes line up with storage positions.

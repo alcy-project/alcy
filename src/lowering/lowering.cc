@@ -891,13 +891,17 @@ const Lowerer::ClosureEntry* Lowerer::closure_entry(ir::TypeIdx type) {
   return nullptr;
 }
 
+bool Lowerer::closure_has_code(const ClosureEntry* entry) const {
+  return entry != nullptr && entry->fn.is_valid() &&
+         tag_of(entry->func) == ir::TypeTag::Func;
+}
+
 // The view of a closure value: the code the literal registered and a
 // pointer to the environment the value owns, which sits at the
 // nominal's first field, so the value's own address is that pointer.
 Val Lowerer::closure_view(Val value) {
   const ClosureEntry* closure = closure_entry(value.type);
-  if (closure == nullptr || !closure->fn.is_valid() ||
-      tag_of(closure->func) != ir::TypeTag::Func) {
+  if (!closure_has_code(closure)) {
     internal(cur_span_, "closure view without code");
     return Val{size_one, error_type(), false, false};
   }

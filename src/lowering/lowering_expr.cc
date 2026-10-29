@@ -1242,16 +1242,26 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
   if (failed || terminated_cur()) {
     return stopped_value();
   }
-  if (tag_of(callee.type) != ir::TypeTag::Func) {
+  // A closure value's implementation is the function the lowering
+  // registered for its literal (ADR-0116). A view would carry the
+  // value's own address as its environment; the direct call hands that
+  // address over as the first argument instead, so a call on a closure
+  // nominal has no view and no indirect call.
+  const ClosureEntry* closure = tag_of(callee.type) == ir::TypeTag::Func
+                                    ? nullptr
+                                    : closure_entry(callee.type);
+  const bool direct = closure_has_code(closure);
+  if (!direct && tag_of(callee.type) != ir::TypeTag::Func) {
     // A closure value calls through the view its nominal makes.
     callee = closure_view(callee);
     if (failed || tag_of(callee.type) == ir::TypeTag::Error) {
       return Val{size_one, error_type(), false, false};
     }
   }
+  const ir::TypeIdx shape_type = direct ? closure->func : callee.type;
   std::vector<ir::TypeIdx> params;
   const ir::FuncType& shape =
-      builder.state().func_types[builder.state().types[callee.type].as_func()];
+      builder.state().func_types[builder.state().types[shape_type].as_func()];
   params.reserve(shape.params.size());
   for (ir::TypeIdx param : shape.params) {
     params.push_back(param);
@@ -1262,7 +1272,31 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
     return Val{size_one, error_type(), false, false};
   }
   std::vector<ir::OperandIdx> ops;
-  ops.push_back(use_value(callee));
+  if (direct) {
+    // The environment the registered function takes first: the value's
+    // own address, the pointer a view would carry. An environment
+    // reference goes through the argument path so the borrow checker
+    // records the loan a call takes on the closure - and refuses a
+    // closure a move already gave away; a captureless closure keeps
+    // the opaque pointer, which reads nothing.
+    const Val place = callee.address ? callee : address_of(callee);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    const ir::TypeIdx env_param = fns[closure->fn.idx].params[0];
+    const ir::TypeTag env_tag = tag_of(env_param);
+    ops.push_back(builder.operand(ir::Operand::from_function(
+        closure->fn, builder.primitive(ir::TypeTag::Function))));
+    if (env_tag == ir::TypeTag::Ref || env_tag == ir::TypeTag::MutRef) {
+      ops.push_back(arg_for(place, env_param));
+    } else {
+      // A captureless closure's environment is the opaque pointer,
+      // which reads nothing: the value's address goes as it is.
+      ops.push_back(place.op);
+    }
+  } else {
+    ops.push_back(use_value(callee));
+  }
   for (usize i = 0; i < call.args.size(); ++i) {
     Val arg = lower_moved(call.args[i], &params[i]);
     if (failed || terminated_cur()) {

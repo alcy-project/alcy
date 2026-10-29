@@ -132,23 +132,26 @@ derives the rest of the body.
 
 ## Staged landing
 
-**The bound landed; the dispatch and the once-checked body follow.**
-The desugar writes `Fn<(A, ...), R>` onto the synthetic parameter in
-place of the hand-rolled record, the checker answers the bound through
-the spec's satisfaction rule - a closure nominal's recorded signature,
-a function view's own - and a hand-spelled `Fn` bound instantiates
-like any other. What remains:
+**The bound and the call landed; the once-checked body follows.** The
+desugar writes `Fn<(A, ...), R>` onto the synthetic parameter in place
+of the hand-rolled record, the checker answers the bound through the
+spec's satisfaction rule - a closure nominal's recorded signature, a
+function view's own - a hand-spelled `Fn` bound instantiates like any
+other, and a call on a closure nominal is a direct call to the
+function the lowering registered for the literal: the value's own
+address is the environment a view would have carried, handed over
+through the argument path so the borrow checker records the loan the
+call takes. The view stays for a callee whose type is the bare
+function type - a coerced name, a declared view - where the code is
+not statically known.
 
-1. The dispatch the spec resolves (ADR-0080's shape): a call on a
-   closure nominal names the function the lowering registered for the
-   literal, rather than building the view and calling through it.
-2. The parametric nominal and the once-checked body (ADR-0079 slice
-   two): the literal interns its captures under the declaration's
-   parameters, the return slot binds once, and the stand-in and the
-   per-instantiation witness record retire.
-
-Until those land, a call through a `fn()`-typed parameter resolves
-against the concrete witness the instantiation bound - the same call
-it resolved to before this record - and the bound's satisfaction is
-what changed. The spelling names a `core` item, so a build that stages
-no `core` has no bound to check the witness against.
+What remains is the parametric half (ADR-0079 slice two, with
+ADR-0080's dispatch): the literal interns its captures under the
+declaration's type parameters so the body checks once, the return slot
+binds once instead of per instantiation, the stand-in and the
+per-instantiation witness record retire, and a call the parameter's
+type decides records a dispatch the specialization resolves. Until
+then, a call through a `fn()`-typed parameter still resolves against
+the concrete witness the instantiation bound. The spelling names a
+`core` item, so a build that stages no `core` has no bound to check
+the witness against.
