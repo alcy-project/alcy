@@ -3,6 +3,7 @@
 
 #include "lsp/semantic_tokens.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -275,8 +276,12 @@ text::JsonValue semantic_tokens_empty() {
   return result;
 }
 
-text::JsonValue semantic_tokens(const Document& document,
-                                const DocumentAnalysis& analysis) {
+namespace {
+
+text::JsonValue semantic_tokens_in(const Document& document,
+                                   const DocumentAnalysis& analysis,
+                                   usize range_begin,
+                                   usize range_end) {
   const std::string_view source = document.text();
   SymbolKinds kinds;
   if (analysis.ok()) {
@@ -310,7 +315,8 @@ text::JsonValue semantic_tokens(const Document& document,
   // A token cannot cross a line on the wire, so a block comment or a
   // multi-line string is emitted one line at a time.
   const auto emit_span = [&](diag::Span span, SemanticTokenType type) {
-    const usize end = static_cast<usize>(span.offset) + span.length;
+    const usize end =
+        std::min(static_cast<usize>(span.offset) + span.length, range_end);
     usize begin = span.offset;
     while (begin < end) {
       usize line_end = begin;
@@ -331,6 +337,9 @@ text::JsonValue semantic_tokens(const Document& document,
   for (const cst::Lexeme& lexeme : cst::lex(source)) {
     if (lexeme.kind == cst::Lexeme::Kind::End) {
       break;
+    }
+    if (lexeme.offset < range_begin || lexeme.offset >= range_end) {
+      continue;
     }
     diag::Span span;
     span.offset = lexeme.offset;
@@ -368,6 +377,22 @@ text::JsonValue semantic_tokens(const Document& document,
   text::JsonValue result = text::JsonValue::make_object();
   result.set("data", std::move(data));
   return result;
+}
+
+}  // namespace
+
+text::JsonValue semantic_tokens(const Document& document,
+                                const DocumentAnalysis& analysis) {
+  return semantic_tokens_in(document, analysis, 0, document.text().size());
+}
+
+text::JsonValue semantic_tokens_range(const Document& document,
+                                      const DocumentAnalysis& analysis,
+                                      Position start,
+                                      Position end) {
+  const usize begin = document.index().byte_offset(document.text(), start);
+  const usize finish = document.index().byte_offset(document.text(), end);
+  return semantic_tokens_in(document, analysis, begin, finish);
 }
 
 }  // namespace lsp

@@ -45,6 +45,8 @@ class Server {
   void signature(const text::JsonValue& id, const text::JsonValue& params);
   void semantic_tokens_full(const text::JsonValue& id,
                             const text::JsonValue& params);
+  void semantic_tokens_in_range(const text::JsonValue& id,
+                                const text::JsonValue& params);
   void selection_range(const text::JsonValue& id,
                        const text::JsonValue& params);
   void prepare_rename(const text::JsonValue& id, const text::JsonValue& params);

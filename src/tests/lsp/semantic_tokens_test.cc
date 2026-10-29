@@ -118,6 +118,23 @@ TEST_CASE("A field read and a method call carry their kinds") {
   CHECK(type_at(tokens, 11, 8) == 10);  // p.get()
 }
 
+TEST_CASE("A range request answers only the tokens it covers") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() -> i32 {\n  x := 1\n  ret x\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue result =
+      semantic_tokens_range(document, analysis, Position{1, 0}, Position{2, 0});
+  const std::vector<Decoded> tokens = decode(result);
+  CHECK(!tokens.empty());
+  bool one_line = true;
+  for (const Decoded& token : tokens) {
+    if (token.line != 1) {
+      one_line = false;
+    }
+  }
+  CHECK(one_line);
+}
+
 TEST_CASE("A multi-line comment becomes one token per line") {
   const Document document(
       "file:///main.al", "alcy", 1,

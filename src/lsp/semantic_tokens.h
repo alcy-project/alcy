@@ -24,4 +24,12 @@ text::JsonValue semantic_tokens_empty();
 text::JsonValue semantic_tokens(const Document& document,
                                 const DocumentAnalysis& analysis);
 
+// The tokens that start inside [start, end), as the same object. A
+// client that shows one viewport asks for it instead of the whole
+// buffer.
+text::JsonValue semantic_tokens_range(const Document& document,
+                                      const DocumentAnalysis& analysis,
+                                      Position start,
+                                      Position end);
+
 }  // namespace lsp

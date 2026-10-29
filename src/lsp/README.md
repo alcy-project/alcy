@@ -62,7 +62,8 @@ of the compiler (ADR-0107), so it owns no analysis of its own:
 - `selection.{h,cc}` grows a selection from the word under the cursor
   through the syntax nodes the compiler parsed to the whole buffer.
 - `semantic_tokens.{h,cc}` classifies every token the lossless lexer
-  reads; an identifier's kind is what the checker resolved it to.
+  reads; an identifier's kind is what the checker resolved it to, and a
+  range request answers only the tokens a viewport covers.
 - `signature.{h,cc}` reads the call the cursor sits in, follows the
   recorded target to its signature, and names the argument position.
 - `protocol.{h,cc}` holds the JSON a position and a range are spelled

@@ -303,6 +303,15 @@ void Server::handle_request(const text::JsonValue& message) {
     selection_range(*id, *params);
     return;
   }
+  if (method == "textDocument/semanticTokens/range") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "semanticTokens/range needs params");
+      return;
+    }
+    semantic_tokens_in_range(*id, *params);
+    return;
+  }
   if (method == "textDocument/semanticTokens/full") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -431,6 +440,7 @@ void Server::initialize(const text::JsonValue& id) {
   legend.set("tokenModifiers", text::JsonValue::make_array());
   semantic.set("legend", std::move(legend));
   semantic.set("full", text::JsonValue::make_bool(true));
+  semantic.set("range", text::JsonValue::make_bool(true));
   capabilities.set("semanticTokensProvider", std::move(semantic));
   capabilities.set("documentHighlightProvider",
                    text::JsonValue::make_bool(true));
@@ -860,6 +870,28 @@ void Server::semantic_tokens_full(const text::JsonValue& id,
     return;
   }
   send_result(id, semantic_tokens(*document, cache_.get(*document)));
+}
+
+void Server::semantic_tokens_in_range(const text::JsonValue& id,
+                                      const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  const text::JsonValue* range = field(params, "range");
+  if (text_document == nullptr || !text_document->is_object() ||
+      range == nullptr || !range->is_object()) {
+    send_result(id, semantic_tokens_empty());
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  const text::JsonValue* start = field(*range, "start");
+  const text::JsonValue* end = field(*range, "end");
+  if (document == nullptr || start == nullptr || end == nullptr) {
+    send_result(id, semantic_tokens_empty());
+    return;
+  }
+  send_result(
+      id, semantic_tokens_range(*document, cache_.get(*document),
+                                read_position(*start), read_position(*end)));
 }
 
 void Server::struct_layout(const text::JsonValue& id,

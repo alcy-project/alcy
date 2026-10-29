@@ -406,7 +406,19 @@ def main() -> int:
             "params": {"textDocument": {"uri": NAV_URI}},
         },
         {"jsonrpc": "2.0", "id": 26, "method": "workspace/diagnostic", "params": {}},
-        {"jsonrpc": "2.0", "id": 27, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 27,
+            "method": "textDocument/semanticTokens/range",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "range": {
+                    "start": {"line": 4, "character": 0},
+                    "end": {"line": 4, "character": 12},
+                },
+            },
+        },
+        {"jsonrpc": "2.0", "id": 28, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -457,6 +469,8 @@ def main() -> int:
         return fail("initialize did not advertise codeActionProvider")
     if not isinstance(capabilities.get("semanticTokensProvider"), dict):
         return fail("initialize did not advertise semanticTokensProvider")
+    if capabilities.get("semanticTokensProvider", {}).get("range") is not True:
+        return fail("initialize did not advertise semantic token ranges")
     if capabilities.get("documentHighlightProvider") is not True:
         return fail("initialize did not advertise documentHighlightProvider")
     if capabilities.get("selectionRangeProvider") is not True:
@@ -695,7 +709,12 @@ def main() -> int:
             f"workspace/diagnostic missed the broken buffer: {workspace_pull!r}"
         )
 
-    if by_id.get(27, {}).get("result", "missing") is not None:
+    ranged = by_id.get(27, {}).get("result")
+    ranged_data = ranged.get("data") if isinstance(ranged, dict) else None
+    if not isinstance(ranged_data, list) or not ranged_data:
+        return fail(f"semanticTokens/range returned no data: {ranged!r}")
+
+    if by_id.get(28, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
