@@ -111,9 +111,13 @@ type is structural: `(A, B) -> R`, with `()` and `(A)` as its no- and
 one-parameter spellings; a bare `(A)` outside the arrow position is
 the type it wraps. `fn(A, B) -> R` is the owning spelling of the same
 signature: a value that owns its environment, move-only, against the
-borrowing view (ADR-0075). `*T` and `*mut T` are raw pointers: thin, Copy,
-and outside the region system; `**T` lexes as the power token but a
-type position reads the pair as two stars. See `ffi.md`.
+borrowing view (ADR-0075). The owning spelling names the bound
+`Fn<(A, B), R>` - the parameters as one tuple - so the same
+capability can be written by hand (`F: Fn<(i32,), i32>`), and `fn()`
+in a signature is sugar for an anonymous parameter carrying it
+(ADR-0116). `*T` and `*mut T` are raw pointers: thin, Copy, and
+outside the region system; `**T` lexes as the power token but a type
+position reads the pair as two stars. See `ffi.md`.
 
 ## Patterns (shared by declarations and `match`)
 

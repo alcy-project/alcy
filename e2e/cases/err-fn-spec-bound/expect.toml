@@ -1,0 +1,3 @@
+exit = 4
+contains = ["Type 'i32' does not implement 'Fn', which the bound requires"]
+not_contains = []

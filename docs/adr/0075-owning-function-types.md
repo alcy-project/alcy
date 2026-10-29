@@ -63,3 +63,11 @@ already are. Out of scope, each its own decision: named storage of
 abstract function values, reassignment, fat pointers for dynamic
 dispatch, and a real `Fn` spec (which unlocks explicit bounds and
 `Box<dyn>`-shaped designs, not this one).
+
+Amended at the `Fn` spec's landing (ADR-0116): the automatic bound is
+no longer structural. The spelling desugars to an anonymous parameter
+bounded by `core`'s `Fn`, the witness is checked through the spec
+system's satisfaction rule, an `Fn` bound can be written by hand, and
+a call on a closure value is a direct call to the function its
+literal registered. What this record settled about position,
+move-onlyness, and the coercions is unchanged.

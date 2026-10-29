@@ -40,12 +40,19 @@ spelling names, and the impl is the body the lowering registered.
 implements it, and the impl is the code the lowering registers.**
 
 - `core` declares the spec the operator specs' way, parameterized by
-  the signature: `spec Fn<P, R> { fn call(self, P) -> R; }`, with `P`
-  the parameters as the tuple the signature spells. It is
-  compiler-owned like the operator table: a closure implements it by
-  construction, the impl is generated beside the call function the
-  lowering registers (ADR-0064's `closure_fn_index`), and no
-  user-written impl exists, so the seal has nothing to gate.
+  the signature: `spec Fn<P, R> { fn call(self: &Self, args: P) -> R; }`,
+  with `P` the parameters as the tuple the signature spells (a single
+  non-tuple argument reads as the one parameter, and `()` is none). It
+  is compiler-owned like the operator table: a closure nominal
+  implements it by construction, a function view answers it by the
+  signature it carries, and the impl for a closure is the code the
+  lowering registers for the literal (ADR-0064's `closure_fn_index`),
+  so no user-written impl exists and the seal has nothing to gate. The
+  receiver is `&Self` because a call borrows the value - a moved
+  capture stays callable through its environment, however often - and
+  for a closure nominal that reference is the environment pointer the
+  registered function already takes, so the impl is that function
+  itself.
 - `fn(P) -> R` in a signature is sugar for an anonymous type parameter
   bounded by `Fn<P, R>` - in parameter position, where the caller's
   closure binds it, and in return position, where the body's literal
@@ -60,11 +67,15 @@ implements it, and the impl is the code the lowering registers.**
   against it once. Each instantiation substitutes the parameters, and
   the substituted nominal is the concrete impl the instantiation's
   calls dispatch through.
-- **The hand-rolled machinery retires with the spec's landing:**
-  `OwnFnBound`, `check_own_fn_witness`, the stand-in a return slot
-  resolved with until the body answered, and the witness record the
-  per-instantiation key corrected. The bound checking is the spec
-  system's; the impl lookup is the spec dispatch's.
+- **The hand-rolled bound retires with the spec's landing:** the
+  synthetic parameter carries the spec bound, the witness is checked
+  through the spec's satisfaction rule, and `check_own_fn_witness` and
+  the `OwnFnBound` record go; what the desugar keeps is the slot
+  bookkeeping, not a bound. The stand-in a return slot resolved with
+  until the body answered and the witness record the per-instantiation
+  key corrected go with the parametric check (ADR-0079 slice two). The
+  bound checking is the spec system's; the impl lookup is the spec
+  dispatch's.
 
 ## Alternatives considered
 
@@ -118,3 +129,26 @@ The drop glue of a parametric closure nominal is the substituted
 nominal's: captures may own values of the type parameters, and the
 specialization derives the glue from the substituted fields, the way it
 derives the rest of the body.
+
+## Staged landing
+
+**The bound landed; the dispatch and the once-checked body follow.**
+The desugar writes `Fn<(A, ...), R>` onto the synthetic parameter in
+place of the hand-rolled record, the checker answers the bound through
+the spec's satisfaction rule - a closure nominal's recorded signature,
+a function view's own - and a hand-spelled `Fn` bound instantiates
+like any other. What remains:
+
+1. The dispatch the spec resolves (ADR-0080's shape): a call on a
+   closure nominal names the function the lowering registered for the
+   literal, rather than building the view and calling through it.
+2. The parametric nominal and the once-checked body (ADR-0079 slice
+   two): the literal interns its captures under the declaration's
+   parameters, the return slot binds once, and the stand-in and the
+   per-instantiation witness record retire.
+
+Until those land, a call through a `fn()`-typed parameter resolves
+against the concrete witness the instantiation bound - the same call
+it resolved to before this record - and the bound's satisfaction is
+what changed. The spelling names a `core` item, so a build that stages
+no `core` has no bound to check the witness against.

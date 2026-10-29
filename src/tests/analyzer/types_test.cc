@@ -2950,6 +2950,97 @@ TEST_CASE("Check rejects a call whose type misses a bound") {
       "Type 'Tag' does not implement 'Shown', which the bound requires"));
 }
 
+// The closure capability is a bound like any other (ADR-0116): a
+// spelled `Fn` bound instantiates with a named function or a closure
+// literal, and the body's calls reach the witness.
+TEST_CASE("Check reads a call through a spelled Fn bound") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "fn apply<F: Fn<(i32,), i32>>(f: F, x: i32) -> i32 {\n"
+        "  ret f(x) + f(x)\n"
+        "}\n"
+        "fn inc(x: i32) -> i32 {\n"
+        "  ret x + 1\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  ret apply(inc, 1) + apply((y: i32) -> y * 2, 3)\n"
+        "}\n"},
+       {"core.al",
+        "pub spec Fn<P, R> {\n  fn call(self: &Self, args: P) -> R;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check rejects a non-callable argument for an Fn bound") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "fn apply<F: Fn<(i32,), i32>>(f: F, x: i32) -> i32 {\n"
+        "  ret f(x)\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  ret apply(1, 2)\n"
+        "}\n"},
+       {"core.al",
+        "pub spec Fn<P, R> {\n  fn call(self: &Self, args: P) -> R;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(has_message(
+      f.bag, "Type 'i32' does not implement 'Fn', which the bound requires"));
+}
+
+// The sugar's bound belongs to the compiler's spec (ADR-0116): a
+// module-local spec that shares the name is a different capability, so
+// the desugared spelling keeps answering core's.
+TEST_CASE("Check binds the fn spelling to core's Fn by identity") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"main.al",
+        "spec Fn<P, R> {\n"
+        "  fn hijack(self: &Self) -> i32;\n"
+        "}\n"
+        "fn apply(f: fn (i32) -> i32, x: i32) -> i32 {\n"
+        "  ret f(x)\n"
+        "}\n"
+        "fn inc(x: i32) -> i32 {\n"
+        "  ret x + 1\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  ret apply(inc, 1)\n"
+        "}\n"},
+       {"core.al",
+        "pub spec Fn<P, R> {\n  fn call(self: &Self, args: P) -> R;\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 // A parameter no argument binds but a bound mentions is inferred from
 // the first declared method's signature: `drain`'s item type comes
 // from `I: Stepper<T>` (ADR-0028).
