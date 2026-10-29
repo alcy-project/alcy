@@ -1,0 +1,4 @@
+subcommand = "lint"
+exit = 0
+contains = ["Linted"]
+not_contains = ["unused-import"]

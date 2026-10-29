@@ -8,17 +8,26 @@
 
 namespace linter {
 
-// The walk's whole surface: one call per node of the kind a rule
-// checks, over the module being checked, in traversal order. The
-// schedule - the order, the child paths, the entry into nested bodies -
-// is the walk's, not the caller's, so every rule reads the module the
-// same way and a rule states the node kind it wants and nothing else.
-using ItemVisit = void (*)(LintContext&, ast::ItemIdx);
-using ExprVisit = void (*)(LintContext&, ast::ExprIdx);
-using BlockVisit = void (*)(LintContext&, ast::BlockIdx);
+// The walk's ledger: one callback per node family it reports. A caller
+// fills the slots it wants; a null slot is not called. The schedule -
+// the order, the child paths, the entry into nested bodies - is the
+// walk's, so every rule reads the module the same way.
+struct Visitor {
+  void (*item)(LintContext&, ast::ItemIdx) = nullptr;
+  void (*expr)(LintContext&, ast::ExprIdx) = nullptr;
+  void (*stmt)(LintContext&, ast::StmtIdx) = nullptr;
+  void (*block)(LintContext&, ast::BlockIdx) = nullptr;
+  void (*pattern)(LintContext&, ast::PatternIdx) = nullptr;
+  void (*type)(LintContext&, ast::TypeIdx) = nullptr;
+  // Every path the module names outside its own use items: the value
+  // paths, the type paths, the structurally named patterns and struct
+  // literals, and a fixed array's length path.
+  void (*path)(LintContext&, ast::PathIdx) = nullptr;
+};
 
-void for_each_item(LintContext& ctx, ItemVisit visit);
-void for_each_expr(LintContext& ctx, ExprVisit visit);
-void for_each_block(LintContext& ctx, BlockVisit visit);
+// Walks the module being checked: every item and the types its signature
+// declares, every expression and statement in a body, the patterns, and
+// the paths all of those name. Callbacks run in traversal order.
+void walk_module(LintContext& ctx, const Visitor& visitor);
 
 }  // namespace linter

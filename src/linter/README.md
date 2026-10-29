@@ -50,12 +50,13 @@ file that cannot be written is reported and ends the pass loop.
 ## Performance
 
 A run is the frontend, the rules, and, unless borrow-checks is false,
-the lowering and borrow tail. The rules on a module share one expression
-walk, one item walk, and one binding table; the binding table is built
-only when an enabled rule reads it. The tail is most of the cost and the
-rules do not need it, so borrow-checks = false stops after analysis for
-a faster edit loop. The run then does not report a borrow error, and
-alcy check remains the complete gate.
+the lowering and borrow tail. The rules on a module share one walk, one
+binding table, and the name-usage table the walk records; the binding
+table is built only when an enabled rule reads it, and so is the usage
+table. The tail is most of the cost and the rules do not need it, so
+borrow-checks = false stops after analysis for a faster edit loop. The
+run then does not report a borrow error, and alcy check remains the
+complete gate.
 
 ## Rules
 
@@ -76,6 +77,7 @@ alcy check remains the complete gate.
 | `lossy-cast` | allow | a cast that narrows the value's scalar type |
 | `missing-docs` | allow | a `pub` item without a doc comment |
 | `too-many-arguments` | warn | a function above `max-args` parameters |
+| `unused-import` | warn | an import no path in the module names |
 
 `unreachable-code` is off by default because lowering already warns
 about the same expression (`WD003`); it is there for a caller that
@@ -85,6 +87,13 @@ that is usually a mistake, not every one. A rule that suppresses a
 false positive is preferred to one that guesses: `unused-mut` counts a
 method receiver as a write, because the syntax does not say whether the
 receiver is taken newly exclusively.
+
+`unused-import` reads the path heads the walk recorded. An import is
+used when the module names its local name as the head of a value path, a
+type path, a pattern path, or a struct literal; a `pub use` is a
+re-export and an underscore alias imports for resolution's sake, so
+neither is reported. The rule removes the import and its line with a
+repair.
 
 The type-based rules read the analyzer's recorded types, not the
 source spelling. `types.h` answers what type an expression was checked
@@ -100,8 +109,10 @@ change the meaning.
 1. Define the rule as a type in `rules/rules.h` - the id lint.toml
    addresses, the default level, the code, and the summary - and one
    check shape: a whole-module `run`, or a `check_expr` / `check_item`
-   hook the engine's shared walk dispatches to. Implement it under
-   `rules/`. A rule reads
+   / `check_block` hook the engine's shared walk dispatches to.
+   Implement it under `rules/`. A module rule that needs the binding or
+   usage table declares `READS_BINDINGS` or `READS_USAGE`; the engine
+   builds it once per module. A rule reads
    `LintContext` - the checked package, the AST, the sources, and the
    resolved setting - and reports through
    `ctx.report<Key>(span, args...)`, which composes the catalog message
@@ -120,9 +131,9 @@ change the meaning.
 ## Layout
 
 - `lint.h` / `lint.cc`: the entry points and the file/config loading.
-- `engine.h` / `engine.cc`: builds the active rule lists and the
-  per-module binding table, dispatches the shared walks, and counts what
-  the rules emitted.
+- `engine.h` / `engine.cc`: builds the active rule lists, the
+  per-module binding table, and the usage table; dispatches the one
+  walk; and counts what the rules emitted.
 - `rule.h` / `rule.cc`: the rule table.
 - `config.h` / `config.cc`: `.alcy/lint.toml`.
 - `context.h`: what one rule run reads and how it reports.
@@ -133,6 +144,8 @@ change the meaning.
   `shadow` read it.
 - `types.h` / `types.cc`: the checked-type query the type-based rules
   read, including the conservative answer for a generic body.
+- `usage.h` / `usage.cc`: the path heads the walk records for
+  `unused-import`.
 - `fix.h` / `fix.cc`: collecting a pass's repairs and applying one
   file's edits, which `--fix` drives.
 - `rules/`: the rule implementations and their shared declarations.

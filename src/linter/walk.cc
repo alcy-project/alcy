@@ -14,59 +14,49 @@ namespace linter {
 
 namespace {
 
-// The traversal's ledger of callbacks, one slot per node family the
-// walk reports. It stays inside this file: a rule names the kind it
-// reads through for_each_item, for_each_expr, and for_each_block, and
-// the schedule - the order, the child paths, the entry into nested
-// bodies - never leaves the walk.
-struct TreeVisitor {
-  void (*item)(LintContext&, ast::ItemIdx) = nullptr;
-  void (*expr)(LintContext&, ast::ExprIdx) = nullptr;
-  void (*stmt)(LintContext&, ast::StmtIdx) = nullptr;
-  void (*block)(LintContext&, ast::BlockIdx) = nullptr;
-  void (*pattern)(LintContext&, ast::PatternIdx) = nullptr;
-  void (*type)(LintContext&, ast::TypeIdx) = nullptr;
-};
-
-// The traversal itself. Declarations live here rather than in the
-// header for the same reason the visitor does: the schedule is not
-// something a rule reaches into.
+// The traversal itself. The declarations live here rather than in the
+// header for the same reason the schedule does: a rule names the node
+// kind it reads and the walk decides how to reach it.
 void walk_exprs(LintContext& ctx,
                 std::span<const ast::ExprIdx> exprs,
-                const TreeVisitor& visitor);
-void walk_cond(LintContext& ctx, ast::CondIdx cond, const TreeVisitor& visitor);
-void walk_block(LintContext& ctx,
-                ast::BlockIdx block,
-                const TreeVisitor& visitor);
-void walk_expr(LintContext& ctx, ast::ExprIdx expr, const TreeVisitor& visitor);
-void walk_stmt(LintContext& ctx, ast::StmtIdx stmt, const TreeVisitor& visitor);
+                const Visitor& visitor);
+void walk_cond(LintContext& ctx, ast::CondIdx cond, const Visitor& visitor);
+void walk_block(LintContext& ctx, ast::BlockIdx block, const Visitor& visitor);
+void walk_expr(LintContext& ctx, ast::ExprIdx expr, const Visitor& visitor);
+void walk_stmt(LintContext& ctx, ast::StmtIdx stmt, const Visitor& visitor);
 void walk_pattern(LintContext& ctx,
                   ast::PatternIdx pattern,
-                  const TreeVisitor& visitor);
-void walk_type(LintContext& ctx, ast::TypeIdx type, const TreeVisitor& visitor);
-void walk_item(LintContext& ctx, ast::ItemIdx item, const TreeVisitor& visitor);
+                  const Visitor& visitor);
+void walk_type(LintContext& ctx, ast::TypeIdx type, const Visitor& visitor);
+void walk_generic(LintContext& ctx,
+                  std::span<const ast::GenericParam> params,
+                  const Visitor& visitor);
+void walk_item(LintContext& ctx, ast::ItemIdx item, const Visitor& visitor);
 void walk_items(LintContext& ctx,
                 std::span<const ast::ItemIdx> items,
-                const TreeVisitor& visitor);
-void walk_module(LintContext& ctx, u32 module, const TreeVisitor& visitor);
+                const Visitor& visitor);
 
-void call_expr(const TreeVisitor& visitor, LintContext& ctx, ast::ExprIdx id) {
+void call_expr(const Visitor& visitor, LintContext& ctx, ast::ExprIdx id) {
   if (visitor.expr != nullptr) {
     visitor.expr(ctx, id);
   }
 }
 
+void call_path(const Visitor& visitor, LintContext& ctx, ast::PathIdx id) {
+  if (id.is_valid() && visitor.path != nullptr) {
+    visitor.path(ctx, id);
+  }
+}
+
 void walk_exprs(LintContext& ctx,
                 std::span<const ast::ExprIdx> exprs,
-                const TreeVisitor& visitor) {
+                const Visitor& visitor) {
   for (const ast::ExprIdx expr : exprs) {
     walk_expr(ctx, expr, visitor);
   }
 }
 
-void walk_cond(LintContext& ctx,
-               ast::CondIdx cond,
-               const TreeVisitor& visitor) {
+void walk_cond(LintContext& ctx, ast::CondIdx cond, const Visitor& visitor) {
   if (!cond.is_valid()) {
     return;
   }
@@ -79,9 +69,7 @@ void walk_cond(LintContext& ctx,
   walk_expr(ctx, node.value, visitor);
 }
 
-void walk_block(LintContext& ctx,
-                ast::BlockIdx block,
-                const TreeVisitor& visitor) {
+void walk_block(LintContext& ctx, ast::BlockIdx block, const Visitor& visitor) {
   if (!block.is_valid()) {
     return;
   }
@@ -95,9 +83,7 @@ void walk_block(LintContext& ctx,
   walk_expr(ctx, node.value, visitor);
 }
 
-void walk_expr(LintContext& ctx,
-               ast::ExprIdx expr,
-               const TreeVisitor& visitor) {
+void walk_expr(LintContext& ctx, ast::ExprIdx expr, const Visitor& visitor) {
   if (!expr.is_valid()) {
     return;
   }
@@ -106,11 +92,22 @@ void walk_expr(LintContext& ctx,
   using K = ast::ExprKind;
   switch (node.kind) {
     case K::Literal:
-    case K::Path:
     case K::Break:
     case K::Continue: break;
+    case K::Path: {
+      const ast::ExprPath& e = node.payload.get<ast::ExprPath>();
+      call_path(visitor, ctx, e.idx);
+      for (const ast::TypeIdx arg : e.type_args) {
+        walk_type(ctx, arg, visitor);
+      }
+      break;
+    }
     case K::Struct: {
       const ast::ExprStruct& e = node.payload.get<ast::ExprStruct>();
+      call_path(visitor, ctx, e.path);
+      for (const ast::TypeIdx arg : e.type_args) {
+        walk_type(ctx, arg, visitor);
+      }
       for (const ast::ExprFieldInit& field : e.init) {
         walk_expr(ctx, field.value, visitor);
       }
@@ -125,6 +122,7 @@ void walk_expr(LintContext& ctx,
       const ast::ExprArray& e = node.payload.get<ast::ExprArray>();
       walk_exprs(ctx, e.elements, visitor);
       walk_expr(ctx, e.repeat, visitor);
+      call_path(visitor, ctx, e.count_path);
       break;
     }
     case K::Unary:
@@ -218,15 +216,16 @@ void walk_expr(LintContext& ctx,
     }
     case K::Closure: {
       const ast::ExprClosure& e = node.payload.get<ast::ExprClosure>();
+      for (const ast::ClosureParam& param : e.params) {
+        walk_type(ctx, param.type, visitor);
+      }
       walk_expr(ctx, e.body, visitor);
       break;
     }
   }
 }
 
-void walk_stmt(LintContext& ctx,
-               ast::StmtIdx stmt,
-               const TreeVisitor& visitor) {
+void walk_stmt(LintContext& ctx, ast::StmtIdx stmt, const Visitor& visitor) {
   if (!stmt.is_valid()) {
     return;
   }
@@ -257,7 +256,7 @@ void walk_stmt(LintContext& ctx,
 
 void walk_pattern(LintContext& ctx,
                   ast::PatternIdx pattern,
-                  const TreeVisitor& visitor) {
+                  const Visitor& visitor) {
   if (!pattern.is_valid()) {
     return;
   }
@@ -273,6 +272,7 @@ void walk_pattern(LintContext& ctx,
     case K::Literal: break;
     case K::Tuple: {
       const ast::PatternTuple& p = node.payload.tuple;
+      call_path(visitor, ctx, p.path);
       for (const ast::PatternIdx element : p.elements) {
         walk_pattern(ctx, element, visitor);
       }
@@ -280,6 +280,7 @@ void walk_pattern(LintContext& ctx,
     }
     case K::Struct: {
       const ast::PatternStruct& p = node.payload.strukt;
+      call_path(visitor, ctx, p.path);
       for (const ast::FieldPattern& field : p.fields) {
         walk_pattern(ctx, field.pattern, visitor);
       }
@@ -296,9 +297,7 @@ void walk_pattern(LintContext& ctx,
   }
 }
 
-void walk_type(LintContext& ctx,
-               ast::TypeIdx type,
-               const TreeVisitor& visitor) {
+void walk_type(LintContext& ctx, ast::TypeIdx type, const Visitor& visitor) {
   if (!type.is_valid()) {
     return;
   }
@@ -323,6 +322,7 @@ void walk_type(LintContext& ctx,
     case K::Array: {
       const ast::TypeArray& t = node.payload.get<ast::TypeArray>();
       walk_type(ctx, t.element, visitor);
+      call_path(visitor, ctx, t.length_path);
       break;
     }
     case K::Slice:
@@ -330,6 +330,7 @@ void walk_type(LintContext& ctx,
       break;
     case K::Path: {
       const ast::TypePath& t = node.payload.get<ast::TypePath>();
+      call_path(visitor, ctx, t.path);
       for (const ast::TypeIdx arg : t.args) {
         walk_type(ctx, arg, visitor);
       }
@@ -354,9 +355,18 @@ void walk_type(LintContext& ctx,
   }
 }
 
-void walk_item(LintContext& ctx,
-               ast::ItemIdx item,
-               const TreeVisitor& visitor) {
+void walk_generic(LintContext& ctx,
+                  std::span<const ast::GenericParam> params,
+                  const Visitor& visitor) {
+  for (const ast::GenericParam& param : params) {
+    walk_type(ctx, param.type, visitor);
+    for (const ast::TypeIdx bound : param.bounds) {
+      walk_type(ctx, bound, visitor);
+    }
+  }
+}
+
+void walk_item(LintContext& ctx, ast::ItemIdx item, const Visitor& visitor) {
   if (!item.is_valid()) {
     return;
   }
@@ -368,6 +378,7 @@ void walk_item(LintContext& ctx,
   switch (node.kind) {
     case K::Fn: {
       const ast::ItemFn& f = node.payload.get<ast::ItemFn>();
+      walk_generic(ctx, f.generic, visitor);
       for (const ast::ItemFnParam& param : f.params) {
         walk_pattern(ctx, param.pattern, visitor);
         walk_type(ctx, param.type, visitor);
@@ -378,6 +389,9 @@ void walk_item(LintContext& ctx,
     }
     case K::Impl: {
       const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      walk_generic(ctx, impl.params, visitor);
+      walk_type(ctx, impl.type, visitor);
+      walk_type(ctx, impl.spec, visitor);
       for (const ast::ItemIdx method : impl.methods) {
         walk_item(ctx, method, visitor);
       }
@@ -397,6 +411,7 @@ void walk_item(LintContext& ctx,
     }
     case K::Struct: {
       const ast::ItemStruct& s = node.payload.get<ast::ItemStruct>();
+      walk_generic(ctx, s.params, visitor);
       for (const ast::ItemStructField& field : s.fields) {
         walk_type(ctx, field.type, visitor);
       }
@@ -404,6 +419,7 @@ void walk_item(LintContext& ctx,
     }
     case K::Enum: {
       const ast::ItemEnum& e = node.payload.get<ast::ItemEnum>();
+      walk_generic(ctx, e.params, visitor);
       for (const ast::ItemEnumVariant& variant : e.variants) {
         for (const ast::TypeIdx field : variant.fields) {
           walk_type(ctx, field, visitor);
@@ -413,7 +429,10 @@ void walk_item(LintContext& ctx,
     }
     case K::Spec: {
       const ast::ItemSpec& s = node.payload.get<ast::ItemSpec>();
+      walk_generic(ctx, s.params, visitor);
+      walk_type(ctx, s.super, visitor);
       for (const ast::SpecMethod& method : s.methods) {
+        walk_generic(ctx, method.generic, visitor);
         for (const ast::ItemFnParam& param : method.params) {
           walk_pattern(ctx, param.pattern, visitor);
           walk_type(ctx, param.type, visitor);
@@ -424,6 +443,7 @@ void walk_item(LintContext& ctx,
     }
     case K::Intrinsic: {
       const ast::ItemIntrinsic& f = node.payload.get<ast::ItemIntrinsic>();
+      walk_generic(ctx, f.generic, visitor);
       for (const ast::ItemFnParam& param : f.params) {
         walk_pattern(ctx, param.pattern, visitor);
         walk_type(ctx, param.type, visitor);
@@ -431,42 +451,35 @@ void walk_item(LintContext& ctx,
       walk_type(ctx, f.return_type, visitor);
       break;
     }
-    case K::Extern:
+    case K::Extern: {
+      const ast::ItemExtern& e = node.payload.get<ast::ItemExtern>();
+      for (const ast::ItemExternFn& fn : e.fns) {
+        walk_generic(ctx, fn.generic, visitor);
+        for (const ast::ItemFnParam& param : fn.params) {
+          walk_pattern(ctx, param.pattern, visitor);
+          walk_type(ctx, param.type, visitor);
+        }
+        walk_type(ctx, fn.return_type, visitor);
+      }
+      break;
+    }
     case K::Use: break;
   }
 }
 
 void walk_items(LintContext& ctx,
                 std::span<const ast::ItemIdx> items,
-                const TreeVisitor& visitor) {
+                const Visitor& visitor) {
   for (const ast::ItemIdx item : items) {
     walk_item(ctx, item, visitor);
   }
 }
 
-void walk_module(LintContext& ctx, u32 module, const TreeVisitor& visitor) {
-  const analyzer::ModuleNode& node = *ctx.package.tree.modules[module];
-  walk_items(ctx, node.items, visitor);
-}
-
 }  // namespace
 
-void for_each_item(LintContext& ctx, ItemVisit visit) {
-  TreeVisitor visitor;
-  visitor.item = visit;
-  walk_module(ctx, ctx.module, visitor);
-}
-
-void for_each_expr(LintContext& ctx, ExprVisit visit) {
-  TreeVisitor visitor;
-  visitor.expr = visit;
-  walk_module(ctx, ctx.module, visitor);
-}
-
-void for_each_block(LintContext& ctx, BlockVisit visit) {
-  TreeVisitor visitor;
-  visitor.block = visit;
-  walk_module(ctx, ctx.module, visitor);
+void walk_module(LintContext& ctx, const Visitor& visitor) {
+  const analyzer::ModuleNode& node = *ctx.package.tree.modules[ctx.module];
+  walk_items(ctx, node.items, visitor);
 }
 
 }  // namespace linter

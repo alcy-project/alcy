@@ -35,6 +35,7 @@ enum class LintCode : u8 {
   FloatEquality = 22,
   NeedlessBorrow = 23,
   LossyCast = 24,
+  UnusedImport = 25,
 };
 
 }  // namespace linter

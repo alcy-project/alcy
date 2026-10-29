@@ -25,6 +25,15 @@ concept ReadsBindings = requires {
   { R::READS_BINDINGS } -> std::convertible_to<bool>;
 } && R::READS_BINDINGS;
 
+// A rule that reads the module's name-usage table declares the fact, so
+// the engine records the paths during the one walk instead of letting
+// the rule walk the syntax again. A rule without the member does not
+// read it.
+template <typename R>
+concept ReadsUsage = requires {
+  { R::READS_USAGE } -> std::convertible_to<bool>;
+} && R::READS_USAGE;
+
 // The identity every rule carries.
 template <typename R>
 concept RuleIdentity = requires {
@@ -49,13 +58,18 @@ template <typename R>
 concept ItemRule =
     requires(LintContext& ctx, ast::ItemIdx item) { R::check_item(ctx, item); };
 
+template <typename R>
+concept BlockRule = requires(LintContext& ctx, ast::BlockIdx block) {
+  R::check_block(ctx, block);
+};
+
 // One check the linter runs, as a type: the identity lint.toml
 // addresses and the check itself live in one place, and this concept
 // holds every rule to the shape, so a rule that forgets a field or
 // misspells one fails here instead of at the registry.
 template <typename R>
-concept RuleType =
-    RuleIdentity<R> && (ModuleRule<R> || ExprRule<R> || ItemRule<R>);
+concept RuleType = RuleIdentity<R> && (ModuleRule<R> || ExprRule<R> ||
+                                       ItemRule<R> || BlockRule<R>);
 
 // The row the runtime reads. A rule type compiles to one of these in
 // the registry's table: the engine iterates rows and lint.toml's rule
@@ -68,22 +82,26 @@ struct Rule {
   // One line describing what the rule reports, for --help and the
   // module's README. Not the message a finding carries.
   std::string_view summary;
-  // Exactly one of the three check shapes is set; the concept and the
-  // static assertion in rule_row hold that.
+  // Exactly one of the check shapes is set; the concept and the static
+  // assertion in rule_row hold that.
   void (*run)(LintContext&);
   void (*check_expr)(LintContext&, ast::ExprIdx);
   void (*check_item)(LintContext&, ast::ItemIdx);
+  void (*check_block)(LintContext&, ast::BlockIdx);
   // Whether the rule reads the binding table the engine builds once per
   // module, rather than walking the syntax itself.
   bool reads_bindings = false;
+  // Whether the rule reads the name-usage table the engine records
+  // during the same walk.
+  bool reads_usage = false;
 };
 
 template <RuleType R>
 constexpr Rule rule_row() {
-  static_assert(
-      (ModuleRule<R> ? 1 : 0) + (ExprRule<R> ? 1 : 0) + (ItemRule<R> ? 1 : 0) ==
-          1,
-      "a rule states exactly one check shape");
+  static_assert((ModuleRule<R> ? 1 : 0) + (ExprRule<R> ? 1 : 0) +
+                        (ItemRule<R> ? 1 : 0) + (BlockRule<R> ? 1 : 0) ==
+                    1,
+                "a rule states exactly one check shape");
   Rule rule{};
   rule.id = R::ID;
   rule.default_level = R::DEFAULT_LEVEL;
@@ -98,7 +116,11 @@ constexpr Rule rule_row() {
   if constexpr (ItemRule<R>) {
     rule.check_item = &R::check_item;
   }
+  if constexpr (BlockRule<R>) {
+    rule.check_block = &R::check_block;
+  }
   rule.reads_bindings = ReadsBindings<R>;
+  rule.reads_usage = ReadsUsage<R>;
   return rule;
 }
 

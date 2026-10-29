@@ -13,10 +13,12 @@
 #include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
+#include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "linter/config.h"
 #include "linter/fix.h"
 #include "linter/lint.h"
+#include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
@@ -83,6 +85,48 @@ const diag::Fix* fix_for(const diag::DiagBag& bag, std::string_view rule) {
   return fix;
 }
 
+// A two-module package under proj/: the manifest names main and util,
+// and a case supplies both files. Returns the unused-import findings,
+// or nullopt when setup or linting failed.
+constexpr std::string_view IMPORT_MANIFEST =
+    "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+    "[modules]\ninclude = [\"main\", \"util\"]\n\n"
+    "[[bin]]\nname = \"demo\"\npath = \"main.al\"\n";
+
+std::optional<u32> unused_imports(io::TempDir& dir,
+                                  std::string_view util,
+                                  std::string_view main) {
+  if (!dir.write_file("proj/alcy.toml", IMPORT_MANIFEST) ||
+      !dir.write_file("proj/util.al", util) ||
+      !dir.write_file("proj/main.al", main)) {
+    return std::nullopt;
+  }
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  if (root.is_err()) {
+    return std::nullopt;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(root_path.join("alcy.toml").as_view());
+  if (manifest.is_err()) {
+    return std::nullopt;
+  }
+  base::Result<LintConfig, diag::Reported> config =
+      parse_lint_config("", "<test>", source::UNKNOWN_FILE, ctx.bag, ctx.arena);
+  if (config.is_err()) {
+    return std::nullopt;
+  }
+  base::Result<LintOutcome, diag::Reported> result =
+      lint_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                   std::move(config).unwrap());
+  if (result.is_err()) {
+    return std::nullopt;
+  }
+  return findings_for(ctx.bag, "unused-import");
+}
+
 struct Run {
   pipeline::PipelineContext ctx;
   LintOutcome outcome{};
@@ -107,6 +151,41 @@ struct Run {
 };
 
 }  // namespace
+
+TEST_CASE("unused-import reports an import no path names") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_linter_import_");
+  const std::optional<u32> unused = unused_imports(
+      dir, "pub fn helper() -> i32 {\n  ret 1\n}\n",
+      "use self::util::helper\n\nfn main() -> i32 {\n  ret 0\n}\n");
+  CHECK(unused.has_value());
+  if (unused.has_value()) {
+    CHECK(*unused == 1);
+  }
+}
+
+TEST_CASE("unused-import leaves an import a value path names") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_linter_import_used_");
+  const std::optional<u32> unused = unused_imports(
+      dir, "pub fn helper() -> i32 {\n  ret 1\n}\n",
+      "use self::util::helper\n\nfn main() -> i32 {\n  ret helper()\n}\n");
+  CHECK(unused.has_value());
+  if (unused.has_value()) {
+    CHECK(*unused == 0);
+  }
+}
+
+TEST_CASE("unused-import leaves a type only a generic bound names") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_linter_import_bound_");
+  const std::optional<u32> unused =
+      unused_imports(dir, "pub spec Show {\n  fn show(self: Self) -> i32;\n}\n",
+                     "use self::util::Show\n\n"
+                     "fn f<T: Show>(x: T) -> i32 {\n  ret 0\n}\n\n"
+                     "fn main() -> i32 {\n  ret 0\n}\n");
+  CHECK(unused.has_value());
+  if (unused.has_value()) {
+    CHECK(*unused == 0);
+  }
+}
 
 TEST_CASE("unused-variable names the binding") {
   Run run;

@@ -565,6 +565,7 @@
   F(LintUnreachableCode, Warning, Lint, "unreachable statement") \
   F(LintUnusedMut, Warning, Lint, "variable does not need to be mutable: {}") \
   F(LintUnusedParameter, Warning, Lint, "unused parameter: {}") \
+  F(LintUnusedImport, Warning, Lint, "unused import: {}") \
   F(LintUnusedVariable, Warning, Lint, "unused variable: {}") \
   F(LintUnusedVariableHelp, Warning, Lint, "if this is intentional, prefix the name with an underscore") \
   F(LintWhileTrue, Warning, Lint, "while true is a loop that never ends") \

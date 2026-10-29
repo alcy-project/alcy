@@ -42,15 +42,17 @@ that grew its own parser has had.
   path dependencies are skipped.
 - A rule is a type: the id, default level, code, and summary as
   static members, and exactly one check shape - a whole-module `run`,
-  or a `check_expr` / `check_item` hook the engine's shared traversal
-  dispatches to - defined in `linter/rules/`. A concept holds every
-  rule to that shape, and the registry folds the type list into the
-  runtime table the engine iterates and lint.toml resolves against -
-  the dispatch is one function pointer per rule, generated rather than
-  hand-maintained. The engine builds one active list per node family
-  and one binding table per module: expressions and items are each
-  walked once, and the binding walk runs only when an enabled rule
-  reads it. There is no virtual dispatch, matching the compiler
+  or a `check_expr` / `check_item` / `check_block` hook the engine's
+  one traversal dispatches to - defined in `linter/rules/`. A concept
+  holds every rule to that shape, and the registry folds the type list
+  into the runtime table the engine iterates and lint.toml resolves
+  against - the dispatch is one function pointer per rule, generated
+  rather than hand-maintained. The engine builds one active list per
+  node family, one binding table per module, and the usage table of
+  path heads: expressions, items, and blocks are dispatched from one
+  walk, which also records the heads `unused-import` reads, and the
+  binding table is built only when an enabled rule reads it. There is
+  no virtual dispatch, matching the compiler
   no-runtime-polymorphism rule. The type list's order is the index the
   parsed configuration is aligned with, so a rule is appended and never
   inserted.
@@ -67,7 +69,7 @@ The linter gets the frontend, the diagnostic renderer, the source
 snippet, and the JSON envelope for free. The frontend grew one seam,
 `analyze_tree`, which build and check now also compose; a new rule is
 a type under `linter/rules/` and one line in the registry's list. The
-rules over a module share their walks, so the lint phase stays small
+rules over a module share one walk, so the lint phase stays small
 beside the frontend, and the frontend's tail can be traded for speed
 without touching a rule.
 

@@ -9,7 +9,6 @@
 #include "i18n/messages.h"
 #include "linter/context.h"
 #include "linter/rules/rules.h"
-#include "linter/walk.h"
 
 namespace linter::rules {
 
@@ -78,7 +77,7 @@ bool expr_diverges(const LintContext& ctx, ast::ExprIdx expr) {
   }
 }
 
-void check_block(LintContext& ctx, ast::BlockIdx block) {
+void check_unreachable(LintContext& ctx, ast::BlockIdx block) {
   const ast::Block& node = ctx.ast.blocks[block];
   bool diverged = false;
   for (const ast::StmtIdx stmt : node.statements) {
@@ -153,8 +152,8 @@ void check_loop(LintContext& ctx, ast::ExprIdx expr) {
 
 }  // namespace
 
-void UnreachableCode::run(LintContext& ctx) {
-  for_each_block(ctx, &check_block);
+void UnreachableCode::check_block(LintContext& ctx, ast::BlockIdx block) {
+  check_unreachable(ctx, block);
 }
 
 void WhileTrue::check_expr(LintContext& ctx, ast::ExprIdx expr) {

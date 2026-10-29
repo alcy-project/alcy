@@ -55,7 +55,7 @@ struct UnreachableCode {
   static constexpr LintCode CODE = LintCode::UnreachableCode;
   static constexpr std::string_view SUMMARY =
       "a statement after control leaves the block";
-  static void run(LintContext& ctx);
+  static void check_block(LintContext& ctx, ast::BlockIdx block);
 };
 
 struct WhileTrue {
@@ -156,6 +156,18 @@ struct TooManyArguments {
   static constexpr std::string_view SUMMARY =
       "a function taking more parameters than the limit";
   static void check_item(LintContext& ctx, ast::ItemIdx item);
+};
+
+// A module rule: it reads the name-usage table the engine records during
+// its walk and reports the imports no path names.
+struct UnusedImport {
+  static constexpr std::string_view ID = "unused-import";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
+  static constexpr LintCode CODE = LintCode::UnusedImport;
+  static constexpr std::string_view SUMMARY =
+      "an import the module never names";
+  static constexpr bool READS_USAGE = true;
+  static void run(LintContext& ctx);
 };
 
 }  // namespace linter::rules

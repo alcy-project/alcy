@@ -26,6 +26,7 @@
 namespace linter {
 
 struct BindingIndex;
+struct NameUsage;
 
 // What one rule run reads. The context is rebuilt for each module, so a
 // rule addresses the module it is checking through this rather than
@@ -68,10 +69,16 @@ struct LintContext {
   // enabled rule reads it. Null when no enabled rule does, so a rule
   // that asks for it either finds the answer or is not running.
   const BindingIndex* binding_index = nullptr;
-  // The rules the engine's single expression and item walks dispatch
-  // to, in registry order. Engine plumbing; a rule does not read these.
+  // The head names the module's paths use, recorded by the engine's
+  // walk when an enabled rule reads it. Null when no enabled rule does.
+  // The engine writes it; a rule only reads it.
+  NameUsage* usage_index = nullptr;
+  // The rules the engine's single walk dispatches expressions, items,
+  // and blocks to, in registry order. Engine plumbing; a rule does not
+  // read these.
   std::span<const Rule*> active_expr;
   std::span<const Rule*> active_item;
+  std::span<const Rule*> active_block;
 
   [[nodiscard]] const ast::ItemNode& item_node(ast::ItemIdx id) const {
     return ast.items[id];
