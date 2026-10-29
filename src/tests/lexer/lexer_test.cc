@@ -257,6 +257,25 @@ TEST_CASE("Lexer recovers from invalid characters") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("A broken scalar stops at the whitespace that follows it") {
+  Fixture f;
+  // A lead takes the continuation bytes that follow and stops at the
+  // first byte that is neither one nor part of the promise: the span
+  // never ends in whitespace, so a layout that writes a break or an
+  // indent next to it reads the span back the same length it wrote.
+  const std::vector<Token> tokens =
+      lex_all("\xf6\xf6\xf6\x09\xeb\xb1\n", f.bag);
+  CHECK(kinds_of(tokens) ==
+        std::vector<TokenKind>({TokenKind::Error, TokenKind::Error,
+                                TokenKind::Error, TokenKind::Error,
+                                TokenKind::Eof}));
+  CHECK(tokens[0].span.length == 1);
+  CHECK(tokens[1].span.length == 1);
+  CHECK(tokens[2].span.length == 1);
+  CHECK(tokens[3].span.length == 2);
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("A statement an unterminated comment ends still gets its semi") {
   Fixture f;
   // The comment the source never closed is a token the real lexer

@@ -340,13 +340,10 @@ TEST_CASE("A statement an unterminated comment follows keeps its layout") {
 }
 
 TEST_CASE("A hungry scalar that swallowed a tab keeps the line count") {
-  // A UTF-8 lead takes the bytes it promised, blanks included, and the
-  // span's tail rides in the gap the source put around the error -- but
-  // a tail at the end of a chunk has no gap to ride in, so the layout
-  // writes its own line break there. A span that kept the newline it
-  // absorbed would read back having swallowed that break and grow by a
-  // line on every pass; dropping it keeps the second pass where the
-  // first one stood.
+  // A UTF-8 lead takes the continuation bytes that follow it and stops
+  // at the first byte that is neither one nor part of the promise, so
+  // the span never ends in a byte the layout rewrites: the pass over
+  // the layout reads the same span the pass over the source did.
   const std::string source = std::string(
       "\xf6\xf6\xff\xff\xff\xff\xff\xff\xffRRR\xff\xff\xf6\xf6\xf6\t\n"
       "\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6\xf6");
@@ -389,13 +386,28 @@ TEST_CASE("Code an error precedes across a newline keeps its indent") {
 }
 
 TEST_CASE("A carriage return an error span ends in does not survive") {
-  // The lexer reads \r as trivia and the renderer trims blanks before a
-  // break, so a span that ends in one never reads back the same unless
-  // the layout drops it with the newlines it sits between.
+  // A run of stray scalars sits against carriage returns and newlines
+  // the lexer reads as trivia: the layout writes its own breaks there,
+  // and the pass over them reads the same runs the pass over the
+  // source did.
   const std::string source = std::string(
       "{sp\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\r\n\n\n\n\n\n\n"
       "\xf5\xf5\xf5\xf5\xf5\xf5\xf5?\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5"
       "\xf5\xf5\xf5\xf5\xf5\xf5");
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, default_format_config()));
+  CHECK(idempotent(source, narrow));
+}
+
+TEST_CASE("A bracket a line comment hides does not swallow the code") {
+  // The comment rides the line it sits on, the semicolon the lexer
+  // inserted at the newline stands for the break the comment's own
+  // already wrote, and the bytes past it are the next line's indent --
+  // the layout writes that indent once, and the error's span reads the
+  // same wherever the pass started from.
+  const std::string source = std::string("+{*[w//[\n\xeb\xb1");
   FormatConfig narrow;
   narrow.line_length = 24;
   narrow.indent_width = 1;

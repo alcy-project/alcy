@@ -68,10 +68,9 @@ std::string_view error_text(std::string_view source, const cst::Node& node) {
 // at a boundary it did not choose, so whatever the layout writes after
 // it joins the span on the next pass. A literal that never closed takes
 // bytes to the newline, an unterminated block comment takes the rest of
-// the file, and a UTF-8 lead that did not get all the bytes it promised
-// takes them from what follows. A complete scalar and a closed literal
-// ended where they ended, so a separator after one reads back as a
-// separator.
+// the file. A broken scalar takes its continuation bytes and stops at
+// the first byte that is neither one nor whitespace, so a separator
+// after one reads back as a separator.
 bool error_absorbs(std::string_view text) {
   if (text.empty()) {
     return false;
@@ -82,16 +81,6 @@ bool error_absorbs(std::string_view text) {
   }
   if (first == '/' && text.size() >= 2 && text[1] == '*') {
     return true;
-  }
-  const bool lead = (first & 0xE0) == 0xC0 || (first & 0xF0) == 0xE0 ||
-                    (first & 0xF8) == 0xF0;
-  if (lead) {
-    const usize promise = (first & 0xE0) == 0xC0   ? 2
-                          : (first & 0xF0) == 0xE0 ? 3
-                                                   : 4;
-    if (text.size() < promise) {
-      return true;
-    }
   }
   return false;
 }
@@ -725,6 +714,14 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
       // all ride in the gap and the count stays put.
       gap_start = from.offset + error_text(source_, from).size();
     }
+    // A semicolon the lexer inserted stands for the break the layout
+    // writes itself: the bytes past it are the next line's indent, and
+    // pinning them would lay them on top of the indent the break
+    // carries, growing the line by the nesting on every pass.
+    if (from.kind == cst::NodeKind::Token &&
+        from.token == lexer::TokenKind::Semicolon) {
+      return;
+    }
     if (to.offset > gap_start) {
       pieces.push_back(
           Piece{doc_text(source_.substr(gap_start, to.offset - gap_start)),
@@ -766,6 +763,14 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
     const bool near_error = node.kind == cst::NodeKind::Token &&
                             node.token == lexer::TokenKind::Error;
     const bool after_comment_break = suppress;
+    // A semicolon the lexer inserted at a newline stands for the break
+    // that newline wrote. After a comment that ends its line the break
+    // is already out -- the comment's own -- so the semicolon's byte
+    // would write the line twice, and the pass over that would count a
+    // blank line more than this one did. The piece is nothing instead.
+    const bool semi_after_break =
+        suppress && node.kind == cst::NodeKind::Token &&
+        node.token == lexer::TokenKind::Semicolon && node.synthetic_semi;
     if (pieces.empty()) {
       sep = Sep::None;
     } else if (suppress) {
@@ -816,7 +821,8 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
                      node_text(source_, node))) {
       sep = Sep::Space;
     }
-    pieces.push_back(Piece{node_doc(node), sep});
+    pieces.push_back(
+        Piece{semi_after_break ? doc_empty() : node_doc(node), sep});
     // A generic bracket reads as a delimiter here, not as a comparison:
     // a break inside an argument list would space it flat.
     pending_break = node.kind == cst::NodeKind::Token && !unary[i] &&
