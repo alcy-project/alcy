@@ -406,6 +406,19 @@ struct CheckedPackage {
   // Types that are never moved (ADR-0085): the anchor and anything
   // holding one. Parallel to the type table.
   std::vector<u8> not_movable;
+  // One spec declaration, in checker order. A MethodInfo's spec field
+  // indexes this list; the LSP reads it to reach the implementations.
+  struct SpecDecl {
+    std::string_view name;
+    ast::ItemIdx item;
+  };
+  std::vector<SpecDecl> specs;
+  // One spec implementation block: the spec it implements and its item.
+  struct SpecImplDecl {
+    u32 spec = NO_SPEC;
+    ast::ItemIdx item = ast::ItemIdx::invalid();
+  };
+  std::vector<SpecImplDecl> spec_impls;
 };
 
 // The static a value path names in `module`: a declaration there, or

@@ -26,6 +26,14 @@ std::vector<diag::Span> references_at(const Document& document,
                                       const DocumentAnalysis& analysis,
                                       Position position);
 
+// The methods that implement the spec at position: for a spec method or
+// a call that resolved to one, every method that implements it, in the
+// root file. An inherent method has no implementations and answers an
+// empty list.
+std::vector<diag::Span> implementation_at(const Document& document,
+                                          const DocumentAnalysis& analysis,
+                                          Position position);
+
 // The declaration of the type of the value or written type at position:
 // a variable of struct type answers with the struct declaration. A type
 // the language defines, such as a primitive, answers nothing.

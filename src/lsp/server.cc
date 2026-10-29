@@ -197,6 +197,15 @@ void Server::handle_request(const text::JsonValue& message) {
     type_definition(*id, *params);
     return;
   }
+  if (method == "textDocument/implementation") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "implementation needs params");
+      return;
+    }
+    implementation(*id, *params);
+    return;
+  }
   if (method == "textDocument/documentHighlight") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -378,6 +387,7 @@ void Server::initialize(const text::JsonValue& id) {
   rename_provider.set("prepareProvider", text::JsonValue::make_bool(true));
   capabilities.set("renameProvider", std::move(rename_provider));
   capabilities.set("typeDefinitionProvider", text::JsonValue::make_bool(true));
+  capabilities.set("implementationProvider", text::JsonValue::make_bool(true));
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(false));
@@ -504,6 +514,23 @@ void Server::type_definition(const text::JsonValue& id,
     return;
   }
   send_result(id, location_json(*document, *location));
+}
+
+void Server::implementation(const text::JsonValue& id,
+                            const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const std::vector<diag::Span> locations =
+      implementation_at(*document, cache_.get(*document), position);
+  text::JsonValue result = text::JsonValue::make_array();
+  for (const diag::Span span : locations) {
+    result.push(location_json(*document, span));
+  }
+  send_result(id, std::move(result));
 }
 
 void Server::references(const text::JsonValue& id,

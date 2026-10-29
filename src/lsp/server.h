@@ -51,6 +51,7 @@ class Server {
   void rename(const text::JsonValue& id, const text::JsonValue& params);
   void type_definition(const text::JsonValue& id,
                        const text::JsonValue& params);
+  void implementation(const text::JsonValue& id, const text::JsonValue& params);
   void inlay_hint(const text::JsonValue& id, const text::JsonValue& params);
   void code_action(const text::JsonValue& id, const text::JsonValue& params);
   void document_highlight(const text::JsonValue& id,

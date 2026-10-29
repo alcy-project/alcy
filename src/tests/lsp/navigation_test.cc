@@ -191,6 +191,62 @@ TEST_CASE("A primitive has no type definition") {
   CHECK(!type_definition_at(document, analysis, Position{5, 6}).has_value());
 }
 
+const char* const SPEC_SOURCE =
+    "struct Tag {\n"
+    "  n: i32,\n"
+    "}\n"
+    "spec Shown {\n"
+    "  fn show(self: &Self) -> i32;\n"
+    "}\n"
+    "impl Shown for Tag {\n"
+    "  fn show(self: &Self) -> i32 {\n"
+    "    ret self.n\n"
+    "  }\n"
+    "}\n"
+    "fn call_it(t: &Tag) -> i32 {\n"
+    "  ret t.show()\n"
+    "}\n";
+
+TEST_CASE("A spec method's implementation is the impl method") {
+  const Document document("file:///main.al", "alcy", 1, SPEC_SOURCE);
+  const DocumentAnalysis analysis(document);
+  const std::vector<diag::Span> sites =
+      implementation_at(document, analysis, Position{4, 6});
+  CHECK(sites.size() == 1);
+  if (sites.size() == 1) {
+    const Position start = position_of(document, sites[0]);
+    CHECK(start.line == 7);
+    CHECK(start.character == 5);
+  }
+}
+
+TEST_CASE("A call to a spec method finds its implementation") {
+  const Document document("file:///main.al", "alcy", 1, SPEC_SOURCE);
+  const DocumentAnalysis analysis(document);
+  const std::vector<diag::Span> sites =
+      implementation_at(document, analysis, Position{12, 9});
+  CHECK(sites.size() == 1);
+  if (sites.size() == 1) {
+    const Position start = position_of(document, sites[0]);
+    CHECK(start.line == 7);
+    CHECK(start.character == 5);
+  }
+}
+
+TEST_CASE("A spec name answers its implementations") {
+  const Document document("file:///main.al", "alcy", 1, SPEC_SOURCE);
+  const DocumentAnalysis analysis(document);
+  const std::vector<diag::Span> sites =
+      implementation_at(document, analysis, Position{3, 6});
+  CHECK(sites.size() == 1);
+}
+
+TEST_CASE("An inherent name has no implementation") {
+  const Document document("file:///main.al", "alcy", 1, SPEC_SOURCE);
+  const DocumentAnalysis analysis(document);
+  CHECK(implementation_at(document, analysis, Position{11, 4}).empty());
+}
+
 TEST_CASE("Nothing at a comment answers nothing") {
   const Document document("file:///main.al", "alcy", 1,
                           "// nothing here\nfn main() -> i32 {\n  ret 0\n}\n");

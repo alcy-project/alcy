@@ -9042,11 +9042,21 @@ base::Result<CheckedPackage, diag::Reported> check_package(
                          {},
                          {},
                          {},
+                         {},
+                         {},
                          {}};
   package.drop_glue = std::move(checker.drop_glue_);
   package.needs_drop = std::move(checker.needs_drop_);
   package.not_movable = std::move(checker.not_movable_);
   package.comp_calls = std::move(checker.comp_calls_);
+  package.specs.reserve(checker.specs.size());
+  for (const SpecEntry& spec : checker.specs) {
+    package.specs.push_back({spec.name, spec.item});
+  }
+  package.spec_impls.reserve(checker.spec_impls.size());
+  for (const SpecImplEntry& impl : checker.spec_impls) {
+    package.spec_impls.push_back({impl.spec, impl.item});
+  }
   // Generic instantiations lower as ordinary nominals; publish their
   // field or variant names under the defining module for lowering
   // lookups. Their types publish in instantiation order for keying.

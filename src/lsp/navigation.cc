@@ -237,6 +237,96 @@ std::optional<diag::Span> type_definition_at(const Document& document,
   return std::nullopt;
 }
 
+std::vector<diag::Span> implementation_at(const Document& document,
+                                          const DocumentAnalysis& analysis,
+                                          Position position) {
+  if (!analysis.ok()) {
+    return {};
+  }
+  const usize offset = document.index().byte_offset(document.text(), position);
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
+
+  // A call or an impl method resolves to the method the checker bound;
+  // its spec field names the spec the implementation belongs to.
+  u32 spec = analyzer::NO_SPEC;
+  std::string_view method;
+  if (const std::optional<diag::Span> declaration =
+          definition_at(document, analysis, position);
+      declaration.has_value()) {
+    for (const analyzer::CheckedModule& module : package.modules) {
+      for (const analyzer::CheckedModule::MethodInfo& info : module.methods) {
+        if (info.item.is_valid() &&
+            same_span(item_name_span(context.ast, context.ast.items[info.item]),
+                      *declaration)) {
+          spec = info.spec;
+          method = info.name;
+          break;
+        }
+      }
+      if (spec != analyzer::NO_SPEC) {
+        break;
+      }
+    }
+  }
+  // A spec declaration names its spec and the method the cursor is on.
+  if (spec == analyzer::NO_SPEC) {
+    for (u32 i = 0; i < package.specs.size(); ++i) {
+      const ast::ItemNode& item = context.ast.items[package.specs[i].item];
+      if (item.kind != ast::ItemKind::Spec) {
+        continue;
+      }
+      const ast::ItemSpec& declaration = item.payload.get<ast::ItemSpec>();
+      if (span_contains(declaration.name.span, offset)) {
+        spec = i;
+        break;
+      }
+      for (const ast::SpecMethod& candidate : declaration.methods) {
+        if (span_contains(candidate.name.span, offset)) {
+          spec = i;
+          method = candidate.name.name;
+          break;
+        }
+      }
+      if (spec != analyzer::NO_SPEC) {
+        break;
+      }
+    }
+  }
+  if (spec == analyzer::NO_SPEC) {
+    return {};
+  }
+
+  std::vector<diag::Span> out;
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::MethodInfo& info : module.methods) {
+      if (info.spec != spec || !info.item.is_valid()) {
+        continue;
+      }
+      if (!method.empty() && info.name != method) {
+        continue;
+      }
+      const diag::Span span =
+          item_name_span(context.ast, context.ast.items[info.item]);
+      if (span.file != root) {
+        continue;
+      }
+      bool duplicate = false;
+      for (const diag::Span existing : out) {
+        if (same_span(existing, span)) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (!duplicate) {
+        out.push_back(span);
+      }
+    }
+  }
+  return out;
+}
+
 std::vector<diag::Span> references_at(const Document& document,
                                       const DocumentAnalysis& analysis,
                                       Position position) {

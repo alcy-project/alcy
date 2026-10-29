@@ -37,6 +37,7 @@ BROKEN_URI = "file:///broken.al"
 FOLD_URI = "file:///fold.al"
 NAV_URI = "file:///nav.al"
 TYPE_URI = "file:///type.al"
+SPEC_URI = "file:///spec.al"
 
 # Lint-clean but not canonical: the diagnostics answer is empty while
 # the formatter still has a rewrite to return, so one buffer drives both
@@ -55,6 +56,14 @@ NAV = "fn id(x: i32) -> i32 {\n  ret x\n}\nfn main() -> i32 {\n  ret id(1)\n}\n"
 # A value of struct type, so a type definition request has a value whose
 # checked type names a declaration.
 TYPE = "struct Point {\n  x: i32,\n}\n\nfn take(p: Point) -> i32 {\n  ret p.x\n}\n"
+# A spec and its one implementation, so an implementation request can
+# find the method that supplies the spec's body.
+SPEC = (
+    "struct Tag {\n  n: i32,\n}\n"
+    "spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"
+    "impl Shown for Tag {\n  fn show(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+    "fn call_it(t: &Tag) -> i32 {\n  ret t.show()\n}\n"
+)
 
 
 def alcy_binary(build_subdir: str) -> Path:
@@ -166,6 +175,18 @@ def main() -> int:
                     "languageId": "alcy",
                     "version": 1,
                     "text": TYPE,
+                }
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": SPEC_URI,
+                    "languageId": "alcy",
+                    "version": 1,
+                    "text": SPEC,
                 }
             },
         },
@@ -322,7 +343,16 @@ def main() -> int:
                 "position": {"line": 5, "character": 6},
             },
         },
-        {"jsonrpc": "2.0", "id": 20, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 20,
+            "method": "textDocument/implementation",
+            "params": {
+                "textDocument": {"uri": SPEC_URI},
+                "position": {"line": 4, "character": 6},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 21, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -379,6 +409,8 @@ def main() -> int:
         return fail("initialize did not advertise selectionRangeProvider")
     if capabilities.get("typeDefinitionProvider") is not True:
         return fail("initialize did not advertise typeDefinitionProvider")
+    if capabilities.get("implementationProvider") is not True:
+        return fail("initialize did not advertise implementationProvider")
     rename = capabilities.get("renameProvider")
     if not isinstance(rename, dict) or rename.get("prepareProvider") is not True:
         return fail("initialize did not advertise renameProvider")
@@ -542,7 +574,16 @@ def main() -> int:
     if not isinstance(typed_start, dict) or typed_start.get("line") != 0:
         return fail(f"typeDefinition did not name Point: {typed!r}")
 
-    if by_id.get(20, {}).get("result", "missing") is not None:
+    implementations = by_id.get(20, {}).get("result")
+    impl_start = (
+        (implementations or [{}])[0].get("range", {}).get("start")
+        if isinstance(implementations, list)
+        else None
+    )
+    if not isinstance(impl_start, dict) or impl_start.get("line") != 7:
+        return fail(f"implementation missed the impl method: {implementations!r}")
+
+    if by_id.get(21, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")
