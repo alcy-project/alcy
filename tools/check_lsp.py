@@ -457,7 +457,16 @@ def main() -> int:
                 "previousResultId": "0",
             },
         },
-        {"jsonrpc": "2.0", "id": 32, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 33,
+            "method": "textDocument/linkedEditingRange",
+            "params": {
+                "textDocument": {"uri": NAV_URI},
+                "position": {"line": 4, "character": 7},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 34, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -517,6 +526,8 @@ def main() -> int:
         return fail("initialize did not advertise semantic token deltas")
     if capabilities.get("documentHighlightProvider") is not True:
         return fail("initialize did not advertise documentHighlightProvider")
+    if capabilities.get("linkedEditingRangeProvider") is not True:
+        return fail("initialize did not advertise linkedEditingRangeProvider")
     if capabilities.get("selectionRangeProvider") is not True:
         return fail("initialize did not advertise selectionRangeProvider")
     if capabilities.get("typeDefinitionProvider") is not True:
@@ -782,7 +793,12 @@ def main() -> int:
     ):
         return fail(f"semanticTokens delta answered nothing: {delta!r}")
 
-    if by_id.get(32, {}).get("result", "missing") is not None:
+    linked = by_id.get(33, {}).get("result")
+    linked_ranges = linked.get("ranges") if isinstance(linked, dict) else None
+    if not isinstance(linked_ranges, list) or len(linked_ranges) != 2:
+        return fail(f"linkedEditingRange missed the occurrences: {linked!r}")
+
+    if by_id.get(34, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

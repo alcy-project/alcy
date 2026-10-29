@@ -23,7 +23,8 @@ of the compiler (ADR-0107), so it owns no analysis of its own:
   range as quick fixes, reading the repair the linter attached to its
   finding.
 - `highlights.{h,cc}` marks the declaration and every resolved use of
-  the name under the cursor.
+  the name under the cursor, and answers the ranges linked editing
+  should change together.
 - `completion.{h,cc}` offers the names the checked package holds, plus
   the language's keywords, filtered by the prefix the cursor typed.
 - `diagnostics.{h,cc}` runs `linter::lint_source` over one buffer and

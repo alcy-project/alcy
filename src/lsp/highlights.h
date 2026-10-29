@@ -17,4 +17,11 @@ text::JsonValue document_highlights(const Document& document,
                                     const DocumentAnalysis& analysis,
                                     Position position);
 
+// The ranges that should be edited together when the name at position is
+// edited: its declaration and every use, as a LinkedEditingRanges
+// object, or null when the name resolves to nothing.
+text::JsonValue linked_editing_ranges(const Document& document,
+                                      const DocumentAnalysis& analysis,
+                                      Position position);
+
 }  // namespace lsp

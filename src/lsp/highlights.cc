@@ -51,4 +51,26 @@ text::JsonValue document_highlights(const Document& document,
   return highlights;
 }
 
+text::JsonValue linked_editing_ranges(const Document& document,
+                                      const DocumentAnalysis& analysis,
+                                      Position position) {
+  const std::optional<diag::Span> declaration =
+      definition_at(document, analysis, position);
+  if (!declaration.has_value()) {
+    return text::JsonValue{};
+  }
+  text::JsonValue ranges = text::JsonValue::make_array();
+  ranges.push(range_json(document, declaration->offset, declaration->length));
+  for (const diag::Span site : references_at(document, analysis, position)) {
+    if (!same_span(site, *declaration)) {
+      ranges.push(range_json(document, site.offset, site.length));
+    }
+  }
+  text::JsonValue result = text::JsonValue::make_object();
+  result.set("ranges", std::move(ranges));
+  result.set("wordPattern",
+             text::JsonValue::make_string("[A-Za-z_][A-Za-z0-9_]*"));
+  return result;
+}
+
 }  // namespace lsp

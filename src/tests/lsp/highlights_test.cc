@@ -70,6 +70,22 @@ TEST_CASE("A local highlights its binding and its use") {
   CHECK(has(found, 2, 7));
 }
 
+TEST_CASE("Linked editing joins the declaration and its uses") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn id(x: i32) -> i32 {\n  ret x\n}\nfn main() -> "
+                          "i32 {\n  ret id(1)\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue linked =
+      linked_editing_ranges(document, analysis, Position{4, 7});
+  CHECK(linked.is_object());
+  const text::JsonValue* ranges = linked.find("ranges");
+  CHECK(ranges != nullptr);
+  if (ranges != nullptr) {
+    CHECK(ranges->as_array().size() == 2);
+  }
+  CHECK(linked.find("wordPattern") != nullptr);
+}
+
 TEST_CASE("A comment highlights nothing") {
   const Document document("file:///main.al", "alcy", 1,
                           "// nothing\nfn main() -> i32 {\n  ret 0\n}\n");

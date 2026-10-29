@@ -76,6 +76,8 @@ class Server {
   void code_action(const text::JsonValue& id, const text::JsonValue& params);
   void document_highlight(const text::JsonValue& id,
                           const text::JsonValue& params);
+  void linked_editing_range(const text::JsonValue& id,
+                            const text::JsonValue& params);
   void diagnostic(const text::JsonValue& id, const text::JsonValue& params);
   void workspace_diagnostic(const text::JsonValue& id);
   void struct_layout(const text::JsonValue& id, const text::JsonValue& params);

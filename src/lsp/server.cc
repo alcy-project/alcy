@@ -282,6 +282,15 @@ void Server::handle_request(const text::JsonValue& message) {
     workspace_symbol(*id, *params);
     return;
   }
+  if (method == "textDocument/linkedEditingRange") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "linkedEditingRange needs params");
+      return;
+    }
+    linked_editing_range(*id, *params);
+    return;
+  }
   if (method == "textDocument/documentHighlight") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -482,6 +491,8 @@ void Server::initialize(const text::JsonValue& id) {
   semantic.set("range", text::JsonValue::make_bool(true));
   capabilities.set("semanticTokensProvider", std::move(semantic));
   capabilities.set("documentHighlightProvider",
+                   text::JsonValue::make_bool(true));
+  capabilities.set("linkedEditingRangeProvider",
                    text::JsonValue::make_bool(true));
   capabilities.set("selectionRangeProvider", text::JsonValue::make_bool(true));
   text::JsonValue rename_provider = text::JsonValue::make_object();
@@ -841,6 +852,18 @@ void Server::code_action(const text::JsonValue& id,
   }
   send_result(
       id, code_actions(*document, read_position(*start), read_position(*end)));
+}
+
+void Server::linked_editing_range(const text::JsonValue& id,
+                                  const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(
+      id, linked_editing_ranges(*document, cache_.get(*document), position));
 }
 
 void Server::document_highlight(const text::JsonValue& id,
