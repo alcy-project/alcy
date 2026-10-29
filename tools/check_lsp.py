@@ -418,7 +418,37 @@ def main() -> int:
                 },
             },
         },
-        {"jsonrpc": "2.0", "id": 28, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 28,
+            "method": "textDocument/prepareTypeHierarchy",
+            "params": {
+                "textDocument": {"uri": SPEC_URI},
+                "position": {"line": 0, "character": 8},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 29,
+            "method": "typeHierarchy/supertypes",
+            "params": {
+                "item": {
+                    "name": "Tag",
+                    "kind": 23,
+                    "uri": SPEC_URI,
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end": {"line": 2, "character": 1},
+                    },
+                    "selectionRange": {
+                        "start": {"line": 0, "character": 7},
+                        "end": {"line": 0, "character": 10},
+                    },
+                    "data": {"nameOffset": 7, "nameLength": 3},
+                }
+            },
+        },
+        {"jsonrpc": "2.0", "id": 30, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -485,6 +515,8 @@ def main() -> int:
         return fail("initialize did not advertise callHierarchyProvider")
     if not isinstance(capabilities.get("codeLensProvider"), dict):
         return fail("initialize did not advertise codeLensProvider")
+    if capabilities.get("typeHierarchyProvider") is not True:
+        return fail("initialize did not advertise typeHierarchyProvider")
     rename = capabilities.get("renameProvider")
     if not isinstance(rename, dict) or rename.get("prepareProvider") is not True:
         return fail("initialize did not advertise renameProvider")
@@ -714,7 +746,21 @@ def main() -> int:
     if not isinstance(ranged_data, list) or not ranged_data:
         return fail(f"semanticTokens/range returned no data: {ranged!r}")
 
-    if by_id.get(28, {}).get("result", "missing") is not None:
+    type_items = by_id.get(28, {}).get("result")
+    if (
+        not isinstance(type_items, list)
+        or not type_items
+        or type_items[0].get("name") != "Tag"
+    ):
+        return fail(f"prepareTypeHierarchy missed Tag: {type_items!r}")
+
+    supers = by_id.get(29, {}).get("result")
+    if not isinstance(supers, list) or not any(
+        isinstance(entry, dict) and entry.get("name") == "Shown" for entry in supers
+    ):
+        return fail(f"typeHierarchy missed the spec: {supers!r}")
+
+    if by_id.get(30, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

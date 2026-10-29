@@ -34,6 +34,7 @@
 #include "lsp/signature.h"
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
+#include "lsp/type_hierarchy.h"
 #include "lsp/workspace_symbols.h"
 #include "text/json.h"
 
@@ -207,6 +208,33 @@ void Server::handle_request(const text::JsonValue& message) {
       return;
     }
     implementation(*id, *params);
+    return;
+  }
+  if (method == "textDocument/prepareTypeHierarchy") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "prepareTypeHierarchy needs params");
+      return;
+    }
+    type_hierarchy_prepare(*id, *params);
+    return;
+  }
+  if (method == "typeHierarchy/supertypes") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "supertypes needs params");
+      return;
+    }
+    type_hierarchy_supertypes(*id, *params);
+    return;
+  }
+  if (method == "typeHierarchy/subtypes") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "subtypes needs params");
+      return;
+    }
+    type_hierarchy_subtypes(*id, *params);
     return;
   }
   if (method == "textDocument/codeLens") {
@@ -452,6 +480,7 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("implementationProvider", text::JsonValue::make_bool(true));
   capabilities.set("workspaceSymbolProvider", text::JsonValue::make_bool(true));
   capabilities.set("callHierarchyProvider", text::JsonValue::make_bool(true));
+  capabilities.set("typeHierarchyProvider", text::JsonValue::make_bool(true));
   capabilities.set("codeLensProvider", text::JsonValue::make_object());
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
@@ -595,6 +624,52 @@ void Server::code_lens(const text::JsonValue& id,
     return;
   }
   send_result(id, code_lenses(*document, cache_.get(*document)));
+}
+
+void Server::type_hierarchy_prepare(const text::JsonValue& id,
+                                    const text::JsonValue& params) {
+  Position position;
+  const Document* document = open_document_at(params, &position);
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(
+      id, prepare_type_hierarchy(*document, cache_.get(*document), position));
+}
+
+void Server::type_hierarchy_supertypes(const text::JsonValue& id,
+                                       const text::JsonValue& params) {
+  const text::JsonValue* item = field(params, "item");
+  const text::JsonValue* uri =
+      item != nullptr && item->is_object() ? field(*item, "uri") : nullptr;
+  if (uri == nullptr || !uri->is_string()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document = documents_.find(uri->as_string());
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, supertypes(*document, cache_.get(*document), *item));
+}
+
+void Server::type_hierarchy_subtypes(const text::JsonValue& id,
+                                     const text::JsonValue& params) {
+  const text::JsonValue* item = field(params, "item");
+  const text::JsonValue* uri =
+      item != nullptr && item->is_object() ? field(*item, "uri") : nullptr;
+  if (uri == nullptr || !uri->is_string()) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  const Document* document = documents_.find(uri->as_string());
+  if (document == nullptr) {
+    send_result(id, text::JsonValue::make_array());
+    return;
+  }
+  send_result(id, subtypes(*document, cache_.get(*document), *item));
 }
 
 void Server::call_hierarchy_prepare(const text::JsonValue& id,

@@ -57,6 +57,12 @@ class Server {
   void workspace_symbol(const text::JsonValue& id,
                         const text::JsonValue& params);
   void code_lens(const text::JsonValue& id, const text::JsonValue& params);
+  void type_hierarchy_prepare(const text::JsonValue& id,
+                              const text::JsonValue& params);
+  void type_hierarchy_supertypes(const text::JsonValue& id,
+                                 const text::JsonValue& params);
+  void type_hierarchy_subtypes(const text::JsonValue& id,
+                               const text::JsonValue& params);
   void call_hierarchy_prepare(const text::JsonValue& id,
                               const text::JsonValue& params);
   void call_hierarchy_incoming(const text::JsonValue& id,

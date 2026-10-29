@@ -59,6 +59,8 @@ source_set("lsp") {
     "symbols.h",
     "transport.cc",
     "transport.h",
+    "type_hierarchy.cc",
+    "type_hierarchy.h",
     "typing.cc",
     "typing.h",
     "workspace_symbols.cc",

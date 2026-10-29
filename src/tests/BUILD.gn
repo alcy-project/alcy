@@ -69,6 +69,7 @@ executable("tests") {
     "lsp/server_test.cc",
     "lsp/signature_test.cc",
     "lsp/symbols_test.cc",
+    "lsp/type_hierarchy_test.cc",
     "lsp/workspace_symbols_test.cc",
     "opt/opt_test.cc",
     "overlay/overlay_test.cc",
