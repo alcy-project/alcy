@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <optional>
 #include <string_view>
 
 #include "ast/ast.h"
@@ -107,6 +108,45 @@ bool is_comparison(ast::BinaryOp op) {
   }
 }
 
+// The source bytes one expression covers, or nullopt when the source
+// manager cannot resolve them.
+std::optional<std::string_view> source_of(const LintContext& ctx,
+                                          const ast::ExprNode& node) {
+  const std::optional<std::string_view> bytes =
+      ctx.sources.bytes(node.span.file);
+  if (!bytes.has_value()) {
+    return std::nullopt;
+  }
+  const usize begin = node.span.offset;
+  const usize end = begin + node.span.length;
+  if (begin > bytes->size() || end > bytes->size() || end < begin) {
+    return std::nullopt;
+  }
+  return bytes->substr(node.span.offset, node.span.length);
+}
+
+// Whether moving an expression out of the construct that wraps it
+// cannot change how its neighbours group it.
+bool binds_tightly(ast::ExprKind kind) {
+  using K = ast::ExprKind;
+  switch (kind) {
+    case K::Literal:
+    case K::Path:
+    case K::Struct:
+    case K::Tuple:
+    case K::Array:
+    case K::Call:
+    case K::MethodCall:
+    case K::Field:
+    case K::Index:
+    case K::Unary:
+    case K::Borrow:
+    case K::Deref:
+    case K::Question: return true;
+    default: return false;
+  }
+}
+
 void check_double_negation(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::Unary) {
@@ -121,8 +161,23 @@ void check_double_negation(LintContext& ctx, ast::ExprIdx expr) {
     return;
   }
   const ast::ExprUnary& nested = inner.payload.get<ast::ExprUnary>();
-  if (nested.op == outer.op) {
-    ctx.report<i18n::Key::LintDoubleNegation>(node.span);
+  if (nested.op != outer.op) {
+    return;
+  }
+  const u32 finding = ctx.report<i18n::Key::LintDoubleNegation>(node.span);
+  // The repair replaces both operators with the expression they wrap,
+  // when moving it out cannot change how its neighbours group it. The
+  // bytes are the inner expression exactly as the reader wrote them.
+  if (!nested.inner.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& core = ctx.ast.exprs[nested.inner];
+  if (!binds_tightly(core.kind)) {
+    return;
+  }
+  const std::optional<std::string_view> text = source_of(ctx, core);
+  if (text.has_value()) {
+    ctx.fix(finding, node.span, *text);
   }
 }
 

@@ -119,10 +119,11 @@ source spelling. `types.h` answers what type an expression was checked
 at and whether that type is a float or a shared reference; a cast whose
 two types are the same, an equality over a float, `&*r` over a shared
 reference, a cast from a wider integer or float, and a bool compared
-with a true or false literal are the findings. `useless-cast`,
-`needless-borrow`, and `bool-comparison` also offer a machine-applicable
-repair (`ctx.fix`) when the expression they would put in place binds
-tightly enough that the regrouping cannot change the meaning.
+with a true or false literal are the findings. `double-negation`,
+`useless-cast`, `needless-borrow`, and `bool-comparison` also offer a
+machine-applicable repair (`ctx.fix`) when the expression they would
+put in place binds tightly enough that the regrouping cannot change
+the meaning.
 
 ## Adding a rule
 

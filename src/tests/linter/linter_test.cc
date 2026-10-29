@@ -251,6 +251,30 @@ TEST_CASE("double-negation reports a repeated operator") {
   CHECK(findings_for(run.ctx.bag, "double-negation") == 1);
 }
 
+TEST_CASE("double-negation offers the repair that unwraps it") {
+  Run run;
+  run("fn main() -> i32 {\n  b := true\n  if !!b {\n    ret 1\n  }\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "double-negation") == 1);
+  const diag::Fix* fix = fix_for(run.ctx.bag, "double-negation");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "b");
+  }
+}
+
+TEST_CASE("double-negation reports without a repair it cannot prove") {
+  Run run;
+  // The wrapped side is a comparison, which does not bind tightly; the
+  // rule reports but leaves the bytes alone.
+  run("fn main() -> i32 {\n  a := 1\n  b := 2\n"
+      "  if !!(a == b) {\n    ret 1\n  }\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "double-negation") == 1);
+  CHECK(fix_for(run.ctx.bag, "double-negation") == nullptr);
+}
+
 TEST_CASE("nested-if reports an if whose only statement is an if") {
   Run run;
   run("fn main() -> i32 {\n  a := true\n  b := true\n  if a {\n    if b {\n"
