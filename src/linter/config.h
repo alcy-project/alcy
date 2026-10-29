@@ -17,7 +17,7 @@ namespace linter {
 
 // Configuration for the goal package. The file is optional; absent
 // means every rule keeps its default level and options. See
-// docs/adr/0075-the-linter-is-a-library-over-the-frontend.md.
+// docs/adr/0082-the-linter-is-a-library-over-the-frontend.md.
 constexpr std::string_view LINT_FILE_NAME = "lint.toml";
 
 // One rule's resolved settings. The level may be Allow even though the

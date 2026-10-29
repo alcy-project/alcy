@@ -34,6 +34,9 @@ source_set("linter") {
     "rules/item_rules.cc",
     "rules/rules.cc",
     "rules/rules.h",
+    "rules/type_rules.cc",
+    "types.cc",
+    "types.h",
     "walk.cc",
     "walk.h",
   ]

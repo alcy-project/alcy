@@ -548,6 +548,10 @@
   F(LintConfigUnknownRule, Error, Lint, "unknown lint rule '{}' in {}") \
   F(LintDoubleNegation, Warning, Lint, "double negation is a no-op") \
   F(LintEmptyLoop, Warning, Lint, "this loop has an empty body") \
+  F(LintFloatEquality, Warning, Lint, "comparing floating-point values for equality is exact; use an ordering or an epsilon") \
+  F(LintNeedlessBorrow, Warning, Lint, "this borrow of a dereference is the reference itself") \
+  F(LintLossyCast, Warning, Lint, "this cast narrows {} to {}; the value may not fit") \
+  F(LintUselessCast, Warning, Lint, "this cast does not change the value's type") \
   F(LintMissingDocs, Warning, Lint, "public item {} is missing a documentation comment") \
   F(LintNestedIf, Warning, Lint, "nested if can be collapsed into a single condition") \
   F(LintSelfComparison, Warning, Lint, "comparison of a value with itself") \

@@ -98,6 +98,44 @@ struct NestedIf {
   static void run(LintContext& ctx);
 };
 
+// Rules over the checked types: the analyzer's answer for an
+// expression rather than the spelling the source wrote.
+struct UselessCast {
+  static constexpr std::string_view ID = "useless-cast";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
+  static constexpr LintCode CODE = LintCode::UselessCast;
+  static constexpr std::string_view SUMMARY =
+      "a cast to the type the value already has";
+  static void run(LintContext& ctx);
+};
+
+struct FloatEquality {
+  static constexpr std::string_view ID = "float-equality";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Allow;
+  static constexpr LintCode CODE = LintCode::FloatEquality;
+  static constexpr std::string_view SUMMARY =
+      "an equality test on floating-point values";
+  static void run(LintContext& ctx);
+};
+
+struct NeedlessBorrow {
+  static constexpr std::string_view ID = "needless-borrow";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
+  static constexpr LintCode CODE = LintCode::NeedlessBorrow;
+  static constexpr std::string_view SUMMARY =
+      "a borrow of a dereference that is the reference itself";
+  static void run(LintContext& ctx);
+};
+
+struct LossyCast {
+  static constexpr std::string_view ID = "lossy-cast";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Allow;
+  static constexpr LintCode CODE = LintCode::LossyCast;
+  static constexpr std::string_view SUMMARY =
+      "a cast that narrows the value's scalar type";
+  static void run(LintContext& ctx);
+};
+
 // Rules over item declarations.
 struct MissingDocs {
   static constexpr std::string_view ID = "missing-docs";

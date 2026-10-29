@@ -1,0 +1,3 @@
+subcommand = "lint"
+exit = 0
+contains = ["warning[useless-cast]"]

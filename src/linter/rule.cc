@@ -26,6 +26,10 @@ constexpr auto RULES = rule_table<rules::UnusedVariable,
                                   rules::DoubleNegation,
                                   rules::SelfComparison,
                                   rules::NestedIf,
+                                  rules::UselessCast,
+                                  rules::FloatEquality,
+                                  rules::NeedlessBorrow,
+                                  rules::LossyCast,
                                   rules::MissingDocs,
                                   rules::TooManyArguments>();
 

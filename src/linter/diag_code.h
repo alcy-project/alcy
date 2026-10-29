@@ -30,6 +30,10 @@ enum class LintCode : u8 {
   TooManyArguments = 18,
   EmptyLoop = 19,
   Shadow = 20,
+  UselessCast = 21,
+  FloatEquality = 22,
+  NeedlessBorrow = 23,
+  LossyCast = 24,
 };
 
 }  // namespace linter

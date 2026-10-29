@@ -1,0 +1,2 @@
+[rules]
+float-equality = "warn"

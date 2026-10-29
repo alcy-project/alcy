@@ -66,6 +66,19 @@ std::string_view finding_text(const pipeline::PipelineContext& ctx,
   return text;
 }
 
+// The repair a finding of one rule carries, or null when it offers
+// none. A case asserts the bytes a client would write, not just that a
+// repair exists.
+const diag::Fix* fix_for(const diag::DiagBag& bag, std::string_view rule) {
+  const diag::Fix* fix = nullptr;
+  bag.for_each([&](const diag::Diagnostic& finding) {
+    if (finding.check_name == rule) {
+      fix = finding.fix;
+    }
+  });
+  return fix;
+}
+
 struct Run {
   pipeline::PipelineContext ctx;
   LintOutcome outcome{};
@@ -153,6 +166,54 @@ TEST_CASE("nested-if reports an if whose only statement is an if") {
       "      println(\"x\")\n    }\n  }\n  ret 0\n}\n",
       default_config(run.ctx));
   CHECK(findings_for(run.ctx.bag, "nested-if") == 1);
+}
+
+TEST_CASE("useless-cast reports a cast to the value's own type") {
+  Run run;
+  run("fn main() -> i32 {\n  n := 1\n  m := n as i32\n  ret m\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "useless-cast") == 1);
+  const diag::Fix* fix = fix_for(run.ctx.bag, "useless-cast");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "n");
+  }
+}
+
+TEST_CASE("float-equality is off until it is asked for") {
+  Run run;
+  const std::string_view source =
+      "fn main() -> i32 {\n  a := 1.0f64\n  b := 2.0f64\n"
+      "  if a == b {\n    ret 1\n  }\n  ret 0\n}\n";
+  run(source, default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "float-equality") == 0);
+  Run asked;
+  asked(source, config_from(asked.ctx, "[rules]\nfloat-equality = \"warn\"\n"));
+  CHECK(findings_for(asked.ctx.bag, "float-equality") == 1);
+}
+
+TEST_CASE("needless-borrow reports a borrow of a shared reference") {
+  Run run;
+  run("fn main() -> i32 {\n  n := 7\n  r := &n\n  s := &*r\n  ret *s\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "needless-borrow") == 1);
+  const diag::Fix* fix = fix_for(run.ctx.bag, "needless-borrow");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "r");
+  }
+}
+
+TEST_CASE("lossy-cast reports a narrowing cast when asked") {
+  Run run;
+  const std::string_view source =
+      "fn main() -> i32 {\n  big := 300i64\n  small := big as i32\n  ret "
+      "small\n}\n";
+  run(source, default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "lossy-cast") == 0);
+  Run asked;
+  asked(source, config_from(asked.ctx, "[rules]\nlossy-cast = \"warn\"\n"));
+  CHECK(findings_for(asked.ctx.bag, "lossy-cast") == 1);
 }
 
 TEST_CASE("unreachable-code reports the statement after a break") {
