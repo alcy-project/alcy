@@ -553,6 +553,8 @@
   F(LintConfigUnknownRule, Error, Lint, "unknown lint rule '{}' in {}") \
   F(LintFixWriteFailed, Error, Lint, "cannot write the repair to {}") \
   F(LintBoolComparison, Warning, Lint, "this comparison can be simplified") \
+  F(LintDeadCode, Warning, Lint, "function {} is never called") \
+  F(LintDeadCodeNote, Note, Lint, "if this is meant as a public surface, declare it pub") \
   F(LintDoubleNegation, Warning, Lint, "double negation is a no-op") \
   F(LintEmptyLoop, Warning, Lint, "this loop has an empty body") \
   F(LintFloatEquality, Warning, Lint, "comparing floating-point values for equality is exact; use an ordering or an epsilon") \

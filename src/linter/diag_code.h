@@ -37,6 +37,7 @@ enum class LintCode : u8 {
   LossyCast = 24,
   UnusedImport = 25,
   BoolComparison = 26,
+  DeadCode = 27,
 };
 
 }  // namespace linter

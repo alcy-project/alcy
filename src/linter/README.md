@@ -77,18 +77,28 @@ complete gate.
 | `needless-borrow` | warn | a borrow of a dereference that is the reference |
 | `lossy-cast` | allow | a cast that narrows the value's scalar type |
 | `bool-comparison` | warn | a bool compared with a true or false literal |
+| `dead-code` | allow | a function no call in the package reaches |
 | `missing-docs` | allow | a `pub` item without a doc comment |
 | `too-many-arguments` | warn | a function above `max-args` parameters |
 | `unused-import` | warn | an import no path in the module names |
 
-`unreachable-code` is off by default because lowering already warns
-about the same expression (`WD003`); it is there for a caller that
-lints without lowering. `float-equality` is opt-in because comparing
-floats exactly is sometimes the point; the rule reports the comparison
-that is usually a mistake, not every one. A rule that suppresses a
+`unreachable-code` and `dead-code` are off by default: the lowering
+pass already warns about the same expression (`WD003`), and a package
+in progress always has functions waiting for their first caller.
+`float-equality` is opt-in because comparing floats exactly is
+sometimes the point; the rule reports the comparison that is usually a
+mistake, not every one. A rule that suppresses a
 false positive is preferred to one that guesses: `unused-mut` counts a
 method receiver as a write, because the syntax does not say whether the
 receiver is taken newly exclusively.
+
+`dead-code` reads the checker's call graph, not the source: a finding
+is a private function whose (module, signature) pair no recorded call
+target names. The entry point, `pub` declarations, and spec
+implementations are the surface the rule keeps out of the question; the
+goal package alone is read, so the toolchain's own functions are never
+findings. It is opt-in because a package in progress always has
+functions waiting for their first caller.
 
 `unused-import` reads the path heads the walk recorded. An import is
 used when the module names its local name as the head of a value path, a

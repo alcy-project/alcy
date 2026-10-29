@@ -32,6 +32,7 @@ source_set("linter") {
     "rule.h",
     "rules/bindings_rules.cc",
     "rules/control_flow_rules.cc",
+    "rules/dead_code_rules.cc",
     "rules/expression_rules.cc",
     "rules/import_rules.cc",
     "rules/item_rules.cc",

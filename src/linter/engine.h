@@ -28,4 +28,10 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
                     const analyzer::CheckedPackage& package,
                     const LintConfig& config);
 
+// Whether the module is the goal package's own code, which is what
+// makes a module lintable. The engine skips the rest; a rule whose
+// subject reaches past that boundary (the dead-code rule reads the call
+// graph across every module) asks this rather than rebuilding it.
+bool lintable(const analyzer::ModuleTree& tree, u32 module);
+
 }  // namespace linter

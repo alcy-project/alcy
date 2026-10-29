@@ -33,7 +33,8 @@ constexpr auto RULES = rule_table<rules::UnusedVariable,
                                   rules::MissingDocs,
                                   rules::TooManyArguments,
                                   rules::UnusedImport,
-                                  rules::BoolComparison>();
+                                  rules::BoolComparison,
+                                  rules::DeadCode>();
 
 }  // namespace
 

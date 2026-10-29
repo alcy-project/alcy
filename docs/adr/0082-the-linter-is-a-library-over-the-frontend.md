@@ -83,3 +83,9 @@ lint exists for a caller that lints without lowering.
 Out of scope for this record: per-rule option schemas beyond the
 `max-args` and `ignore` options, plugin or dynamically loaded rules,
 and linting dependencies.
+
+A later revision added `dead-code`, which reads the checker's call
+target table rather than the source: reachability is the resolution the
+analyzer already did, restricted to the goal package and its entry
+point, with `pub` declarations and spec implementations kept out of the
+question.

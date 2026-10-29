@@ -167,6 +167,17 @@ struct TooManyArguments {
   static void check_item(LintContext& ctx, ast::ItemIdx item);
 };
 
+// A module rule: reachability from the entry point over the checker's
+// recorded call graph. A function no call reaches, that is not pub, not
+// a spec implementation, and not the entry point, is reported.
+struct DeadCode {
+  static constexpr std::string_view ID = "dead-code";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Allow;
+  static constexpr LintCode CODE = LintCode::DeadCode;
+  static constexpr std::string_view SUMMARY = "a function no call reaches";
+  static void run(LintContext& ctx);
+};
+
 // A module rule: it reads the name-usage table the engine records during
 // its walk and reports the imports no path names.
 struct UnusedImport {

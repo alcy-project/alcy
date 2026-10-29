@@ -452,6 +452,65 @@ TEST_CASE("ignore silences an unused import") {
   }
 }
 
+TEST_CASE("dead-code reports an uncalled private function") {
+  Run run;
+  run("fn main() -> i32 {\n  ret 0\n}\n\n"
+      "fn orphaned() -> i32 {\n  ret 1\n}\n",
+      config_from(run.ctx, "[rules]\ndead-code = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "dead-code") == 1);
+}
+
+TEST_CASE("dead-code leaves a called function alone") {
+  Run run;
+  run("fn main() -> i32 {\n  ret used()\n}\n\n"
+      "fn used() -> i32 {\n  ret 1\n}\n",
+      config_from(run.ctx, "[rules]\ndead-code = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "dead-code") == 0);
+}
+
+TEST_CASE("dead-code is off until it is asked for") {
+  Run run;
+  run("fn main() -> i32 {\n  ret 0\n}\n\n"
+      "fn orphaned() -> i32 {\n  ret 1\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "dead-code") == 0);
+}
+
+TEST_CASE("dead-code leaves a pub function and the entry point alone") {
+  Run run;
+  run("fn main() -> i32 {\n  ret 0\n}\n\n"
+      "pub fn api() -> i32 {\n  ret 1\n}\n",
+      config_from(run.ctx, "[rules]\ndead-code = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "dead-code") == 0);
+}
+
+TEST_CASE("dead-code counts a method call as reaching its method") {
+  Run run;
+  run("struct P { x: i32 }\n\nimpl P {\n"
+      "  fn get(self: Self) -> i32 {\n    ret self.x\n  }\n}\n\n"
+      "fn main() -> i32 {\n  p := P { x: 1 }\n  ret p.get()\n}\n",
+      config_from(run.ctx, "[rules]\ndead-code = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "dead-code") == 0);
+}
+
+TEST_CASE("dead-code reports an uncalled method") {
+  Run run;
+  run("struct P { x: i32 }\n\nimpl P {\n"
+      "  fn unused_method(self: Self) -> i32 {\n    ret self.x\n  }\n}\n\n"
+      "fn main() -> i32 {\n  p := P { x: 1 }\n  ret p.x\n}\n",
+      config_from(run.ctx, "[rules]\ndead-code = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "dead-code") == 1);
+}
+
+TEST_CASE("dead-code reads the goal package only") {
+  // A single-file lint stages the standard library; the rule must not
+  // report the toolchain's own functions, whatever its level.
+  Run run;
+  run("fn main() -> i32 {\n  x := 1\n  ret x\n}\n",
+      config_from(run.ctx, "[rules]\ndead-code = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "dead-code") == 0);
+}
+
 TEST_CASE("while-true offers a machine-applicable repair") {
   Run run;
   run("fn main() -> i32 {\n  mut n := 0\n  while true {\n"

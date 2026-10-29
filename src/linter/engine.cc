@@ -25,18 +25,6 @@ namespace linter {
 
 namespace {
 
-// Whether the module is the goal package's own code. A staged prelude
-// is the toolchain's and a path dependency's modules belong to the
-// package that declares them; lint.toml configures the goal package
-// alone, so neither is checked.
-bool lintable(const analyzer::ModuleTree& tree, u32 module) {
-  const analyzer::ModuleNode& node = *tree.modules[module];
-  if (node.is_staged) {
-    return false;
-  }
-  return tree.module_root(module) == analyzer::NO_PACKAGE_ROOT;
-}
-
 // A rule's position in the registry, which is the index the settings
 // are read by. The active lists hold rows from the same array, so the
 // difference is the position.
@@ -83,6 +71,17 @@ void collect_path(LintContext& ctx, ast::PathIdx path) {
 }
 
 }  // namespace
+
+bool lintable(const analyzer::ModuleTree& tree, u32 module) {
+  // A staged prelude is the toolchain's and a path dependency's modules
+  // belong to the package that declares them; lint.toml configures the
+  // goal package alone, so neither is checked.
+  const analyzer::ModuleNode& node = *tree.modules[module];
+  if (node.is_staged) {
+    return false;
+  }
+  return tree.module_root(module) == analyzer::NO_PACKAGE_ROOT;
+}
 
 LintStats run_lints(pipeline::PipelineContext& ctx,
                     const analyzer::CheckedPackage& package,

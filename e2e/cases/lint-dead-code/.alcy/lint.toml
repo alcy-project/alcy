@@ -1,0 +1,2 @@
+[rules]
+dead-code = "warn"
