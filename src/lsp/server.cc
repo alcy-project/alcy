@@ -340,6 +340,15 @@ void Server::handle_request(const text::JsonValue& message) {
     semantic_tokens_in_range(*id, *params);
     return;
   }
+  if (method == "textDocument/semanticTokens/full/delta") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "semanticTokens delta needs params");
+      return;
+    }
+    semantic_tokens_delta(*id, *params);
+    return;
+  }
   if (method == "textDocument/semanticTokens/full") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -467,7 +476,9 @@ void Server::initialize(const text::JsonValue& id) {
   legend.set("tokenTypes", semantic_token_types());
   legend.set("tokenModifiers", text::JsonValue::make_array());
   semantic.set("legend", std::move(legend));
-  semantic.set("full", text::JsonValue::make_bool(true));
+  text::JsonValue full = text::JsonValue::make_object();
+  full.set("delta", text::JsonValue::make_bool(true));
+  semantic.set("full", std::move(full));
   semantic.set("range", text::JsonValue::make_bool(true));
   capabilities.set("semanticTokensProvider", std::move(semantic));
   capabilities.set("documentHighlightProvider",
@@ -944,7 +955,24 @@ void Server::semantic_tokens_full(const text::JsonValue& id,
     send_result(id, semantic_tokens_empty());
     return;
   }
-  send_result(id, semantic_tokens(*document, cache_.get(*document)));
+  send_result(id, tokens_.full(*document, cache_.get(*document)));
+}
+
+void Server::semantic_tokens_delta(const text::JsonValue& id,
+                                   const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  if (text_document == nullptr || !text_document->is_object()) {
+    send_result(id, semantic_tokens_empty());
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  if (document == nullptr) {
+    send_result(id, semantic_tokens_empty());
+    return;
+  }
+  const std::string_view previous = string_field(params, "previousResultId");
+  send_result(id, tokens_.delta(*document, cache_.get(*document), previous));
 }
 
 void Server::semantic_tokens_in_range(const text::JsonValue& id,
@@ -1031,6 +1059,7 @@ void Server::did_close(const text::JsonValue& params) {
   const std::string_view uri = string_field(*text_document, "uri");
   documents_.close(uri);
   cache_.erase(uri);
+  tokens_.erase(uri);
   publish_empty_diagnostics(uri);
 }
 

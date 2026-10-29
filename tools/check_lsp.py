@@ -448,7 +448,16 @@ def main() -> int:
                 }
             },
         },
-        {"jsonrpc": "2.0", "id": 30, "method": "shutdown", "params": None},
+        {
+            "jsonrpc": "2.0",
+            "id": 31,
+            "method": "textDocument/semanticTokens/full/delta",
+            "params": {
+                "textDocument": {"uri": MAIN_URI},
+                "previousResultId": "0",
+            },
+        },
+        {"jsonrpc": "2.0", "id": 32, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
 
@@ -501,6 +510,11 @@ def main() -> int:
         return fail("initialize did not advertise semanticTokensProvider")
     if capabilities.get("semanticTokensProvider", {}).get("range") is not True:
         return fail("initialize did not advertise semantic token ranges")
+    if (
+        capabilities.get("semanticTokensProvider", {}).get("full", {}).get("delta")
+        is not True
+    ):
+        return fail("initialize did not advertise semantic token deltas")
     if capabilities.get("documentHighlightProvider") is not True:
         return fail("initialize did not advertise documentHighlightProvider")
     if capabilities.get("selectionRangeProvider") is not True:
@@ -760,7 +774,15 @@ def main() -> int:
     ):
         return fail(f"typeHierarchy missed the spec: {supers!r}")
 
-    if by_id.get(30, {}).get("result", "missing") is not None:
+    delta = by_id.get(31, {}).get("result")
+    if (
+        not isinstance(delta, dict)
+        or "resultId" not in delta
+        or not isinstance(delta.get("edits"), list)
+    ):
+        return fail(f"semanticTokens delta answered nothing: {delta!r}")
+
+    if by_id.get(32, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")
 
     print("lsp: smoke passed")

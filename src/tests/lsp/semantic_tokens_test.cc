@@ -5,6 +5,7 @@
 
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "doctest/doctest.h"
@@ -57,6 +58,38 @@ u32 type_at(const std::vector<Decoded>& tokens, u32 line, u32 character) {
     }
   }
   return 0;
+}
+
+std::vector<u32> flat_data(const text::JsonValue& result) {
+  std::vector<u32> out;
+  const text::JsonValue* data = result.find("data");
+  if (data == nullptr) {
+    return out;
+  }
+  for (const text::JsonValue& value : data->as_array()) {
+    out.push_back(static_cast<u32>(value.as_number()));
+  }
+  return out;
+}
+
+std::vector<u32> apply_edits(const std::vector<u32>& before,
+                             const text::JsonValue& edits) {
+  std::vector<u32> out = before;
+  for (const text::JsonValue& edit : edits.as_array()) {
+    const usize start = static_cast<usize>(edit.find("start")->as_number());
+    const usize remove =
+        static_cast<usize>(edit.find("deleteCount")->as_number());
+    out.erase(out.begin() + start, out.begin() + start + remove);
+    const text::JsonValue* inserted = edit.find("data");
+    if (inserted != nullptr) {
+      std::vector<u32> values;
+      for (const text::JsonValue& value : inserted->as_array()) {
+        values.push_back(static_cast<u32>(value.as_number()));
+      }
+      out.insert(out.begin() + start, values.begin(), values.end());
+    }
+  }
+  return out;
 }
 
 }  // namespace
@@ -144,6 +177,41 @@ TEST_CASE("A multi-line comment becomes one token per line") {
       decode(semantic_tokens(document, analysis));
   CHECK(type_at(tokens, 0, 0) == 13);
   CHECK(type_at(tokens, 1, 0) == 13);
+}
+
+TEST_CASE("A delta after an edit reproduces the new array") {
+  SemanticTokensCache cache;
+  const Document before("file:///main.al", "alcy", 1,
+                        "fn main() -> i32 {\n  x := 1\n  ret x\n}\n");
+  const DocumentAnalysis before_analysis(before);
+  const text::JsonValue full = cache.full(before, before_analysis);
+  const std::string_view result_id = full.find("resultId")->as_string();
+  const std::vector<u32> old_data = flat_data(full);
+
+  const Document after("file:///main.al", "alcy", 2,
+                       "fn main() -> i32 {\n  x := 1\n  y := 2\n  ret x\n}\n");
+  const DocumentAnalysis after_analysis(after);
+  const text::JsonValue delta = cache.delta(after, after_analysis, result_id);
+  const text::JsonValue* edits = delta.find("edits");
+  CHECK(edits != nullptr);
+  if (edits == nullptr) {
+    return;
+  }
+  CHECK(!edits->as_array().empty());
+  const std::vector<u32> applied = apply_edits(old_data, *edits);
+  const std::vector<u32> expected =
+      flat_data(semantic_tokens(after, after_analysis));
+  CHECK(applied == expected);
+}
+
+TEST_CASE("A stale previous id answers the whole array") {
+  SemanticTokensCache cache;
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() -> i32 {\n  ret 0\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue delta = cache.delta(document, analysis, "stale");
+  CHECK(delta.find("data") != nullptr);
+  CHECK(delta.find("edits") == nullptr);
 }
 
 }  // namespace lsp

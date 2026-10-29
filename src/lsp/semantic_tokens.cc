@@ -5,10 +5,12 @@
 
 #include <algorithm>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "analyzer/types.h"
 #include "ast/ast.h"
@@ -278,17 +280,17 @@ text::JsonValue semantic_tokens_empty() {
 
 namespace {
 
-text::JsonValue semantic_tokens_in(const Document& document,
-                                   const DocumentAnalysis& analysis,
-                                   usize range_begin,
-                                   usize range_end) {
+std::vector<u32> semantic_tokens_in(const Document& document,
+                                    const DocumentAnalysis& analysis,
+                                    usize range_begin,
+                                    usize range_end) {
   const std::string_view source = document.text();
   SymbolKinds kinds;
   if (analysis.ok()) {
     collect(analysis, kinds);
   }
 
-  text::JsonValue data = text::JsonValue::make_array();
+  std::vector<u32> data;
   u32 previous_line = 0;
   u32 previous_character = 0;
   bool first = true;
@@ -302,12 +304,11 @@ text::JsonValue semantic_tokens_in(const Document& document,
     const u32 delta_character = first || start.line != previous_line
                                     ? start.character
                                     : start.character - previous_character;
-    data.push(text::JsonValue::make_number(static_cast<f64>(delta_line)));
-    data.push(text::JsonValue::make_number(static_cast<f64>(delta_character)));
-    data.push(text::JsonValue::make_number(static_cast<f64>(length)));
-    data.push(
-        text::JsonValue::make_number(static_cast<f64>(static_cast<u8>(type))));
-    data.push(text::JsonValue::make_number(0));
+    data.push_back(delta_line);
+    data.push_back(delta_character);
+    data.push_back(length);
+    data.push_back(static_cast<u32>(type));
+    data.push_back(0);
     previous_line = start.line;
     previous_character = start.character;
     first = false;
@@ -374,16 +375,68 @@ text::JsonValue semantic_tokens_in(const Document& document,
     }
   }
 
+  return data;
+}
+
+text::JsonValue tokens_json(std::span<const u32> data,
+                            std::string_view result_id) {
+  text::JsonValue array = text::JsonValue::make_array();
+  for (const u32 value : data) {
+    array.push(text::JsonValue::make_number(static_cast<f64>(value)));
+  }
   text::JsonValue result = text::JsonValue::make_object();
-  result.set("data", std::move(data));
+  result.set("data", std::move(array));
+  if (!result_id.empty()) {
+    result.set("resultId",
+               text::JsonValue::make_string(std::string(result_id)));
+  }
   return result;
+}
+
+text::JsonValue compute_edits(std::span<const u32> previous,
+                              std::span<const u32> current) {
+  usize prefix = 0;
+  while (prefix < previous.size() && prefix < current.size() &&
+         previous[prefix] == current[prefix]) {
+    ++prefix;
+  }
+  prefix -= prefix % 5;
+  usize suffix = 0;
+  while (suffix < previous.size() - prefix &&
+         suffix < current.size() - prefix &&
+         previous[previous.size() - 1 - suffix] ==
+             current[current.size() - 1 - suffix]) {
+    ++suffix;
+  }
+  suffix -= suffix % 5;
+
+  text::JsonValue edits = text::JsonValue::make_array();
+  const usize removed = previous.size() - prefix - suffix;
+  const usize added = current.size() - prefix - suffix;
+  if (removed != 0 || added != 0) {
+    text::JsonValue edit = text::JsonValue::make_object();
+    edit.set("start", text::JsonValue::make_number(static_cast<f64>(prefix)));
+    edit.set("deleteCount",
+             text::JsonValue::make_number(static_cast<f64>(removed)));
+    if (added != 0) {
+      text::JsonValue inserted = text::JsonValue::make_array();
+      for (usize i = prefix; i < current.size() - suffix; ++i) {
+        inserted.push(
+            text::JsonValue::make_number(static_cast<f64>(current[i])));
+      }
+      edit.set("data", std::move(inserted));
+    }
+    edits.push(std::move(edit));
+  }
+  return edits;
 }
 
 }  // namespace
 
 text::JsonValue semantic_tokens(const Document& document,
                                 const DocumentAnalysis& analysis) {
-  return semantic_tokens_in(document, analysis, 0, document.text().size());
+  return tokens_json(
+      semantic_tokens_in(document, analysis, 0, document.text().size()), {});
 }
 
 text::JsonValue semantic_tokens_range(const Document& document,
@@ -392,7 +445,43 @@ text::JsonValue semantic_tokens_range(const Document& document,
                                       Position end) {
   const usize begin = document.index().byte_offset(document.text(), start);
   const usize finish = document.index().byte_offset(document.text(), end);
-  return semantic_tokens_in(document, analysis, begin, finish);
+  return tokens_json(semantic_tokens_in(document, analysis, begin, finish), {});
+}
+
+text::JsonValue SemanticTokensCache::full(const Document& document,
+                                          const DocumentAnalysis& analysis) {
+  std::vector<u32> data =
+      semantic_tokens_in(document, analysis, 0, document.text().size());
+  const std::string id = std::to_string(next_id_++);
+  entries_.insert_or_assign(document.uri(), Entry{id, std::move(data)});
+  const Entry& entry = entries_.at(document.uri());
+  return tokens_json(entry.data, entry.result_id);
+}
+
+text::JsonValue SemanticTokensCache::delta(
+    const Document& document,
+    const DocumentAnalysis& analysis,
+    std::string_view previous_result_id) {
+  std::vector<u32> current =
+      semantic_tokens_in(document, analysis, 0, document.text().size());
+  const std::string id = std::to_string(next_id_++);
+  const auto entry = entries_.find(document.uri());
+  if (entry == entries_.end() ||
+      entry->second.result_id != previous_result_id) {
+    entries_.insert_or_assign(document.uri(), Entry{id, std::move(current)});
+    const Entry& stored = entries_.at(document.uri());
+    return tokens_json(stored.data, stored.result_id);
+  }
+  text::JsonValue edits = compute_edits(entry->second.data, current);
+  entries_.insert_or_assign(document.uri(), Entry{id, std::move(current)});
+  text::JsonValue result = text::JsonValue::make_object();
+  result.set("resultId", text::JsonValue::make_string(id));
+  result.set("edits", std::move(edits));
+  return result;
+}
+
+void SemanticTokensCache::erase(std::string_view uri) {
+  entries_.erase(std::string(uri));
 }
 
 }  // namespace lsp

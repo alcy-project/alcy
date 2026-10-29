@@ -9,6 +9,7 @@
 #include "fpag/base/numeric.h"
 #include "lsp/analysis_cache.h"
 #include "lsp/document.h"
+#include "lsp/semantic_tokens.h"
 #include "lsp/transport.h"
 #include "text/json.h"
 
@@ -47,6 +48,8 @@ class Server {
                             const text::JsonValue& params);
   void semantic_tokens_in_range(const text::JsonValue& id,
                                 const text::JsonValue& params);
+  void semantic_tokens_delta(const text::JsonValue& id,
+                             const text::JsonValue& params);
   void selection_range(const text::JsonValue& id,
                        const text::JsonValue& params);
   void prepare_rename(const text::JsonValue& id, const text::JsonValue& params);
@@ -90,6 +93,7 @@ class Server {
   Transport& transport_;
   DocumentStore documents_;
   AnalysisCache cache_;
+  SemanticTokensCache tokens_;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;
