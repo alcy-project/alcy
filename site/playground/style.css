@@ -204,9 +204,13 @@ body.resizing {
      column, and the pane clips it. A stretched, `overflow: hidden` box
      would hold only the first paneful of numbers. */
   align-self: flex-start;
+  /* The pane's content box already stops short of the textarea's horizontal
+     scrollbar, since that bar comes off its border box too. `app.js` adds
+     the height back on one side of the numbers and takes it off the other,
+     so the column tallies no more than the scrolling area does and travels
+     with the mirror to the same bottom. */
+  padding: 0 4px var(--editor-scrollbar-height, 0px) 0;
   overflow: visible;
-  padding: var(--editor-padding);
-  padding-right: 4px;
   min-width: 3ch;
   text-align: right;
   color: var(--fg-faint);
@@ -246,12 +250,23 @@ body.resizing {
   background: transparent;
   color: var(--fg);
   scrollbar-width: none;
+  /* A bar taken out of the scrollport would shorten the mirror as well,
+     and the padding below measures its own bar; the mirror reaches the
+     textarea's scroll offsets alone. */
+  scrollbar-height: none;
   /* The mirror hides its scrollbars while the textarea keeps them, so
-     without this the two would clamp at different scroll maxima and the
-     caret would drift from the glyphs at the right and bottom edges.
+     without this the two would clamp at different scroll maxima.
+     The vertical bar only narrows the content, which the padding covers.
+     The horizontal bar, though, takes a band off the bottom of the
+     textarea that the scrolling area starts above but the mirror's
+     padding does not reach, leaving the two maxima exactly one bar
+     apart. The band is reserved below the padding to match.
      app.js measures the textarea's scrollbars into these two values. */
   padding-right: calc(var(--editor-pad-x) + var(--editor-scrollbar-width, 0px));
-  padding-bottom: calc(var(--editor-pad-y) + var(--editor-scrollbar-height, 0px));
+  padding-bottom: calc(
+    var(--editor-pad-y) + var(--editor-scrollbar-height, 0px) +
+      var(--editor-scrollbar-height, 0px)
+  );
 }
 
 /* The mirror must lay text out with the textarea's font exactly. A `code`
