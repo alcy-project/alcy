@@ -1190,7 +1190,7 @@ def main():
 
     gaps = sum(1 for c in CASES if c[3])
     if unexpected:
-        print(f"\nborrrow rules: {len(unexpected)} unexpected deviation(s)")
+        print(f"\nborrow rules: {len(unexpected)} unexpected deviation(s)")
         for group, name, expect, got, reason in unexpected:
             print(f"  - {group}/{name}: want {expect}, got {got} {reason}")
         return 1

@@ -131,14 +131,33 @@ def format_files(dry_run: bool) -> int:
     # normalizes whatever they rewrote.
     commands = tool_commands(dry_run) + create_commands(target_dirs, dry_run)
     # Every command's exit code is the gate; a discarded one lets both
-    # clang-format drift and a license that would be applied pass.
+    # clang-format drift and a license that would be applied pass. The
+    # output is captured so the gate's answer is its own summary, and a
+    # failure's diagnostics print where they can be read.
     for cmd in commands:
-        if subprocess.run(cmd, cwd=project_root_dir).returncode != 0:
+        proc = subprocess.run(cmd, cwd=project_root_dir, capture_output=True, text=True)
+        if proc.returncode != 0:
             ok = False
+            print(f"format: failed: {' '.join(cmd)}")
+            if proc.stdout:
+                print(proc.stdout, end="")
+            if proc.stderr:
+                print(proc.stderr, end="")
+        elif not dry_run and proc.stdout:
+            # A fix that changed something names it; a fix that changed
+            # nothing is the silence the summary carries.
+            print(f"--- {' '.join(cmd)}")
+            print(proc.stdout, end="")
 
     if len(commands) == 0:
         print("None of the files were formatted")
         ok = False
+    if ok:
+        print(
+            "format: the tree is formatted"
+            if dry_run
+            else "format: the sources are formatted"
+        )
     return 0 if ok else 1
 
 

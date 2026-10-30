@@ -80,6 +80,10 @@ def main() -> int:
 
     def run(*command: str) -> None:
         """One gate: the first failure is where the run stops."""
+        # The boundary names the gate before its output, so a silent gate
+        # and a talkative one read as steps of one run rather than as
+        # stray output.
+        print(f"==> {' '.join(command)}", flush=True)
         if subprocess.run(list(command)).returncode != 0:
             sys.exit(f"error: gate failed: {' '.join(command)}")
 

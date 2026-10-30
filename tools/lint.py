@@ -308,6 +308,12 @@ def lint_files(
             print("lint: this shard has no files")
             return 0
     enumerated = len(files) + len(comp_files) + len(header_files)
+    # The tidy is the run's long stretch; its size is worth naming before
+    # the silence starts.
+    print(
+        f"lint: {len(comp_files) + len(header_files)} file(s) to tidy, "
+        f"{enumerated} in the gate's scope"
+    )
 
     if whole_tree:
         # Every source and header file under project_source_dirs stays
