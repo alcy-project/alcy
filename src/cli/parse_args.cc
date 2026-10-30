@@ -194,6 +194,7 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
           c.fmt_files.push_back(name);
         }
       }
+      c.file = {};
     }
     if (!positionals.empty()) {
       c.input = positionals[0];

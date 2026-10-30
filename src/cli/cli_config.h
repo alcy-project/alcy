@@ -67,7 +67,7 @@ struct CliConfig {
   // absent; the cli substitutes "."). Borrows argv storage, so a config
   // must not outlive the argument vector it was parsed from.
   std::string_view input;
-  // Single file for `check --file`, naming one source explicitly so the
+  // A single source named with `--file` (build/check/fmt/lint), so the
   // positional stays a package directory. Borrows argv storage like
   // input.
   std::string_view file;

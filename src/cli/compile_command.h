@@ -30,4 +30,3 @@ base::Result<pipeline::StdSelection, diag::Reported> compile_selection(
     pipeline::PipelineContext& ctx);
 
 }  // namespace cli
-
