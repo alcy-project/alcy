@@ -29,6 +29,15 @@ struct BindingIndex;
 struct FieldUsage;
 struct NameUsage;
 
+// Whether the source line of `span` silences `rule`: an
+// `alcy-lint-ignore` comment on that line, or an
+// `alcy-lint-ignore-next-line` comment on the line above. A directive
+// with no list silences every rule; one followed by `: ` names a
+// comma-separated list of ids, and `all` in that list means every rule.
+[[nodiscard]] bool suppressed(const source::SourceManager& sources,
+                              diag::Span span,
+                              std::string_view rule);
+
 // What one rule run reads. The context is rebuilt for each module, so a
 // rule addresses the module it is checking through this rather than
 // through a parameter of its own; the alternative is every rule
@@ -134,6 +143,12 @@ struct LintContext {
   u32 report(diag::Span span, Args&&... args) {
     const LintLevel level = setting().level;
     if (level == LintLevel::Allow) {
+      return bag.size();
+    }
+    // A source-level directive silences the finding the same way an
+    // allow does, so a rule that reports through here needs no
+    // suppression code of its own and its label and fix go nowhere.
+    if (suppressed(sources, span, rule->id)) {
       return bag.size();
     }
     const diag::Severity severity = level == LintLevel::Deny

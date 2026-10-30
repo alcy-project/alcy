@@ -92,3 +92,13 @@ question. It added `unused-field` beside it, which reads the field
 names the same walk records - a projection or a destructuring pattern,
 not the constructor's initializer - so the read and the write are told
 apart by the node that names the field.
+
+A later revision added source-level suppression, the counterpart to
+clang-tidy's `NOLINT` and clippy's `#[allow]`. A finding whose line
+carries an `alcy-lint-ignore` comment is not reported, and a comment on
+the line above can silence the next one; a list after the colon narrows
+the directive to the rules it names. The directive is read from the
+source bytes beside the finding rather than from a parsed attribute,
+because the language has no attribute syntax yet, and every finding
+goes through the context's report, so one check covers every rule and a
+suppressed finding offers no repair.

@@ -518,6 +518,68 @@ TEST_CASE("unused-field is off until it is asked for") {
   CHECK(findings_for(run.ctx.bag, "unused-field") == 0);
 }
 
+TEST_CASE("a line comment silences the finding on its line") {
+  Run run;
+  run("fn main() -> i32 {\n  unused := 1 // alcy-lint-ignore\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 0);
+}
+
+TEST_CASE("a line comment can name the rule it silences") {
+  Run run;
+  run("fn main() -> i32 {\n"
+      "  unused := 1 // alcy-lint-ignore: unused-variable\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 0);
+}
+
+TEST_CASE("a line comment naming another rule silences nothing") {
+  Run run;
+  run("fn main() -> i32 {\n"
+      "  unused := 1 // alcy-lint-ignore: unused-mut\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 1);
+}
+
+TEST_CASE("a comment above silences the next line") {
+  Run run;
+  run("fn main() -> i32 {\n  // alcy-lint-ignore-next-line\n"
+      "  unused := 1\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 0);
+}
+
+TEST_CASE("a next-line directive silences no line it sits on") {
+  Run run;
+  run("fn main() -> i32 {\n"
+      "  unused := 1 // alcy-lint-ignore-next-line\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 1);
+}
+
+TEST_CASE("a reason after the rule list is not a rule") {
+  Run run;
+  run("fn main() -> i32 {\n  unused := 1 // alcy-lint-ignore: "
+      "unused-variable -- kept for the debugger\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 0);
+}
+
+TEST_CASE("an ordinary comment silences nothing") {
+  Run run;
+  run("fn main() -> i32 {\n  unused := 1 // a note\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 1);
+}
+
+TEST_CASE("a directive silences only the line it is on") {
+  Run run;
+  run("fn main() -> i32 {\n  first := 1 // alcy-lint-ignore\n"
+      "  second := 2\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 1);
+}
+
 TEST_CASE("dead-code reports an uncalled private function") {
   Run run;
   run("fn main() -> i32 {\n  ret 0\n}\n\n"

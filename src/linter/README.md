@@ -38,6 +38,38 @@ names the rule must not report; the binding rules and `unused-import`
 read it. A `deny` finding is an error, so `alcy lint` exits non-zero;
 a `warn` finding does not change the exit code.
 
+## Suppressing a finding
+
+A rule the package config enables can be silenced at the line that
+would report it. A `// alcy-lint-ignore` comment on that line makes the
+finding there go away, whatever the rule's level; a list of ids after a
+colon narrows it to those rules, and `all` in the list means every
+rule. The directive is read at the start of the comment, so a note that
+merely mentions it does nothing.
+
+```alcy
+fn example() -> i32 {
+  unused := 1 // alcy-lint-ignore
+  pinned := 2 // alcy-lint-ignore: unused-variable -- held for the debugger
+  ret 0
+}
+```
+
+The line above can silence the next one instead, the spelling for an
+item whose finding points at a declaration rather than at an expression:
+
+```alcy
+// alcy-lint-ignore-next-line: missing-docs
+pub fn api() -> i32 {
+  ret 1
+}
+```
+
+The directive is read from the source bytes beside the finding, not from
+a parsed attribute, because the language has no attribute syntax yet.
+Every rule reports through the context, so a rule needs no suppression
+code of its own and a suppressed finding offers no repair.
+
 ## Fixing
 
 `alcy lint --fix` applies the repairs the rules are sure of and then
