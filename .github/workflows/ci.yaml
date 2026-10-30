@@ -281,6 +281,17 @@ jobs:
           nix: "false"
           os: Linux
 
+      # The fuzz build is a whole compiler with the fuzzer's own flags in
+      # a build directory of its own, so it caches the way the matrix's
+      # build directory does: restored when the sources have not moved,
+      # rebuilt incrementally when they have.
+      - name: Cache Fuzz Build Directory
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: out/fuzz
+          key: ${{ runner.os }}-fuzz-build-dir-${{ hashFiles('.gn', 'BUILD.gn', 'src/**', 'config.toml') }}
+          restore-keys: ${{ runner.os }}-fuzz-build-dir-
+
       - name: Build and Run the Fuzz Targets
         shell: bash
         run: uv run ./tools/run_fuzz.py

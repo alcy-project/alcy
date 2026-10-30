@@ -28,6 +28,7 @@ and asserted. Directories holding alcy.toml build as packages.
 """
 
 import argparse
+import concurrent.futures
 import os
 import platform
 import re
@@ -429,6 +430,17 @@ def main():
             "the code alcy generates is reported rather than inherited."
         ),
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=0,
+        help=(
+            "Cases to run concurrently (default: the runner's core count, "
+            "capped at 8). A case is a pipeline of subprocesses -- the "
+            "compiler, the system link, the run -- so concurrent cases wait "
+            "on their children rather than on each other."
+        ),
+    )
     args = parser.parse_args()
 
     if args.sanitize and SYSTEM_CLANG is None:
@@ -462,8 +474,13 @@ def main():
     # kernel enters; another host's pipeline refuses the target, which is
     # the compiler working rather than the case failing.
     runs_freestanding = sys.platform.startswith("linux")
-    failures = 0
-    ran = 0
+    # A case is a subprocess pipeline of its own -- the compiler, the
+    # system link, the run -- so the pool waits on processes rather than
+    # holding the interpreter, and the order the cases finish in is the
+    # order the results are reported in, which is the sorted order they
+    # were handed out in.
+    jobs = args.jobs or min(os.cpu_count() or 2, 8)
+    selected_dirs = []
     skipped = 0
     for case_dir in sorted(cases_root.iterdir()):
         if not case_dir.is_dir():
@@ -473,12 +490,26 @@ def main():
         if not runs_freestanding and is_freestanding(case_dir):
             skipped += 1
             continue
-        ran += 1
-        ok, detail = run_case(alcy, case_dir, args.sanitize)
-        print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
-        if not ok:
-            failures += 1
-            print(detail)
+        selected_dirs.append(case_dir)
+
+    def checked(case_dir: Path):
+        try:
+            return run_case(alcy, case_dir, args.sanitize)
+        except Exception as e:  # noqa: BLE001 - a harness bug is a case failure
+            return False, f"the harness raised: {e!r}"
+
+    failures = 0
+    ran = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        for case_dir, (ok, detail) in zip(
+            selected_dirs, pool.map(checked, selected_dirs), strict=True
+        ):
+            ran += 1
+            print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
+            if not ok:
+                failures += 1
+                print(detail)
+    sys.stdout.flush()
     if skipped:
         print(
             f"note: {skipped} freestanding case(s) skipped: "

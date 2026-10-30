@@ -24,6 +24,8 @@ case gets `-o` pointed at a scratch path unless it sets
 """
 
 import argparse
+import concurrent.futures
+import os
 import subprocess
 import sys
 import tempfile
@@ -192,6 +194,17 @@ def main():
         default="",
         help="Comma-separated case names to run (default: all)",
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=0,
+        help=(
+            "Cases to run concurrently (default: the runner's core count, "
+            "capped at 8). A case is a compiler invocation of its own, so "
+            "concurrent cases wait on their children rather than on each "
+            "other."
+        ),
+    )
     args = parser.parse_args()
 
     alcy = project_root_dir / "out" / args.build_subdir / "alcy"
@@ -211,15 +224,29 @@ def main():
     if selected is not None:
         case_dirs = [p for p in case_dirs if p.name in selected]
 
+    # A case is one compiler invocation of its own, so the pool waits on
+    # subprocesses rather than holding the interpreter, and the results
+    # are reported in the sorted order the cases were handed out in.
+    jobs = args.jobs or min(os.cpu_count() or 2, 8)
+
+    def checked(case_dir: Path):
+        try:
+            return run_case(alcy, case_dir)
+        except Exception as e:  # noqa: BLE001 - a harness bug is a case failure
+            return False, f"the harness raised: {e!r}"
+
     failures = 0
     ran = 0
-    for case_dir in case_dirs:
-        ran += 1
-        ok, detail = run_case(alcy, case_dir)
-        print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
-        if not ok:
-            failures += 1
-            print(detail)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        for case_dir, (ok, detail) in zip(
+            case_dirs, pool.map(checked, case_dirs), strict=True
+        ):
+            ran += 1
+            print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
+            if not ok:
+                failures += 1
+                print(detail)
+    sys.stdout.flush()
     print(f"e2e: {ran - failures}/{ran} passed")
     return 1 if failures else 0
 

@@ -24,6 +24,8 @@ two halves of the tree agree about what a source file is.
 """
 
 import argparse
+import concurrent.futures
+import os
 import subprocess
 import sys
 import tempfile
@@ -123,26 +125,41 @@ def main() -> int:
     # The property sweep: format every file once, then ask --check of
     # the copies (idempotence) and the compiler of both sides (the
     # verdict). The copies mirror the tree so a failure names the file
-    # the way the tree spells it.
+    # the way the tree spells it. A file's work is its own three
+    # compiler invocations, so the pool waits on subprocesses rather
+    # than holding the interpreter, and the results are read in the
+    # corpus order the files were handed out in.
+    jobs = min(os.cpu_count() or 2, 8)
+
+    def swept(path: Path):
+        formatted = run(alcy, "fmt", stdin=path.read_bytes())
+        if formatted.returncode != 0:
+            sys.exit(
+                f"error: alcy fmt failed on {path}\n"
+                + formatted.stderr.decode("utf-8", "replace")
+            )
+        return formatted.stdout
+
+    def checked(path: Path, copy: Path):
+        return verdict(alcy, path), verdict(alcy, copy)
+
     moved = []
     verdict_changed = []
     with tempfile.TemporaryDirectory(prefix="alcy_fmt_sweep_") as tmp:
         mirror = Path(tmp)
-        for path in corpus:
-            formatted = run(alcy, "fmt", stdin=path.read_bytes())
-            if formatted.returncode != 0:
-                print(formatted.stderr.decode("utf-8", "replace"), file=sys.stderr)
-                sys.exit(f"error: alcy fmt failed on {path}")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            formatted = list(pool.map(swept, corpus))
+        for path, text in zip(corpus, formatted, strict=True):
             copy = mirror / path.relative_to(project_root_dir)
             copy.parent.mkdir(parents=True, exist_ok=True)
-            copy.write_bytes(formatted.stdout)
+            copy.write_bytes(text)
             if args.verbose:
                 print(f"formatted {path.relative_to(project_root_dir)}")
         copies = [mirror / path.relative_to(project_root_dir) for path in corpus]
         moved = unformatted(alcy, copies)
-        for path, copy in zip(corpus, copies, strict=True):
-            before = verdict(alcy, path)
-            after = verdict(alcy, copy)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            verdicts = list(pool.map(checked, corpus, copies))
+        for path, (before, after) in zip(corpus, verdicts, strict=True):
             if before != after:
                 verdict_changed.append(
                     f"{path.relative_to(project_root_dir)}: "
