@@ -97,7 +97,13 @@ def tool_commands(dry_run: bool) -> list[list[str]]:
         else ["uv", "run", "ast-grep", "scan", "-U", "src"]
     )
     if shutil.which("taplo") is not None:
-        commands.append(["taplo", "fmt", "--check"] if dry_run else ["taplo", "fmt"])
+        # The default log lists every file the glob collected; the
+        # errors that matter are the level RUST_LOG keeps.
+        commands.append(
+            ["env", "RUST_LOG=error", "taplo", "fmt", "--check"]
+            if dry_run
+            else ["env", "RUST_LOG=error", "taplo", "fmt"]
+        )
     else:
         print("note: taplo not on PATH, so the TOML formatting did not run")
     if dry_run:

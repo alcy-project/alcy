@@ -186,7 +186,9 @@ def main() -> int:
             file=sys.stderr,
         )
     else:
-        run("taplo", "fmt", "--check")
+        # The default log lists every file the glob collected; the
+        # errors that matter are the level RUST_LOG keeps.
+        run("env", "RUST_LOG=error", "taplo", "fmt", "--check")
 
     if py[0] == "uv":
         run(*py, "ast-grep", "test")

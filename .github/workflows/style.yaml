@@ -155,7 +155,9 @@ jobs:
           tool: taplo@${{ steps.versions.outputs.taplo }}
 
       - name: Check TOML Formatting
-        run: taplo fmt --check
+        # The default log lists every file the glob collected; the errors
+        # that matter are the level RUST_LOG keeps.
+        run: RUST_LOG=error taplo fmt --check
 
       - name: Check Markdown
         run: uv run rumdl check .
