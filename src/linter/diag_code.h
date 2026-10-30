@@ -40,6 +40,7 @@ enum class LintCode : u8 {
   DeadCode = 27,
   UnusedField = 28,
   NeedlessBool = 29,
+  UnreachablePattern = 30,
 };
 
 }  // namespace linter

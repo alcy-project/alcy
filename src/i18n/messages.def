@@ -563,6 +563,8 @@
   F(LintBoolComparison, Warning, Lint, "this comparison can be simplified") \
   F(LintUnusedField, Warning, Lint, "field {} of {} is never read") \
   F(LintNeedlessBool, Warning, Lint, "this if can return its condition instead") \
+  F(LintUnreachablePattern, Warning, Lint, "this pattern is unreachable; an earlier arm matches anything") \
+  F(LintUnreachablePatternNote, Note, Lint, "the arm that matches anything is here") \
   F(LintDeadCode, Warning, Lint, "function {} is never called") \
   F(LintDeadCodeNote, Note, Lint, "if this is meant as a public surface, declare it pub") \
   F(LintDoubleNegation, Warning, Lint, "double negation is a no-op") \

@@ -599,6 +599,54 @@ TEST_CASE("a command-line override edits the resolved table") {
   CHECK(!apply_override(config, "no-such-rule", LintLevel::Warn));
 }
 
+TEST_CASE("unreachable-pattern reports an arm below a wildcard") {
+  Run run;
+  run("fn f(x: i32) -> i32 {\n  ret match x {\n    _ => 1,\n    0 => 2,\n  }\n}"
+      "\n\nfn main() -> i32 {\n  ret f(0)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 1);
+  CHECK(finding_text(run.ctx, "unreachable-pattern") == "0");
+}
+
+TEST_CASE("unreachable-pattern reports an arm below a binding") {
+  Run run;
+  run("fn f(x: i32) -> i32 {\n  ret match x {\n    y => y,\n    0 => 2,\n  }\n}"
+      "\n\nfn main() -> i32 {\n  ret f(0)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 1);
+}
+
+TEST_CASE("unreachable-pattern reports every dead arm") {
+  Run run;
+  run("fn f(x: i32) -> i32 {\n  ret match x {\n    _ => 1,\n    1 => 2,\n    2 "
+      "=> 3,\n"
+      "  }\n}\n\nfn main() -> i32 {\n  ret f(0)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 2);
+}
+
+TEST_CASE("unreachable-pattern leaves a guarded anything-pattern alone") {
+  Run run;
+  // The guard tests after the pattern binds, so the arms below the
+  // guarded wildcard are still reachable.
+  run("fn f(x: i32) -> i32 {\n  ret match x {\n    _ if x > 0 => 1,\n    0 => "
+      "2,\n"
+      "    _ => 3,\n  }\n}\n\nfn main() -> i32 {\n  ret f(0)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 0);
+}
+
+TEST_CASE("unreachable-pattern leaves enum variants alone") {
+  Run run;
+  // An uppercase or qualified name is a unit variant, not a binding, so
+  // no arm here covers the ones below it.
+  run("enum E {\n  A,\n  B,\n}\n\nfn f(e: E) -> i32 {\n  ret match e {\n"
+      "    E::A => 1,\n    E::B => 2,\n  }\n}\n\nfn main() -> i32 {\n"
+      "  ret f(E::A)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 0);
+}
+
 TEST_CASE("needless-bool reports an if that returns its condition") {
   Run run;
   run("fn f(c: bool) -> bool {\n  if c {\n    ret true\n  } else {\n"

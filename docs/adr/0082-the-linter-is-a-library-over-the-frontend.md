@@ -138,3 +138,11 @@ skips, and on a 61-module package it is most of the run.
 `&&`, looser than every operator but `||`, so only an `||` condition
 is parenthesized; a pattern test is not a value and cannot be joined,
 so that finding keeps the repairless form.
+
+`unreachable-pattern` reads a match's arms in order and reports each
+one below the first that matches anything, with a note at the arm that
+covers it. The set of anything-patterns is the parser's, not a
+heuristic: only a wildcard and a lone underscore-or-lowercase name bind,
+while an uppercase or qualified name is a unit variant, so the rule
+never calls an arm dead that the compiler's exhaustiveness believes is
+reachable. The checker rejects a repeated literal and not this shape.

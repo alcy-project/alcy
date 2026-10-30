@@ -1,0 +1,4 @@
+subcommand = "lint"
+exit = 0
+contains = ["warning[unreachable-pattern]", "the arm that matches anything is here"]
+not_contains = ["error["]

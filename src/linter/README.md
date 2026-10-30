@@ -128,6 +128,7 @@ complete gate.
 | `unused-mut` | warn | a `mut` binding that is never written |
 | `shadow` | allow | a binding that shadows an enclosing one |
 | `unreachable-code` | allow | a statement after control leaves the block |
+| `unreachable-pattern` | warn | a match arm an earlier arm already covers |
 | `while-true` | warn | `while true`, which a `loop` states better |
 | `empty-loop` | warn | a `loop` with an empty body |
 | `double-negation` | warn | an operator applied to itself |
@@ -175,6 +176,16 @@ a call target without the function it sits in, so a helper reached only
 from an uncalled function stays live. The rule under-reports rather than
 claim a chain it cannot prove. It is opt-in because a package in
 progress always has functions waiting for their first caller.
+
+`unreachable-pattern` reads a match's arms in order. Once an arm's
+pattern matches anything - a wildcard, or one of the two bindings the
+parser makes of a lone underscore-or-lowercase name - every arm below
+it is dead, and each is reported with a note pointing at the arm that
+covers it. A guarded arm covers nothing, because the guard tests after
+the pattern binds. The parser is what makes the set exact: an uppercase
+or qualified name is a unit variant rather than a binding, so `E::A`
+and `E::B` do not cover one another. The checker rejects a repeated
+literal (`EC019`) but not this shape, which is the gap the rule fills.
 
 `unused-import` reads the path heads the walk recorded. An import is
 used when the module names its local name as the head of a value path, a

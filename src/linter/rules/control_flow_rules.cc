@@ -152,8 +152,62 @@ void check_loop(LintContext& ctx, ast::ExprIdx expr) {
 
 }  // namespace
 
+// Whether a pattern matches a value of any shape, so an arm carrying
+// it and no guard makes every arm below it unreachable.
+//
+// Only three kinds answer: a wildcard, and the two bindings the parser
+// makes of a lone `_`-or-lowercase name. Every uppercase or qualified
+// name is a unit variant rather than a binding, and a reference,
+// tuple, or struct pattern destructures, so none of them covers
+// everything. That is the same set the checker's exhaustiveness treats
+// as an anything-pattern, so the rule never calls an arm dead that the
+// compiler thinks is reachable.
+bool pattern_is_irrefutable(const LintContext& ctx, ast::PatternIdx pattern) {
+  if (!pattern.is_valid()) {
+    return false;
+  }
+  const ast::PatternKind kind = ctx.ast.patterns[pattern].kind;
+  return kind == ast::PatternKind::Wildcard ||
+         kind == ast::PatternKind::Ident || kind == ast::PatternKind::MutIdent;
+}
+
+// The arms a match can never reach: everything below the first arm that
+// matches anything. A guard tests after its pattern binds, so a guarded
+// arm covers nothing and the arm below it is still reachable. The
+// checker already rejects a repeated literal, which is the case a
+// pattern alone answers; what it does not see is an arm hidden behind
+// an anything-pattern.
+void check_unreachable_pattern(LintContext& ctx, ast::ExprIdx expr) {
+  const ast::ExprNode& node = ctx.ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Match) {
+    return;
+  }
+  const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
+  ast::PatternIdx covering = ast::PatternIdx::invalid();
+  for (const ast::ExprMatchArm& arm : match.arms) {
+    if (covering.is_valid()) {
+      const ast::PatternNode& pattern = ctx.ast.patterns[arm.pattern];
+      const u32 finding =
+          ctx.report<i18n::Key::LintUnreachablePattern>(pattern.span);
+      ctx.label<i18n::Key::LintUnreachablePatternNote>(
+          finding, ctx.ast.patterns[covering].span);
+      continue;
+    }
+    if (arm.guard.is_valid()) {
+      continue;
+    }
+    if (pattern_is_irrefutable(ctx, arm.pattern)) {
+      covering = arm.pattern;
+    }
+  }
+}
+
 void UnreachableCode::check_block(LintContext& ctx, ast::BlockIdx block) {
   check_unreachable(ctx, block);
+}
+
+void UnreachablePattern::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_unreachable_pattern(ctx, expr);
 }
 
 void WhileTrue::check_expr(LintContext& ctx, ast::ExprIdx expr) {

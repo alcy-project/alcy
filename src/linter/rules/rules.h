@@ -5,6 +5,7 @@
 
 #include <string_view>
 
+#include "ast/ast.h"
 #include "linter/context.h"
 #include "linter/diag_code.h"
 #include "linter/level.h"
@@ -201,6 +202,18 @@ struct UnusedField {
       "a struct field no expression reads";
   static constexpr bool READS_FIELD_USAGE = true;
   static void run(LintContext& ctx);
+};
+
+// An expression rule: a match arm the arms above it already cover. An
+// arm whose pattern matches anything makes every arm after it
+// unreachable; the checker rejects a repeated literal, not this.
+struct UnreachablePattern {
+  static constexpr std::string_view ID = "unreachable-pattern";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
+  static constexpr LintCode CODE = LintCode::UnreachablePattern;
+  static constexpr std::string_view SUMMARY =
+      "a match arm an earlier arm already covers";
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
 // An expression rule: an if whose two branches return the two boolean
