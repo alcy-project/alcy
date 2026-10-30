@@ -31,3 +31,7 @@ abd = "abd"
 halp = "halp"
 # The `String::truncate` and `strip_suffix` cases cut "hello" short.
 hel = "hel"
+# The workspace_symbols subsequence test queries "pn" ("Point").
+pn = "pn"
+# Errno table variants: e_acces (EACCES), etc.
+acces = "acces"
