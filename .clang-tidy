@@ -23,7 +23,6 @@ Checks: >
   bugprone-unused-raii,
   bugprone-use-after-move,
   bugprone-virtual-near-miss,
-  clang-analyzer-deadcode.DeadStores,
   cppcoreguidelines-init-variables,
   cppcoreguidelines-virtual-class-destructor,
   google-*,
