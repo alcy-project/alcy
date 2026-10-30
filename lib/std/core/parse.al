@@ -127,8 +127,9 @@ impl Parse for u32 {
 }
 
 // Parses a decimal floating point number with an optional sign and
-// fractional part. An exponent is not read. `None` when the bytes
-// are not a number or the digits pass what a `u64` numerator holds.
+// fractional part. An exponent is not read, so `1e10` is rejected.
+// `None` when the bytes are not a number or the digits pass what a
+// `u64` numerator holds.
 impl Parse for f64 {
   fn parse(text: str) -> Option<f64> {
     n := str_len(text)

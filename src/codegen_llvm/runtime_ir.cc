@@ -1137,7 +1137,13 @@ class RuntimeBuilder {
     i32 e_pipe = 32;
     i32 e_inval = 22;
     if (mach_o_) {
+      // BSD errno numbering: only EAGAIN differs from the Linux table.
+      e_intr = 4;
       e_again = 35;
+      e_noent = 2;
+      e_acces = 13;
+      e_pipe = 32;
+      e_inval = 22;
     }
     struct Mapping {
       i32 number;

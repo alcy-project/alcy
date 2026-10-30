@@ -121,8 +121,7 @@ bool is_primitive_path_head(lexer::TokenKind kind) {
     case lexer::TokenKind::U64:
     case lexer::TokenKind::Usize:
     case lexer::TokenKind::F32:
-    case lexer::TokenKind::F64:
-    case lexer::TokenKind::Bool: return true;
+    case lexer::TokenKind::F64: return true;
     default: return false;
   }
 }
