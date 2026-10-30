@@ -132,3 +132,9 @@ wants; it is read in `LintContext::report` beside the level, so a rule
 needs no code for it. `--no-borrow-checks` is the command-line spelling
 of `borrow-checks = false`; it is the same tail the config already
 skips, and on a 61-module package it is most of the run.
+
+`nested-if` gained the repair its finding always implied:
+`if a { if b { body } }` becomes `if a && b { body }`. The join is
+`&&`, looser than every operator but `||`, so only an `||` condition
+is parenthesized; a pattern test is not a value and cannot be joined,
+so that finding keeps the repairless form.

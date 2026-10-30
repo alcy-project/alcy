@@ -188,10 +188,15 @@ the meaning.
 `needless-bool` reads the shape ADR-0059 gives an `if`: every branch
 must end in `ret`, so `if c { ret true } else { ret false }` is the
 condition itself and the swapped pair is its negation. Both branches
-returning one literal is a constant and an `if let` tests a pattern
-rather than a value, so neither is reported. The repair writes
+returning one literal is a constant and an `if PAT := EXPR` tests a
+pattern rather than a value, so neither is reported. The repair writes
 `ret c` or `ret !(c)`, parenthesizing the condition because it is any
 expression.
+
+`nested-if` collapses the pair it reports: `if a { if b { body } }` is
+`if a && b { body }`. Only `||` binds looser than the join, so a
+condition that is one is parenthesized and every other reads bare; a
+pattern test cannot be joined, so the finding stays without a repair.
 
 ## Adding a rule
 

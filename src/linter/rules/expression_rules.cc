@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "ast/ast.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
@@ -111,21 +112,26 @@ bool is_comparison(ast::BinaryOp op) {
   }
 }
 
-// The source bytes one expression covers, or nullopt when the source
-// manager cannot resolve them.
-std::optional<std::string_view> source_of(const LintContext& ctx,
-                                          const ast::ExprNode& node) {
-  const std::optional<std::string_view> bytes =
-      ctx.sources.bytes(node.span.file);
+// The source bytes a span covers, or nullopt when the source manager
+// cannot resolve them.
+std::optional<std::string_view> source_of_span(const LintContext& ctx,
+                                               diag::Span span) {
+  const std::optional<std::string_view> bytes = ctx.sources.bytes(span.file);
   if (!bytes.has_value()) {
     return std::nullopt;
   }
-  const usize begin = node.span.offset;
-  const usize end = begin + node.span.length;
+  const usize begin = span.offset;
+  const usize end = begin + span.length;
   if (begin > bytes->size() || end > bytes->size() || end < begin) {
     return std::nullopt;
   }
-  return bytes->substr(node.span.offset, node.span.length);
+  return bytes->substr(span.offset, span.length);
+}
+
+// The source bytes one expression covers.
+std::optional<std::string_view> source_of(const LintContext& ctx,
+                                          const ast::ExprNode& node) {
+  return source_of_span(ctx, node.span);
 }
 
 // Whether moving an expression out of the construct that wraps it
@@ -198,6 +204,36 @@ void check_self_comparison(LintContext& ctx, ast::ExprIdx expr) {
   }
 }
 
+// The bytes of a condition, wrapped in parentheses when joining it to
+// another with `&&` would regroup it. `||` is the only operator looser
+// than `&&`, so every other condition reads the same bare.
+std::optional<std::string> condition_text(LintContext& ctx, ast::CondIdx cond) {
+  if (!cond.is_valid()) {
+    return std::nullopt;
+  }
+  const ast::Cond& node = ctx.ast.conds[cond];
+  if (node.is_pattern || !node.value.is_valid()) {
+    return std::nullopt;
+  }
+  const ast::ExprNode& value = ctx.ast.exprs[node.value];
+  const std::optional<std::string_view> text = source_of(ctx, value);
+  if (!text.has_value()) {
+    return std::nullopt;
+  }
+  const bool regroup =
+      value.kind == ast::ExprKind::Binary &&
+      value.payload.get<ast::ExprBinary>().op == ast::BinaryOp::Or;
+  std::string out;
+  if (regroup) {
+    out += '(';
+  }
+  out.append(*text);
+  if (regroup) {
+    out += ')';
+  }
+  return out;
+}
+
 void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::If) {
@@ -232,7 +268,31 @@ void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
   if (inner.else_block.is_valid()) {
     return;
   }
-  ctx.report<i18n::Key::LintNestedIf>(inner_node.span);
+  const u32 finding = ctx.report<i18n::Key::LintNestedIf>(inner_node.span);
+  // The repair states the two tests as one: `if a { if b { body } }` is
+  // `if a && b { body }`, which the outer span covers whole. An
+  // `if let` tests a pattern rather than a value, so `condition_text`
+  // answers nothing and the finding keeps its repairless form.
+  if (!inner.then_block.is_valid()) {
+    return;
+  }
+  const std::optional<std::string> outer_cond = condition_text(ctx, outer.cond);
+  const std::optional<std::string> inner_cond = condition_text(ctx, inner.cond);
+  if (!outer_cond.has_value() || !inner_cond.has_value()) {
+    return;
+  }
+  const std::optional<std::string_view> body =
+      source_of_span(ctx, ctx.ast.blocks[inner.then_block].span);
+  if (!body.has_value()) {
+    return;
+  }
+  std::string replacement = "if ";
+  replacement += *outer_cond;
+  replacement += " && ";
+  replacement += *inner_cond;
+  replacement += ' ';
+  replacement.append(*body);
+  ctx.fix(finding, node.span, replacement);
 }
 
 // The expression a block ends on: its tail value, or the single

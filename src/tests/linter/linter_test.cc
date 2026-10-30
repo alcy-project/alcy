@@ -285,6 +285,43 @@ TEST_CASE("nested-if reports an if whose only statement is an if") {
   CHECK(findings_for(run.ctx.bag, "nested-if") == 1);
 }
 
+TEST_CASE("nested-if states the two tests as one") {
+  Run run;
+  run("fn main() -> i32 {\n  a := true\n  b := true\n  if a {\n    if b {\n"
+      "      ret 1\n    }\n  }\n  ret 0\n}\n",
+      default_config(run.ctx));
+  const diag::Fix* fix = fix_for(run.ctx.bag, "nested-if");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "if a && b {\n      ret 1\n    }");
+  }
+}
+
+TEST_CASE("nested-if wraps a condition looser than the join") {
+  Run run;
+  run("fn main() -> i32 {\n  a := 1\n  b := 2\n"
+      "  if a > 0 || b > 0 {\n    if a > 1 {\n      ret 1\n    }\n  }\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  const diag::Fix* fix = fix_for(run.ctx.bag, "nested-if");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement.starts_with("if (a > 0 || b > 0) && a > 1 {"));
+  }
+}
+
+TEST_CASE("nested-if reports without a repair for a pattern test") {
+  Run run;
+  // The outer test binds a pattern rather than reading a value, so the
+  // two cannot be joined; the finding stays and carries no repair.
+  run("fn f(o: Option<i32>) -> i32 {\n  if Option::Some(a) := o {\n"
+      "    if a > 0 {\n      ret 1\n    }\n  }\n  ret 0\n}\n\n"
+      "fn main() -> i32 {\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "nested-if") == 1);
+  CHECK(fix_for(run.ctx.bag, "nested-if") == nullptr);
+}
+
 TEST_CASE("useless-cast reports a cast to the value's own type") {
   Run run;
   run("fn main() -> i32 {\n  n := 1\n  m := n as i32\n  ret m\n}\n",
