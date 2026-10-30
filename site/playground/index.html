@@ -17,6 +17,10 @@
     <link rel="icon" href="{{dist}}favicon.svg" />
     {{pageLinks}}
     {{social}}
+      <script type="speculationrules">
+    {"prerender":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}],
+     "prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}
+    </script>
   </head>
   <body>
     <header class="site-header">
@@ -129,6 +133,7 @@
       <p class="noscript">{{t:noscript.playground}}</p>
     </noscript>
 
+    <link rel="modulepreload" href="{{dist}}playground/app.js" />
     <script type="module" src="{{dist}}playground/app.js"></script>
   </body>
 </html>

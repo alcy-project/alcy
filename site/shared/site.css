@@ -722,3 +722,14 @@ body.site {
 .site-search li.site-search-none {
   color: var(--fg-faint);
 }
+
+/* Cross-document view transitions (MPA). Unsupported browsers fall back to an ordinary navigation, which is still correct. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
+.site-header { view-transition-name: site-header; }
+.site-main, .guide-article, .guide-contents, .layout { view-transition-name: site-main; }
+.site-footer, .statusbar { view-transition-name: site-footer; }

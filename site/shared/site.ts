@@ -98,3 +98,71 @@ export function registerAssetWorker(): void {
       .catch(() => undefined);
   });
 }
+
+// Prefetch same-origin documents on hover/touch, so a link the reader is
+// heading for is already warm (or finished) by the time the click lands.
+// Speculation rules (injected by the generator) cover Chrome; this covers
+// the rest and any browser that ignores them.
+const prefetchScheduled = new WeakSet<HTMLAnchorElement>();
+
+function isInternalAnchor(anchor: HTMLAnchorElement): boolean {
+  try {
+    const url = new URL(anchor.href, window.location.href);
+    if (url.origin !== window.location.origin) {
+      return false;
+    }
+    if (url.pathname === window.location.pathname && url.search === window.location.search) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function queuePrefetch(anchor: HTMLAnchorElement): void {
+  if (prefetchScheduled.has(anchor) || !isInternalAnchor(anchor)) {
+    return;
+  }
+  const conn = (navigator as { connection?: { saveData?: boolean } }).connection;
+  if (conn?.saveData === true) {
+    return;
+  }
+  prefetchScheduled.add(anchor);
+  const link = document.createElement("link");
+  link.rel = "prefetch";
+  link.as = "document";
+  link.href = anchor.href;
+  document.head.append(link);
+}
+
+export function enableLinkPrefetch(): void {
+  document.addEventListener(
+    "pointerenter",
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      const anchor = target.closest("a[href]") as HTMLAnchorElement | null;
+      if (anchor !== null) {
+        queuePrefetch(anchor);
+      }
+    },
+    { capture: true, passive: true },
+  );
+  document.addEventListener(
+    "touchstart",
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      const anchor = target.closest("a[href]") as HTMLAnchorElement | null;
+      if (anchor !== null) {
+        queuePrefetch(anchor);
+      }
+    },
+    { capture: true, passive: true },
+  );
+}

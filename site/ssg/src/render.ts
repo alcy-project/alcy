@@ -248,6 +248,11 @@ function pager(page: GuidePage, options: PageOptions): string {
       </nav>`;
 }
 
+const SPECULATION = "<script type=\"speculationrules\">" +
+  '{"prerender":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}],' +
+  '"prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}' +
+  "</script>";
+
 export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const assets = assetPrefix(page.route);
   const t = (key: MessageKey): string => translate(page.language, key);
@@ -275,9 +280,12 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     <title>${escapeHtml(page.title)} · alcy</title>
     <script>${options.boot}</script>
     <link rel="stylesheet" href="${assets}shared/site.css" />${guideCss}
+    <link rel="modulepreload" href="${assets}shared/shell.js" />
+    ${hasCode ? `<link rel="modulepreload" href="${assets}shared/guide.js" />` : ""}
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(page.language, page.path)}
     ${socialMeta(`${page.title} · alcy`, description, page.route)}
+    ${SPECULATION}
   </head>
   <body class="site">
     ${header(page.route, page.language, page.path)}
@@ -330,9 +338,11 @@ export function renderGuideIndex(
     <title>${t("site.guide")} · alcy</title>
     <script>${boot}</script>
     <link rel="stylesheet" href="${assets}shared/site.css" />
+    <link rel="modulepreload" href="${assets}shared/shell.js" />
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(language, "guide/index.html")}
     ${socialMeta(`${t("site.guide")} · alcy`, t("meta.guide"), route)}
+    ${SPECULATION}
   </head>
   <body class="site">
     ${header(route, language, "guide/index.html")}

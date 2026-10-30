@@ -7,11 +7,12 @@
 
 import { elements } from "./elements.js";
 import { initSearch } from "./search.js";
-import { initThemeToggle, registerAssetWorker } from "./site.js";
+import { enableLinkPrefetch, initThemeToggle, registerAssetWorker } from "./site.js";
 
 initThemeToggle(elements.theme);
 registerAssetWorker();
 initSearch();
+enableLinkPrefetch();
 
 // The page outline reads open beside the article on a wide screen,
 // where its sticky column has the room; a narrow one keeps it one tap

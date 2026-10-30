@@ -5,7 +5,7 @@
 // callbacks, and start the flows. Everything else lives in the feature
 // modules next to this file.
 
-import { initThemeToggle, registerAssetWorker } from "../shared/site.js";
+import { enableLinkPrefetch, initThemeToggle, registerAssetWorker } from "../shared/site.js";
 import { initSearch } from "../shared/search.js";
 import { writeClipboard } from "../shared/clipboard.js";
 
@@ -44,6 +44,7 @@ function init(): void {
   initThemeToggle(elements.theme);
   registerAssetWorker();
   initSearch();
+  enableLinkPrefetch();
   splitter.initSplitter();
   tabs.initTabs();
   status.renderStatus();

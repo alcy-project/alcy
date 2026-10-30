@@ -18,6 +18,10 @@
     <link rel="icon" href="{{dist}}favicon.svg" />
     {{pageLinks}}
     {{social}}
+      <script type="speculationrules">
+    {"prerender":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}],
+     "prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}
+    </script>
   </head>
   <body class="site">
     <header class="site-header">
@@ -55,6 +59,7 @@
       <a href="https://github.com/alcy-project/alcy" rel="noopener">GitHub</a>
     </footer>
 
+    <link rel="modulepreload" href="{{dist}}shared/shell.js" />
     <script type="module" src="{{dist}}shared/shell.js"></script>
   </body>
 </html>

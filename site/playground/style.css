@@ -620,3 +620,10 @@ body.resizing {
     min-width: 0;
   }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+}
+.site-header { view-transition-name: site-header; }
+.layout { view-transition-name: site-main; }
+.statusbar { view-transition-name: site-footer; }
