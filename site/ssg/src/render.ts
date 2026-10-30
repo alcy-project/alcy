@@ -279,12 +279,18 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const assets = assetPrefix(page.route);
   const t = (key: MessageKey): string => translate(page.language, key);
   const hasCode = page.blocks.some((block) => block.type === "code");
+  // A runnable program is the only reason to load the compiler's client
+  // and the editor, so the page asks for `guide.js` only when it has one.
+  const hasRunnable = page.blocks.some(
+    (block) => block.type === "code" && block.language === "alcy",
+  );
   const guideCss = hasCode
     ? `\n    <link rel="stylesheet" href="${assets}shared/guide.css" />`
     : "";
-  const guideJs = hasCode
-    ? `\n    <script type="module" src="${assets}shared/guide.js"></script>`
-    : "";
+  const guideJs = [
+    hasCode ? `\n    <script type="module" src="${assets}shared/guide-copy.js"></script>` : "",
+    hasRunnable ? `\n    <script type="module" src="${assets}shared/guide.js"></script>` : "",
+  ].join("");
   const sections = sectionsOf(page);
   const headingIds = new Map<Block, string>(sections.map((s) => [s.block, s.id]));
   const article = page.blocks
@@ -303,7 +309,8 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     <script>${options.boot}</script>
     <link rel="stylesheet" href="${assets}shared/site.css" />${guideCss}
     <link rel="modulepreload" href="${assets}shared/shell.js" />
-    ${hasCode ? `<link rel="modulepreload" href="${assets}shared/guide.js" />` : ""}
+    ${hasCode ? `<link rel="modulepreload" href="${assets}shared/guide-copy.js" />` : ""}
+    ${hasRunnable ? `<link rel="modulepreload" href="${assets}shared/guide.js" />` : ""}
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(page.language, page.path)}
     ${socialMeta(`${page.title} · alcy`, description, page.route)}
@@ -457,6 +464,7 @@ export function renderNotFound(
     </main>
 
     ${footer(stamp)}
+    <script type="module" src="shared/guide-copy.js"></script>
     <script type="module" src="shared/guide.js"></script>
   </body>
 </html>

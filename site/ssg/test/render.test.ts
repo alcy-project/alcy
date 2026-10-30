@@ -53,6 +53,16 @@ test("sections gain anchors and an outline beside the article", () => {
   match(html, /<li><a href="#functions">Functions<\/a><\/li>/);
 });
 
+test("only a runnable block loads the compiler's half of the guide", () => {
+  const examples = render("en", [prose, sh]);
+  match(examples, /<script type="module" src="\.\.\/shared\/guide-copy.js"><\/script>/);
+  equal(examples.includes("guide.js"), false);
+  equal(examples.includes("../shared/guide.js\" />"), false);
+  const runnable = render("en", [alcy]);
+  match(runnable, /<script type="module" src="\.\.\/shared\/guide-copy.js"><\/script>/);
+  match(runnable, /<script type="module" src="\.\.\/shared\/guide.js"><\/script>/);
+});
+
 test("a page without sections carries no outline", () => {
   const html = render("en", [prose]);
   equal(html.includes("guide-outline"), false);
@@ -148,6 +158,7 @@ test("the 404 page keeps its links on the deployment root", () => {
   // The playful block: runnable like the guide's but read-only -- the
   // page's own links already reach the playground.
   match(html, /<link rel="stylesheet" href="shared\/guide.css" \/>/);
+  match(html, /<script type="module" src="shared\/guide-copy.js"><\/script>/);
   match(html, /<script type="module" src="shared\/guide.js"><\/script>/);
   match(html, /<div class="code-block" data-language="alcy">/);
   match(html, /println\("Page not found"\)/);

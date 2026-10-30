@@ -141,9 +141,14 @@ PAGE_BUDGETS = (
     Budget("playground/style.css", 6_000, "the playground's layout"),
 )
 
-# A guide page with code pays for its blocks' Copy and Edit buttons. The
-# ceiling covers the whole budget of scripts the page names.
+# A guide page with code pays for its blocks' Copy button, and a page
+# with a runnable program pays for Run and Edit too. The ceiling covers
+# the whole budget of scripts a code page names.
 GUIDE_SCRIPT_BUDGET = 8_000
+
+# The copy-only half rides along with every code page, so it is the half
+# that has to stay small.
+GUIDE_COPY_BUDGET = 3_000
 
 # The heaviest files the playground can fetch, though only on demand:
 # `tree-sitter-alcy` for the editor's colors and the compiler for Check
@@ -187,23 +192,17 @@ def check_budget(dist_dir: Path, budget: Budget, errors: list[str]) -> None:
 
 
 def check_guide_scripts(dist_dir: Path, errors: list[str]) -> None:
-    compressed = measured(dist_dir / "shared" / "guide.js")
-    log(f"budget: shared/guide.js {compressed} / {GUIDE_SCRIPT_BUDGET}")
-    if compressed > GUIDE_SCRIPT_BUDGET:
-        errors.append(
-            f"shared/guide.js: {compressed} bytes is over the "
-            f"{GUIDE_SCRIPT_BUDGET} budget (a guide page's buttons)"
-        )
-    # The copy-only half stays small enough to ride along with every code
-    # page; the run half is what a reader who asks for it pays for.
-    copy_only = dist_dir / "shared" / "guide-copy.js"
-    if copy_only.is_file():
-        compressed = measured(copy_only)
-        log(f"budget: shared/guide-copy.js {compressed} / 3_000")
-        if compressed > 3_000:
+    """Holds both halves of the guide's script to their budgets."""
+    for path, budget, note in (
+        ("guide-copy.js", GUIDE_COPY_BUDGET, "every code page's buttons"),
+        ("guide.js", GUIDE_SCRIPT_BUDGET, "a runnable block's Run and Edit"),
+    ):
+        compressed = measured(dist_dir / "shared" / path)
+        log(f"budget: shared/{path} {compressed} / {budget}")
+        if compressed > budget:
             errors.append(
-                f"shared/guide-copy.js: {compressed} bytes is over the 3_000 "
-                "budget (every guide page's buttons)"
+                f"shared/{path}: {compressed} bytes is over the {budget} "
+                f"budget ({note})"
             )
 
 

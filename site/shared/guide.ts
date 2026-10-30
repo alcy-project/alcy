@@ -1,14 +1,11 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// The guide's code blocks. The generator stamps each block's buttons and
-// leaves them hidden, so a reader without JavaScript sees only the code;
-// this module reveals them and wires Copy on every block, and Run and
-// Edit on the `alcy` ones. The `alcy` blocks are complete programs by
-// construction -- the build compiles them -- so Run is the playground's
-// compiler and runner over the block's own text, loaded on first use.
+// The `alcy` code blocks' Run and Edit. A guide page loads this module
+// only when a block holds a complete program, so a page of ordinary
+// examples does not carry the compiler's client or the editor. Copy is
+// every page's, and lives in `guide-copy.js`.
 
-import { writeClipboard } from "./clipboard.js";
 import { handOffToPlayground } from "./handoff.js";
 import { openCompiler, runProgram } from "./compiler-client.js";
 import type {
@@ -19,13 +16,19 @@ import type {
   RunOutcome,
 } from "./compiler-client.js";
 import type { Highlighter } from "../playground/highlight.js";
+import { findBlocks, type CodeBlock } from "./guide-copy.js";
 import { t } from "./site.js";
 
 // The workers live in the playground's one set of assets; the module's
 // own URL decides where that is, in any language tree.
 const PLAYGROUND_BASE = new URL("../playground/", import.meta.url);
-const COPIED_MS = 1500;
 const RUN_TIMEOUT_MS = 5000;
+
+// One run at a time per page: the compiler worker is shared, and a second
+// click would only queue behind the first.
+let compiler: CompilerClient | null = null;
+let currentState: HTMLElement | null = null;
+let running = false;
 
 // The runtime highlighter, shared by every editable block and loaded on
 // the first Edit: colors while typing are an enhancement, so a reader
@@ -68,65 +71,6 @@ function ensureHighlighter(): Promise<Highlighter | null> {
   }
   return highlighterPromise;
 }
-
-interface CodeBlock {
-  root: HTMLElement;
-  pre: HTMLElement;
-  code: HTMLElement;
-  actions: HTMLElement;
-  output: HTMLElement | null;
-  alcy: boolean;
-  // The code as it should be copied or run right now: the published text,
-  // or the reader's working copy.
-  source(): string;
-}
-
-function findBlocks(): CodeBlock[] {
-  const found: CodeBlock[] = [];
-  for (const root of document.querySelectorAll<HTMLElement>(".code-block")) {
-    const pre = root.querySelector<HTMLElement>("pre");
-    const code = root.querySelector<HTMLElement>("pre code");
-    const actions = root.querySelector<HTMLElement>(".code-actions");
-    if (pre !== null && code !== null && actions !== null) {
-      found.push({
-        root,
-        pre,
-        code,
-        actions,
-        output: root.querySelector<HTMLElement>(".code-output"),
-        alcy: root.dataset.language === "alcy",
-        source: () => code.textContent ?? "",
-      });
-    }
-  }
-  return found;
-}
-
-function copy(block: CodeBlock, button: HTMLButtonElement): void {
-  void writeClipboard(block.source()).then((copied) => {
-    if (!copied) {
-      return;
-    }
-    button.textContent = t("guide.copied");
-    window.setTimeout(() => {
-      button.textContent = t("guide.copy");
-    }, COPIED_MS);
-  });
-}
-
-function wireCopy(block: CodeBlock): void {
-  const button = block.actions.querySelector<HTMLButtonElement>('[data-action="copy"]');
-  if (button === null) {
-    return;
-  }
-  button.addEventListener("click", () => copy(block, button));
-}
-
-// One run at a time per page: the compiler worker is shared, and a second
-// click would only queue behind the first.
-let compiler: CompilerClient | null = null;
-let currentState: HTMLElement | null = null;
-let running = false;
 
 function runButtons(): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('.code-block [data-action="run"]')];
@@ -435,9 +379,8 @@ function wireAlcy(block: CodeBlock): void {
 }
 
 for (const block of findBlocks()) {
-  block.actions.hidden = false;
-  wireCopy(block);
   if (block.alcy) {
     wireAlcy(block);
   }
 }
+
