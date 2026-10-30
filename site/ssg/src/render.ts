@@ -74,7 +74,7 @@ function header(route: string, language: Language, treePath: string): string {
   });
   return `<header class="site-header">
       <a class="site-brand" href="${home}">alcy</a>
-      <nav class="site-nav">
+      <nav class="site-nav" aria-label="${t("site.nav")}">
         <a href="${home}guide/" aria-current="page">${t("site.guide")}</a>
         <a href="${home}playground/">${t("site.playground")}</a>
         <button type="button" class="site-search-open" data-action="search">${t("site.search")}</button>
@@ -242,7 +242,7 @@ function pager(page: GuidePage, options: PageOptions): string {
   const forward = next
     ? `<a href="${relativeRoute(page.route, next.route)}">${t("site.next")} · ${escapeHtml(next.title)} →</a>`
     : `<span class="empty"></span>`;
-  return `<nav class="guide-pager" aria-label="${t("site.guide")}">
+  return `<nav class="guide-pager" aria-label="${t("site.pager")}">
         ${back}
         ${forward}
       </nav>`;
@@ -437,7 +437,7 @@ export function renderNotFound(
     <a class="skip-link" href="#content">Skip to content</a>
     <header class="site-header">
       <a class="site-brand" href="./">alcy</a>
-      <nav class="site-nav">
+      <nav class="site-nav" aria-label="Site">
         <a href="guide/">Guide</a>
         <a href="playground/">Playground</a>
       </nav>

@@ -56,6 +56,15 @@ test("the page's regions are named landmarks", () => {
   match(html, /<nav[^>]*aria-label="/);
 });
 
+test("no two landmarks answer to the same name", () => {
+  // Repeated regions are leaf nodes in a screen reader's landmark list,
+  // so two called "Guide" would be told apart by position alone.
+  const html = render("en", [prose]);
+  const names = Array.from(html.matchAll(/<nav[^>]*aria-label="([^"]*)"/g)).map((m) => m[1]);
+  ok(names.length >= 3, "the header, the contents, and the pager are navs");
+  equal(new Set(names).size, names.length, `${names.join(", ")} name distinct regions`);
+});
+
 test("a control that ships hidden is still describable when it appears", () => {
   const html = render("en", [alcy]);
   // The row is hidden until the script reveals it, and the buttons are
