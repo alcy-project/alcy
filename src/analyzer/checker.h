@@ -245,8 +245,12 @@ class Checker {
   std::vector<CompCallRecord> comp_calls_;
   // Interned name every `MaybeUninit` wrapper carries.
   str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
-  // Interned name every closure literal's nominal type carries.
+  // Interned name every closure literal's nominal type carries. The
+  // formatter keys a signature spelling off it, so two literals told
+  // apart in a diagnostic read as the signatures they were checked for.
   str::StringPoolId closure_name_id = str::INVALID_STRING_POOL_ID;
+  // The interned name of the formatter's head for a closure signature.
+  str::StringPoolId closure_sig_head_id = str::INVALID_STRING_POOL_ID;
   // Interned name every method type parameter's stand-in carries.
   str::StringPoolId method_param_name_id = str::INVALID_STRING_POOL_ID;
   // Interned name the stand-in of a return-position `fn()` carries.

@@ -1082,6 +1082,23 @@ std::string Checker::type_display_at(ir::TypeIdx type, usize depth) const {
     }
     case ir::TypeTag::Struct: {
       const ir::StructType& shape = builder.struct_types()[node.as_struct()];
+      // A closure literal's nominal is the literal's own type, and the
+      // signature it was checked against is what tells two literals
+      // apart; spelling it is what keeps a mismatch of two literals
+      // from reading as a mismatch of a type with itself.
+      if (shape.name == closure_name_id) {
+        if (const ClosureSig* sig = closure_sig_of_type(origin)) {
+          std::string out(interner.get(closure_sig_head_id));
+          for (usize i = 0; i < sig->params.size(); ++i) {
+            if (i != 0) {
+              out += ", ";
+            }
+            out += type_display_at(sig->params[i], depth + 1);
+          }
+          out += ") -> " + type_display_at(sig->ret, depth + 1);
+          return out;
+        }
+      }
       // The shape carries its declared name, which a nominal lookup can
       // miss when the type only appears as another instance's argument.
       const std::string_view declared = interner.get(shape.name);
@@ -8964,6 +8981,10 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   }
   checker.closure_name_id = checker.intern_name("Closure");
   if (checker.closure_name_id == str::INVALID_STRING_POOL_ID) {
+    return base::make_err(diag::Reported{});
+  }
+  checker.closure_sig_head_id = checker.intern_name("Closure(");
+  if (checker.closure_sig_head_id == str::INVALID_STRING_POOL_ID) {
     return base::make_err(diag::Reported{});
   }
   checker.method_param_name_id = checker.intern_name("MethodParam");

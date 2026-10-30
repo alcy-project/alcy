@@ -1,0 +1,2 @@
+exit = 4
+contains = ["expected 'Closure() -> i32', found 'Closure(i32) -> i32'"]

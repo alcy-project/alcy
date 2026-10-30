@@ -42,13 +42,6 @@ replaced. The foundations are in `roadmap.md`.
   relation rather than a rule about one instruction; the case is here so
   that work starts from a reproducer.
 
-- [ ] A type mismatch between two closure literals reads `expected
-  'struct', found 'struct'`: each closure literal is its own type, which
-  is what the error is about, and the message names the kind both sides
-  share instead. Spelling an anonymous closure by its signature, or
-  numbering the environments, is what a reader needs - it wants a
-  decision on what a closure type is called in a diagnostic.
-
 - [ ] An unreachable match arm is not reported: two arms with the same
   literal pattern keep the first and the later one can never run, while
   the compiler does warn about a statement after `ret` (WD003). The
