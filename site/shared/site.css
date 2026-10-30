@@ -67,6 +67,33 @@
   outline-offset: 1px;
 }
 
+/* The header repeats on every page, so the first thing the keyboard
+   reaches is a link past it. It sits off the top edge until focused, and
+   the page's main takes the focus on activation: a hash alone scrolls but
+   leaves the caret at the top, so the next Tab would start over. */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  z-index: 40;
+  padding: 6px 12px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--bg-soft);
+  color: var(--fg);
+  text-decoration: none;
+  transform: translateY(-100%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* Focused by the skip link, not tabbed to: the page's own outline is the
+   next stop, so main itself draws no ring. */
+main:focus {
+  outline: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);

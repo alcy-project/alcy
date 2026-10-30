@@ -80,7 +80,7 @@ test("a code block's text survives with its buttons hidden", () => {
   // page's furniture and needs no script to open its place in the page.
   // The buttons sit inside the group the markup hides; a button that is
   // itself hidden is one a script reveals later (Reset, once editing).
-  const article = html.slice(html.indexOf('<main class="guide-article">'));
+  const article = html.slice(html.indexOf('class="guide-article"'));
   const group = article.match(/<div class="code-actions" hidden>([\s\S]*?)<\/div>/);
   ok(group !== null, "the block's controls are in a hidden group");
   const actions = (group?.[1] ?? "").match(/<button[^>]*>/g) ?? [];
@@ -101,7 +101,7 @@ test("nothing the reader sees depends on JavaScript being on", () => {
   // Every hidden section of the page is a control, never content: a
   // <div class="code-view"> or the article itself must never be hidden.
   const html = render([alcy, sh]);
-  const article = html.slice(html.indexOf('<main class="guide-article">'));
+  const article = html.slice(html.indexOf('class="guide-article"'));
   // A hidden element is a control a script reveals or a panel it fills.
   // Nothing that carries the page's words is ever hidden, and no hidden
   // element wraps the article.

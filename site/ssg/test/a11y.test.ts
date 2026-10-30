@@ -81,6 +81,17 @@ test("the 404 is marked as a dead end and still reads in order", () => {
   ok(html.indexOf("<main") < html.indexOf("<button type=\"button\" data-action=\"copy\""));
 });
 
+test("the keyboard reaches the article without the header in the way", () => {
+  // The header repeats on every page. The first tab stop is a link past
+  // it, the main it points at takes the focus, and it stays reachable
+  // without a stylesheet trick that would leave it off-screen forever.
+  const html = render("en", [prose]);
+  match(html, /<body[^>]*>\s*<a class="skip-link" href="#content">/);
+  match(html, /<main[^>]*id="content"[^>]*tabindex="-1"/);
+  // The label is the reader's own language, not the catalog's default.
+  match(render("ja", [prose]), />本文へ移動<\/a>/);
+});
+
 test("the search dialog names its field, its list, and its tally", () => {
   // The dialog is built in the browser; these are the attributes the
   // script sets, held here so a change to them is a change to the

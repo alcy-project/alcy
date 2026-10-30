@@ -317,6 +317,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     ${speculationRules()}
   </head>
   <body class="site">
+    <a class="skip-link" href="#content">${t("site.skip")}</a>
     ${header(page.route, page.language, page.path)}
 
     <div class="guide-layout">
@@ -325,7 +326,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
         ${outline(sections, options, t)}
       </div>
 
-      <main class="guide-article">
+      <main class="guide-article" id="content" tabindex="-1">
         ${article}
         ${pager(page, options)}
       </main>
@@ -374,9 +375,10 @@ export function renderGuideIndex(
     ${speculationRules()}
   </head>
   <body class="site">
+    <a class="skip-link" href="#content">${t("site.skip")}</a>
     ${header(route, language, "guide/index.html")}
 
-    <main class="site-main guide-contents">
+    <main class="site-main guide-contents" id="content" tabindex="-1">
       <h1>${t("site.guide")}</h1>
       <ol>
         ${items}
@@ -432,6 +434,7 @@ export function renderNotFound(
     <link rel="icon" href="favicon.svg" />
   </head>
   <body class="site">
+    <a class="skip-link" href="#content">Skip to content</a>
     <header class="site-header">
       <a class="site-brand" href="./">alcy</a>
       <nav class="site-nav">
@@ -440,7 +443,7 @@ export function renderNotFound(
       </nav>
     </header>
 
-    <main class="site-main">
+    <main class="site-main" id="content" tabindex="-1">
       <h1>Page not found</h1>
       <p>
         The page you asked for does not exist. It may have moved, or the link
