@@ -109,6 +109,17 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   // here means the default, not an error to report a second time.
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
   c.fmt_check = matches.get<bool>("check").unwrap_or(c.fmt_check);
+  c.fmt_stdin = matches.get<bool>("stdin").unwrap_or(c.fmt_stdin);
+  c.fmt_stdout = matches.get<bool>("stdout").unwrap_or(c.fmt_stdout);
+  c.fmt_diff = matches.get<bool>("diff").unwrap_or(c.fmt_diff);
+  if (auto names = matches.get_all<std::string_view>("exclude");
+      names.is_ok()) {
+    for (std::string_view name : std::move(names).unwrap()) {
+      if (!name.empty()) {
+        c.fmt_exclude.push_back(name);
+      }
+    }
+  }
   c.lint_fix = matches.get<bool>("fix").unwrap_or(c.lint_fix);
   c.lint_list_rules =
       matches.get<bool>("list-rules").unwrap_or(c.lint_list_rules);
@@ -479,9 +490,25 @@ arg::Parser build_parser(i18n::Language language) {
           .build());
   builder.add_subcommand(
       build_subcommand("fmt", std::string(usage.text(i18n::Key::CliFmtAbout)))
+          .add_arg(arg::ArgBuilder("stdin")
+                       .help("Read the program from standard input.")
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("stdout")
+                       .help("Write the result to standard output.")
+                       .is_flag(true)
+                       .build())
           .add_arg(arg::ArgBuilder("check")
                        .help(usage.text(i18n::Key::CliFmtCheckHelp))
                        .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("diff")
+                       .help("Show a unified diff instead of writing.")
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("exclude")
+                       .help("Skip files whose path ends with this suffix.")
+                       .default_value("")
                        .build())
           .build());
   builder.add_subcommand(

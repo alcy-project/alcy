@@ -128,9 +128,18 @@ struct CliConfig {
   std::vector<std::string_view> lint_warn;
   std::vector<std::string_view> lint_deny;
   // The files fmt was pointed at, in command-line order. Empty reads
-  // standard input and writes standard output. Views borrow argv storage
-  // like input.
+  // standard input and writes standard output unless package discovery
+  // applies. Views borrow argv storage like input.
   std::vector<std::string_view> fmt_files;
+  // fmt was asked to read the program from standard input.
+  bool fmt_stdin = false;
+  // fmt was asked to write its result to standard output even for a file.
+  bool fmt_stdout = false;
+  // fmt was asked to show a unified diff rather than write.
+  bool fmt_diff = false;
+  // Glob-like path suffixes fmt skips during package discovery or when
+  // handling an explicit list. Views borrow argv storage like input.
+  std::vector<std::string_view> fmt_exclude;
   // Which ignore file `new` and `init` write. Defaults to git because
   // that is the version control most packages are kept in, and the
   // choice only selects a file: no repository is created either way.
