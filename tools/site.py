@@ -142,13 +142,18 @@ PAGE_BUDGETS = (
 )
 
 # A guide page with code pays for its blocks' Copy button, and a page
-# with a runnable program pays for Run and Edit too. The ceiling covers
-# the whole budget of scripts a code page names.
+# with a runnable program pays for Run too. The ceiling covers every
+# script a runnable page names or fetches on its own initiative.
 GUIDE_SCRIPT_BUDGET = 8_000
 
 # The copy-only half rides along with every code page, so it is the half
 # that has to stay small.
 GUIDE_COPY_BUDGET = 3_000
+
+# The editor's half is fetched on the first Edit rather than with the
+# page, so it has a ceiling of its own: it is the one download a reader
+# can decline by not pressing the button.
+GUIDE_EDIT_BUDGET = 3_000
 
 # The heaviest files the playground can fetch, though only on demand:
 # `tree-sitter-alcy` for the editor's colors and the compiler for Check
@@ -195,7 +200,8 @@ def check_guide_scripts(dist_dir: Path, errors: list[str]) -> None:
     """Holds both halves of the guide's script to their budgets."""
     for path, budget, note in (
         ("guide-copy.js", GUIDE_COPY_BUDGET, "every code page's buttons"),
-        ("guide.js", GUIDE_SCRIPT_BUDGET, "a runnable block's Run and Edit"),
+        ("guide-run.js", GUIDE_SCRIPT_BUDGET, "a runnable block's Run"),
+        ("guide-edit.js", GUIDE_EDIT_BUDGET, "the editor, fetched on first Edit"),
     ):
         compressed = measured(dist_dir / "shared" / path)
         log(f"budget: shared/{path} {compressed} / {budget}")

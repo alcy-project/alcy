@@ -10,6 +10,7 @@
 // by a script.
 
 import { equal, ok, match } from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import type { GuidePage } from "../src/guide.js";
@@ -140,4 +141,19 @@ test("the 404 page keeps its words and its way home", () => {
   const text = textOutsideScripts(html);
   ok(text.includes("Page not found"), "the message is in the body");
   match(html, /href="guide\/"/);
+});
+
+test("the editor is fetched on the first Edit, not with the page", () => {
+  // A reader who only presses Run pays for Run: the page names the
+  // module that answers it, and the editor's half arrives by import.
+  const html = render([alcy]);
+  match(html, /src="[^"]*shared\/guide\.js"/);
+  ok(!/src="[^"]*guide-edit\.js"/.test(html), "the page does not name the editor");
+  // The entry defers it: a static import would put it back on the page.
+  const entry = readFileSync("site/shared/guide.ts", "utf8");
+  match(entry, /import\("\.\/guide-edit\.js"\)/);
+  ok(
+    !/^import \{[^}]*\} from "\.\/guide-edit\.js"/m.test(entry),
+    "guide-edit is imported only on demand",
+  );
 });

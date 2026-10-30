@@ -279,8 +279,9 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const assets = assetPrefix(page.route);
   const t = (key: MessageKey): string => translate(page.language, key);
   const hasCode = page.blocks.some((block) => block.type === "code");
-  // A runnable program is the only reason to load the compiler's client
-  // and the editor, so the page asks for `guide.js` only when it has one.
+  // A runnable program is the only reason to load the compiler's client,
+  // so the page asks for `guide.js` only when it has one; that module
+  // fetches the editor's half the first time a reader presses Edit.
   const hasRunnable = page.blocks.some(
     (block) => block.type === "code" && block.language === "alcy",
   );

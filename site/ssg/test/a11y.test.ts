@@ -52,7 +52,10 @@ test("the page's regions are named landmarks", () => {
   match(html, /<main/);
   match(html, /<footer class="site-footer"/);
   // The banner, the main region, and the contentinfo come from the
-  // elements themselves; the navigation and the search need names.
+  // elements themselves; the navigation and the search need names. The
+  // header's nav is named first, so a bare `<nav[^>]*aria-label` would
+  // be satisfied by the article's own contents and let it stay silent.
+  match(html, /<nav class="site-nav" aria-label="[^"]+"/);
   match(html, /<nav[^>]*aria-label="/);
 });
 
@@ -60,8 +63,12 @@ test("no two landmarks answer to the same name", () => {
   // Repeated regions are leaf nodes in a screen reader's landmark list,
   // so two called "Guide" would be told apart by position alone.
   const html = render("en", [prose]);
-  const names = Array.from(html.matchAll(/<nav[^>]*aria-label="([^"]*)"/g)).map((m) => m[1]);
+  const names = Array.from(html.matchAll(/<nav[^>]*aria-label="([^"]*)"/g), (m) => m[1] ?? "");
   ok(names.length >= 3, "the header, the contents, and the pager are navs");
+  // Every nav carries a name: a missing one would read as `""` and pass
+  // a set-comparison while leaving the region silent.
+  const silent = names.filter((name) => name.trim() === "");
+  equal(silent.length, 0, `${names.join(", ")} all name their region`);
   equal(new Set(names).size, names.length, `${names.join(", ")} name distinct regions`);
 });
 
