@@ -57,6 +57,21 @@ every instantiation it needs, and the pass substitutes and clones
 bodies, memoized by (item, type arguments). A dependent's use of a
 library generic produces the specialization in the dependent's build.
 
+Amended at its landing: the pass sits **before the borrow pass**, in
+each package's own build. Linking is object-level and a package lowers
+to its own IR, so there is no whole-program IR to specialize after
+linking; the dependent reads the parametric body from the summary and
+emits the instance beside its own code. The borrow pass therefore sees
+only monomorphic code, and a generic body is borrowed once per
+specialization - which settles what this record left open. The
+instantiations the pass resolves are the ones the lowered IR names: a
+call the parameter's acts decide is the dispatch record ADR-0080
+describes, and a call to a generic item is the item with the type
+arguments the definition-site check already resolved, so the pass
+substitutes the concrete arguments and clones the body. The generic
+item is emitted once, in the parametric form, and a parametric
+function is one no backend ever receives.
+
 A body that is monomorphic is still not carried in a summary: the
 dependent links the library's object for it. A generic body is carried,
 in the parameterized form, because no concrete object can hold it. The
@@ -89,9 +104,9 @@ analyzer's per-instantiation resolution goes with it. The binary
 format changes; the project is pre-MVP, so there is no compatibility
 to keep.
 
-What this record does not settle, because each is a decision of its
-own: where the specialization pass sits relative to the borrow pass, a
-generic body being borrowed once or once per specialization. How a call
+What this record did not settle, and its landing has: where the
+specialization pass sits relative to the borrow pass, and whether a
+generic body is borrowed once or once per specialization. How a call
 on a parameter resolves is ADR-0080.
 
 One case did not fit the decision as it landed: a generic whose
@@ -124,7 +139,8 @@ stay: the specialization pass is what replaces them.
    shape a bare parameter would decide. An unsuffixed numeric literal
    meeting a parameter adopts it, and the instantiation's own check
    settles the width.
-3. A specialization pass over IR, after linking.
+3. A specialization pass over IR, before the borrow pass, in each
+   package's build (the Decision above).
 4. The summary carries a generic body, and the `needs_body` flag
    goes.
 5. The AST-level instantiation walk is deleted.
