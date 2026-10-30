@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "ast/ast.h"
 #include "linter/context.h"
 

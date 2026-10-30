@@ -6,7 +6,6 @@
 #include <string_view>
 #include <vector>
 
-#include "ast/ast.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "linter/context.h"

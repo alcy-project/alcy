@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "fpag/base/numeric.h"
 #include "linter/config.h"
