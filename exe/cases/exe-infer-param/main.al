@@ -5,9 +5,15 @@ fn id<T>(x: T) -> T {
 }
 
 fn main() -> i32 {
-  if id(5) != 5 { ret 1 }
-  if id("x") != "x" { ret 2 }
+  if id(5) != 5 {
+    ret 1
+  }
+  if id("x") != "x" {
+    ret 2
+  }
   n := id(7)
-  if n != 7 { ret 3 }
+  if n != 7 {
+    ret 3
+  }
   ret 0
 }

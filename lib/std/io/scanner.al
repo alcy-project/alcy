@@ -77,8 +77,7 @@ impl Scanner {
 
   // `count` tokens parsed as `T`, in order; the end of input before
   // the count is met answers `End`.
-  pub fn next_vec<T: Parse>(mut self: &mut Self,
-                            count: usize) -> Result<Vec<T>, ScanError> {
+  pub fn next_vec<T: Parse>(mut self: &mut Self, count: usize) -> Result<Vec<T>, ScanError> {
     mut out := Vec::<T>::with_capacity(count)
     mut i := 0 as usize
     while i < count {

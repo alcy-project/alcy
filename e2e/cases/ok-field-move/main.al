@@ -9,8 +9,12 @@ fn main() -> i32 {
   s := S { b: Option::Some(items) }
   match s.b {
     Option::Some(inner) => {
-      if inner.len() != 1 { ret 1 }
-      if *inner.at(0).or_panic_with_message("the vector holds one element") != 7 { ret 2 }
+      if inner.len() != 1 {
+        ret 1
+      }
+      if *inner.at(0).or_panic_with_message("the vector holds one element") != 7 {
+        ret 2
+      }
     }
     Option::None => {
       ret 3

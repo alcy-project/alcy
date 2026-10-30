@@ -2,7 +2,9 @@ spec Ident {
   fn id(self: &Self) -> i32;
 }
 
-struct Point { x: i32 }
+struct Point {
+  x: i32,
+}
 
 impl Ident for Point {
   fn id<U>(self: &Point) -> i32 {

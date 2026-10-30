@@ -19,16 +19,24 @@ fn main() -> i32 {
   v.push(2)
   match first_of(&v) {
     Option::Some(x) => {
-      if *x != 1 { ret 1 }
+      if *x != 1 {
+        ret 1
+      }
     }
     Option::None => {
       ret 2
     }
   }
   doubled := map_all(&v, (x: &i32) -> *x * 2)
-  if *doubled.at(0).or_panic_with_message("the vector holds two elements") != 2 { ret 3 }
-  if *doubled.at(1).or_panic_with_message("the vector holds two elements") != 4 { ret 4 }
+  if *doubled.at(0).or_panic_with_message("the vector holds two elements") != 2 {
+    ret 3
+  }
+  if *doubled.at(1).or_panic_with_message("the vector holds two elements") != 4 {
+    ret 4
+  }
   labels := map_all(&v, (x: &i32) -> format("n{}", *x))
-  if labels.at(0).or_panic_with_message("the vector holds two elements").as_str() != "n1" { ret 5 }
+  if labels.at(0).or_panic_with_message("the vector holds two elements").as_str() != "n1" {
+    ret 5
+  }
   ret 0
 }

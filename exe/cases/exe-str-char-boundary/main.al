@@ -1,7 +1,7 @@
 // `is_char_boundary` answers for a position a scalar may start at: the
 // ends always qualify, a position inside a scalar does not.
 fn main() -> i32 {
-  s := "éx"  // two bytes, then one
+  s := "éx" // two bytes, then one
   if !s.is_char_boundary(0) {
     ret 1
   }

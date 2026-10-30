@@ -2,7 +2,9 @@
 // a literal, an arithmetic result, a Copy struct literal, and an
 // explicit spec call like `a.eq(&1)`.
 
-struct P { x: i32 }
+struct P {
+  x: i32,
+}
 
 fn take_p(p: &P) -> i32 {
   ret p.x
