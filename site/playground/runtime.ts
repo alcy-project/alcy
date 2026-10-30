@@ -29,14 +29,58 @@ let compilerClient: CompilerClient | null = null;
 
 // The client creates the worker on the first request and keeps it for the
 // page; `applyCompilerState` hears every load status in between.
+function compiler(): CompilerClient {
+  if (compilerClient === null) {
+    compilerClient = openCompiler({ base: assetBase, onStatus: applyCompilerState });
+  }
+  return compilerClient;
+}
+
+// Loading the compiler costs more than any check does, so the page starts
+// it as soon as the reader looks like they will use it -- hovering Run,
+// focusing the editor, or simply staying on the page -- and the status
+// line then reports a load already under way rather than one the click
+// started. A metered connection is left alone: there the download is the
+// reader's decision to make.
+const WARM_DELAY_MS = 400;
+
+export function warmCompiler(): void {
+  if (compilerClient !== null || !worthWarming()) {
+    return;
+  }
+  void compiler().request("check", normalizedSource()).catch(() => {
+    // A load that fails reports itself through the compiler state.
+  });
+}
+
+function worthWarming(): boolean {
+  const connection = (
+    navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }
+  ).connection;
+  if (connection?.saveData === true) {
+    return false;
+  }
+  return connection?.effectiveType !== "slow-2g" && connection?.effectiveType !== "2g";
+}
+
+// The intent signals: a pointer resting on a button, or focus arriving in
+// the editor. Both are added once, and both stay out of the way.
+export function warmOnIntent(): void {
+  const warm = (): void => {
+    window.clearTimeout(state.warmTimer);
+    state.warmTimer = window.setTimeout(warmCompiler, WARM_DELAY_MS);
+  };
+  for (const button of [elements.run, elements.check]) {
+    button.addEventListener("pointerenter", warm, { passive: true });
+  }
+  elements.source.addEventListener("focus", warm, { passive: true });
+}
+
 function callCompiler(
   op: "check" | "compile",
   source: string,
 ): Promise<CompilerResponse> {
-  if (compilerClient === null) {
-    compilerClient = openCompiler({ base: assetBase, onStatus: applyCompilerState });
-  }
-  return compilerClient.request(op, source);
+  return compiler().request(op, source);
 }
 
 // What a compiler state change means for the page: a ready worker gets a

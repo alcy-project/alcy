@@ -30,6 +30,8 @@ export interface PageState {
   sideFraction: number;
   codeSaveTimer: number | undefined;
   checkTimer: number | undefined;
+  // Pending delay before the compiler's load starts on intent.
+  warmTimer: number | undefined;
   running: boolean;
   status: StatusRef;
   runMeta: RunMeta | null;
@@ -48,6 +50,7 @@ export const state: PageState = {
   sideFraction: 0,
   codeSaveTimer: undefined,
   checkTimer: undefined,
+  warmTimer: undefined,
   running: false,
   status: { key: "status.ready" },
   runMeta: null,

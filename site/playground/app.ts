@@ -62,6 +62,15 @@ function init(): void {
     void runtime.runCheck({ automatic: false });
   });
   elements.copyLink.addEventListener("click", copyLink);
+  runtime.warmOnIntent();
+
+  // A reader who stays is likely to try something. Idle time is free
+  // unless the connection says otherwise, which `warmCompiler` checks.
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(() => runtime.warmCompiler(), { timeout: 4000 });
+  } else {
+    window.setTimeout(() => runtime.warmCompiler(), 2000);
+  }
 
   // A reload or a tab switch right after a keystroke must not lose it:
   // both events flush the pending debounced save.

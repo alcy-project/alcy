@@ -134,6 +134,17 @@
     </noscript>
 
     <link rel="modulepreload" href="{{dist}}playground/app.js" />
+    <!-- The compiler's module is what Check and Run wait on. Naming it
+         here lets the browser fetch it beside the page's own scripts
+         instead of after the first keystroke asks for it; it is still
+         only downloaded, never instantiated, unless the reader runs. -->
+    <link
+      rel="preload"
+      href="{{dist}}playground/compiler/alcy_playground.wasm"
+      as="fetch"
+      type="application/wasm"
+      crossorigin
+    />
     <script type="module" src="{{dist}}playground/app.js"></script>
   </body>
 </html>
