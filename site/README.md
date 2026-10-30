@@ -24,15 +24,17 @@ site is shaped this way.
   names its cache from that file, so a deploy retires the old cache on
   the next page load. The playground's editor and the guide's
   build-time highlighting share `shared/highlight.ts`, and
-  `shared/i18n.ts` is the one catalog the generator stamps from.
-  `guide.ts` wires the guide's code blocks -- Copy everywhere, Run and
-  Edit on the `alcy` ones -- with the edit colored by the same
-  tree-sitter grammar the playground uses, fetched on the first Edit;
-  Open hands the working copy to the playground through `handoff.ts`,
-  and `compiler-client.ts` is the shared client for the playground's
-  two workers. `search.ts` opens the guide's search dialog from the
-  header's button, `/`, or Ctrl/Cmd-K, over the index the generator
-  writes; a result links into the tree the reader is in.
+  `shared/i18n.ts` is the catalog both trees are cut from. The guide's
+  code blocks are two modules: `guide-copy.ts` reveals the row and
+  wires Copy on every block, and `guide.ts` adds Run and Edit, with the
+  edit colored by the same tree-sitter grammar the playground uses,
+  fetched on the first Edit. A page loads the second only when a block
+  holds a complete program. Open hands the working copy to the
+  playground through `handoff.ts`, and `compiler-client.ts` is the
+  shared client for the playground's two workers. `search.ts` opens
+  the guide's search dialog from the header's button, `/`, or
+  Ctrl/Cmd-K, over the index the generator writes; a result links into
+  the tree the reader is in.
 - `playground/` - the browser playground. Its `index.html` is a template
   too; the launch scripts resolve the page's assets against their own
   URL, so a page in another language's tree finds the one set of assets.
@@ -69,11 +71,56 @@ the wrong language first and the guide reads without JavaScript. The
 compiled assets (`shared/`, `playground/`) stay in one place; only the
 pages are duplicated per tree.
 
+## What the pages owe their readers
+
+The site is served by GitHub Pages: static files, no server, no headers
+of our own. Everything below is a property of the built HTML and of what
+the page names, so a change that breaks one breaks it in production and
+nowhere earlier.
+
+- **The page reads without JavaScript.** The generator stamps the
+  article, the highlighting, the labels, and the language; scripts only
+  reveal controls and wire them. `ssg/test/no-js.test.ts` holds this:
+  every character of the text is in the document, nothing that needs a
+  script to work is shown, and no styling comes from a script.
+- **The first paint needs nothing but the HTML.** `boot.js` is inlined
+  into every head and resolves the theme before the body paints, so a
+  reader who chose dark never sees a light flash, offline or not.
+- **A page loads one module, and it names what it needs.** Each page has
+  one entry script at the end of the body; `modulepreload` covers the
+  shell and, on a code page, the guide's copy module. Only a page with a
+  runnable block names `guide.js`, and only the playground names its
+  workers. A new dependency belongs behind an interaction or behind a
+  route, never in the shell.
+- **Sizes are budgeted.** `site.py budget` holds the pages, the shell,
+  the catalogs, and the guide's two modules to byte counts, and `build`
+  runs the same gate. The numbers are raw bytes, so they do not drift
+  with what a proxy chooses to compress.
+- **One catalog per tree, one copy of the assets.** `i18n.ts` is the
+  source; the build writes `i18n.<lang>.js` and stamps each tree's
+  modules to import its own, so a page never carries the other
+  language's strings. The compiled assets stay at the root, and every
+  tree fetches them from there.
+- **Motion is offered, not imposed.** View transitions sit inside
+  `@media (prefers-reduced-motion: no-preference)`; with the preference
+  set, navigation is an ordinary page load.
+- **Keyboard and screen-reader users get the same page.** Landmarks
+  come from the elements, the navigation and the search carry names, the
+  search dialog announces its result count through a live region, and a
+  control that ships hidden is a real button that appears in the tab
+  order the moment it is shown. `ssg/test/a11y.test.ts` holds the markup
+  contract.
+- **Offline is a cache, not a rewrite.** The service worker caches the
+  shell and the assets by name and leaves navigations to the network
+  first, so a deploy is seen on the next load and an old cache is retired
+  by its version.
+
 ## Building
 
 ```sh
 uv run ./tools/site.py build          # assemble site/dist
 uv run ./tools/site.py test           # run the generator's tests
+uv run ./tools/site.py budget         # check the built pages' weight
 uv run ./tools/site.py serve          # http://127.0.0.1:8000/
 ```
 
