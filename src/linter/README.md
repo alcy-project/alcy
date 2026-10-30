@@ -101,10 +101,13 @@ code of its own and a suppressed finding offers no repair.
 `alcy lint --fix` applies the repairs the rules are sure of and then
 reports what remains. A pass lints, writes each file's non-overlapping
 repairs, and lints again; a repair that overlaps one already applied is
-left for a later pass, and the run stops after four. The final pass runs
+left for a later pass, and the run stops after four - a repair a fifth
+pass would have offered, or one the last pass skipped as overlapping,
+is not applied and its finding stays in the report. The final pass runs
 on the rewritten files, so the findings it prints describe the bytes on
 disk, and a denied finding a repair removed does not fail the run. A
-file that cannot be written is reported and ends the pass loop.
+file that cannot be written is reported, ends the pass loop, and keeps
+its original bytes, so the final pass reports against those.
 
 ## Performance
 
@@ -142,9 +145,12 @@ complete gate.
 | `too-many-arguments` | warn | a function above `max-args` parameters |
 | `unused-import` | warn | an import no path in the module names |
 
-`unreachable-code` and `dead-code` are off by default: the lowering
-pass already warns about the same expression (`WD003`), and a package
-in progress always has functions waiting for their first caller.
+Two rules are off by default, for different reasons.
+`unreachable-code` duplicates the lowering pass, which already warns
+`WD003` for the same statement; a run that lints without lowering opts
+in, and a run that lowers sees the finding twice if it does. `dead-code`
+has no compiler counterpart, and a package in progress always has
+functions waiting for their first caller, so it waits to be asked.
 `float-equality` is opt-in because comparing floats exactly is
 sometimes the point; the rule reports the comparison that is usually a
 mistake, not every one. A rule that suppresses a
@@ -164,8 +170,11 @@ is a private function whose (module, signature) pair no recorded call
 target names. The entry point, `pub` declarations, and spec
 implementations are the surface the rule keeps out of the question; the
 goal package alone is read, so the toolchain's own functions are never
-findings. It is opt-in because a package in progress always has
-functions waiting for their first caller.
+findings. Liveness is per signature, not per path: the checker records
+a call target without the function it sits in, so a helper reached only
+from an uncalled function stays live. The rule under-reports rather than
+claim a chain it cannot prove. It is opt-in because a package in
+progress always has functions waiting for their first caller.
 
 `unused-import` reads the path heads the walk recorded. An import is
 used when the module names its local name as the head of a value path, a
@@ -204,9 +213,14 @@ pattern test cannot be joined, so the finding stays without a repair.
    addresses, the default level, the code, and the summary - and one
    check shape: a whole-module `run`, or a `check_expr` / `check_item`
    / `check_block` hook the engine's shared walk dispatches to.
-   Implement it under `rules/`. A module rule that needs the binding or
-   usage table declares `READS_BINDINGS` or `READS_USAGE`; the engine
-   builds it once per module. A rule reads
+   Implement it in the `rules/` file that already covers its subject -
+   the binding table, checked types, control flow, expressions, items,
+   imports, fields, or the call graph - adding a file only when the
+   subject is new; the split is by what a rule reads, as the Layout
+   section lists. A module rule that needs the binding, name-usage, or
+   field-usage table declares `READS_BINDINGS`, `READS_USAGE`, or
+   `READS_FIELD_USAGE`; the engine builds each once per module, and
+   only when an enabled rule asked. A rule reads
    `LintContext` - the checked package, the AST, the sources, and the
    resolved setting - and reports through
    `ctx.report<Key>(span, args...)`, which composes the catalog message
@@ -243,3 +257,10 @@ pattern test cannot be joined, so the finding stays without a repair.
 - `fix.h` / `fix.cc`: collecting a pass's repairs and applying one
   file's edits, which `--fix` drives.
 - `rules/`: the rule implementations and their shared declarations.
+  `rules.h` holds every rule type; the registry folds them into one
+  table. The implementation files group rules by what they read rather
+  than one file per rule: `bindings_rules.cc` (the binding table),
+  `control_flow_rules.cc` (blocks and loops), `expression_rules.cc`
+  (one expression at a time), `type_rules.cc` (checked types),
+  `item_rules.cc` (declarations), `import_rules.cc`, `field_rules.cc`,
+  and `dead_code_rules.cc` (the call graph).
