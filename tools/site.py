@@ -18,6 +18,7 @@ file server can host.
 
     uv run ./tools/site.py build            # assemble site/dist
     uv run ./tools/site.py test             # run the generator's tests
+    uv run ./tools/site.py budget           # check site/dist against its budgets
     uv run ./tools/site.py serve            # serve it on :8000
 
 `build` takes whatever compiler artifacts it finds and warns when there
@@ -114,6 +115,111 @@ def log(message: str) -> None:
 def fail(message: str) -> int:
     print(f"site: error: {message}", file=sys.stderr)
     return 1
+
+
+# The site's weight budgets. Every page loads the shell's CSS and module;
+# a guide page with code adds `guide.js`, and only the playground ever
+# loads the compiler. Bytes are what the server sends (gzip for text, as
+# GitHub Pages and `site.py serve` both do), because that is what a
+# reader pays for; the per-asset ceilings leave room for ordinary growth
+# and none for a module that quietly pulls in the playground's runtime.
+@dataclass(frozen=True)
+class Budget:
+    path: str
+    bytes: int
+    note: str
+
+
+PAGE_BUDGETS = (
+    Budget("shared/site.css", 6_000, "the shell's stylesheet"),
+    Budget("shared/site.js", 3_000, "theme, prefetch, the service worker"),
+    Budget("shared/shell.js", 1_200, "every guide page's own module"),
+    Budget("shared/i18n.js", 4_500, "the catalog the shell imports"),
+    Budget("playground/app.js", 4_000, "the playground's wiring"),
+    Budget("playground/style.css", 6_000, "the playground's layout"),
+)
+
+# A guide page with code pays for its blocks' Copy and Edit buttons. The
+# ceiling covers the whole budget of scripts the page names.
+GUIDE_SCRIPT_BUDGET = 8_000
+
+# The heaviest files the playground can fetch, though only on demand:
+# `tree-sitter-alcy` for the editor's colors and the compiler for Check
+# and Run. The compiler's module is the one number on the site that
+# matters most, so it is budgeted rather than watched.
+ASSET_BUDGETS = (
+    Budget(
+        "playground/compiler/alcy_playground.wasm",
+        620_000,
+        "the compiler module, compressed",
+    ),
+    Budget("playground/grammar/tree-sitter-alcy.wasm", 64_000, "the grammar"),
+    Budget("playground/vendor/web-tree-sitter.js", 40_000, "the binding"),
+)
+
+
+# The compression every server applies to the site's text and wasm, so a
+# budget names the bytes a reader downloads rather than the bytes on disk.
+TEXT_SUFFIXES = {".css", ".html", ".js", ".json", ".svg", ".txt", ".wasm", ".xml"}
+
+
+def measured(path: Path) -> int:
+    if not TEXT_SUFFIXES & {path.suffix}:
+        return path.stat().st_size
+    with open(path, "rb") as handle:
+        return len(gzip.compress(handle.read(), 9))
+
+
+def check_budget(dist_dir: Path, budget: Budget, errors: list[str]) -> None:
+    path = dist_dir / budget.path
+    if not path.is_file():
+        errors.append(f"{budget.path}: missing ({budget.note})")
+        return
+    size = measured(path)
+    log(f"budget: {budget.path} {size} / {budget.bytes}")
+    if size > budget.bytes:
+        errors.append(
+            f"{budget.path}: {size} bytes is over the {budget.bytes} budget "
+            f"({budget.note})"
+        )
+
+
+def check_guide_scripts(dist_dir: Path, errors: list[str]) -> None:
+    compressed = measured(dist_dir / "shared" / "guide.js")
+    log(f"budget: shared/guide.js {compressed} / {GUIDE_SCRIPT_BUDGET}")
+    if compressed > GUIDE_SCRIPT_BUDGET:
+        errors.append(
+            f"shared/guide.js: {compressed} bytes is over the "
+            f"{GUIDE_SCRIPT_BUDGET} budget (a guide page's buttons)"
+        )
+    # The copy-only half stays small enough to ride along with every code
+    # page; the run half is what a reader who asks for it pays for.
+    copy_only = dist_dir / "shared" / "guide-copy.js"
+    if copy_only.is_file():
+        compressed = measured(copy_only)
+        log(f"budget: shared/guide-copy.js {compressed} / 3_000")
+        if compressed > 3_000:
+            errors.append(
+                f"shared/guide-copy.js: {compressed} bytes is over the 3_000 "
+                "budget (every guide page's buttons)"
+            )
+
+
+def command_budget(args: argparse.Namespace) -> int:
+    dist_dir = args.dist.resolve()
+    if not (dist_dir / "index.html").is_file():
+        return fail(f"{dist_dir} has no index.html; run `site.py build` first")
+    errors: list[str] = []
+    for budget in PAGE_BUDGETS + ASSET_BUDGETS:
+        check_budget(dist_dir, budget, errors)
+    check_guide_scripts(dist_dir, errors)
+    if errors:
+        for message in errors:
+            print(f"site: {message}", file=sys.stderr)
+        return 1
+    log("budgets held")
+    return 0
+
 
 
 def load_versions() -> Versions:
@@ -482,6 +588,15 @@ def command_build(args: argparse.Namespace) -> int:
     write_asset_version(dist_dir)
     build_guide(dist_dir)
 
+    errors: list[str] = []
+    for budget in PAGE_BUDGETS + ASSET_BUDGETS:
+        check_budget(dist_dir, budget, errors)
+    check_guide_scripts(dist_dir, errors)
+    if errors:
+        for message in errors:
+            print(f"site: {message}", file=sys.stderr)
+        return 1
+
     log(f"site ready: {dist_dir}")
     log(f"serve it with: uv run ./tools/site.py serve --dist {dist_dir}")
     return 0
@@ -612,6 +727,12 @@ def main() -> int:
 
     test_parser = subparsers.add_parser("test", help="run the generator's tests")
     test_parser.set_defaults(handler=command_test)
+
+    budget_parser = subparsers.add_parser(
+        "budget", help="check the assembled site against its weight budgets"
+    )
+    budget_parser.add_argument("--dist", type=Path, default=DEFAULT_DIST_DIR)
+    budget_parser.set_defaults(handler=command_budget)
 
     serve_parser = subparsers.add_parser("serve", help="serve the assembled site")
     serve_parser.add_argument("--dist", type=Path, default=DEFAULT_DIST_DIR)
