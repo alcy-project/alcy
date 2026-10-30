@@ -38,6 +38,7 @@ import http.server
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -134,7 +135,8 @@ PAGE_BUDGETS = (
     Budget("shared/site.css", 6_000, "the shell's stylesheet"),
     Budget("shared/site.js", 3_000, "theme, prefetch, the service worker"),
     Budget("shared/shell.js", 1_200, "every guide page's own module"),
-    Budget("shared/i18n.js", 4_500, "the catalog the shell imports"),
+    Budget("shared/i18n.en.js", 2_400, "the English catalog every page loads"),
+    Budget("shared/i18n.ja.js", 2_900, "the Japanese catalog, loaded by its tree"),
     Budget("playground/app.js", 4_000, "the playground's wiring"),
     Budget("playground/style.css", 6_000, "the playground's layout"),
 )
@@ -338,10 +340,91 @@ def copy_shared(dist_dir: Path) -> None:
             # The service worker serves from the site's root, not here:
             # its scope is its own directory and the whole site needs it.
             continue
+        if source.name == "i18n.js":
+            continue
         shutil.copy2(source, target / source.name)
         source_map = source.with_suffix(".js.map")
         if source_map.is_file():
             shutil.copy2(source_map, target / source_map.name)
+
+
+# The languages the generator emits a page tree for. A tree's script
+# loads one language's strings, not the table of all of them: each tree
+# gets its own copy of `shared/i18n.js` with the other catalog removed.
+# The module keeps every exported name, so nothing else changes.
+SITE_LANGUAGES = ("en", "ja")
+DEFAULT_LANGUAGE = "en"
+
+# The two catalogs are adjacent blocks that end at a line holding only
+# `};`, and the table that selects one by the page's language is a single
+# line between them and `toLanguage`.
+CATALOGS_TABLE = "const CATALOGS = { en, ja };"
+
+
+def prune_catalogs(source: str, language: str) -> str:
+    """Returns `source` with every catalog but `language` removed."""
+    pruned = source
+    for name in SITE_LANGUAGES:
+        if name == language:
+            continue
+        pattern = re.compile(
+            r"^(?:export )?const %s = \{\n[\s\S]*?^\};\n" % name, re.MULTILINE
+        )
+        pruned, count = pattern.subn("", pruned)
+        if count != 1:
+            raise RuntimeError(
+                f"shared/i18n.js has no {name} catalog to remove for {language}"
+            )
+    if pruned.count(CATALOGS_TABLE) != 1:
+        raise RuntimeError("shared/i18n.js has no CATALOGS table to prune")
+    return pruned.replace(CATALOGS_TABLE, f"const CATALOGS = {{ {language} }};")
+
+
+def write_catalogs(dist_dir: Path) -> None:
+    source = (BUILD_DIR / "shared" / "i18n.js").read_text(encoding="utf-8")
+    target = dist_dir / "shared"
+    target.mkdir(parents=True, exist_ok=True)
+    for language in SITE_LANGUAGES:
+        (target / f"i18n.{language}.js").write_text(
+            prune_catalogs(source, language), encoding="utf-8"
+        )
+    log(f"catalogs: {', '.join(SITE_LANGUAGES)}")
+
+
+# The catalog import the shared modules carry. The build rewrites it in
+# the tree's copy, which is the thing the compiler cannot know: one
+# source serves every tree, and only the stamper knows which tree a page
+# belongs to. A playground page reaches the shell through its own entry,
+# so both entries are rewritten.
+CATALOG_IMPORT = 'from "./i18n.js"'
+SHARED_CATALOG_IMPORT = 'from "../shared/i18n.js"'
+
+
+def catalog_users(route: str) -> list[Path]:
+    """The modules that import the catalog on behalf of `route`'s tree."""
+    users = [Path("shared") / "site.js"]
+    if route.startswith(f"{PAGE_SUBDIR}/") or route.rstrip("/") == PAGE_SUBDIR:
+        users.append(Path(PAGE_SUBDIR) / "app.js")
+    return users
+
+
+def stamp_catalog(dist_dir: Path, route: str, language: str) -> None:
+    """Points the tree's catalog imports at that language's module."""
+    for relative in catalog_users(route):
+        module = dist_dir / relative
+        source = module.read_text(encoding="utf-8")
+        needle = (
+            CATALOG_IMPORT if relative.parts[0] == "shared" else SHARED_CATALOG_IMPORT
+        )
+        count = source.count(needle)
+        if count == 0 or f"i18n.{language}.js" in source:
+            continue
+        if count != 1:
+            raise RuntimeError(f"{relative} does not import the catalog exactly once")
+        module.write_text(
+            source.replace(needle, needle.replace("i18n.js", f"i18n.{language}.js")),
+            encoding="utf-8",
+        )
 
 
 # The service worker must sit at the site's root for its scope.
@@ -577,6 +660,12 @@ def build_guide(dist_dir: Path) -> None:
     else:
         log("guide: compiler wasm is missing; alcy fences were not compiled")
     subprocess.run(command, check=True, cwd=project_root_dir)
+    # English is the tree at the site root, so its modules are the ones
+    # the build already copied; every other language lives under its own
+    # prefix, which is how `tools/site.py` names the trees it stamps.
+    for language in SITE_LANGUAGES:
+        route = "" if language == DEFAULT_LANGUAGE else f"{language}/"
+        stamp_catalog(dist_dir, route, language)
 
 
 def command_build(args: argparse.Namespace) -> int:
@@ -602,6 +691,7 @@ def command_build(args: argparse.Namespace) -> int:
 
     copy_static(dist_dir)
     copy_shared(dist_dir)
+    write_catalogs(dist_dir)
     copy_service_worker(dist_dir)
     copy_samples(dist_dir)
 

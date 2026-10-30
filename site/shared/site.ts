@@ -9,8 +9,13 @@
 // stored preference (`alcy-site-theme`) that `boot.js` applies to
 // `data-theme` before first paint; the settings menu's toggle drives it
 // afterwards.
+//
+// The stamper in `tools/site.py` points the catalog import at the one
+// module for this page's tree, so a reader downloads one language's
+// strings rather than the table of all of them; `i18n.ts` is the source
+// both modules are cut from.
 
-import { toLanguage, translate } from "./i18n.js";
+import * as catalog from "./i18n.js";
 import type { Language, MessageKey, MessageParams } from "./i18n.js";
 
 const THEME_KEY = "alcy-site-theme";
@@ -20,10 +25,10 @@ type ThemeMode = (typeof THEME_MODES)[number];
 
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-const language: Language = toLanguage(document.documentElement.lang);
+const language: Language = catalog.toLanguage(document.documentElement.lang);
 
 export function t(key: MessageKey, params?: MessageParams): string {
-  return translate(language, key, params);
+  return catalog.translate(language, key, params);
 }
 
 function isThemeMode(value: string | null): value is ThemeMode {

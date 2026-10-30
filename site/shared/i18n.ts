@@ -11,8 +11,12 @@
 // the template level), and the playground's dynamic strings go through
 // `t()` at runtime. Adding a language means one catalog here, one entry
 // in `LANGUAGES`, and one tree for the generator to emit.
+//
+// A browser ships one catalog, not the table of all of them: the build
+// generates a module per language from this file, and each page tree
+// loads only its own.
 
-const en = {
+export const en = {
   "site.guide": "Guide",
   "site.playground": "Playground",
   "site.search": "Search",
@@ -94,10 +98,7 @@ const en = {
     "the compiler wasm module could not be loaded{detail}. Build it with `uv run ./tools/site.py build` and serve the result.",
 } as const;
 
-export type MessageKey = keyof typeof en;
-export type MessageParams = Record<string, string | number>;
-
-const ja: Record<MessageKey, string> = {
+const ja = {
   "label.example": "例",
   "site.guide": "ガイド",
   "site.playground": "プレイグラウンド",
@@ -177,7 +178,10 @@ const ja: Record<MessageKey, string> = {
   "program.timedOut": "プログラムが {seconds} 秒以内に終了しなかったため停止しました",
   "compiler.missing":
     "コンパイラの wasm モジュールを読み込めませんでした{detail}。`uv run ./tools/site.py build` でビルドしてから配信してください。",
-};
+} satisfies Record<MessageKey, string>;
+
+export type MessageKey = keyof typeof en;
+export type MessageParams = Record<string, string | number>;
 
 export type Language = "en" | "ja";
 
@@ -190,7 +194,11 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
   ja: "日本語",
 };
 
-const CATALOGS: Record<Language, Record<MessageKey, string>> = { en, ja };
+// A catalog may be incomplete: the build generates one per language, and
+// a key it does not carry falls back to the English text.
+export type Catalog = Partial<Record<MessageKey, string>>;
+
+const CATALOGS: Record<Language, Catalog> = { en, ja };
 
 // A page's `<html lang>` names its tree; a value outside the catalog
 // falls back to English so a hand-edited page still renders.
@@ -204,7 +212,7 @@ export function translate(
   params?: MessageParams,
 ): string {
   const template = CATALOGS[language][key] ?? en[key];
-  if (!params) {
+  if (params === undefined) {
     return template;
   }
   return template.replace(/\{(\w+)\}/g, (match: string, name: string) =>
