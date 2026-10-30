@@ -372,6 +372,15 @@ TEST_CASE("The root version names the build") {
   }
 }
 
+TEST_CASE("Parse lint run-mode flags") {
+  const std::string_view args[] = {"alcy", "lint", "--deny-warnings",
+                                   "--no-borrow-checks"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Lint);
+  CHECK(config.lint_deny_warnings);
+  CHECK(config.lint_no_borrow_checks);
+}
+
 TEST_CASE("Parse lint list-rules") {
   const std::string_view args[] = {"alcy", "lint", "--list-rules"};
   const CliConfig config = parse_ok(args);

@@ -520,6 +520,33 @@ TEST_CASE("unused-field is off until it is asked for") {
   CHECK(findings_for(run.ctx.bag, "unused-field") == 0);
 }
 
+TEST_CASE("deny-warnings makes a warning an error") {
+  Run run;
+  run("fn main() -> i32 {\n  unused := 1\n  ret 0\n}\n",
+      config_from(run.ctx, "deny-warnings = true\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 1);
+  CHECK(run.ctx.bag.has_errors());
+}
+
+TEST_CASE("a non-boolean deny-warnings is a config error") {
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<LintConfig, diag::Reported> parsed =
+      parse_lint_config("deny-warnings = \"yes\"\n", "lint.toml",
+                        source::UNKNOWN_FILE, ctx.bag, ctx.arena);
+  CHECK(parsed.is_err());
+  CHECK(ctx.bag.has_errors());
+}
+
+TEST_CASE("deny-warnings leaves a silenced rule silent") {
+  Run run;
+  // shadow is allow by default; deny-warnings promotes what fires and
+  // must not turn the rule on.
+  run("fn main() -> i32 {\n  x := 1\n  if x > 0 {\n    x := 2\n    ret x\n  }\n"
+      "  ret x\n}\n",
+      config_from(run.ctx, "deny-warnings = true\n"));
+  CHECK(findings_for(run.ctx.bag, "shadow") == 0);
+}
+
 TEST_CASE("a command-line override edits the resolved table") {
   pipeline::PipelineContext ctx{i18n::Language::EnUs};
   LintConfig config =

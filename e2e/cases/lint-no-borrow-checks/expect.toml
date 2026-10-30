@@ -1,0 +1,4 @@
+subcommand = "lint"
+args = ["--no-borrow-checks"]
+exit = 0
+contains = ["warning[unused-variable]"]

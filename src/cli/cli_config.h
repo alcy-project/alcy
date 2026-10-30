@@ -112,6 +112,13 @@ struct CliConfig {
   // lint was asked to print the rule table and stop, the shape clang-tidy
   // spells --list-checks. It needs no target: the registry is the answer.
   bool lint_list_rules = false;
+  // lint was asked to fail on a warning, the shape rustc and clippy spell
+  // -D warnings. It promotes the findings that fire and does not turn on a
+  // rule the config silenced.
+  bool lint_deny_warnings = false;
+  // lint was asked to skip the lowering and borrow tail, the fast edit
+  // loop. It is the command-line spelling of borrow-checks = false.
+  bool lint_no_borrow_checks = false;
   // Command-line level overrides for lint, in the order the flags were
   // given within each kind. They edit the resolved table after the file
   // is read, so a flag wins over lint.toml; deny beats warn beats allow

@@ -151,9 +151,13 @@ struct LintContext {
     if (suppressed(sources, span, rule->id)) {
       return bag.size();
     }
-    const diag::Severity severity = level == LintLevel::Deny
-                                        ? diag::Severity::Error
-                                        : diag::Severity::Warning;
+    // A denied rule is an error, and so is every finding when the run
+    // asked a warning to fail; an allow already answered above, so a
+    // rule the config silenced is not promoted.
+    const diag::Severity severity =
+        (level == LintLevel::Deny || config.deny_warnings)
+            ? diag::Severity::Error
+            : diag::Severity::Warning;
     return bag.emit_named<K>(severity, rule->code, rule->id, span,
                              std::forward<Args>(args)...);
   }

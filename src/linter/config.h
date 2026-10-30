@@ -48,6 +48,11 @@ struct LintConfig {
   // tail is what makes a lint run reject a program the compiler would.
   // False trades that verdict for about half the run.
   bool borrow_checks = true;
+  // Whether a finding that would be a warning is an error instead, the
+  // shape rustc and clippy spell -D warnings. It promotes what fires; a
+  // rule at allow stays silent and is not turned on. A CI gate every
+  // finding fails.
+  bool deny_warnings = false;
 
   // The setting for the rule at the given index in the registry. An
   // index past the table reads the rule's own default: a config that

@@ -314,6 +314,12 @@ ResultCode run_lint(const CliConfig& config,
   if (!apply_overrides(config, lint_config, ctx.bag)) {
     return ResultCode::LintFailed;
   }
+  // The run-mode flags are additive: the file can turn either on and the
+  // command line adds to it.
+  lint_config.deny_warnings =
+      lint_config.deny_warnings || config.lint_deny_warnings;
+  lint_config.borrow_checks =
+      lint_config.borrow_checks && !config.lint_no_borrow_checks;
 
   u32 fixed = 0;
   if (config.lint_fix) {

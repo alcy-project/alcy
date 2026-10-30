@@ -155,6 +155,17 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
       config.borrow_checks = *flag;
       continue;
     }
+    if (name == "deny-warnings") {
+      const std::optional<bool> flag = node.value<bool>();
+      if (!flag.has_value()) {
+        const u32 index = bag.emit<i18n::Key::LintConfigDenyWarningsNotBool>(
+            LintCode::ConfigSemanticError, filename);
+        (void)index;
+        return base::make_err(diag::Reported{});
+      }
+      config.deny_warnings = *flag;
+      continue;
+    }
     if (name == "rules") {
       if (!node.is_table()) {
         const u32 index = bag.emit<i18n::Key::LintConfigRuleNotTable>(
