@@ -78,7 +78,12 @@ def unformatted(alcy: Path, paths: list[Path]) -> list[str]:
     names: list[str] = []
     for start in range(0, len(paths), CHUNK):
         chunk = paths[start : start + CHUNK]
-        result = run(alcy, "fmt", "--check", *map(str, chunk))
+        result = run(
+            alcy,
+            "fmt",
+            "--check",
+            *[flag for path in chunk for flag in ("--file", str(path))],
+        )
         if result.returncode not in (0, FMT_NOT_CLEAN):
             print(result.stderr.decode("utf-8", "replace"), file=sys.stderr)
             sys.exit("error: alcy fmt --check failed on the corpus")
@@ -132,7 +137,7 @@ def main() -> int:
     jobs = min(os.cpu_count() or 2, 8)
 
     def swept(path: Path):
-        formatted = run(alcy, "fmt", stdin=path.read_bytes())
+        formatted = run(alcy, "fmt", "--stdin", stdin=path.read_bytes())
         if formatted.returncode != 0:
             sys.exit(
                 f"error: alcy fmt failed on {path}\n"
