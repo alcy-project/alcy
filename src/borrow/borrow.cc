@@ -618,6 +618,20 @@ class Checker {
           // loan on the caller's argument rather than a bare pointer.
           flow[instr.dst.idx] = flow[place_reg];
           flow[instr.dst.idx].push_back(static_cast<u32>(loans.size()));
+          // A `str` local is a view: a borrow of it names the buffer
+          // the view reads through, and the slot that holds the view is
+          // the other place the same loan reaches. Both are stated, so
+          // a later borrow of the slot and one of the buffer compare as
+          // the overlapping loans they are. The slot stands for the
+          // view, not for the two words a copy of it owns, which is why
+          // copying the view out is still a plain copy.
+          if (place.path.empty() && place.root < storage.registers().size() &&
+              tag_of(storage.registers()[place.root].type) ==
+                  ir::TypeTag::Str) {
+            Place slot;
+            slot.root = place.root;
+            loans.push_back({instr.dst.idx, slot, exclusive, pos});
+          }
           loans.push_back({instr.dst.idx, place, exclusive, pos});
         }
         break;
