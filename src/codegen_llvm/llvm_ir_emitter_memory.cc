@@ -199,6 +199,127 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
                      : builder_->CreateGEP(elem_ty, base, indices));
       break;
     }
+    case Op::EnumTagLoad: {
+      // operands = [place]. The representation is the enum's: a niche
+      // synthesizes the discriminant from the payload's spare pattern
+      // (ADR-0087), a plain enum reads its tag slot.
+      DCHECK(ops.size() == 1);
+      if (!i.dst.is_valid()) {
+        break;
+      }
+      const ir::Operand& place_op = storage_->operands()[ops.head()];
+      llvm::Value* place = resolve_operand_value(place_op);
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_->state(), place_op.type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_->state(), enum_ty);
+      llvm::Value* disc = nullptr;
+      llvm::Type* const i32_ty = builder_->getInt32Ty();
+      if (!niche.has) {
+        llvm::Value* tag_ptr = builder_->CreateInBoundsGEP(
+            type(enum_ty), place,
+            {builder_->getInt32(0), builder_->getInt32(0)});
+        disc = builder_->CreateLoad(i32_ty, tag_ptr);
+      } else {
+        llvm::Value* payload = builder_->CreateLoad(type(niche.slot), place);
+        llvm::Value* fieldless = nullptr;
+        if (niche.slot == niche.payload) {
+          fieldless = builder_->CreateICmpEQ(
+              payload, llvm::ConstantPointerNull::get(builder_->getPtrTy()));
+        } else {
+          fieldless = builder_->CreateICmpUGT(
+              payload,
+              llvm::ConstantInt::get(type(niche.slot),
+                                     static_cast<u64>(niche.sentinel) - 1));
+        }
+        llvm::Value* step = builder_->CreateZExt(fieldless, i32_ty);
+        llvm::Value* carrying =
+            llvm::ConstantInt::get(i32_ty, static_cast<u64>(niche.carrying));
+        disc = niche.fieldless < niche.carrying
+                   ? builder_->CreateSub(carrying, step)
+                   : builder_->CreateAdd(carrying, step);
+      }
+      values_.add_register(i.dst, disc);
+      break;
+    }
+    case Op::EnumTagSet: {
+      // operands = [place, tag]. A niche writes its fieldless spell for
+      // the fieldless variant; the carrying variant's payload follows,
+      // so a zero stands where that payload's store lands.
+      DCHECK(ops.size() == 2);
+      const ir::Operand& place_op = storage_->operands()[ops.head()];
+      llvm::Value* place = resolve_operand_value(place_op);
+      llvm::Value* tag =
+          resolve_operand_value(storage_->operands()[ops.head() + 1]);
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_->state(), place_op.type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_->state(), enum_ty);
+      llvm::Type* const i32_ty = builder_->getInt32Ty();
+      if (!niche.has) {
+        llvm::Value* tag_ptr = builder_->CreateInBoundsGEP(
+            type(enum_ty), place,
+            {builder_->getInt32(0), builder_->getInt32(0)});
+        builder_->CreateStore(tag, tag_ptr);
+        break;
+      }
+      llvm::Value* fieldless = builder_->CreateICmpEQ(
+          tag,
+          llvm::ConstantInt::get(i32_ty, static_cast<u64>(niche.fieldless)));
+      llvm::Type* const slot_ty = type(niche.slot);
+      llvm::Value* spell =
+          niche.slot == niche.payload
+              ? static_cast<llvm::Value*>(
+                    llvm::ConstantPointerNull::get(builder_->getPtrTy()))
+              : static_cast<llvm::Value*>(llvm::ConstantInt::get(
+                    slot_ty, static_cast<u64>(niche.sentinel)));
+      builder_->CreateStore(
+          builder_->CreateSelect(fieldless, spell,
+                                 llvm::Constant::getNullValue(slot_ty)),
+          place);
+      break;
+    }
+    case Op::EnumFieldAddr: {
+      // operands = [place, variant, field]. A niche's payload is the
+      // slot itself; a plain enum's field lies in the area after the
+      // tag, at the offset the variant's fields publish.
+      DCHECK(ops.size() == 3);
+      if (!i.dst.is_valid()) {
+        break;
+      }
+      const ir::Operand& place_op = storage_->operands()[ops.head()];
+      llvm::Value* place = resolve_operand_value(place_op);
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_->state(), place_op.type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_->state(), enum_ty);
+      if (niche.has) {
+        values_.add_register(i.dst, place);
+        break;
+      }
+      const u64 variant =
+          llvm::cast<llvm::ConstantInt>(
+              resolve_operand_value(storage_->operands()[ops.head() + 1]))
+              ->getZExtValue();
+      const u64 field =
+          llvm::cast<llvm::ConstantInt>(
+              resolve_operand_value(storage_->operands()[ops.head() + 2]))
+              ->getZExtValue();
+      const ir::EnumType& shape =
+          storage_->enum_types()[storage_->types()[enum_ty.idx].as_enum()];
+      DCHECK(variant < shape.variants.size());
+      const ir::TypeIdxRange fields =
+          storage_->enum_variant_types()[shape.variants[variant]].fields;
+      DCHECK(field < fields.size());
+      // The area member sits at the alignment the payload needs, so
+      // the field's offset within the area is all that is left to add:
+      // the struct's own padding is the discriminant's room.
+      const u64 at = ir::field_offset(storage_->state(), fields,
+                                      static_cast<u32>(field), width_);
+      llvm::Value* area_ptr = builder_->CreateInBoundsGEP(
+          type(enum_ty), place, {builder_->getInt32(0), builder_->getInt32(1)});
+      values_.add_register(
+          i.dst, builder_->CreateInBoundsGEP(builder_->getInt8Ty(), area_ptr,
+                                             {builder_->getInt64(at)}));
+      break;
+    }
     case Op::ExtractValue: {
       // operands = [aggregate, index...]; indexes are integer immediates.
       DCHECK(ops.size() >= 2);

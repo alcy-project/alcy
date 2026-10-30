@@ -673,6 +673,9 @@ void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
     case Op::Memcopy:
     case Op::GetElementPtr:
     case Op::ElemOffset:
+    case Op::EnumTagLoad:
+    case Op::EnumTagSet:
+    case Op::EnumFieldAddr:
     case Op::ExtractValue:
     case Op::InsertValue:
     case Op::AtomicLoad:

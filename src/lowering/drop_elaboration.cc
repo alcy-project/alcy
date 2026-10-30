@@ -31,7 +31,6 @@
 #include "lowering/diag_code.h"
 #include "lowering/immediate.h"
 #include "lowering/lowerer.h"
-#include "lowering/niche.h"
 
 namespace lowering {
 
@@ -690,28 +689,11 @@ void DropElaborator::run() {
       // destructible fields are there to end.
       const ir::EnumType& shape = builder.enum_types()[node.as_enum()];
       const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
-      // A niche-carrying enum has no discriminant field: the payload's
-      // spell in the spare pattern answers for it (ADR-0087), the way
-      // the lowering's own load does.
-      const ir::EnumNiche niche = ir::enum_niche(builder.state(), type);
-      ir::RegisterIdx disc = ir::RegisterIdx(base::INVALID_IDX);
-      if (niche.has) {
-        // The same sequence the lowering reads, so the two cannot drift:
-        // the slot's shape and the fieldless spell come from the niche
-        // (ADR-0087).
-        disc = niche_discriminant(builder, niche, place, i32_ty,
-                                  [&](ir::Opcode op, ir::TypeIdx type,
-                                      const std::vector<ir::OperandIdx>& ops) {
-                                    return pass_emit(seq_of(out), op, type, ops,
-                                                     span);
-                                  });
-      } else {
-        const ir::RegisterIdx disc_addr =
-            pass_emit(seq_of(out), ir::Opcode::GetElementPtr, i32_ty,
-                      {place, zero_i32, index_operand(0)}, span);
-        disc = pass_emit(seq_of(out), ir::Opcode::Load, i32_ty,
-                         {to_operand(disc_addr, i32_ty)}, span);
-      }
+      // The discriminant answers which variant is live, however the
+      // representation spells it (ADR-0087); the tag read is the same
+      // semantic operation the lowering emits.
+      const ir::RegisterIdx disc = pass_emit(
+          seq_of(out), ir::Opcode::EnumTagLoad, i32_ty, {place}, span);
       const u32 exit_index = spawn(out);
       std::vector<u32> variant_blocks(shape.variants.size(), exit_index);
       for (u32 v = 0; v < shape.variants.size(); ++v) {
@@ -737,30 +719,23 @@ void DropElaborator::run() {
             out.blocks[variant_blocks[v]].block, void_ty)));
       }
       pass_emit_void(seq_of(out), ir::Opcode::Switch, ops, span);
-      const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
       for (u32 v = 0; v < shape.variants.size(); ++v) {
         if (variant_blocks[v] == exit_index) {
           continue;
         }
         out.current = variant_blocks[v];
         const ir::TypeIdxRange fields = variant_fields(type, v);
-        const ir::RegisterIdx area =
-            pass_emit(seq_of(out), ir::Opcode::GetElementPtr, byte,
-                      {place, zero_i32, index_operand(1)}, span);
         for (u32 fi = 0; fi < fields.size(); ++fi) {
           const ir::TypeIdx field = fields[fi];
           if (!runs_destructor(field)) {
             continue;
           }
-          // The address carries the field's own type, not the byte
-          // it was reached through: a projection from it recovers the
-          // element type from the register, and a byte register would
-          // index the element type itself.
+          // The address carries the field's own type; the offsets are
+          // the backend's (ADR-0087).
           const ir::RegisterIdx field_addr =
-              pass_emit(seq_of(out), ir::Opcode::GetElementPtr, field,
-                        {to_operand(area, byte),
-                         index_operand(static_cast<u32>(ir::field_offset(
-                             builder.state(), fields, fi, width)))},
+              pass_emit(seq_of(out), ir::Opcode::EnumFieldAddr, field,
+                        {place, imm_from_u64(ir::TypeTag::I32, i32_ty, v),
+                         index_operand(fi)},
                         span);
           emit_end(
               out, local, path, field, to_operand(field_addr, field),

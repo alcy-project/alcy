@@ -99,6 +99,22 @@ enum class Opcode : u8 {
   IntAddWrap,
   IntSubWrap,
   IntMulWrap,
+
+  // The enum accesses are semantic: what they mean is the discriminant
+  // or a payload field, and the representation - a tag slot or a
+  // niche's spare pattern, the payload's offsets - belongs to the
+  // backend, because a body whose type arguments are not known yet
+  // cannot commit to a layout (ADR-0079's landing).
+  // The discriminant at an enum place, as i32: operands = [place].
+  EnumTagLoad,
+  // Makes an enum place hold a variant: operands = [place, tag(i32)].
+  // A niche-carrying enum writes its fieldless spell for the fieldless
+  // variant and a zero for the carrying one, whose payload follows.
+  EnumTagSet,
+  // The address of payload field `field` of variant `variant` at an
+  // enum place, carrying the field's type: operands = [place,
+  // variant, field]. A niche-carrying enum's payload is the slot.
+  EnumFieldAddr,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -170,8 +186,12 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
 
     case O::IntAddWrap: return "IntAddWrap";
     case O::IntSubWrap: return "IntSubWrap";
-    case O::IntMulWrap:
-      return "IntMulWrap";
+    case O::IntMulWrap: return "IntMulWrap";
+
+    case O::EnumTagLoad: return "EnumTagLoad";
+    case O::EnumTagSet: return "EnumTagSet";
+    case O::EnumFieldAddr:
+      return "EnumFieldAddr";
 
       // case O::BorrowBegin: return "BorrowBegin";
       // case O::BorrowEnd: return "BorrowEnd";

@@ -319,6 +319,133 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       return emit_elem_offset(storage_.operands()[ops.head()],
                               storage_.operands()[ops.head() + 1], elem, instr);
     }
+    case O::EnumTagLoad: {
+      DCHECK_EQ(ops.size(), 1u);
+      if (!instr.dst.is_valid()) {
+        return base::make_ok();
+      }
+      const ir::Operand& place = storage_.operands()[ops.head()];
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_.state(), place.type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_ty);
+      if (!niche.has) {
+        if (push_word(place, 0, ValType::I32).is_err()) {
+          return base::make_err(codegen::EmitError::Unsupported);
+        }
+        i32_load(body_, 2, 0);
+      } else {
+        // The discriminant is the payload's spare pattern (ADR-0087):
+        // pick the variant index the spell names.
+        const std::optional<Access> byte = access_for(ir::TypeTag::I1);
+        if (!byte.has_value()) {
+          return unsupported(current_span_, "this enum");
+        }
+        i32_const(static_cast<i32>(niche.fieldless));
+        i32_const(static_cast<i32>(niche.carrying));
+        if (push_word(place, 0, ValType::I32).is_err()) {
+          return base::make_err(codegen::EmitError::Unsupported);
+        }
+        if (niche.slot == niche.payload) {
+          i32_load(body_, 2, 0);
+          op(op::OP_I32_EQZ);
+        } else {
+          body_.byte(byte->load);
+          body_.u32_leb(byte->load_align);
+          body_.u32_leb(0);
+          i32_const(static_cast<i32>(niche.sentinel) - 1);
+          op(op::OP_I32_GT_U);
+        }
+        op(op::OP_SELECT);
+      }
+      local_set(reg_base_[instr.dst.idx]);
+      return base::make_ok();
+    }
+    case O::EnumTagSet: {
+      DCHECK_EQ(ops.size(), 2u);
+      const ir::Operand& place = storage_.operands()[ops.head()];
+      const ir::Operand& tag = storage_.operands()[ops.head() + 1];
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_.state(), place.type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_ty);
+      if (!niche.has) {
+        if (push_word(place, 0, ValType::I32).is_err() ||
+            push_word(tag, 0, ValType::I32).is_err()) {
+          return base::make_err(codegen::EmitError::Unsupported);
+        }
+        i32_store(body_, 2, 0);
+        return base::make_ok();
+      }
+      // The fieldless spell for the fieldless variant; the carrying
+      // variant's payload follows, so a zero stands where it lands.
+      const bool thin = niche.slot == niche.payload;
+      const std::optional<Access> byte = access_for(ir::TypeTag::I1);
+      if (!thin && !byte.has_value()) {
+        return unsupported(current_span_, "this enum");
+      }
+      if (push_word(place, 0, ValType::I32).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      i32_const(thin ? 0 : static_cast<i32>(niche.sentinel));
+      i32_const(0);
+      if (push_word(tag, 0, ValType::I32).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      i32_const(static_cast<i32>(niche.fieldless));
+      op(op::OP_I32_EQ);
+      op(op::OP_SELECT);
+      if (thin) {
+        i32_store(body_, 2, 0);
+      } else {
+        body_.byte(byte->store);
+        body_.u32_leb(byte->store_align);
+        body_.u32_leb(0);
+      }
+      return base::make_ok();
+    }
+    case O::EnumFieldAddr: {
+      DCHECK_EQ(ops.size(), 3u);
+      if (!instr.dst.is_valid()) {
+        return base::make_ok();
+      }
+      const ir::Operand& place = storage_.operands()[ops.head()];
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_.state(), place.type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_ty);
+      if (push_word(place, 0, ValType::I32).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      if (!niche.has) {
+        const ir::Operand& variant_op = storage_.operands()[ops.head() + 1];
+        const ir::Operand& field_op = storage_.operands()[ops.head() + 2];
+        if (!variant_op.is<ir::ImmutableIdx>() ||
+            !field_op.is<ir::ImmutableIdx>()) {
+          return unsupported(current_span_, "this enum field");
+        }
+        const ir::Immutable& variant_imm =
+            storage_.immutables()[variant_op.as_immutable()];
+        const ir::Immutable& field_imm =
+            storage_.immutables()[field_op.as_immutable()];
+        const u64 variant =
+            variant_imm.as_u64_integer(storage_.types()[variant_imm.type].tag);
+        const u64 field =
+            field_imm.as_u64_integer(storage_.types()[field_imm.type].tag);
+        const ir::EnumType& shape =
+            storage_.enum_types()[storage_.types()[enum_ty].as_enum()];
+        DCHECK(variant < shape.variants.size());
+        const ir::TypeIdxRange fields =
+            storage_.enum_variant_types()[shape.variants[variant]].fields;
+        DCHECK(field < fields.size());
+        const ir::TypeLayout area =
+            ir::enum_payload_area(storage_.state(), enum_ty, target_.width);
+        const u64 at = ir::align_up(4, area.align) +
+                       ir::field_offset(storage_.state(), fields,
+                                        static_cast<u32>(field), target_.width);
+        i32_const(static_cast<i32>(at));
+        op(OP_I32_ADD);
+      }
+      local_set(reg_base_[instr.dst.idx]);
+      return base::make_ok();
+    }
     case O::ExtractValue: {
       if (ops.size() < 2) {
         return unsupported(current_span_, "this extraction");

@@ -56,6 +56,7 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::Fence: return {0, 0, true};
     case O::Alloca:
     case O::Load:
+    case O::EnumTagLoad:
     case O::Not:
     case O::BitReverse:
     case O::TypeCast:
@@ -64,6 +65,7 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::Drop:
     case O::Borrow: return {1, 1, true};
     case O::Store:
+    case O::EnumTagSet:
     case O::ElemOffset:
     case O::IntAdd:
     case O::IntSub:
@@ -101,6 +103,7 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::GetElementPtr:
     case O::ExtractValue:
     case O::Switch: return {2, ANY_OPERANDS, true};
+    case O::EnumFieldAddr: return {3, 3, true};
     case O::InsertValue: return {3, ANY_OPERANDS, true};
     case O::Br:
     case O::Call: return {1, ANY_OPERANDS, true};

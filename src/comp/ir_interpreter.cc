@@ -614,6 +614,127 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       return write(operand_at(instr, 0).type, value, pointer.address, instr);
     }
     case Opcode::GetElementPtr: return execute_gep(instr, frame);
+    case Opcode::EnumTagLoad: {
+      if (!ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "enum tag load without a destination");
+      }
+      Slot place;
+      if (!resolve_at(instr, 0, frame, place)) {
+        return false;
+      }
+      if (place.kind != Slot::Kind::Address) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "enum tag load of a non-address");
+      }
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_, operand_at(instr, 0).type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
+      u64 disc = 0;
+      if (!niche.has) {
+        if (!read_bytes(place.address, 4, instr, disc)) {
+          return false;
+        }
+      } else {
+        // The discriminant lives in the payload's spare pattern
+        // (ADR-0087): ask whether the slot holds the fieldless spell.
+        Slot payload;
+        if (!read(niche.slot, place.address, instr, payload)) {
+          return false;
+        }
+        const bool fieldless =
+            niche.slot == niche.payload
+                ? (payload.kind == Slot::Kind::Address && payload.address == 0)
+                : payload.bits > static_cast<u64>(niche.sentinel) - 1;
+        disc = fieldless ? niche.fieldless : niche.carrying;
+      }
+      frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, disc, 0};
+      return true;
+    }
+    case Opcode::EnumTagSet: {
+      Slot place;
+      u64 tag = 0;
+      if (!resolve_at(instr, 0, frame, place)) {
+        return false;
+      }
+      if (place.kind != Slot::Kind::Address) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "enum tag set on a non-address");
+      }
+      if (!resolve_int_at(instr, 1, frame, tag)) {
+        return false;
+      }
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_, operand_at(instr, 0).type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
+      if (!niche.has) {
+        return write_bytes(place.address, 4, tag, instr);
+      }
+      if (tag != niche.fieldless) {
+        // The carrying variant's payload follows; the tag itself
+        // stores nothing.
+        return true;
+      }
+      // The fieldless spell: the payload's spare pattern.
+      if (niche.slot == niche.payload) {
+        return write_bytes(place.address, layout_of(niche.slot).size, 0, instr);
+      }
+      return write_bytes(place.address, layout_of(niche.slot).size,
+                         niche.sentinel, instr);
+    }
+    case Opcode::EnumFieldAddr: {
+      if (!ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "enum field address without a destination");
+      }
+      Slot place;
+      u64 variant = 0;
+      u64 field = 0;
+      if (!resolve_at(instr, 0, frame, place)) {
+        return false;
+      }
+      if (place.kind != Slot::Kind::Address) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "enum field address of a non-address");
+      }
+      if (!resolve_int_at(instr, 1, frame, variant) ||
+          !resolve_int_at(instr, 2, frame, field)) {
+        return false;
+      }
+      const ir::TypeIdx enum_ty =
+          ir::enum_place_type(storage_, operand_at(instr, 0).type);
+      const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
+      if (niche.has) {
+        // The payload is the slot itself.
+        frame.regs[ins.dst.idx] = Slot{Slot::Kind::Address, 0, place.address};
+        return true;
+      }
+      const ir::EnumType& shape =
+          storage_.enum_types[storage_.types[enum_ty].as_enum()];
+      if (variant >= shape.variants.size()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "enum variant out of range");
+      }
+      const ir::TypeIdxRange fields =
+          storage_.enum_variant_types[shape.variants[static_cast<u32>(variant)]]
+              .fields;
+      if (field >= fields.size()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "enum field out of range");
+      }
+      // The slot is `{i32, [carrier; N]}`: the payload area follows the
+      // discriminant at the area's alignment, and the field lies within
+      // the area.
+      const ir::TypeLayout area =
+          ir::enum_payload_area(storage_, enum_ty, width_);
+      const u64 align_mask = area.align == 0 ? 0 : area.align - 1;
+      const u64 area_at = (4 + align_mask) & ~align_mask;
+      const u64 at =
+          place.address + area_at +
+          ir::field_offset(storage_, fields, static_cast<u32>(field), width_);
+      frame.regs[ins.dst.idx] = Slot{Slot::Kind::Address, 0, at};
+      return true;
+    }
     case Opcode::IntAdd:
     case Opcode::IntSub:
     case Opcode::IntMul:

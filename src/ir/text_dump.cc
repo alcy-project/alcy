@@ -466,6 +466,31 @@ class TextWriter {
         write_operand(state_.operands[instr.operands.head()]);
         break;
       }
+      case O::EnumTagLoad: {
+        write_dst(instr);
+        out_ += "enumtag(";
+        write_operand(state_.operands[instr.operands.head()]);
+        out_ += ')';
+        break;
+      }
+      case O::EnumTagSet: {
+        out_ += "enumtag(";
+        write_operand(state_.operands[instr.operands.head()]);
+        out_ += ") = ";
+        write_operand(state_.operands[instr.operands.head() + 1]);
+        break;
+      }
+      case O::EnumFieldAddr: {
+        write_dst(instr);
+        out_ += "enumfield(";
+        write_operand(state_.operands[instr.operands.head()]);
+        for (u32 i = 1; i < instr.operands.size(); ++i) {
+          out_ += ", ";
+          write_operand(state_.operands[instr.operands.head() + i]);
+        }
+        out_ += ')';
+        break;
+      }
       case O::GetElementPtr: {
         write_dst(instr);
         out_ += "addr(";

@@ -873,4 +873,157 @@ TEST_CASE("IR interpreter answers MIN % -1 as zero") {
   CHECK(run.value.value.int_value == 0);
 }
 
+// The scrutinee is the constructed place itself, so no aggregate value
+// is ever loaded: comp evaluation carries scalars only, and the enum
+// opcodes are what the interpreter reads the variants through.
+TEST_CASE("IR interpreter agrees on enum variants and payloads") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "enum Grade { Point(u32), Pass, Fail }\n"
+                                    "const D: Grade = Grade::Point(7u32)\n"
+                                    "comp fn score(mark: u32) -> u32 {\n"
+                                    "  ret match Grade::Point(mark) {\n"
+                                    "    Grade::Point(p) => p,\n"
+                                    "    Grade::Pass => 100u32,\n"
+                                    "    Grade::Fail => 0u32,\n"
+                                    "  }\n"
+                                    "}\n"
+                                    "comp fn pass() -> u32 {\n"
+                                    "  ret match Grade::Pass {\n"
+                                    "    Grade::Point(p) => p,\n"
+                                    "    Grade::Pass => 100u32,\n"
+                                    "    Grade::Fail => 0u32,\n"
+                                    "  }\n"
+                                    "}\n"
+                                    "comp fn fail() -> u32 {\n"
+                                    "  ret match Grade::Fail {\n"
+                                    "    Grade::Point(p) => p,\n"
+                                    "    Grade::Pass => 100u32,\n"
+                                    "    Grade::Fail => 0u32,\n"
+                                    "  }\n"
+                                    "}\n"
+                                    "const A: u32 = score(42u32)\n"
+                                    "const B: u32 = pass()\n"
+                                    "const C: u32 = fail()\n"
+                                    "fn main() {\n"
+                                    "}\n",
+                                    {"A", "B", "C"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  const ir::FunctionIdx score =
+      find_function(storage, scenario.fixture.strings, "score");
+  const ir::FunctionIdx pass =
+      find_function(storage, scenario.fixture.strings, "pass");
+  const ir::FunctionIdx fail =
+      find_function(storage, scenario.fixture.strings, "fail");
+  CHECK(score.is_valid());
+  CHECK(pass.is_valid());
+  CHECK(fail.is_valid());
+  if (!score.is_valid() || !pass.is_valid() || !fail.is_valid()) {
+    return;
+  }
+  CHECK(scenario.asts.size() == 3);
+  if (scenario.asts.size() != 3) {
+    return;
+  }
+  const std::vector<comp::CompVal> mark = int_args(storage, score, {42});
+  CHECK(mark.size() == 1);
+  if (mark.size() != 1) {
+    return;
+  }
+  const RunResult carried = run_function(scenario.fixture, storage, score, mark,
+                                         comp::COMP_BRANCH_QUOTA, 0);
+  const RunResult given = run_function(scenario.fixture, storage, pass, {},
+                                       comp::COMP_BRANCH_QUOTA, 0);
+  const RunResult denied = run_function(scenario.fixture, storage, fail, {},
+                                        comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(carried.ok);
+  CHECK(given.ok);
+  CHECK(denied.ok);
+  if (!carried.ok || !given.ok || !denied.ok) {
+    return;
+  }
+  check_same_value(storage, scenario.asts[0], carried.value);
+  check_same_value(storage, scenario.asts[1], given.value);
+  check_same_value(storage, scenario.asts[2], denied.value);
+}
+
+TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built =
+      build_scenario(dir,
+                     "enum Maybe { Yes(bool), No }\n"
+                     "comp fn say(flag: bool) -> i32 {\n"
+                     "  ret match Maybe::Yes(flag) {\n"
+                     "    Maybe::Yes(b) => if b { 1 } else { 2 },\n"
+                     "    Maybe::No => 3,\n"
+                     "  }\n"
+                     "}\n"
+                     "comp fn absent() -> i32 {\n"
+                     "  ret match Maybe::No {\n"
+                     "    Maybe::Yes(b) => if b { 1 } else { 2 },\n"
+                     "    Maybe::No => 3,\n"
+                     "  }\n"
+                     "}\n"
+                     "const A: i32 = say(true)\n"
+                     "const B: i32 = say(false)\n"
+                     "const C: i32 = absent()\n"
+                     "fn main() {\n"
+                     "}\n",
+                     {"A", "B", "C"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  const ir::FunctionIdx say =
+      find_function(storage, scenario.fixture.strings, "say");
+  const ir::FunctionIdx absent =
+      find_function(storage, scenario.fixture.strings, "absent");
+  CHECK(say.is_valid());
+  CHECK(absent.is_valid());
+  if (!say.is_valid() || !absent.is_valid()) {
+    return;
+  }
+  CHECK(scenario.asts.size() == 3);
+  if (scenario.asts.size() != 3) {
+    return;
+  }
+  const std::vector<comp::CompVal> up = bool_args(storage, say, {true});
+  const std::vector<comp::CompVal> down = bool_args(storage, say, {false});
+  CHECK(up.size() == 1);
+  CHECK(down.size() == 1);
+  if (up.size() != 1 || down.size() != 1) {
+    return;
+  }
+  const RunResult set = run_function(scenario.fixture, storage, say, up,
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  const RunResult unset = run_function(scenario.fixture, storage, say, down,
+                                       comp::COMP_BRANCH_QUOTA, 0);
+  const RunResult empty = run_function(scenario.fixture, storage, absent, {},
+                                       comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(set.ok);
+  CHECK(unset.ok);
+  CHECK(empty.ok);
+  if (!set.ok || !unset.ok || !empty.ok) {
+    return;
+  }
+  check_same_value(storage, scenario.asts[0], set.value);
+  check_same_value(storage, scenario.asts[1], unset.value);
+  check_same_value(storage, scenario.asts[2], empty.value);
+}
+
 }  // namespace lowering

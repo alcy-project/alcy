@@ -14,7 +14,6 @@ source_set("lowering") {
     "lowering.cc",
     "lowering.h",
     "lowering_expr.cc",
-    "niche.h",
   ]
   deps = [
     "//src:base_modules",

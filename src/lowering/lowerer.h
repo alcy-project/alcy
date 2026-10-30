@@ -428,12 +428,6 @@ class Lowerer {
                      std::string_view name,
                      u32& index_out);
   std::vector<ir::TypeIdx> variant_payload(ir::TypeIdx enum_type, u32 variant);
-  ir::TypeIdx enum_slot_type(ir::TypeIdx enum_type);
-  ir::TypeIdx payload_carrier(u64 align);
-
-  // Enum slot types by enum type index: the payload half is inline,
-  // so the slot shape varies per enum.
-  std::unordered_map<u32, ir::TypeIdx> enum_slot_types_;
   Val lower_variant_construct(ast::ExprIdx expr,
                               const analyzer::CheckedModule::VariantUse* use);
   ir::OperandIdx disc_operand(u32 discriminant);
@@ -491,29 +485,26 @@ class Lowerer {
   // through a field of one.
   bool reads_through_array_element(ast::ExprIdx expr);
   ir::OperandIdx arg_for(Val arg, ir::TypeIdx param);
-  Val load_disc(Val slot_addr);
-  // A null reference of the given reference type, spelling the
-  // fieldless variant of a niche-carrying enum (ADR-0087).
-  ir::OperandIdx null_reference(ir::TypeIdx ref_type);
-  // The operand that spells a niche-carrying enum's fieldless variant:
-  // a null reference, or the byte above one for a bool.
-  ir::OperandIdx niche_sentinel(const ir::EnumNiche& niche);
+  Val load_disc(Val place);
   bool is_unit_payload(const std::vector<ir::TypeIdx>& payloads);
   Val void_value();
-  Val load_payload_field(Val slot_addr,
+  Val load_payload_field(Val place,
                          ir::TypeIdx enum_type,
-                         ir::TypeIdxRange fields,
+                         u32 variant,
                          u32 field);
-  ir::RegisterIdx payload_field_addr(Val slot_addr,
-                                     ir::TypeIdx enum_type,
-                                     ir::TypeIdxRange fields,
-                                     u32 field);
+  // The address of payload field `field` of variant `variant` at the
+  // enum place: the representation is the backend's (ADR-0087's
+  // niches included), so the lowering only names the field.
+  ir::RegisterIdx enum_field_addr(Val place,
+                                  ir::TypeIdx enum_type,
+                                  u32 variant,
+                                  u32 field);
   // The same address cast to the field's own pointer, so a nested
   // pattern can project into it (a variant reads its discriminant).
-  ir::RegisterIdx payload_field_slot_addr(Val slot_addr,
-                                          ir::TypeIdx enum_type,
-                                          ir::TypeIdxRange fields,
-                                          u32 field);
+  ir::RegisterIdx enum_field_ref_addr(Val place,
+                                      ir::TypeIdx enum_type,
+                                      u32 variant,
+                                      u32 field);
   ir::TypeIdxRange variant_fields(ir::TypeIdx enum_type, u32 variant);
   void emit_br(ir::BlockIdx target);
   void emit_cond_br(ir::OperandIdx cond,

@@ -113,6 +113,20 @@ struct EnumNiche {
   u8 sentinel = 0;
 };
 
+// The enum type a place names: a place read through a reference
+// arrives labelled with the reference, and the enum is what it points
+// at. Every other label is its own type.
+inline TypeIdx enum_place_type(const StorageState& state, TypeIdx idx) {
+  if (!idx.is_valid() || idx.idx >= state.types.size()) {
+    return idx;
+  }
+  const TypeNode& node = state.types[idx];
+  if (node.tag == TypeTag::Ref || node.tag == TypeTag::MutRef) {
+    return state.ref_types[node.as_ref()].pointee;
+  }
+  return idx;
+}
+
 inline EnumNiche enum_niche(const StorageState& state, TypeIdx idx) {
   EnumNiche niche;
   if (!idx.is_valid() || idx.idx >= state.types.size()) {

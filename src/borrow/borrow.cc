@@ -534,6 +534,34 @@ class Checker {
         flow[instr.dst.idx] = flow[base];
         break;
       }
+      case ir::Opcode::EnumFieldAddr: {
+        // A variant payload's address names a subplace of the enum the
+        // way a GEP names one of a struct: the variant and the field
+        // say which payload the loan flows into, so the address keeps
+        // the place and its loans (an `Option<&T>` hands a pointer
+        // back only while its payload's loan is alive).
+        u32 base = NO_ROOT;
+        if (!operand_reg(0, base) || !instr.dst.is_valid()) {
+          break;
+        }
+        if (home[base] == NO_ROOT) {
+          break;
+        }
+        home[instr.dst.idx] = home[base];
+        path[instr.dst.idx] = path[base];
+        for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
+          const ir::Operand& index =
+              storage.operands()[instr.operands.head() + offset];
+          if (!index.is<ir::ImmutableIdx>()) {
+            continue;
+          }
+          const ir::Immutable& imm = storage.immutables()[index.as_immutable()];
+          path[instr.dst.idx].push_back(
+              static_cast<u32>(imm.as_u64_integer(tag_of(imm.type))));
+        }
+        flow[instr.dst.idx] = flow[base];
+        break;
+      }
       case ir::Opcode::ElemOffset:
       case ir::Opcode::TypeCast: {
         // `elem_ref` and `uninit_ref` lower to these, and a container's
@@ -1245,6 +1273,7 @@ class Checker {
       return false;
     };
     switch (instr.op) {
+      case ir::Opcode::EnumTagLoad:
       case ir::Opcode::Load: {
         // Reading a place is a use, so a read of a moved place is a
         // use-after-move.
@@ -1431,6 +1460,33 @@ class Checker {
           // other loan reaching the place still forbids it, which is
           // what makes a write through one reference a conflict with a
           // loan taken through another.
+          for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+            const Loan& loan = loans[id];
+            if (loan.param != NO_ROOT) {
+              continue;
+            }
+            if (carries_loan(target, id)) {
+              continue;
+            }
+            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+              continue;
+            }
+            const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
+                DiagCode::AssignBorrowed, span, addr_name(place.root));
+            (void)index;
+            break;
+          }
+        }
+        break;
+      }
+      case ir::Opcode::EnumTagSet: {
+        // Setting a variant reinitializes the enum place: what was
+        // there ends, and the write answers to every loan a store to
+        // the place would.
+        Place place;
+        u32 target = NO_ROOT;
+        if (operand_reg(0, target) && operand_place(0, place)) {
+          kill_moved(moved, place);
           for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
             const Loan& loan = loans[id];
             if (loan.param != NO_ROOT) {

@@ -140,7 +140,11 @@ stay: the specialization pass is what replaces them.
    meeting a parameter adopts it, and the instantiation's own check
    settles the width.
 3. A specialization pass over IR, before the borrow pass, in each
-   package's build (the Decision above).
+   package's build (the Decision above). The enum accesses that would
+   bake a layout into a body landed ahead of it as semantic opcodes:
+   the discriminant, the niche's spell, and the payload offsets derive
+   from the operands' types at emission, so a parametric body has no
+   layout for the substitution to touch.
 4. The summary carries a generic body, and the `needs_body` flag
    goes.
 5. The AST-level instantiation walk is deleted.

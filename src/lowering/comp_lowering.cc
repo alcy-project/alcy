@@ -135,59 +135,30 @@ Val Lowerer::Comp::materialize(const CompVal& value, diag::Span span) {
         owner_.internal(span, "comp variant arity");
         return Val{owner_.size_one, owner_.error_type(), false, false};
       }
-      const ir::TypeIdx slot = owner_.enum_slot_type(value.type);
       const ir::RegisterIdx addr =
-          owner_.emit(ir::Opcode::Alloca, slot, {owner_.size_one});
-      const ir::EnumNiche niche =
-          ir::enum_niche(owner_.builder.state(), value.type);
-      if (niche.has) {
-        // The fieldless variant is the payload's spare pattern; the
-        // carrying one is the payload the loop below stores (ADR-0087).
-        if (value.value.variant == niche.fieldless) {
-          owner_.emit_void(ir::Opcode::Store, {owner_.niche_sentinel(niche),
-                                               owner_.to_operand(addr, slot)});
-        }
-      } else {
-        const ir::RegisterIdx tag_reg =
-            owner_.emit(ir::Opcode::GetElementPtr,
-                        owner_.builder.primitive(ir::TypeTag::I32),
-                        {owner_.to_operand(addr, slot), owner_.zero_i32,
-                         owner_.index_operand(0)});
-        owner_.emit_void(ir::Opcode::Store,
-                         {owner_.disc_operand(value.value.variant),
-                          owner_.to_operand(tag_reg, slot)});
-      }
+          owner_.emit(ir::Opcode::Alloca, value.type, {owner_.size_one});
+      owner_.emit_void(ir::Opcode::EnumTagSet,
+                       {owner_.to_operand(addr, value.type),
+                        owner_.disc_operand(value.value.variant)});
       if (!payloads.empty() && !owner_.is_unit_payload(payloads)) {
-        // The payload lives in the slot, the way a constructed variant
-        // stores it; a boxed tuple would make every reader of the slot
-        // load the payload pointer as the field itself.
-        const ir::TypeIdxRange fields =
-            owner_.variant_fields(value.type, value.value.variant);
-        const Val slot_addr{owner_.to_operand(addr, slot), slot, true, false};
+        // The payload lives in the place, the way a constructed variant
+        // stores it; the field address is the backend's.
+        const Val place{owner_.to_operand(addr, value.type), value.type, true,
+                        false};
         for (usize i = 0; i < payloads.size(); ++i) {
           const CompVal field{value.value.fields[i], payloads[i]};
           Val lowered = materialize(field, span);
           if (owner_.failed) {
             return Val{owner_.size_one, owner_.error_type(), false, false};
           }
-          const ir::RegisterIdx field_addr =
-              niche.has
-                  ? addr
-                  : owner_.payload_field_addr(slot_addr, value.type, fields,
-                                              static_cast<u32>(i));
-          const ir::OperandIdx stored =
-              niche.has && niche.slot != niche.payload
-                  ? owner_.to_operand(
-                        owner_.emit(ir::Opcode::TypeCast, niche.slot,
-                                    {owner_.use_value(lowered)}),
-                        niche.slot)
-                  : owner_.use_value(lowered);
-          owner_.emit_void(
-              ir::Opcode::Store,
-              {stored, owner_.to_operand(field_addr, payloads[i])});
+          const ir::RegisterIdx field_addr = owner_.enum_field_addr(
+              place, value.type, value.value.variant, static_cast<u32>(i));
+          owner_.emit_void(ir::Opcode::Store,
+                           {owner_.use_value(lowered),
+                            owner_.to_operand(field_addr, payloads[i])});
         }
       }
-      return Val{owner_.to_operand(addr, slot), value.type, true, false};
+      return Val{owner_.to_operand(addr, value.type), value.type, true, false};
     }
   }
 }

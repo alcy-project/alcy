@@ -359,9 +359,11 @@ bool Emitter::argument_is_zero_sized(
 std::optional<ValueShape> Emitter::shape_of_definition(
     const ir::Instruction& instr) const {
   // An address is a word whatever the destination names: an `Alloca`
-  // names the element it reserves, and a `GetElementPtr` the field or
-  // element it points at, while both hand out an address.
-  if (instr.op == ir::Opcode::Alloca || instr.op == ir::Opcode::GetElementPtr) {
+  // names the element it reserves, a `GetElementPtr` the field or
+  // element it points at, and an `EnumFieldAddr` a variant payload,
+  // while all three hand out an address.
+  if (instr.op == ir::Opcode::Alloca || instr.op == ir::Opcode::GetElementPtr ||
+      instr.op == ir::Opcode::EnumFieldAddr) {
     return ValueShape{ValType::I32, 1};
   }
   if (!instr.dst.is_valid()) {
@@ -727,6 +729,9 @@ Emitter::EmitResult Emitter::emit_instruction(ir::InstructionIdx instr_idx,
     case O::Memcopy:
     case O::GetElementPtr:
     case O::ElemOffset:
+    case O::EnumTagLoad:
+    case O::EnumTagSet:
+    case O::EnumFieldAddr:
     case O::ExtractValue:
     case O::InsertValue: return emit_memory(instr);
 
