@@ -25,6 +25,14 @@ text::JsonValue range_json(const Document& document, u32 offset, u32 length);
 // A location in this document for a span the checker recorded.
 text::JsonValue location_json(const Document& document, diag::Span span);
 
+// A span's identity as one integer, for a key in a table. Features
+// compare spans within one root file, so the file is not part of the
+// key.
+u64 span_key(diag::Span span);
+
+// Whether two spans cover the same range of the same file.
+bool same_span(diag::Span left, diag::Span right);
+
 // The protocol enumerations this server emits, carrying the values the
 // specification assigns them. A feature names a kind rather than
 // counting one, so the number that crosses the wire is the protocol's

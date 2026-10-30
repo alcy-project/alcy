@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "analyzer/resolve.h"
@@ -18,6 +19,7 @@
 #include "lsp/analysis.h"
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
+#include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
@@ -27,11 +29,6 @@ namespace {
 
 bool span_contains(diag::Span span, usize offset) {
   return span.offset <= offset && offset < span.offset + span.length;
-}
-
-bool same_span(diag::Span left, diag::Span right) {
-  return left.file == right.file && left.offset == right.offset &&
-         left.length == right.length;
 }
 
 // The declaration of a named type, when its name is the one the checker
@@ -299,6 +296,7 @@ std::vector<diag::Span> implementation_at(const Document& document,
   }
 
   std::vector<diag::Span> out;
+  std::unordered_set<u64> seen;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::MethodInfo& info : module.methods) {
       if (info.spec != spec || !info.item.is_valid()) {
@@ -312,14 +310,7 @@ std::vector<diag::Span> implementation_at(const Document& document,
       if (span.file != root) {
         continue;
       }
-      bool duplicate = false;
-      for (const diag::Span existing : out) {
-        if (same_span(existing, span)) {
-          duplicate = true;
-          break;
-        }
-      }
-      if (!duplicate) {
+      if (seen.insert(span_key(span)).second) {
         out.push_back(span);
       }
     }
@@ -360,6 +351,7 @@ std::vector<diag::Span> references_at(const Document& document,
   }
 
   std::vector<diag::Span> out;
+  std::unordered_set<u64> seen;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
@@ -367,14 +359,7 @@ std::vector<diag::Span> references_at(const Document& document,
           !same_span(reference.declaration, *declaration)) {
         continue;
       }
-      bool duplicate = false;
-      for (const diag::Span site : out) {
-        if (same_span(site, reference.site)) {
-          duplicate = true;
-          break;
-        }
-      }
-      if (!duplicate) {
+      if (seen.insert(span_key(reference.site)).second) {
         out.push_back(reference.site);
       }
     }

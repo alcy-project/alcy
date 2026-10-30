@@ -27,15 +27,6 @@ namespace lsp {
 
 namespace {
 
-u64 span_key(diag::Span span) {
-  return (static_cast<u64>(span.offset) << 32) | static_cast<u64>(span.length);
-}
-
-bool same_span(diag::Span left, diag::Span right) {
-  return left.file == right.file && left.offset == right.offset &&
-         left.length == right.length;
-}
-
 bool contains(diag::Span outer, diag::Span inner) {
   return outer.offset <= inner.offset &&
          outer.offset + outer.length >= inner.offset + inner.length;
@@ -111,7 +102,11 @@ std::optional<ItemRef> enclosing_function(
   return best;
 }
 
-// Every call the checker recorded in the root file, deduplicated.
+// Every call the checker recorded in the root file, deduplicated. A
+// call site is recognized by span identity: the callee expression's span
+// for a call, the member name's span for a method call, matched against
+// the reference table's site. The parser and the checker agree on those
+// spans, so the join is exact.
 std::vector<CallEdge> call_edges(const pipeline::PipelineContext& context,
                                  const analyzer::CheckedPackage& package,
                                  source::FileId root) {

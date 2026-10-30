@@ -54,7 +54,8 @@ of the compiler (ADR-0107), so it owns no analysis of its own:
 - `inlay_hints.{h,cc}` names the parameter each call argument binds,
   beside the binding and layout hints it already shows.
 - `code_lens.{h,cc}` counts each declaration's references in one pass
-  over the reference table.
+  over the reference table. The provider does not advertise a resolve,
+  so a lens is complete in the first answer.
 - `workspace_symbols.{h,cc}` searches every open document's outline,
   so quick open spans the buffers the client holds.
 - `rename.{h,cc}` renames the name under the cursor, editing the

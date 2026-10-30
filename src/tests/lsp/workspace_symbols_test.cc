@@ -63,6 +63,17 @@ TEST_CASE("A nested symbol carries its container") {
   CHECK(container);
 }
 
+TEST_CASE("A query matches by subsequence, not only by substring") {
+  DocumentStore documents;
+  open_two_documents(&documents);
+  const std::vector<std::string> found =
+      names(workspace_symbols(documents, "pn"));
+  CHECK(found.size() == 1);
+  if (found.size() == 1) {
+    CHECK(found[0] == "Point");
+  }
+}
+
 TEST_CASE("A query with no match answers nothing") {
   DocumentStore documents;
   open_two_documents(&documents);

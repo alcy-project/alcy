@@ -30,10 +30,6 @@ namespace lsp {
 
 namespace {
 
-u64 span_key(diag::Span span) {
-  return (static_cast<u64>(span.offset) << 32) | static_cast<u64>(span.length);
-}
-
 std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
   switch (kind) {
     case lexer::TokenKind::I8:

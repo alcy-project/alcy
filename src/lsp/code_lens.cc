@@ -25,10 +25,6 @@ namespace lsp {
 
 namespace {
 
-u64 span_key(diag::Span span) {
-  return (static_cast<u64>(span.offset) << 32) | static_cast<u64>(span.length);
-}
-
 std::string reference_title(u32 count) {
   return std::to_string(count) + (count == 1 ? " reference" : " references");
 }

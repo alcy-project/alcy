@@ -26,11 +26,6 @@ void add(text::JsonValue* list, const Document& document, diag::Span span) {
   list->push(std::move(highlight));
 }
 
-bool same_span(diag::Span left, diag::Span right) {
-  return left.file == right.file && left.offset == right.offset &&
-         left.length == right.length;
-}
-
 }  // namespace
 
 text::JsonValue document_highlights(const Document& document,

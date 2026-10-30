@@ -36,6 +36,15 @@ text::JsonValue location_json(const Document& document, diag::Span span) {
   return out;
 }
 
+u64 span_key(diag::Span span) {
+  return (static_cast<u64>(span.offset) << 32) | static_cast<u64>(span.length);
+}
+
+bool same_span(diag::Span left, diag::Span right) {
+  return left.file == right.file && left.offset == right.offset &&
+         left.length == right.length;
+}
+
 namespace {
 
 constexpr std::string_view TOKEN_TYPE_NAMES[] = {

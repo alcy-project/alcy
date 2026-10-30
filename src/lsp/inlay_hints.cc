@@ -40,10 +40,6 @@ struct Hint {
   bool is_parameter = false;
 };
 
-u64 span_key(diag::Span span) {
-  return (static_cast<u64>(span.offset) << 32) | static_cast<u64>(span.length);
-}
-
 // The name a parameter pattern binds, or nothing for a pattern that
 // binds no single name.
 std::string_view param_name(const ast::AstArena& ast,

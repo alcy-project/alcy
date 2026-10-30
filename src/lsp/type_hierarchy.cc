@@ -37,11 +37,6 @@ bool contains(diag::Span span, usize offset) {
   return span.offset <= offset && offset < span.offset + span.length;
 }
 
-bool same_span(diag::Span left, diag::Span right) {
-  return left.file == right.file && left.offset == right.offset &&
-         left.length == right.length;
-}
-
 f64 kind_number(TypeKind kind) {
   switch (kind) {
     case TypeKind::Struct: return static_cast<f64>(SymbolKind::Struct);

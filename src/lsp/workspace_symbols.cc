@@ -21,26 +21,20 @@ char lower(char c) {
   return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
 }
 
+// A fuzzy match: the query's characters appear in the name in order,
+// which is the filtering a quick-open box expects. A substring is one
+// such match, so the answer stays a superset of an exact search.
 bool matches(std::string_view name, std::string_view query) {
   if (query.empty()) {
     return true;
   }
-  if (query.size() > name.size()) {
-    return false;
-  }
-  for (usize i = 0; i + query.size() <= name.size(); ++i) {
-    bool same = true;
-    for (usize j = 0; j < query.size(); ++j) {
-      if (lower(name[i + j]) != lower(query[j])) {
-        same = false;
-        break;
-      }
-    }
-    if (same) {
-      return true;
+  usize at = 0;
+  for (const char c : name) {
+    if (at < query.size() && lower(c) == lower(query[at])) {
+      ++at;
     }
   }
-  return false;
+  return at == query.size();
 }
 
 std::string child_container(std::string_view container, std::string_view name) {
