@@ -13,7 +13,12 @@ import { test } from "node:test";
 
 import type { GuidePage } from "../src/guide.js";
 import type { Block } from "../src/markdown.js";
-import { renderGuidePage, renderNotFound } from "../src/render.js";
+import {
+  GUIDE_TREE,
+  REFERENCE_TREE,
+  renderGuidePage,
+  renderNotFound,
+} from "../src/render.js";
 
 function page(language: "en" | "ja", blocks: Block[], path = "guide/x.html"): GuidePage {
   return {
@@ -31,6 +36,7 @@ function render(language: "en" | "ja", blocks: Block[]): string {
   const target = page(language, blocks);
   return renderGuidePage(target, {
     pages: [target],
+    tree: GUIDE_TREE,
     highlight: (code) => code,
     resolveLink: (url) => url,
     boot: "INLINE_BOOT",
@@ -118,3 +124,20 @@ test("the search dialog names its field, its list, and its tally", () => {
   match(source, /tally\.setAttribute\("role", "status"\)/);
   match(source, /t\("search\.count", \{ count: String\(results\.length\) \}\)/);
 });
+test("the reference names its regions the same way the guide does", () => {
+  const target = page("en", [prose]);
+  const html = renderGuidePage(target, {
+    pages: [target],
+    tree: REFERENCE_TREE,
+    highlight: (code) => code,
+    resolveLink: (url) => url,
+    boot: "INLINE_BOOT",
+    stamp: { text: "TESTSTAMP", url: "" },
+  });
+  match(html, /<nav class="site-nav" aria-label="[^"]+"/);
+  match(html, /<nav class="guide-nav" aria-label="Reference"/);
+  const names = Array.from(html.matchAll(/<nav[^>]*aria-label="([^"]*)"/g), (m) => m[1] ?? "");
+  ok(names.every((name) => name !== ""), "every landmark is named");
+  equal(new Set(names).size, names.length, "no two landmarks share a name");
+});
+

@@ -567,6 +567,12 @@ body.site {
   visibility: hidden;
 }
 
+/* The guide's last page continues into the reference, which is a
+   different kind of reading, so the hand-off is marked as one. */
+.pager-onward {
+  font-weight: 600;
+}
+
 @media (max-width: 760px) {
   .guide-layout {
     grid-template-columns: minmax(0, 1fr);

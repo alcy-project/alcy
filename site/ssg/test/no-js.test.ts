@@ -15,7 +15,13 @@ import { test } from "node:test";
 
 import type { GuidePage } from "../src/guide.js";
 import type { Block } from "../src/markdown.js";
-import { renderGuidePage, renderGuideIndex, renderNotFound } from "../src/render.js";
+import {
+  GUIDE_TREE,
+  REFERENCE_TREE,
+  renderGuidePage,
+  renderNotFound,
+  renderTreeIndex,
+} from "../src/render.js";
 
 function page(blocks: Block[]): GuidePage {
   return {
@@ -33,6 +39,7 @@ function render(blocks: Block[]): string {
   const target = page(blocks);
   return renderGuidePage(target, {
     pages: [target],
+    tree: GUIDE_TREE,
     highlight: (code) => `<span class="hl-keyword">${code}</span>`,
     resolveLink: (url) => url,
     boot: "INLINE_BOOT",
@@ -126,11 +133,12 @@ test("a page without code loads no script beyond the shell", () => {
 });
 
 test("the contents page is a list of links, not a script", () => {
-  const html = renderGuideIndex(
+  const html = renderTreeIndex(
     [page([prose])],
     "en",
     "INLINE_BOOT",
     { text: "TESTSTAMP", url: "" },
+    GUIDE_TREE,
   );
   ok(textOutsideScripts(html).includes("Title"));
   match(html, /<li><a href="x\.html">Title<\/a><\/li>/);
@@ -157,3 +165,20 @@ test("the editor is fetched on the first Edit, not with the page", () => {
     "guide-edit is imported only on demand",
   );
 });
+test("a reference page without a program loads no compiler", () => {
+  // The spec is prose about the language and, in its current state, one
+  // signature sketch that is not a program; a page of it asks for the
+  // copy button and nothing that would fetch a wasm.
+  const target = page([prose]);
+  const html = renderGuidePage(target, {
+    pages: [target],
+    tree: REFERENCE_TREE,
+    highlight: (code) => code,
+    resolveLink: (url) => url,
+    boot: "INLINE_BOOT",
+    stamp: { text: "TESTSTAMP", url: "" },
+  });
+  ok(!/shared\/guide\.js/.test(html), "no Run, no run entry");
+  ok(!/guide-edit\.js/.test(html), "no editor");
+});
+

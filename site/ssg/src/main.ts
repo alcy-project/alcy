@@ -35,8 +35,16 @@ import type { Highlighter } from "./highlight.js";
 import { otherLanguages, prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
 import { createLinkChecker } from "./links.js";
-import { renderGuideIndex, renderGuidePage, renderNotFound, sectionsOf } from "./render.js";
-import type { Stamp } from "./render.js";
+import {
+  GUIDE_TREE,
+  REFERENCE_TREE,
+  renderGuidePage,
+  renderNotFound,
+  renderTreeIndex,
+  sectionsOf,
+} from "./render.js";
+import type { Stamp, Tree } from "./render.js";
+import { discoverSpec, discoverSpecAssets, specPagesForLanguage } from "./spec.js";
 import { speculation, stampMark } from "./render.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
@@ -45,6 +53,7 @@ import { canonicalUrl, pageLinks, SITE_URL, socialMeta } from "./urls.js";
 
 interface Options {
   docs: string;
+  spec: string;
   dist: string;
   site: string;
   repoRoot: string;
@@ -103,6 +112,7 @@ function parseArgs(argv: string[]): Options {
   }
   const options: Options = {
     docs,
+    spec: values.get("--spec") ?? join(repoRoot, "docs", "spec"),
     dist,
     site: values.get("--site") ?? join(repoRoot, "site"),
     repoRoot,
@@ -314,9 +324,15 @@ async function main(): Promise<void> {
   if (sources.length === 0) {
     throw new Error(`${options.docs} has no guide pages`);
   }
+  const specSources = discoverSpec(options.spec);
+  if (specSources.length === 0) {
+    throw new Error(`${options.spec} has no specification pages`);
+  }
 
   const compiler = await loadCompiler(options);
-  const fences = validateFences(sources, compiler);
+  // The reference answers to the same gate as the guide: a fence the
+  // compiler refuses is a build failure, whichever tree it came from.
+  const fences = validateFences([...sources, ...specSources], compiler);
   const highlighter = await loadHighlighter(options);
   const highlighted = new Map<string, string>();
   const highlight = (code: string): string => {
@@ -330,9 +346,20 @@ async function main(): Promise<void> {
   };
 
   const allPages = LANGUAGES.flatMap((language) => pagesForLanguage(sources, language));
+  const allSpecPages = LANGUAGES.flatMap((language) =>
+    specPagesForLanguage(specSources, language),
+  );
+  // Every route this build will write. The audit asks whether a target
+  // exists, and a page's link is satisfied by another page in the same
+  // build, whether or not that page has been written yet -- so the answer
+  // is the set, not the directory's current contents.
+  const planned = new Set([
+    ...allPages.map((page) => page.route),
+    ...allSpecPages.map((page) => page.route),
+  ]);
   const checker = createLinkChecker({
-    pages: allPages,
-    siteExists: (route) => siteExists(options.dist, route),
+    pages: [...allPages, ...allSpecPages],
+    siteExists: (route) => planned.has(route) || siteExists(options.dist, route),
     repoExists: (path) => existsSync(join(options.repoRoot, path)),
   });
 
@@ -347,18 +374,31 @@ async function main(): Promise<void> {
     { treePath: "playground/index.html", source: playgroundTemplate },
   ];
 
+  // The two trees are the same machine over different sources: the guide
+  // and the language reference differ in their contents and their label,
+  // and in nothing the reader can see.
+  const trees: Array<{ tree: Tree; pages: readonly GuidePage[] }> = [
+    { tree: GUIDE_TREE, pages: allPages },
+    { tree: REFERENCE_TREE, pages: allSpecPages },
+  ];
+
   // The templates and the contents pages first: they create the routes
-  // the guide's own links point at, so the link audit in the second pass
+  // the pages' own links point at, so the link audit in the second pass
   // sees the whole site.
   for (const language of LANGUAGES) {
-    const pages: readonly GuidePage[] = allPages.filter(
-      (page) => page.language === language,
-    );
-    writePage(
-      options.dist,
-      `${prefixOf(language)}guide/index.html`,
-      renderGuideIndex(pages, language, boot, stamp),
-    );
+    for (const { tree, pages } of trees) {
+      writePage(
+        options.dist,
+        `${prefixOf(language)}${tree.segment}/index.html`,
+        renderTreeIndex(
+          pages.filter((page) => page.language === language),
+          language,
+          boot,
+          stamp,
+          tree,
+        ),
+      );
+    }
     for (const template of templates) {
       writePage(
         options.dist,
@@ -372,22 +412,36 @@ async function main(): Promise<void> {
     }
   }
 
+  // The spec's assets ride along with its pages: the grammar file a page
+  // links to has to exist in the built site, or the link audit fails.
+  const specAssets = discoverSpecAssets(options.spec);
   for (const language of LANGUAGES) {
-    const pages: readonly GuidePage[] = allPages.filter(
-      (page) => page.language === language,
-    );
-    for (const page of pages) {
+    for (const asset of specAssets) {
       writePage(
         options.dist,
-        page.route,
-        renderGuidePage(page, {
-          pages,
-          highlight,
-          resolveLink: (url) => checker.resolve(url, page),
-          boot,
-          stamp,
-        }),
+        prefixOf(language) + asset.path,
+        readFileSync(join(options.spec, asset.sourceRel), "utf8"),
       );
+    }
+  }
+
+  for (const language of LANGUAGES) {
+    for (const { tree, pages: all } of trees) {
+      const pages: readonly GuidePage[] = all.filter((page) => page.language === language);
+      for (const page of pages) {
+        writePage(
+          options.dist,
+          page.route,
+          renderGuidePage(page, {
+            pages,
+            tree,
+            highlight,
+            resolveLink: (url) => checker.resolve(url, page),
+            boot,
+            stamp,
+          }),
+        );
+      }
     }
   }
 
@@ -402,8 +456,8 @@ async function main(): Promise<void> {
     return;
   }
   process.stdout.write(
-    `guide: ${sources.length} pages × ${LANGUAGES.length} languages, ` +
-      `${fences.count} alcy fences compiled\n`,
+    `guide: ${sources.length} guide and ${specSources.length} reference pages × ` +
+      `${LANGUAGES.length} languages, ${fences.count} alcy fences compiled\n`,
   );
 }
 

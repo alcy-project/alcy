@@ -33,6 +33,8 @@ export const en = {
   "guide.reset": "Reset",
   "guide.open": "Open",
   "guide.openTitle": "Open this program in the playground",
+  "site.reference": "Reference",
+  "meta.reference": "The alcy language specification",
   "guide.onThisPage": "On this page",
   // The outline's tally of runnable programs, counting one and many
   // apart because English has no other way to say it.
@@ -126,6 +128,8 @@ const ja = {
   "guide.openTitle": "このプログラムをプレイグラウンドで開く",
   "guide.programs.one": "{count} 個のプログラム",
   "guide.programs.other": "{count} 個のプログラム",
+  "site.reference": "リファレンス",
+  "meta.reference": "alcy の言語仕様",
   "guide.onThisPage": "このページの内容",
   "meta.guide": "alcy ガイド",
   "noscript.playground": "プレイグラウンドの実行には JavaScript が必要です。",

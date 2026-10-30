@@ -6,7 +6,7 @@ conversion runs at runtime.
 
 ## API
 
-```alcy
+```text
 pub struct WriteOutcome { pub written: usize, pub total: usize }
 
 pub fn write(comp fmt: str, buf: &mut [u8; N], args: ..) -> WriteOutcome

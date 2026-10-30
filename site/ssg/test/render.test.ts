@@ -1,12 +1,17 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import { equal, match } from "node:assert/strict";
+import { equal, match, ok } from "node:assert/strict";
 import { test } from "node:test";
 
 import type { GuidePage } from "../src/guide.js";
 import type { Block } from "../src/markdown.js";
-import { renderGuidePage, renderNotFound } from "../src/render.js";
+import {
+  GUIDE_TREE,
+  REFERENCE_TREE,
+  renderGuidePage,
+  renderNotFound,
+} from "../src/render.js";
 import { canonicalUrl } from "../src/urls.js";
 
 function page(language: "en" | "ja", blocks: Block[]): GuidePage {
@@ -25,6 +30,7 @@ function render(language: "en" | "ja", blocks: Block[]): string {
   const target = page(language, blocks);
   return renderGuidePage(target, {
     pages: [target],
+    tree: GUIDE_TREE,
     highlight: (code) => code,
     resolveLink: (url) => url,
     boot: "INLINE_BOOT",
@@ -208,3 +214,30 @@ test("the 404 page keeps its links on the deployment root", () => {
   match(html, /location\.pathname\.startsWith\("\/alcy\/"\)/);
   match(html, /href="guide\/"/);
 });
+test("the guide's last page continues into the reference", () => {
+  const first = page("en", [prose]);
+  const last = { ...page("en", [prose]), path: "guide/z.html", route: "guide/z.html", title: "Last" };
+  const html = renderGuidePage(last, {
+    pages: [first, last],
+    tree: GUIDE_TREE,
+    highlight: (code) => code,
+    resolveLink: (url) => url,
+    boot: "INLINE_BOOT",
+    stamp: { text: "TESTSTAMP", url: "" },
+  });
+  match(html, /<a class="pager-onward" href="\.\.\/reference\/index\.html">Next · Reference/);
+});
+
+test("the reference does not send a reader back into the guide", () => {
+  const target = page("en", [prose]);
+  const html = renderGuidePage(target, {
+    pages: [target],
+    tree: REFERENCE_TREE,
+    highlight: (code) => code,
+    resolveLink: (url) => url,
+    boot: "INLINE_BOOT",
+    stamp: { text: "TESTSTAMP", url: "" },
+  });
+  ok(!/pager-onward/.test(html));
+});
+

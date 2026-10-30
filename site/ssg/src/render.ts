@@ -19,8 +19,38 @@ import type { Block } from "./markdown.js";
 import { renderSettings } from "./shell.js";
 import { pageLinks, SITE_PATH, socialMeta } from "./urls.js";
 
+// A tree of pages the site publishes: the guide, and the language
+// reference. Both are a contents list beside an article, a pager, and the
+// same chrome, so one renderer serves both and neither can drift.
+export interface Tree {
+  // The URL segment the tree is rooted at, e.g. `guide`, and the nav's
+  // label -- "Guide", "Reference" -- which names both the tree and its
+  // link in the header.
+  segment: string;
+  label: MessageKey;
+  summary: MessageKey;
+  // The tree a reader is handed to after this one's last page, when the
+  // reading order continues somewhere the page list cannot see. A guide
+  // ends where the reference begins; the reference ends without one.
+  continuesInto?: { segment: string; label: MessageKey };
+}
+
+export const GUIDE_TREE: Tree = {
+  segment: "guide",
+  label: "site.guide",
+  summary: "meta.guide",
+  continuesInto: { segment: "reference", label: "site.reference" },
+};
+
+export const REFERENCE_TREE: Tree = {
+  segment: "reference",
+  label: "site.reference",
+  summary: "meta.reference",
+};
+
 export interface PageOptions {
   pages: readonly GuidePage[];
+  tree: Tree;
   highlight(code: string): string;
   resolveLink(url: string): string;
   // The theme bootstrap, inlined into the head: a render-blocking
@@ -65,17 +95,25 @@ function relativeRoute(from: string, to: string): string {
   return posix.relative(posix.dirname(from), to);
 }
 
-function header(route: string, language: Language, treePath: string): string {
+function header(
+  route: string,
+  language: Language,
+  treePath: string,
+  tree: Tree = GUIDE_TREE,
+): string {
   const home = treeHome(route, language);
   const t = (key: MessageKey): string => translate(language, key);
   const settings = renderSettings({
     language,
     switchHref: languageSwitch(route, language, treePath),
   });
+  const current = (other: Tree): string =>
+    other.segment === tree.segment ? ' aria-current="page"' : "";
   return `<header class="site-header">
       <a class="site-brand" href="${home}">alcy</a>
       <nav class="site-nav" aria-label="${t("site.nav")}">
-        <a href="${home}guide/" aria-current="page">${t("site.guide")}</a>
+        <a href="${home}guide/"${current(GUIDE_TREE)}>${t("site.guide")}</a>
+        <a href="${home}reference/"${current(REFERENCE_TREE)}>${t("site.reference")}</a>
         <a href="${home}playground/">${t("site.playground")}</a>
         <button type="button" class="site-search-open" data-action="search">${t("site.search")}</button>
       </nav>
@@ -214,8 +252,9 @@ function contents(page: GuidePage, options: PageOptions): string {
       return `<li><a href="${relativeRoute(page.route, other.route)}"${current}>${escapeHtml(other.title)}</a></li>`;
     })
     .join("\n        ");
-  return `<nav class="guide-nav" aria-label="${t("site.guide")}">
-      <h2>${t("site.guide")}</h2>
+  const label = t(options.tree.label);
+  return `<nav class="guide-nav" aria-label="${label}">
+      <h2>${label}</h2>
       <ol>
         ${items}
       </ol>
@@ -264,9 +303,13 @@ function pager(page: GuidePage, options: PageOptions): string {
   const back = previous
     ? `<a href="${relativeRoute(page.route, previous.route)}">← ${t("site.previous")} · ${escapeHtml(previous.title)}</a>`
     : `<span class="empty"></span>`;
+  // Past the last page the order does not stop; it changes lanes.
+  const onward = options.tree.continuesInto;
   const forward = next
     ? `<a href="${relativeRoute(page.route, next.route)}">${t("site.next")} · ${escapeHtml(next.title)} →</a>`
-    : `<span class="empty"></span>`;
+    : onward
+      ? `<a class="pager-onward" href="${relativeRoute(page.route, onward.segment + "/index.html")}">${t("site.next")} · ${t(onward.label)} →</a>`
+      : `<span class="empty"></span>`;
   return `<nav class="guide-pager" aria-label="${t("site.pager")}">
         ${back}
         ${forward}
@@ -279,16 +322,20 @@ function pager(page: GuidePage, options: PageOptions): string {
 // grammar, and pre-rendering it would start both for a page the reader
 // may never open. Every link is still prefetched, which costs one fetch
 // and no execution.
-const PRERENDERABLE = "/guide/**";
+// The reference is the same kind of page, so it is offered on the same
+// terms: two groups, because a rule names one URL pattern.
+const PRERENDERABLE = ["/guide/**", "/reference/**"];
 
 // The rules are one script for the whole site, written once here and
 // stamped into every page; a template asks `speculation()` for the same
 // text rather than keeping a copy.
 function speculationRules(): string {
   const rules = {
-    prerender: [
-      { source: "document", where: { href_matches: PRERENDERABLE }, eagerness: "moderate" },
-    ],
+    prerender: PRERENDERABLE.map((pattern) => ({
+      source: "document",
+      where: { href_matches: pattern },
+      eagerness: "moderate",
+    })),
     prefetch: [
       { source: "document", where: { href_matches: "/*" }, eagerness: "moderate" },
     ],
@@ -322,7 +369,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const article = page.blocks
     .map((block) => blockHtml(block, options, t, headingIds))
     .join("\n      ");
-  const description = `${page.title} · ${t("meta.guide")}`;
+  const description = `${page.title} · ${t(options.tree.summary)}`;
   return `<!doctype html>
 <!-- Copyright 2026 The Alcy Project Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception -->
@@ -344,7 +391,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   </head>
   <body class="site">
     <a class="skip-link" href="#content">${t("site.skip")}</a>
-    ${header(page.route, page.language, page.path)}
+    ${header(page.route, page.language, page.path, options.tree)}
 
     <div class="guide-layout">
       <div class="guide-aside">
@@ -368,15 +415,18 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
 
 // `/guide/` is a real page, not a signpost: a contents list a reader can
 // land on, so following the header's Guide link never flashes empty.
-export function renderGuideIndex(
+export function renderTreeIndex(
   pages: readonly GuidePage[],
   language: Language,
   boot: string,
   stamp: Stamp,
+  tree: Tree,
 ): string {
-  const route = `${prefixOf(language)}guide/index.html`;
+  const route = `${prefixOf(language)}${tree.segment}/index.html`;
   const assets = assetPrefix(route);
-  const t = (key: MessageKey): string => translate(language, key);
+  const t = (key: MessageKey, params?: MessageParams): string =>
+    translate(language, key, params);
+  const label = t(tree.label);
   const items = pages
     .map(
       (page) =>
@@ -390,22 +440,22 @@ export function renderGuideIndex(
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="${escapeHtml(t("meta.guide"))}" />
-    <title>${t("site.guide")} · alcy</title>
+    <meta name="description" content="${escapeHtml(t(tree.summary))}" />
+    <title>${label} · alcy</title>
     <script>${boot}</script>
     <link rel="stylesheet" href="${assets}shared/site.css" />
     <link rel="modulepreload" href="${assets}shared/shell.js" />
     <link rel="icon" href="${assets}favicon.svg" />
-    ${pageLinks(language, "guide/index.html")}
-    ${socialMeta(`${t("site.guide")} · alcy`, t("meta.guide"), route)}
+    ${pageLinks(language, `${tree.segment}/index.html`)}
+    ${socialMeta(`${label} · alcy`, t(tree.summary), route)}
     ${speculationRules()}
   </head>
   <body class="site">
     <a class="skip-link" href="#content">${t("site.skip")}</a>
-    ${header(route, language, "guide/index.html")}
+    ${header(route, language, `${tree.segment}/index.html`, tree)}
 
     <main class="site-main guide-contents" id="content" tabindex="-1">
-      <h1>${t("site.guide")}</h1>
+      <h1>${label}</h1>
       <ol>
         ${items}
       </ol>
@@ -465,6 +515,7 @@ export function renderNotFound(
       <a class="site-brand" href="./">alcy</a>
       <nav class="site-nav" aria-label="Site">
         <a href="guide/">Guide</a>
+        <a href="reference/">Reference</a>
         <a href="playground/">Playground</a>
       </nav>
     </header>
@@ -478,6 +529,7 @@ export function renderNotFound(
       <div class="actions">
         <a class="primary" href="./">Go home</a>
         <a href="guide/">Read the guide</a>
+        <a href="reference/">Look up the language</a>
         <a href="playground/">Open the playground</a>
       </div>
       <div class="code-block" data-language="alcy">
