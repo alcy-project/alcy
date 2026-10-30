@@ -41,6 +41,7 @@ enum class LintCode : u8 {
   UnusedField = 28,
   NeedlessBool = 29,
   UnreachablePattern = 30,
+  UnusedVariant = 31,
 };
 
 }  // namespace linter

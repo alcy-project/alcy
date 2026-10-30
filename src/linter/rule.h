@@ -40,6 +40,13 @@ concept ReadsFieldUsage = requires {
   { R::READS_FIELD_USAGE } -> std::convertible_to<bool>;
 } && R::READS_FIELD_USAGE;
 
+// A rule that reads the package's variant-usage table declares the
+// fact.
+template <typename R>
+concept ReadsVariantUsage = requires {
+  { R::READS_VARIANT_USAGE } -> std::convertible_to<bool>;
+} && R::READS_VARIANT_USAGE;
+
 // The identity every rule carries.
 template <typename R>
 concept RuleIdentity = requires {
@@ -102,6 +109,8 @@ struct Rule {
   bool reads_usage = false;
   // Whether the rule reads the field-usage table.
   bool reads_field_usage = false;
+  // Whether the rule reads the package's variant-usage table.
+  bool reads_variant_usage = false;
 };
 
 template <RuleType R>
@@ -130,6 +139,7 @@ constexpr Rule rule_row() {
   rule.reads_bindings = ReadsBindings<R>;
   rule.reads_usage = ReadsUsage<R>;
   rule.reads_field_usage = ReadsFieldUsage<R>;
+  rule.reads_variant_usage = ReadsVariantUsage<R>;
   return rule;
 }
 

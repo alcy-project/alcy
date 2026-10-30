@@ -40,6 +40,7 @@ source_set("linter") {
     "rules/rules.cc",
     "rules/rules.h",
     "rules/type_rules.cc",
+    "rules/variant_rules.cc",
     "types.cc",
     "types.h",
     "usage.cc",

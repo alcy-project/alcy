@@ -24,4 +24,13 @@ struct FieldUsage {
   std::vector<std::string_view> names;
 };
 
+// The variant names the package's value paths name, in traversal order:
+// the last segment of every multi-segment path (`Color::Red` records
+// `Red`). One table for the whole package, because a variant the
+// declaring module never names may be another module's constructor;
+// unused-variant reads it.
+struct VariantUsage {
+  std::vector<std::string_view> names;
+};
+
 }  // namespace linter

@@ -146,3 +146,11 @@ heuristic: only a wildcard and a lone underscore-or-lowercase name bind,
 while an uppercase or qualified name is a unit variant, so the rule
 never calls an arm dead that the compiler's exhaustiveness believes is
 reachable. The checker rejects a repeated literal and not this shape.
+
+`unused-variant` reads a third usage table, the package's variant
+names: the walk records the last segment of every multi-segment value
+path, and the table accumulates across modules rather than clearing
+per module, because what one module constructs stays constructed. A
+private enum is only its own module's to construct, so the
+package-wide table is future-proofing, not a present need; the rule
+itself skips `pub` enums, whose variants another package may build.

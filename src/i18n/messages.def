@@ -565,6 +565,7 @@
   F(LintNeedlessBool, Warning, Lint, "this if can return its condition instead") \
   F(LintUnreachablePattern, Warning, Lint, "this pattern is unreachable; an earlier arm matches anything") \
   F(LintUnreachablePatternNote, Note, Lint, "the arm that matches anything is here") \
+  F(LintUnusedVariant, Warning, Lint, "variant {} of {} is never constructed") \
   F(LintDeadCode, Warning, Lint, "function {} is never called") \
   F(LintDeadCodeNote, Note, Lint, "if this is meant as a public surface, declare it pub") \
   F(LintDoubleNegation, Warning, Lint, "double negation is a no-op") \

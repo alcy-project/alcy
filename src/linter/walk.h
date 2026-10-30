@@ -27,6 +27,10 @@ struct Visitor {
   // pattern's field. A constructor's initializer is a write and is not
   // reported here.
   void (*field_read)(LintContext&, std::string_view) = nullptr;
+  // Every variant name the module's multi-segment value paths name: the
+  // last segment of `Color::Red` is `Red`. Single-segment paths are
+  // bindings or imports and name no variant.
+  void (*variant_read)(LintContext&, std::string_view) = nullptr;
 };
 
 // Walks the module being checked: every item and the types its signature

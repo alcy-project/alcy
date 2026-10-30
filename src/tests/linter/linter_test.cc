@@ -647,6 +647,43 @@ TEST_CASE("unreachable-pattern leaves enum variants alone") {
   CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 0);
 }
 
+TEST_CASE("unused-variant reports a variant nothing constructs") {
+  Run run;
+  run("enum Color {\n  Red,\n  Green,\n  Blue,\n}\n\n"
+      "fn paint(c: Color) -> i32 {\n  ret match c {\n    Color::Red => 1,\n"
+      "    Color::Green => 2,\n    Color::Blue => 3,\n  }\n}\n\n"
+      "fn main() -> i32 {\n  ret paint(Color::Red)\n}\n",
+      config_from(run.ctx, "[rules]\nunused-variant = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-variant") == 2);
+  // Traversal order: the first dead variant is Green.
+  CHECK(finding_text(run.ctx, "unused-variant") == "Green");
+}
+
+TEST_CASE("unused-variant leaves a constructed variant alone") {
+  Run run;
+  run("enum Color {\n  Red,\n  Green,\n}\n\n"
+      "fn main() -> i32 {\n  r := Color::Red\n  g := Color::Green\n"
+      "  ret 0\n}\n",
+      config_from(run.ctx, "[rules]\nunused-variant = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-variant") == 0);
+}
+
+TEST_CASE("unused-variant is off until it is asked for") {
+  Run run;
+  run("enum Color {\n  Red,\n  Green,\n}\n\nfn main() -> i32 {\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variant") == 0);
+}
+
+TEST_CASE("unused-variant leaves a pub enum alone") {
+  Run run;
+  run("pub enum Color {\n  Red,\n  Green,\n}\n\nfn main() -> i32 {\n"
+      "  ret 0\n}\n",
+      config_from(run.ctx, "[rules]\nunused-variant = \"warn\"\n"));
+  CHECK(findings_for(run.ctx.bag, "unused-variant") == 0);
+}
+
 TEST_CASE("needless-bool reports an if that returns its condition") {
   Run run;
   run("fn f(c: bool) -> bool {\n  if c {\n    ret true\n  } else {\n"

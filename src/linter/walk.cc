@@ -97,6 +97,15 @@ void walk_expr(LintContext& ctx, ast::ExprIdx expr, const Visitor& visitor) {
     case K::Path: {
       const ast::ExprPath& e = node.payload.get<ast::ExprPath>();
       call_path(visitor, ctx, e.idx);
+      // A multi-segment path names a variant in its last segment:
+      // `Color::Red` constructs `Red`. The head went to the
+      // name-usage table; this is the tail.
+      if (visitor.variant_read != nullptr) {
+        const ast::Path& path = ctx.ast.paths[e.idx];
+        if (path.segments.size() > 1) {
+          visitor.variant_read(ctx, path.segments.back().name);
+        }
+      }
       for (const ast::TypeIdx arg : e.type_args) {
         walk_type(ctx, arg, visitor);
       }

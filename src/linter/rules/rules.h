@@ -204,6 +204,19 @@ struct UnusedField {
   static void run(LintContext& ctx);
 };
 
+// A module rule: the package's variant-usage table. A variant of a
+// private enum that no value path in the package constructs is
+// reported; a pub enum is the package's surface.
+struct UnusedVariant {
+  static constexpr std::string_view ID = "unused-variant";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Allow;
+  static constexpr LintCode CODE = LintCode::UnusedVariant;
+  static constexpr std::string_view SUMMARY =
+      "an enum variant nothing constructs";
+  static constexpr bool READS_VARIANT_USAGE = true;
+  static void run(LintContext& ctx);
+};
+
 // An expression rule: a match arm the arms above it already cover. An
 // arm whose pattern matches anything makes every arm after it
 // unreachable; the checker rejects a repeated literal, not this.

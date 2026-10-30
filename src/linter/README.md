@@ -142,6 +142,7 @@ complete gate.
 | `bool-comparison` | warn | a bool compared with a true or false literal |
 | `dead-code` | allow | a function no call in the package reaches |
 | `unused-field` | allow | a struct field no expression reads |
+| `unused-variant` | allow | an enum variant nothing constructs |
 | `missing-docs` | allow | a `pub` item without a doc comment |
 | `too-many-arguments` | warn | a function above `max-args` parameters |
 | `unused-import` | warn | an import no path in the module names |
@@ -186,6 +187,15 @@ the pattern binds. The parser is what makes the set exact: an uppercase
 or qualified name is a unit variant rather than a binding, so `E::A`
 and `E::B` do not cover one another. The checker rejects a repeated
 literal (`EC019`) but not this shape, which is the gap the rule fills.
+
+`unused-variant` reads the variant names the package's value paths
+construct - the last segment of every multi-segment path, `Color::Red`
+records `Red`. Matching an arm does not construct, so an enum whose
+variants appear only in `match` arms reports them all; the table is
+package-wide, because a private enum is only its own module's to
+construct anyway. A `pub` enum is the package's surface and is never
+reported. It is opt-in beside `dead-code`, for the same reason: a
+variant waiting for its first construction is a package in progress.
 
 `unused-import` reads the path heads the walk recorded. An import is
 used when the module names its local name as the head of a value path, a

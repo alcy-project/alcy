@@ -28,6 +28,7 @@ namespace linter {
 struct BindingIndex;
 struct FieldUsage;
 struct NameUsage;
+struct VariantUsage;
 
 // Whether the source line of `span` silences `rule`: an
 // `alcy-lint-ignore` comment on that line, or an
@@ -86,6 +87,10 @@ struct LintContext {
   // The field names the module reads, recorded by the same walk. Null
   // when no enabled rule reads it.
   FieldUsage* field_usage = nullptr;
+  // The variant names the package names, accumulated by the engine
+  // across every module's walk. Written during the walks and read after
+  // them; null when no enabled rule reads it.
+  VariantUsage* variant_usage = nullptr;
   // The rules the engine's single walk dispatches expressions, items,
   // and blocks to, in registry order. Engine plumbing; a rule does not
   // read these.

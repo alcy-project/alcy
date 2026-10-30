@@ -78,6 +78,15 @@ void collect_field_read(LintContext& ctx, std::string_view name) {
   }
 }
 
+// The variant-usage table rides the same walk, and accumulates across
+// modules: a variant the declaring module never names may be another
+// module's constructor.
+void collect_variant_read(LintContext& ctx, std::string_view name) {
+  if (ctx.variant_usage != nullptr) {
+    ctx.variant_usage->names.push_back(name);
+  }
+}
+
 }  // namespace
 
 bool lintable(const analyzer::ModuleTree& tree, u32 module) {
@@ -112,6 +121,7 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
   bool needs_bindings = false;
   bool needs_usage = false;
   bool needs_field_usage = false;
+  bool needs_variant_usage = false;
   for (u32 index = 0; index < static_cast<u32>(all.size()); ++index) {
     if (config.setting(index).level == LintLevel::Allow) {
       continue;
@@ -120,6 +130,7 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
     needs_bindings = needs_bindings || rule.reads_bindings;
     needs_usage = needs_usage || rule.reads_usage;
     needs_field_usage = needs_field_usage || rule.reads_field_usage;
+    needs_variant_usage = needs_variant_usage || rule.reads_variant_usage;
     if (rule.check_expr != nullptr) {
       expr_rules.push_back(&rule);
     } else if (rule.check_item != nullptr) {
@@ -150,6 +161,7 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
   BindingIndex bindings;
   NameUsage usage;
   FieldUsage fields;
+  VariantUsage variants;
   for (u32 module = 0; module < package.tree.modules.size(); ++module) {
     if (!lintable(package.tree, module)) {
       continue;
@@ -158,6 +170,9 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
     lint.binding_index = nullptr;
     lint.usage_index = nullptr;
     lint.field_usage = nullptr;
+    // The variant table is package-wide and never cleared: what one
+    // module names stays named for the rules that run after its walk.
+    lint.variant_usage = needs_variant_usage ? &variants : nullptr;
     if (needs_bindings) {
       collect_bindings(lint, bindings);
       lint.binding_index = &bindings;
@@ -182,13 +197,17 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
       fields.names.clear();
       lint.field_usage = &fields;
     }
-    if (walk || usage_here || lint.field_usage != nullptr) {
+    if (walk || usage_here || lint.field_usage != nullptr ||
+        lint.variant_usage != nullptr) {
       Visitor module_visitor = visitor;
       if (usage_here) {
         module_visitor.path = &collect_path;
       }
       if (lint.field_usage != nullptr) {
         module_visitor.field_read = &collect_field_read;
+      }
+      if (lint.variant_usage != nullptr) {
+        module_visitor.variant_read = &collect_variant_read;
       }
       walk_module(lint, module_visitor);
     }
