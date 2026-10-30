@@ -239,7 +239,20 @@ replaced. The foundations are in `roadmap.md`.
   leave the bound out, and `spec_method_sig` binds the method's type
   parameters to the call's arguments without asking whether those
   arguments satisfy what the declaration requires. `check_declared_bounds`
-  is the pass that would answer it.
+  answers the question for a free function and for a generic impl's
+  own parameters, so the missing piece is the declaration.
+
+  The call does not reach `lookup_method`'s generic branch for a
+  concrete impl: `generic_record` is set only when the impl's *target*
+  names a parameter or a value, so `impl Checkable for P` takes the
+  other branch, which hands back the registered method and never asks
+  the declaration anything. Registering that method compares the two
+  signatures under one stand-in per parameter, and equal stand-ins
+  match, so neither side's bounds are consulted. A fix has to put the
+  question where both branches meet - the check belongs after the
+  candidate is chosen and before it is returned - and it has to
+  resolve the receiver's arguments from `entry.spec_args` under the
+  impl's scope, the way the generic branch already does.
 
 - [ ] A value's type is named in three places, and a place is not a
   value: a register's row, the operand that names it, and the
