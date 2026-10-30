@@ -79,6 +79,7 @@ class RuntimeBuilder {
     const bool panic = declared("alcy_panic") || alloc || checked;
     const bool sys_write = declared("alcy_sys_write");
     const bool sys_read = declared("alcy_sys_read");
+    const bool error_kind = declared("alcy_error_kind");
     if (print || println || eprint || eprintln || panic) {
       build_write_all();
     }
@@ -147,6 +148,9 @@ class RuntimeBuilder {
     }
     if (sys_read) {
       build_sys_read();
+    }
+    if (error_kind) {
+      build_error_kind();
     }
     if (alloc) {
       build_alloc();
@@ -1116,7 +1120,52 @@ class RuntimeBuilder {
     build_faithful_io("alcy_sys_read", /*is_write=*/false);
   }
 
-  // The faithful descriptor call (ADR-0117): one `write(2)`/`read(2)`,
+  void build_error_kind() {
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getInt32Ty(), {builder_.getInt32Ty()}, false);
+    llvm::Function* function = runtime("alcy_error_kind", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* code = function->getArg(0);
+    i32 e_intr = 4;
+    i32 e_again = 11;
+    i32 e_noent = 2;
+    i32 e_acces = 13;
+    i32 e_pipe = 32;
+    i32 e_inval = 22;
+    if (mach_o_) {
+      e_again = 35;
+    }
+    struct Mapping {
+      i32 number;
+      i32 kind;
+    };
+    const Mapping mappings[] = {{e_intr, 1},  {e_again, 2}, {e_noent, 3},
+                                {e_acces, 4}, {e_pipe, 5},  {e_inval, 6}};
+    llvm::BasicBlock* current = entry;
+    for (const Mapping& mapping : mappings) {
+      llvm::BasicBlock* matched =
+          llvm::BasicBlock::Create(context, "matched", function);
+      llvm::BasicBlock* next =
+          llvm::BasicBlock::Create(context, "next", function);
+      builder_.SetInsertPoint(current);
+      llvm::Value* equal = builder_.CreateICmpEQ(
+          code, llvm::ConstantInt::get(builder_.getInt32Ty(), mapping.number),
+          "equal");
+      builder_.CreateCondBr(equal, matched, next);
+      builder_.SetInsertPoint(matched);
+      builder_.CreateRet(
+          llvm::ConstantInt::get(builder_.getInt32Ty(), mapping.kind));
+      current = next;
+    }
+    builder_.SetInsertPoint(current);
+    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt32Ty(), 0));
+  }
+
+  // The faithful descriptor call (ADR-0128): one `write(2)`/`read(2)`,
   // answering the bytes or `-(errno)`. A short write and an interrupted
   // call are the caller's to see; the retrying loops stay with the
   // print hooks and the std's own helpers.

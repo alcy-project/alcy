@@ -1888,7 +1888,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   std::string_view target_display;
   if (target_node.kind == ast::TypeKind::Primitive) {
     // A scalar belongs to the staged suite (ADR-0090): only a staged
-    // package implements a spec for one, sealed or not (ADR-0122). The
+    // package implements a spec for one, sealed or not (ADR-0133). The
     // seal above still governs which package may implement a sealed
     // spec, for a scalar as for a nominal.
     if (!tree.modules[module]->is_staged) {
@@ -3335,18 +3335,19 @@ ir::TypeIdx Checker::resolve_type(u32 module,
 bool Checker::is_known_intrinsic(std::string_view name) {
   return name == "memcopy" || name == "panic" || name == "str_len" ||
          name == "str_byte" || name == "str_slice" || name == "sys_write" ||
-         name == "sys_read" || name == "str_from_parts" ||
-         name == "slice_len" || name == "slice_from_parts" ||
-         name == "slice_from_parts_mut" || name == "alloc" ||
-         name == "dealloc" || name == "elem_ptr" || name == "elem_ref" ||
-         name == "size_of" || name == "align_of" || name == "uninit_write" ||
-         name == "uninit_assume" || name == "uninit_ref" ||
-         name == "ptr_offset" || name == "ptr_offset_mut" ||
-         name == "drop_in_place" || name == "slice_at" ||
-         name == "slice_at_mut" || name == "read" || name == "wrapping_add" ||
-         name == "wrapping_sub" || name == "wrapping_mul" ||
-         name == "file_size" || name == "read_file_into" ||
-         name == "write_file_all" || name == "arg_count" || name == "arg";
+         name == "sys_read" || name == "error_kind" ||
+         name == "str_from_parts" || name == "slice_len" ||
+         name == "slice_from_parts" || name == "slice_from_parts_mut" ||
+         name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
+         name == "elem_ref" || name == "size_of" || name == "align_of" ||
+         name == "uninit_write" || name == "uninit_assume" ||
+         name == "uninit_ref" || name == "ptr_offset" ||
+         name == "ptr_offset_mut" || name == "drop_in_place" ||
+         name == "slice_at" || name == "slice_at_mut" || name == "read" ||
+         name == "wrapping_add" || name == "wrapping_sub" ||
+         name == "wrapping_mul" || name == "file_size" ||
+         name == "read_file_into" || name == "write_file_all" ||
+         name == "arg_count" || name == "arg";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -3622,6 +3623,9 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected.push_back(builder.reference_type(u8, true));
     expected.push_back(usize_ty);
     expected_ret = builder.primitive(ir::TypeTag::I64);
+  } else if (name == "error_kind") {
+    expected.push_back(builder.primitive(ir::TypeTag::I32));
+    expected_ret = builder.primitive(ir::TypeTag::I32);
   } else if (name == "str_from_parts") {
     expected.push_back(builder.reference_type(u8, false));
     expected.push_back(usize_ty);
@@ -4700,7 +4704,7 @@ ir::TypeIdx Checker::primitive_by_name(std::string_view name) {
       return builder.primitive(spell.tag);
     }
   }
-  // The pointer-width spellings name the target's width (ADR-0121).
+  // The pointer-width spellings name the target's width (ADR-0132).
   if (name == "isize") {
     return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::I64
                                                             : ir::TypeTag::I32);
@@ -6394,9 +6398,6 @@ const CheckedModule::MethodInfo* Checker::lookup_param_method(
     CheckedModule::ReceiverKind receiver = CheckedModule::ReceiverKind::None;
     if (!spec_method_sig(dispatch, name, spec_args, param, module, method_args,
                          params, ret, receiver)) {
-      return reject();
-    }
-    if (receiver == CheckedModule::ReceiverKind::None) {
       return reject();
     }
     for (CheckedModule::MethodInfo& existing : modules[module].methods) {
@@ -8181,7 +8182,7 @@ bool Checker::resolve_value_path_impl(u32 module,
     }
     // A scalar or a bound type parameter as the prefix: `i64::parse`
     // and `T::parse` reach an associated function or a spec's
-    // receiverless member (ADR-0122). A bound parameter sees the
+    // receiverless member (ADR-0133). A bound parameter sees the
     // instantiation's implementation, the way its receiver calls do
     // (ADR-0063).
     const ir::TypeIdx head_type = head_named_type(head);

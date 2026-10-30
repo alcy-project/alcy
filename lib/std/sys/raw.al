@@ -7,7 +7,7 @@ use package::error::error_from;
 
 // One `write(2)`, answering the byte count or the negated error
 // number the call reported. The compiler provides it per target
-// (ADR-0117).
+// (ADR-0128).
 intrinsic fn sys_write(fd: i32, buf: str) -> i64;
 
 // One `read(2)`, the same way. The caller guarantees room for

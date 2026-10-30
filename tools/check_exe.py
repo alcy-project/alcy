@@ -59,6 +59,11 @@ def parse_expect(path: Path):
     stdout_contains = data.get("stdout_contains", [])
     stderr_contains = data.get("stderr_contains", [])
     walk_stderr_contains = data.get("walk_stderr_contains", [])
+    # What the program reads from standard input, so a case can cover
+    # the input layer (ADR-0129).
+    expected_input = data.get("input")
+    if expected_input is not None and not isinstance(expected_input, str):
+        sys.exit(f"{path}: 'input' must be a string")
 
     # Extra arguments for the alcy build itself, so a single-file case
     # can select what a package case declares in its own files.
@@ -72,6 +77,7 @@ def parse_expect(path: Path):
         stdout_contains,
         stderr_contains,
         walk_stderr_contains,
+        expected_input,
         args,
     )
 
@@ -283,6 +289,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
         stdout_contains,
         stderr_contains,
         walk_stderr_contains,
+        expected_input,
         extra_args,
     ) = parse_expect(expect_path)
     if host_walks_frames():
@@ -345,6 +352,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
                 text=True,
                 encoding="utf-8",
                 cwd=work,
+                input=expected_input,
             )
         except OSError as e:
             return False, f"cannot execute '{exe_name}': {e}"

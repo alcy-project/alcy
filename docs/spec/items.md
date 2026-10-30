@@ -73,7 +73,15 @@
     the call reported. A short write and an interrupted call are the
     caller's to see; the std wraps them with `sys`'s `Fd` and
     `OsError`, and the write-all loop stays with the print hooks
-    (ADR-0117).
+    (ADR-0128).
+  - `error_kind(code: i32) -> i32` maps a failed call's reported
+    number to a stable kind code (0 = Other, 1 = Interrupted,
+    2 = WouldBlock, 3 = NotFound, 4 = PermissionDenied,
+    5 = BrokenPipe, 6 = InvalidInput). The table is the target's own,
+    because the C library's errno numbering differs (Linux's EAGAIN is
+    11, BSD's is 35): the LLVM runtime compares against the target's
+    constants, the freestanding one uses the Linux kernel's, and wasm
+    maps WASI's numbers. `sys::OsError` classifies through it.
   - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
     and `str_slice(s: str, start: usize, end: usize) -> str` are the
     string primitives. Out-of-bounds `str_byte`/`str_slice` panic.

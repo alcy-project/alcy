@@ -4,9 +4,8 @@
 // `alcy/std/sys`: what a failed call reported.
 
 // The kind of a failed call: the portable half of the error. The
-// numbers behind these are the first target's (Linux); another target
-// extends the table with its own numbers while the kind stays the
-// program's vocabulary (ADR-0117).
+// runtime answers a stable kind code for the number it reported, so
+// the table is the target's own (ADR-0128).
 pub enum ErrorKind {
   Interrupted,
   WouldBlock,
@@ -18,31 +17,39 @@ pub enum ErrorKind {
 }
 
 // The error a call reported: the raw number the runtime answered and
-// the kind it maps to. A number outside the documented set stays in
-// `code` and answers `Other`.
+// the kind it maps to. The number is target-specific; the kind is
+// the program's vocabulary.
 pub struct OsError {
   pub code: i32,
   pub kind: ErrorKind,
 }
 
+// The runtime maps the target's errno number to a stable kind code:
+//   0 = Other, 1 = Interrupted, 2 = WouldBlock, 3 = NotFound,
+//   4 = PermissionDenied, 5 = BrokenPipe, 6 = InvalidInput.
+// The compiler provides it per target, so the table is the target's
+// own (ADR-0128).
+intrinsic fn error_kind(code: i32) -> i32;
+
 // The kind of a raw error number.
 pub fn kind_of(code: i32) -> ErrorKind {
-  if code == 4 {
+  k := error_kind(code)
+  if k == 1 {
     ret ErrorKind::Interrupted
   }
-  if code == 11 {
+  if k == 2 {
     ret ErrorKind::WouldBlock
   }
-  if code == 2 {
+  if k == 3 {
     ret ErrorKind::NotFound
   }
-  if code == 1 || code == 13 {
+  if k == 4 {
     ret ErrorKind::PermissionDenied
   }
-  if code == 32 {
+  if k == 5 {
     ret ErrorKind::BrokenPipe
   }
-  if code == 22 {
+  if k == 6 {
     ret ErrorKind::InvalidInput
   }
   ret ErrorKind::Other

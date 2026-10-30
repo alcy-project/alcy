@@ -111,10 +111,10 @@ std::span<const u8> code_body_at(const std::vector<u8>& module, u32 index) {
   return {};
 }
 
-// The ten defined runtime functions occupy the first bodies; a module
+// The eleven defined runtime functions occupy the first bodies; a module
 // with one own function finds that body here. Pinning the number keeps
 // the test honest if the runtime's function count moves.
-constexpr u32 FIRST_PROGRAM_BODY = 10;
+constexpr u32 FIRST_PROGRAM_BODY = 11;
 
 // One verified free function: `fn not_bool() -> bool { ret !true }`.
 // The operand is a literal, so the logical-not sequence is the only one

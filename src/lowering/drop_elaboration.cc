@@ -655,6 +655,26 @@ void DropElaborator::run() {
     if (!runs_destructor(type)) {
       return;
     }
+    // A place may arrive byte-addressed: a payload field's address is
+    // the area's byte pointer, and the projections below index the
+    // type's own layout. Relabel the pointer with the type when the
+    // register's label is not already the type's; the cast is the
+    // identity on the value.
+    ir::OperandIdx end_place = place;
+    const ir::Operand& place_operand = builder.state().operands[place.idx];
+    if (place_operand.is<ir::RegisterIdx>()) {
+      const ir::RegisterIdx place_reg = place_operand.as_register();
+      const ir::TypeIdx labeled = builder.state().registers[place_reg].type;
+      if (labeled.idx != type.idx) {
+        const ir::TypeTag tag = builder.types()[type].tag;
+        if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Tuple ||
+            tag == ir::TypeTag::Array || tag == ir::TypeTag::Enum) {
+          const ir::RegisterIdx relabeled =
+              pass_emit(seq_of(out), ir::Opcode::TypeCast, type, {place}, span);
+          end_place = to_operand(relabeled, type);
+        }
+      }
+    }
     // The same origin rule the collected call follows: a copy's
     // glue is the one the type it came from declared.
     const ir::TypeIdx glue_type = type_origin(type);
@@ -693,7 +713,7 @@ void DropElaborator::run() {
       // representation spells it (ADR-0087); the tag read is the same
       // semantic operation the lowering emits.
       const ir::RegisterIdx disc = pass_emit(
-          seq_of(out), ir::Opcode::EnumTagLoad, i32_ty, {place}, span);
+          seq_of(out), ir::Opcode::EnumTagLoad, i32_ty, {end_place}, span);
       const u32 exit_index = spawn(out);
       std::vector<u32> variant_blocks(shape.variants.size(), exit_index);
       for (u32 v = 0; v < shape.variants.size(); ++v) {
@@ -793,7 +813,7 @@ void DropElaborator::run() {
                     {to_operand(counter, usize_ty)}, span);
       const ir::RegisterIdx element =
           pass_emit(seq_of(out), ir::Opcode::GetElementPtr, shape.element,
-                    {place, zero_i32, to_operand(index, usize_ty)}, span);
+                    {end_place, zero_i32, to_operand(index, usize_ty)}, span);
       emit_end(
           out, local, path, shape.element, to_operand(element, shape.element),
           [](const std::vector<u32>&) { return State::Owned; }, span);

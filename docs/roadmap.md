@@ -177,7 +177,7 @@ peripheral work lives in `backlog.md`. The language record lives in
 - [x] The platform floor: a core-only `sys`, and the OS calls out of
   `core`.
 
-  ADR-0117 landed: `sys` depends on `core` alone and owns `Fd` with
+  ADR-0128 landed: `sys` depends on `core` alone and owns `Fd` with
   the standard descriptors (associated functions), the faithful
   `read`/`write` that reports short and interrupted results as
   themselves, `OsError` over the raw errno, and the process
@@ -196,8 +196,8 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 - [ ] The standard library's surface is impls and specs.
 
-  ADR-0121. The parse family goes generic first, because input needs
-  it: the `Parse` capability (receiver-less, per ADR-0122) is called
+  ADR-0132. The parse family goes generic first, because input needs
+  it: the `Parse` capability (receiver-less, per ADR-0133) is called
   as `i64::parse(text)` or `T::parse(text)`, and `String`'s six
   delegations collapse into one. The method spelling
   `str.parse::<T>()` waits on generic methods over builtin compound
@@ -210,7 +210,7 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 - [ ] Bytes-first input.
 
-  ADR-0118. Over `sys` and `Parse`: `io::BufReader` (one-call `fill`,
+  ADR-0129. Over `sys` and `Parse`: `io::BufReader` (one-call `fill`,
   `read_byte`, `read_line` with the CRLF rule and no UTF-8 validation,
   `read_to_end`; `EINTR` retried here and only here) and
   `io::Scanner` (ASCII whitespace, `next_token`, `next::<T>`, counted
@@ -222,7 +222,7 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 - [ ] `comp` expands what it knows, and the `fmt` pilot.
 
-  ADR-0119. Explicit `comp for`/`comp if` control flow whose remaining
+  ADR-0130. Explicit `comp for`/`comp if` control flow whose remaining
   operations are emitted in the function's per-instantiation body,
   with the variadic tuple's shape readable at compile time (length,
   comp-known indexing that keeps each element's type) and ADR-0055's
@@ -231,7 +231,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   carries its precision), retires the C++ conversion lane once the
   tests, code size, compile time, runtime performance, wasm parity,
   and the float-digit accuracy item pass, and lets `print` ride the
-  same expansion. Then ADR-0120's removals follow: `builtin_display`
+  same expansion. Then ADR-0131's removals follow: `builtin_display`
   retires, the fmt/io recognition moves under the mechanism, and the
   agreement test pinning the scalar comparisons to their impls lands
   early.

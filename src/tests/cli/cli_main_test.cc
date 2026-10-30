@@ -350,7 +350,7 @@ TEST_CASE("Compile reads a program from standard input") {
   return;
 #endif
   io::TempDir dir = io::TempDir::create_unique("alcy_cli_compile_stdin_ok_");
-  SilencedOutput silenced;
+  // SilencedOutput silenced;
   CHECK(run_compile_stdin(dir,
                           "fn main() -> i32 {\n"
                           "  print(\"hi\")\n"

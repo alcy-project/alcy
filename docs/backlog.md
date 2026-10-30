@@ -349,6 +349,6 @@ replaced. The foundations are in `roadmap.md`.
 
 - [ ] Compile-time reflection, read-only: the blocker for the struct
   flavor of input, a clap-like argument parser, and serde-like
-  (de)serialization (ADR-0118, ADR-0119). Its record lands with the
+  (de)serialization (ADR-0129, ADR-0130). Its record lands with the
   design, after expansion; the floor is read-only and comp-only, with
   no runtime type information and no generative types.

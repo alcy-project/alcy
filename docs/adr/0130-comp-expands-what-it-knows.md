@@ -1,4 +1,4 @@
-# ADR-0119: `comp` expands what it knows
+# ADR-0130: `comp` expands what it knows
 
 - Subject: the language
 - Status: Accepted
@@ -136,11 +136,11 @@ by the ordinary rules.**
 
 - Reflection's record and its floor.
 - `[T; n]` in declarations: attributes (deferred for `repr(C)`) or
-  wrapper types (ADR-0118) until then.
+  wrapper types (ADR-0129) until then.
 - The `Parse` capability's associated functions (recorded with the
-  implementation, ADR-0121).
+  implementation, ADR-0132).
 - Spec default methods, which are what the iterator adapters would
-  need to become methods (ADR-0121).
+  need to become methods (ADR-0132).
 - The evaluator's own deferred list (receiver methods marked
   `comp`, float evaluation, generics interplay) stays; the pilot
   needs none of it.

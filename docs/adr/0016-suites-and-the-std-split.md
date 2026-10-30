@@ -88,7 +88,7 @@ heap they grow on.
 
 `fmt` sits above `alloc` because `format` returns a `String`.
 
-Amended at the `sys` landing (ADR-0117): the split gains the row
+Amended at the `sys` landing (ADR-0128): the split gains the row
 `sys → core`, the platform floor a program selects alone when it wants
 descriptor calls without the heap or the formatter. `io` sits above it
 (`core, sys, alloc, arch` plus the `fmt`, `text`, and `unicode` it

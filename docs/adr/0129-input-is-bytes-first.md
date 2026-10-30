@@ -1,4 +1,4 @@
-# ADR-0118: Input is bytes first
+# ADR-0129: Input is bytes first
 
 - Subject: the language
 - Status: Accepted
@@ -24,7 +24,7 @@ tokens) and the language's constraints shape the design:
   types, lengths, and bindings (proconio's `input! { n: usize, a:
   [i32; n] }`) is a token-carrying construct, which the language does
   not have and does not plan to add for input.
-- The floor is `sys` (ADR-0117): faithful calls on a descriptor.
+- The floor is `sys` (ADR-0128): faithful calls on a descriptor.
 
 The two existing shapes to weigh are Rust's (`stdin` plus
 `BufRead::lines` plus `parse`: general, compositional, and verbose)
@@ -47,7 +47,7 @@ scanner over it. Bytes first; text conveniences come later.**
     one trailing `\n` (and one `\r` before it) dropped. No UTF-8
     validation: the bytes are the text.
   - `EINTR` is retried at this layer and the retry is documented;
-    the raw layer keeps it visible (ADR-0117).
+    the raw layer keeps it visible (ADR-0128).
 - `io::Scanner` is the token domain. ASCII space, tab, CR, and LF
   separate tokens; a token is the byte run between them, so tokens
   cross lines the way the token domain expects.
@@ -56,7 +56,7 @@ scanner over it. Bytes first; text conveniences come later.**
     not a name per type. The capability's shape (an associated
     function - the spec system has receiver methods only) is a
     prerequisite whose own record lands with its implementation
-    (ADR-0121).
+    (ADR-0132).
   - The failure taxonomy is three-way: the end of input, a token
     that does not parse, and the operating-system error underneath.
     The exact payloads land with the implementation; the
@@ -80,7 +80,7 @@ scanner over it. Bytes first; text conveniences come later.**
     which ADR-0097 defers with a floor; `comp` evaluates values and
     cannot introduce bindings in a caller.
   - The struct flavor needs read-only compile-time reflection (its
-    own record, when designed; ADR-0119).
+    own record, when designed; ADR-0130).
   - The length coupling (`[T; n]`) cannot live in a struct's field
     types, because `n` is a runtime value; without a general
     attribute system (deferred for `repr(C)`) or a convention, the
@@ -125,7 +125,7 @@ scanner over it. Bytes first; text conveniences come later.**
   typed conversion of values, not a declaration language.
 - **Reflection now, for the struct flavor.** Not taken: it is a
   large facility whose record belongs with its own justification
-  (ADR-0119); input alone does not carry it, and it still would not
+  (ADR-0130); input alone does not carry it, and it still would not
   express a runtime length.
 
 ## Deferred
@@ -133,5 +133,5 @@ scanner over it. Bytes first; text conveniences come later.**
 - Validating (UTF-8-aware) line and token readers in `unicode`.
 - A global stdin lock and the thread story that needs it (the
   `thread` package is empty).
-- `open`, `close`, and `seek` (ADR-0117's deferred list).
+- `open`, `close`, and `seek` (ADR-0128's deferred list).
 - The exact error payloads and the vector-read spellings.

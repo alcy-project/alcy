@@ -107,7 +107,7 @@ bool is_path_segment(lexer::TokenKind kind) {
 }
 
 // A scalar spelling, which a path may open with: `i64::parse(text)`
-// reaches a static member of the scalar (ADR-0122).
+// reaches a static member of the scalar (ADR-0133).
 bool is_primitive_path_head(lexer::TokenKind kind) {
   switch (kind) {
     case lexer::TokenKind::I8:

@@ -230,9 +230,11 @@ void Emitter::declare_runtime() {
   const u32 alloc =
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {ValType::I32}});
   // The faithful descriptor calls answer the bytes or the negated errno
-  // in an i64 (ADR-0117).
+  // in an i64 (ADR-0128).
   const u32 sys_io = builder_.add_type(
       FuncType{{ValType::I32, ValType::I32, ValType::I32}, {ValType::I64}});
+  const u32 error_kind =
+      builder_.add_type(FuncType{{ValType::I32}, {ValType::I32}});
 
   // The builder calls run in every build; the DCHECKs only pin the indexes.
   const u32 fd_write_index =
@@ -264,6 +266,8 @@ void Emitter::declare_runtime() {
   DCHECK_EQ(check_shift_index, CHECK_SHIFT);
   const u32 sys_read_index = builder_.add_function(sys_io);
   DCHECK_EQ(sys_read_index, SYS_READ);
+  const u32 error_kind_index = builder_.add_function(error_kind);
+  DCHECK_EQ(error_kind_index, ERROR_KIND);
 }
 
 Emitter::EmitResult Emitter::choose_roots() {
@@ -905,6 +909,8 @@ Emitter::EmitResult Emitter::emit_call(const ir::Instruction& instr) {
       callee_index = SYS_WRITE;
     } else if (name == "alcy_sys_read") {
       callee_index = SYS_READ;
+    } else if (name == "alcy_error_kind") {
+      callee_index = ERROR_KIND;
     } else if (name == "alcy_alloc") {
       callee_index = ALLOC;
     } else if (name == "alcy_dealloc") {
@@ -1303,7 +1309,7 @@ void Emitter::emit_runtime_bodies() {
   }
   {
     // alcy_sys_write(fd, ptr, len) -> i64: one fd_write, answering the
-    // bytes written or the negated errno (ADR-0117).
+    // bytes written or the negated errno (ADR-0128).
     begin_body(3);
     const u32 errno_local = allocate_local(ValType::I32);
     i32_const(static_cast<i32>(scratch_));
@@ -1357,6 +1363,57 @@ void Emitter::emit_runtime_bodies() {
     op(OP_SELECT);
     op(OP_I64_EXTEND_I32_S);
     finish_body(SYS_READ);
+  }
+  {
+    // alcy_error_kind(code: i32) -> i32: the target's own errno
+    // mapped to the portable kind codes (0 = Other, 1 = Interrupted,
+    // 2 = WouldBlock, 3 = NotFound, 4 = PermissionDenied,
+    // 5 = BrokenPipe, 6 = InvalidInput). WASI preview1 numbers.
+    begin_body(1);
+    local_get(0);
+    i32_const(27);
+    op(OP_I32_EQ);
+    if_void();
+    i32_const(1);
+    op(OP_RETURN);
+    end_op();
+    local_get(0);
+    i32_const(6);
+    op(OP_I32_EQ);
+    if_void();
+    i32_const(2);
+    op(OP_RETURN);
+    end_op();
+    local_get(0);
+    i32_const(44);
+    op(OP_I32_EQ);
+    if_void();
+    i32_const(3);
+    op(OP_RETURN);
+    end_op();
+    local_get(0);
+    i32_const(2);
+    op(OP_I32_EQ);
+    if_void();
+    i32_const(4);
+    op(OP_RETURN);
+    end_op();
+    local_get(0);
+    i32_const(64);
+    op(OP_I32_EQ);
+    if_void();
+    i32_const(5);
+    op(OP_RETURN);
+    end_op();
+    local_get(0);
+    i32_const(28);
+    op(OP_I32_EQ);
+    if_void();
+    i32_const(6);
+    op(OP_RETURN);
+    end_op();
+    i32_const(0);
+    finish_body(ERROR_KIND);
   }
   {
     // alcy_panic(msg, msg_len, where, where_len): `panic at <site>:

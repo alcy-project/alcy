@@ -1,4 +1,4 @@
-// The faithful descriptor write (ADR-0117): one write(2) answering
+// The faithful descriptor write (ADR-0128): one write(2) answering
 // the bytes it accepted, and the error a bad descriptor reports.
 
 use sys::raw::write;

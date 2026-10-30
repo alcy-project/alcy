@@ -1,4 +1,4 @@
-# ADR-0120: The compiler's knowledge of `std` is a reasoned list
+# ADR-0131: The compiler's knowledge of `std` is a reasoned list
 
 - Subject: the compiler
 - Status: Accepted
@@ -30,7 +30,7 @@ kept as a list.**
 - The three reasons: (i) it is language semantics; (ii) it is an
   unavoidable cost (the direct builtin comparison, the type-level
   intrinsics); (iii) the manifest or the expansion machinery can
-  declare it (ADR-0119's mechanism). A shortcut that can cite none
+  declare it (ADR-0130's mechanism). A shortcut that can cite none
   is a bug.
 - When one behavior has both an implementation and a shortcut, the
   two must agree, and a test names the pair. The implementable side
@@ -40,7 +40,7 @@ kept as a list.**
   - `builtin_display` (the checker's `{}` and `Display`-bound rule
     that admits builtin convertibles with no implementation):
     retires. The builtins gain their conversion implementations in
-    ADR-0119's pilot, so the ordinary path reaches them.
+    ADR-0130's pilot, so the ordinary path reaches them.
   - `is_builtin_comparable` (the direct comparison for builtins,
     used by the operator checks): stays. Tuples and arrays compare
     element-wise structurally, and the direct path is the built-in
@@ -52,15 +52,15 @@ kept as a list.**
     platform primitive, and a new name must say which.
   - The recognitions `is_core_fmt`, `is_io_print`, and
     `is_expanded_variadic` (package-gated through the staged index,
-    never by bare name): move under ADR-0119's mechanism, or the
+    never by bare name): move under ADR-0130's mechanism, or the
     manifest declares which items expand where the machinery cannot
     see it.
   - The `io` write hooks' name mapping (`alcy_print` and friends):
     an ABI detail; it stays, and may move to the manifest later.
-  - `fmt`'s conversions: ADR-0119's pilot.
+  - `fmt`'s conversions: ADR-0130's pilot.
   - `Map`'s `str`-only keys: ADR-0024's continuation; the `Hash`
     capability and the scalar implementations land together
-    (ADR-0121).
+    (ADR-0132).
 - The list is a snapshot, not a license: a new shortcut cites its
   reason when it appears. There is no lint for this; the question is
   asked in review, and the answer is in this list.
@@ -68,12 +68,12 @@ kept as a list.**
 ## Consequences
 
 - The shrinkage is scheduled through the records that own the
-  machinery (ADR-0119, ADR-0121), not a flag day, and each removal
+  machinery (ADR-0130, ADR-0132), not a flag day, and each removal
   lands with the tests that prove the ordinary path is equivalent.
 - The rule cuts both ways: a library that cannot be written in alcy
   must say why, and the answer is usually a primitive the language
-  should own - which is where `sys` (ADR-0117) and the `num`
-  direction (ADR-0121) came from.
+  should own - which is where `sys` (ADR-0128) and the `num`
+  direction (ADR-0132) came from.
 - Reviewers get a concrete instrument: "which of the three reasons?"
   is answerable, and this list is where the answers accumulate.
 

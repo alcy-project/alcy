@@ -1,4 +1,4 @@
-# ADR-0117: The platform floor is `sys`
+# ADR-0128: The platform floor is `sys`
 
 - Subject: the language
 - Status: Accepted
@@ -85,7 +85,7 @@ floor: the calls a program makes to the system.**
 - Raw I/O is selectable without the heap, the formatter, or text:
   `core` and `sys`, and nothing else. The freestanding path has its
   floor, and io builds its buffered reader, scanner, and printing
-  above it (ADR-0118).
+  above it (ADR-0129).
 - `core` becomes what its manifest says, and the intrinsic home rule
   is one sentence: the package that abstracts the facility declares
   it (alloc already declares its own).
@@ -120,5 +120,5 @@ floor: the calls a program makes to the system.**
   declarations.
 - A global input lock and a global buffered stdout (the `thread`
   package is empty; the story lands with it).
-- `OsError`'s kind table beyond the first targets, and whether kinds
-  are normalized in the runtime.
+- `OsError`'s kind table is now normalized in the runtime (LLVM and
+  wasm, ADR-0128's escape hatch); only future targets need a table.

@@ -1672,6 +1672,29 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     }
     return Val{to_operand(dst, i64_ty), i64_ty, false, false};
   }
+  if (name == "error_kind") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 1) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val code = lower_expr(call.args[0], nullptr);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+    const ir::ExternalFunctionIdx ext =
+        declare_external("alcy_error_kind", i32_ty, {i32_ty});
+    const ir::RegisterIdx dst =
+        emit(ir::Opcode::Call, i32_ty,
+             {builder.operand(ir::Operand::from_external_function(
+                  ext, builder.primitive(ir::TypeTag::Function))),
+              use_value(code)});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(dst, i32_ty), i32_ty, false, false};
+  }
   if (name == "memcopy") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
     if (call.args.size() != 3) {

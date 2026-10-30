@@ -81,9 +81,10 @@ class Emitter {
   static constexpr u32 CHECK_OVERFLOW = 10;
   static constexpr u32 CHECK_SHIFT = 11;
   static constexpr u32 SYS_READ = 12;
+  static constexpr u32 ERROR_KIND = 13;
   // The runtime occupies [0, RUNTIME_FUNCTIONS); the program's functions
   // and `_start` follow it.
-  static constexpr u32 RUNTIME_FUNCTIONS = 13;
+  static constexpr u32 RUNTIME_FUNCTIONS = 14;
 
   // The globals the module defines: the shadow stack pointer and the
   // bump allocator's cursor.

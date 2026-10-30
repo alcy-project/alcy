@@ -157,6 +157,7 @@ TEST_CASE("Runtime defines every entry point") {
           signature(void_ty, {pointer, usize, pointer, usize}));
   declare(module, "alcy_sys_write", signature(usize, {i32, pointer, usize}));
   declare(module, "alcy_sys_read", signature(usize, {i32, pointer, usize}));
+  declare(module, "alcy_error_kind", signature(i32, {i32}));
   declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
   declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
 
@@ -175,6 +176,7 @@ TEST_CASE("Runtime defines every entry point") {
                    signature(usize, {i32, pointer, usize}));
   check_definition(module, target, "alcy_sys_read",
                    signature(usize, {i32, pointer, usize}));
+  check_definition(module, target, "alcy_error_kind", signature(i32, {i32}));
   check_definition(module, target, "alcy_alloc",
                    signature(pointer, {usize, usize}));
   check_definition(module, target, "alcy_dealloc",

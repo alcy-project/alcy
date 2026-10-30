@@ -4,7 +4,7 @@
 // `alcy/std/core`: reading a value out of its text.
 
 // A type that can be read from its decimal text. The member is an
-// associated function (ADR-0122), so the bound `T: Parse` is nameable
+// associated function (ADR-0133), so the bound `T: Parse` is nameable
 // and the call reads from the type: `i64::parse(text)`,
 // `T::parse(text)`, `text.parse::<i64>()`.
 pub spec Parse {

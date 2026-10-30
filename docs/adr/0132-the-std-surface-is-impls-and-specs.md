@@ -1,4 +1,4 @@
-# ADR-0121: The standard library's surface is impls and specs
+# ADR-0132: The standard library's surface is impls and specs
 
 - Subject: the language
 - Status: Accepted
@@ -9,7 +9,7 @@
 The library's surface has grown by naming. `str` carries
 `parse_i64`, `parse_u64`, `parse_i32`, `parse_u32`, `parse_usize`,
 and `parse_f64`; `String` duplicates all six as delegations; a typed
-read would add a `next_i32` family (ADR-0118). Most of the iterator
+read would add a `next_i32` family (ADR-0129). Most of the iterator
 adapters are free functions. Primitives have no inherent methods at
 all: the checker accepts inherent impls for nominal types, `str`,
 slices, and arrays, and refuses them for scalars, so "a method on
@@ -44,13 +44,13 @@ method.**
 - **Polymorphic behavior is a spec plus implementations, named
   generically.** The `parse` family is the first: `parse_i64`/
   `parse_u32`/... are replaced by the capability's calls -
-  `i64::parse(text)` and `T::parse(text)` (ADR-0122) - and
+  `i64::parse(text)` and `T::parse(text)` (ADR-0133) - and
   `String`'s six delegations collapse into one. A typed read
-  (ADR-0118) is the same capability: `next::<T>()`.
+  (ADR-0129) is the same capability: `next::<T>()`.
   - The capability needs a receiver-less (associated) function;
     today every spec method takes a receiver. That record lands
     just before its implementation.
-  - Amended at that landing (ADR-0122): the method spelling
+  - Amended at that landing (ADR-0133): the method spelling
     `str.parse::<T>()` did not land with it; a generic method with
     its own parameters on a builtin compound target (`impl str`) is
     the slice it waits on, and the two type-first forms are what

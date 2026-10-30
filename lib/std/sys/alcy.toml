@@ -1,7 +1,7 @@
 # Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
 #
 # The platform floor: descriptors, the faithful calls on them, and the
-# process's arguments (ADR-0117). Depends on `core` alone.
+# process's arguments (ADR-0128). Depends on `core` alone.
 
 [package]
 name = "sys"

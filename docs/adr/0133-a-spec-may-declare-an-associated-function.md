@@ -1,4 +1,4 @@
-# ADR-0122: A spec may declare an associated function
+# ADR-0133: A spec may declare an associated function
 
 - Subject: the language
 - Status: Accepted
@@ -8,7 +8,7 @@
 
 A spec's members are methods: every one takes a receiver, and the
 receiver is how dispatch reaches the implementation (`eq`, `index`,
-`next`, `display`). ADR-0121's first target needs the other shape.
+`next`, `display`). ADR-0132's first target needs the other shape.
 `parse` is a capability of the type being parsed, not of the text: the
 natural bound is on the result type (`T: Parse`), and the call reads
 from the type (`T::parse(text)`, `i64::parse(text)`). A
@@ -49,7 +49,7 @@ member.**
   generic method with its own parameters on a builtin compound target
   (`impl str`), which the checker does not index; that is its own
   slice, and until then the two forms above are what replaces the six
-  names (ADR-0121, amended).
+  names (ADR-0132, amended).
 - The `parse` family lands on it: `core` declares `Parse` with
   implementations for `i64`, `u64`, `i32`, `u32`, and `f64` - the set
   the six `str` methods covered - and `usize` is served by the
@@ -57,7 +57,7 @@ member.**
   serve it. `i64::parse(text)`/`T::parse(text)` replace
   `parse_i64`/`parse_u32`/..., and `String`'s six delegations
   collapse into one generic method. The input layer's `next::<T>`
-  (ADR-0118) is the same bound.
+  (ADR-0129) is the same bound.
 - `Parse` is open, not suite-sealed: parsing a type of one's own from
   text is the type's own business, and ADR-0090 puts the
   implementation where the type or the spec lives.
@@ -70,7 +70,7 @@ member.**
   dispatch, implementation matching, sealing, and generic methods
   are unchanged.
 - The concrete spellings are replaced, not aliased (pre-1.0, per
-  ADR-0121); the exe and e2e cases move to `parse::<T>()`.
+  ADR-0132); the exe and e2e cases move to `parse::<T>()`.
 
 ## Alternatives considered
 
@@ -83,10 +83,10 @@ member.**
   the same, and the type-first calls cover what a free spelling
   would, without a third name for one capability.
 - **Reflection over a type's conversions.** Rejected: heavier than
-  the shape needs, and ADR-0119 keeps reflection for the data-shaped
+  the shape needs, and ADR-0130 keeps reflection for the data-shaped
   clients.
 
 ## Deferred
 
-- Default methods (ADR-0121's iterator note).
+- Default methods (ADR-0132's iterator note).
 - Associated values (constants) on specs.

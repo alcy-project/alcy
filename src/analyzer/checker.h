@@ -758,7 +758,7 @@ class Checker {
   ir::TypeIdx primitive_by_name(std::string_view name);
   // The type a two-segment value path's head names when it is a scalar
   // spelling or a bound type parameter; an error type when it is
-  // neither (ADR-0122).
+  // neither (ADR-0133).
   ir::TypeIdx head_named_type(std::string_view name);
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
