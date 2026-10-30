@@ -18,14 +18,16 @@ are examples that cannot quietly rot.
 | `fizzbuzz` | `for`, `else if`, and formatted `println` |
 | `fibonacci` | a named function, iterative, printing a formatted table |
 | `primes` | two functions, an early `ret`, and trial division to a square root |
+| `vectors` | a `Vec` grown by `push`, read by `at`, and `pop`ped |
+| `wordfreq` | a `Map` of counts, `.iter()` over an array, and `keys()` |
 
 ## What they do not show
 
 They are not a tour of the language. Several things alcy has are absent
-here, most obviously collections: no sample builds a `Vec` or a `String`,
-and every one prints line by line. That is also why these are
-small — the exercises are the ones a reader already knows the shape of,
-so the reading is about alcy rather than about the algorithm.
+here: no sample builds a `String`, and every one prints line by line.
+That is also why these are small — the exercises are the ones a reader
+already knows the shape of, so the reading is about alcy rather than
+about the algorithm.
 
 ## Writing one
 

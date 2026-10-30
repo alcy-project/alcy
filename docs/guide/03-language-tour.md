@@ -224,6 +224,71 @@ it took and ends it when the value ends, so a closure over a `String`
 is a value like any other. A body may read what it captured and borrow
 it, but not consume it, because the closure can run again.
 
+## Generic functions
+
+A type parameter lets one body serve several types. `T` is written after
+the name, and each call fixes it from the arguments, so `identity`
+returns whatever it was handed without the caller naming a type:
+
+```alcy
+fn identity<T>(x: T) -> T {
+  ret x
+}
+
+fn main() {
+  println("{} {}", identity(42), identity(true))
+}
+```
+
+A type argument may also be written out where the arguments leave it
+undecided, as `Vec::<i32>::new()` does below. Bounds are not there yet:
+a body cannot yet say that `T` must be `Ord`, which is why a sort needs
+a vector whose element type already is.
+
+## Collections
+
+A `Vec<T>` is a growable buffer on the heap. `Vec::<i32>::new()` names
+the element type at the call, and `push` adds one; a `mut` binding is
+what lets it grow:
+
+```alcy
+fn main() {
+  mut v := Vec::<i32>::new()
+  v.push(10)
+  v.push(20)
+  if Option::Some(first) := v.at(0) {
+    println("first = {}", *first)
+  }
+  println("len = {}", v.len())
+}
+```
+
+`at` takes a `usize` and hands back an `Option<&T>`, so an index that
+is past the end is `None` rather than a fault; `v[i]` instead panics
+when the index is out of range. This is the `Option` the match section
+already covers, so a read is a decision rather than an assumption.
+
+A `Map<V>` keys by `str` and stores a `V` per key. `insert` copies the
+key and returns the value it replaced, if any, which is why the result
+is discarded with `_ :=` when the old value is not wanted:
+
+```alcy
+fn main() {
+  mut titles := Map::<str>::new()
+  _ := titles.insert("alcy", "a compiler")
+  if Option::Some(t) := titles.get("alcy") {
+    println("alcy: {}", *t)
+  }
+  println("{} entries", titles.len())
+}
+```
+
+`get` borrows the value, and `keys`, `values`, and `iter` walk the
+table; `Set` is built on the same table and keys by `str` too. Neither
+promises an order, so a report that needs one collects the keys into a
+`Vec` and sorts it (`sort` needs `T: Ord`) rather than depending on
+the order the entries went in.
+
 ## Printing
 
 `print` and `println` take a compile-time format string and one

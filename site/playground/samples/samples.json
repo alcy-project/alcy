@@ -24,6 +24,18 @@
       "source": "samples/primes/main.al",
       "title": "Primes",
       "description": "Two functions, an early ret, and trial division to a square root."
+    },
+    {
+      "file": "vectors.al",
+      "source": "samples/vectors/main.al",
+      "title": "Vectors",
+      "description": "A growable Vec: push, indexed reads through at, and pop."
+    },
+    {
+      "file": "wordfreq.al",
+      "source": "samples/wordfreq/main.al",
+      "title": "Word Frequency",
+      "description": "A Map table, iterated keys, and a count per word."
     }
   ]
 }

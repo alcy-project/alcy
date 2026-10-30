@@ -1,0 +1,7 @@
+exit = 0
+stdout = """
+len = 6 capacity = 8
+sum = 91
+popped 36
+len = 5
+"""
