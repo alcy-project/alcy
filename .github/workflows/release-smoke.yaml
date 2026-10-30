@@ -1,0 +1,53 @@
+name: Release Smoke
+
+# The action installs a published release, and a tag's draft is not a
+# URL yet: this smoke walks the release when the human publishes it, and
+# asks the two questions the build matrix cannot -- does the action file
+# at the tag install on every runner the release covers, and does the
+# CLI it installs compile and run a program with nothing but the
+# runner's own tools on PATH?
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26, windows-2025-vs2026]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba080525da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+
+      - name: Set up alcy
+        uses: ./
+        with:
+          version: ${{ github.ref_name }}
+
+      - name: Print the version
+        shell: bash
+        run: alcy --version
+
+      - name: Compile and run a program
+        shell: bash
+        run: |
+          mkdir smoke && cd smoke
+          printf 'fn main() -> i32 {\n  ret 7\n}\n' > main.al
+          alcy compile main.al -o smoke
+          set +e
+          ./smoke
+          code=$?
+          set -e
+          [ "$code" = 7 ] || {
+            echo "::error::the smoke program exited $code, expected 7"
+            exit 1
+          }

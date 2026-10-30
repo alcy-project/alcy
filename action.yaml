@@ -1,0 +1,65 @@
+# The repository as a consumer action: `uses: alcy-project/alcy@vX` puts
+# the release `vX`'s CLI on PATH. The version defaults to the tag the
+# action was used at, so the action code and the binary it installs are
+# the ones the release pipeline walked together. Building the compiler
+# from source is this repository's own workflows' business (see
+# .github/actions); a consumer only ever downloads a release.
+
+name: Set up alcy
+description: >-
+  Install the alcy compiler CLI from this repository's releases and put
+  it on PATH. Linking a program needs a C toolchain on PATH (clang, or
+  MSVC on Windows).
+branding:
+  icon: terminal
+  color: purple
+
+inputs:
+  version:
+    description: Release tag to install. Defaults to the tag this action was used at.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install alcy
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_REPO: ${{ github.action_repository }}
+      run: |
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64)   plat=linux;   arch=x86_64; ext=tar.zst ;;
+          macOS-ARM64) plat=macos;   arch=arm64;  ext=tar.zst ;;
+          Windows-X64) plat=windows; arch=x64;    ext=zip ;;
+          *)
+            echo "::error::alcy publishes no archive for ${RUNNER_OS}-${RUNNER_ARCH}"
+            exit 1
+            ;;
+        esac
+        tag=${VERSION:-$ACTION_REF}
+        case "$tag" in
+          v*) ;;
+          *)
+            echo "::error::version '$tag' is not a release tag; pin one (uses: ${ACTION_REPO:-alcy-project/alcy}@vX.Y.Z)"
+            exit 1
+            ;;
+        esac
+        repo=${ACTION_REPO:-$GITHUB_REPOSITORY}
+        asset="alcy-${plat}-${arch}-release.${ext}"
+        curl --fail --silent --show-error --location \
+          -o "$asset" "https://github.com/${repo}/releases/download/${tag}/${asset}" \
+          -o "$asset.sha256" "https://github.com/${repo}/releases/download/${tag}/${asset}.sha256"
+        case "$RUNNER_OS" in
+          macOS) shasum -a 256 -c "$asset.sha256" ;;
+          *)     sha256sum -c "$asset.sha256" ;;
+        esac
+        dir=${RUNNER_TEMP}/alcy
+        mkdir -p "$dir"
+        case "$ext" in
+          zip) /c/Windows/System32/tar.exe -xf "$asset" -C "$dir" ;;
+          *)   tar --zstd -xf "$asset" -C "$dir" ;;
+        esac
+        echo "$dir" >> "$GITHUB_PATH"
