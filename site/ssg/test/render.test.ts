@@ -63,6 +63,42 @@ test("only a runnable block loads the compiler's half of the guide", () => {
   match(runnable, /<script type="module" src="\.\.\/shared\/guide.js"><\/script>/);
 });
 
+test("the outline says how much each section asks of the reader", () => {
+  // The count is decided at build time, from the fences the section
+  // actually holds: a reader scanning the outline learns that one section
+  // holds three programs before they scroll to it.
+  const html = render("en", [
+    { type: "heading", level: 1, text: "Title", line: 1 },
+    { type: "heading", level: 2, text: "Values", line: 3 },
+    alcy,
+    alcy,
+    { type: "heading", level: 2, text: "Functions", line: 7 },
+    alcy,
+    { type: "heading", level: 2, text: "Notes", line: 11 },
+    prose,
+  ]);
+  match(html, /<li><a href="#values">Values <span class="outline-tally">2 programs<\/span><\/a><\/li>/);
+  match(html, /<li><a href="#functions">Functions <span class="outline-tally">1 program<\/span><\/a><\/li>/);
+  // A section with nothing to run says nothing: the absence is the message.
+  match(html, /<li><a href="#notes">Notes<\/a><\/li>/);
+});
+
+test("the outline counts only the fences that run", () => {
+  // A shell block is something to copy, not something to run, and a
+  // level-3 heading does not start a new section.
+  const html = render("en", [
+    { type: "heading", level: 1, text: "Title", line: 1 },
+    { type: "heading", level: 2, text: "Values", line: 3 },
+    sh,
+    { type: "heading", level: 3, text: "Detail", line: 5 },
+    alcy,
+    { type: "heading", level: 2, text: "Functions", line: 9 },
+    prose,
+  ]);
+  match(html, /<li><a href="#values">Values <span class="outline-tally">1 program<\/span><\/a><\/li>/);
+  match(html, /<li><a href="#functions">Functions<\/a><\/li>/);
+});
+
 test("a page without sections carries no outline", () => {
   const html = render("en", [prose]);
   equal(html.includes("guide-outline"), false);

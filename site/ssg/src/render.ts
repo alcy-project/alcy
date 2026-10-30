@@ -10,7 +10,7 @@ import { posix } from "node:path";
 
 import { escapeHtml } from "../../shared/highlight.js";
 import { translate } from "../../shared/i18n.js";
-import type { MessageKey } from "../../shared/i18n.js";
+import type { MessageKey, MessageParams } from "../../shared/i18n.js";
 import type { GuidePage } from "./guide.js";
 import { otherLanguages, prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
@@ -112,6 +112,10 @@ export interface GuideSection {
   id: string;
   text: string;
   block: Block;
+  // How many runnable programs the section holds, counted at build time:
+  // an outline that shows it tells the reader what awaits them before
+  // they scroll to it.
+  programs: number;
 }
 
 // The page's sections: its level-2 headings, each with an id unique on
@@ -130,7 +134,19 @@ export function sectionsOf(page: GuidePage): GuideSection[] {
       id = `${base}-${count}`;
     }
     used.add(id);
-    sections.push({ id, text: block.text, block });
+    sections.push({ id, text: block.text, block, programs: 0 });
+  }
+  // A section runs to the next one, so its programs are the alcy fences
+  // between its heading and the next heading of level 2 or higher.
+  let current: GuideSection | undefined;
+  for (const block of page.blocks) {
+    if (block.type === "heading" && block.level <= 2) {
+      current = sections.find((section) => section.block === block);
+      continue;
+    }
+    if (current !== undefined && block.type === "code" && block.language === "alcy") {
+      current.programs += 1;
+    }
   }
   return sections;
 }
@@ -191,7 +207,7 @@ function blockHtml(
 }
 
 function contents(page: GuidePage, options: PageOptions): string {
-  const t = (key: MessageKey): string => translate(page.language, key);
+  const t = (key: MessageKey, params?: MessageParams): string => translate(page.language, key, params);
   const items = options.pages
     .map((other) => {
       const current = other === page ? ' aria-current="page"' : "";
@@ -211,16 +227,25 @@ function contents(page: GuidePage, options: PageOptions): string {
 function outline(
   sections: readonly GuideSection[],
   options: PageOptions,
-  t: (key: MessageKey) => string,
+  t: (key: MessageKey, params?: MessageParams) => string,
 ): string {
   if (sections.length < 2) {
     return "";
   }
+  // A section with programs says so; the tally is the section's own
+  // weight, so it rides inside the link rather than beside it, and it is
+  // text rather than a badge: it reads the same with the stylesheet gone.
   const items = sections
-    .map(
-      (section) =>
-        `<li><a href="#${section.id}">${renderInline(section.text, options.resolveLink)}</a></li>`,
-    )
+    .map((section) => {
+      const tally =
+        section.programs > 0
+          ? `<span class="outline-tally">${t(
+              section.programs === 1 ? "guide.programs.one" : "guide.programs.other",
+              { count: String(section.programs) },
+            )}</span>`
+          : "";
+      return `<li><a href="#${section.id}">${renderInline(section.text, options.resolveLink)}${tally ? ` ${tally}` : ""}</a></li>`;
+    })
     .join("\n        ");
   return `<details class="guide-outline">
       <summary>${t("guide.onThisPage")}</summary>
@@ -231,7 +256,7 @@ function outline(
 }
 
 function pager(page: GuidePage, options: PageOptions): string {
-  const t = (key: MessageKey): string => translate(page.language, key);
+  const t = (key: MessageKey, params?: MessageParams): string => translate(page.language, key, params);
   const index = options.pages.indexOf(page);
   const previous = index > 0 ? options.pages[index - 1] : undefined;
   const next =
@@ -277,7 +302,7 @@ export function speculation(): string {
 
 export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const assets = assetPrefix(page.route);
-  const t = (key: MessageKey): string => translate(page.language, key);
+  const t = (key: MessageKey, params?: MessageParams): string => translate(page.language, key, params);
   const hasCode = page.blocks.some((block) => block.type === "code");
   // A runnable program is the only reason to load the compiler's client,
   // so the page asks for `guide.js` only when it has one; that module

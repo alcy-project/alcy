@@ -34,6 +34,10 @@ export const en = {
   "guide.open": "Open",
   "guide.openTitle": "Open this program in the playground",
   "guide.onThisPage": "On this page",
+  // The outline's tally of runnable programs, counting one and many
+  // apart because English has no other way to say it.
+  "guide.programs.one": "{count} program",
+  "guide.programs.other": "{count} programs",
   "meta.guide": "the alcy guide",
   "noscript.playground": "The playground needs JavaScript to run.",
   "meta.playground":
@@ -120,6 +124,8 @@ const ja = {
   "guide.reset": "リセット",
   "guide.open": "開く",
   "guide.openTitle": "このプログラムをプレイグラウンドで開く",
+  "guide.programs.one": "{count} 個のプログラム",
+  "guide.programs.other": "{count} 個のプログラム",
   "guide.onThisPage": "このページの内容",
   "meta.guide": "alcy ガイド",
   "noscript.playground": "プレイグラウンドの実行には JavaScript が必要です。",

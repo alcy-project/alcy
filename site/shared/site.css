@@ -449,6 +449,15 @@ body.site {
   text-decoration: none;
 }
 
+/* The section's weight, said quietly after its title: a count, not a badge.
+   The space in the markup is what separates the two, so the outline still
+   parses without this rule. */
+.outline-tally {
+  color: var(--fg-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .guide-nav a:hover,
 .guide-outline a:hover {
   color: var(--fg);
