@@ -753,6 +753,13 @@ class Checker {
   // Whether the backend compares the operand type directly: a scalar,
   // a thin address, or a tuple or array of comparable elements.
   bool is_builtin_comparable(ir::TypeIdx type) const;
+  // The type a scalar spelling names (`i64`, `usize`), or an error
+  // type for a spelling no scalar carries.
+  ir::TypeIdx primitive_by_name(std::string_view name);
+  // The type a two-segment value path's head names when it is a scalar
+  // spelling or a bound type parameter; an error type when it is
+  // neither (ADR-0122).
+  ir::TypeIdx head_named_type(std::string_view name);
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
   bool types_equal_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);

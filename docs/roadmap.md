@@ -197,13 +197,16 @@ peripheral work lives in `backlog.md`. The language record lives in
 - [ ] The standard library's surface is impls and specs.
 
   ADR-0121. The parse family goes generic first, because input needs
-  it: the `Parse` capability (receiver-less, its own record lands with
-  the implementation) becomes `str.parse::<T>()`, and `String`'s six
-  delegations collapse into one. Primitives gain inherent impls (the
-  checker's rule extends to `TypeKind::Primitive`, gated to the staged
-  suite), and `num`'s per-type methods land with their first callers.
-  The iterator adapters stay free functions until the spec system can
-  express them as methods; that door is named, not promised.
+  it: the `Parse` capability (receiver-less, per ADR-0122) is called
+  as `i64::parse(text)` or `T::parse(text)`, and `String`'s six
+  delegations collapse into one. The method spelling
+  `str.parse::<T>()` waits on generic methods over builtin compound
+  targets (its own slice). Primitives gain inherent impls (the
+  checker's rule extends to `TypeKind::Primitive`, gated to the
+  staged suite), and `num`'s per-type methods land with their first
+  callers. The iterator adapters stay free functions until the spec
+  system can express them as methods; that door is named, not
+  promised.
 
 - [ ] Bytes-first input.
 

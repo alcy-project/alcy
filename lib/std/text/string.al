@@ -326,28 +326,10 @@ impl String {
     ret self.as_str().is_ascii()
   }
 
-  pub fn parse_i64(self: &Self) -> Option<i64> {
-    ret self.as_str().parse_i64()
-  }
-
-  pub fn parse_u64(self: &Self) -> Option<u64> {
-    ret self.as_str().parse_u64()
-  }
-
-  pub fn parse_i32(self: &Self) -> Option<i32> {
-    ret self.as_str().parse_i32()
-  }
-
-  pub fn parse_f64(self: &Self) -> Option<f64> {
-    ret self.as_str().parse_f64()
-  }
-
-  pub fn parse_u32(self: &Self) -> Option<u32> {
-    ret self.as_str().parse_u32()
-  }
-
-  pub fn parse_usize(self: &Self) -> Option<usize> {
-    ret self.as_str().parse_usize()
+  // The value read from the string's text; the capability is the
+  // type's (ADR-0122).
+  pub fn parse<T: Parse>(self: &Self) -> Option<T> {
+    ret T::parse(self.as_str())
   }
 
   pub fn split_whitespace(self: &Self) -> SplitWhitespace {

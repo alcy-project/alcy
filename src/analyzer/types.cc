@@ -1879,17 +1879,19 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       }
     }
   }
-  // The target is a nominal type in scope, or one scalar primitive when
-  // the spec is sealed. v1 never implements a spec for a compound,
+  // The target is a nominal type in scope, or one scalar primitive from
+  // a staged package. v1 never implements a spec for a compound,
   // reference, or `str` target.
   NominalEntry* target_entry = nullptr;
   bool primitive_target = false;
   ir::TypeIdx primitive = ir::TypeIdx::invalid();
   std::string_view target_display;
   if (target_node.kind == ast::TypeKind::Primitive) {
-    // Only a sealed spec accepts a scalar: the seal is what keeps
-    // `impl PartialEq for i32` the standard library's own.
-    if (!sealed) {
+    // A scalar belongs to the staged suite (ADR-0090): only a staged
+    // package implements a spec for one, sealed or not (ADR-0122). The
+    // seal above still governs which package may implement a sealed
+    // spec, for a scalar as for a nominal.
+    if (!tree.modules[module]->is_staged) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
           DiagCode::UnknownType, target_node.span);
       (void)index;
@@ -4679,6 +4681,48 @@ usize Checker::scope_of(std::string_view name) const {
     }
   }
   return scopes.size();
+}
+
+ir::TypeIdx Checker::primitive_by_name(std::string_view name) {
+  struct Spell {
+    std::string_view text;
+    ir::TypeTag tag;
+  };
+  constexpr Spell SPELLS[] = {
+      {"i8", ir::TypeTag::I8},   {"i16", ir::TypeTag::I16},
+      {"i32", ir::TypeTag::I32}, {"i64", ir::TypeTag::I64},
+      {"u8", ir::TypeTag::U8},   {"u16", ir::TypeTag::U16},
+      {"u32", ir::TypeTag::U32}, {"u64", ir::TypeTag::U64},
+      {"f32", ir::TypeTag::F32}, {"f64", ir::TypeTag::F64},
+  };
+  for (const Spell& spell : SPELLS) {
+    if (name == spell.text) {
+      return builder.primitive(spell.tag);
+    }
+  }
+  // The pointer-width spellings name the target's width (ADR-0121).
+  if (name == "isize") {
+    return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::I64
+                                                            : ir::TypeTag::I32);
+  }
+  if (name == "usize") {
+    return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
+                                                            : ir::TypeTag::U32);
+  }
+  return error_type();
+}
+
+ir::TypeIdx Checker::head_named_type(std::string_view name) {
+  const ir::TypeIdx builtin = primitive_by_name(name);
+  if (!is_error(builtin)) {
+    return builtin;
+  }
+  for (usize i = type_params.size(); i > 0; --i) {
+    if (type_params[i - 1].first == name) {
+      return type_params[i - 1].second;
+    }
+  }
+  return error_type();
 }
 
 // True for a recognized suffix (tag set), false when absent (tag
@@ -8128,6 +8172,22 @@ bool Checker::resolve_value_path_impl(u32 module,
       }
       if (const CheckedModule::MethodInfo* method =
               lookup_method(self, member, module, node.span, false)) {
+        if (method->receiver == CheckedModule::ReceiverKind::None) {
+          out.kind = PathValue::Kind::AssocFunction;
+          out.method = method;
+          return true;
+        }
+      }
+    }
+    // A scalar or a bound type parameter as the prefix: `i64::parse`
+    // and `T::parse` reach an associated function or a spec's
+    // receiverless member (ADR-0122). A bound parameter sees the
+    // instantiation's implementation, the way its receiver calls do
+    // (ADR-0063).
+    const ir::TypeIdx head_type = head_named_type(head);
+    if (!is_error(head_type)) {
+      if (const CheckedModule::MethodInfo* method =
+              lookup_method(head_type, member, module, node.span, false)) {
         if (method->receiver == CheckedModule::ReceiverKind::None) {
           out.kind = PathValue::Kind::AssocFunction;
           out.method = method;

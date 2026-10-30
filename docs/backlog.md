@@ -288,7 +288,7 @@ replaced. The foundations are in `roadmap.md`.
   the member's package, with that module as the root of the analysis
   rather than a root package of its own.
 
-- [ ] `parse_f64` converts the integer part exactly and still divides a
+- [ ] `f64::parse` converts the integer part exactly and still divides a
   fraction below one in f64, so a numerator past 2^53 rounds twice:
   `"0.9876543210987654321".parse_f64()` answers 0.98765432109876550
   where the literal `0.9876543210987654321` answers

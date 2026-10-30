@@ -42,13 +42,19 @@ method.**
   arrays (staged suite only, ADR-0090). This is a small checker
   change, and it unblocks every future method on a scalar.
 - **Polymorphic behavior is a spec plus implementations, named
-  generically.** The `parse` family is the first: `str.parse::<T>()`
-  replaces `parse_i64`/`parse_u32`/..., and `String`'s six
-  delegations collapse into one. A typed read (ADR-0118) is the
-  same capability: `next::<T>()`.
+  generically.** The `parse` family is the first: `parse_i64`/
+  `parse_u32`/... are replaced by the capability's calls -
+  `i64::parse(text)` and `T::parse(text)` (ADR-0122) - and
+  `String`'s six delegations collapse into one. A typed read
+  (ADR-0118) is the same capability: `next::<T>()`.
   - The capability needs a receiver-less (associated) function;
     today every spec method takes a receiver. That record lands
     just before its implementation.
+  - Amended at that landing (ADR-0122): the method spelling
+    `str.parse::<T>()` did not land with it; a generic method with
+    its own parameters on a builtin compound target (`impl str`) is
+    the slice it waits on, and the two type-first forms are what
+    replaces the six names until then.
 - **An algorithm over a spec stays a free function while the spec
   system cannot express it as a method.** The iterator adapters
   (`all`, `fold`, `position`, ...) are the example: specs have no

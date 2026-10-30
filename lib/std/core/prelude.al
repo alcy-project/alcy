@@ -55,6 +55,7 @@ pub use package::ops::Neg;
 pub use package::ops::Rem;
 pub use package::ops::Sub;
 pub use package::option::Option;
+pub use package::parse::Parse;
 pub use package::range::Bound;
 pub use package::range::Range;
 pub use package::range::RangeIter;

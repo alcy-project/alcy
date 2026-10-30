@@ -106,6 +106,27 @@ bool is_path_segment(lexer::TokenKind kind) {
   }
 }
 
+// A scalar spelling, which a path may open with: `i64::parse(text)`
+// reaches a static member of the scalar (ADR-0122).
+bool is_primitive_path_head(lexer::TokenKind kind) {
+  switch (kind) {
+    case lexer::TokenKind::I8:
+    case lexer::TokenKind::I16:
+    case lexer::TokenKind::I32:
+    case lexer::TokenKind::I64:
+    case lexer::TokenKind::Isize:
+    case lexer::TokenKind::U8:
+    case lexer::TokenKind::U16:
+    case lexer::TokenKind::U32:
+    case lexer::TokenKind::U64:
+    case lexer::TokenKind::Usize:
+    case lexer::TokenKind::F32:
+    case lexer::TokenKind::F64:
+    case lexer::TokenKind::Bool: return true;
+    default: return false;
+  }
+}
+
 }  // namespace
 
 Parser::Parser(std::span<const lexer::Token> tokens,
@@ -574,7 +595,13 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
   const usize mark = pos_;
   std::vector<ast::Ident> segments;
   while (true) {
-    if (!is_path_segment(peek_kind())) {
+    // A scalar may open a path only as a member's prefix: `i64::parse`
+    // parses, a bare `i64` expression stays the spelling error it was.
+    const bool scalar_head =
+        segments.empty() && is_primitive_path_head(peek_kind()) &&
+        pos_ + 1 < tokens_.size() &&
+        tokens_[pos_ + 1].kind == lexer::TokenKind::ColonColon;
+    if (!is_path_segment(peek_kind()) && !scalar_head) {
       if (segments.empty()) {
         expect(lexer::TokenKind::Ident, "path");
         return ast::PathIdx::invalid();
