@@ -37,8 +37,9 @@ relied upon by MVP programs or by the MVP compiler implementation.
   structs, free functions, methods, and spec methods where the impl is
   generic). Declarations, implementations,
   dispatch, and coherence are settled (see `items.md` and
-  `grammar.md`); a bound admitting a super-spec's methods, and generic
-  super-specs, arrive with this work.
+  `grammar.md`); a bound admitting a super-spec's methods resolves
+  through the super chain now, and generic super-specs arrive with
+  this work.
 - The implementing-side manifest key that would let a package outside a
   seal opt in to a suite-only spec; seals are one-way until it ships
   (see `modules.md`).

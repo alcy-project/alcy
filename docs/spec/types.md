@@ -116,10 +116,10 @@
   implement only `PartialEq`, because IEEE equality is not reflexive.
 - `Vec<T>` compares lengths and then elements through `PartialEq` in
   turn, and `String` compares its bytes. The element's capability is
-  checked where the generic body is instantiated until spec bounds
-  land (see `deferred.md`), so comparing a vector of a type without
-  `PartialEq` is an error at that use rather than at the
-  implementation.
+  the implementation's `PartialEq` bound, checked at each use, and the
+  body itself is checked once at its definition (ADR-0079): comparing
+  a vector of a type without `PartialEq` names that use rather than a
+  line inside the implementation.
 
 ## Comparison over specs
 

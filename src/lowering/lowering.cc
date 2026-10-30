@@ -702,6 +702,78 @@ bool Lowerer::fn_budget_available() {
   return false;
 }
 
+// Whether a type names an `ir::TypeTag::Param` where a signature can
+// see one: the arguments of a nominal instance, a reference's
+// pointee, a sequence's element, a tuple's parts. Fields are not
+// walked: a signature names its types, and a parameter reaches one
+// through an argument the source wrote.
+static bool mentions_param(const ir::StorageState& state, ir::TypeIdx type) {
+  if (!type.is_valid() || type.idx >= state.types.size()) {
+    return false;
+  }
+  const ir::TypeNode& node = state.types[type];
+  using T = ir::TypeTag;
+  switch (node.tag) {
+    case T::Param: return true;
+    case T::Ref:
+    case T::MutRef:
+    case T::RawPtr:
+    case T::RawMutPtr:
+      return mentions_param(state, state.ref_types[node.as_ref()].pointee);
+    case T::Array:
+      return mentions_param(state, state.array_types[node.as_array()].element);
+    case T::Slice:
+      return mentions_param(state, state.slice_types[node.as_slice()].element);
+    case T::Tuple: {
+      for (ir::TypeIdx element : state.tuple_types[node.as_tuple()].elements) {
+        if (mentions_param(state, element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case T::Func: {
+      const ir::FuncType& shape = state.func_types[node.as_func()];
+      for (ir::TypeIdx param : shape.params) {
+        if (mentions_param(state, param)) {
+          return true;
+        }
+      }
+      return mentions_param(state, shape.ret);
+    }
+    case T::Struct:
+      for (ir::TypeIdx arg : state.struct_types[node.as_struct()].params) {
+        if (mentions_param(state, arg)) {
+          return true;
+        }
+      }
+      return false;
+    case T::Enum:
+      for (ir::TypeIdx arg : state.enum_types[node.as_enum()].params) {
+        if (mentions_param(state, arg)) {
+          return true;
+        }
+      }
+      return false;
+    default: return false;
+  }
+}
+
+static bool signature_mentions_param(const ir::StorageState& state,
+                                     const std::vector<ir::TypeIdx>& params,
+                                     ir::TypeIdx ret,
+                                     ir::TypeIdx owner) {
+  if (mentions_param(state, ret) || mentions_param(state, owner)) {
+    return true;
+  }
+  for (const ir::TypeIdx param : params) {
+    if (mentions_param(state, param)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Enqueues lowering work on first encounter, so a recursive call sees
 // the reserved index and the body may reference itself.
 ir::FunctionIdx Lowerer::fn_index(u32 mod,
@@ -714,6 +786,14 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   ir::SymbolKind kind,
                                   std::span<const ir::TypeIdx> extra_generics,
                                   ir::TypeIdx owner) {
+  // A signature that names a type parameter belongs to the
+  // definition-site check, and only the specialization pass may lower
+  // one (ADR-0079). A row that gets here means the isolation broke:
+  // the failure is loud rather than a Param type at a backend.
+  if (signature_mentions_param(builder.state(), params, ret, owner)) {
+    internal(diag::Span{}, "a parametric signature reached lowering");
+    return ir::FunctionIdx(base::INVALID_IDX);
+  }
   std::string key = fn_key(item, params, ret, inst, comp_args, extra_generics);
   const auto found = fn_by_key_.find(key);
   if (found != fn_by_key_.end()) {
@@ -1380,6 +1460,15 @@ void Lowerer::run() {
           ast.items[method.item].kind == ast::ItemKind::Intrinsic) {
         continue;
       }
+      // The definition-site check's rows never lower (ADR-0079): the
+      // specialization pass is what consumes them. The key says so even
+      // when the signature is concrete - a method called on a concrete
+      // receiver inside a generic body carries one.
+      if (method.method_inst == analyzer::PARAM_INST ||
+          signature_mentions_param(builder.state(), method.params, method.ret,
+                                   method.self_type)) {
+        continue;
+      }
       // A method with its own type parameters is reserved at its call
       // site, which spells them.
       if (!ast.items[method.item].payload.get<ast::ItemFn>().generic.empty()) {
@@ -1419,9 +1508,11 @@ void Lowerer::run() {
       }
       // Generic free functions reserve per instantiation on first
       // call, like comp specializations; seeding them here would
-      // lower one body under the wrong instantiation key.
-      if (ast.items[sig.item].kind == ast::ItemKind::Fn &&
-          !ast.items[sig.item].payload.get<ast::ItemFn>().generic.empty()) {
+      // lower one body under the wrong instantiation key, and the
+      // definition-site check's rows never lower at all (ADR-0079).
+      if (sig.inst == analyzer::PARAM_INST ||
+          (ast.items[sig.item].kind == ast::ItemKind::Fn &&
+           !ast.items[sig.item].payload.get<ast::ItemFn>().generic.empty())) {
         continue;
       }
       fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::NO_INST,

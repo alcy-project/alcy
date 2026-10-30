@@ -38,7 +38,7 @@ pub struct RangeIter<T> {
   done: bool,
 }
 
-impl<T> Bound<T> {
+impl<T: Add> Bound<T> {
   // The first value a range starting at this bound yields. `Excluded`
   // steps once, honoring the language's wrapping arithmetic; only
   // hand-built intervals can hold one, since range expressions always
@@ -51,7 +51,9 @@ impl<T> Bound<T> {
       Bound::Unbounded => panic("cannot iterate a range with no start"),
     }
   }
+}
 
+impl<T: PartialOrd> Bound<T> {
   // Whether this end bound admits `current` and possibly more: every
   // value up to an inclusive end, every value below an exclusive one,
   // and everything when the end is open.
@@ -62,7 +64,9 @@ impl<T> Bound<T> {
       Bound::Unbounded => true,
     }
   }
+}
 
+impl<T: PartialOrd + PartialEq + Sub> Bound<T> {
   // Whether the cursor is spent after yielding `current` with this
   // stride: an inclusive end hit exactly, or a next step that would
   // pass the end. The differences are exact - a yielded value always
@@ -77,12 +81,14 @@ impl<T> Bound<T> {
   }
 }
 
-impl<T> Range<T> {
+impl<T: Add> Range<T> {
   // Names the cursor `for` iterates, advancing one value at a time.
   pub fn into_iter(self: Self) -> RangeIter<T> {
     ret RangeIter { current: self.start.first(), end: self.end, stride: 1, done: false, }
   }
+}
 
+impl<T: Add + PartialOrd> Range<T> {
   // Names a cursor advancing `stride` values at a time: `(0..<10)`
   // `.step_by(2)` yields 0, 2, 4, 6, 8. A stride must be positive;
   // zero - or, for signed ranges, a negative one - has no meaning as
@@ -104,7 +110,7 @@ impl<T> RangeIter<T> {
   }
 }
 
-impl<T> Iterator < T > for RangeIter<T> {
+impl<T: PartialOrd + PartialEq + Sub> Iterator < T > for RangeIter<T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if self.done {
       ret Option::None

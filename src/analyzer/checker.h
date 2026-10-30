@@ -269,6 +269,11 @@ class Checker {
   // annotated (`N: usize`) bind their compile-time value here while
   // the declaration's members resolve.
   std::vector<ValueParam> value_params;
+  // The declared parameters of the item the definition-site check is
+  // in, by the index an `ir::TypeTag::Param` node carries: a method's
+  // scope is the receiver's impl parameters first, then the item's
+  // own (ADR-0079). Pushed only by `check_generic_bodies`.
+  std::vector<const ast::GenericParam*> param_scope_;
   // Every spec's direct super, by index, or U32_MAX; filled with the
   // rest of the super-spec walk before bounds are checked.
   std::vector<u32> spec_supers_;
@@ -680,7 +685,7 @@ class Checker {
   // its substitution while resolving member types, then pop.
   const GenericInstance* generic_instance_for(u32 nominal,
                                               ir::TypeIdx type) const;
-  // Watermarks of both generic scopes, so a pop restores whatever a
+  // Watermarks of every generic scope, so a pop restores whatever a
   // push added without knowing which slots the declaration kinds bound.
   struct GenericScope {
     usize type_params = 0;
@@ -916,6 +921,9 @@ class Checker {
   // the way the operators are, so a closure's implementation is known
   // by identity and needs no `use`.
   u32 fn_spec() const;
+  // Whether `declared` is `required` or refines it through the super
+  // chain: a bound on a refined spec provides the refined ones' methods.
+  bool spec_refines(u32 declared, u32 required) const;
   // The spec the `fmt` package declares under `name`, or U32_MAX when
   // the package is not staged or declares none. `Display` is known by
   // identity, the way `write` and `format` are (ADR-0055), so a
@@ -1350,6 +1358,74 @@ class Checker {
   void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
   void check_main(u32 module, ast::ItemIdx fn);
   void check_bodies();
+  // Checks every generic body once, against its parameters (ADR-0079):
+  // a dedicated pass whose type-parameter scope is the Param nodes and
+  // whose records carry PARAM_INST, so no other check and no lowering
+  // reads them. An item whose parameters cannot stand in yet - a value
+  // parameter, an owning `fn()` slot - stays per-instantiation.
+  void check_generic_bodies();
+  // The declared parameter the index names in the definition-site
+  // check's scope, or null.
+  const ast::GenericParam* param_at(u32 index) const;
+  // Whether the declared parameters can stand in for the item's types:
+  // false for a value parameter or an owning `fn()` slot.
+  bool parametric_scope_ok(std::span<const ast::GenericParam> impl_params,
+                           std::span<const ast::GenericParam> own) const;
+  // Checks one item's body once under the parametric scope.
+  void check_generic_body(u32 module,
+                          ast::ItemIdx item,
+                          std::span<const ast::GenericParam> impl_params,
+                          ast::TypeIdx target,
+                          bool has_target);
+  // Whether the record a check is making belongs to the definition-
+  // site pass: calls then resolve signatures without checking callee
+  // bodies, and a receiver naming a parameter dispatches through its
+  // declared bounds (ADR-0080).
+  bool parametric_mode() const;
+  // Whether a type names a type parameter, directly or behind one
+  // reference: such a value's operators dispatch through the
+  // parameter's declared bounds.
+  bool is_param_value(ir::TypeIdx type) const;
+  // A call through a value whose type is a type parameter (ADR-0080):
+  // the parameter's `Fn` bound provides `call`, and the call's
+  // arguments are the elements of the bound's tuple.
+  ir::TypeIdx check_param_call(u32 module,
+                               ast::ExprIdx expr,
+                               ast::ExprIdx callee,
+                               ir::TypeIdx param,
+                               const ir::TypeIdx* expected);
+  // The method the parameter's declared bounds provide under `name`:
+  // a bound spec declares it, and its signature resolves with the
+  // bound's arguments and `Self` at the parameter. Reports and answers
+  // null when no bound provides the method.
+  const CheckedModule::MethodInfo* lookup_param_method(
+      ir::TypeIdx param,
+      std::string_view name,
+      u32 module,
+      diag::Span span,
+      bool spec_only,
+      u32 spec_filter,
+      std::span<const ast::TypeIdx> method_type_args);
+  // One bound annotation a declared parameter carries: the spec it
+  // names, when that spec is in scope, and the path its arguments
+  // resolve through.
+  struct DeclaredBound {
+    u32 spec = U32_MAX;
+    ast::TypePath path;
+  };
+  // The bound annotations of a declared parameter, in order: the first
+  // annotation (`T: A`) and the `+` bounds. An annotation that is no
+  // path or names no spec in scope contributes nothing.
+  void declared_bounds(u32 module,
+                       const ast::GenericParam& param,
+                       std::vector<DeclaredBound>& out);
+  // Whether the parameter's declared bounds include `spec` over
+  // `spec_args`: the implication a parametric call checks in place of
+  // an implementation (ADR-0080).
+  bool param_declares_bound(u32 index,
+                            u32 spec,
+                            std::span<const ir::TypeIdx> spec_args,
+                            u32 module);
   CheckedModule empty_module(u32 module);
 };
 

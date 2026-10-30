@@ -28,6 +28,14 @@
 
 namespace analyzer {
 
+// Whether an operand of an operator reaches a spec: a nominal
+// dispatches through its implementation and a type parameter through
+// its declared bounds (ADR-0080).
+static bool operator_dispatch_tag(ir::TypeTag tag) {
+  return tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum ||
+         tag == ir::TypeTag::Param;
+}
+
 // Patterns
 
 void Checker::collect_pattern_idents(ast::PatternIdx pattern,
@@ -726,8 +734,10 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
                                            std::string_view what,
                                            const ir::TypeIdx* expected) {
   const ir::TypeIdx* operand_expected =
-      (expected != nullptr && is_integer_tag(tag_of(*expected))) ? expected
-                                                                 : nullptr;
+      (expected != nullptr && (is_integer_tag(tag_of(*expected)) ||
+                               tag_of(*expected) == ir::TypeTag::Param))
+          ? expected
+          : nullptr;
   // An unsuffixed integer literal takes the other operand's type, so the
   // sibling is checked first: ranking it against the default would report
   // a magnitude the position holds.
@@ -738,13 +748,18 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
   if (lhs_literal != rhs_literal) {
     if (lhs_literal) {
       right = check_expr(module, rhs, operand_expected);
-      left =
-          check_expr(module, lhs,
-                     is_integer_tag(tag_of(right)) ? &right : operand_expected);
+      left = check_expr(
+          module, lhs,
+          is_integer_tag(tag_of(right)) || tag_of(right) == ir::TypeTag::Param
+              ? &right
+              : operand_expected);
     } else {
       left = check_expr(module, lhs, operand_expected);
       right = check_expr(
-          module, rhs, is_integer_tag(tag_of(left)) ? &left : operand_expected);
+          module, rhs,
+          is_integer_tag(tag_of(left)) || tag_of(left) == ir::TypeTag::Param
+              ? &left
+              : operand_expected);
     }
   } else {
     left = check_expr(module, lhs, operand_expected);
@@ -1030,9 +1045,9 @@ bool Checker::verify_fmt_literal(u32 module,
     // A nominal argument formats through `fmt`'s `Display` spec when it
     // implements it; the recording pass in `check_fmt_write` is what
     // lowering reads.
-    const bool nominal = tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum;
+    const bool by_impl = operator_dispatch_tag(tag);
     if (!is_formattable_tag(tag) &&
-        !(nominal && has_display(element, module))) {
+        !(by_impl && has_display(element, module))) {
       const u32 index = bag.emit<i18n::Key::CodegenArgumentNotFormattable>(
           DiagCode::InvalidOperation, args_span);
       (void)index;
@@ -1497,6 +1512,70 @@ ir::TypeIdx Checker::check_closure(u32 module,
   return self_type;
 }
 
+// A call through a value whose type is a type parameter (ADR-0080):
+// the `Fn` bound the parameter declares provides `call`, its `args`
+// parameter is the arguments as one tuple, and the call spells them
+// out. The definition-site check's records key PARAM_INST.
+ir::TypeIdx Checker::check_param_call(u32 module,
+                                      ast::ExprIdx expr,
+                                      ast::ExprIdx callee,
+                                      ir::TypeIdx param,
+                                      const ir::TypeIdx* expected) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const std::span<const ast::ExprIdx> args =
+      node.payload.get<ast::ExprCall>().args;
+  const u32 spec = fn_spec();
+  const CheckedModule::MethodInfo* method =
+      spec == U32_MAX ? nullptr
+                      : lookup_param_method(param, "call", module, node.span,
+                                            true, spec, {});
+  if (method == nullptr || method->params.size() != 2) {
+    // The parameter's bounds do not provide a call: the call is what
+    // reports it, since an operator or a `for` head stays silent for
+    // its own capability's sake.
+    const u32 index = bag.emit<i18n::Key::AnalyzerNotCallable>(
+        DiagCode::InvalidOperation, node.span);
+    (void)index;
+    for (ast::ExprIdx arg : args) {
+      check_expr(module, arg, nullptr);
+    }
+    return error_type();
+  }
+  // The declared signature is `call(self: &Self, args: P) -> R`: the
+  // parameters are one tuple, a single non-tuple value is the one
+  // parameter, and `()` is none.
+  std::vector<ir::TypeIdx> params;
+  const ir::TypeIdx declared = method->params[1];
+  const ir::TypeTag declared_tag = tag_of(declared);
+  if (declared_tag == ir::TypeTag::Tuple) {
+    const ir::TupleType tuple =
+        builder.tuple_types()[builder.types()[declared.idx].as_tuple()];
+    params.reserve(tuple.elements.size());
+    for (ir::TypeIdx element : tuple.elements) {
+      params.push_back(element);
+    }
+  } else if (declared_tag != ir::TypeTag::Void) {
+    params.push_back(declared);
+  }
+  std::string_view what = "closure";
+  if (ast.exprs[callee].kind == ast::ExprKind::Path) {
+    const ast::Path& path =
+        ast.paths[ast.exprs[callee].payload.get<ast::ExprPath>().idx];
+    if (path.segments.size() == 1) {
+      what = path.segments[0].name;
+    }
+  }
+  const ir::TypeIdx ret = method->ret;
+  check_call_args(module, args, params, {}, node.span, what, false);
+  if (args.size() != params.size()) {
+    return error_type();
+  }
+  if (expected != nullptr) {
+    return unify(*expected, ret, node.span, "call");
+  }
+  return ret;
+}
+
 // A call through a function value: arity and argument types unify
 // against the signature, and the call records for lowering, which
 // emits it indirectly.
@@ -1795,6 +1874,9 @@ ir::TypeIdx Checker::check_call(u32 module,
           builder.func_types()[builder.types()[resolved.type].as_func()];
       return check_indirect_call(module, expr, callee, sig, expected);
     }
+    if (tag_of(resolved.type) == ir::TypeTag::Param) {
+      return check_param_call(module, expr, callee, resolved.type, expected);
+    }
     if (const ClosureSig* closure = closure_sig_of_type(resolved.type);
         closure != nullptr) {
       ir::TypeSeq shape_params;
@@ -1875,7 +1957,10 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   // spec impl's generic method instantiates against its declaration.
   const CheckedModule::MethodInfo* method = lookup_method(
       nominal, name, module, node.span, spec_only, U32_MAX, method_type_args);
-  if (method == nullptr && !spec_only) {
+  // The fallback does not rescue a refusal a bound already reported
+  // (ADR-0080): the definition-site dispatch named the parameter, and
+  // the generic message would only repeat it.
+  if (method == nullptr && !spec_only && !bound_failure_) {
     bound_failure_ = false;
     method = instantiate_generic_method(
         module, nominal, name, method_type_args,
@@ -2419,7 +2504,7 @@ ir::TypeIdx Checker::check_index(u32 module,
     }
     return run;
   }
-  if (!is_error(index_nominal(receiver))) {
+  if (!is_error(index_nominal(receiver)) || is_param_value(receiver)) {
     return check_spec_index(module, expr, receiver, position, index.index,
                             expected, false);
   }
@@ -3157,6 +3242,16 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
   if (rows.empty()) {
     return false;
   }
+  // A column whose type is a type parameter cannot be reasoned about:
+  // the parameter stands for a type the body has not been specialized
+  // against, so the arms may well cover it (ADR-0079). Leaving it
+  // alone is the answer that does not refuse a correct program.
+  for (const ir::TypeIdx type : types) {
+    if (type.is_valid() &&
+        builder.types()[type.idx].tag == ir::TypeTag::Param) {
+      return true;
+    }
+  }
   // An or-pattern covers exactly what its alternatives do, so each
   // alternative becomes a row of its own.
   {
@@ -3755,7 +3850,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             }
             return inner;
           }
-          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+          if (operator_dispatch_tag(tag)) {
             return check_spec_arithmetic(module, expr, inner, "Neg", "neg", 1,
                                          expected);
           }
@@ -3937,8 +4032,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             // A nominal type compares through the sealed `PartialEq`
             // spec (ADR-0053); `str` does too, byte comparison the core
             // suite declares. Everything else has no comparison.
-            if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum ||
-                tag == ir::TypeTag::Str) {
+            if (operator_dispatch_tag(tag) || tag == ir::TypeTag::Str) {
               return check_spec_equality(module, expr, operands, expected);
             }
             break;
@@ -3960,8 +4054,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             }
             return boolean;
           }
-          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum ||
-              tag == ir::TypeTag::Str) {
+          if (operator_dispatch_tag(tag) || tag == ir::TypeTag::Str) {
             return check_spec_ordering(module, expr, operands, expected);
           }
           break;
@@ -3975,7 +4068,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
             }
             return operands;
           }
-          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+          if (operator_dispatch_tag(tag)) {
             const ArithmeticNames names =
                 arithmetic_names(node.payload.get<ast::ExprBinary>().op);
             return check_spec_arithmetic(module, expr, operands, names.spec,
@@ -3994,7 +4087,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           // Remainder and the bitwise and shift operators are
           // integer-only; a nominal remainder reaches the `Rem` spec.
           if (node.payload.get<ast::ExprBinary>().op == ast::BinaryOp::Mod &&
-              (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum)) {
+              operator_dispatch_tag(tag)) {
             const ArithmeticNames names =
                 arithmetic_names(node.payload.get<ast::ExprBinary>().op);
             return check_spec_arithmetic(module, expr, operands, names.spec,
@@ -4308,7 +4401,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
         (void)diag;
         return error_type();
       }
-      if (!is_error(index_nominal(receiver))) {
+      if (!is_error(index_nominal(receiver)) || is_param_value(receiver)) {
         return check_spec_index(module, place, receiver, position, index.index,
                                 nullptr, true);
       }
@@ -4471,9 +4564,7 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           // binary form does; the call is recorded on the place for
           // lowering to find.
           const ArithmeticNames names = arithmetic_names(op);
-          const bool nominal =
-              tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum;
-          if (!nominal || names.params == 0) {
+          if (!operator_dispatch_tag(tag) || names.params == 0) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerCompoundAssignNeedsNumeric>(
                     DiagCode::InvalidOperation, node.span);

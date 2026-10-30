@@ -104,9 +104,9 @@ replaced. The foundations are in `roadmap.md`.
   tags are concrete), so a declaration's shape cannot be spelled; it
   exists only per instantiation. The decision is ADR-0079: a generic
   item crosses as its declaration and its checked body, and the
-  dependent instantiates it. What remains is that work - a type
-  parameter in the IR, the body checked once against its parameters, the
-  specialization pass, the body in the summary, and the AST-level
+  dependent instantiates it. The IR's type parameter and the body
+  checked once landed (ADR-0079 slices one and two); what remains is
+  the specialization pass, the body in the summary, and the AST-level
   instantiation walk deleted.
 
 - [ ] `core::string`'s `trim_start_matches` once reported `Returns

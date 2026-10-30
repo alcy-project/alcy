@@ -103,18 +103,27 @@ carries into ADR-0079's second slice.
 
 ## Staged landing
 
-**Not landed.** Until these land, a generic body is checked at its
-instantiations (ADR-0063), and a dependent still cannot name a generic
-item.
+**The node and the once-check landed; the rest follows.** A dependent
+still cannot name a generic item, and the per-instantiation checks
+stay: the specialization pass is what replaces them.
 
-1. A type parameter in the IR: a type node that names a parameter of
-   the item it belongs to, and a generic item emitted once in that
-   form. The node lands first, and the analyzer's resolution of a
-   declaration's own signature follows: it binds the parameters to
-   those nodes, so it must run where no check can see that scope, or a
-   check that runs under it records a type that names a parameter where
-   it means a type.
-2. The analyzer checks a generic body once, against its parameters.
+1. Landed. A type parameter in the IR: a type node that names a
+   parameter of the item it belongs to (`1ed02420`).
+2. Landed. The analyzer checks a generic body once, against its
+   parameters: a dedicated pass after every concrete check binds each
+   declared parameter to the `Param` node its index names, resolves
+   the declaration's own signature under it, and checks the body
+   against that once. A call the parameter's type decides resolves
+   through the parameter's declared bounds (ADR-0080), and a call to a
+   generic callee resolves only its signature, because each item is
+   checked in its own context. The pass's records carry `PARAM_INST`,
+   which no concrete check and no lowering reads - the lowering leaves
+   any signature that names a parameter for the specialization pass.
+   What cannot stand in yet stays per-instantiation: a value parameter,
+   a `comp fn`, an owning `fn()` slot (ADR-0116), and an intrinsic's
+   shape a bare parameter would decide. An unsuffixed numeric literal
+   meeting a parameter adopts it, and the instantiation's own check
+   settles the width.
 3. A specialization pass over IR, after linking.
 4. The summary carries a generic body, and the `needs_body` flag
    goes.

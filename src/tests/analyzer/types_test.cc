@@ -2950,6 +2950,62 @@ TEST_CASE("Check rejects a call whose type misses a bound") {
       "Type 'Tag' does not implement 'Shown', which the bound requires"));
 }
 
+// A call on an unbounded type parameter is refused at the definition,
+// where the bound would be written (ADR-0079, ADR-0080): the body is
+// checked once, against its parameters.
+TEST_CASE("Check refuses a call on an unbounded type parameter") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir, {{"main.al",
+             "struct Counter {\n  n: i32,\n}\n"
+             "impl Counter {\n"
+             "  fn bump(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+             "fn bad<T>(x: T) -> i32 {\n"
+             "  ret x.bump()\n"
+             "}\n"
+             "fn main() -> i32 {\n"
+             "  ret 0\n"
+             "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(has_message(f.bag, "The bounds on 'T' do not provide 'bump'"));
+}
+
+// The declared bound is what a parameter's body may call: the
+// definition-site check resolves the call through it (ADR-0080).
+TEST_CASE("Check reads a call on a bounded type parameter") {
+  VirtualDir dir;
+  const bool setup = write_all(
+      dir,
+      {{"core.al", "pub spec Shown {\n  fn show(self: &Self) -> i32;\n}\n"},
+       {"main.al",
+        "struct Tag {\n  n: i32,\n}\n"
+        "impl Shown for Tag {\n"
+        "  fn show(self: &Self) -> i32 {\n    ret self.n\n  }\n}\n"
+        "fn get<T: Shown>(x: &T) -> i32 {\n"
+        "  ret x.show()\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  t := Tag { n: 1 }\n"
+        "  ret get(&t)\n"
+        "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
 // The closure capability is a bound like any other (ADR-0116): a
 // spelled `Fn` bound instantiates with a named function or a closure
 // literal, and the body's calls reach the witness.
@@ -3453,12 +3509,12 @@ TEST_CASE("Check resolves an associated function of a generic type") {
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Box<T> { item: T }\n"
                                       "impl<T> Box<T> {\n"
-                                      "  fn empty() -> Box<T> {\n"
-                                      "    ret Box { item: 0i32 }\n"
+                                      "  fn wrap(item: T) -> Box<T> {\n"
+                                      "    ret Box { item: item }\n"
                                       "  }\n"
                                       "}\n"
                                       "fn main() -> i32 {\n"
-                                      "  b := Box::<i32>::empty()\n"
+                                      "  b := Box::<i32>::wrap(5)\n"
                                       "  ret b.item\n"
                                       "}\n"}});
   CHECK(setup);
@@ -3477,12 +3533,12 @@ TEST_CASE(
   const bool setup = write_all(dir, {{"main.al",
                                       "struct Box<T> { item: T }\n"
                                       "impl<T> Box<T> {\n"
-                                      "  fn empty() -> Box<T> {\n"
-                                      "    ret Box { item: 0i32 }\n"
+                                      "  fn wrap(item: T) -> Box<T> {\n"
+                                      "    ret Box { item: item }\n"
                                       "  }\n"
                                       "}\n"
                                       "fn main() -> i32 {\n"
-                                      "  b := Box::empty()\n"
+                                      "  b := Box::wrap(5)\n"
                                       "  ret b.item\n"
                                       "}\n"}});
   CHECK(setup);

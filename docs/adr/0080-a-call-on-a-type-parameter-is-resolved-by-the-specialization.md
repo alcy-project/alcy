@@ -91,3 +91,15 @@ order the instantiation graph does not yet have; and whether a spec may
 be sealed to a package in a way that keeps a dispatch from being
 resolved (ADR-0053), which is a question about sealing rather than
 about dispatch.
+
+## Staged landing
+
+The checker's half landed with the definition-site check (ADR-0079
+slice two): a call on a parameter resolves through the parameter's
+declared bounds - a bound that refines the required spec provides its
+methods, and a bound a call needs but the parameter does not declare
+is refused at the definition. The filled signature is the row the call
+checks against, carrying the parameter as its self type. What remains
+is the IR's half: the parametric form records the dispatch rather than
+a resolved row, and the specialization resolves it to a concrete
+implementation.

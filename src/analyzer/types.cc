@@ -762,6 +762,15 @@ bool Checker::has_display(ir::TypeIdx type, u32 module) {
          method->params.size() == 2;
 }
 
+bool Checker::is_param_value(ir::TypeIdx type) const {
+  ir::TypeIdx inner = type_origin(type);
+  const ir::TypeTag tag = tag_of(inner);
+  if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+    inner = builder.ref_types()[builder.types()[inner.idx].as_ref()].pointee;
+  }
+  return tag_of(inner) == ir::TypeTag::Param;
+}
+
 ir::TypeIdx Checker::index_nominal(ir::TypeIdx receiver) {
   ir::TypeIdx inner = receiver;
   const ir::TypeTag tag = tag_of(inner);
@@ -1068,6 +1077,15 @@ std::string Checker::type_display_at(ir::TypeIdx type, usize depth) const {
     }
     case ir::TypeTag::Const:
       return std::to_string(builder.const_types()[node.as_const()].value);
+    case ir::TypeTag::Param: {
+      // The name the declaration wrote, while the definition-site
+      // check's scope is in; the index is what remains otherwise.
+      const ast::GenericParam* declared = param_at(node.as_param().value);
+      if (declared != nullptr) {
+        return std::string(declared->name.name);
+      }
+      return "T" + std::to_string(node.as_param().value);
+    }
     default: return std::string(pretty_tag(node.tag));
   }
 }
@@ -1206,6 +1224,86 @@ bool Checker::implements_spec(ir::TypeIdx type,
       if (node == spec) {
         return true;
       }
+    }
+  }
+  return false;
+}
+
+// Whether `declared` is `required` or refines it through the super
+// chain (`Eq` carries `PartialEq`, ADR-0028): an implementation of a
+// refined spec implements the ones it refines, so a bound on one
+// provides the others' methods.
+bool Checker::spec_refines(u32 declared, u32 required) const {
+  for (u32 node = declared; node < spec_supers_.size();) {
+    node = spec_supers_[node];
+    if (node == U32_MAX) {
+      return false;
+    }
+    if (node == required) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void Checker::declared_bounds(u32 module,
+                              const ast::GenericParam& param,
+                              std::vector<DeclaredBound>& out) {
+  std::vector<ast::TypeIdx> annotations;
+  if (param.type.is_valid()) {
+    annotations.push_back(param.type);
+  }
+  for (ast::TypeIdx extra : param.bounds) {
+    annotations.push_back(extra);
+  }
+  for (ast::TypeIdx annotation : annotations) {
+    if (ast.types[annotation].kind != ast::TypeKind::Path) {
+      continue;
+    }
+    const ast::TypePath& path =
+        ast.types[annotation].payload.get<ast::TypePath>();
+    const std::span<const ast::Ident> segments = ast.paths[path.path].segments;
+    if (segments.empty()) {
+      continue;
+    }
+    const u32 spec = bound_spec(module, segments.back().name);
+    if (spec == U32_MAX) {
+      continue;
+    }
+    out.push_back(DeclaredBound{spec, path});
+  }
+}
+
+// Whether the declared bounds of the parameter at `index` include
+// `spec` over `spec_args`: the requirement a parametric call checks,
+// the way an implementation satisfies a concrete instantiation's
+// (ADR-0080). The comparison is exact - the spec in scope and the
+// arguments pairwise equal - which is the shape the sources write.
+bool Checker::param_declares_bound(u32 index,
+                                   u32 spec,
+                                   std::span<const ir::TypeIdx> spec_args,
+                                   u32 module) {
+  const ast::GenericParam* declared = param_at(index);
+  if (declared == nullptr) {
+    return false;
+  }
+  std::vector<DeclaredBound> bounds;
+  declared_bounds(module, *declared, bounds);
+  for (const DeclaredBound& bound : bounds) {
+    if (bound.spec != spec && !spec_refines(bound.spec, spec)) {
+      continue;
+    }
+    if (bound.path.args.size() != spec_args.size()) {
+      continue;
+    }
+    bool same = true;
+    for (usize i = 0; same && i < bound.path.args.size(); ++i) {
+      const ir::TypeIdx resolved =
+          resolve_type(module, bound.path.args[i], nullptr);
+      same = !is_error(resolved) && types_equal(resolved, spec_args[i]);
+    }
+    if (same) {
+      return true;
     }
   }
   return false;
@@ -1389,7 +1487,30 @@ bool Checker::check_declared_bounds(
           analyzer::is_formattable_tag(tag_of(*bound_type)) &&
           specs[spec].name == "Display" &&
           tree.is_staged_item("fmt", specs[spec].item);
-      if (!builtin_display &&
+      // A scalar carries its operators builtin (ADR-0053), so an
+      // arithmetic bound it already satisfies, the way a formattable
+      // scalar satisfies `Display`. The spec is the compiler-owned one
+      // by identity, not a user spec that shares the name.
+      const ir::TypeTag bound_tag = tag_of(*bound_type);
+      const bool numeric =
+          bound_tag != ir::TypeTag::I1 &&
+          (is_integer_tag(bound_tag) || is_float_tag(bound_tag));
+      const bool builtin_arithmetic =
+          numeric &&
+          (spec == operator_spec("Add") || spec == operator_spec("Sub") ||
+           spec == operator_spec("Mul") || spec == operator_spec("Div") ||
+           spec == operator_spec("Neg") ||
+           (is_integer_tag(bound_tag) && spec == operator_spec("Rem")));
+      // A parameter the instantiation has not fixed yet meets the
+      // definition-site check: what its declared bounds already state
+      // satisfies the requirement, the way an implementation would
+      // (ADR-0080).
+      const bool implied =
+          tag_of(*bound_type) == ir::TypeTag::Param &&
+          param_declares_bound(
+              builder.types()[bound_type->idx].as_param().value, spec,
+              spec_args, module);
+      if (!builtin_display && !builtin_arithmetic && !implied &&
           !implements_spec(*bound_type, spec, spec_args, module)) {
         // An owning-function slot reports its own spelling (ADR-0075):
         // the witness does not carry the `fn(...)` signature that was
@@ -1399,9 +1520,15 @@ bool Checker::check_declared_bounds(
               DiagCode::TypeMismatch, span, own->display);
           (void)index;
         } else {
+          const ast::GenericParam* declared =
+              tag_of(*bound_type) == ir::TypeTag::Param
+                  ? param_at(builder.types()[bound_type->idx].as_param().value)
+                  : nullptr;
+          const std::string_view name = declared != nullptr
+                                            ? declared->name.name
+                                            : type_name(*bound_type);
           const u32 index = bag.emit<i18n::Key::AnalyzerTypeBoundNotSatisfied>(
-              DiagCode::InvalidOperation, span, type_name(*bound_type),
-              specs[spec].name);
+              DiagCode::InvalidOperation, span, name, specs[spec].name);
           (void)index;
         }
         bound_failure_ = true;
@@ -4400,6 +4527,13 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
           builder.const_types()[builder.types()[b].as_const()].value;
       return left == right;
     }
+    case ir::TypeTag::Param: {
+      // The index is the identity: one node serves every item's
+      // position with that index, and each item's own scope says what
+      // the position means (ADR-0079).
+      return builder.types()[a].as_param().value ==
+             builder.types()[b].as_param().value;
+    }
     case ir::TypeTag::Struct:
     case ir::TypeTag::Enum: return false;
     default: return true;
@@ -4727,6 +4861,13 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       }
       const bool negative = lit.is_negative != literal_negated_;
       if (!has_suffix && expected != nullptr &&
+          tag_of(*expected) == ir::TypeTag::Param) {
+        // The parameter stands for an integer type the instantiation
+        // chooses: the definition-site check adopts it, and the width
+        // settles where the argument is known (ADR-0079).
+        return *expected;
+      }
+      if (!has_suffix && expected != nullptr &&
           is_integer_tag(tag_of(*expected))) {
         const ir::TypeTag wanted = tag_of(*expected);
         if (!int_literal_fits(lit.spelling, wanted, negative)) {
@@ -4768,7 +4909,8 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
         return error_type();
       }
       if (!has_suffix && expected != nullptr &&
-          is_float_tag(tag_of(*expected))) {
+          (is_float_tag(tag_of(*expected)) ||
+           tag_of(*expected) == ir::TypeTag::Param)) {
         return *expected;
       }
       const ir::TypeIdx type = builder.primitive(tag);
@@ -6110,6 +6252,130 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
   return nullptr;
 }
 
+// The method a type parameter's declared bounds provide (ADR-0080): a
+// bound's spec declares it, its signature resolves with the bound's
+// arguments and `Self` at the parameter, and the row it registers
+// carries the parameter as its self type, so the call site answers
+// with it the way it answers with an implementation's. The row's
+// records key PARAM_INST: no lowering reads them.
+const CheckedModule::MethodInfo* Checker::lookup_param_method(
+    ir::TypeIdx param,
+    std::string_view name,
+    u32 module,
+    diag::Span span,
+    bool spec_only,
+    u32 spec_filter,
+    std::span<const ast::TypeIdx> method_type_args) {
+  const ast::GenericParam* declared =
+      param_at(builder.types()[param.idx].as_param().value);
+  if (declared == nullptr) {
+    return nullptr;
+  }
+  // An operator or a `for` head reports its own missing capability, so
+  // those failures stay silent here; a plain method call names the
+  // parameter and the method it asked for.
+  const bool own_report = spec_filter == U32_MAX && !spec_only;
+  const auto reject = [&]() {
+    if (own_report) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerParamMethodMissing>(
+          DiagCode::UnknownValue, span, declared->name.name, name);
+      (void)index;
+      // The caller reports the capability, not a second missing name.
+      bound_failure_ = true;
+    }
+    return static_cast<const CheckedModule::MethodInfo*>(nullptr);
+  };
+  std::vector<DeclaredBound> bounds;
+  declared_bounds(module, *declared, bounds);
+  for (const DeclaredBound& bound : bounds) {
+    const u32 spec = bound.spec;
+    const ast::TypePath& path = bound.path;
+    // The bound's spec provides the method, or one it refines does
+    // (`Ord` answers through `PartialOrd`, ADR-0028): walk the chain
+    // for the node that declares the name and meets the scope the call
+    // asked for.
+    u32 dispatch = U32_MAX;
+    for (u32 node = spec; node != U32_MAX && node < spec_supers_.size();) {
+      const bool accepted =
+          spec_filter != U32_MAX
+              ? (node == spec_filter || spec_refines(node, spec_filter))
+              : spec_in_scope(module, specs[node]);
+      if (accepted) {
+        const ast::ItemSpec& candidate =
+            ast.items[specs[node].item].payload.get<ast::ItemSpec>();
+        for (const ast::SpecMethod& method : candidate.methods) {
+          if (method.name.name == name) {
+            dispatch = node;
+            break;
+          }
+        }
+      }
+      if (dispatch != U32_MAX) {
+        break;
+      }
+      node = spec_supers_[node];
+    }
+    if (dispatch == U32_MAX) {
+      continue;
+    }
+    // The declared spec's arguments are the bound's own; a refined
+    // node (a super) takes none, since a generic super is deferred.
+    std::vector<ir::TypeIdx> spec_args;
+    if (dispatch == spec) {
+      for (ast::TypeIdx arg : path.args) {
+        const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+        if (is_error(resolved)) {
+          return reject();
+        }
+        spec_args.push_back(resolved);
+      }
+    }
+    std::vector<ir::TypeIdx> method_args;
+    for (ast::TypeIdx arg : method_type_args) {
+      const ir::TypeIdx resolved = resolve_type(module, arg, nullptr);
+      if (is_error(resolved)) {
+        return reject();
+      }
+      method_args.push_back(resolved);
+    }
+    std::vector<ir::TypeIdx> params;
+    ir::TypeIdx ret = ir::TypeIdx::invalid();
+    CheckedModule::ReceiverKind receiver = CheckedModule::ReceiverKind::None;
+    if (!spec_method_sig(dispatch, name, spec_args, param, module, method_args,
+                         params, ret, receiver)) {
+      return reject();
+    }
+    if (receiver == CheckedModule::ReceiverKind::None) {
+      return reject();
+    }
+    for (CheckedModule::MethodInfo& existing : modules[module].methods) {
+      // The bound's arguments are part of the key: two parameters share
+      // an index across items, and their bounds are what says which
+      // call the row answers (ADR-0080).
+      if (existing.spec == dispatch && existing.self_type.idx == param.idx &&
+          existing.name == name &&
+          std::ranges::equal(existing.method_args, method_args) &&
+          std::ranges::equal(existing.params, params) &&
+          types_equal(existing.ret, ret)) {
+        return &existing;
+      }
+    }
+    CheckedModule::MethodInfo& row =
+        add_method(module, {
+                               .self_type = param,
+                               .name = name,
+                               .params = params,
+                               .ret = ret,
+                               .receiver = receiver,
+                               .item = ast::ItemIdx::invalid(),
+                               .spec = dispatch,
+                               .method_args = method_args,
+                           });
+    return &row;
+  }
+  return reject();
+}
+
 const CheckedModule::MethodInfo* Checker::lookup_method(
     ir::TypeIdx self,
     std::string_view name,
@@ -6122,6 +6388,13 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
   // A field's type is a storage copy of the declared type, so a method or
   // operator reached through a field follows the copy back to its origin.
   self = type_origin(self);
+  // A method on a type parameter is the bound's (ADR-0080): the
+  // parameter's declared bounds are what its body may call, so the
+  // dispatch resolves through them rather than through a nominal.
+  if (tag_of(self) == ir::TypeTag::Param) {
+    return lookup_param_method(self, name, module, span, spec_only, spec_filter,
+                               method_type_args);
+  }
   // A call that spells type arguments reaches only a method that
   // declares them; the eager inherent methods declare none.
   if (!spec_only && method_type_args.empty()) {
@@ -6720,7 +6993,21 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   if (declared_ret.is_valid()) {
     ret = resolve_type(module, declared_ret, nullptr);
   }
-  if (is_intrinsic &&
+  // An intrinsic's shape is its own check, and a definition-site
+  // argument that names a parameter cannot pass it: the concrete type
+  // is the instantiation's (each one checks it there). ADR-0079.
+  bool parametric_intrinsic = false;
+  if (is_intrinsic && parametric_mode()) {
+    for (const ir::TypeIdx param : sig_params) {
+      if (tag_of(param) == ir::TypeTag::Param) {
+        parametric_intrinsic = true;
+      }
+    }
+    if (tag_of(ret) == ir::TypeTag::Param) {
+      parametric_intrinsic = true;
+    }
+  }
+  if (is_intrinsic && !parametric_intrinsic &&
       !check_intrinsic_signature(
           module, ast.items[item].payload.get<ast::ItemIntrinsic>(), sig_params,
           ret)) {
@@ -6736,6 +7023,17 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
                         .is_unsafe = fn_is_unsafe(item),
                         .is_comp = fn_is_comp(item)});
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
+  // The definition-site check records under its own key: no numbering
+  // slot is claimed and no body is checked here - each generic item's
+  // own pass checks its body once, in its own context (ADR-0079).
+  if (parametric_mode()) {
+    modules[module].functions[sig_index].inst = PARAM_INST;
+    fn_instances.push_back(
+        FnInstance{item, module, args, sig_index, PARAM_INST});
+    type_params = kept_outer;
+    value_params = kept_outer_values;
+    return &modules[module].functions[sig_index];
+  }
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.
   fn_instances.push_back(FnInstance{item, module, args, sig_index, NO_INST});
@@ -6968,6 +7266,13 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       bound[i] = known;
       continue;
     }
+    if (parametric_mode()) {
+      // The witness belongs to an instantiation (ADR-0116): the
+      // definition-site check leaves the slot at the error type and
+      // the instantiation checks stay the authority for such items.
+      bound[i] = error_type();
+      continue;
+    }
     bound[i] = own_fn_return_stand_in();
     return_slots.push_back(i);
   }
@@ -7112,6 +7417,14 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     // entry this call owns.
     CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
     entry->method_args.assign(method_args.begin(), method_args.end());
+    // The definition-site check records under its own key: no
+    // numbering slot is claimed and no body is checked here (ADR-0079).
+    if (parametric_mode()) {
+      entry->method_inst = PARAM_INST;
+      type_params = std::move(outer_scope);
+      value_params = std::move(outer_values);
+      return entry;
+    }
     // A method with its own type arguments needs an instantiation key
     // of its own: two instances share the receiver's nominal, and the
     // side tables record a body's calls per instantiation.
@@ -7278,6 +7591,14 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
                       false,
                       spec,
                       {method_args.begin(), method_args.end()}});
+    // The definition-site check records under its own key: no
+    // numbering slot is claimed and no body is checked here (ADR-0079).
+    if (parametric_mode()) {
+      entry->method_inst = PARAM_INST;
+      type_params = std::move(outer_scope);
+      value_params = std::move(outer_values);
+      return entry;
+    }
     const u32 inst = inst_index(self_type);
     spec_scope.push_back(spec);
     const ir::TypeIdx saved_ret = fn_ret;
@@ -8288,6 +8609,155 @@ void Checker::check_bodies() {
   }
 }
 
+// --- The definition-site check (ADR-0079) -------------------------------
+
+const ast::GenericParam* Checker::param_at(u32 index) const {
+  if (index >= param_scope_.size()) {
+    return nullptr;
+  }
+  return param_scope_[index];
+}
+
+bool Checker::parametric_mode() const {
+  return cur_inst == PARAM_INST;
+}
+
+// Whether the declared parameters can stand in for the item's types: a
+// value parameter has no symbolic node, and an owning `fn()` slot's
+// witness is per instantiation (ADR-0116), so an item that declares
+// either stays checked at its calls.
+bool Checker::parametric_scope_ok(
+    std::span<const ast::GenericParam> impl_params,
+    std::span<const ast::GenericParam> own) const {
+  for (const ast::GenericParam& param : impl_params) {
+    if (is_value_param(ast, param)) {
+      return false;
+    }
+  }
+  for (const ast::GenericParam& param : own) {
+    if (is_value_param(ast, param) || own_fn_slot(param.name.name) != nullptr) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Checks one generic item's body once, against its parameters: every
+// declared parameter binds to the `Param` node its index names, the
+// receiver resolves with them, and the records carry PARAM_INST, so
+// nothing outside the pass reads what it writes. The per-instantiation
+// checks keep their own records and stay the authority until the
+// specialization pass consumes these bodies instead (ADR-0079).
+void Checker::check_generic_body(u32 module,
+                                 ast::ItemIdx item,
+                                 std::span<const ast::GenericParam> impl_params,
+                                 ast::TypeIdx target,
+                                 bool has_target) {
+  const std::span<const ast::GenericParam> own = fn_generic_params(item);
+  std::vector<std::pair<std::string_view, ir::TypeIdx>> saved_types =
+      std::move(type_params);
+  std::vector<ValueParam> saved_values = std::move(value_params);
+  type_params.clear();
+  value_params.clear();
+  const usize saved_scope = param_scope_.size();
+  u32 slot = 0;
+  for (const ast::GenericParam& param : impl_params) {
+    param_scope_.push_back(&param);
+    type_params.emplace_back(param.name.name, builder.param_type(slot++));
+  }
+  for (const ast::GenericParam& param : own) {
+    param_scope_.push_back(&param);
+    type_params.emplace_back(param.name.name, builder.param_type(slot++));
+  }
+  ir::TypeIdx self = ir::TypeIdx::invalid();
+  if (has_target) {
+    self = resolve_type(module, target, nullptr, true);
+  }
+  // Every per-body field a nested check could see is saved, the way
+  // the const pre-pass does; only `cur_inst` differs, keying the
+  // records where no other reader looks.
+  const ir::TypeIdx saved_ret = fn_ret;
+  const u32 saved_loop = loop_depth;
+  const bool saved_in_fn = in_fn;
+  const bool saved_bind = bind_comp_known;
+  const bool saved_too_deep = reported_too_deep_;
+  const u32 saved_inst = cur_inst;
+  const u32 saved_comp = comp_depth;
+  const usize saved_specs = spec_scope.size();
+  cur_inst = PARAM_INST;
+  // The comp rules of the enclosing phase do not apply: this is an
+  // ordinary body check.
+  comp_depth = 0;
+  check_fn(module, item, has_target ? &self : nullptr);
+  while (spec_scope.size() > saved_specs) {
+    spec_scope.pop_back();
+  }
+  comp_depth = saved_comp;
+  cur_inst = saved_inst;
+  reported_too_deep_ = saved_too_deep;
+  bind_comp_known = saved_bind;
+  in_fn = saved_in_fn;
+  loop_depth = saved_loop;
+  fn_ret = saved_ret;
+  while (param_scope_.size() > saved_scope) {
+    param_scope_.pop_back();
+  }
+  type_params = std::move(saved_types);
+  value_params = std::move(saved_values);
+}
+
+void Checker::check_generic_bodies() {
+  for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
+    for (ast::ItemIdx item : tree.modules[m]->items) {
+      const ast::ItemNode& node = ast.items[item];
+      if (node.kind == ast::ItemKind::Fn) {
+        const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+        if (fn.generic.empty() || fn.is_comp ||
+            !parametric_scope_ok({}, fn.generic)) {
+          continue;
+        }
+        check_generic_body(m, item, {}, ast::TypeIdx::invalid(), false);
+        continue;
+      }
+      if (node.kind != ast::ItemKind::Impl) {
+        continue;
+      }
+      const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      u32 spec_index = U32_MAX;
+      for (const SpecImplEntry& record : spec_impls) {
+        if (record.item == item) {
+          spec_index = record.spec;
+          break;
+        }
+      }
+      for (ast::ItemIdx method_item : impl.methods) {
+        const ast::ItemNode& method_node = ast.items[method_item];
+        if (method_node.kind != ast::ItemKind::Fn) {
+          continue;
+        }
+        const ast::ItemFn& method = method_node.payload.get<ast::ItemFn>();
+        if (impl.params.empty() && method.generic.empty()) {
+          continue;
+        }
+        if (method.is_comp ||
+            !parametric_scope_ok(impl.params, method.generic)) {
+          continue;
+        }
+        // A spec implementation resolves its siblings through the
+        // spec, the way its instantiation-time body check does.
+        const usize pushed_specs = spec_scope.size();
+        if (spec_index != U32_MAX) {
+          spec_scope.push_back(spec_index);
+        }
+        check_generic_body(m, method_item, impl.params, impl.type, true);
+        while (spec_scope.size() > pushed_specs) {
+          spec_scope.pop_back();
+        }
+      }
+    }
+  }
+}
+
 CheckedModule Checker::empty_module(u32 module) {
   CheckedModule checked;
   checked.module = module;
@@ -8467,6 +8937,17 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "drops",
                                              "analyze");
     checker.resolve_drops();
+  }
+  if (checker.name_table_exhausted_) {
+    return base::make_err(diag::Reported{});
+  }
+  // The definition-site check runs after every check that means a
+  // concrete type: its scope binds the parameters and its records
+  // carry PARAM_INST, which nothing else reads (ADR-0079).
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "generic bodies",
+                                             "analyze");
+    checker.check_generic_bodies();
   }
   if (checker.name_table_exhausted_) {
     return base::make_err(diag::Reported{});

@@ -30,6 +30,11 @@ namespace analyzer {
 // outside any instantiation-time checking carry this key.
 constexpr u32 NO_INST = 0xFFFFFFFFu;
 
+// Sentinel for the definition-site check's instantiation key: a
+// generic body checked once against its parameters records under this
+// key (ADR-0079), which no concrete check and no lowering reads.
+constexpr u32 PARAM_INST = 0xFFFFFFFEu;
+
 // Sentinel for an inherent method: `MethodInfo::spec` carries the
 // index of the implemented spec in the checker's spec table, and
 // this for methods from inherent impl blocks.

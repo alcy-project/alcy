@@ -115,6 +115,13 @@ operators, `Display` for `{}`, a deref operator, and the
 implementing-side manifest key that would let user packages implement
 these specs.
 
+Amended at the bounds' landing and the definition-site check: a bound
+on an arithmetic spec is satisfied by any scalar the builtin operators
+cover, exactly as the operators need no implementation there. The
+capability exists builtin, so a `T: Add` bound accepts `i32` without
+an impl record, and the same reads for `Sub`, `Mul`, `Div`, `Neg`,
+and `Rem` on integers.
+
 ## Consequences
 
 `m[key]`, `v[i]`, and `==` on standard types arrive without a general

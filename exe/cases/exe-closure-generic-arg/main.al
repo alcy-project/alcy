@@ -1,12 +1,12 @@
-// A function type inferred for a generic parameter is an argument
-// like any other: the body is checked at the call, so the parameter
-// is the concrete function type where the body returns or calls it.
+// A generic parameter that is called states the callable bound: the
+// body answers through `Fn` (ADR-0080), and a closure argument
+// instantiates it like any other.
 
 fn id<T>(x: T) -> T {
   ret x
 }
 
-fn apply<T>(f: T, x: i32) -> i32 {
+fn apply<F: Fn<(i32,), i32>>(f: F, x: i32) -> i32 {
   ret f(x)
 }
 

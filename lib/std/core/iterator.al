@@ -229,9 +229,6 @@ pub fn last<I: Iterator<T>, T>(mut iter: I) -> Option<T> {
   ret found
 }
 
-// Pushes every value into a container the caller owns. The element
-// type comes from the bound (`collect_into::<I, T>(iter, out)`), the
-// way `collect` asks it.
 // The adapters' constructors. The element type comes from the bound
 // (`I: Iterator<T>`), so a call spells only the predicate or the count
 // (`filter(v.iter(), (x: &i32) -> *x > 1)`); `map` waits for the
@@ -251,25 +248,4 @@ pub fn take<I: Iterator<T>, T>(iter: I, n: usize) -> TakeIter<I, T> {
 
 pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
   ret SkipIter { iter: iter, remaining: n, started: false }
-}
-
-// `collect`'s shape: the item type comes from the bound, so the call
-// spells nothing (`collect(v.iter())`). `T` appears only in
-// `I: Iterator<T>`, and the checker infers it from the iterator's
-// implementation.
-pub fn collect<I: Iterator<T>, T>(mut iter: I) -> Vec<T> {
-  mut out := Vec::<T>::new()
-  collect_into::<I, T>(iter, &mut out)
-  ret out
-}
-
-pub fn collect_into<I: Iterator<T>, T>(mut iter: I, out: &mut Vec<T>) {
-  loop {
-    match iter.next() {
-      Option::Some(v) => {
-        out.push(v)
-      }
-      Option::None => break,
-    }
-  }
 }

@@ -78,56 +78,6 @@ impl<T>[T] {
     ret Option::None
   }
 
-  // Whether some element equals `value`, compared the way `==`
-  // compares two elements.
-  pub fn contains(self: &Self, value: &T) -> bool {
-    mut i := 0 as usize
-    while i < slice_len(self) {
-      if *self.at(i).or_panic_with_message("the index is within the slice") == *value {
-        ret true
-      }
-      i = i + 1
-    }
-    ret false
-  }
-
-  // Whether the view begins with `prefix`; an empty prefix matches.
-  pub fn starts_with(self: &Self, prefix: &[T]) -> bool {
-    n := slice_len(prefix)
-    if n > slice_len(self) {
-      ret false
-    }
-    mut i := 0 as usize
-    while i < n {
-      if *self.at(i).or_panic_with_message("the index is within the slice") != *prefix.at(i).or_panic_with_message(
-        "the index is within the slice"
-      ) {
-        ret false
-      }
-      i = i + 1
-    }
-    ret true
-  }
-
-  // Whether the view ends with `suffix`; an empty suffix matches.
-  pub fn ends_with(self: &Self, suffix: &[T]) -> bool {
-    n := slice_len(suffix)
-    m := slice_len(self)
-    if n > m {
-      ret false
-    }
-    mut i := 0 as usize
-    while i < n {
-      if *self.at(m - n + i).or_panic_with_message("the index is within the slice") != *suffix.at(i).or_panic_with_message(
-        "the index is within the slice"
-      ) {
-        ret false
-      }
-      i = i + 1
-    }
-    ret true
-  }
-
   // The last index the predicate accepts, or `None`.
   pub fn rposition(self: &Self, pred: (&T) -> bool) -> Option<usize> {
     mut i := slice_len(self)
@@ -234,6 +184,61 @@ impl<T>[T] {
   // An exclusive cursor over the elements.
   pub fn iter_mut(mut self: &mut Self) -> SliceIterMut<T> {
     ret SliceIterMut { s: self, pos: 0 }
+  }
+}
+
+// The comparisons walk elements, so they sit in a block that says
+// what they need: `s.contains(&x)` on a `[Plain]` names `Plain` at the
+// call rather than a line in here (ADR-0028).
+impl<T: PartialEq>[T] {
+  // Whether some element equals `value`, compared the way `==`
+  // compares two elements.
+  pub fn contains(self: &Self, value: &T) -> bool {
+    mut i := 0 as usize
+    while i < slice_len(self) {
+      if *self.at(i).or_panic_with_message("the index is within the slice") == *value {
+        ret true
+      }
+      i = i + 1
+    }
+    ret false
+  }
+
+  // Whether the view begins with `prefix`; an empty prefix matches.
+  pub fn starts_with(self: &Self, prefix: &[T]) -> bool {
+    n := slice_len(prefix)
+    if n > slice_len(self) {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < n {
+      if *self.at(i).or_panic_with_message("the index is within the slice") != *prefix.at(i).or_panic_with_message(
+        "the index is within the slice"
+      ) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
+  }
+
+  // Whether the view ends with `suffix`; an empty suffix matches.
+  pub fn ends_with(self: &Self, suffix: &[T]) -> bool {
+    n := slice_len(suffix)
+    m := slice_len(self)
+    if n > m {
+      ret false
+    }
+    mut i := 0 as usize
+    while i < n {
+      if *self.at(m - n + i).or_panic_with_message("the index is within the slice") != *suffix.at(i).or_panic_with_message(
+        "the index is within the slice"
+      ) {
+        ret false
+      }
+      i = i + 1
+    }
+    ret true
   }
 }
 

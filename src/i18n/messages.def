@@ -266,6 +266,7 @@
   F(AnalyzerTuplePatternArity, Error, Analyzer, "Tuple pattern has {} elements, type has {}") \
   F(AnalyzerBoundNotASpec, Error, Analyzer, "Bound '{}' does not name a spec") \
   F(AnalyzerBoundUnknownSpec, Error, Analyzer, "Bound '{}' names no spec") \
+  F(AnalyzerParamMethodMissing, Error, Analyzer, "The bounds on '{}' do not provide '{}'") \
   F(AnalyzerTypeBoundNotSatisfied, Error, Analyzer, "Type '{}' does not implement '{}', which the bound requires") \
   F(AnalyzerTypeArgumentNeedsPointer, Error, Analyzer, "Type `{}` needs a pointer to bind its type argument") \
   F(AnalyzerTypeArgumentNeedsReference, Error, Analyzer, "Type `{}` needs a reference to bind its type argument") \
