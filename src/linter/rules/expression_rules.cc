@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "ast/ast.h"
 #include "fpag/base/numeric.h"
 #include "i18n/messages.h"
+#include "ir/common.h"
 #include "linter/context.h"
 #include "linter/rules/rules.h"
+#include "linter/types.h"
 
 namespace linter::rules {
 
@@ -232,6 +235,101 @@ void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
   ctx.report<i18n::Key::LintNestedIf>(inner_node.span);
 }
 
+// The expression a block ends on: its tail value, or the single
+// expression statement it holds. Invalid for a block of any other shape.
+ast::ExprIdx block_end(LintContext& ctx, ast::BlockIdx block) {
+  const ast::Block& node = ctx.ast.blocks[block];
+  if (node.value.is_valid()) {
+    return node.value;
+  }
+  if (node.statements.size() != 1) {
+    return ast::ExprIdx::invalid();
+  }
+  const ast::StmtNode& stmt = ctx.ast.stmts[node.statements[0]];
+  if (stmt.kind != ast::StmtKind::Expr) {
+    return ast::ExprIdx::invalid();
+  }
+  return stmt.payload.get<ast::StmtExpr>().value;
+}
+
+// The boolean a block returns, or nullopt when its only outcome is not
+// `ret true` or `ret false`.
+std::optional<bool> returned_bool(LintContext& ctx, ast::BlockIdx block) {
+  const ast::ExprIdx end = block_end(ctx, block);
+  if (!end.is_valid()) {
+    return std::nullopt;
+  }
+  const ast::ExprNode& node = ctx.ast.exprs[end];
+  if (node.kind != ast::ExprKind::Return) {
+    return std::nullopt;
+  }
+  const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
+  if (!ret.value.is_valid()) {
+    return std::nullopt;
+  }
+  const ast::ExprNode& value = ctx.ast.exprs[ret.value];
+  if (value.kind != ast::ExprKind::Literal) {
+    return std::nullopt;
+  }
+  const ast::Literal& literal =
+      ctx.ast.literals[value.payload.get<ast::ExprLiteral>().value];
+  if (literal.kind != ast::LiteralKind::Bool) {
+    return std::nullopt;
+  }
+  return literal.spelling == "true";
+}
+
+// An if whose branches return the two boolean literals is the condition
+// itself: `if c { ret true } else { ret false }` returns `c`, and the
+// swapped pair returns its negation. The shape is the one the explicit
+// `ret` gives it, not a tail value.
+void check_needless_bool(LintContext& ctx, ast::ExprIdx expr) {
+  const ast::ExprNode& node = ctx.ast.exprs[expr];
+  if (node.kind != ast::ExprKind::If) {
+    return;
+  }
+  const ast::ExprIf& branch = node.payload.get<ast::ExprIf>();
+  if (!branch.then_block.is_valid() || !branch.else_block.is_valid()) {
+    return;
+  }
+  // An `if let` tests a pattern, not a boolean value.
+  const ast::Cond& cond = ctx.ast.conds[branch.cond];
+  if (cond.is_pattern) {
+    return;
+  }
+  const std::optional<bool> then_value = returned_bool(ctx, branch.then_block);
+  const std::optional<bool> else_value = returned_bool(ctx, branch.else_block);
+  if (!then_value.has_value() || !else_value.has_value()) {
+    return;
+  }
+  // Both branches agreeing is a constant, not the condition.
+  if (*then_value == *else_value) {
+    return;
+  }
+  const std::optional<ir::TypeIdx> type = expression_type(ctx, cond.value);
+  if (!type.has_value() || !is_bool_type(ctx, *type)) {
+    return;
+  }
+  const u32 finding = ctx.report<i18n::Key::LintNeedlessBool>(node.span);
+  // The repair keeps the condition the reader wrote. The swapped pair
+  // inverts it, and the negation is parenthesized because a condition
+  // is any expression.
+  const std::optional<std::string_view> text =
+      source_of(ctx, ctx.ast.exprs[cond.value]);
+  if (!text.has_value()) {
+    return;
+  }
+  std::string replacement = "ret ";
+  if (*then_value) {
+    replacement.append(*text);
+  } else {
+    replacement += "!(";
+    replacement.append(*text);
+    replacement += ')';
+  }
+  ctx.fix(finding, node.span, replacement);
+}
+
 }  // namespace
 
 void DoubleNegation::check_expr(LintContext& ctx, ast::ExprIdx expr) {
@@ -244,6 +342,10 @@ void SelfComparison::check_expr(LintContext& ctx, ast::ExprIdx expr) {
 
 void NestedIf::check_expr(LintContext& ctx, ast::ExprIdx expr) {
   check_nested_if(ctx, expr);
+}
+
+void NeedlessBool::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_needless_bool(ctx, expr);
 }
 
 }  // namespace linter::rules

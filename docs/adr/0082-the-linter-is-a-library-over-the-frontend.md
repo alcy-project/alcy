@@ -117,3 +117,10 @@ reader discovers what a run could report without one; `--json` makes
 the same table one document. A command that pipes its own result sets
 the envelope's `Piped` outcome, and the reporter writes no JSON beside
 it, which is what keeps standard output a single document.
+
+A rule added later, `needless-bool`, reads the shape ADR-0059 gives an
+`if`: because every branch ends in `ret`, an if whose branches return
+the two boolean literals is the condition or its negation, and the
+repair writes `ret c` or `ret !(c)`. Both branches returning one
+literal is a constant and an `if let` tests a pattern, so neither is a
+finding.

@@ -35,7 +35,8 @@ constexpr auto RULES = rule_table<rules::UnusedVariable,
                                   rules::UnusedImport,
                                   rules::BoolComparison,
                                   rules::DeadCode,
-                                  rules::UnusedField>();
+                                  rules::UnusedField,
+                                  rules::NeedlessBool>();
 
 }  // namespace
 

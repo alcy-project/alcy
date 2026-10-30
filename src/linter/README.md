@@ -118,6 +118,7 @@ complete gate.
 | `double-negation` | warn | an operator applied to itself |
 | `self-comparison` | warn | a comparison whose operands are one expression |
 | `nested-if` | warn | an `if` whose only statement is another `if` |
+| `needless-bool` | warn | an `if` whose branches return true and false |
 | `useless-cast` | warn | a cast to the type the value already has |
 | `float-equality` | allow | an equality test on floating-point values |
 | `needless-borrow` | warn | a borrow of a dereference that is the reference |
@@ -171,6 +172,14 @@ with a true or false literal are the findings. `double-negation`,
 machine-applicable repair (`ctx.fix`) when the expression they would
 put in place binds tightly enough that the regrouping cannot change
 the meaning.
+
+`needless-bool` reads the shape ADR-0059 gives an `if`: every branch
+must end in `ret`, so `if c { ret true } else { ret false }` is the
+condition itself and the swapped pair is its negation. Both branches
+returning one literal is a constant and an `if let` tests a pattern
+rather than a value, so neither is reported. The repair writes
+`ret c` or `ret !(c)`, parenthesizing the condition because it is any
+expression.
 
 ## Adding a rule
 

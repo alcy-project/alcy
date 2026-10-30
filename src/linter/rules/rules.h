@@ -203,4 +203,15 @@ struct UnusedField {
   static void run(LintContext& ctx);
 };
 
+// An expression rule: an if whose two branches return the two boolean
+// literals, which is the condition itself or its negation.
+struct NeedlessBool {
+  static constexpr std::string_view ID = "needless-bool";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
+  static constexpr LintCode CODE = LintCode::NeedlessBool;
+  static constexpr std::string_view SUMMARY =
+      "an if whose branches return true and false";
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
+};
+
 }  // namespace linter::rules

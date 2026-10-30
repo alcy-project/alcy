@@ -39,6 +39,7 @@ enum class LintCode : u8 {
   BoolComparison = 26,
   DeadCode = 27,
   UnusedField = 28,
+  NeedlessBool = 29,
 };
 
 }  // namespace linter

@@ -535,6 +535,47 @@ TEST_CASE("a command-line override edits the resolved table") {
   CHECK(!apply_override(config, "no-such-rule", LintLevel::Warn));
 }
 
+TEST_CASE("needless-bool reports an if that returns its condition") {
+  Run run;
+  run("fn f(c: bool) -> bool {\n  if c {\n    ret true\n  } else {\n"
+      "    ret false\n  }\n}\n\nfn main() -> i32 {\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "needless-bool") == 1);
+  const diag::Fix* fix = fix_for(run.ctx.bag, "needless-bool");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "ret c");
+  }
+}
+
+TEST_CASE("needless-bool inverts the swapped pair") {
+  Run run;
+  run("fn f(c: bool) -> bool {\n  if c {\n    ret false\n  } else {\n"
+      "    ret true\n  }\n}\n\nfn main() -> i32 {\n  ret 0\n}\n",
+      default_config(run.ctx));
+  const diag::Fix* fix = fix_for(run.ctx.bag, "needless-bool");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "ret !(c)");
+  }
+}
+
+TEST_CASE("needless-bool leaves agreeing branches alone") {
+  Run run;
+  run("fn f(c: bool) -> bool {\n  if c {\n    ret true\n  } else {\n"
+      "    ret true\n  }\n}\n\nfn main() -> i32 {\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "needless-bool") == 0);
+}
+
+TEST_CASE("needless-bool leaves a one-armed if alone") {
+  Run run;
+  run("fn f(c: bool) -> bool {\n  if c {\n    ret true\n  }\n  ret false\n}"
+      "\n\nfn main() -> i32 {\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "needless-bool") == 0);
+}
+
 TEST_CASE("a line comment silences the finding on its line") {
   Run run;
   run("fn main() -> i32 {\n  unused := 1 // alcy-lint-ignore\n  ret 0\n}\n",
