@@ -346,3 +346,9 @@ replaced. The foundations are in `roadmap.md`.
   null pattern is still spare: teach the niche a fat null - a null pair
   as the fieldless spell, and the discriminant read through the data
   pointer - and `Option<&[T]>` is two words again.
+
+- [ ] Compile-time reflection, read-only: the blocker for the struct
+  flavor of input, a clap-like argument parser, and serde-like
+  (de)serialization (ADR-0118, ADR-0119). Its record lands with the
+  design, after expansion; the floor is read-only and comp-only, with
+  no runtime type information and no generative types.

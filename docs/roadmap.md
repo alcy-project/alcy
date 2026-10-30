@@ -174,6 +174,60 @@ peripheral work lives in `backlog.md`. The language record lives in
   `docs/adr/0078-the-summary-a-dependent-reads.md`; the pieces
   are named in `docs/spec/deferred.md`.
 
+- [ ] The platform floor: a core-only `sys`, and the OS calls out of
+  `core`.
+
+  ADR-0117. A new suite member depending on `core` alone owns the
+  calls to the system: `Fd`, the standard descriptors, the faithful
+  one-call `read`/`write` that reports short and interrupted results
+  as themselves, `OsError` over the raw errno, and the process
+  arguments. The six declarations in `core/mem.al` move out - the
+  descriptor call and the arguments to `sys`, the whole-file helpers
+  to `io` - and `core`'s prelude re-exports retire. `sys_write`'s
+  write-all meaning goes back to the print hooks (ADR-0023), a
+  `sys_read` intrinsic and its LLVM/WASI runtime pieces land, and
+  `items.md`'s intrinsic list follows. The exe runner learns an input
+  field in `expect.toml` so programs that read can be tested.
+
+- [ ] The standard library's surface is impls and specs.
+
+  ADR-0121. The parse family goes generic first, because input needs
+  it: the `Parse` capability (receiver-less, its own record lands with
+  the implementation) becomes `str.parse::<T>()`, and `String`'s six
+  delegations collapse into one. Primitives gain inherent impls (the
+  checker's rule extends to `TypeKind::Primitive`, gated to the staged
+  suite), and `num`'s per-type methods land with their first callers.
+  The iterator adapters stay free functions until the spec system can
+  express them as methods; that door is named, not promised.
+
+- [ ] Bytes-first input.
+
+  ADR-0118. Over `sys` and `Parse`: `io::BufReader` (one-call `fill`,
+  `read_byte`, `read_line` with the CRLF rule and no UTF-8 validation,
+  `read_to_end`; `EINTR` retried here and only here) and
+  `io::Scanner` (ASCII whitespace, `next_token`, `next::<T>`, counted
+  vector reads) with the three-way failure - end of input, a token
+  that does not parse, the OS error underneath. wasm reads through
+  WASI `fd_read` (end of input in the playground), and exe cases cover
+  the path. proconio-class input stays out; its blockers are recorded
+  in the ADR.
+
+- [ ] `comp` expands what it knows, and the `fmt` pilot.
+
+  ADR-0119. Explicit `comp for`/`comp if` control flow whose remaining
+  operations are emitted in the function's per-instantiation body,
+  with the variadic tuple's shape readable at compile time (length,
+  comp-known indexing that keeps each element's type) and ADR-0055's
+  variadic rule restated. The pilot rewrites `fmt`'s parse and its
+  conversions in alcy (the builtins gain conversion impls; a float
+  carries its precision), retires the C++ conversion lane once the
+  tests, code size, compile time, runtime performance, wasm parity,
+  and the float-digit accuracy item pass, and lets `print` ride the
+  same expansion. Then ADR-0120's removals follow: `builtin_display`
+  retires, the fmt/io recognition moves under the mechanism, and the
+  agreement test pinning the scalar comparisons to their impls lands
+  early.
+
 ## 1.0
 
 The number is a compatibility boundary rather than a feature count,
