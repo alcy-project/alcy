@@ -1,9 +1,10 @@
 /* Copyright 2026 The Alcy Project Authors */
 /* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception */
 
-/* The guide's code blocks: the buttons the generator stamps and
-   `guide.js` reveals, and the run output under an `alcy` block. Only
-   guide pages load this sheet. */
+/* The guide's code blocks: the frame, the buttons the generator stamps
+   and `guide-copy.js` reveals, and the editing overlay and run output
+   that `guide.js` brings. Only guide pages with code load this
+   sheet. */
 
 .code-block {
   position: relative;

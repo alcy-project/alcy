@@ -723,6 +723,19 @@ body.site {
   color: var(--fg-faint);
 }
 
+/* The result count is spoken to screen readers and read by everyone as
+   the tally under the field. */
+.site-search-count {
+  margin: 0;
+  padding: 0 14px;
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+
+.site-search-count:empty {
+  display: none;
+}
+
 /* Cross-document view transitions (MPA). Unsupported browsers fall back to an ordinary navigation, which is still correct. */
 @media (prefers-reduced-motion: no-preference) {
   @view-transition {

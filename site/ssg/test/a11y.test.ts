@@ -1,0 +1,93 @@
+// Copyright 2026 The Alcy Project Authors
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// What a reader who is not looking at the page gets. The generator emits
+// the landmarks, the labels, and the current-page state, so these checks
+// hold that every page names its regions, every control that ships
+// hidden announces why it is unusable, and the language each document
+// declares is the language its strings are in.
+
+import { equal, ok, match } from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+
+import type { GuidePage } from "../src/guide.js";
+import type { Block } from "../src/markdown.js";
+import { renderGuidePage, renderNotFound } from "../src/render.js";
+
+function page(language: "en" | "ja", blocks: Block[], path = "guide/x.html"): GuidePage {
+  return {
+    sourceRel: "01-x.md",
+    path,
+    route: language === "en" ? path : `${language}/${path}`,
+    language,
+    order: 1,
+    title: "Title",
+    blocks,
+  };
+}
+
+function render(language: "en" | "ja", blocks: Block[]): string {
+  const target = page(language, blocks);
+  return renderGuidePage(target, {
+    pages: [target],
+    highlight: (code) => code,
+    resolveLink: (url) => url,
+    boot: "INLINE_BOOT",
+    stamp: { text: "TESTSTAMP", url: "https://example.test/commit/TESTSTAMP" },
+  });
+}
+
+const alcy: Block = { type: "code", language: "alcy", text: "fn main() {}", line: 1 };
+const prose: Block = { type: "paragraph", text: "hello", line: 1 };
+
+test("each document declares the language of its own strings", () => {
+  match(render("en", [prose]), /<html lang="en">/);
+  match(render("ja", [prose]), /<html lang="ja">/);
+});
+
+test("the page's regions are named landmarks", () => {
+  const html = render("en", [prose]);
+  match(html, /<header class="site-header"/);
+  match(html, /<main/);
+  match(html, /<footer class="site-footer"/);
+  // The banner, the main region, and the contentinfo come from the
+  // elements themselves; the navigation and the search need names.
+  match(html, /<nav[^>]*aria-label="/);
+});
+
+test("a control that ships hidden is still describable when it appears", () => {
+  const html = render("en", [alcy]);
+  // The row is hidden until the script reveals it, and the buttons are
+  // real buttons, so the keyboard reaches them the moment it appears.
+  match(html, /<div class="code-actions" hidden>/);
+  match(html, /<button type="button" data-action="copy">Copy<\/button>/);
+  match(html, /<button type="button" data-action="run">Run<\/button>/);
+  match(html, /data-action="edit" aria-pressed="false">Edit</);
+  // The editing frame is a pressed-state toggle, so it announces as one.
+  match(html, /data-action="reset"[^>]*hidden/);
+});
+
+test("the editing overlay is labelled in the page's language", () => {
+  const html = render("ja", [alcy]);
+  match(html, /aria-pressed="false">編集</);
+  match(html, />コピー</);
+});
+
+test("the 404 is marked as a dead end and still reads in order", () => {
+  const html = renderNotFound("INLINE_BOOT", { text: "TESTSTAMP", url: "" }, (code) => code);
+  match(html, /name="robots" content="noindex"/);
+  match(html, /<html lang="en">/);
+  ok(html.indexOf("<main") < html.indexOf("<button type=\"button\" data-action=\"copy\""));
+});
+
+test("the search dialog names its field, its list, and its tally", () => {
+  // The dialog is built in the browser; these are the attributes the
+  // script sets, held here so a change to them is a change to the
+  // page's contract with a screen reader.
+  const source = readFileSync("site/shared/search.ts", "utf8");
+  match(source, /field\.setAttribute\("aria-label", t\("search\.placeholder"\)\)/);
+  match(source, /results\.setAttribute\("aria-label", t\("search\.placeholder"\)\)/);
+  match(source, /tally\.setAttribute\("role", "status"\)/);
+  match(source, /t\("search\.count", \{ count: String\(results\.length\) \}\)/);
+});

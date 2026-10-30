@@ -34,6 +34,7 @@ let entries: Entry[] | null = null;
 let dialog: HTMLDialogElement | null = null;
 let input: HTMLInputElement | null = null;
 let list: HTMLOListElement | null = null;
+let count: HTMLElement | null = null;
 
 async function loadEntries(): Promise<Entry[]> {
   if (entries === null) {
@@ -85,6 +86,12 @@ function renderResults(results: readonly Result[]): void {
   if (list === null) {
     return;
   }
+  // The field keeps the focus while a reader types, so the count is
+  // spoken through a live region rather than moved to.
+  if (count !== null) {
+    count.textContent =
+      results.length === 0 ? "" : t("search.count", { count: String(results.length) });
+  }
   const items = [];
   if (results.length === 0) {
     const empty = document.createElement("li");
@@ -116,6 +123,9 @@ function runSearch(): void {
   const query = (input?.value ?? "").trim().toLowerCase();
   if (query === "") {
     list?.replaceChildren();
+    if (count !== null) {
+      count.textContent = "";
+    }
     return;
   }
   void loadEntries().then((loaded) => {
@@ -139,8 +149,12 @@ function buildDialog(): HTMLDialogElement {
       list?.querySelector<HTMLAnchorElement>("a")?.click();
     }
   });
+  const tally = document.createElement("p");
+  tally.className = "site-search-count";
+  tally.setAttribute("role", "status");
   const results = document.createElement("ol");
-  created.append(field, results);
+  results.setAttribute("aria-label", t("search.placeholder"));
+  created.append(field, tally, results);
   created.addEventListener("click", (event) => {
     // A click that reaches the dialog itself is the backdrop's.
     if (event.target === created) {
@@ -150,12 +164,18 @@ function buildDialog(): HTMLDialogElement {
   document.body.append(created);
   input = field;
   list = results;
+  count = tally;
   return created;
 }
 
 function openSearch(): void {
   const opened = dialog ?? buildDialog();
   dialog = opened;
+  // A closed dialog hands the focus back to the control that opened it,
+  // which is the shortcut's own promise: nothing is lost mid-page.
+  if (opened.open) {
+    return;
+  }
   opened.showModal();
   input?.focus();
   input?.select();
