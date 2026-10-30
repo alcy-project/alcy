@@ -121,7 +121,7 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
   }
 
   LintConfig config;
-  config.rules = std::span<const RuleSetting>(settings, registered.size());
+  config.rules = std::span<RuleSetting>(settings, registered.size());
 
   const toml::table& root = result.table();
   const toml::table* overrides = nullptr;
@@ -238,6 +238,23 @@ base::Result<LintConfig, diag::Reported> parse_lint_config(
     }
   }
   return base::make_ok(config);
+}
+
+bool apply_override(LintConfig& config,
+                    std::string_view name,
+                    LintLevel level) {
+  if (name == "all") {
+    for (RuleSetting& setting : config.rules) {
+      setting.level = level;
+    }
+    return true;
+  }
+  const u32 index = rule_index(name);
+  if (index == NO_RULE || index >= config.rules.size()) {
+    return false;
+  }
+  config.rules[index].level = level;
+  return true;
 }
 
 }  // namespace linter

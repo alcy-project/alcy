@@ -17,7 +17,9 @@
 #include "i18n/language.h"
 #include "linter/config.h"
 #include "linter/fix.h"
+#include "linter/level.h"
 #include "linter/lint.h"
+#include "linter/rule.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
@@ -516,6 +518,21 @@ TEST_CASE("unused-field is off until it is asked for") {
       "fn main() -> i32 {\n  p := P { used: 1, unused: 2 }\n  ret p.used\n}\n",
       default_config(run.ctx));
   CHECK(findings_for(run.ctx.bag, "unused-field") == 0);
+}
+
+TEST_CASE("a command-line override edits the resolved table") {
+  pipeline::PipelineContext ctx{i18n::Language::EnUs};
+  LintConfig config =
+      config_from(ctx, "[rules]\nunused-variable = \"allow\"\n");
+  const u32 named = rule_index("unused-variable");
+  CHECK(config.setting(named).level == LintLevel::Allow);
+  CHECK(apply_override(config, "unused-variable", LintLevel::Deny));
+  CHECK(config.setting(named).level == LintLevel::Deny);
+  CHECK(apply_override(config, "all", LintLevel::Allow));
+  for (u32 i = 0; i < all_rules().size(); ++i) {
+    CHECK(config.setting(i).level == LintLevel::Allow);
+  }
+  CHECK(!apply_override(config, "no-such-rule", LintLevel::Warn));
 }
 
 TEST_CASE("a line comment silences the finding on its line") {

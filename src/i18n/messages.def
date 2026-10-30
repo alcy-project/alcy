@@ -538,6 +538,9 @@
   F(CliLspAbout, Note, Pipeline, "Serve the language server over standard input and output") \
   F(CliLintFileHelp, Note, Pipeline, "Lint a single source file instead of a package directory.") \
   F(CliLintFixHelp, Note, Pipeline, "Apply the repairs a rule is sure of, then report what remains.") \
+  F(CliLintAllowHelp, Note, Pipeline, "Silence a rule (a rule id, or all). Repeatable.") \
+  F(CliLintWarnHelp, Note, Pipeline, "Make a rule a warning (a rule id, or all). Repeatable.") \
+  F(CliLintDenyHelp, Note, Pipeline, "Make a rule an error (a rule id, or all). Repeatable.") \
   F(CliLintFixSingular, Note, Pipeline, "fix") \
   F(CliLintFixPlural, Note, Pipeline, "fixes") \
   F(CliLintFindingPlural, Note, Pipeline, "findings") \
@@ -551,6 +554,7 @@
   F(LintConfigSyntaxError, Error, Lint, "cannot parse {}: {}") \
   F(LintConfigUnknownLevel, Error, Lint, "unknown lint level '{}' in {}") \
   F(LintConfigUnknownRule, Error, Lint, "unknown lint rule '{}' in {}") \
+  F(LintCliUnknownRule, Error, Lint, "unknown lint rule '{}' on the command line") \
   F(LintFixWriteFailed, Error, Lint, "cannot write the repair to {}") \
   F(LintBoolComparison, Warning, Lint, "this comparison can be simplified") \
   F(LintUnusedField, Warning, Lint, "field {} of {} is never read") \

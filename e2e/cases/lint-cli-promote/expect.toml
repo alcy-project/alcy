@@ -1,0 +1,4 @@
+subcommand = "lint"
+args = ["--warn", "dead-code"]
+exit = 0
+contains = ["warning[dead-code]"]

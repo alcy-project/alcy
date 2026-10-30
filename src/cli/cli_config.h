@@ -109,6 +109,14 @@ struct CliConfig {
   // lint was asked to apply the repairs a rule is sure of, then report
   // what remains.
   bool lint_fix = false;
+  // Command-line level overrides for lint, in the order the flags were
+  // given within each kind. They edit the resolved table after the file
+  // is read, so a flag wins over lint.toml; deny beats warn beats allow
+  // when one rule is named more than once. A name is a rule id or
+  // `all`. Views borrow argv storage like input.
+  std::vector<std::string_view> lint_allow;
+  std::vector<std::string_view> lint_warn;
+  std::vector<std::string_view> lint_deny;
   // The files fmt was pointed at, in command-line order. Empty reads
   // standard input and writes standard output. Views borrow argv storage
   // like input.

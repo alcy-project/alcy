@@ -102,3 +102,11 @@ source bytes beside the finding rather than from a parsed attribute,
 because the language has no attribute syntax yet, and every finding
 goes through the context's report, so one check covers every rule and a
 suppressed finding offers no repair.
+
+The same revision added command-line level overrides, the counterpart
+to clippy's `-A` / `-W` / `-D`: `alcy lint --allow`, `--warn`, and
+`--deny` take a rule id or `all` and edit the resolved table after the
+file is read, so a flag wins over lint.toml and the loudest of two flags
+naming one rule wins. The override is a small function over the table
+the config already resolved, which is why the table became mutable
+while a reader still only copies a setting out of it.

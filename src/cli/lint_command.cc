@@ -22,6 +22,7 @@
 #include "linter/config.h"
 #include "linter/diag_code.h"
 #include "linter/fix.h"
+#include "linter/level.h"
 #include "linter/lint.h"
 #include "path/path.h"
 #include "pipeline/artifact.h"
@@ -203,6 +204,29 @@ void finish(const linter::LintOutcome& result, Envelope& envelope) {
   envelope.lint_count = result.warning_count + result.error_count;
 }
 
+// Applies the command-line level overrides to the resolved table. A
+// name that matches no rule is the same typo lint.toml would report.
+// Deny is applied last, so a rule that two flags name is the loudest.
+bool apply_overrides(const CliConfig& config,
+                     linter::LintConfig& lint_config,
+                     diag::DiagBag& bag) {
+  const auto apply = [&](const std::vector<std::string_view>& names,
+                         linter::LintLevel level) {
+    for (const std::string_view name : names) {
+      if (!linter::apply_override(lint_config, name, level)) {
+        const u32 index = bag.emit<i18n::Key::LintCliUnknownRule>(
+            linter::LintCode::ConfigSemanticError, name);
+        (void)index;
+        return false;
+      }
+    }
+    return true;
+  };
+  return apply(config.lint_allow, linter::LintLevel::Allow) &&
+         apply(config.lint_warn, linter::LintLevel::Warn) &&
+         apply(config.lint_deny, linter::LintLevel::Deny);
+}
+
 // The exit code a finished lint run takes: a denied finding is an error
 // in the bag, and the verb fails when it has one. The command still
 // filled the envelope, so the counts are reported either way.
@@ -229,6 +253,9 @@ ResultCode run_lint(const CliConfig& config,
     return ResultCode::LintFailed;
   }
   const LintTarget resolved = std::move(target).unwrap();
+  if (!apply_overrides(config, lint_config, ctx.bag)) {
+    return ResultCode::LintFailed;
+  }
 
   u32 fixed = 0;
   if (config.lint_fix) {

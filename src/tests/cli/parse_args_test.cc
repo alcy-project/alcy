@@ -56,6 +56,9 @@ TEST_CASE("Parse build subcommand") {
                             .no_std = false,
                             .deps = {},
                             .fmt_check = false,
+                            .lint_allow = {},
+                            .lint_warn = {},
+                            .lint_deny = {},
                             .fmt_files = {}});
 }
 
@@ -366,6 +369,26 @@ TEST_CASE("The root version names the build") {
   } else {
     CHECK(open > 0);
     CHECK(version.ends_with(')'));
+  }
+}
+
+TEST_CASE("Parse lint level overrides") {
+  const std::string_view args[] = {
+      "alcy",    "lint", "--deny", "unused-variable",
+      "--allow", "all",  "--warn", "dead-code"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Lint);
+  CHECK(config.lint_deny.size() == 1);
+  CHECK(config.lint_allow.size() == 1);
+  CHECK(config.lint_warn.size() == 1);
+  if (!config.lint_deny.empty()) {
+    CHECK(config.lint_deny[0] == "unused-variable");
+  }
+  if (!config.lint_allow.empty()) {
+    CHECK(config.lint_allow[0] == "all");
+  }
+  if (!config.lint_warn.empty()) {
+    CHECK(config.lint_warn[0] == "dead-code");
   }
 }
 

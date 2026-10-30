@@ -1,0 +1,4 @@
+subcommand = "lint"
+args = ["--deny", "unused-variable"]
+exit = "non-zero"
+contains = ["error[unused-variable]"]

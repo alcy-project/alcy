@@ -110,6 +110,30 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
   c.fmt_check = matches.get<bool>("check").unwrap_or(c.fmt_check);
   c.lint_fix = matches.get<bool>("fix").unwrap_or(c.lint_fix);
+  // The level overrides are repeatable and read in the order the flags
+  // were given, so a later flag of the same kind wins over an earlier
+  // one; across kinds the caller applies deny over warn over allow.
+  if (auto names = matches.get_all<std::string_view>("allow"); names.is_ok()) {
+    for (std::string_view name : std::move(names).unwrap()) {
+      if (!name.empty()) {
+        c.lint_allow.push_back(name);
+      }
+    }
+  }
+  if (auto names = matches.get_all<std::string_view>("warn"); names.is_ok()) {
+    for (std::string_view name : std::move(names).unwrap()) {
+      if (!name.empty()) {
+        c.lint_warn.push_back(name);
+      }
+    }
+  }
+  if (auto names = matches.get_all<std::string_view>("deny"); names.is_ok()) {
+    for (std::string_view name : std::move(names).unwrap()) {
+      if (!name.empty()) {
+        c.lint_deny.push_back(name);
+      }
+    }
+  }
   c.file = matches.get<std::string_view>("file").unwrap_or(c.file);
   c.emit = matches.get<pipeline::EmitMode>("emit").unwrap_or(
       pipeline::EmitMode::Executable);
@@ -463,6 +487,18 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("fix")
                        .help(usage.text(i18n::Key::CliLintFixHelp))
                        .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("allow")
+                       .help(usage.text(i18n::Key::CliLintAllowHelp))
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("warn")
+                       .help(usage.text(i18n::Key::CliLintWarnHelp))
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("deny")
+                       .help(usage.text(i18n::Key::CliLintDenyHelp))
+                       .default_value("")
                        .build())
           .build());
   builder.add_subcommand(

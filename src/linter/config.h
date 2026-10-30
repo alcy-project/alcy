@@ -40,7 +40,9 @@ struct RuleSetting {
 // as the run.
 struct LintConfig {
   LintLevel default_level = LintLevel::Warn;
-  std::span<const RuleSetting> rules;
+  // Mutable because a command-line override edits the resolved table in
+  // place; a reader only ever copies a setting out of it.
+  std::span<RuleSetting> rules;
   // Whether the frontend's lowering and borrow tail runs after the
   // rules. The rules read the analyzed package and do not need it; the
   // tail is what makes a lint run reject a program the compiler would.
@@ -63,6 +65,14 @@ struct LintConfig {
     return RuleSetting{.level = default_level, .ignore = {}};
   }
 };
+
+// Applies one command-line override to the resolved table: the level
+// the named rule takes, or every rule's when `name` is `all`. Returns
+// false when the name matches no registered rule, which the caller
+// reports as the typo it is.
+[[nodiscard]] bool apply_override(LintConfig& config,
+                                  std::string_view name,
+                                  LintLevel level);
 
 // Parses .alcy/lint.toml bytes. Unknown keys are ignored, like
 // alcy.toml; a level that names no level and a rule name that matches

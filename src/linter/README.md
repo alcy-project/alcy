@@ -38,6 +38,13 @@ names the rule must not report; the binding rules and `unused-import`
 read it. A `deny` finding is an error, so `alcy lint` exits non-zero;
 a `warn` finding does not change the exit code.
 
+The command line can override a level too, the counterpart to clippy's
+`-A` / `-W` / `-D`: `--allow`, `--warn`, and `--deny` each take a rule
+id or `all` and may be repeated. A flag edits the resolved table after
+the file is read, so it wins over lint.toml, and when one rule is named
+by more than one flag the loudest level wins. An unknown id is the same
+error lint.toml reports, so a run that misspells a rule still fails.
+
 ## Suppressing a finding
 
 A rule the package config enables can be silenced at the line that
