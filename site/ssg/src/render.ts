@@ -248,10 +248,32 @@ function pager(page: GuidePage, options: PageOptions): string {
       </nav>`;
 }
 
-const SPECULATION = "<script type=\"speculationrules\">" +
-  '{"prerender":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}],' +
-  '"prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}' +
-  "</script>";
+// What a link may cost before the reader commits to it. Prerendering a
+// document buys an instant navigation, so it is offered only where the
+// target is a reading page: the playground loads a compiler and a
+// grammar, and pre-rendering it would start both for a page the reader
+// may never open. Every link is still prefetched, which costs one fetch
+// and no execution.
+const PRERENDERABLE = "/guide/**";
+
+// The rules are one script for the whole site, written once here and
+// stamped into every page; a template asks `speculation()` for the same
+// text rather than keeping a copy.
+function speculationRules(): string {
+  const rules = {
+    prerender: [
+      { source: "document", where: { href_matches: PRERENDERABLE }, eagerness: "moderate" },
+    ],
+    prefetch: [
+      { source: "document", where: { href_matches: "/*" }, eagerness: "moderate" },
+    ],
+  };
+  return '<script type="speculationrules">' + JSON.stringify(rules) + "</script>";
+}
+
+export function speculation(): string {
+  return speculationRules();
+}
 
 export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const assets = assetPrefix(page.route);
@@ -285,7 +307,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(page.language, page.path)}
     ${socialMeta(`${page.title} · alcy`, description, page.route)}
-    ${SPECULATION}
+    ${speculationRules()}
   </head>
   <body class="site">
     ${header(page.route, page.language, page.path)}
@@ -342,7 +364,7 @@ export function renderGuideIndex(
     <link rel="icon" href="${assets}favicon.svg" />
     ${pageLinks(language, "guide/index.html")}
     ${socialMeta(`${t("site.guide")} · alcy`, t("meta.guide"), route)}
-    ${SPECULATION}
+    ${speculationRules()}
   </head>
   <body class="site">
     ${header(route, language, "guide/index.html")}

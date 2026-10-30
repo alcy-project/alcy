@@ -37,7 +37,7 @@ import type { Language } from "./languages.js";
 import { createLinkChecker } from "./links.js";
 import { renderGuideIndex, renderGuidePage, renderNotFound, sectionsOf } from "./render.js";
 import type { Stamp } from "./render.js";
-import { stampMark } from "./render.js";
+import { speculation, stampMark } from "./render.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
 import type { TemplateValues } from "./templates.js";
@@ -228,6 +228,7 @@ function templateValues(
     social: templateSocial(language, treePath, route),
     boot: `<script>${boot}</script>`,
     stamp: stampMark(stamp),
+    speculation: speculation(),
   };
 }
 
