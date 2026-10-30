@@ -82,7 +82,11 @@ nowhere earlier.
   article, the highlighting, the labels, and the language; scripts only
   reveal controls and wire them. `ssg/test/no-js.test.ts` holds this:
   every character of the text is in the document, nothing that needs a
-  script to work is shown, and no styling comes from a script.
+  script to work is shown, and no styling comes from a script. The tests
+  that hold a page's contract (`no-js`, `a11y`, `render`) read the
+  page through one description in `ssg/test/page.ts` — its text, the
+  modules it names, the names of its landmarks — so a property is stated
+  once and a template change is answered in one place.
 - **The first paint needs nothing but the HTML.** `boot.js` is inlined
   into every head and resolves the theme before the body paints, so a
   reader who chose dark never sees a light flash, offline or not.
@@ -101,6 +105,15 @@ nowhere earlier.
   modules to import its own, so a page never carries the other
   language's strings. The compiled assets stay at the root, and every
   tree fetches them from there.
+- **The chrome is repeated, and that is the cheap trade.** A reading
+  page's header and footer gzip to about 830 bytes, and every page
+  carries its own copy: twice per language tree, and again for the
+  reference. Gzip works per response, and the reader's browser holds
+  the previous page's bytes in a window it cannot reuse for this
+  page's markup, so the repeat is paid on every navigation. Rebuilding
+  the chrome from a script would replace it with a page that renders
+  nothing until a module runs. The repeat stays, and `budget` keeps it
+  from growing unseen.
 - **Motion is offered, not imposed.** View transitions sit inside
   `@media (prefers-reduced-motion: no-preference)`; with the preference
   set, navigation is an ordinary page load.

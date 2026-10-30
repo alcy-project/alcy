@@ -160,9 +160,9 @@ what implements it lives in `src/`.
 - `site/` - the published site: one page tree per language (English at
   the site root, `/ja/` beside it), the shared shell under
   `site/shared/`, and the browser playground under `site/playground/`;
-  the guide under `docs/guide/` is rendered by the site's own generator
-  (`site/ssg/`), which also stamps the landing and playground templates
-  per language. `tools/site.py` builds it into `site/dist/`, combining
+  the guide under `docs/guide/` and the specification under
+  `docs/spec/` are rendered by the site's own generator (`site/ssg/`),
+  which also stamps the landing and playground templates per language. `tools/site.py` builds it into `site/dist/`, combining
   those sources with the grammar and the compiler's wasm module;
   `.github/workflows/site.yaml` deploys that directory to GitHub Pages.
   See `docs/adr/0058-the-site-its-generator-and-the-guide.md`.

@@ -57,15 +57,27 @@ The published thing is the *site*, and the playground is one page of it.
   `alcy-playground-theme` is read once), resolved before first paint and
   toggled from the header's settings menu.
 
-Out of scope: publishing `docs/spec/` or `docs/adr/`, search, and content
-translations. The guide's body is written in English in every tree;
-translating it means adding translated sources beside the English ones.
-The interface labels are part of the tree.
+The reference is published the same way the guide is: every file in
+`docs/spec/` is a page under `reference/`, in the spec's own reading
+order, held to the same gates (every `alcy` fence compiles, every link
+resolves). A tree is a descriptor -- a URL segment, a label, and where
+the reading order continues -- so the guide and the reference share one
+renderer, one contents list, one pager, and one set of landmarks. The
+guide's last page continues into the reference rather than ending.
+
+Out of scope: publishing `docs/adr/`, search, and content translations.
+The guide's body is written in English in every tree; translating it
+means adding translated sources beside the English ones. The spec has no
+translations, so the reference pages carry English prose inside each
+tree's chrome until they do. The interface labels are part of the tree.
 
 ## Consequences
 
-The site can grow pages without a framework, and the guide's examples are
-validated by the same compiler the playground runs. The costs are a
+The site can grow pages without a framework, and every example in the
+guide and in the reference is validated by the same compiler the
+playground runs. The spec is now readable without a checkout, which
+makes it the site's authority as well as the implementer's; a change to
+`docs/spec/` is now a site change on the next build. The costs are a
 Markdown parser to keep covered by a test corpus, and a generator whose
 only consumer is the site it serves.
 
