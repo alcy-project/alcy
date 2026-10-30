@@ -367,7 +367,7 @@ ASSET_PATHS = (
 )
 
 
-def write_asset_version(dist_dir: Path) -> None:
+def asset_version(dist_dir: Path) -> str:
     digest = hashlib.sha256()
     for part in ASSET_PATHS:
         path = dist_dir / part
@@ -377,11 +377,37 @@ def write_asset_version(dist_dir: Path) -> None:
         with open(path, "rb") as handle:
             for block in iter(lambda: handle.read(1 << 16), b""):
                 digest.update(block)
-    version = digest.hexdigest()[:16]
+    return digest.hexdigest()[:16]
+
+
+def write_asset_version(dist_dir: Path) -> str:
+    version = asset_version(dist_dir)
     (dist_dir / "asset-version.json").write_text(
         json.dumps({"v": version}) + "\n", encoding="utf-8"
     )
     log(f"asset cache: {version}")
+    return version
+
+
+# The service worker reads its cache's name from a string literal the
+# build fills in, so the installed worker knows the version without a
+# request; `asset-version.json` stays as the out-of-band copy it
+# re-reads to notice a deploy. Only the literal is substituted: the
+# name also appears in the worker's own declarations.
+SW_VERSION_DECLARATION = 'const __ALCY_ASSET_VERSION__ = "__ALCY_ASSET_VERSION__";'
+
+
+def stamp_service_worker(dist_dir: Path, version: str) -> None:
+    script = dist_dir / "sw.js"
+    text = script.read_text(encoding="utf-8")
+    declaration = SW_VERSION_DECLARATION.replace('"__ALCY_ASSET_VERSION__"', '""')
+    if declaration not in text:
+        raise RuntimeError(f"{script} has no version declaration to stamp")
+    script.write_text(
+        text.replace(declaration, declaration.replace('""', f'"{version}"')),
+        encoding="utf-8",
+    )
+    log(f"service worker: version {version}")
 
 
 def copy_samples(dist_dir: Path) -> None:
@@ -585,7 +611,7 @@ def command_build(args: argparse.Namespace) -> int:
     copy_compiler(
         dist_dir, project_root_dir / "out" / args.build_subdir, args.compiler_dir
     )
-    write_asset_version(dist_dir)
+    stamp_service_worker(dist_dir, write_asset_version(dist_dir))
     build_guide(dist_dir)
 
     errors: list[str] = []
