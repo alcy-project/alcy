@@ -3604,6 +3604,93 @@ Val Lowerer::lower_int_division(diag::Span span,
   return Val{to_operand(result, lhs.type), lhs.type, false, false};
 }
 
+// Exponentiation by squaring. The result and the base ride one slot
+// each and the exponent walks down its bits: a set bit multiplies the
+// result by the base, and a surviving exponent squares the base before
+// the next bit. Every intermediate is a smaller power of the same base,
+// so an overflow check fires exactly when the mathematical result does
+// not fit, whatever path the squaring took. A negative exponent never
+// had an integer answer, and panics instead of reaching a backend.
+Val Lowerer::lower_int_power(diag::Span span,
+                             Val lhs,
+                             Val rhs,
+                             ir::TypeTag tag) {
+  const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+  const ir::OperandIdx zero = int_operand(0, lhs.type);
+  if (ir::is_signed_integer_type(tag)) {
+    const ir::RegisterIdx negative =
+        emit(ir::Opcode::Lt, boolean, {use_value(rhs), zero});
+    const ir::BlockIdx ok_block = reserve_block();
+    const ir::BlockIdx bad_block = reserve_block();
+    emit_cond_br(to_operand(negative, boolean), bad_block, ok_block);
+    switch_to(bad_block);
+    emit_panic(span, str_operand("negative exponent"));
+    switch_to(ok_block);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+  }
+  const ir::OperandIdx one = int_operand(1, lhs.type);
+  Val result = result_slot(lhs.type, span);
+  Val base = result_slot(lhs.type, span);
+  Val exponent = result_slot(lhs.type, span);
+  store_result(result, Val{one, lhs.type, false, false});
+  store_result(base, lhs);
+  store_result(exponent, rhs);
+  const ir::BlockIdx head_block = reserve_block();
+  const ir::BlockIdx body_block = reserve_block();
+  const ir::BlockIdx odd_block = reserve_block();
+  const ir::BlockIdx square_block = reserve_block();
+  const ir::BlockIdx square_mul_block = reserve_block();
+  const ir::BlockIdx done_block = reserve_block();
+  emit_br(head_block);
+  switch_to(head_block);
+  const ir::RegisterIdx remaining =
+      emit(ir::Opcode::Load, lhs.type, {exponent.op});
+  const ir::RegisterIdx exhausted =
+      emit(ir::Opcode::Eq, boolean, {to_operand(remaining, lhs.type), zero});
+  emit_cond_br(to_operand(exhausted, boolean), done_block, body_block);
+  switch_to(body_block);
+  const ir::RegisterIdx low_bit =
+      emit(ir::Opcode::And, lhs.type, {to_operand(remaining, lhs.type), one});
+  const ir::RegisterIdx set =
+      emit(ir::Opcode::Ne, boolean, {to_operand(low_bit, lhs.type), zero});
+  emit_cond_br(to_operand(set, boolean), odd_block, square_block);
+  switch_to(odd_block);
+  const ir::RegisterIdx held = emit(ir::Opcode::Load, lhs.type, {result.op});
+  const ir::RegisterIdx factor = emit(ir::Opcode::Load, lhs.type, {base.op});
+  const ir::RegisterIdx grown =
+      emit(ir::Opcode::IntMul, lhs.type,
+           {to_operand(held, lhs.type), to_operand(factor, lhs.type)});
+  store_result(result,
+               Val{to_operand(grown, lhs.type), lhs.type, false, false});
+  emit_br(square_block);
+  switch_to(square_block);
+  // A signed exponent is non-negative past the panic above, so an
+  // arithmetic halve is exact for it; an unsigned one has no sign to
+  // preserve, and an arithmetic halve would loop on its high bit.
+  const ir::Opcode halve = ir::is_signed_integer_type(tag)
+                               ? ir::Opcode::ArithmeticShiftRight
+                               : ir::Opcode::LogicalShiftRight;
+  const ir::RegisterIdx halved =
+      emit(halve, lhs.type, {to_operand(remaining, lhs.type), one});
+  store_result(exponent,
+               Val{to_operand(halved, lhs.type), lhs.type, false, false});
+  const ir::RegisterIdx last =
+      emit(ir::Opcode::Eq, boolean, {to_operand(halved, lhs.type), zero});
+  emit_cond_br(to_operand(last, boolean), done_block, square_mul_block);
+  switch_to(square_mul_block);
+  const ir::RegisterIdx square = emit(ir::Opcode::Load, lhs.type, {base.op});
+  const ir::RegisterIdx squared =
+      emit(ir::Opcode::IntMul, lhs.type,
+           {to_operand(square, lhs.type), to_operand(square, lhs.type)});
+  store_result(base,
+               Val{to_operand(squared, lhs.type), lhs.type, false, false});
+  emit_br(head_block);
+  switch_to(done_block);
+  return materialize(result);
+}
+
 // The element-wise comparison the checker admitted for == and != on a
 // tuple or array. A leaf is a scalar or a thin address the backend
 // compares; an aggregate recurses over its fields or elements, and
@@ -3674,10 +3761,6 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
       return lower_spec_ordering(expr, target, bin.op);
     }
     return lower_spec_binary(expr, target);
-  }
-  if (bin.op == ast::BinaryOp::Pow) {
-    unsupported(node.span, "power operator");
-    return Val{size_one, error_type(), false, false};
   }
   // `&&` and `||` are control flow: the right side runs only when the
   // left did not decide. A result slot takes whichever branch ran.
@@ -3801,6 +3884,11 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
     const ir::RegisterIdx dst =
         emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
     return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  // Checking admits `**` on integers only; a float reaching here would
+  // have taken the float block's refusal above.
+  if (bin.op == ast::BinaryOp::Pow) {
+    return lower_int_power(node.span, lhs, rhs, tag);
   }
   // A shift count rides modulo the type's width, so an overshift has
   // one result instead of a backend-defined one.

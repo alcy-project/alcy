@@ -220,7 +220,7 @@
   F(AnalyzerOwnFunctionUnsupported, Error, Analyzer, "Owning function types are not supported here yet") \
   F(AnalyzerOwnFunctionWitness, Error, Analyzer, "Argument for owning function parameter '{}' does not match its `fn(...)` signature") \
   F(AnalyzerPathHeadNotSupported, Error, Analyzer, "`{}` is not a path head; the package root is `package::`") \
-  F(AnalyzerPowerNotImplemented, Error, Analyzer, "The '**' operator is not implemented yet") \
+  F(AnalyzerPowerTypeUnsupported, Error, Analyzer, "The '**' operator is not defined for this type") \
   F(AnalyzerPrintArity, Error, Analyzer, "'{}' expects a format string, found {} arguments") \
   F(AnalyzerPrintInCompEvaluation, Error, Analyzer, "'{}' is not allowed in comp evaluation") \
   F(AnalyzerPrivateField, Error, Analyzer, "Field '{}' of '{}' is private; the module that declares the struct can open it with `pub`") \

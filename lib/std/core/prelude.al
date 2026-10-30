@@ -52,6 +52,7 @@ pub use package::ops::Add;
 pub use package::ops::Div;
 pub use package::ops::Mul;
 pub use package::ops::Neg;
+pub use package::ops::Pow;
 pub use package::ops::Rem;
 pub use package::ops::Sub;
 pub use package::option::Option;

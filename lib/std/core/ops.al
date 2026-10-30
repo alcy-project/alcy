@@ -31,6 +31,12 @@ pub spec Rem {
   fn rem(self: Self, other: Self) -> Self;
 }
 
+// `a ** b`. The integer scalar form is repeated squaring in the
+// compiler; a nominal type defines its own meaning here.
+pub spec Pow {
+  fn pow(self: Self, other: Self) -> Self;
+}
+
 // `-a`.
 pub spec Neg {
   fn neg(self: Self) -> Self;

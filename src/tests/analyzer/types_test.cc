@@ -4158,14 +4158,32 @@ TEST_CASE("Check rejects a duplicated struct field initializer") {
   CHECK(f.bag.has_errors());
 }
 
-// The backend has no power operation; refusing it at checking keeps the
-// unsupported construct out of lowering.
-TEST_CASE("Check rejects the power operator") {
+// An integer power has one integer answer, so checking admits it; a
+// float exponent has a fractional value no integer expansion answers,
+// and the operator stays undefined there.
+TEST_CASE("Check admits the integer power operator") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() -> i32 {\n"
                                       "  x := 2\n"
                                       "  ret x ** 3\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check refuses the float power operator") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  x := 2.0\n"
+                                      "  ret x ** 3.0 as i32\n"
                                       "}\n"}});
   CHECK(setup);
   if (!setup) {

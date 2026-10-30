@@ -1809,6 +1809,38 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
       }
       out.value.int_value = (left * right) & mask;
       return true;
+    case ast::BinaryOp::Pow: {
+      // Repeated squaring over the runtime expansion's steps: the
+      // exponent walks down its bits, each set one multiplies into the
+      // result, and a surviving exponent squares the base. A negative
+      // exponent has no integer answer, and an overflow refuses the
+      // constant rather than reading as a wrapped value.
+      if (comp::is_signed(tag) && comp::sign_extend(right, tag) < 0) {
+        return fail(node.span, "negative exponent in comp evaluation");
+      }
+      u64 result = 1;
+      u64 base = left;
+      u64 remaining = right;
+      while (remaining != 0) {
+        if ((remaining & 1) != 0) {
+          if (comp::mul_overflows(result, base, tag)) {
+            return fail_overflow(node.span,
+                                 "integer overflow in comp evaluation");
+          }
+          result = (result * base) & mask;
+        }
+        remaining >>= 1;
+        if (remaining != 0) {
+          if (comp::mul_overflows(base, base, tag)) {
+            return fail_overflow(node.span,
+                                 "integer overflow in comp evaluation");
+          }
+          base = (base * base) & mask;
+        }
+      }
+      out.value.int_value = result & mask;
+      return true;
+    }
     case ast::BinaryOp::Div:
     case ast::BinaryOp::Mod: {
       if (right == 0) {

@@ -2655,6 +2655,7 @@ static ArithmeticNames arithmetic_names(ast::BinaryOp op) {
     case ast::BinaryOp::Mul: return {"Mul", "mul", 2};
     case ast::BinaryOp::Div: return {"Div", "div", 2};
     case ast::BinaryOp::Mod: return {"Rem", "rem", 2};
+    case ast::BinaryOp::Pow: return {"Pow", "pow", 2};
     default: return {};
   }
 }
@@ -4075,14 +4076,29 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
                                          names.method, names.params, expected);
           }
           break;
-        case ast::BinaryOp::Pow: {
-          // The backend has no power operation yet; refuse it here
-          // rather than let it reach lowering's unsupported path.
-          const u32 index = bag.emit<i18n::Key::AnalyzerPowerNotImplemented>(
-              DiagCode::InvalidOperation, node.span);
-          (void)index;
+        case ast::BinaryOp::Pow:
+          // An integer exponent has one integer answer, which lowering
+          // computes by repeated squaring. A nominal type reaches the
+          // sealed `Pow` spec the way the other arithmetic does. A float
+          // has a fractional answer no integer expansion produces, and
+          // the operator stays undefined for it.
+          if (is_integer_tag(tag)) {
+            if (expected != nullptr) {
+              return unify(*expected, operands, node.span, "arithmetic");
+            }
+            return operands;
+          }
+          if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+            const ArithmeticNames names = arithmetic_names(ast::BinaryOp::Pow);
+            return check_spec_arithmetic(module, expr, operands, names.spec,
+                                         names.method, names.params, expected);
+          }
+          {
+            const u32 index = bag.emit<i18n::Key::AnalyzerPowerTypeUnsupported>(
+                DiagCode::InvalidOperation, node.span);
+            (void)index;
+          }
           return error_type();
-        }
         default:
           // Remainder and the bitwise and shift operators are
           // integer-only; a nominal remainder reaches the `Rem` spec.

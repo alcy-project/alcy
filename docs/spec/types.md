@@ -168,9 +168,9 @@
 
 ## Arithmetic over specs
 
-- `a + b`, `a - b`, `a * b`, `a / b`, `a % b`, and `-a` over a
-  nominal type resolve through the sealed specs in `core`: `Add`,
-  `Sub`, `Mul`, `Div`, `Rem`, and `Neg`. Every method takes its
+- `a + b`, `a - b`, `a * b`, `a / b`, `a % b`, `a ** b`, and `-a`
+  over a nominal type resolve through the sealed specs in `core`:
+  `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Pow`, and `Neg`. Every method takes its
   operands by value (`fn add(self: Self, other: Self) -> Self`), so an
   operator consumes them, which for a `Copy` type reads as a copy.
   Scalars keep their builtin arithmetic, and a nominal type with no

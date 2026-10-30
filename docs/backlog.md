@@ -49,6 +49,14 @@ replaced. The foundations are in `roadmap.md`.
   and wants a decision on whether the duplicate is a warning or an
   error; a guarded arm must not count as covering a later unguarded one.
 
+- [ ] Float `**` is refused while the integer one is repeated
+  squaring: a fractional exponent needs `pow`, and the direct-wasm
+  target imports no libm and has no instruction for it, so admitting
+  floats on one backend only would make the same program compile
+  differently per target. A portable story wants either an inline
+  exp/ln pair the std owns or a wasm import the freestanding target
+  agrees to carry.
+
 - [ ] The exponent form's mantissa is reached by multiplying the
   magnitude by ten or a tenth per step, so its low places are the
   accumulated rounding, not the value's: `{:.17f}` of `f64::MAX` prints

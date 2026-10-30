@@ -565,6 +565,11 @@ class Lowerer {
                          Val lhs,
                          Val rhs,
                          ir::TypeTag tag);
+  // `a ** b` by repeated squaring: a logarithmic number of
+  // multiplications answers any exponent, each one carrying the source
+  // `*` policy (ADR-0068). A negative exponent has no integer answer
+  // and panics the way a zero divisor does.
+  Val lower_int_power(diag::Span span, Val lhs, Val rhs, ir::TypeTag tag);
   Val lower_binary(ast::ExprIdx expr);
   // The element-wise equality of two aggregates the checker admitted to
   // == or !=, walking tuples and arrays and comparing leaves directly.

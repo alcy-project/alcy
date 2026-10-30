@@ -70,6 +70,17 @@ implements them by listing them in its own `[spec] implement`, and
 the checker then records the call for lowering the way `PartialEq`
 does.
 
+Amended at power's landing: `Pow` joined the sealed operator
+specs in `core`, with the same shape the arithmetic ones have. Unlike
+them it is not a single backend instruction on the integer scalars:
+the compiler lowers `a ** b` to repeated squaring, whose every
+multiplication carries the source `*` policy, so an overflow is
+checked exactly where the mathematical result stops fitting. A
+negative exponent has no integer answer and panics, the way a zero
+divisor does. Float `**` stays undefined because the two backends
+would answer it differently; the fractional case wants a portable
+`exp`/`ln` the standard library owns.
+
 Amended at ordering's landing: `Ordering` joined `core` as the
 three-variant enum, `PartialOrd` declares `fn partial_cmp(self:
 &Self, other: &Self) -> Option<Ordering>`, and `Ord: PartialOrd`
