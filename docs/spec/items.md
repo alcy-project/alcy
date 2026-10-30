@@ -67,9 +67,13 @@
   - `memcopy<T>(dst: &mut T, src: &T, n: usize)` copies `n` bytes
     between two buffers of one storage type.
   - `panic(msg: str)` diverges through the runtime abort.
-  - `sys_write(fd: i32, buf: str)` writes `buf` to the file
-    descriptor. User code cannot name file descriptors portably, so
-    this stays intrinsic.
+  - `sys_write(fd: i32, buf: str) -> i64` and
+    `sys_read(fd: i32, out: &mut u8, out_len: usize) -> i64` are one
+    `write(2)`/`read(2)`: the byte count, or the negated error number
+    the call reported. A short write and an interrupted call are the
+    caller's to see; the std wraps them with `sys`'s `Fd` and
+    `OsError`, and the write-all loop stays with the print hooks
+    (ADR-0117).
   - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
     and `str_slice(s: str, start: usize, end: usize) -> str` are the
     string primitives. Out-of-bounds `str_byte`/`str_slice` panic.
@@ -129,12 +133,13 @@
     bounds check. See `docs/adr/0010-typed-heap-primitives.md`.
 - `memcopy`, `str_from_parts`, `slice_from_parts`,
   `slice_from_parts_mut`, `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
-  `uninit_assume`, `ptr_offset`, and `ptr_offset_mut` carry a
-  precondition the compiler cannot check, so their declarations say
-  `unsafe` and a call needs an `unsafe` block (`ffi.md`). The checker
-  verifies the marker against the set the way it verifies the shape,
-  so leaving it out, or adding it to a safe intrinsic, is an error.
-  The remaining intrinsics stay safe.
+  `uninit_assume`, `ptr_offset`, `ptr_offset_mut`, `sys_read`,
+  `file_size`, `read_file_into`, `write_file_all`, `arg_count`, and
+  `arg` carry a precondition the compiler cannot check, so their
+  declarations say `unsafe` and a call needs an `unsafe` block
+  (`ffi.md`). The checker verifies the marker against the set the way
+  it verifies the shape, so leaving it out, or adding it to a safe
+  intrinsic, is an error. The remaining intrinsics stay safe.
 - `print(comp fmt: str, args: ..)` and
   `println(comp fmt: str, args: ..)` are `io`'s declarations,
   compiler-expanded like `fmt::format`: the format string is

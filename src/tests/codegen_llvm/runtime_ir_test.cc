@@ -155,7 +155,8 @@ TEST_CASE("Runtime defines every entry point") {
   declare(module, "alcy_println", signature(void_ty, {pointer, usize}));
   declare(module, "alcy_panic",
           signature(void_ty, {pointer, usize, pointer, usize}));
-  declare(module, "alcy_sys_write", signature(void_ty, {i32, pointer, usize}));
+  declare(module, "alcy_sys_write", signature(usize, {i32, pointer, usize}));
+  declare(module, "alcy_sys_read", signature(usize, {i32, pointer, usize}));
   declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
   declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
 
@@ -171,7 +172,9 @@ TEST_CASE("Runtime defines every entry point") {
   check_definition(module, target, "alcy_panic",
                    signature(void_ty, {pointer, usize, pointer, usize}));
   check_definition(module, target, "alcy_sys_write",
-                   signature(void_ty, {i32, pointer, usize}));
+                   signature(usize, {i32, pointer, usize}));
+  check_definition(module, target, "alcy_sys_read",
+                   signature(usize, {i32, pointer, usize}));
   check_definition(module, target, "alcy_alloc",
                    signature(pointer, {usize, usize}));
   check_definition(module, target, "alcy_dealloc",
@@ -298,9 +301,8 @@ TEST_CASE("A freestanding runtime calls no libc") {
   declare(module, "alcy_println", signature(void_ty, {pointer, usize}));
   declare(module, "alcy_panic",
           signature(void_ty, {pointer, usize, pointer, usize}));
-  declare(
-      module, "alcy_sys_write",
-      signature(void_ty, {llvm::Type::getInt32Ty(context), pointer, usize}));
+  declare(module, "alcy_sys_write",
+          signature(usize, {llvm::Type::getInt32Ty(context), pointer, usize}));
   declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
   declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
 

@@ -463,6 +463,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
           "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
           "[modules]\ninclude = [\"main\", \"lib\"]\n\n"
           "[dependencies]\n\"alcy/std/core\" = {}\n"
+          "\"alcy/std/sys\" = {}\n"
           "\"alcy/std/alloc\" = {}\n"
           "\"alcy/std/arch\" = {}\n"
           "\"alcy/std/fmt\" = {}\n"

@@ -280,6 +280,7 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
           "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
           "[modules]\ninclude = [\"lib\"]\n\n"
           "[dependencies]\n\"alcy/std/core\" = {}\n"
+          "\"alcy/std/sys\" = {}\n"
           "\"alcy/std/alloc\" = {}\n"
           "\"alcy/std/arch\" = {}\n"
           "\"alcy/std/fmt\" = {}\n"

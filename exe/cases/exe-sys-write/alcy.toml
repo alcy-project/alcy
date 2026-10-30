@@ -1,0 +1,15 @@
+[package]
+name = "sys-write"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/core" = {}
+"alcy/std/sys" = {}
+
+[[bin]]
+name = "sys-write"
+path = "main.al"

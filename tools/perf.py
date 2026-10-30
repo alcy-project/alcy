@@ -262,6 +262,7 @@ def manifest_source(shape: str, modules: int) -> str:
         dependencies = """
 [dependencies]
 "alcy/std/core" = {}
+"alcy/std/sys" = {}
 "alcy/std/alloc" = {}
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}

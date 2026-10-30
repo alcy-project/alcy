@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/core`: memory, the process, and the size of a type.
+// `alcy/std/core`: memory and the size of a type.
 
 pub unsafe intrinsic fn memcopy<T>(dst: &mut T, src: &T, n: usize);
 
@@ -13,8 +13,6 @@ pub unsafe intrinsic fn ptr_offset<T>(ptr: *T, count: isize) -> *T;
 pub unsafe intrinsic fn ptr_offset_mut<T>(ptr: *mut T, count: isize) -> *mut T;
 
 pub intrinsic fn panic(msg: str) -> !;
-
-intrinsic fn sys_write(fd: i32, buf: str);
 
 pub intrinsic fn size_of<T>() -> usize;
 
@@ -38,24 +36,3 @@ pub intrinsic fn wrapping_add<T>(a: T, b: T) -> T;
 pub intrinsic fn wrapping_sub<T>(a: T, b: T) -> T;
 
 pub intrinsic fn wrapping_mul<T>(a: T, b: T) -> T;
-
-// The byte count of the file at `path`, or -1 when it cannot be
-// opened. The path is NUL-terminated in a temporary slot.
-pub unsafe intrinsic fn file_size(path: str) -> i64;
-
-// Reads up to `out_len` bytes from the file at `path` into the bytes
-// `out` names, answering the bytes read or -1 when it cannot be
-// opened. The caller must have room for `out_len` bytes at `out`.
-pub unsafe intrinsic fn read_file_into(path: str, out: &mut u8, out_len: usize) -> i64;
-
-// Writes `data` to the file at `path`, answering the bytes written or
-// -1 when it cannot be opened. The path is NUL-terminated in a
-// temporary slot and an existing file is truncated.
-pub unsafe intrinsic fn write_file_all(path: str, data: str) -> i64;
-
-// The number of process arguments, the program name first.
-pub unsafe intrinsic fn arg_count() -> i64;
-
-// Argument `i` as a view, or an empty view when `i` is out of range.
-// The bytes belong to the process.
-pub unsafe intrinsic fn arg(i: i64) -> str;

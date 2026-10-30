@@ -122,9 +122,10 @@ The module must be the Emscripten `MODULARIZE` build from
 so the same artifact runs in the page's worker and in the bun smoke test.
 
 The compiled program speaks WASI preview1: it exports `_start` and its
-memory, and imports `fd_write` and `proc_exit` from
-`wasi_snapshot_preview1`. `wasi.ts` supplies those two imports, so the
-same module also runs under `bun` and `wasmtime`.
+memory, and imports `fd_read`, `fd_write`, and `proc_exit` from
+`wasi_snapshot_preview1`. `wasi.ts` supplies those imports (the page
+has no input, so a read is the end of input), so the same module also
+runs under `bun` and `wasmtime`.
 
 ## Deploying
 

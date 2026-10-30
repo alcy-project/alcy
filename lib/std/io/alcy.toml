@@ -16,6 +16,7 @@ export = ["prelude", "args", "file", "print"]
 
 [dependencies]
 "alcy/std/core" = {}
+"alcy/std/sys" = {}
 "alcy/std/alloc" = {}
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}

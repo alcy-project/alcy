@@ -3333,18 +3333,18 @@ ir::TypeIdx Checker::resolve_type(u32 module,
 bool Checker::is_known_intrinsic(std::string_view name) {
   return name == "memcopy" || name == "panic" || name == "str_len" ||
          name == "str_byte" || name == "str_slice" || name == "sys_write" ||
-         name == "str_from_parts" || name == "slice_len" ||
-         name == "slice_from_parts" || name == "slice_from_parts_mut" ||
-         name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
-         name == "elem_ref" || name == "size_of" || name == "align_of" ||
-         name == "uninit_write" || name == "uninit_assume" ||
-         name == "uninit_ref" || name == "ptr_offset" ||
-         name == "ptr_offset_mut" || name == "drop_in_place" ||
-         name == "slice_at" || name == "slice_at_mut" || name == "read" ||
-         name == "wrapping_add" || name == "wrapping_sub" ||
-         name == "wrapping_mul" || name == "file_size" ||
-         name == "read_file_into" || name == "write_file_all" ||
-         name == "arg_count" || name == "arg";
+         name == "sys_read" || name == "str_from_parts" ||
+         name == "slice_len" || name == "slice_from_parts" ||
+         name == "slice_from_parts_mut" || name == "alloc" ||
+         name == "dealloc" || name == "elem_ptr" || name == "elem_ref" ||
+         name == "size_of" || name == "align_of" || name == "uninit_write" ||
+         name == "uninit_assume" || name == "uninit_ref" ||
+         name == "ptr_offset" || name == "ptr_offset_mut" ||
+         name == "drop_in_place" || name == "slice_at" ||
+         name == "slice_at_mut" || name == "read" || name == "wrapping_add" ||
+         name == "wrapping_sub" || name == "wrapping_mul" ||
+         name == "file_size" || name == "read_file_into" ||
+         name == "write_file_all" || name == "arg_count" || name == "arg";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -3357,8 +3357,9 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "slice_from_parts_mut" || name == "ptr_offset" ||
          name == "ptr_offset_mut" || name == "drop_in_place" ||
          name == "slice_at" || name == "slice_at_mut" || name == "read" ||
-         name == "file_size" || name == "read_file_into" ||
-         name == "write_file_all" || name == "arg_count" || name == "arg";
+         name == "sys_read" || name == "file_size" ||
+         name == "read_file_into" || name == "write_file_all" ||
+         name == "arg_count" || name == "arg";
 }
 
 // What may cross a C boundary in the first ABI slice (ADR-0051):
@@ -3613,6 +3614,12 @@ bool Checker::check_intrinsic_signature(u32 module,
   } else if (name == "sys_write") {
     expected.push_back(builder.primitive(ir::TypeTag::I32));
     expected.push_back(str);
+    expected_ret = builder.primitive(ir::TypeTag::I64);
+  } else if (name == "sys_read") {
+    expected.push_back(builder.primitive(ir::TypeTag::I32));
+    expected.push_back(builder.reference_type(u8, true));
+    expected.push_back(usize_ty);
+    expected_ret = builder.primitive(ir::TypeTag::I64);
   } else if (name == "str_from_parts") {
     expected.push_back(builder.reference_type(u8, false));
     expected.push_back(usize_ty);

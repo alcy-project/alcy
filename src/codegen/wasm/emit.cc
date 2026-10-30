@@ -66,6 +66,7 @@ using op::OP_I32_SHR_U;
 using op::OP_I32_SUB;
 using op::OP_I64_CONST;
 using op::OP_I64_EQ;
+using op::OP_I64_EXTEND_I32_S;
 using op::OP_IF;
 using op::OP_LOCAL_GET;
 using op::OP_LOCAL_SET;
@@ -214,6 +215,9 @@ void Emitter::declare_runtime() {
   const u32 fd_write = builder_.add_type(
       FuncType{{ValType::I32, ValType::I32, ValType::I32, ValType::I32},
                {ValType::I32}});
+  const u32 fd_read = builder_.add_type(
+      FuncType{{ValType::I32, ValType::I32, ValType::I32, ValType::I32},
+               {ValType::I32}});
   const u32 proc_exit = builder_.add_type(FuncType{{ValType::I32}, {}});
   const u32 text =
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {}});
@@ -225,11 +229,18 @@ void Emitter::declare_runtime() {
       FuncType{{ValType::I32, ValType::I32, ValType::I32}, {}});
   const u32 alloc =
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {ValType::I32}});
+  // The faithful descriptor calls answer the bytes or the negated errno
+  // in an i64 (ADR-0117).
+  const u32 sys_io = builder_.add_type(
+      FuncType{{ValType::I32, ValType::I32, ValType::I32}, {ValType::I64}});
 
   // The builder calls run in every build; the DCHECKs only pin the indexes.
   const u32 fd_write_index =
       builder_.add_import("wasi_snapshot_preview1", "fd_write", fd_write);
   DCHECK_EQ(fd_write_index, FD_WRITE);
+  const u32 fd_read_index =
+      builder_.add_import("wasi_snapshot_preview1", "fd_read", fd_read);
+  DCHECK_EQ(fd_read_index, FD_READ);
   const u32 proc_exit_index =
       builder_.add_import("wasi_snapshot_preview1", "proc_exit", proc_exit);
   DCHECK_EQ(proc_exit_index, PROC_EXIT);
@@ -241,7 +252,7 @@ void Emitter::declare_runtime() {
   DCHECK_EQ(println_index, PRINTLN);
   const u32 panic_index = builder_.add_function(panic);
   DCHECK_EQ(panic_index, PANIC);
-  const u32 sys_write_index = builder_.add_function(write_all);
+  const u32 sys_write_index = builder_.add_function(sys_io);
   DCHECK_EQ(sys_write_index, SYS_WRITE);
   const u32 alloc_index = builder_.add_function(alloc);
   DCHECK_EQ(alloc_index, ALLOC);
@@ -251,6 +262,8 @@ void Emitter::declare_runtime() {
   DCHECK_EQ(check_overflow_index, CHECK_OVERFLOW);
   const u32 check_shift_index = builder_.add_function(check);
   DCHECK_EQ(check_shift_index, CHECK_SHIFT);
+  const u32 sys_read_index = builder_.add_function(sys_io);
+  DCHECK_EQ(sys_read_index, SYS_READ);
 }
 
 Emitter::EmitResult Emitter::choose_roots() {
@@ -890,6 +903,8 @@ Emitter::EmitResult Emitter::emit_call(const ir::Instruction& instr) {
       callee_index = PANIC;
     } else if (name == "alcy_sys_write") {
       callee_index = SYS_WRITE;
+    } else if (name == "alcy_sys_read") {
+      callee_index = SYS_READ;
     } else if (name == "alcy_alloc") {
       callee_index = ALLOC;
     } else if (name == "alcy_dealloc") {
@@ -1287,13 +1302,61 @@ void Emitter::emit_runtime_bodies() {
     finish_body(PRINTLN);
   }
   {
-    // alcy_sys_write(fd, ptr, len)
+    // alcy_sys_write(fd, ptr, len) -> i64: one fd_write, answering the
+    // bytes written or the negated errno (ADR-0117).
     begin_body(3);
-    local_get(0);
+    const u32 errno_local = allocate_local(ValType::I32);
+    i32_const(static_cast<i32>(scratch_));
     local_get(1);
-    guard_null_len(1);
-    call(WRITE_ALL);
+    i32_store(body_, 2, 0);
+    i32_const(static_cast<i32>(scratch_ + 4));
+    local_get(2);
+    i32_store(body_, 2, 0);
+    local_get(0);
+    i32_const(static_cast<i32>(scratch_));
+    i32_const(1);
+    i32_const(static_cast<i32>(scratch_ + 8));
+    call(FD_WRITE);
+    local_set(errno_local);
+    // errno == 0 ? nwritten : -errno, widened to the i64 result.
+    i32_const(static_cast<i32>(scratch_ + 8));
+    i32_load(body_, 2, 0);
+    i32_const(0);
+    local_get(errno_local);
+    op(OP_I32_SUB);
+    local_get(errno_local);
+    op(OP_I32_EQZ);
+    op(OP_SELECT);
+    op(OP_I64_EXTEND_I32_S);
     finish_body(SYS_WRITE);
+  }
+  {
+    // alcy_sys_read(fd, ptr, len) -> i64: one fd_read, answering the
+    // bytes read or the negated errno; zero is the end of input.
+    begin_body(3);
+    const u32 errno_local = allocate_local(ValType::I32);
+    i32_const(static_cast<i32>(scratch_));
+    local_get(1);
+    i32_store(body_, 2, 0);
+    i32_const(static_cast<i32>(scratch_ + 4));
+    local_get(2);
+    i32_store(body_, 2, 0);
+    local_get(0);
+    i32_const(static_cast<i32>(scratch_));
+    i32_const(1);
+    i32_const(static_cast<i32>(scratch_ + 8));
+    call(FD_READ);
+    local_set(errno_local);
+    i32_const(static_cast<i32>(scratch_ + 8));
+    i32_load(body_, 2, 0);
+    i32_const(0);
+    local_get(errno_local);
+    op(OP_I32_SUB);
+    local_get(errno_local);
+    op(OP_I32_EQZ);
+    op(OP_SELECT);
+    op(OP_I64_EXTEND_I32_S);
+    finish_body(SYS_READ);
   }
   {
     // alcy_panic(msg, msg_len, where, where_len): `panic at <site>:

@@ -88,6 +88,19 @@ heap they grow on.
 
 `fmt` sits above `alloc` because `format` returns a `String`.
 
+Amended at the `sys` landing (ADR-0117): the split gains the row
+`sys → core`, the platform floor a program selects alone when it wants
+descriptor calls without the heap or the formatter. `io` sits above it
+(`core, sys, alloc, arch` plus the `fmt`, `text`, and `unicode` it
+actually uses), and `network`'s row is revisited when that package is
+built, since its current manifest pulls io's whole closure. The same
+landing settled two details of the surface rules: a selected member is
+a package root, so `use sys::raw::write;` reaches it from a program
+and from a member beside it (the follow-up this ADR recorded), and an
+explicit `use` shadows a facade's name rather than colliding with it,
+so a name the implicit surface already offers is still reachable; two
+explicit imports under one name remain an ambiguity.
+
 ## Consequences
 
 - The special-casing by name goes away. `write` and `format` are

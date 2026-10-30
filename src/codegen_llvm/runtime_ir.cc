@@ -47,6 +47,7 @@ class RuntimeBuilder {
         freestanding_(freestanding),
         backtrace_(backtrace),
         comdat_(llvm::Triple(target.triple).isOSBinFormatCOFF()),
+        mach_o_(llvm::Triple(target.triple).isOSBinFormatMachO()),
         arch_(target.triple.substr(0, target.triple.find('-'))),
         usize_(target.width == ir::PointerWidth::W64 ? builder_.getInt64Ty()
                                                      : builder_.getInt32Ty()) {}
@@ -77,7 +78,8 @@ class RuntimeBuilder {
         declared("alcy_check_overflow") || declared("alcy_check_shift");
     const bool panic = declared("alcy_panic") || alloc || checked;
     const bool sys_write = declared("alcy_sys_write");
-    if (print || println || eprint || eprintln || panic || sys_write) {
+    const bool sys_read = declared("alcy_sys_read");
+    if (print || println || eprint || eprintln || panic) {
       build_write_all();
     }
     if (print) {
@@ -143,6 +145,9 @@ class RuntimeBuilder {
     if (sys_write) {
       build_sys_write();
     }
+    if (sys_read) {
+      build_sys_read();
+    }
     if (alloc) {
       build_alloc();
     }
@@ -184,6 +189,7 @@ class RuntimeBuilder {
   struct SyscallAbi {
     const char* text;
     const char* constraints;
+    u64 read;
     u64 write;
     u64 exit;
     u64 mmap;
@@ -197,6 +203,7 @@ class RuntimeBuilder {
           .constraints =
               "={rax},0,{rdi},{rsi},{rdx},{r10},{r8},{r9},~{rcx},~{r11},"
               "~{memory}",
+          .read = 0,
           .write = 1,
           .exit = 60,
           .mmap = 9,
@@ -208,6 +215,7 @@ class RuntimeBuilder {
       out = SyscallAbi{
           .text = "svc #0",
           .constraints = "={x0},{x8},0,{x1},{x2},{x3},{x4},{x5},~{memory}",
+          .read = 63,
           .write = 64,
           .exit = 93,
           .mmap = 222,
@@ -219,6 +227,7 @@ class RuntimeBuilder {
       out = SyscallAbi{
           .text = "ecall",
           .constraints = "={a0},{a7},0,{a1},{a2},{a3},{a4},{a5},~{memory}",
+          .read = 63,
           .write = 64,
           .exit = 93,
           .mmap = 222,
@@ -1100,18 +1109,100 @@ class RuntimeBuilder {
   }
 
   void build_sys_write() {
-    llvm::FunctionType* type = llvm::FunctionType::get(
-        builder_.getVoidTy(),
-        {builder_.getInt32Ty(), builder_.getPtrTy(), usize_}, false);
-    llvm::Function* function = runtime("alcy_sys_write", type);
-    function->setDoesNotThrow();
-    llvm::BasicBlock* entry =
-        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    build_faithful_io("alcy_sys_write", /*is_write=*/true);
+  }
 
+  void build_sys_read() {
+    build_faithful_io("alcy_sys_read", /*is_write=*/false);
+  }
+
+  // The faithful descriptor call (ADR-0117): one `write(2)`/`read(2)`,
+  // answering the bytes or `-(errno)`. A short write and an interrupted
+  // call are the caller's to see; the retrying loops stay with the
+  // print hooks and the std's own helpers.
+  void build_faithful_io(std::string_view name, bool is_write) {
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        i64, {builder_.getInt32Ty(), builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime(name, type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
     builder_.SetInsertPoint(entry);
-    Guarded text = guard_null(function->getArg(1), function->getArg(2));
-    builder_.CreateCall(write_all_, {function->getArg(0), text.text, text.len});
-    builder_.CreateRetVoid();
+    llvm::Value* fd_value = function->getArg(0);
+    llvm::Value* data = function->getArg(1);
+    llvm::Value* len = function->getArg(2);
+    if (freestanding_) {
+      // The kernel answers `-errno` itself; there is nothing to fetch.
+      SyscallAbi abi{};
+      CHECK_MSG(syscall_abi(abi),
+                "freestanding runtime on an unsupported target");
+      llvm::Value* zero = llvm::ConstantInt::get(i64, 0);
+      llvm::Value* count = syscall({
+          llvm::ConstantInt::get(i64, is_write ? abi.write : abi.read),
+          builder_.CreateSExt(fd_value, i64),
+          builder_.CreatePtrToInt(data, i64),
+          builder_.CreateZExtOrTrunc(len, i64),
+          zero,
+          zero,
+          zero,
+      });
+      builder_.CreateRet(count);
+      return;
+    }
+    llvm::Value* count = io_call(is_write, fd_value, data, len);
+    llvm::BasicBlock* failed =
+        llvm::BasicBlock::Create(context, "failed", function);
+    llvm::BasicBlock* ok = llvm::BasicBlock::Create(context, "ok", function);
+    llvm::Value* zero = llvm::ConstantInt::get(count->getType(), 0);
+    llvm::Value* refused = builder_.CreateICmpSLT(count, zero, "refused");
+    builder_.CreateCondBr(refused, failed, ok);
+
+    builder_.SetInsertPoint(failed);
+    llvm::Value* negated =
+        builder_.CreateNeg(builder_.CreateSExt(errno_code(), i64), "errno");
+    builder_.CreateRet(negated);
+
+    builder_.SetInsertPoint(ok);
+    builder_.CreateRet(builder_.CreateSExtOrTrunc(count, i64, "count"));
+  }
+
+  // One libc call, with the raw signed result the caller compares; the
+  // Windows entry points take and return the narrower count.
+  llvm::Value* io_call(bool is_write,
+                       llvm::Value* fd_value,
+                       llvm::Value* data,
+                       llvm::Value* len) {
+    if (windows_) {
+      llvm::Function* function = libc(
+          is_write ? "_write" : "_read",
+          llvm::FunctionType::get(builder_.getInt32Ty(),
+                                  {builder_.getInt32Ty(), builder_.getPtrTy(),
+                                   builder_.getInt32Ty()},
+                                  false));
+      return builder_.CreateCall(
+          function,
+          {fd_value, data, builder_.CreateTrunc(len, builder_.getInt32Ty())},
+          "count");
+    }
+    llvm::Function* function =
+        libc(is_write ? "write" : "read",
+             llvm::FunctionType::get(
+                 usize_, {builder_.getInt32Ty(), builder_.getPtrTy(), usize_},
+                 false));
+    return builder_.CreateCall(function, {fd_value, data, len}, "count");
+  }
+
+  // The number the last failed call left, read from the C library's
+  // thread-local slot.
+  llvm::Value* errno_code() {
+    const char* slot_name =
+        windows_ ? "_errno" : (mach_o_ ? "__error" : "__errno_location");
+    llvm::Function* slot = libc(
+        slot_name, llvm::FunctionType::get(builder_.getPtrTy(), {}, false));
+    return builder_.CreateLoad(builder_.getInt32Ty(),
+                               builder_.CreateCall(slot, {}, "slot"), "errno");
   }
 
   // Allocation failure is a defined abort, matching the panic path:
@@ -1398,6 +1489,9 @@ class RuntimeBuilder {
   // Whether a discardable definition needs a comdat to dedup by name:
   // only COFF resolves weak externals through per-object defaults.
   bool comdat_;
+  // Whether the C library's error slot is spelled `__error` (Mach-O)
+  // rather than `__errno_location`.
+  bool mach_o_;
   std::string arch_;
   llvm::IntegerType* usize_;
   llvm::Constant* empty_text_ = nullptr;

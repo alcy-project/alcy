@@ -42,7 +42,10 @@
 - Three namespaces exist: types, values, and modules. A struct name
   may denote both its type and its constructor expressions.
 - Resolution order is lexical scope, then module, then the core
-  prelude. Ambiguity is a compile-time error.
+  prelude. Ambiguity is a compile-time error. An explicit `use`
+  shadows the implicit surface's name, so a name the prelude already
+  offers is still reachable explicitly; two explicit imports under
+  one name remain an ambiguity.
 
 ## Suites
 

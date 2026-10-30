@@ -761,6 +761,131 @@ TEST_CASE("Resolve nests a facade beside its sibling modules") {
   CHECK(found);
 }
 
+// The staged sources one case declares, with the facade marked, plus
+// the policy row that makes `dep` a package root (the way a selected
+// standard-library member is one).
+struct StagedCase {
+  std::deque<std::string> prelude_storage;
+  std::vector<ModuleInput> prelude_inputs;
+  PackagePolicy policy{"dep", "alcy/std", {}, {}};
+};
+
+bool stage_dep(Fixture& f, VirtualDir& dir, StagedCase& staged) {
+  for (const auto& entry :
+       {std::tuple<std::string_view, std::string_view, bool>{
+            "dep/prelude.al", "dep/prelude.al", true},
+        std::tuple<std::string_view, std::string_view, bool>{
+            "dep/mem.al", "dep/mem.al", false},
+        std::tuple<std::string_view, std::string_view, bool>{
+            "dep/other.al", "dep/other.al", false}}) {
+    const std::string_view name = std::get<0>(entry);
+    const std::string_view rel = std::get<1>(entry);
+    const bool facade = std::get<2>(entry);
+    const tests::VirtualSource* const file = dir.find(rel);
+    if (file == nullptr) {
+      return false;
+    }
+    staged.prelude_storage.emplace_back(name);
+    staged.prelude_inputs.push_back(
+        {staged.prelude_storage.back(),
+         f.sources.add_virtual(file->name, file->bytes), facade});
+  }
+  return true;
+}
+
+TEST_CASE("An explicit use shadows a facade's import") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {
+                         {"main.al", "use dep::mem::write;\nfn main() {}\n"},
+                         {"dep/prelude.al", "pub use package::other::write;\n"},
+                         {"dep/mem.al", "pub fn write() {}\n"},
+                         {"dep/other.al", "pub fn write() {}\n"},
+                     });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  std::deque<std::string> name_storage;
+  std::vector<ModuleInput> inputs;
+  std::optional<ModuleInput> root_input =
+      tests::register_source(f.sources, dir, "main.al", true, name_storage);
+  CHECK(root_input.has_value());
+  if (!root_input.has_value()) {
+    return;
+  }
+  inputs.push_back(*root_input);
+  StagedCase staged;
+  CHECK(stage_dep(f, dir, staged));
+  base::Result<ModuleTree, diag::Reported> resolved = pipeline::resolve_inputs(
+      f.ctx, root_input->id, inputs, "testpkg", staged.prelude_inputs, {}, {},
+      std::span<const PackagePolicy>{&staged.policy, 1});
+  CHECK(resolved.is_ok());
+  if (resolved.is_err()) {
+    return;
+  }
+  ModuleTree tree = std::move(resolved).unwrap();
+  CHECK(!f.bag.has_errors());
+  const ModuleNode* root = find_module(tree, "");
+  const ModuleNode* mem = find_module(tree, "dep::mem");
+  CHECK(root != nullptr);
+  CHECK(mem != nullptr);
+  if (root == nullptr || mem == nullptr) {
+    return;
+  }
+  u32 mem_index = 0;
+  for (u32 i = 0; i < static_cast<u32>(tree.modules.size()); ++i) {
+    if (tree.modules[i] == mem) {
+      mem_index = i;
+    }
+  }
+  bool found = false;
+  for (const Import& import : root->imports) {
+    if (import.ns == Namespace::Value && import.name == "write") {
+      found = true;
+      CHECK(import.target_module == mem_index);
+    }
+  }
+  CHECK(found);
+}
+
+TEST_CASE("Two explicit imports under one name stay ambiguous") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {
+                         {"main.al",
+                          "use dep::mem::write;\nuse dep::other::write;\n"
+                          "fn main() {}\n"},
+                         {"dep/prelude.al", "pub use package::other::write;\n"},
+                         {"dep/mem.al", "pub fn write() {}\n"},
+                         {"dep/other.al", "pub fn write() {}\n"},
+                     });
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  std::deque<std::string> name_storage;
+  std::vector<ModuleInput> inputs;
+  std::optional<ModuleInput> root_input =
+      tests::register_source(f.sources, dir, "main.al", true, name_storage);
+  CHECK(root_input.has_value());
+  if (!root_input.has_value()) {
+    return;
+  }
+  inputs.push_back(*root_input);
+  StagedCase staged;
+  CHECK(stage_dep(f, dir, staged));
+  base::Result<ModuleTree, diag::Reported> resolved = pipeline::resolve_inputs(
+      f.ctx, root_input->id, inputs, "testpkg", staged.prelude_inputs, {}, {},
+      std::span<const PackagePolicy>{&staged.policy, 1});
+  (void)resolved;
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Resolve injects prelude imports") {
   VirtualDir dir;
   const bool setup = write_all(dir, {

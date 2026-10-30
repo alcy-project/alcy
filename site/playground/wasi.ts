@@ -7,8 +7,8 @@
 // which is how it is smoke-tested.
 //
 // The module contract is fixed by `src/playground/`: the program
-// exports `_start` and its memory, and imports `fd_write` and `proc_exit`
-// from `wasi_snapshot_preview1`.
+// exports `_start` and its memory, and imports `fd_read`, `fd_write`,
+// and `proc_exit` from `wasi_snapshot_preview1`.
 
 "use strict";
 
@@ -69,6 +69,13 @@ interface WorkerGlobalScope {
             total += len;
           }
           view.setUint32(nwrittenPtr, total, true);
+          return 0;
+        },
+
+        // The page has no input; every read is the end of input.
+        fd_read(fd: number, iovsPtr: number, iovsLen: number, nreadPtr: number): number {
+          const memory = getMemory();
+          new DataView(memory.buffer).setUint32(nreadPtr, 0, true);
           return 0;
         },
 

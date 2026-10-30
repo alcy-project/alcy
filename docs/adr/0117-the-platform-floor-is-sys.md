@@ -39,7 +39,9 @@ keeping OS facilities in `core` makes the suite's one intact rule
 floor: the calls a program makes to the system.**
 
 - `sys` declares `Fd` (a nominal handle rather than a bare `i32`),
-  `STDIN`, `STDOUT`, `STDERR`, and the faithful calls on a
+  the standard descriptors (`Fd::stdin()`, `Fd::stdout()`,
+  `Fd::stderr()` — associated functions, because a `const` holding a
+  struct value does not lower yet), and the faithful calls on a
   descriptor:
   - `read(fd: Fd, out: &mut [u8]) -> Result<usize, OsError>` and
     `write(fd: Fd, bytes: str) -> Result<usize, OsError>`, one

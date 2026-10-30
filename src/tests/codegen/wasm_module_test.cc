@@ -89,8 +89,8 @@ FuncBody add_one_body() {
 }
 
 // The nth body in the code section. The section lists one body per
-// defined function in wasm index order; the two WASI imports take no
-// body, so the seven runtime functions come first and a module's own
+// defined function in wasm index order; the three WASI imports take no
+// body, so the ten runtime functions come first and a module's own
 // functions follow them.
 std::span<const u8> code_body_at(const std::vector<u8>& module, u32 index) {
   for (const Section& section : read_sections(module)) {
@@ -111,10 +111,10 @@ std::span<const u8> code_body_at(const std::vector<u8>& module, u32 index) {
   return {};
 }
 
-// The nine defined runtime functions occupy the first bodies; a module
+// The ten defined runtime functions occupy the first bodies; a module
 // with one own function finds that body here. Pinning the number keeps
 // the test honest if the runtime's function count moves.
-constexpr u32 FIRST_PROGRAM_BODY = 9;
+constexpr u32 FIRST_PROGRAM_BODY = 10;
 
 // One verified free function: `fn not_bool() -> bool { ret !true }`.
 // The operand is a literal, so the logical-not sequence is the only one
@@ -438,8 +438,8 @@ TEST_CASE("A failed wasm allocation panics instead of trapping") {
   // `memory.grow 0; i32.const -1; i32.eq`: grow reports failure as -1.
   const std::array<u8, 5> grow_check{0x40, 0x00, 0x41, 0x7F, 0x46};
   CHECK(any_body_contains(module, grow_check));
-  // `call 5` is the runtime's panic and `unreachable` ends the branch.
-  const std::array<u8, 3> panic_call{0x10, 0x05, 0x00};
+  // `call 6` is the runtime's panic and `unreachable` ends the branch.
+  const std::array<u8, 3> panic_call{0x10, 0x06, 0x00};
   CHECK(any_body_contains(module, panic_call));
   // And the message the panic writes is part of the module's data.
   constexpr std::string_view MESSAGE = "allocation failed";

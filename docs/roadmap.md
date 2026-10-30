@@ -174,20 +174,25 @@ peripheral work lives in `backlog.md`. The language record lives in
   `docs/adr/0078-the-summary-a-dependent-reads.md`; the pieces
   are named in `docs/spec/deferred.md`.
 
-- [ ] The platform floor: a core-only `sys`, and the OS calls out of
+- [x] The platform floor: a core-only `sys`, and the OS calls out of
   `core`.
 
-  ADR-0117. A new suite member depending on `core` alone owns the
-  calls to the system: `Fd`, the standard descriptors, the faithful
-  one-call `read`/`write` that reports short and interrupted results
-  as themselves, `OsError` over the raw errno, and the process
-  arguments. The six declarations in `core/mem.al` move out - the
-  descriptor call and the arguments to `sys`, the whole-file helpers
-  to `io` - and `core`'s prelude re-exports retire. `sys_write`'s
-  write-all meaning goes back to the print hooks (ADR-0023), a
-  `sys_read` intrinsic and its LLVM/WASI runtime pieces land, and
-  `items.md`'s intrinsic list follows. The exe runner learns an input
-  field in `expect.toml` so programs that read can be tested.
+  ADR-0117 landed: `sys` depends on `core` alone and owns `Fd` with
+  the standard descriptors (associated functions), the faithful
+  `read`/`write` that reports short and interrupted results as
+  themselves, `OsError` over the raw errno, and the process
+  arguments. The six declarations in `core/mem.al` moved out - the
+  descriptor calls and the arguments to `sys`, the whole-file helpers
+  to `io` - and `core`'s prelude re-exports retired. `sys_write` is
+  one `write(2)` now and the write-all loop stayed with the print
+  hooks (ADR-0023); `sys_read` joined it, and the runtimes answer
+  `-(errno)` (LLVM through the C library's error slot, freestanding
+  through the kernel, wasm through WASI's `fd_read`/`fd_write`, whose
+  playground host answers end of input). The landing also settled two
+  surface rules: a selected member is a package root
+  (`use sys::raw::write`), and an explicit `use` shadows a facade's
+  name - the follow-up ADR-0016 recorded. The exe runner's stdin field
+  still waits on the input layer's cases.
 
 - [ ] The standard library's surface is impls and specs.
 

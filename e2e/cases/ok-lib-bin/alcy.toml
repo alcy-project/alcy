@@ -8,6 +8,7 @@ include = ["main", "lib"]
 
 [dependencies]
 "alcy/std/core" = {}
+"alcy/std/sys" = {}
 "alcy/std/alloc" = {}
 "alcy/std/collections" = {}
 "alcy/std/arch" = {}

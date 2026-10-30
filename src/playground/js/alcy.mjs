@@ -12,9 +12,10 @@
 //   const result = alcy.compile("fn main() { println(\"hi\") }");
 //   const { stdout, exitCode } = await alcy.run(result.wasm);
 //
-// `run` implements only the two imports a produced module declares
-// (`fd_write` and `proc_exit`), so a page needs no WASI runtime behind
-// it. It is the module's own host, not a general-purpose one.
+// `run` implements only the imports a produced module declares
+// (`fd_read`, `fd_write`, and `proc_exit`), so a page needs no WASI
+// runtime behind it. It is the module's own host, not a general-purpose
+// one; it has no input, so every read answers the end of input.
 
 // The `AlcyResult` layout on wasm32, as 32-bit words. `playground.h` is
 // the definition; this table is the one place the JS side names it.
@@ -99,6 +100,11 @@ async function run(wasmBytes) {
           written += len;
         }
         view.setUint32(writtenPtr, written, true);
+        return 0;
+      },
+      fd_read: (fd, iovs, iovsLen, readPtr) => {
+        // The playground has no input; every read is the end of input.
+        new DataView(memory.buffer).setUint32(readPtr, 0, true);
         return 0;
       },
       proc_exit: (code) => {

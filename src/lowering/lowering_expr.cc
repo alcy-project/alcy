@@ -1623,15 +1623,54 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
         emit(ir::Opcode::ExtractValue, ptr_ty, {material.op, index_operand(0)});
     const ir::RegisterIdx len = emit(ir::Opcode::ExtractValue, usize_ty,
                                      {material.op, index_operand(1)});
+    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
     const ir::ExternalFunctionIdx ext = declare_external(
-        "alcy_sys_write", builder.primitive(ir::TypeTag::Void),
+        "alcy_sys_write", i64_ty,
         {builder.primitive(ir::TypeTag::I32), ptr_ty, usize_ty});
-    emit_void(
-        ir::Opcode::Call,
+    const ir::RegisterIdx dst = emit(
+        ir::Opcode::Call, i64_ty,
         {builder.operand(ir::Operand::from_external_function(
              ext, builder.primitive(ir::TypeTag::Function))),
          use_value(fd), to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
-    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+  }
+  if (name == "sys_read") {
+    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    if (call.args.size() != 3) {
+      internal(node.span, "intrinsic arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    Val fd = lower_expr(call.args[0], nullptr);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    Val out = lower_expr(call.args[1], &sig.params[1]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    Val len = lower_expr(call.args[2], &sig.params[2]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+    const ir::TypeIdx usize_ty = usize_type();
+    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+    const ir::ExternalFunctionIdx ext = declare_external(
+        "alcy_sys_read", i64_ty,
+        {builder.primitive(ir::TypeTag::I32), ptr_ty, usize_ty});
+    const ir::RegisterIdx dst =
+        emit(ir::Opcode::Call, i64_ty,
+             {builder.operand(ir::Operand::from_external_function(
+                  ext, builder.primitive(ir::TypeTag::Function))),
+              use_value(fd), arg_for(out, sig.params[1]),
+              arg_for(len, sig.params[2])});
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
   }
   if (name == "memcopy") {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();

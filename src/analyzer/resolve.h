@@ -37,6 +37,10 @@ struct Import {
   u32 target_module;
   std::string_view member;
   bool is_pub;
+  // Whether a facade put the name here rather than the module's own
+  // `use`: an explicit import shadows the facade, and two explicit
+  // imports under one name stay an error.
+  bool injected = false;
 };
 
 // The module index that names no module. Zero is the entry module, so the

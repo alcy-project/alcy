@@ -4,6 +4,7 @@
 #include "analyzer/resolve.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <span>
 #include <string>
 #include <string_view>
@@ -537,7 +538,8 @@ class Resolver {
         }
       }
       if (!imported) {
-        module_imports[m].push_back(Import{name, ns, target, member, false});
+        module_imports[m].push_back(
+            Import{name, ns, target, member, false, /*injected=*/true});
       }
     }
   }
@@ -599,13 +601,23 @@ class Resolver {
       (void)index;
       return;
     }
-    for (const Import& prior : module_imports[module]) {
-      if (prior.ns == ns && prior.name == name) {
+    for (usize i = 0; i < module_imports[module].size(); ++i) {
+      const Import& prior = module_imports[module][i];
+      if (prior.ns != ns || prior.name != name) {
+        continue;
+      }
+      // An explicit import shadows the facade's; two explicit imports
+      // under one name are still an ambiguity (ADR-0016's two
+      // surfaces: the facade is a default, not a lock).
+      if (!prior.injected) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateImport>(
             DiagCode::AmbiguousImport, use_node.span, name);
         (void)index;
         return;
       }
+      module_imports[module].erase(module_imports[module].begin() +
+                                   static_cast<std::ptrdiff_t>(i));
+      break;
     }
     module_imports[module].push_back(
         Import{name, ns, target, member, use_node.is_pub});
@@ -951,6 +963,28 @@ class Resolver {
       if (!stage_dependencies(dependencies)) {
         return ModuleTree{};
       }
+    }
+    // A selected standard-library member is a package root: a `use`
+    // head names one (`sys::raw::write`), from the user's package and
+    // from a member beside it (ADR-0016's follow-up). Reachability is
+    // not trimmed to a member's `[modules] export` yet, and a member's
+    // facade stays the only implicit surface.
+    for (const PackagePolicy& policy : package_policies_) {
+      u32 member_root = NO_MODULE;
+      for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
+        if (modules[m]->path == policy.package && parents[m] == NO_MODULE &&
+            modules[m]->is_staged) {
+          member_root = m;
+          break;
+        }
+      }
+      if (member_root == NO_MODULE) {
+        continue;
+      }
+      const u32 member_index = static_cast<u32>(package_roots_.size());
+      package_roots_.push_back(
+          PackageRoot{policy.package, member_root, /*trimmed=*/false, {}});
+      module_roots_[member_root] = member_index;
     }
     // Every module now exists and every edge is in place, so the
     // children spans are taken here rather than in build_tree: the

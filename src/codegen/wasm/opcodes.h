@@ -50,6 +50,7 @@ constexpr u8 OP_I32_MUL = 0x6C;
 constexpr u8 OP_I32_AND = 0x71;
 constexpr u8 OP_I32_SHL = 0x74;
 constexpr u8 OP_I32_SHR_U = 0x76;
+constexpr u8 OP_I64_EXTEND_I32_S = 0xAC;
 
 // The body of a `loop` or `block` with no parameters and no results.
 constexpr u8 OP_BLOCK_VOID = 0x40;

@@ -69,19 +69,21 @@ class Emitter {
   // The function index space: the two WASI imports, then the runtime this
   // emitter defines, then the program's functions, then `_start`.
   static constexpr u32 FD_WRITE = 0;
-  static constexpr u32 PROC_EXIT = 1;
-  static constexpr u32 WRITE_ALL = 2;
-  static constexpr u32 PRINT = 3;
-  static constexpr u32 PRINTLN = 4;
-  static constexpr u32 PANIC = 5;
-  static constexpr u32 SYS_WRITE = 6;
-  static constexpr u32 ALLOC = 7;
-  static constexpr u32 DEALLOC = 8;
-  static constexpr u32 CHECK_OVERFLOW = 9;
-  static constexpr u32 CHECK_SHIFT = 10;
+  static constexpr u32 FD_READ = 1;
+  static constexpr u32 PROC_EXIT = 2;
+  static constexpr u32 WRITE_ALL = 3;
+  static constexpr u32 PRINT = 4;
+  static constexpr u32 PRINTLN = 5;
+  static constexpr u32 PANIC = 6;
+  static constexpr u32 SYS_WRITE = 7;
+  static constexpr u32 ALLOC = 8;
+  static constexpr u32 DEALLOC = 9;
+  static constexpr u32 CHECK_OVERFLOW = 10;
+  static constexpr u32 CHECK_SHIFT = 11;
+  static constexpr u32 SYS_READ = 12;
   // The runtime occupies [0, RUNTIME_FUNCTIONS); the program's functions
   // and `_start` follow it.
-  static constexpr u32 RUNTIME_FUNCTIONS = 11;
+  static constexpr u32 RUNTIME_FUNCTIONS = 13;
 
   // The globals the module defines: the shadow stack pointer and the
   // bump allocator's cursor.
