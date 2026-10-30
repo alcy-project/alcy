@@ -186,9 +186,19 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
 
   const std::span<const std::string_view> positionals = matches.positionals();
   if (c.subcommand == Subcommand::Fmt) {
-    // fmt takes any number of files: the first positional is not a
-    // input path, and the rest are not program arguments.
-    c.fmt_files.assign(positionals.begin(), positionals.end());
+    // `--file` names the (possibly single) file to format; positionals
+    // are the package directory.
+    if (auto files = matches.get_all<std::string_view>("file"); files.is_ok()) {
+      for (std::string_view name : std::move(files).unwrap()) {
+        if (!name.empty()) {
+          c.fmt_files.push_back(name);
+        }
+      }
+    }
+    if (!positionals.empty()) {
+      c.input = positionals[0];
+      c.program_args.assign(positionals.begin() + 1, positionals.end());
+    }
   } else if (!positionals.empty()) {
     c.input = positionals[0];
     c.program_args.assign(positionals.begin() + 1, positionals.end());
@@ -207,6 +217,22 @@ ParseOutcome to_outcome(arg::Parser& parser,
         return std::move(extracted).unwrap_err();
       }
       CliConfig config = std::move(extracted).unwrap();
+      // Package-target commands take a directory positionally; a single
+      // file must be named with `--file` (compile alone keeps its file
+      // positional, being the language's machine-facing entry point).
+      if (config.subcommand == Subcommand::Build ||
+          config.subcommand == Subcommand::Check ||
+          config.subcommand == Subcommand::Fmt ||
+          config.subcommand == Subcommand::Lint) {
+        if (!config.input.empty() && config.input.size() > 3 &&
+            config.input.substr(config.input.size() - 3) == ".al") {
+          ParseFailure failure;
+          arg::ParseError error(arg::ErrorCode::InvalidValue, "positional",
+                                "must be a package directory; use --file");
+          failure.errors.push_back(std::move(error));
+          return failure;
+        }
+      }
       if (config.subcommand == Subcommand::None) {
         if (!config.input.empty()) {
           UnknownSubcommand unknown{std::string(config.input), ""};
@@ -363,6 +389,10 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliNoCacheHelp))
                        .is_flag(true)
                        .build())
+          .add_arg(arg::ArgBuilder("file")
+                       .help(usage.text(i18n::Key::CliCheckFileHelp))
+                       .default_value("")
+                       .build())
           .build());
   builder.add_subcommand(
       build_subcommand("compile",
@@ -490,6 +520,10 @@ arg::Parser build_parser(i18n::Language language) {
           .build());
   builder.add_subcommand(
       build_subcommand("fmt", std::string(usage.text(i18n::Key::CliFmtAbout)))
+          .add_arg(arg::ArgBuilder("file")
+                       .help(usage.text(i18n::Key::CliLintFileHelp))
+                       .default_value("")
+                       .build())
           .add_arg(arg::ArgBuilder("stdin")
                        .help("Read the program from standard input.")
                        .is_flag(true)

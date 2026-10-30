@@ -20,6 +20,7 @@
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/profile.h"
+#include "pipeline/std_select.h"
 #include "pkg/manifest.h"
 #include "pkg/profile.h"
 #include "pkg/toolchain.h"
@@ -35,6 +36,39 @@ ResultCode run_build(const CliConfig& config,
   const ResultCode failed = ResultCode::BuildFailed;
   // Validation keeps single files out: `build` takes a package
   // directory, and `compile` takes the file.
+  if (!config.file.empty()) {
+    // `--file` builds one source with the command-line profile, the way
+    // `compile` does, while honoring `--emit` and `--output`. A goal
+    // package's manifest is not consulted; put the file in a package
+    // and build it normally when that matters.
+    const pipeline::StdSelection selection = pipeline::full_std_selection();
+    const pipeline::LinkOptions link =
+        resolve_link_options(config, pkg::Toolchain{});
+    base::Result<pipeline::BuildProfile, diag::Reported> resolved =
+        pipeline::resolve_profile(
+            pipeline::ProfileRequest{.name = config.profile,
+                                     .on_panic = config.on_panic,
+                                     .optimize = config.optimize,
+                                     .overflow_checks = config.overflow_checks},
+            pkg::Profiles{}, ctx.bag);
+    if (resolved.is_err() || ctx.bag.has_errors()) {
+      return failed;
+    }
+    const pipeline::BuildProfile profile = std::move(resolved).unwrap();
+    resolve_backend_options(config, ctx, profile);
+    const pipeline::BuildPlan plan{.profile = profile, .link = link};
+    base::Result<std::string, diag::Reported> res = pipeline::build_single_file(
+        ctx, config.file, config.output, plan, config.emit, selection);
+    envelope.trace = trace.take_events();
+    if (res.is_err() || ctx.bag.has_errors()) {
+      return failed;
+    }
+    envelope.status = Status::Ok;
+    envelope.outcome = Outcome::Built;
+    record_output(std::move(res).unwrap(), envelope);
+    return ResultCode::Success;
+  }
+
   const std::string_view raw_dir = config.input.empty() ? "." : config.input;
   base::Result<pipeline::ManifestProbe, diag::Reported> probe =
       pipeline::require_package_manifest(ctx, raw_dir, false);
