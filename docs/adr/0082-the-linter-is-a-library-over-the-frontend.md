@@ -110,3 +110,10 @@ file is read, so a flag wins over lint.toml and the loudest of two flags
 naming one rule wins. The override is a small function over the table
 the config already resolved, which is why the table became mutable
 while a reader still only copies a setting out of it.
+
+`alcy lint --list-rules` prints the registry - the id, default level,
+and summary of every rule - and stops before a package is read, so a
+reader discovers what a run could report without one; `--json` makes
+the same table one document. A command that pipes its own result sets
+the envelope's `Piped` outcome, and the reporter writes no JSON beside
+it, which is what keeps standard output a single document.

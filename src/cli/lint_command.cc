@@ -3,6 +3,7 @@
 
 #include "cli/lint_command.h"
 
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <string>
@@ -24,6 +25,7 @@
 #include "linter/fix.h"
 #include "linter/level.h"
 #include "linter/lint.h"
+#include "linter/rule.h"
 #include "path/path.h"
 #include "pipeline/artifact.h"
 #include "pipeline/pipeline_context.h"
@@ -237,6 +239,51 @@ ResultCode lint_result_code(const pipeline::PipelineContext& ctx) {
   return ResultCode::Success;
 }
 
+// The rule table as text, one rule per line: the id, its default level,
+// and the summary. The id column is padded so a reader can scan the
+// levels down a terminal.
+std::string rules_text() {
+  const std::span<const linter::Rule> rules = linter::all_rules();
+  usize width = 0;
+  for (const linter::Rule& rule : rules) {
+    width = std::max(width, rule.id.size());
+  }
+  std::string out;
+  for (const linter::Rule& rule : rules) {
+    out += rule.id;
+    out.append(width - rule.id.size(), ' ');
+    out += "  ";
+    out += linter::lint_level_name(rule.default_level);
+    out += "  ";
+    out += rule.summary;
+    out += '\n';
+  }
+  return out;
+}
+
+// The same table as one JSON document. Rule ids, levels, and summaries
+// are compile-time ASCII holding no character JSON escapes, so the
+// fields are written directly.
+std::string rules_json() {
+  std::string out = R"({"version":1,"rules":[)";
+  bool first = true;
+  for (const linter::Rule& rule : linter::all_rules()) {
+    if (!first) {
+      out += ',';
+    }
+    first = false;
+    out += R"({"id":")";
+    out += rule.id;
+    out += R"(","default":")";
+    out += linter::lint_level_name(rule.default_level);
+    out += R"(","summary":")";
+    out += rule.summary;
+    out += R"("})";
+  }
+  out += "]}";
+  return out;
+}
+
 }  // namespace
 
 ResultCode run_lint(const CliConfig& config,
@@ -245,6 +292,17 @@ ResultCode run_lint(const CliConfig& config,
   TraceSession trace(ctx, config.time_trace);
   envelope.bag = &ctx.bag;
   envelope.sources = &ctx.sources;
+
+  // The listing reads no package, so it answers before a target is
+  // resolved. It writes its own result, so the reporter adds nothing
+  // after it on standard output.
+  if (config.lint_list_rules) {
+    const std::string listing = config.json ? rules_json() : rules_text();
+    io::write(io::STDOUT_FD, listing.data(), listing.size());
+    envelope.status = Status::Ok;
+    envelope.outcome = Outcome::Piped;
+    return ResultCode::Success;
+  }
 
   linter::LintConfig lint_config{};
   base::Result<LintTarget, diag::Reported> target =

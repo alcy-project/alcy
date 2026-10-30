@@ -109,6 +109,9 @@ struct CliConfig {
   // lint was asked to apply the repairs a rule is sure of, then report
   // what remains.
   bool lint_fix = false;
+  // lint was asked to print the rule table and stop, the shape clang-tidy
+  // spells --list-checks. It needs no target: the registry is the answer.
+  bool lint_list_rules = false;
   // Command-line level overrides for lint, in the order the flags were
   // given within each kind. They edit the resolved table after the file
   // is read, so a flag wins over lint.toml; deny beats warn beats allow

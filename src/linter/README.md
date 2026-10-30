@@ -45,6 +45,13 @@ the file is read, so it wins over lint.toml, and when one rule is named
 by more than one flag the loudest level wins. An unknown id is the same
 error lint.toml reports, so a run that misspells a rule still fails.
 
+`alcy lint --list-rules` prints the registered rules, their default
+levels, and what each reports, the counterpart to clang-tidy's
+`--list-checks`; it reads no package and stops before any file is
+loaded. With `--json` the same table is one JSON document with a
+`rules` array, so a tool reads ids and defaults rather than the
+aligned text.
+
 ## Suppressing a finding
 
 A rule the package config enables can be silenced at the line that

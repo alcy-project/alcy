@@ -372,6 +372,13 @@ TEST_CASE("The root version names the build") {
   }
 }
 
+TEST_CASE("Parse lint list-rules") {
+  const std::string_view args[] = {"alcy", "lint", "--list-rules"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Lint);
+  CHECK(config.lint_list_rules);
+}
+
 TEST_CASE("Parse lint level overrides") {
   const std::string_view args[] = {
       "alcy",    "lint", "--deny", "unused-variable",

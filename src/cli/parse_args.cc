@@ -110,6 +110,8 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   c.stdin_source = matches.get<bool>("stdin").unwrap_or(false);
   c.fmt_check = matches.get<bool>("check").unwrap_or(c.fmt_check);
   c.lint_fix = matches.get<bool>("fix").unwrap_or(c.lint_fix);
+  c.lint_list_rules =
+      matches.get<bool>("list-rules").unwrap_or(c.lint_list_rules);
   // The level overrides are repeatable and read in the order the flags
   // were given, so a later flag of the same kind wins over an earlier
   // one; across kinds the caller applies deny over warn over allow.
@@ -486,6 +488,10 @@ arg::Parser build_parser(i18n::Language language) {
                        .build())
           .add_arg(arg::ArgBuilder("fix")
                        .help(usage.text(i18n::Key::CliLintFixHelp))
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("list-rules")
+                       .help(usage.text(i18n::Key::CliLintListRulesHelp))
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("allow")

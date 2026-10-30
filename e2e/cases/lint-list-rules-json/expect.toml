@@ -1,0 +1,4 @@
+subcommand = "lint"
+args = ["--list-rules", "--json"]
+exit = 0
+contains = ["\"rules\"", "\"unused-variable\""]

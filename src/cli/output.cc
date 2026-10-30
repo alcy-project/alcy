@@ -503,6 +503,12 @@ void report(const Logger& out,
             i18n::Language language,
             bool json) {
   if (json) {
+    // A command that piped its result to standard output wrote that
+    // document itself - a rule listing is one - and a second document
+    // beside it would leave the stream unparsable.
+    if (envelope.outcome == Outcome::Piped) {
+      return;
+    }
     // One document, and it carries the diagnostics inside it, so a reader
     // has one thing to parse whatever the command did.
     out.block(render_json(envelope, language));

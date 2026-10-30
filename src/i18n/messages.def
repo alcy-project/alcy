@@ -541,6 +541,7 @@
   F(CliLintAllowHelp, Note, Pipeline, "Silence a rule (a rule id, or all). Repeatable.") \
   F(CliLintWarnHelp, Note, Pipeline, "Make a rule a warning (a rule id, or all). Repeatable.") \
   F(CliLintDenyHelp, Note, Pipeline, "Make a rule an error (a rule id, or all). Repeatable.") \
+  F(CliLintListRulesHelp, Note, Pipeline, "Print the registered rules and their default levels, then stop.") \
   F(CliLintFixSingular, Note, Pipeline, "fix") \
   F(CliLintFixPlural, Note, Pipeline, "fixes") \
   F(CliLintFindingPlural, Note, Pipeline, "findings") \
