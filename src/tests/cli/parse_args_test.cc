@@ -59,7 +59,11 @@ TEST_CASE("Parse build subcommand") {
                             .lint_allow = {},
                             .lint_warn = {},
                             .lint_deny = {},
-                            .fmt_files = {}});
+                            .fmt_files = {},
+                            .fmt_stdin = false,
+                            .fmt_stdout = false,
+                            .fmt_diff = false,
+                            .fmt_exclude = {}});
 }
 
 TEST_CASE("Parse profile flag") {
@@ -132,10 +136,11 @@ TEST_CASE("Parse new suite flag") {
 }
 
 TEST_CASE("Parse build output flag") {
-  const std::string_view args[] = {"alcy", "build", "main.al", "-o", "main.o"};
+  const std::string_view args[] = {"alcy",    "build", "--file",
+                                   "main.al", "-o",    "main.o"};
   const CliConfig config = parse_ok(args);
   CHECK(config.subcommand == Subcommand::Build);
-  CHECK(config.input == "main.al");
+  CHECK(config.file == "main.al");
   CHECK(config.output == "main.o");
 }
 
