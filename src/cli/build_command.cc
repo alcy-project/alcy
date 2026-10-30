@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "cli/cli_config.h"
+#include "cli/compile_command.h"
 #include "cli/output.h"
 #include "cli/result_code.h"
 #include "cli/trace.h"
@@ -41,7 +42,12 @@ ResultCode run_build(const CliConfig& config,
     // `compile` does, while honoring `--emit` and `--output`. A goal
     // package's manifest is not consulted; put the file in a package
     // and build it normally when that matters.
-    const pipeline::StdSelection selection = pipeline::full_std_selection();
+    base::Result<pipeline::StdSelection, diag::Reported> selected =
+        compile_selection(config, ctx);
+    if (selected.is_err() || ctx.bag.has_errors()) {
+      return failed;
+    }
+    pipeline::StdSelection selection = std::move(selected).unwrap();
     const pipeline::LinkOptions link =
         resolve_link_options(config, pkg::Toolchain{});
     base::Result<pipeline::BuildProfile, diag::Reported> resolved =

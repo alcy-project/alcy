@@ -463,6 +463,7 @@
   F(CliAbout, Note, Pipeline, "alcy language compiler") \
   F(CliBackendHelp, Note, Pipeline, "Which code generation backend writes the machine code: llvm (the default where it was built in), or direct-wasm for alcy's own wasm emitter.") \
   F(CliBuildAbout, Note, Pipeline, "Build a package directory") \
+  F(CliBuildFileHelp, Note, Pipeline, "Build one source file instead of a package directory.") \
   F(CliBuildOutputHelp, Note, Pipeline, "Where the output goes. Empty picks the package's out/ directory.") \
   F(CliBuildTakesDirectory, Note, Pipeline, "The `build` command takes a package directory; use `compile` for a file") \
   F(CliCacheHit, Note, Pipeline, "cache hit") \
@@ -485,6 +486,7 @@
   F(CliFilePlural, Note, Pipeline, "files") \
   F(CliFileSingular, Note, Pipeline, "file") \
   F(CliFmtAbout, Note, Pipeline, "Format source files") \
+  F(CliFmtFileHelp, Note, Pipeline, "Format one source file instead of a package directory.") \
   F(CliFmtCheckHelp, Note, Pipeline, "Report the files whose layout would change, without writing them.") \
   F(CliFmtNotFormatted, Note, Pipeline, "'{}' needs formatting") \
   F(CliFmtReadFailed, Note, Pipeline, "Cannot read '{}'") \

@@ -390,7 +390,7 @@ arg::Parser build_parser(i18n::Language language) {
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("file")
-                       .help(usage.text(i18n::Key::CliCheckFileHelp))
+                       .help(usage.text(i18n::Key::CliBuildFileHelp))
                        .default_value("")
                        .build())
           .build());
@@ -521,7 +521,7 @@ arg::Parser build_parser(i18n::Language language) {
   builder.add_subcommand(
       build_subcommand("fmt", std::string(usage.text(i18n::Key::CliFmtAbout)))
           .add_arg(arg::ArgBuilder("file")
-                       .help(usage.text(i18n::Key::CliLintFileHelp))
+                       .help(usage.text(i18n::Key::CliFmtFileHelp))
                        .default_value("")
                        .build())
           .add_arg(arg::ArgBuilder("stdin")
