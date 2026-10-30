@@ -19,7 +19,7 @@
   --bg-code: #faf9f4;
   --fg: #262420;
   --fg-soft: #635e52;
-  --fg-faint: #8d887b;
+  --fg-faint: #736e61;
   --line: #e5e2da;
   --accent: #e6002d;
   --accent-fg: #ffffff;
@@ -36,9 +36,9 @@
   --radius: 2px;
 }
 
-/* `data-theme` is set before first paint by `shared/boot.js`, from the
-   stored choice or the system preference; `site.ts` keeps the picker and
-   the attribute in step afterwards. */
+/* `boot.js` sets `data-theme` before first paint and `site.ts` keeps it in
+   step with the picker. The media query repeats the palette for a reader
+   whose script never runs; the attribute, when present, wins. */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #131110;
@@ -46,7 +46,7 @@
   --bg-code: #161514;
   --fg: #ebe9e4;
   --fg-soft: #9f9a93;
-  --fg-faint: #726e66;
+  --fg-faint: #8a857c;
   --line: #282623;
   --accent: #f2485f;
   --accent-fg: #2a0a10;
@@ -56,6 +56,27 @@
   --selection: rgba(242, 72, 95, 0.26);
   --accent-strong: #ff8098;
   --focus: rgba(235, 233, 228, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #131110;
+    --bg-soft: #1a1917;
+    --bg-code: #161514;
+    --fg: #ebe9e4;
+    --fg-soft: #9f9a93;
+    --fg-faint: #8a857c;
+    --line: #282623;
+    --accent: #f2485f;
+    --accent-fg: #2a0a10;
+    --error: #f59078;
+    --warning: #e0b55c;
+    --note: #7db4ea;
+    --selection: rgba(242, 72, 95, 0.26);
+    --accent-strong: #ff8098;
+    --focus: rgba(235, 233, 228, 0.6);
+  }
 }
 
 * {
@@ -264,10 +285,9 @@ body.site {
 .theme-toggle {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
+  gap: 6px;
   height: 28px;
-  padding: 0;
+  padding: 0 10px;
   color: var(--fg-soft);
   background: none;
   border: 1px solid transparent;
@@ -278,16 +298,41 @@ body.site {
   border-color: var(--line);
 }
 
-.theme-toggle svg {
-  display: none;
-  width: 16px;
-  height: 16px;
+/* The icon is a mask: the shape comes from the path, the color from the
+   button's own ink, so the three modes need one element and no copy of
+   the geometry in the page. The name beside it is real text, which is
+   what the button says when the stylesheet is gone. */
+/* The row's own "Theme" label names the control, so the button's text
+   stays in the document for a reader without the stylesheet and out of
+   the panel's way otherwise. */
+.theme-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.theme-toggle[data-theme-mode="auto"] .theme-icon:nth-of-type(1),
-.theme-toggle[data-theme-mode="light"] .theme-icon:nth-of-type(2),
-.theme-toggle[data-theme-mode="dark"] .theme-icon:nth-of-type(3) {
-  display: block;
+.theme-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  -webkit-mask: var(--theme-mask) center / contain no-repeat;
+  mask: var(--theme-mask) center / contain no-repeat;
+}
+
+.theme-toggle[data-theme-mode="auto"] {
+  --theme-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.7'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M12 3.5a8.5 8.5 0 0 1 0 17z' fill='%23000' stroke='none'/%3E%3C/svg%3E");
+}
+
+.theme-toggle[data-theme-mode="light"] {
+  --theme-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cpath d='M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4'/%3E%3C/svg%3E");
+}
+
+.theme-toggle[data-theme-mode="dark"] {
+  --theme-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.7' stroke-linejoin='round'%3E%3Cpath d='M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'/%3E%3C/svg%3E");
 }
 
 .language-link {
@@ -504,6 +549,18 @@ body.site {
   color: var(--accent);
 }
 
+/* An arrow, not an icon: the prose stays text and no asset is needed.
+   Only the article's prose is marked, and the site's own address, which
+   appears there as text, is left alone. */
+.guide-article a[href^="http"]:not([href*="alcy-project.github.io"])::after {
+  content: "\2197";
+  font-size: 0.85em;
+  margin-inline-start: 0.15em;
+  color: var(--fg-faint);
+  text-decoration: none;
+  display: inline-block;
+}
+
 .guide-article code {
   padding: 1px 4px;
   background: var(--bg-code);
@@ -674,6 +731,7 @@ body.site {
   color: var(--fg-soft);
 }
 
+/* The syntax colors follow the palette by the same two routes. */
 :root[data-theme="dark"] .hl-keyword,
 :root[data-theme="dark"] .hl-variable-builtin {
   color: #d3a6f5;
@@ -702,6 +760,35 @@ body.site {
   color: #6fc0cf;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hl-keyword,
+  :root:not([data-theme="light"]) .hl-variable-builtin {
+    color: #d3a6f5;
+  }
+
+  :root:not([data-theme="light"]) .hl-string {
+    color: #8fd694;
+  }
+
+  :root:not([data-theme="light"]) .hl-number,
+  :root:not([data-theme="light"]) .hl-constant,
+  :root:not([data-theme="light"]) .hl-type,
+  :root:not([data-theme="light"]) .hl-type-builtin,
+  :root:not([data-theme="light"]) .hl-type-parameter,
+  :root:not([data-theme="light"]) .hl-constructor {
+    color: #d9a96b;
+  }
+
+  :root:not([data-theme="light"]) .hl-function,
+  :root:not([data-theme="light"]) .hl-function-method {
+    color: #82b4f0;
+  }
+
+  :root:not([data-theme="light"]) .hl-property,
+  :root:not([data-theme="light"]) .hl-namespace {
+    color: #6fc0cf;
+  }
+}
 /* The search dialog: one field, one list, opened by the header's
    button, the slash key, or Ctrl/Cmd-K. */
 

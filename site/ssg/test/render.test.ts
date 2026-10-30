@@ -5,8 +5,13 @@ import { equal, match, ok } from "node:assert/strict";
 import { test } from "node:test";
 
 import type { Block } from "../src/markdown.js";
-import { GUIDE_TREE, REFERENCE_TREE, renderNotFound } from "../src/render.js";
-import { canonicalUrl } from "../src/urls.js";
+import {
+  GUIDE_TREE,
+  REFERENCE_TREE,
+  renderNotFound,
+  speculation,
+} from "../src/render.js";
+import { canonicalUrl, SITE_PATH } from "../src/urls.js";
 import { makePage, renderPage } from "./page.js";
 
 // `makePage` and `renderPage` come from the shared reader, so every
@@ -209,4 +214,21 @@ test("the reference does not send a reader back into the guide", () => {
   const target = makePage({ blocks: [prose] });
   const page = renderPage({ blocks: [prose], tree: REFERENCE_TREE, pages: [target] });
   ok(!/pager-onward/.test(page.html));
+});
+
+test("every speculation pattern carries the path the site is published under", () => {
+  // The rules are matched against an absolute path on the server, and
+  // the site is not at the root: a pattern without the base names
+  // nothing and the prerender never happens.
+  const rules = JSON.parse(
+    speculation().replace(/^<script type="speculationrules">/, "").replace(/<\/script>$/, ""),
+  ) as { prerender: { where: { href_matches: string } }[]; prefetch: { where: { href_matches: string } }[] };
+  const patterns = [...rules.prerender, ...rules.prefetch].map((rule) => rule.where.href_matches);
+  equal(patterns.length > 0, true);
+  for (const pattern of patterns) {
+    equal(pattern.startsWith(SITE_PATH), true, `${pattern} starts at the published base`);
+  }
+  // And the base is the project path, not the root, so the assertion
+  // above cannot be satisfied by an empty prefix.
+  equal(SITE_PATH, "/alcy/");
 });

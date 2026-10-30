@@ -75,7 +75,9 @@ test("nothing the reader sees depends on JavaScript being on", () => {
   // A hidden element is a control a script reveals or a panel it fills.
   // Nothing that carries the page's words is ever hidden, and no hidden
   // element wraps the article.
-  const hidden = page.html.match(/<(?!svg|button)[a-z]+[^>]*\bhidden\b[^>]*>/gi) ?? [];
+  // The attribute, not the substring: `aria-hidden` names decoration
+  // that is already invisible to a screen reader and hides no content.
+  const hidden = page.html.match(/<(?!svg|button)[a-z]+[^>]*\shidden(?:\s|>)/gi) ?? [];
   ok(hidden.length > 0, "the article has controls to reveal");
   for (const element of hidden) {
     ok(

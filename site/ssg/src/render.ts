@@ -324,7 +324,11 @@ function pager(page: GuidePage, options: PageOptions): string {
 // and no execution.
 // The reference is the same kind of page, so it is offered on the same
 // terms: two groups, because a rule names one URL pattern.
-const PRERENDERABLE = ["/guide/**", "/reference/**"];
+// The patterns are absolute against the deployed address, which is not
+// the server's root: the site is published under the project path, and a
+// rule written as "/guide/**" would match nothing there and buy no
+// prerender at all. They are built from the one place that knows it.
+const PRERENDERABLE = [`${SITE_PATH}guide/**`, `${SITE_PATH}reference/**`];
 
 // The rules are one script for the whole site, written once here and
 // stamped into every page; a template asks `speculation()` for the same
@@ -337,7 +341,7 @@ function speculationRules(): string {
       eagerness: "moderate",
     })),
     prefetch: [
-      { source: "document", where: { href_matches: "/*" }, eagerness: "moderate" },
+      { source: "document", where: { href_matches: `${SITE_PATH}*` }, eagerness: "moderate" },
     ],
   };
   return '<script type="speculationrules">' + JSON.stringify(rules) + "</script>";

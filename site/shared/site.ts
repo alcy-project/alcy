@@ -68,8 +68,16 @@ export function initThemeToggle(button: HTMLButtonElement): void {
   let mode = storedTheme();
 
   const render = (): void => {
+    const label = t(THEME_LABEL[mode]);
     button.dataset.themeMode = mode;
-    button.setAttribute("aria-label", t(THEME_LABEL[mode]));
+    button.setAttribute("aria-label", label);
+    // The name beside the icon repeats the mode, so it carries the same
+    // string; with the stylesheet gone the button still says which mode
+    // it holds.
+    const name = button.querySelector(".theme-name");
+    if (name !== null) {
+      name.textContent = label;
+    }
   };
 
   applyTheme(mode);
