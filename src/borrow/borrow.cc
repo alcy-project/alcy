@@ -1140,9 +1140,10 @@ class Checker {
   // and the argument evaluation between the two is the window
   // ADR-0012 opens for reads of the place.
   void collect_reserved(const ir::Function& fn) {
-    const usize registers = storage.registers().size();
-    use_count_scratch_.assign(registers, 0);
-    receiver_call_scratch_.assign(registers, 0);
+    // Both scratch vectors are sized with the package and cleared per
+    // register by reset_function, so counting a function touches only what
+    // the function names rather than zeroing every register it cannot.
+    const usize registers = use_count_scratch_.size();
     for (ir::BlockIdx bidx : fn.blocks) {
       for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
         const ir::Instruction& instr = instr_at(iidx);
@@ -1711,6 +1712,8 @@ class Checker {
     path.assign(registers, {});
     flow.assign(registers, {});
     reserved_receiver.assign(registers, 0);
+    use_count_scratch_.assign(registers, 0);
+    receiver_call_scratch_.assign(registers, 0);
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
@@ -1790,6 +1793,8 @@ class Checker {
     home[reg] = NO_ROOT;
     path[reg].clear();
     flow[reg].clear();
+    use_count_scratch_[reg] = 0;
+    receiver_call_scratch_[reg] = 0;
   }
 
   // Clears the scratch for one function. Every register a function reads or
