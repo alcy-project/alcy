@@ -69,6 +69,30 @@ impl Set {
     self.map.clear()
   }
 
+  // A new set with every key of either. Each key is copied the way
+  // `insert` copies one.
+  pub fn union_with(self: &Self, other: &Self) -> Set {
+    mut out := Set::with_capacity(self.len() + other.len())
+    for key in self.iter() {
+      _ := out.insert(key)
+    }
+    for key in other.iter() {
+      _ := out.insert(key)
+    }
+    ret out
+  }
+
+  // A new set with only the keys both hold.
+  pub fn intersection(self: &Self, other: &Self) -> Set {
+    mut out := Set::new()
+    for key in self.iter() {
+      if other.contains(key) {
+        _ := out.insert(key)
+      }
+    }
+    ret out
+  }
+
   // Keys end when the set does; `iter` hands them out while it lives.
   pub fn iter(self: &Self) -> MapKeys<u8> {
     ret self.map.keys()

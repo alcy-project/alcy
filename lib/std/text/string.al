@@ -167,6 +167,35 @@ impl String {
     self[at] = b
   }
 
+  // Inserts every byte of `s` at `at`, shifting the bytes after it up
+  // by its length. `at` must not pass the length, and must fall on a
+  // scalar boundary: a spelling that split a scalar would leave the
+  // bytes ill-formed, so it panics instead.
+  pub fn insert_str(mut self: &mut Self, at: usize, s: str) {
+    if at > self.len {
+      panic("String insert out of bounds")
+    }
+    if !self.as_str().is_char_boundary(at) {
+      panic("String insert splits a character")
+    }
+    n := str_len(s)
+    self.reserve(n)
+    // The shifted run reaches past the old length, so the bytes are
+    // written through the buffer rather than through `self[i]`, which
+    // stops at the length.
+    mut i := self.len
+    while i > at {
+      unsafe { uninit_write(elem_ptr(self.buf, i + n - 1), self[i - 1]) }
+      i = i - 1
+    }
+    mut k := 0 as usize
+    while k < n {
+      unsafe { uninit_write(elem_ptr(self.buf, at + k), str_byte(s, k)) }
+      k = k + 1
+    }
+    self.len = self.len + n
+  }
+
   // Keeps the bytes `keep` accepts, compacting them in place.
   pub fn retain(mut self: &mut Self, keep: (u8) -> bool) {
     mut write := 0 as usize

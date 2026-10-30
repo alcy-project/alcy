@@ -53,7 +53,6 @@ impl str {
     ret str_len(*self) == 0
   }
 
-  // The byte at `at`; in bounds exactly when `at < self.len_bytes()`.
   // The view over the bytes in `[start, end)`. An index past the end
   // clamps, so a span read never leaves the source.
   pub fn byte_slice(self: &Self, start: usize, end: usize) -> str {
@@ -72,8 +71,23 @@ impl str {
     ret str_slice(*self, lo, hi)
   }
 
+  // The byte at `at`; in bounds exactly when `at < self.len_bytes()`.
   pub fn byte(self: &Self, at: usize) -> u8 {
     ret str_byte(*self, at)
+  }
+
+  // Whether `at` falls on a scalar boundary: a position past the end,
+  // or one whose byte does not continue a scalar that began earlier.
+  // A run of continuation bytes with no lead byte in front of it is not
+  // well-formed, so each of its positions answers as a boundary: the
+  // predicate reads one byte, and `utf8::valid` is what judges the
+  // whole text.
+  pub fn is_char_boundary(self: &Self, at: usize) -> bool {
+    if at >= str_len(*self) {
+      ret true
+    }
+    b := str_byte(*self, at)
+    ret b < 0x80u8 || b > 0xBFu8
   }
 
   // Whether the bytes begin with `prefix`. An empty prefix always

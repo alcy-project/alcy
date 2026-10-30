@@ -222,17 +222,12 @@ replaced. The foundations are in `roadmap.md`.
   bounds; `keys()` traversal and `Vec` sorting moved to the roadmap's
   iteration and operator items.
 
-- [ ] Set algebra: `union_with` and `intersection` build a new set from
-  two, and the cases for them were written before either existed. The
-  set carries `insert`, `remove`, `contains`, `is_subset` and
-  `extend` over `str` keys, and a builder returns `bool`, which a
-  statement discards with a warning. The two operations want the same
-  answer: whether a builder's result is the caller's to ignore.
-
-- [ ] `String::insert_str` at a byte index, which `insert_byte` does for
-  one byte. The index must be a character boundary, and nothing yet
-  spells that refusal, so the operation waits on the boundary check
-  `str` slicing shares.
+- [ ] A mutator that answers `bool` is discarded by a plain
+  statement with a warning: `Set::insert`, `Set::remove` and
+  `Map::insert` report what they did, and `a.insert(k)` alone throws
+  the answer away. `#[must_use]` on the return, or a spelling that
+  names the discard, is the decision; it wants one answer for the
+  whole std rather than a `_` at each call site.
 
 - [ ] A spec method's *receiver* bound is still unchecked: a
   declaration stating `fn take<U: PartialEq>(self: &Self) where Self:
