@@ -4,38 +4,19 @@
 import { equal, match, ok } from "node:assert/strict";
 import { test } from "node:test";
 
-import type { GuidePage } from "../src/guide.js";
 import type { Block } from "../src/markdown.js";
-import {
-  GUIDE_TREE,
-  REFERENCE_TREE,
-  renderGuidePage,
-  renderNotFound,
-} from "../src/render.js";
+import { GUIDE_TREE, REFERENCE_TREE, renderNotFound } from "../src/render.js";
 import { canonicalUrl } from "../src/urls.js";
+import { makePage, renderPage } from "./page.js";
 
-function page(language: "en" | "ja", blocks: Block[]): GuidePage {
-  return {
-    sourceRel: "01-x.md",
-    path: "guide/x.html",
-    route: language === "en" ? "guide/x.html" : "ja/guide/x.html",
-    language,
-    order: 1,
-    title: "Title",
-    blocks,
-  };
+// `makePage` and `renderPage` come from the shared reader, so every
+// test sees a page described the same way.
+function page(language: "en" | "ja", blocks: Block[]) {
+  return makePage({ language, blocks });
 }
 
 function render(language: "en" | "ja", blocks: Block[]): string {
-  const target = page(language, blocks);
-  return renderGuidePage(target, {
-    pages: [target],
-    tree: GUIDE_TREE,
-    highlight: (code) => code,
-    resolveLink: (url) => url,
-    boot: "INLINE_BOOT",
-    stamp: { text: "TESTSTAMP", url: "https://example.test/commit/TESTSTAMP" },
-  });
+  return renderPage({ language, blocks }).html;
 }
 
 const sh: Block = { type: "code", language: "sh", text: "echo hi", line: 1 };
@@ -215,29 +196,17 @@ test("the 404 page keeps its links on the deployment root", () => {
   match(html, /href="guide\/"/);
 });
 test("the guide's last page continues into the reference", () => {
-  const first = page("en", [prose]);
-  const last = { ...page("en", [prose]), path: "guide/z.html", route: "guide/z.html", title: "Last" };
-  const html = renderGuidePage(last, {
-    pages: [first, last],
-    tree: GUIDE_TREE,
-    highlight: (code) => code,
-    resolveLink: (url) => url,
-    boot: "INLINE_BOOT",
-    stamp: { text: "TESTSTAMP", url: "" },
-  });
-  match(html, /<a class="pager-onward" href="\.\.\/reference\/index\.html">Next · Reference/);
+  const first = makePage({ blocks: [prose] });
+  const last = { ...first, path: "guide/z.html", route: "guide/z.html", title: "Last" };
+  const page = renderPage({ blocks: [prose], pages: [first, last] });
+  match(
+    page.html,
+    /<a class="pager-onward" href="\.\.\/reference\/index\.html">Next · Reference/,
+  );
 });
 
 test("the reference does not send a reader back into the guide", () => {
-  const target = page("en", [prose]);
-  const html = renderGuidePage(target, {
-    pages: [target],
-    tree: REFERENCE_TREE,
-    highlight: (code) => code,
-    resolveLink: (url) => url,
-    boot: "INLINE_BOOT",
-    stamp: { text: "TESTSTAMP", url: "" },
-  });
-  ok(!/pager-onward/.test(html));
+  const target = makePage({ blocks: [prose] });
+  const page = renderPage({ blocks: [prose], tree: REFERENCE_TREE, pages: [target] });
+  ok(!/pager-onward/.test(page.html));
 });
-

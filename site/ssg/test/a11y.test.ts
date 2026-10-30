@@ -11,89 +11,69 @@ import { equal, ok, match } from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import type { GuidePage } from "../src/guide.js";
 import type { Block } from "../src/markdown.js";
-import {
-  GUIDE_TREE,
-  REFERENCE_TREE,
-  renderGuidePage,
-  renderNotFound,
-} from "../src/render.js";
-
-function page(language: "en" | "ja", blocks: Block[], path = "guide/x.html"): GuidePage {
-  return {
-    sourceRel: "01-x.md",
-    path,
-    route: language === "en" ? path : `${language}/${path}`,
-    language,
-    order: 1,
-    title: "Title",
-    blocks,
-  };
-}
-
-function render(language: "en" | "ja", blocks: Block[]): string {
-  const target = page(language, blocks);
-  return renderGuidePage(target, {
-    pages: [target],
-    tree: GUIDE_TREE,
-    highlight: (code) => code,
-    resolveLink: (url) => url,
-    boot: "INLINE_BOOT",
-    stamp: { text: "TESTSTAMP", url: "https://example.test/commit/TESTSTAMP" },
-  });
-}
+import { REFERENCE_TREE, renderNotFound } from "../src/render.js";
+import { navNames, renderPage } from "./page.js";
 
 const alcy: Block = { type: "code", language: "alcy", text: "fn main() {}", line: 1 };
 const prose: Block = { type: "paragraph", text: "hello", line: 1 };
 
 test("each document declares the language of its own strings", () => {
-  match(render("en", [prose]), /<html lang="en">/);
-  match(render("ja", [prose]), /<html lang="ja">/);
+  match(renderPage({ blocks: [prose] }).html, /<html lang="en">/);
+  match(renderPage({ language: "ja", blocks: [prose] }).html, /<html lang="ja">/);
 });
 
 test("the page's regions are named landmarks", () => {
-  const html = render("en", [prose]);
-  match(html, /<header class="site-header"/);
-  match(html, /<main/);
-  match(html, /<footer class="site-footer"/);
+  const page = renderPage({ blocks: [prose] });
+  const tags = page.landmarks.map((landmark) => landmark.tag);
+  for (const tag of ["header", "main", "footer"]) {
+    ok(tags.includes(tag), `the page has a <${tag}>`);
+  }
   // The banner, the main region, and the contentinfo come from the
   // elements themselves; the navigation and the search need names. The
   // header's nav is named first, so a bare `<nav[^>]*aria-label` would
   // be satisfied by the article's own contents and let it stay silent.
-  match(html, /<nav class="site-nav" aria-label="[^"]+"/);
-  match(html, /<nav[^>]*aria-label="/);
+  match(page.html, /<nav class="site-nav" aria-label="[^"]+"/);
+  ok(navNames(page).length > 0, "the page has a named nav");
 });
 
 test("no two landmarks answer to the same name", () => {
   // Repeated regions are leaf nodes in a screen reader's landmark list,
   // so two called "Guide" would be told apart by position alone.
-  const html = render("en", [prose]);
-  const names = Array.from(html.matchAll(/<nav[^>]*aria-label="([^"]*)"/g), (m) => m[1] ?? "");
-  ok(names.length >= 3, "the header, the contents, and the pager are navs");
+  const page = renderPage({ blocks: [prose] });
+  ok(navNames(page).length >= 3, "the header, the contents, and the pager are navs");
   // Every nav carries a name: a missing one would read as `""` and pass
   // a set-comparison while leaving the region silent.
-  const silent = names.filter((name) => name.trim() === "");
-  equal(silent.length, 0, `${names.join(", ")} all name their region`);
-  equal(new Set(names).size, names.length, `${names.join(", ")} name distinct regions`);
+  const silent = navNames(page).filter((name) => name.trim() === "");
+  equal(silent.length, 0, `${navNames(page).join(", ")} all name their region`);
+  equal(
+    new Set(navNames(page)).size,
+    navNames(page).length,
+    `${navNames(page).join(", ")} name distinct regions`,
+  );
+});
+
+test("the current page is marked, not just coloured", () => {
+  const page = renderPage({ blocks: [prose] });
+  match(page.html, /aria-current="page"/);
 });
 
 test("a control that ships hidden is still describable when it appears", () => {
-  const html = render("en", [alcy]);
+  const page = renderPage({ blocks: [alcy] });
   // The row is hidden until the script reveals it, and the buttons are
   // real buttons, so the keyboard reaches them the moment it appears.
-  match(html, /<div class="code-actions" hidden>/);
-  match(html, /<button type="button" data-action="copy">Copy<\/button>/);
-  match(html, /<button type="button" data-action="run">Run<\/button>/);
-  match(html, /data-action="edit" aria-pressed="false">Edit</);
+  match(page.html, /<div class="code-actions" hidden>/);
+  match(page.html, /<button type="button" data-action="copy">Copy<\/button>/);
+  match(page.html, /<button type="button" data-action="run">Run<\/button>/);
+  match(page.html, /data-action="edit" aria-pressed="false">Edit</);
   // The editing frame is a pressed-state toggle, so it announces as one.
-  match(html, /data-action="reset"[^>]*hidden/);
+  match(page.html, /data-action="reset"[^>]*hidden/);
 });
 
 test("the editing overlay is labelled in the page's language", () => {
-  const html = render("ja", [alcy]);
-  match(html, /aria-pressed="false">編集</);
-  match(html, />コピー</);
+  const page = renderPage({ language: "ja", blocks: [alcy] });
+  match(page.html, /aria-pressed="false">編集</);
+  match(page.html, />コピー</);
 });
 
 test("the 404 is marked as a dead end and still reads in order", () => {
@@ -107,11 +87,11 @@ test("the keyboard reaches the article without the header in the way", () => {
   // The header repeats on every page. The first tab stop is a link past
   // it, the main it points at takes the focus, and it stays reachable
   // without a stylesheet trick that would leave it off-screen forever.
-  const html = render("en", [prose]);
-  match(html, /<body[^>]*>\s*<a class="skip-link" href="#content">/);
-  match(html, /<main[^>]*id="content"[^>]*tabindex="-1"/);
+  const page = renderPage({ blocks: [prose] });
+  match(page.html, /<body[^>]*>\s*<a class="skip-link" href="#content">/);
+  match(page.html, /<main[^>]*id="content"[^>]*tabindex="-1"/);
   // The label is the reader's own language, not the catalog's default.
-  match(render("ja", [prose]), />本文へ移動<\/a>/);
+  match(renderPage({ language: "ja", blocks: [prose] }).html, />本文へ移動<\/a>/);
 });
 
 test("the search dialog names its field, its list, and its tally", () => {
@@ -124,20 +104,11 @@ test("the search dialog names its field, its list, and its tally", () => {
   match(source, /tally\.setAttribute\("role", "status"\)/);
   match(source, /t\("search\.count", \{ count: String\(results\.length\) \}\)/);
 });
-test("the reference names its regions the same way the guide does", () => {
-  const target = page("en", [prose]);
-  const html = renderGuidePage(target, {
-    pages: [target],
-    tree: REFERENCE_TREE,
-    highlight: (code) => code,
-    resolveLink: (url) => url,
-    boot: "INLINE_BOOT",
-    stamp: { text: "TESTSTAMP", url: "" },
-  });
-  match(html, /<nav class="site-nav" aria-label="[^"]+"/);
-  match(html, /<nav class="guide-nav" aria-label="Reference"/);
-  const names = Array.from(html.matchAll(/<nav[^>]*aria-label="([^"]*)"/g), (m) => m[1] ?? "");
-  ok(names.every((name) => name !== ""), "every landmark is named");
-  equal(new Set(names).size, names.length, "no two landmarks share a name");
-});
 
+test("the reference names its regions the same way the guide does", () => {
+  const page = renderPage({ blocks: [prose], tree: REFERENCE_TREE });
+  match(page.html, /<nav class="site-nav" aria-label="[^"]+"/);
+  match(page.html, /<nav class="guide-nav" aria-label="Reference"/);
+  ok(navNames(page).every((name) => name !== ""), "every landmark is named");
+  equal(new Set(navNames(page)).size, navNames(page).length, "no two landmarks share a name");
+});
