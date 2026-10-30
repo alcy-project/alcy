@@ -881,6 +881,45 @@ bool Checker::spec_method_sig(u32 spec,
   return false;
 }
 
+bool Checker::check_spec_method_bounds(u32 spec,
+                                       std::string_view name,
+                                       std::span<const ir::TypeIdx> spec_args,
+                                       std::span<const ir::TypeIdx> method_args,
+                                       diag::Span span) {
+  if (spec >= specs.size()) {
+    return false;
+  }
+  const ast::ItemNode& node = ast.items[specs[spec].item];
+  const ast::ItemSpec& declaration = node.payload.get<ast::ItemSpec>();
+  if (spec_args.size() != declaration.params.size()) {
+    return false;
+  }
+  for (const ast::SpecMethod& method : declaration.methods) {
+    if (method.name.name != name) {
+      continue;
+    }
+    if (method.generic.size() != method_args.size()) {
+      return false;
+    }
+    std::vector<std::pair<std::string_view, ir::TypeIdx>> bindings;
+    bindings.reserve(method.generic.size());
+    for (usize i = 0; i < method.generic.size(); ++i) {
+      bindings.emplace_back(method.generic[i].name.name, method_args[i]);
+    }
+    const usize pushed = type_params.size();
+    for (usize i = 0; i < declaration.params.size(); ++i) {
+      type_params.emplace_back(declaration.params[i].name.name, spec_args[i]);
+    }
+    const bool ok = check_declared_bounds(specs[spec].module, method.generic,
+                                          bindings, span);
+    while (type_params.size() > pushed) {
+      type_params.pop_back();
+    }
+    return ok;
+  }
+  return false;
+}
+
 bool Checker::spec_targets_overlap(const SpecTarget& a, const SpecTarget& b) {
   // A scalar target carries no arguments: it overlaps only the same
   // scalar.
@@ -5810,9 +5849,23 @@ void Checker::index_generic_methods() {
       const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
       // A generic spec impl's methods instantiate through the declared
       // signature, which is the check; a concrete one's conformance was
-      // settled where the impl was written.
+      // settled where the impl was written. A method that declares type
+      // parameters of its own is neither: its signature does not exist
+      // until a call names them, so it indexes here in both shapes and
+      // the call resolves it against the declaration.
       if (impl.spec.is_valid() && !impl.params.empty()) {
-        continue;
+        bool any_generic = false;
+        for (ast::ItemIdx method_item : impl.methods) {
+          if (!ast.items[method_item]
+                   .payload.get<ast::ItemFn>()
+                   .generic.empty()) {
+            any_generic = true;
+            break;
+          }
+        }
+        if (!any_generic) {
+          continue;
+        }
       }
       const ast::TypeNode& target = ast.types[impl.type];
       if (target.kind != ast::TypeKind::Path) {
@@ -6077,6 +6130,20 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     if (!check_declared_bounds(entry.module, method_fn.generic, method_bounds,
                                span)) {
       return nullptr;
+    }
+    // A method of a spec impl answers its call through this path, so
+    // the declaration's bounds are checked here too: the impl may spell
+    // the method's parameters more permissively than the spec does.
+    if (impl.spec.is_valid()) {
+      const SpecEntry* spec_entry = spec_of_impl_path(entry.module, impl.spec);
+      if (spec_entry == nullptr) {
+        return nullptr;
+      }
+      const u32 spec = static_cast<u32>(spec_entry - specs.data());
+      if (!check_spec_method_bounds(spec, name, target_args, method_args,
+                                    span)) {
+        return nullptr;
+      }
     }
     // The body check that follows answers each fresh stand-in: the
     // instantiation consumes the record and takes the witness for the
@@ -6632,7 +6699,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
       }
       candidate = instantiate_spec_method(entry.module, entry.spec,
                                           record_spec_args, method_args, self,
-                                          scope, value_scope, impl, name);
+                                          scope, value_scope, impl, name, span);
       if (candidate == nullptr) {
         return nullptr;
       }
@@ -7549,7 +7616,8 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
     std::span<const ValueParam> value_scope,
     const ast::ItemImpl& impl,
-    std::string_view name) {
+    std::string_view name,
+    diag::Span span) {
   for (ast::ItemIdx method_item : impl.methods) {
     const ast::ItemNode& method_node = ast.items[method_item];
     if (method_node.payload.get<ast::ItemFn>().name.name != name) {
@@ -7596,6 +7664,16 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     if (!spec_method_sig(spec, name, spec_args, self_type, impl_module,
                          method_args, declared_params, declared_ret,
                          declared_receiver)) {
+      type_params = std::move(outer_scope);
+      value_params = std::move(outer_values);
+      return nullptr;
+    }
+    // The declaration's bounds hold whatever the implementation wrote
+    // down: an implementation may leave a bound out, and the call still
+    // owes it (ADR-0028).
+    const bool bounds_ok =
+        check_spec_method_bounds(spec, name, spec_args, method_args, span);
+    if (!bounds_ok) {
       type_params = std::move(outer_scope);
       value_params = std::move(outer_values);
       return nullptr;

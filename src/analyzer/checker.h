@@ -469,6 +469,16 @@ class Checker {
       std::span<const ast::GenericParam> params,
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& bindings,
       diag::Span span);
+  // The bounds a specification's method declaration states, checked
+  // against the arguments a call spelled for it. An implementation may
+  // leave a bound out, so the declaration is the only place that says
+  // what the call owes (ADR-0028). Answers false when the declaration
+  // names no such method, and false when a bound fails.
+  bool check_spec_method_bounds(u32 spec,
+                                std::string_view name,
+                                std::span<const ir::TypeIdx> spec_args,
+                                std::span<const ir::TypeIdx> method_args,
+                                diag::Span span);
   // The name a diagnostic uses for a type: the nominal's, else the
   // scalar spelling.
   std::string_view type_name(ir::TypeIdx type) const;
@@ -494,7 +504,8 @@ class Checker {
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
       std::span<const ValueParam> value_scope,
       const ast::ItemImpl& impl,
-      std::string_view name);
+      std::string_view name,
+      diag::Span span);
   // Checks the bodies of a concrete `impl S for T` under the target.
   // The record carries the resolved arguments, so no path is
   // re-resolved and a rejected impl simply has no record to find.

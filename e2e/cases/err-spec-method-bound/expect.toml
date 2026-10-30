@@ -1,0 +1,4 @@
+# The spec method declares a 'PartialEq' bound on its parameter, and the
+# call spells a type that does not implement it.
+exit = 4
+contains = ["does not implement 'PartialEq'"]
