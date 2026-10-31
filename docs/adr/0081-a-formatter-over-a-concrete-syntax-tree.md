@@ -59,7 +59,7 @@ parameters are injected while it holds no configuration of its own.**
   expression by position, discarding a non-`()` value goes through
   `_ :=`, and a function body still needs an explicit `ret` on every
   path, so its tail expression is never the implicit return
-  (ADR-0133).
+  (ADR-0059).
 
 The library is a module of the toolchain tree rather than a stage of
 the compiler: no compiler target depends on it - the dependency
