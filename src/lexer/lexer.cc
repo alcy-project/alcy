@@ -4,6 +4,7 @@
 #include "lexer/lexer.h"
 
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <span>
 #include <string_view>
@@ -22,16 +23,33 @@ namespace lexer {
 
 namespace {
 
+// Identifier and number bodies are most of a source file, so the byte
+// test is one table load rather than four range comparisons.
+constexpr std::array<bool, 256> ALNUM_OR_UNDERSCORE = [] {
+  std::array<bool, 256> table{};
+  for (u32 c = '0'; c <= '9'; ++c) {
+    table[c] = true;
+  }
+  for (u32 c = 'a'; c <= 'z'; ++c) {
+    table[c] = true;
+  }
+  for (u32 c = 'A'; c <= 'Z'; ++c) {
+    table[c] = true;
+  }
+  table[static_cast<u32>('_')] = true;
+  return table;
+}();
+
+bool is_alnum_or_underscore(char c) {
+  return ALNUM_OR_UNDERSCORE[static_cast<u8>(c)];
+}
+
 bool is_alpha(char c) {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
 bool is_digit(char c) {
   return c >= '0' && c <= '9';
-}
-
-bool is_alnum_or_underscore(char c) {
-  return is_alpha(c) || is_digit(c) || c == '_';
 }
 
 // A newline ends the statement started by these tokens, so the lexer
@@ -421,9 +439,13 @@ TokenKind Lexer::peek_next_kind() const {
 
 void Lexer::lex_identifier(std::vector<Token>& out) {
   const usize start = pos_;
-  while (!at_end() && is_alnum_or_underscore(peek())) {
-    advance();
+  const char* const data = bytes_.data();
+  const usize size = bytes_.size();
+  usize end = start;
+  while (end < size && is_alnum_or_underscore(data[end])) {
+    ++end;
   }
+  pos_ = end;
   const std::string_view word = bytes_.substr(start, pos_ - start);
   const TokenKind kind =
       word == "_" ? TokenKind::Underscore : lookup_keyword(word);
