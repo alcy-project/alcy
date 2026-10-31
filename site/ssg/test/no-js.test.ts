@@ -16,11 +16,11 @@ import { test } from "node:test";
 import type { Block } from "../src/markdown.js";
 import { REFERENCE_TREE, renderNotFound, renderTreeIndex } from "../src/render.js";
 import { GUIDE_TREE } from "../src/render.js";
-import { makePage, readPage, renderPage } from "./page.js";
+import { ALCY as alcy, makePage, readPage, renderPage, SH as sh } from "./page.js";
 
 const prose: Block = { type: "paragraph", text: "hello reader", line: 1 };
-const alcy: Block = { type: "code", language: "alcy", text: "fn main() {}", line: 1 };
-const sh: Block = { type: "code", language: "sh", text: "alcy run main.al", line: 3 };
+
+
 
 test("the article's prose is in the document, not assembled by a script", () => {
   const page = renderPage({

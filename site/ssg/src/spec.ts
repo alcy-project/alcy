@@ -14,25 +14,13 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 
-import { prefixOf } from "./languages.js";
-import type { Language } from "./languages.js";
+import { markdownFiles, titleOf } from "./documents.js";
+import type { DocPage, DocSource } from "./documents.js";
 import { parseMarkdown } from "./markdown.js";
 import type { Block } from "./markdown.js";
 
-export interface SpecSource {
-  // The path under `docs/spec/`, e.g. `types.md`.
-  sourceRel: string;
-  // The path inside one language tree, e.g. `reference/types.html`.
-  path: string;
-  order: number;
-  title: string;
-  blocks: Block[];
-}
-
-export interface SpecPage extends SpecSource {
-  language: Language;
-  route: string;
-}
+export type SpecSource = DocSource;
+export type SpecPage = DocPage;
 
 // The spec's reading order. A file the list does not name still gets a
 // page, sorted after the named ones by name, so adding a spec file
@@ -57,10 +45,7 @@ const SPEC_ORDER = [
 ];
 
 export function discoverSpec(specDir: string): SpecSource[] {
-  const names = readdirSync(specDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => entry.name)
-    .sort();
+  const names = markdownFiles(specDir);
   const pages: SpecSource[] = [];
   // Filled as the files are read; a mention resolves against the whole
   // set, so a file added without a place in the reading order still
@@ -72,16 +57,12 @@ export function discoverSpec(specDir: string): SpecSource[] {
       parseMarkdown(readFileSync(join(specDir, name), "utf8")),
       published,
     );
-    const first = blocks[0];
-    if (first === undefined || first.type !== "heading" || first.level !== 1) {
-      throw new Error(`spec/${name}: the file must open with a level-1 heading`);
-    }
     const known = SPEC_ORDER.indexOf(name);
     pages.push({
       sourceRel: name,
       path: posix.join("reference", name.replace(/\.md$/, ".html")),
       order: known === -1 ? SPEC_ORDER.length : known,
-      title: first.text,
+      title: titleOf(blocks, `spec/${name}`),
       blocks,
     });
   }
@@ -143,13 +124,3 @@ export function linkSpecReferences(
   });
 }
 
-export function specPagesForLanguage(
-  sources: readonly SpecSource[],
-  language: Language,
-): SpecPage[] {
-  return sources.map((source) => ({
-    ...source,
-    language,
-    route: prefixOf(language) + source.path,
-  }));
-}

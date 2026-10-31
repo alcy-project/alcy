@@ -28,13 +28,16 @@ import { pathToFileURL } from "node:url";
 
 import { escapeHtml } from "../../shared/highlight.js";
 import { LANGUAGES, translate } from "../../shared/i18n.js";
-import { discoverGuide, pagesForLanguage } from "./guide.js";
+import { pagesForLanguage } from "./documents.js";
+import type { DocPage } from "./documents.js";
+import { discoverGuide } from "./guide.js";
 import type { GuidePage, GuideSource } from "./guide.js";
 import { createHighlighter } from "./highlight.js";
 import type { Highlighter } from "./highlight.js";
 import { otherLanguages, prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
 import { createLinkChecker } from "./links.js";
+import type { LinkChecker } from "./links.js";
 import {
   GUIDE_TREE,
   REFERENCE_TREE,
@@ -42,10 +45,11 @@ import {
   renderNotFound,
   renderTreeIndex,
   sectionsOf,
+  speculation,
+  stampMark,
 } from "./render.js";
 import type { Stamp, Tree } from "./render.js";
-import { discoverSpec, discoverSpecAssets, specPagesForLanguage } from "./spec.js";
-import { speculation, stampMark } from "./render.js";
+import { discoverSpec, discoverSpecAssets } from "./spec.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
 import type { TemplateValues } from "./templates.js";
@@ -317,6 +321,101 @@ function readBoot(site: string): string {
   return boot;
 }
 
+// A tree writes the same machine over different sources: the contents
+// page, the templates, the assets the reference links to, and then the
+// articles. The pass order is the link audit's: everything a page can
+// point at exists before the page that points at it is checked.
+interface TreePages {
+  tree: Tree;
+  pages: readonly GuidePage[];
+}
+
+interface TemplateSource {
+  treePath: string;
+  source: string;
+}
+
+function writeTemplates(args: {
+  options: Options;
+  trees: readonly TreePages[];
+  templates: readonly TemplateSource[];
+  boot: string;
+  stamp: Stamp;
+}): void {
+  const { options, trees, templates, boot, stamp } = args;
+  for (const language of LANGUAGES) {
+    for (const { tree, pages } of trees) {
+      writePage(
+        options.dist,
+        `${prefixOf(language)}${tree.segment}/index.html`,
+        renderTreeIndex(
+          pages.filter((page) => page.language === language),
+          language,
+          boot,
+          stamp,
+          tree,
+        ),
+      );
+    }
+    for (const template of templates) {
+      writePage(
+        options.dist,
+        prefixOf(language) + template.treePath,
+        stampTemplate(
+          template.source,
+          language,
+          templateValues(language, template.treePath, boot, stamp),
+        ),
+      );
+    }
+  }
+}
+
+// The spec's assets ride along with its pages: the grammar file a page
+// links to has to exist in the built site, or the link audit fails.
+function writeSpecAssets(options: Options): void {
+  const specAssets = discoverSpecAssets(options.spec);
+  for (const language of LANGUAGES) {
+    for (const asset of specAssets) {
+      writePage(
+        options.dist,
+        prefixOf(language) + asset.path,
+        readFileSync(join(options.spec, asset.sourceRel), "utf8"),
+      );
+    }
+  }
+}
+
+function writeArticles(args: {
+  options: Options;
+  trees: readonly TreePages[];
+  boot: string;
+  stamp: Stamp;
+  highlight: (code: string) => string;
+  checker: LinkChecker;
+}): void {
+  const { options, trees, boot, stamp, highlight, checker } = args;
+  for (const language of LANGUAGES) {
+    for (const { tree, pages: all } of trees) {
+      const pages: readonly GuidePage[] = all.filter((page) => page.language === language);
+      for (const page of pages) {
+        writePage(
+          options.dist,
+          page.route,
+          renderGuidePage(page, {
+            pages,
+            tree,
+            highlight,
+            resolveLink: (url) => checker.resolve(url, page),
+            boot,
+            stamp,
+          }),
+        );
+      }
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const stamp: Stamp = { text: options.stamp, url: options.stampUrl };
@@ -347,7 +446,7 @@ async function main(): Promise<void> {
 
   const allPages = LANGUAGES.flatMap((language) => pagesForLanguage(sources, language));
   const allSpecPages = LANGUAGES.flatMap((language) =>
-    specPagesForLanguage(specSources, language),
+    pagesForLanguage(specSources, language),
   );
   // Every route this build will write. The audit asks whether a target
   // exists, and a page's link is satisfied by another page in the same
@@ -369,7 +468,7 @@ async function main(): Promise<void> {
     "utf8",
   );
   const boot = readBoot(options.site);
-  const templates: Array<{ treePath: string; source: string }> = [
+  const templates: readonly TemplateSource[] = [
     { treePath: "index.html", source: landingTemplate },
     { treePath: "playground/index.html", source: playgroundTemplate },
   ];
@@ -377,7 +476,7 @@ async function main(): Promise<void> {
   // The two trees are the same machine over different sources: the guide
   // and the language reference differ in their contents and their label,
   // and in nothing the reader can see.
-  const trees: Array<{ tree: Tree; pages: readonly GuidePage[] }> = [
+  const trees: readonly TreePages[] = [
     { tree: GUIDE_TREE, pages: allPages },
     { tree: REFERENCE_TREE, pages: allSpecPages },
   ];
@@ -385,65 +484,9 @@ async function main(): Promise<void> {
   // The templates and the contents pages first: they create the routes
   // the pages' own links point at, so the link audit in the second pass
   // sees the whole site.
-  for (const language of LANGUAGES) {
-    for (const { tree, pages } of trees) {
-      writePage(
-        options.dist,
-        `${prefixOf(language)}${tree.segment}/index.html`,
-        renderTreeIndex(
-          pages.filter((page) => page.language === language),
-          language,
-          boot,
-          stamp,
-          tree,
-        ),
-      );
-    }
-    for (const template of templates) {
-      writePage(
-        options.dist,
-        prefixOf(language) + template.treePath,
-        stampTemplate(
-          template.source,
-          language,
-          templateValues(language, template.treePath, boot, stamp),
-        ),
-      );
-    }
-  }
-
-  // The spec's assets ride along with its pages: the grammar file a page
-  // links to has to exist in the built site, or the link audit fails.
-  const specAssets = discoverSpecAssets(options.spec);
-  for (const language of LANGUAGES) {
-    for (const asset of specAssets) {
-      writePage(
-        options.dist,
-        prefixOf(language) + asset.path,
-        readFileSync(join(options.spec, asset.sourceRel), "utf8"),
-      );
-    }
-  }
-
-  for (const language of LANGUAGES) {
-    for (const { tree, pages: all } of trees) {
-      const pages: readonly GuidePage[] = all.filter((page) => page.language === language);
-      for (const page of pages) {
-        writePage(
-          options.dist,
-          page.route,
-          renderGuidePage(page, {
-            pages,
-            tree,
-            highlight,
-            resolveLink: (url) => checker.resolve(url, page),
-            boot,
-            stamp,
-          }),
-        );
-      }
-    }
-  }
+  writeTemplates({ options, trees, templates, boot, stamp });
+  writeSpecAssets(options);
+  writeArticles({ options, trees, boot, stamp, highlight, checker });
 
   writeSiteRootFiles(options, allPages, boot, stamp, highlight);
 

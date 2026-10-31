@@ -9,26 +9,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, posix } from "node:path";
 
-import { prefixOf } from "./languages.js";
-import type { Language } from "./languages.js";
+import { titleOf } from "./documents.js";
+import type { DocPage, DocSource } from "./documents.js";
 import { parseMarkdown } from "./markdown.js";
-import type { Block } from "./markdown.js";
 
-export interface GuideSource {
-  // The path under `docs/guide/`, e.g. `01-introduction.md`.
-  sourceRel: string;
-  // The path inside one language tree, e.g. `guide/introduction.html`.
-  path: string;
-  order: number;
-  title: string;
-  blocks: Block[];
-}
-
-export interface GuidePage extends GuideSource {
-  language: Language;
-  // The path under the built site's root, e.g. `ja/guide/introduction.html`.
-  route: string;
-}
+export type GuideSource = DocSource;
+export type GuidePage = DocPage;
 
 // `NN-slug.md`: the number orders the pages, the slug is the URL.
 const GUIDE_FILE = /^(\d+)-([a-z0-9-]+)\.md$/;
@@ -64,27 +50,13 @@ export function discoverGuide(docsDir: string): GuideSource[] {
     orders.set(order, sourceRel);
 
     const blocks = parseMarkdown(readFileSync(join(docsDir, sourceRel), "utf8"));
-    const first = blocks[0];
-    if (first === undefined || first.type !== "heading" || first.level !== 1) {
-      throw new Error(`${sourceRel}: the file must open with a level-1 heading`);
-    }
     const dir = posix.dirname(sourceRel);
     const name = `${match[2] ?? ""}.html`;
     const path = dir === "." ? posix.join("guide", name) : posix.join("guide", dir, name);
-    pages.push({ sourceRel, path, order, title: first.text, blocks });
+    pages.push({ sourceRel, path, order, title: titleOf(blocks, sourceRel), blocks });
   }
 
   pages.sort((a, b) => a.order - b.order || a.path.localeCompare(b.path));
   return pages;
 }
 
-export function pagesForLanguage(
-  sources: readonly GuideSource[],
-  language: Language,
-): GuidePage[] {
-  return sources.map((source) => ({
-    ...source,
-    language,
-    route: prefixOf(language) + source.path,
-  }));
-}

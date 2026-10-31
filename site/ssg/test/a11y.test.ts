@@ -13,14 +13,23 @@ import { test } from "node:test";
 
 import type { Block } from "../src/markdown.js";
 import { REFERENCE_TREE, renderNotFound } from "../src/render.js";
-import { navNames, renderPage } from "./page.js";
-
-const alcy: Block = { type: "code", language: "alcy", text: "fn main() {}", line: 1 };
-const prose: Block = { type: "paragraph", text: "hello", line: 1 };
+import { ALCY as alcy, navNames, PROSE as prose, renderPage } from "./page.js";
 
 test("each document declares the language of its own strings", () => {
   match(renderPage({ blocks: [prose] }).html, /<html lang="en">/);
   match(renderPage({ language: "ja", blocks: [prose] }).html, /<html lang="ja">/);
+});
+
+test("the prose declares its own language inside a translated tree", () => {
+  // The guide and the reference are English in every tree (ADR-0058), so
+  // the tree's language is the chrome's, not the article's. A screen
+  // reader that takes the whole document for Japanese reads the English
+  // body in Japanese; the region says what it actually is.
+  const ja = renderPage({ language: "ja", blocks: [prose] }).html;
+  match(ja, /<html lang="ja">/);
+  match(ja, /<main class="guide-article" id="content" tabindex="-1" lang="en">/);
+  const en = renderPage({ blocks: [prose] }).html;
+  match(en, /<main class="guide-article" id="content" tabindex="-1" lang="en">/);
 });
 
 test("the page's regions are named landmarks", () => {

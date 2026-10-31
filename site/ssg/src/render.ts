@@ -351,6 +351,15 @@ export function speculation(): string {
   return speculationRules();
 }
 
+// The guide and the reference are written in English in every tree: a
+// translation is a translated source beside the English one, not a
+// property of the tree (ADR-0058). The tree's language therefore governs
+// the chrome and the labels, while the prose says its own, so a screen
+// reader announcing Japanese furniture does not also read the article in
+// Japanese. A translated tree drops this attribute on the region it
+// translates.
+const PROSE_LANGUAGE = "en";
+
 export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   const assets = assetPrefix(page.route);
   const t = (key: MessageKey, params?: MessageParams): string => translate(page.language, key, params);
@@ -403,7 +412,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
         ${outline(sections, options, t)}
       </div>
 
-      <main class="guide-article" id="content" tabindex="-1">
+      <main class="guide-article" id="content" tabindex="-1" lang="${PROSE_LANGUAGE}">
         ${article}
         ${pager(page, options)}
       </main>

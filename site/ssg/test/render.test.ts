@@ -12,21 +12,11 @@ import {
   speculation,
 } from "../src/render.js";
 import { canonicalUrl, SITE_PATH } from "../src/urls.js";
-import { makePage, renderPage } from "./page.js";
-
-// `makePage` and `renderPage` come from the shared reader, so every
-// test sees a page described the same way.
-function page(language: "en" | "ja", blocks: Block[]) {
-  return makePage({ language, blocks });
-}
+import { ALCY as alcy, makePage, PROSE as prose, renderPage, SH as sh } from "./page.js";
 
 function render(language: "en" | "ja", blocks: Block[]): string {
   return renderPage({ language, blocks }).html;
 }
-
-const sh: Block = { type: "code", language: "sh", text: "echo hi", line: 1 };
-const alcy: Block = { type: "code", language: "alcy", text: "fn main() {}", line: 1 };
-const prose: Block = { type: "paragraph", text: "hello", line: 1 };
 
 test("sections gain anchors and an outline beside the article", () => {
   const html = render("en", [

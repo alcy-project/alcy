@@ -58,10 +58,3 @@ export function copy(block: CodeBlock, button: HTMLButtonElement): void {
   });
 }
 
-export function wireCopy(block: CodeBlock): void {
-  const button = block.actions.querySelector<HTMLButtonElement>('[data-action="copy"]');
-  if (button === null) {
-    return;
-  }
-  button.addEventListener("click", () => copy(block, button));
-}

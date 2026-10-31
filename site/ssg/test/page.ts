@@ -12,6 +12,19 @@ import type { Block } from "../src/markdown.js";
 import type { Tree } from "../src/render.js";
 import { GUIDE_TREE, renderGuidePage } from "../src/render.js";
 
+// The blocks the page tests build a page from. One of each kind that
+// changes what the template emits: prose is the default body, `sh` is a
+// code block that is not a program, and `alcy` is the only block whose
+// page loads the compiler.
+export const PROSE: Block = { type: "paragraph", text: "hello", line: 1 };
+export const SH: Block = { type: "code", language: "sh", text: "echo hi", line: 1 };
+export const ALCY: Block = {
+  type: "code",
+  language: "alcy",
+  text: "fn main() {}",
+  line: 1,
+};
+
 export interface PageSpec {
   language?: "en" | "ja";
   blocks: Block[];
