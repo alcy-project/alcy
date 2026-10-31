@@ -177,6 +177,11 @@ base::Result<std::vector<std::string>, diag::Reported> collect_package_files(
 
 }  // namespace
 
+bool reads_stdin(const CliConfig& config) {
+  // Standard input is a source only when `--stdin` names it.
+  return config.fmt_stdin;
+}
+
 ResultCode run_fmt(const CliConfig& config,
                    pipeline::PipelineContext& ctx,
                    Envelope& envelope) {
@@ -185,8 +190,7 @@ ResultCode run_fmt(const CliConfig& config,
   const alcy_fmt::FormatConfig layout = alcy_fmt::default_format_config();
   const bool check_only = config.fmt_check;
 
-  // stdin mode
-  if (config.fmt_stdin) {
+  if (reads_stdin(config)) {
     base::Result<std::string, std::string_view> text = read_stdin();
     if (text.is_err()) {
       ctx.bag.emit_message(diag::Severity::Error,

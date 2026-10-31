@@ -16,9 +16,14 @@ namespace cli {
 
 struct Envelope;
 
-// Formats the files the command line named, or standard input when it
-// named none. The layout is the formatter's own: no flag, file, or
-// environment variable is consulted for it.
+// Whether the source comes from standard input, which only
+// `--stdin` asks for.
+bool reads_stdin(const CliConfig& config);
+
+// Formats the files the command line named, or the package under the
+// current directory when it named none. The layout is the
+// formatter's own: no flag, file, or environment variable is
+// consulted for it.
 ResultCode run_fmt(const CliConfig& config,
                    pipeline::PipelineContext& ctx,
                    Envelope& envelope);

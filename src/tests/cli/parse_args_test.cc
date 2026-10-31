@@ -413,6 +413,29 @@ TEST_CASE("Parse lint level overrides") {
   }
 }
 
+TEST_CASE("Parse fmt run-mode flags") {
+  const std::string_view args[] = {"alcy",   "fmt",     "--check",
+                                   "--diff", "--stdin", "--stdout"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Fmt);
+  CHECK(config.fmt_check);
+  CHECK(config.fmt_diff);
+  CHECK(config.fmt_stdin);
+  CHECK(config.fmt_stdout);
+}
+
+TEST_CASE("Parse fmt exclude suffixes") {
+  const std::string_view args[] = {"alcy", "fmt",       "--exclude",
+                                   "gen/", "--exclude", "vendor.al"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.subcommand == Subcommand::Fmt);
+  CHECK(config.fmt_exclude.size() == 2);
+  if (config.fmt_exclude.size() == 2) {
+    CHECK(config.fmt_exclude[0] == "gen/");
+    CHECK(config.fmt_exclude[1] == "vendor.al");
+  }
+}
+
 TEST_CASE("Parse argv overload") {
   const char* argv[] = {"alcy", "build", "--release", "mydir"};
   arg::Parser parser = build_parser();
