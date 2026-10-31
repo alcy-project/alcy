@@ -1543,12 +1543,18 @@ void Lowerer::run() {
   // doubling a dozen times over the run: a discarded doubling costs as
   // much as the block that replaces it.
   {
+    // Per function, measured on the corpora tools/perf.py generates: a
+    // plain body lowers to about this many operands, instructions and
+    // registers, and to one span per instruction once the drop pass has
+    // added its glue.
+    constexpr usize OPERANDS_PER_FUNCTION = 90;
+    constexpr usize INSTRUCTIONS_PER_FUNCTION = 61;
+    constexpr usize REGISTERS_PER_FUNCTION = 23;
     const usize fn_count = fns.size();
-    builder.reserve_operands(fn_count * 90);
-    builder.reserve_instrs(fn_count * 61);
-    builder.reserve_registers(fn_count * 23);
-    // One span per instruction, the drop pass's glue included.
-    instr_spans_.reserve(fn_count * 61);
+    builder.reserve_operands(fn_count * OPERANDS_PER_FUNCTION);
+    builder.reserve_instrs(fn_count * INSTRUCTIONS_PER_FUNCTION);
+    builder.reserve_registers(fn_count * REGISTERS_PER_FUNCTION);
+    instr_spans_.reserve(fn_count * INSTRUCTIONS_PER_FUNCTION);
   }
   // Lower bodies, then publish functions in reservation order so
   // the pre-assigned indexes line up with storage positions.
