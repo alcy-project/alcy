@@ -1579,8 +1579,12 @@ void Lowerer::run() {
   }
   // Lower bodies, then publish functions in reservation order so
   // the pre-assigned indexes line up with storage positions.
+  // The publish step reads the entry the work list named, so a done item is the
+  // index of that entry rather than a copy of it: lowering a body can add
+  // entries, which is why the body works on a copy of its own, but the entry it
+  // lowered is the one that gets published.
   struct Done {
-    FnEntry entry;
+    u32 fn;
     std::vector<ir::BlockIdx> blocks;
   };
   const auto lower_and_publish = [&](const FnEntry& entry,
@@ -1620,11 +1624,13 @@ void Lowerer::run() {
   // The comp prefix is lowered and materialized before the rest; its
   // names are interned first so the function records can take them.
   std::vector<Done> prefix_done;
+  prefix_done.reserve(comp_prefix);
   for (usize w = 0; w < comp_prefix && !failed; ++w) {
-    const FnEntry entry = fns[worklist_[w]];
+    const u32 fn = worklist_[w];
+    const FnEntry entry = fns[fn];
     std::vector<ir::BlockIdx> blocks;
     lower_and_publish(entry, blocks);
-    prefix_done.push_back({entry, std::move(blocks)});
+    prefix_done.push_back({fn, std::move(blocks)});
   }
   if (failed) {
     return;
@@ -1632,15 +1638,18 @@ void Lowerer::run() {
   if (!resolve_names()) {
     return;
   }
-  for (const Done& entry : prefix_done) {
-    materialize(entry.entry, entry.blocks);
+  for (const Done& lowered : prefix_done) {
+    materialize(fns[lowered.fn], lowered.blocks);
   }
   std::vector<Done> done;
+  DCHECK(worklist_.size() >= comp_prefix);
+  done.reserve(worklist_.size() - comp_prefix);
   for (usize w = comp_prefix; w < worklist_.size() && !failed; ++w) {
-    const FnEntry entry = fns[worklist_[w]];
+    const u32 fn = worklist_[w];
+    const FnEntry entry = fns[fn];
     std::vector<ir::BlockIdx> blocks;
     lower_and_publish(entry, blocks);
-    done.push_back({entry, std::move(blocks)});
+    done.push_back({fn, std::move(blocks)});
   }
   if (failed) {
     return;
@@ -1648,8 +1657,8 @@ void Lowerer::run() {
   if (!resolve_names()) {
     return;
   }
-  for (const Done& entry : done) {
-    materialize(entry.entry, entry.blocks);
+  for (const Done& lowered : done) {
+    materialize(fns[lowered.fn], lowered.blocks);
   }
 }
 
@@ -1697,9 +1706,8 @@ void Lowerer::materialize(const FnEntry& entry,
   for (const ir::TypeIdx arg : entry.generics) {
     generics.push(storage_copy(arg));
   }
-  // The handle the gather left in the entry, which this copy of it
-  // predates.
-  const str::StringPoolId name = fns[entry.idx.idx].name_id;
+  // The handle the gather left in the entry.
+  const str::StringPoolId name = entry.name_id;
   const str::StringPoolId path = intern_name(pkg.tree.modules[entry.mod]->path);
   if (name == str::INVALID_STRING_POOL_ID ||
       path == str::INVALID_STRING_POOL_ID) {
