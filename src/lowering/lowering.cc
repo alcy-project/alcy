@@ -229,7 +229,7 @@ ir::OperandIdx Lowerer::to_operand(ir::ImmutableIdx imm, ir::TypeIdx type) {
 
 ir::RegisterIdx Lowerer::emit(ir::Opcode op,
                               ir::TypeIdx type,
-                              const std::vector<ir::OperandIdx>& ops,
+                              std::span<const ir::OperandIdx> ops,
                               ir::InstructionFlags flags) {
   const ir::RegisterIdx dst = claim_reg();
   // Operand ranges must be consecutive in storage, but inputs are
@@ -252,6 +252,14 @@ ir::RegisterIdx Lowerer::emit(ir::Opcode op,
   stream_last_[at(cur_)] = instr;
   instr_spans_.push_back(cur_span_);
   return dst;
+}
+
+ir::RegisterIdx Lowerer::emit(ir::Opcode op,
+                              ir::TypeIdx type,
+                              std::initializer_list<ir::OperandIdx> ops,
+                              ir::InstructionFlags flags) {
+  return emit(op, type,
+              std::span<const ir::OperandIdx>(ops.begin(), ops.size()), flags);
 }
 
 ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
@@ -286,7 +294,7 @@ const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
 }
 
 void Lowerer::emit_void(ir::Opcode op,
-                        const std::vector<ir::OperandIdx>& ops,
+                        std::span<const ir::OperandIdx> ops,
                         ir::InstructionFlags flags) {
   // A store through a pointer to the unit type writes nothing. The
   // value a `()` expression carries is a placeholder with a width of
@@ -311,6 +319,13 @@ void Lowerer::emit_void(ir::Opcode op,
   streams_[at(cur_)].push(void_instr);
   stream_last_[at(cur_)] = void_instr;
   instr_spans_.push_back(cur_span_);
+}
+
+void Lowerer::emit_void(ir::Opcode op,
+                        std::initializer_list<ir::OperandIdx> ops,
+                        ir::InstructionFlags flags) {
+  emit_void(op, std::span<const ir::OperandIdx>(ops.begin(), ops.size()),
+            flags);
 }
 
 Val Lowerer::materialize(Val v) {

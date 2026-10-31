@@ -226,12 +226,22 @@ class Lowerer {
   ir::RegisterIdx claim_reg();
   ir::OperandIdx to_operand(ir::RegisterIdx reg, ir::TypeIdx type);
   ir::OperandIdx to_operand(ir::ImmutableIdx imm, ir::TypeIdx type);
+  // Operands are a view: an instruction carries one to three indices,
+  // so building a vector for the common case allocated on every emit.
+  // A braced list reaches the same implementation without one.
   ir::RegisterIdx emit(ir::Opcode op,
                        ir::TypeIdx type,
-                       const std::vector<ir::OperandIdx>& ops,
+                       std::span<const ir::OperandIdx> ops,
+                       ir::InstructionFlags flags = {});
+  ir::RegisterIdx emit(ir::Opcode op,
+                       ir::TypeIdx type,
+                       std::initializer_list<ir::OperandIdx> ops,
                        ir::InstructionFlags flags = {});
   void emit_void(ir::Opcode op,
-                 const std::vector<ir::OperandIdx>& ops,
+                 std::span<const ir::OperandIdx> ops,
+                 ir::InstructionFlags flags = {});
+  void emit_void(ir::Opcode op,
+                 std::initializer_list<ir::OperandIdx> ops,
                  ir::InstructionFlags flags = {});
   // Emits a type query, which measures a type instead of consuming
   // operands: the measured type rides on the instruction.
