@@ -43,16 +43,6 @@ replaced. The foundations are in `roadmap.md`.
   lowering for the refused expression, so a projection through the
   binding taken from it stays silent (`err-move-out-of-element`).
 
-- [ ] Negative comp-arg cases for the loosened predicates: a runtime
-  value inside a match arm or a block (`double(match runtime_val …)`,
-  `double({ y := runtime; y })`) must still be refused, the guard
-  check a match now performs wants its own pin, and a generic caller's
-  other-instantiation variant record wants one case proving the
-  predicate's miss stays a compile error. The spelling and the
-  evaluation rules are in `docs/spec/comp.md`; the predicate lives in
-  `src/analyzer/comp_evaluator.cc` with the interface in
-  `comp_evaluator.h`.
-
 - [ ] The compiler's stack on a small-stack host: compiling to an
   object needs most of 64 KiB even natively, so the wasm test binary
   runs with a 1 MiB stack while programs it builds keep the default.
