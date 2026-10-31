@@ -100,6 +100,20 @@ perf record -F 999 -g --call-graph dwarf -o /tmp/p.data \
 perf report -i /tmp/p.data --stdio --no-children --percent-limit 1
 ```
 
+A sample says which symbol to read; it does not say how many instructions the
+symbol costs, and inlining can leave the top of the table without a name. For
+that there is callgrind, which counts instead of sampling:
+
+```bash
+uv run ./tools/perf.py costs out/perf/plain1200 --limit 25
+uv run ./tools/perf.py costs out/perf/plain1200 --callees 'DropElaborator::run'
+```
+
+The count is exact and does not need symbols, at the cost of a run an order of
+magnitude slower, so it comes after `scale` has said there is something to
+remove. The dump is written under `out/perf/` and stays usable
+with `--dump`, which compares two rounds at the speed of a parse.
+
 Two traps:
 
 - Inlining folds a callee into its caller. Profile the tree you are changing,
@@ -222,6 +236,9 @@ half of the walk to read next.
 | `perf.py scale --shape plain --sizes 300 600 1200` | instructions per module, and the growth between sizes |
 | `perf.py profile A B --binary BIN` | per-module self cost at two sizes, from `perf report` |
 | `perf.py ab CORPUS BEFORE AFTER` | interleaved wall clock, minimum of N, with per-phase totals |
+| `perf.py costs CORPUS` | per-function self instructions from callgrind, and the call edges around a symbol |
+| `perf.py rss --shape plain --sizes 300 1200` | peak RSS per module at several sizes |
+| `perf.py callers CORPUS --symbol NAME` | who reaches a symbol, and what runs under it |
 | `perf.py determinism CORPUS` | one emitted-IR hash across job counts and repeats |
 
 All of them take `--binary`, defaulting to `out/build_release/alcy`. Generated

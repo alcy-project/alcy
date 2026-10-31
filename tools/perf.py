@@ -16,6 +16,7 @@ commands are steps in.
     uv run ./tools/perf.py corpus --shape plain --modules 300
     uv run ./tools/perf.py scale --shape plain --sizes 300 600 1200
     uv run ./tools/perf.py ab out/perf/plain1200 old-alcy new-alcy
+    uv run ./tools/perf.py costs out/perf/plain1200 --limit 25
 
 The corpora are packages of generated modules with the shape of a real one.
 They are written under `out/`, which is not tracked, and the tool reports the
@@ -40,6 +41,15 @@ The shares are samples of cycles, so a rise can also be locality rather than
 work; `scale` is what says which. It needs a build with symbols, which
 `src/docs/performance.md` shows how to make without committing the
 change.
+
+`costs` is the other half of that: callgrind counts instructions per function
+without sampling, so it says how many a symbol costs of itself, and it does not
+need symbols or a perf-capable machine. It is slower by an order of magnitude,
+which is why the loop starts with `scale`. `--callees` and `--callers` read
+one pattern each and report the call edges around it, which is how a cost that
+is spread over callers is attributed to the interface that causes it. A dump
+written on one build stays usable with `--dump`, so two rounds can be compared
+without a second run.
 """
 
 import argparse
@@ -81,6 +91,14 @@ PROFILE_LINE = re.compile(r"^\s*([0-9]+\.[0-9]+)%\s+.*?\[([.k])\]\s+(.*)$")
 # One line of `perf report -g folded`: a share and a call chain, leaf first,
 # joined by semicolons. The plain self-time lines carry no semicolon.
 FOLDED_LINE = re.compile(r"^\s*([0-9]+\.[0-9]+)%\s+(\S.*)$")
+
+# One line of a callgrind dump that carries a cost: a position, either absolute
+# or compressed against the previous one, and the instruction count there.
+COST_LINE = re.compile(r"^[0-9+\-*]")
+
+# A function name in a callgrind dump is written once, under an id: the first
+# mention spells it, and later ones are the bare id.
+COMPRESSED_NAME = re.compile(r"^\((\d+)\)(?: (.*))?$")
 
 
 def module_source(shape: str, index: int) -> str:
@@ -801,6 +819,138 @@ def cmd_determinism(args: argparse.Namespace) -> int:
     return 1
 
 
+def callgrind_dump(binary: Path, corpus: Path, jobs: int, out: Path) -> Path:
+    """Writes one callgrind dump of a check, and returns where it went."""
+    if shutil.which("valgrind") is None:
+        raise SystemExit("valgrind is not on PATH; per-function costs need it")
+    validate(binary, corpus)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "valgrind",
+            "--tool=callgrind",
+            f"--callgrind-out-file={out}",
+            str(binary),
+            "check",
+            "-j",
+            str(jobs),
+            ".",
+        ],
+        cwd=corpus,
+        capture_output=True,
+        text=True,
+        timeout=3600,
+    )
+    if not out.exists():
+        raise SystemExit(f"valgrind wrote no dump for {corpus}")
+    return out
+
+
+def callgrind_costs(
+    dump: Path,
+) -> tuple[dict[str, int], dict[tuple[str, str], int]]:
+    """Self instructions per function, and how often each call edge was taken.
+
+    A dump is a stream of functions and, under each, the cost of the lines it
+    ran and the edges it took. The cost under a `calls=` line is the callee's
+    inclusive cost, so it is skipped: what a function costs of itself is what
+    its own position lines add up to, which is what removing work changes.
+    """
+    names: dict[str, str] = {}
+    self_cost: dict[str, int] = {}
+    edges: dict[tuple[str, str], int] = {}
+    caller = ""
+    callee = ""
+    under_edge = False
+    for line in dump.read_text(errors="replace").splitlines():
+        if line.startswith("fn=") or line.startswith("cfn="):
+            is_caller = line.startswith("fn=")
+            body = line.split("=", 1)[1]
+            found = COMPRESSED_NAME.match(body)
+            name = found.group(1) if found else body
+            if found and found.group(2):
+                names[name] = found.group(2)
+            if is_caller:
+                caller = name
+                callee = ""
+            else:
+                callee = name
+            under_edge = False
+            continue
+        if line.startswith("calls="):
+            if callee:
+                count = int(line.split()[0].removeprefix("calls="))
+                edges[(caller, callee)] = edges.get((caller, callee), 0) + count
+            under_edge = True
+            continue
+        if not line or not COST_LINE.match(line):
+            continue
+        if under_edge:
+            under_edge = False
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        self_cost[caller] = self_cost.get(caller, 0) + int(parts[1])
+    by_name: dict[str, int] = {}
+    for fid, cost in self_cost.items():
+        name = names.get(fid, fid)
+        by_name[name] = by_name.get(name, 0) + cost
+    resolved: dict[tuple[str, str], int] = {}
+    for (from_id, to_id), count in edges.items():
+        key = (names.get(from_id, from_id), names.get(to_id, to_id))
+        resolved[key] = resolved.get(key, 0) + count
+    return by_name, resolved
+
+
+def cmd_costs(args: argparse.Namespace) -> int:
+    """Exact self instructions per function, from a callgrind run."""
+    corpus = corpus_dir(args.corpus)
+    if args.callees and args.callers:
+        raise SystemExit("--callees and --callers read one pattern each")
+    if args.dump:
+        dump = Path(args.dump)
+        if not dump.exists():
+            raise SystemExit(f"no callgrind dump at {dump}")
+    else:
+        binary = binary_for(args.binary)
+        out = Path(args.out) if args.out else Path(WORK_DIR) / f"{corpus.name}.cg"
+        if not out.is_absolute():
+            out = REPO_ROOT / out
+        dump = callgrind_dump(binary, corpus, args.jobs, out)
+    self_cost, edges = callgrind_costs(dump)
+    total = sum(self_cost.values())
+    if args.callees or args.callers:
+        forward = bool(args.callees)
+        pattern = args.callees or args.callers
+        table: dict[str, int] = {}
+        matched = 0
+        for (from_name, to_name), count in edges.items():
+            here, other = (from_name, to_name) if forward else (to_name, from_name)
+            if pattern not in here:
+                continue
+            matched += count
+            table[other] = table.get(other, 0) + count
+        side = "callee" if forward else "caller"
+        print(
+            f"{corpus.name}: {matched:,} calls {side}s of {pattern!r}, -j {args.jobs}"
+        )
+        print(f"{'calls':>12}  {side}")
+        for other, count in sorted(table.items(), key=lambda kv: -kv[1])[: args.limit]:
+            print(f"{count:>12,}  {other[:110]}")
+        return 0
+    calls_in: dict[str, int] = {}
+    for (_, to_name), count in edges.items():
+        calls_in[to_name] = calls_in.get(to_name, 0) + count
+    rows = sorted(((cost, name) for name, cost in self_cost.items()), reverse=True)
+    print(f"{corpus.name}: {total:,} instructions, -j {args.jobs}  ({dump})")
+    print(f"{'self':>12} {'share':>7} {'calls':>12}  function")
+    for cost, name in rows[: args.limit]:
+        share = cost / total if total else 0.0
+        print(f"{cost:>12,} {share:>6.2%} {calls_in.get(name, 0):>12,}  {name[:100]}")
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     # The compiler travels with every subcommand, before or after it: the
@@ -901,6 +1051,28 @@ def parse_args() -> argparse.Namespace:
     callers.add_argument("--runs", type=int, default=3)
     callers.add_argument("--limit", type=int, default=8)
     callers.set_defaults(func=cmd_callers)
+
+    costs = subparsers.add_parser(
+        "costs",
+        parents=[common],
+        help="exact self instructions per function, from callgrind",
+    )
+    costs.add_argument("corpus", help="corpus directory or name under out/perf")
+    costs.add_argument("--jobs", type=int, default=1)
+    costs.add_argument("--limit", type=int, default=20, help="rows to show")
+    costs.add_argument("--dump", help="read this callgrind dump instead of running one")
+    costs.add_argument(
+        "--out",
+        default="",
+        help=f"where the dump goes (default: {WORK_DIR}/<corpus>.cg)",
+    )
+    costs.add_argument(
+        "--callees", default="", help="how often functions matching this call them"
+    )
+    costs.add_argument(
+        "--callers", default="", help="who calls functions matching this, and how often"
+    )
+    costs.set_defaults(func=cmd_costs)
 
     determinism = subparsers.add_parser(
         "determinism",
