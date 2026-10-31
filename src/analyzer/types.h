@@ -447,4 +447,29 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     std::span<const StdHint> std_hints = {},
     debug::Profiler* profiler = nullptr);
 
+// Helpers the type pass shares between its translation units.
+
+// The key a witness is recorded under: the instantiation's type arguments
+// with the witness slot itself left open, so the two sides of a lookup
+// agree whichever stand-in the other side used.
+std::vector<ir::TypeIdx> witness_key(std::span<const ir::TypeIdx> args,
+                                     usize slot);
+
+// Whether a path head is one the module walk owns: the two relative forms
+// and the two neighbor-language spellings that get their own message
+// (ADR-0060).
+bool module_walk_head(std::string_view head);
+
+// Whether a type position mentions any of a declaration's type parameters.
+// A spec argument that does is stored as a shape and resolved where the
+// target's arguments bind them.
+bool type_mentions_params(const ast::AstArena& ast,
+                          ast::TypeIdx type,
+                          std::span<const ast::GenericParam> params);
+
+// Index of a type parameter in a declaration's parameter list, or the
+// parameter count when the name is not a parameter.
+u32 param_slot(std::span<const ast::GenericParam> params,
+               std::string_view name);
+
 }  // namespace analyzer

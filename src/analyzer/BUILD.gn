@@ -16,7 +16,12 @@ source_set("analyzer") {
     "summary.h",
     "types.cc",
     "types.h",
+    "types_drop.cc",
     "types_expr.cc",
+    "types_generic.cc",
+    "types_literal.cc",
+    "types_relation.cc",
+    "types_spec.cc",
   ]
   deps = [
     "//src:base_modules",
