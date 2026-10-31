@@ -255,6 +255,12 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
       return true;
     }
   }
+  // A type reached twice answers the same both times, and the answer is
+  // what the walk recursed through it to find. Without this, every type
+  // of a package rebuilt the whole subtree below it.
+  if (root.idx < cycle_clean_.size() && cycle_clean_[root.idx] != 0) {
+    return false;
+  }
   const ir::TypeNode& node = storage.types()[root];
   stack.push_back(root);
   bool cycle = false;
@@ -311,6 +317,12 @@ bool Checker::has_value_cycle(ir::TypeIdx root,
     default: break;
   }
   stack.pop_back();
+  if (!cycle) {
+    if (cycle_clean_.size() <= root.idx) {
+      cycle_clean_.resize(root.idx + 1, 0);
+    }
+    cycle_clean_[root.idx] = 1;
+  }
   return cycle;
 }
 

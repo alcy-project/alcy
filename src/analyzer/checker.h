@@ -207,7 +207,7 @@ class Checker {
   // list charged the checker its types times its copies. This answers the
   // same question: a later entry for a copy wins, as walking from the back
   // did.
-  std::unordered_map<u32, u32> type_origins_by_index_;
+  std::vector<u32> type_origins_by_index_;
   // Const pre-pass state, keyed by the initializer being resolved.
   // `in_progress` catches a const that reaches itself, `checked` keeps
   // one initializer from being checked twice, and `failed` lets a later
@@ -234,6 +234,9 @@ class Checker {
   // Destructor resolution, aligned with the type table by index.
   std::vector<CheckedModule::DropGlue> drop_glue_;
   std::vector<u8> needs_drop_;
+  // The types validate_cycles already found to contain no value cycle.
+  // The types the cycle walk already found to contain no value cycle.
+  std::vector<u8> cycle_clean_;
   // Marked where the anchor interns; the walk that reads it is
   // structural, so only the anchor itself needs an entry.
   std::vector<u8> not_movable_;

@@ -204,11 +204,13 @@ u32 Checker::inst_index(ir::TypeIdx type) const {
 ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
   ir::TypeIdx current = type;
   for (u32 depth = 0; depth <= type_origins_.size(); ++depth) {
-    const auto found = type_origins_by_index_.find(current.idx);
-    if (found == type_origins_by_index_.end()) {
+    const u32 found = current.idx < type_origins_by_index_.size()
+                          ? type_origins_by_index_[current.idx]
+                          : base::INVALID_IDX;
+    if (found == base::INVALID_IDX) {
       return current;
     }
-    current = ir::TypeIdx(found->second);
+    current = ir::TypeIdx(found);
   }
   return current;
 }
