@@ -92,4 +92,31 @@ TEST_CASE("Config validation splits files from packages") {
   CHECK(validate_cli_config(check).is_err());
 }
 
+TEST_CASE("Config validation refuses fmt --stdin beside a named file") {
+  CliConfig both{};
+  both.subcommand = Subcommand::Fmt;
+  both.fmt_stdin = true;
+  both.fmt_files = {"main.al"};
+  CHECK(validate_cli_config(both).is_err());
+  CHECK(describe_config_error(ConfigError::FmtStdinWithFiles,
+                              i18n::Language::EnUs) ==
+        "The `--stdin` flag takes no files");
+
+  CliConfig piped{};
+  piped.subcommand = Subcommand::Fmt;
+  piped.fmt_stdin = true;
+  CHECK(validate_cli_config(piped).is_ok());
+
+  CliConfig named{};
+  named.subcommand = Subcommand::Fmt;
+  named.fmt_files = {"main.al"};
+  CHECK(validate_cli_config(named).is_ok());
+
+  // Naming no file leaves the pipe as the only source, which is what an
+  // editor buffer relies on; it is not a configuration error.
+  CliConfig bare{};
+  bare.subcommand = Subcommand::Fmt;
+  CHECK(validate_cli_config(bare).is_ok());
+}
+
 }  // namespace cli

@@ -24,11 +24,4 @@ TEST_CASE("fmt reads the named files instead of standard input") {
   config.fmt_files = {"main.al"};
   CHECK_FALSE(reads_stdin(config));
 }
-TEST_CASE("fmt reads the named files even when --stdin is present") {
-  CliConfig config{};
-  config.subcommand = Subcommand::Fmt;
-  config.fmt_stdin = true;
-  config.fmt_files = {"main.al"};
-  CHECK(reads_stdin(config));
-}
 }  // namespace cli

@@ -522,6 +522,7 @@
   F(CliStdinHelp, Note, Pipeline, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
   F(CliStdinNeedsOutput, Note, Pipeline, "Compiling from standard input needs `-o` to name the output") \
   F(CliStdinTakesNoInput, Note, Pipeline, "The `--stdin` flag takes no input") \
+  F(CliFmtStdinTakesNoFiles, Note, Pipeline, "The `--stdin` flag takes no files") \
   F(CliSuiteHelp, Note, Pipeline, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
   F(CliTargetHelp, Note, Pipeline, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
   F(CliTimeTraceHelp, Note, Pipeline, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \

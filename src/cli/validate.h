@@ -41,6 +41,8 @@ enum class ConfigError : u8 {
   // `--release` is the release profile under another name; naming both
   // it and `--profile` leaves neither standing.
   ReleaseWithProfile,
+  // Reading the pipe and also naming files is a contradiction.
+  FmtStdinWithFiles,
 };
 
 // Semantic validation of a parsed config, kept separate from grammar
