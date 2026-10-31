@@ -1320,8 +1320,9 @@ ir::TypeIdx Checker::check_closure(u32 module,
   // The scope the closure body may see: inside an enclosing closure,
   // only that closure's bindings, its captures, and what is visible
   // there in turn.
-  const usize visible_from =
-      closure_bounds.empty() ? 0 : closure_bounds.back().scope;
+  const usize visible_from = closureTables_.closure_bounds.empty()
+                                 ? 0
+                                 : closureTables_.closure_bounds.back().scope;
   for (const ast::Capture& capture : closure.captures) {
     const std::string_view name = capture.name.name;
     bool duplicate = false;
@@ -1364,9 +1365,10 @@ ir::TypeIdx Checker::check_closure(u32 module,
     }
     // A name the enclosing closure binds is a use of its capture:
     // the inner environment is built from the outer one.
-    if (!closure_bounds.empty() && local->capture != NO_CAPTURE &&
-        local->capture < closure_bounds.back().captures.size()) {
-      closure_bounds.back().captures[local->capture].used = true;
+    if (!closureTables_.closure_bounds.empty() &&
+        local->capture != NO_CAPTURE &&
+        local->capture < closureTables_.closure_bounds.back().captures.size()) {
+      closureTables_.closure_bounds.back().captures[local->capture].used = true;
     }
     entries.push_back(
         {name, capture.mode, local->type, capture.name.span, false});
@@ -1433,15 +1435,16 @@ ir::TypeIdx Checker::check_closure(u32 module,
                              .comp_known = false,
                              .span = param.name.span});
   }
-  closure_bounds.push_back({scopes.size() - 1, std::move(entries)});
+  closureTables_.closure_bounds.push_back(
+      {scopes.size() - 1, std::move(entries)});
   const ir::TypeIdx* body_expected = has_expected_sig ? &expected_ret : nullptr;
   const ir::TypeIdx body_type = check_expr(module, closure.body, body_expected);
   const ir::TypeIdx ret = has_expected_sig
                               ? expected_ret
                               : unify(fn_ret, body_type, node.span, "closure");
   std::vector<CaptureEntry> declared =
-      std::move(closure_bounds.back().captures);
-  closure_bounds.pop_back();
+      std::move(closureTables_.closure_bounds.back().captures);
+  closureTables_.closure_bounds.pop_back();
   scopes.pop_back();
   in_fn = saved_in_fn;
   loop_depth = saved_loop;
@@ -1479,7 +1482,7 @@ ir::TypeIdx Checker::check_closure(u32 module,
       sig.params.push_back(storage_copy(param));
     }
     sig.ret = storage_copy(ret);
-    closure_sigs.push_back(std::move(sig));
+    closureTables_.closure_sigs.push_back(std::move(sig));
   }
   CheckedModule::ClosureLit lit{expr,     {},        ret,          closure.body,
                                 cur_inst, self_type, closure_type, {}};

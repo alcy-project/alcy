@@ -575,7 +575,7 @@ ir::TypeIdx Checker::closure_env_type(std::span<const CaptureEntry> captures) {
 
 const Checker::ClosureSig* Checker::closure_sig_of_type(
     ir::TypeIdx type) const {
-  for (const ClosureSig& sig : closure_sigs) {
+  for (const ClosureSig& sig : closureTables_.closure_sigs) {
     if (sig.self_type.idx == type.idx) {
       return &sig;
     }
@@ -2039,8 +2039,8 @@ template <i18n::Key not_const_key>
 bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
                               diag::Span span,
                               u64& out) {
-  const auto cached = const_int_values_.find(info.init.idx);
-  if (cached != const_int_values_.end()) {
+  const auto cached = constInitTables_.const_int_values_.find(info.init.idx);
+  if (cached != constInitTables_.const_int_values_.end()) {
     out = cached->second;
     return true;
   }
@@ -2074,24 +2074,24 @@ bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
     return wrong();
   }
   out = narrowed;
-  const_int_values_.emplace(info.init.idx, out);
+  constInitTables_.const_int_values_.emplace(info.init.idx, out);
   return true;
 }
 
 bool Checker::ensure_const_checked(const CheckedModule::StaticInfo& info) {
   const u32 key = info.init.idx;
-  if (const_init_checked_.contains(key)) {
-    return !const_init_failed_.contains(key);
+  if (constInitTables_.const_init_checked_.contains(key)) {
+    return !constInitTables_.const_init_failed_.contains(key);
   }
-  if (const_init_in_progress_.contains(key)) {
+  if (constInitTables_.const_init_in_progress_.contains(key)) {
     const u32 index = bag.emit<i18n::Key::AnalyzerConstCycle>(
         DiagCode::InvalidOperation, ast.exprs[info.init].span, info.name);
     (void)index;
     return false;
   }
-  const_init_in_progress_.insert(key);
+  constInitTables_.const_init_in_progress_.insert(key);
   bool ok = check_const_dependencies(info.module, info.init);
-  if (ok && !const_init_checked_.contains(key)) {
+  if (ok && !constInitTables_.const_init_checked_.contains(key)) {
     const ir::TypeIdx want = info.type;
     const bool saved_in_fn = in_fn;
     in_fn = false;
@@ -2103,11 +2103,11 @@ bool Checker::ensure_const_checked(const CheckedModule::StaticInfo& info) {
     in_fn = saved_in_fn;
     ok = !is_error(actual);
     if (!ok) {
-      const_init_failed_.insert(key);
+      constInitTables_.const_init_failed_.insert(key);
     }
-    const_init_checked_.insert(key);
+    constInitTables_.const_init_checked_.insert(key);
   }
-  const_init_in_progress_.erase(key);
+  constInitTables_.const_init_in_progress_.erase(key);
   return ok;
 }
 
@@ -2304,7 +2304,8 @@ void Checker::precheck_called_fn(u32 module, ast::ExprIdx callee) {
 }
 
 void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
-  if (!fn.item.is_valid() || prechecked_fns_.contains(fn.item.idx)) {
+  if (!fn.item.is_valid() ||
+      constInitTables_.prechecked_fns_.contains(fn.item.idx)) {
     return;
   }
   const ast::ItemNode& item = ast.items[fn.item];
@@ -2318,7 +2319,7 @@ void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
   }
   const u32 module = where->second.first;
   const u32 inst = fn.inst;
-  prechecked_fns_.insert(fn.item.idx);
+  constInitTables_.prechecked_fns_.insert(fn.item.idx);
   std::vector<std::pair<std::string_view, ir::TypeIdx>> saved =
       std::move(type_params);
   std::vector<ValueParam> saved_values = std::move(value_params);
@@ -2356,7 +2357,8 @@ void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
 }
 
 void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
-  if (!method.item.is_valid() || prechecked_fns_.contains(method.item.idx)) {
+  if (!method.item.is_valid() ||
+      constInitTables_.prechecked_fns_.contains(method.item.idx)) {
     return;
   }
   // A method of a generic impl was checked under its instantiation the
@@ -2375,7 +2377,7 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
     return;
   }
   const u32 module = where->second.first;
-  prechecked_fns_.insert(method.item.idx);
+  constInitTables_.prechecked_fns_.insert(method.item.idx);
   const u32 inst = inst_index(method.self_type);
   const ir::TypeIdx saved_ret = fn_ret;
   const u32 saved_loop = loop_depth;
@@ -2990,7 +2992,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     // instantiation consumes the record and takes the witness for the
     // return type, or reports that none came.
     for (usize slot : return_slots) {
-      pending_own_fn_returns_.push_back(
+      ownFnTables_.pending_own_fn_returns_.push_back(
           PendingOwnFnReturn{entry.method_item, slot, method_args[slot],
                              own_fn_slot(method_fn.generic[slot].name.name),
                              span, witness_key(method_args, slot)});
@@ -3294,7 +3296,7 @@ bool Checker::fn_is_comp(ast::ItemIdx item) const {
 }
 
 const Checker::OwnFnSlot* Checker::own_fn_slot(std::string_view name) const {
-  for (const OwnFnSlot& slot : own_fn_slots_) {
+  for (const OwnFnSlot& slot : ownFnTables_.own_fn_slots_) {
     if (slot.name == name) {
       return &slot;
     }
@@ -3685,8 +3687,8 @@ bool Checker::resolve_value_path_impl(u32 module,
       // not captured: a closure sees its own bindings and the
       // module scope, nothing else. A use of a capture binding
       // marks its entry used, which is what the unused check reads.
-      if (!closure_bounds.empty()) {
-        ClosureBound& bound = closure_bounds.back();
+      if (!closureTables_.closure_bounds.empty()) {
+        ClosureBound& bound = closureTables_.closure_bounds.back();
         if (scope_of(name) < bound.scope) {
           const u32 index = bag.emit<i18n::Key::AnalyzerNotCaptured>(
               DiagCode::InvalidCapture, node.segments[0].span, name);
@@ -4339,8 +4341,8 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     // answer reports through its own diagnostic, not through this one
     // (the anchor is a stand-in nobody can name).
     const bool awaited =
-        !pending_own_fn_returns_.empty() &&
-        pending_own_fn_returns_.back().stand_in.idx == fn_ret.idx;
+        !ownFnTables_.pending_own_fn_returns_.empty() &&
+        ownFnTables_.pending_own_fn_returns_.back().stand_in.idx == fn_ret.idx;
     if (!is_void(fn_ret) && !awaited && !is_error(fn_ret) && !is_never(type) &&
         !is_error(type)) {
       const diag::Span span = ast.blocks[body].value.is_valid()
@@ -4409,7 +4411,7 @@ void Checker::check_bodies() {
           // sites, where the type parameters are bound. A body the
           // const pre-pass already checked is not checked twice.
           if (node.payload.get<ast::ItemFn>().generic.empty() &&
-              !prechecked_fns_.contains(item.idx)) {
+              !constInitTables_.prechecked_fns_.contains(item.idx)) {
             check_fn(m, item, nullptr);
           }
           if (m == tree.root &&
@@ -4455,7 +4457,7 @@ void Checker::check_bodies() {
             }
             // A method a const initializer already reached had its body
             // typed on demand.
-            if (!prechecked_fns_.contains(method.idx)) {
+            if (!constInitTables_.prechecked_fns_.contains(method.idx)) {
               check_fn(m, method, self_ptr);
             }
           }
@@ -4489,7 +4491,8 @@ void Checker::check_bodies() {
           }
           // A const an array length already evaluated was checked on
           // demand; checking it again would repeat its diagnostics.
-          if (is_const && const_init_checked_.contains(init.idx)) {
+          if (is_const &&
+              constInitTables_.const_init_checked_.contains(init.idx)) {
             break;
           }
           in_fn = false;

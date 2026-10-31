@@ -1923,7 +1923,7 @@ void Checker::check_spec_impl_bodies(u32 module, ast::ItemIdx item) {
       }
       // A method a const initializer already reached had its body typed
       // on demand.
-      if (!prechecked_fns_.contains(method_item.idx)) {
+      if (!constInitTables_.prechecked_fns_.contains(method_item.idx)) {
         check_fn(module, method_item, &self_type);
       }
     }

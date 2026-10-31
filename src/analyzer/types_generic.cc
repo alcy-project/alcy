@@ -812,7 +812,8 @@ ir::TypeIdx Checker::own_fn_return_witness(
     ast::ItemIdx item,
     usize slot,
     std::span<const ir::TypeIdx> args) const {
-  for (const OwnFnReturnWitness& recorded : own_fn_return_witnesses_) {
+  for (const OwnFnReturnWitness& recorded :
+       ownFnTables_.own_fn_return_witnesses_) {
     if (recorded.item != item || recorded.slot != slot) {
       continue;
     }
@@ -832,7 +833,8 @@ bool Checker::try_bind_own_fn_return(u32 module,
   const PendingOwnFnReturn* found = nullptr;
   // The innermost pending answers first: a nested instantiation appends
   // while an outer body is mid-check, and each answers its own stand-in.
-  for (const PendingOwnFnReturn& pending : pending_own_fn_returns_) {
+  for (const PendingOwnFnReturn& pending :
+       ownFnTables_.pending_own_fn_returns_) {
     if (pending.stand_in.idx == fn_ret.idx) {
       found = &pending;
     }
@@ -861,7 +863,7 @@ bool Checker::try_bind_own_fn_return(u32 module,
     }
   }
   if (matches) {
-    own_fn_return_witnesses_.push_back(
+    ownFnTables_.own_fn_return_witnesses_.push_back(
         OwnFnReturnWitness{pending.item, pending.slot, pending.args, actual});
     fn_ret = actual;
   } else {
@@ -872,7 +874,7 @@ bool Checker::try_bind_own_fn_return(u32 module,
     }
     // An answer that failed: later returns meet the error, and the
     // instantiation reports nothing further.
-    own_fn_return_witnesses_.push_back(OwnFnReturnWitness{
+    ownFnTables_.own_fn_return_witnesses_.push_back(OwnFnReturnWitness{
         pending.item, pending.slot, pending.args, error_type()});
     fn_ret = error_type();
   }
@@ -894,8 +896,10 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
   // diagnostic, empty when only the synthetic name can.
   auto rewrite = [&](ast::TypeIdx spelling, ast::TypeFunc sig, bool is_return,
                      std::string_view display) {
-    own_fn_names_.push_back("__fn" + std::to_string(next_own_fn_++));
-    const ast::Ident name{own_fn_names_.back(), ast.types[spelling].span};
+    ownFnTables_.own_fn_names_.push_back("__fn" +
+                                         std::to_string(next_own_fn_++));
+    const ast::Ident name{ownFnTables_.own_fn_names_.back(),
+                          ast.types[spelling].span};
     const diag::Span span = ast.types[spelling].span;
     // The parameter is bounded by the spec its spelling names
     // (ADR-0116): `fn(A, B) -> R` is `Fn<(A, B), R>`, with the
@@ -923,8 +927,8 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
     ast.types[spelling].payload.set(ast::TypePath{.path = path, .args = {}});
     added.push_back(
         ast::GenericParam{.name = name, .type = bound_type, .bounds = {}});
-    own_fn_slots_.push_back(OwnFnSlot{name.name, sig, is_return,
-                                      display.empty() ? name.name : display});
+    ownFnTables_.own_fn_slots_.push_back(OwnFnSlot{
+        name.name, sig, is_return, display.empty() ? name.name : display});
   };
   for (const ast::ItemFnParam& param : fn.params) {
     const ast::TypeIdx param_type = param.type;
@@ -956,8 +960,8 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
   }
   std::vector<ast::GenericParam> all(fn.generic.begin(), fn.generic.end());
   all.insert(all.end(), added.begin(), added.end());
-  own_fn_params_.push_back(std::move(all));
-  fn.generic = own_fn_params_.back();
+  ownFnTables_.own_fn_params_.push_back(std::move(all));
+  fn.generic = ownFnTables_.own_fn_params_.back();
   ast.items[item].payload.set(fn);
 }
 
@@ -1133,10 +1137,11 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   // carries the witness, and the instance's arguments follow it, so
   // the next call with the same witness finds this body check instead
   // of running another.
-  if (!pending_own_fn_returns_.empty() &&
-      pending_own_fn_returns_.back().item == item) {
-    const PendingOwnFnReturn pending = pending_own_fn_returns_.back();
-    pending_own_fn_returns_.pop_back();
+  if (!ownFnTables_.pending_own_fn_returns_.empty() &&
+      ownFnTables_.pending_own_fn_returns_.back().item == item) {
+    const PendingOwnFnReturn pending =
+        ownFnTables_.pending_own_fn_returns_.back();
+    ownFnTables_.pending_own_fn_returns_.pop_back();
     const ir::TypeIdx witness =
         own_fn_return_witness(item, pending.slot, pending.args);
     if (witness.is_valid()) {
@@ -1389,7 +1394,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   // instantiation consumes these records and replaces the signature's
   // return type with the witness, or reports that none came.
   for (usize slot : return_slots) {
-    pending_own_fn_returns_.push_back(PendingOwnFnReturn{
+    ownFnTables_.pending_own_fn_returns_.push_back(PendingOwnFnReturn{
         item, slot, bound[slot], own_fn_slot(params[slot].name.name), span,
         witness_key(bound, slot)});
   }
@@ -1531,10 +1536,11 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     // A stand-in the body answered: the method's signature carries the
     // witness, and the entry's arguments follow it, so the next call
     // with the same witness finds this body check.
-    if (!pending_own_fn_returns_.empty() &&
-        pending_own_fn_returns_.back().item == method_item) {
-      const PendingOwnFnReturn pending = pending_own_fn_returns_.back();
-      pending_own_fn_returns_.pop_back();
+    if (!ownFnTables_.pending_own_fn_returns_.empty() &&
+        ownFnTables_.pending_own_fn_returns_.back().item == method_item) {
+      const PendingOwnFnReturn pending =
+          ownFnTables_.pending_own_fn_returns_.back();
+      ownFnTables_.pending_own_fn_returns_.pop_back();
       const ir::TypeIdx witness =
           own_fn_return_witness(method_item, pending.slot, pending.args);
       if (witness.is_valid()) {

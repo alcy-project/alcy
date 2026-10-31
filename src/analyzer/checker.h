@@ -208,20 +208,18 @@ class Checker {
   // same question: a later entry for a copy wins, as walking from the back
   // did.
   std::unordered_map<u32, u32> type_origins_by_index_;
-  // Const integer values the checker resolved for type positions, by
-  // the initializer they came from; the in-progress set catches a
-  // const that reaches itself, and `const_init_checked_` keeps one
-  // initializer from being checked twice.
-  std::unordered_map<u32, u64> const_int_values_;
-  std::unordered_set<u32> const_init_in_progress_;
-  std::unordered_set<u32> const_init_checked_;
-  // Initializers whose check reported an error. A later request sees
-  // the failure rather than evaluating an error-typed initializer and
-  // reporting a follow-on.
-  std::unordered_set<u32> const_init_failed_;
-  // Functions whose bodies the const pre-pass already checked, so the
-  // bodies sweep does not check them a second time.
-  std::unordered_set<u32> prechecked_fns_;
+  // Const pre-pass state, keyed by the initializer being resolved.
+  // `in_progress` catches a const that reaches itself, `checked` keeps
+  // one initializer from being checked twice, and `failed` lets a later
+  // request see the error instead of a follow-on.
+  struct ConstInitTables {
+    std::unordered_map<u32, u64> const_int_values_;
+    std::unordered_set<u32> const_init_in_progress_;
+    std::unordered_set<u32> const_init_checked_;
+    std::unordered_set<u32> const_init_failed_;
+    std::unordered_set<u32> prechecked_fns_;
+  };
+  ConstInitTables constInitTables_;
   // Items whose declaration has registered, by item index. On-demand
   // resolution consults it so a declaration that reaches itself stops
   // instead of recursing, and so a later sweep does not register the
@@ -354,12 +352,17 @@ class Checker {
     std::vector<ir::TypeIdx> params;
     ir::TypeIdx ret = ir::TypeIdx::invalid();
   };
-  std::vector<ClosureSig> closure_sigs;
   struct ClosureBound {
     usize scope = 0;
     std::vector<CaptureEntry> captures;
   };
-  std::vector<ClosureBound> closure_bounds;
+  // Closures under construction: the signature each nominal was
+  // interned with, and the capture set of each enclosing closure.
+  struct ClosureTables {
+    std::vector<ClosureSig> closure_sigs;
+    std::vector<ClosureBound> closure_bounds;
+  };
+  ClosureTables closureTables_;
   u32 loop_depth = 0;
   // Nonzero while checking comp evaluation contexts (comp block
   // contents and comp declaration initializers).
@@ -591,11 +594,17 @@ class Checker {
     // The instantiation this record answers for.
     std::vector<ir::TypeIdx> args;
   };
-  std::deque<std::vector<ast::GenericParam>> own_fn_params_;
-  std::deque<std::string> own_fn_names_;
-  std::vector<OwnFnSlot> own_fn_slots_;
-  std::vector<OwnFnReturnWitness> own_fn_return_witnesses_;
-  std::vector<PendingOwnFnReturn> pending_own_fn_returns_;
+  // Return-position `fn()` desugaring: the parameters rewritten in
+  // place, the slots they declare, and the returns still waiting for
+  // a witness to bind against.
+  struct OwnFnTables {
+    std::deque<std::vector<ast::GenericParam>> own_fn_params_;
+    std::deque<std::string> own_fn_names_;
+    std::vector<OwnFnSlot> own_fn_slots_;
+    std::vector<OwnFnReturnWitness> own_fn_return_witnesses_;
+    std::vector<PendingOwnFnReturn> pending_own_fn_returns_;
+  };
+  OwnFnTables ownFnTables_;
   u32 next_own_fn_ = 0;
   // Rewrites each `fn(...)` spelling of `item` in place: the type
   // becomes a path to a fresh synthetic parameter bounded by the `Fn`
