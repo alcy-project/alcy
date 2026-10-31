@@ -1,0 +1,4 @@
+exit = 4
+args = ["--color=always"]
+contains = ["Argument for `comp` parameter must be comp-known", "\u001b[31m"]
+not_contains = []
