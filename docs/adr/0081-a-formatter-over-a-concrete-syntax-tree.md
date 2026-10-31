@@ -53,9 +53,13 @@ parameters are injected while it holds no configuration of its own.**
   nothing, and the compiler's verdict about a file survives its
   formatting. The last clause is why a spelled-out semicolon survives
   where dropping it would read differently — a spec or extern member
-  needs it, a signature the lexer does not end a statement after needs
-  it, and a body's last statement keeps its statement status rather
-  than becoming the block's value.
+  needs it, or a signature the lexer does not end a statement after
+  needs it. A spelled-out semicolon is never load-bearing as a
+  block's statement-vs-value switch: block value is the last
+  expression by position, discarding a non-`()` value goes through
+  `_ :=`, and a function body still needs an explicit `ret` on every
+  path, so its tail expression is never the implicit return
+  (ADR-0133).
 
 The library is a module of the toolchain tree rather than a stage of
 the compiler: no compiler target depends on it - the dependency
