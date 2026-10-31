@@ -48,6 +48,15 @@ proportional to the package, and 1.05 per doubling is about 10% removable at
 1200 modules. The fit line splits the run into the part every module pays for
 and the part that grows with the package; the second is the target.
 
+A slope at or below zero is the usual result and is not a measurement error:
+startup, artifact resolution, and the summary sweeps are fixed work, so they
+amortize as modules multiply and the fit tilts down. A slope far below zero
+means the line no longer describes the range at all - a fit of -235 x modules
+reports a negative share of the run - so read the constant, not the slope.
+Run every shape before concluding a run is linear: the constant ranges from
+545K to 884K per module across them, so a change that moves one shape's
+constant proves nothing about another's.
+
 The shapes exist to put weight where a cost can hide, and a corpus whose
 modules do not mention each other would not:
 
