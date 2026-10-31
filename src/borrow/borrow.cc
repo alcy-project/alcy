@@ -1751,9 +1751,14 @@ class Checker {
           // A `str` local is a view, not storage: its two words point at
           // a buffer someone else owns, so handing the view back does
           // not hand back the local. A `String` owns, so a loan rooted
-          // there still escapes.
+          // there still escapes. The exemption covers the view's value,
+          // which reaches the return through a copy: the loan sits on
+          // the register the copy read, not on the returned one. A loan
+          // whose own register is the returned one is the address the
+          // borrow took of the slot, and that address is the frame's.
           if (root < storage.registers().size() &&
-              tag_of(storage.registers()[root].type) == ir::TypeTag::Str) {
+              tag_of(storage.registers()[root].type) == ir::TypeTag::Str &&
+              loans[loan].reg != value.as_register().idx) {
             continue;
           }
           if (!is_param_root(root, fn)) {
