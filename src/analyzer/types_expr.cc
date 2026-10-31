@@ -1721,19 +1721,17 @@ ir::TypeIdx Checker::check_call(u32 module,
   }
   if (resolved.kind == PathValue::Kind::GenericFn) {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    const u64 key = call_resolution_key(expr.idx, cur_inst);
     const CheckedModule::FnSig* fn = nullptr;
-    for (usize i = call_resolutions_.size(); i > 0; --i) {
-      const CallResolution& entry = call_resolutions_[i - 1];
-      if (entry.expr == expr.idx && entry.inst == cur_inst) {
-        fn = entry.sig;
-        break;
-      }
+    const auto found = call_resolutions_.find(key);
+    if (found != call_resolutions_.end()) {
+      fn = found->second;
     }
     if (fn == nullptr) {
       fn = resolve_generic_fn(module, resolved.generic_item, call.args,
                               call.type_args, span);
       if (fn != nullptr) {
-        call_resolutions_.push_back(CallResolution{expr.idx, cur_inst, fn});
+        call_resolutions_.insert_or_assign(key, fn);
       }
     }
     if (fn == nullptr) {

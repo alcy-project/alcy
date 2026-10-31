@@ -152,13 +152,11 @@ class Checker {
   ir::StorageBuilder builder;
   // A generic call resolves to one signature per call expression and
   // instantiation. Resolving it again is what makes a nest of calls
-  // double in cost, so the answer is kept.
-  struct CallResolution {
-    u32 expr = 0;
-    u32 inst = 0;
-    const CheckedModule::FnSig* sig = nullptr;
-  };
-  std::vector<CallResolution> call_resolutions_;
+  // double in cost, so the answer is kept, keyed by both.
+  static u64 call_resolution_key(u32 expr, u32 inst) {
+    return (static_cast<u64>(expr) << 32) | inst;
+  }
+  std::unordered_map<u64, const CheckedModule::FnSig*> call_resolutions_;
   // The compilation's one interner; a second one here would mint storage ids
   // that lowering and codegen could not resolve.
   ir::SymbolTable& interner;
