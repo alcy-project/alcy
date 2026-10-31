@@ -504,16 +504,52 @@ def profile_self_time(binary: Path, corpus: Path, jobs: int, runs: int) -> dict:
             text=True,
             timeout=3600,
         )
-    totals = {}
+    entries = []
     for line in report.stdout.splitlines():
         found = PROFILE_LINE.match(line)
         if not found or found.group(2) == "k":
             continue
-        symbol = found.group(3).strip()
-        if symbol.startswith("0x"):
-            continue
-        totals[symbol] = totals.get(symbol, 0.0) + float(found.group(1))
+        entries.append((float(found.group(1)), found.group(3).strip()))
+    # A perf built without the symbol-resolving frontend reports every
+    # sample as a bare address, which leaves nothing to group by. The
+    # addresses still name what ran, so they are resolved through the
+    # binary's own debug info instead.
+    bare = [e for e in entries if e[1].startswith("0x")]
+    if entries and len(bare) == len(entries):
+        resolved = resolve_addresses(binary, [e[1] for e in entries])
+        entries = [(share, resolved[addr]) for share, addr in entries]
+    totals = {}
+    for share, symbol in entries:
+        totals[symbol] = totals.get(symbol, 0.0) + share
     return totals
+
+
+def symbolized_binary(binary: Path) -> Path:
+    """The binary's debug info, which a stripped install keeps beside it."""
+    unstripped = binary.parent / "exe.unstripped" / binary.name
+    return unstripped if unstripped.is_file() else binary
+
+
+def resolve_addresses(binary: Path, addresses: list) -> dict:
+    """Map sampled addresses to the symbol and line they fall in."""
+    unique = sorted(set(addresses))
+    resolved = {}
+    run = subprocess.run(
+        ["addr2line", "-C", "-f", "-e", str(symbolized_binary(binary))],
+        input="\n".join(unique) + "\n",
+        capture_output=True,
+        text=True,
+        timeout=3600,
+    )
+    lines = run.stdout.splitlines()
+    for i, address in enumerate(unique):
+        name = lines[2 * i].strip() if 2 * i < len(lines) else ""
+        where = lines[2 * i + 1].strip() if 2 * i + 1 < len(lines) else ""
+        if name and name != "??":
+            resolved[address] = f"{name} {where}" if where != "??:0" else name
+        else:
+            resolved[address] = address
+    return resolved
 
 
 def cmd_scale(args: argparse.Namespace) -> int:
