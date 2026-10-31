@@ -832,6 +832,9 @@ class Lowerer {
                         bool fold,
                         ir::RegisterIdx& carry_out,
                         State& state);
+    // Builds ten to the power of `places` from one table entry and a
+    // remainder held exactly. A place past 308 yields an infinity.
+    ir::RegisterIdx emit_decimal_scale(ir::RegisterIdx places);
     // Writes a float in the decimal magnitude form the format string
     // selects, whose placeholders become a mantissa and exponent
     // outside [1e-4, 1e16).

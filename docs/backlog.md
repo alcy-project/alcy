@@ -142,14 +142,17 @@ replaced. The foundations are in `roadmap.md`.
   through it is the borrow checker's question rather than the move
   walk's.
 
-- [ ] The formatter's fixed-point digits are exact only to about
-  sixteen places: `{:.Nf}` takes each digit by multiplying the fraction
-  by ten in `f64`, so the error compounds and the seventeenth place is
-  wrong (`{:.17f}` of `0.1` prints `0.10000000000000000` where half-up
-  rounding of the exact value is `0.10000000000000001`; `1/3` prints
-  `0.33333333333333330` against `0.33333333333333331`). An exact
-  conversion over the mantissa, a scaled long division, is the fix; the
-  spec's cap of 17 places stands.
+- [ ] The exponent form's mantissa is exact to fifteen significant
+  digits: the fixed form takes every digit from an exact conversion,
+  while the exponent form scales the magnitude by a power of ten the
+  table holds and each product of that scale rounds, so the sixteenth
+  digit carries to within a unit and the seventeenth to within a few
+  ulp (`{:.16f}` of `1.4e-323` is exact, `{:.16f}` of
+  `5.1806537865363085e-318` prints `5.180653786536308e-318` against
+  `...309`, and `{:.17f}` of `5e-324` prints `4.94065645841246504e-324`
+  against `...544`). An exact mantissa wants an error-free product
+  carried beside the rounded one, a scaled long division; the spec's
+  floor of about sixteen significant digits stands meanwhile.
 
 - [ ] The direct-wasm stack budget: a frame past the reserve (the
   shadow stack's base) panics with "stack overflow", which is a

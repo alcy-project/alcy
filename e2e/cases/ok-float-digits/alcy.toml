@@ -1,0 +1,21 @@
+[package]
+name = "app"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/core" = {}
+"alcy/std/sys" = {}
+"alcy/std/alloc" = {}
+"alcy/std/collections" = {}
+"alcy/std/arch" = {}
+"alcy/std/fmt" = {}
+"alcy/std/io" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}
+
+[[bin]]
+path = "main.al"

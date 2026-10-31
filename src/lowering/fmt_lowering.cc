@@ -835,6 +835,63 @@ void Lowerer::Fmt::emit_magnitude(diag::Span span,
   }
 }
 
+ir::RegisterIdx Lowerer::Fmt::emit_decimal_scale(ir::RegisterIdx places) {
+  const ir::TypeIdx f64_ty = owner_.builder.primitive(ir::TypeTag::F64);
+  const ir::TypeIdx i32_ty = owner_.builder.primitive(ir::TypeTag::I32);
+  const ir::TypeIdx boolean = owner_.builder.primitive(ir::TypeTag::I1);
+  auto f64_imm = [&](f64 literal) {
+    return owner_.to_operand(
+        owner_.builder.immutable(
+            {.type = f64_ty, .data = {.f64_value = literal}}),
+        f64_ty);
+  };
+  auto i32_imm = [&](i64 value) {
+    return owner_.to_operand(
+        owner_.builder.immutable(
+            {.type = i32_ty, .data = {.i64_value = value}}),
+        i32_ty);
+  };
+  // A table entry for the multiple of sixteen times an exactly held
+  // ten to the remainder, so the product rounds once.
+  auto pow10 = [](u32 exponent) -> f64 {
+    std::string text = "1";
+    text.append(exponent, '0');
+    return std::strtod(text.c_str(), nullptr);
+  };
+  const ir::RegisterIdx chunk =
+      owner_.emit(ir::Opcode::UintDiv, i32_ty,
+                  {owner_.to_operand(places, i32_ty), i32_imm(16)});
+  const ir::RegisterIdx chunk_scaled =
+      owner_.emit(ir::Opcode::IntMul, i32_ty,
+                  {owner_.to_operand(chunk, i32_ty), i32_imm(16)});
+  const ir::RegisterIdx rest =
+      owner_.emit(ir::Opcode::IntSub, i32_ty,
+                  {owner_.to_operand(places, i32_ty),
+                   owner_.to_operand(chunk_scaled, i32_ty)});
+  ir::OperandIdx high = f64_imm(pow10(0));
+  for (u32 i = 1; i <= 20; ++i) {
+    const ir::RegisterIdx hit =
+        owner_.emit(ir::Opcode::Eq, boolean,
+                    {owner_.to_operand(chunk, i32_ty), i32_imm(i)});
+    const ir::RegisterIdx chosen = owner_.emit(
+        ir::Opcode::Select, f64_ty,
+        {owner_.to_operand(hit, boolean), f64_imm(pow10(16 * i)), high});
+    high = owner_.to_operand(chosen, f64_ty);
+  }
+  // Ten to the fifteenth is the last power a double holds exactly, so
+  // the remainder is one constant rather than a run of products.
+  ir::OperandIdx remainder = f64_imm(1.0);
+  for (u32 i = 1; i < 16; ++i) {
+    const ir::RegisterIdx hit = owner_.emit(
+        ir::Opcode::Eq, boolean, {owner_.to_operand(rest, i32_ty), i32_imm(i)});
+    const ir::RegisterIdx chosen = owner_.emit(
+        ir::Opcode::Select, f64_ty,
+        {owner_.to_operand(hit, boolean), f64_imm(pow10(i)), remainder});
+    remainder = owner_.to_operand(chosen, f64_ty);
+  }
+  return owner_.emit(ir::Opcode::FMul, f64_ty, {high, remainder});
+}
+
 void Lowerer::Fmt::emit_float(diag::Span span,
                               ir::RegisterIdx value,
                               u8 precision,
@@ -1002,11 +1059,9 @@ void Lowerer::Fmt::emit_float(diag::Span span,
           i32_ty);
     };
     // Rebuild the mantissa from the original magnitude and a power of
-    // ten built from one table entry (a multiple of sixteen) and an
-    // exact product of tens. The normalization loop's repeated tenths
+    // ten from the table. The normalization loop's repeated tenths
     // accumulate a rounding per decade, which leaves the exponent
-    // form's last digits wrong; two scaled products keep the value's
-    // own digits.
+    // form's last digits wrong.
     const ir::RegisterIdx below_zero = owner_.emit(
         ir::Opcode::Lt, boolean, {owner_.to_operand(e, i32_ty), zero_e});
     const ir::RegisterIdx negated_places = owner_.emit(
@@ -1016,82 +1071,10 @@ void Lowerer::Fmt::emit_float(diag::Span span,
                     {owner_.to_operand(below_zero, boolean),
                      owner_.to_operand(negated_places, i32_ty),
                      owner_.to_operand(e, i32_ty)});
-    // One power of ten, held as a table entry (a multiple of sixteen)
-    // and an exact product of tens, since ten to the fifteenth is the
-    // last that fits a double exactly.
-    auto pow10 = [](u32 exponent) -> f64 {
-      std::string text = "1";
-      text.append(exponent, '0');
-      return std::strtod(text.c_str(), nullptr);
-    };
-    const ir::RegisterIdx chunk =
-        owner_.emit(ir::Opcode::UintDiv, i32_ty,
-                    {owner_.to_operand(places, i32_ty), i32_imm(16)});
-    const ir::RegisterIdx chunk_scaled =
-        owner_.emit(ir::Opcode::IntMul, i32_ty,
-                    {owner_.to_operand(chunk, i32_ty), i32_imm(16)});
-    const ir::RegisterIdx rest =
-        owner_.emit(ir::Opcode::IntSub, i32_ty,
-                    {owner_.to_operand(places, i32_ty),
-                     owner_.to_operand(chunk_scaled, i32_ty)});
-    ir::OperandIdx high = f64_imm(pow10(0));
-    for (u32 i = 1; i <= 20; ++i) {
-      const ir::RegisterIdx hit =
-          owner_.emit(ir::Opcode::Eq, boolean,
-                      {owner_.to_operand(chunk, i32_ty), i32_imm(i)});
-      const ir::RegisterIdx chosen = owner_.emit(
-          ir::Opcode::Select, f64_ty,
-          {owner_.to_operand(hit, boolean), f64_imm(pow10(16 * i)), high});
-      high = owner_.to_operand(chosen, f64_ty);
-    }
-    const ir::RegisterIdx low_addr =
-        owner_.emit(ir::Opcode::Alloca, f64_ty, {owner_.size_one});
-    owner_.emit_void(ir::Opcode::Store,
-                     {f64_imm(1.0), owner_.to_operand(low_addr, f64_ty)});
-    const ir::RegisterIdx count_addr =
-        owner_.emit(ir::Opcode::Alloca, i32_ty, {owner_.size_one});
-    owner_.emit_void(ir::Opcode::Store,
-                     {zero_e, owner_.to_operand(count_addr, i32_ty)});
-    const ir::BlockIdx low_head = owner_.reserve_block();
-    const ir::BlockIdx low_body = owner_.reserve_block();
-    const ir::BlockIdx low_exit = owner_.reserve_block();
-    owner_.emit_br(low_head);
-    owner_.switch_to(low_head);
-    {
-      const ir::RegisterIdx at = owner_.emit(
-          ir::Opcode::Load, i32_ty, {owner_.to_operand(count_addr, i32_ty)});
-      const ir::RegisterIdx more = owner_.emit(
-          ir::Opcode::Lt, boolean,
-          {owner_.to_operand(at, i32_ty), owner_.to_operand(rest, i32_ty)});
-      owner_.emit_cond_br(owner_.to_operand(more, boolean), low_body, low_exit);
-    }
-    owner_.switch_to(low_body);
-    {
-      const ir::RegisterIdx value = owner_.emit(
-          ir::Opcode::Load, f64_ty, {owner_.to_operand(low_addr, f64_ty)});
-      const ir::RegisterIdx grown =
-          owner_.emit(ir::Opcode::FMul, f64_ty,
-                      {owner_.to_operand(value, f64_ty), f64_imm(10.0)});
-      owner_.emit_void(ir::Opcode::Store,
-                       {owner_.to_operand(grown, f64_ty),
-                        owner_.to_operand(low_addr, f64_ty)});
-      const ir::RegisterIdx at = owner_.emit(
-          ir::Opcode::Load, i32_ty, {owner_.to_operand(count_addr, i32_ty)});
-      const ir::RegisterIdx next =
-          owner_.emit(ir::Opcode::IntAdd, i32_ty,
-                      {owner_.to_operand(at, i32_ty), i32_imm(1)});
-      owner_.emit_void(ir::Opcode::Store,
-                       {owner_.to_operand(next, i32_ty),
-                        owner_.to_operand(count_addr, i32_ty)});
-      owner_.emit_br(low_head);
-    }
-    owner_.switch_to(low_exit);
-    const ir::RegisterIdx low = owner_.emit(
-        ir::Opcode::Load, f64_ty, {owner_.to_operand(low_addr, f64_ty)});
-    const ir::RegisterIdx whole = owner_.emit(
-        ir::Opcode::FMul, f64_ty, {high, owner_.to_operand(low, f64_ty)});
-    // A power past the largest double only arises for a subnormal
-    // magnitude, where the loop's own mantissa stands in.
+    const ir::RegisterIdx whole = emit_decimal_scale(places);
+    // A scale past the largest double only arises for a subnormal
+    // magnitude. Halving the places keeps both factors finite, and the
+    // two products that follow round once each.
     const ir::RegisterIdx overflowed = owner_.emit(
         ir::Opcode::Gt, boolean,
         {owner_.to_operand(whole, f64_ty), f64_imm(1.7976931348623157e308)});
@@ -1099,12 +1082,27 @@ void Lowerer::Fmt::emit_float(diag::Span span,
         owner_.emit(ir::Opcode::FMul, f64_ty,
                     {owner_.to_operand(magnitude, f64_ty),
                      owner_.to_operand(whole, f64_ty)});
-    const ir::RegisterIdx fallback = owner_.emit(
-        ir::Opcode::Load, f64_ty, {owner_.to_operand(m_addr, f64_ty)});
+    const ir::RegisterIdx lower_places =
+        owner_.emit(ir::Opcode::UintDiv, i32_ty,
+                    {owner_.to_operand(places, i32_ty), i32_imm(2)});
+    const ir::RegisterIdx upper_places =
+        owner_.emit(ir::Opcode::IntSub, i32_ty,
+                    {owner_.to_operand(places, i32_ty),
+                     owner_.to_operand(lower_places, i32_ty)});
+    const ir::RegisterIdx lower_scale = emit_decimal_scale(lower_places);
+    const ir::RegisterIdx upper_scale = emit_decimal_scale(upper_places);
+    const ir::RegisterIdx partial =
+        owner_.emit(ir::Opcode::FMul, f64_ty,
+                    {owner_.to_operand(magnitude, f64_ty),
+                     owner_.to_operand(lower_scale, f64_ty)});
+    const ir::RegisterIdx staged =
+        owner_.emit(ir::Opcode::FMul, f64_ty,
+                    {owner_.to_operand(partial, f64_ty),
+                     owner_.to_operand(upper_scale, f64_ty)});
     const ir::RegisterIdx tiny =
         owner_.emit(ir::Opcode::Select, f64_ty,
                     {owner_.to_operand(overflowed, boolean),
-                     owner_.to_operand(fallback, f64_ty),
+                     owner_.to_operand(staged, f64_ty),
                      owner_.to_operand(direct_tiny, f64_ty)});
     const ir::RegisterIdx divided =
         owner_.emit(ir::Opcode::FDiv, f64_ty,

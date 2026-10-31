@@ -65,9 +65,11 @@ remaining arguments, one per placeholder.
   the decimal exponent (`1.5e-5`, `1e20`), so every finite value is
   printable. `NaN` and the infinities print as `NaN`, `inf`, and
   `-inf`.
-- Float conversion is exact to the binary value's precision, about
-  sixteen significant digits; digits past that are zero rather than
-  rounded.
+- Float conversion follows the binary value: inside the fixed range
+  every digit is the value's own, rounded half-up. The exponent form's
+  mantissa is accurate to about sixteen significant digits, because a
+  double's significand cannot be rescaled by a power of ten without a
+  rounding; digits past that are not guaranteed.
 
 ## Expansion
 
