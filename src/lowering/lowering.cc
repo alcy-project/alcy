@@ -3,6 +3,7 @@
 
 #include "lowering/lowering.h"
 
+#include <charconv>
 #include <cstdlib>
 #include <initializer_list>
 #include <optional>
@@ -621,29 +622,48 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
   }
 }
 
+namespace {
+
+// Appends `value` in decimal and then `separator`, the form a key records an
+// index in. A key is built at every call site, so the digits go to a buffer
+// that is handed over once: growing the string a character at a time paid the
+// bookkeeping of an append for each one.
+void append_index(std::string& out, u32 value, char separator) {
+  // A u32 in decimal takes at most ten digits, and the separator one more.
+  char digits[11];
+  char* const last = std::to_chars(digits, digits + 10, value).ptr;
+  *last = separator;
+  out.append(digits, static_cast<usize>(last + 1 - digits));
+}
+
+}  // namespace
+
 // The signature does not identify an instantiation: two of them can
 // share parameters and result while differing only inside the body,
 // as `size_of::<T>()` reads it. The instance index is part of the key.
-std::string Lowerer::fn_key(ast::ItemIdx item,
-                            const std::vector<ir::TypeIdx>& params,
-                            ir::TypeIdx ret,
-                            u32 inst,
-                            std::span<const CompVal> comp_args,
-                            std::span<const ir::TypeIdx> extra_generics) {
-  std::string key = std::to_string(item.idx) + "|" + std::to_string(inst) + "|";
+void Lowerer::fn_key(std::string& key,
+                     ast::ItemIdx item,
+                     const std::vector<ir::TypeIdx>& params,
+                     ir::TypeIdx ret,
+                     u32 inst,
+                     std::span<const CompVal> comp_args,
+                     std::span<const ir::TypeIdx> extra_generics) {
+  key.clear();
+  append_index(key, item.idx, '|');
+  append_index(key, inst, '|');
   for (ir::TypeIdx param : params) {
-    key += std::to_string(param.idx) + ",";
+    append_index(key, param.idx, ',');
   }
-  key += "|" + std::to_string(ret.idx) + "|";
+  append_index(key, ret.idx, '|');
   for (const CompVal& arg : comp_args) {
     comp_key_into(key, arg.value);
   }
   // A method's own type arguments may appear nowhere in its signature
   // (`size_of::<U>()` in the body), so they are part of the key.
   for (ir::TypeIdx arg : extra_generics) {
-    key += "g" + std::to_string(arg.idx) + ";";
+    key.push_back('g');
+    append_index(key, arg.idx, ';');
   }
-  return key;
 }
 
 void Lowerer::record_comp_call(void* context,
@@ -677,8 +697,8 @@ bool Lowerer::try_run_comp_ir(u32 def_module,
                               u32& depth,
                               CompVal& out) {
   (void)def_module;
-  const std::string key = fn_key(item, params, ret, inst, comp_args);
-  const auto found = fn_by_key_.find(key);
+  fn_key(fn_key_scratch_, item, params, ret, inst, comp_args);
+  const auto found = fn_by_key_.find(std::string_view(fn_key_scratch_));
   if (found == fn_by_key_.end()) {
     return false;
   }
@@ -809,7 +829,8 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     internal(diag::Span{}, "a parametric signature reached lowering");
     return ir::FunctionIdx(base::INVALID_IDX);
   }
-  std::string key = fn_key(item, params, ret, inst, comp_args, extra_generics);
+  fn_key(fn_key_scratch_, item, params, ret, inst, comp_args, extra_generics);
+  const std::string_view key = fn_key_scratch_;
   const auto found = fn_by_key_.find(key);
   if (found != fn_by_key_.end()) {
     return ir::FunctionIdx(found->second);
@@ -818,10 +839,10 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
-  fn_by_key_.emplace(key, idx.idx);
+  fn_by_key_.emplace(std::string(key), idx.idx);
   FnEntry entry;
   entry.item = item;
-  entry.comp_key = std::move(key);
+  entry.comp_key = std::string(key);
   entry.idx = idx;
   entry.mod = mod;
   entry.name = std::string(name);
@@ -1976,9 +1997,10 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<CompRun> comp_runs;
   comp_runs.reserve(lowerer.comp_calls_.size());
   for (const analyzer::CompCallRecord& record : lowerer.comp_calls_) {
-    const std::string key = Lowerer::fn_key(
-        record.item, record.params, record.ret, record.inst, record.comp_args);
-    const auto found = lowerer.fn_by_key_.find(key);
+    Lowerer::fn_key(lowerer.fn_key_scratch_, record.item, record.params,
+                    record.ret, record.inst, record.comp_args);
+    const auto found =
+        lowerer.fn_by_key_.find(std::string_view(lowerer.fn_key_scratch_));
     if (found == lowerer.fn_by_key_.end()) {
       continue;
     }

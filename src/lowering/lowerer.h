@@ -3,6 +3,7 @@
 #pragma once
 
 #include <deque>
+#include <functional>
 #include <initializer_list>
 #include <optional>
 #include <span>
@@ -52,6 +53,15 @@ struct Val {
   // holds belongs to whoever took the reference, so reading it out as a
   // value would take what that owner still ends.
   bool borrowed = false;
+};
+
+// Hashes a specialization key from the bytes alone, so a lookup may pass the
+// view a key was built in without a string to hold it.
+struct FnKeyHash {
+  using is_transparent = void;
+  usize operator()(std::string_view key) const {
+    return std::hash<std::string_view>{}(key);
+  }
 };
 
 class Lowerer {
@@ -299,13 +309,15 @@ class Lowerer {
   // The identity of one specialization: the declaration, the
   // instantiation, the signature, and the comp argument values. Used
   // where a function is reserved and where the differential pass looks
-  // one up.
-  static std::string fn_key(ast::ItemIdx item,
-                            const std::vector<ir::TypeIdx>& params,
-                            ir::TypeIdx ret,
-                            u32 inst,
-                            std::span<const CompVal> comp_args,
-                            std::span<const ir::TypeIdx> extra_generics = {});
+  // one up. It is written into `key` so that a caller can hand in
+  // storage it reuses: every call site builds one of these.
+  static void fn_key(std::string& key,
+                     ast::ItemIdx item,
+                     const std::vector<ir::TypeIdx>& params,
+                     ir::TypeIdx ret,
+                     u32 inst,
+                     std::span<const CompVal> comp_args,
+                     std::span<const ir::TypeIdx> extra_generics = {});
   // Reserves (or finds) the IR function for one instantiation. `kind`
   // says what the symbol names, because a method and an associated
   // function share an item. `extra_generics` are the method's own type
@@ -892,7 +904,11 @@ class Lowerer {
   // Where a specialization key already has an entry. Lowering asks this of
   // every call site, and walking the entries so far to compare keys charged
   // one call site for every function lowered before it.
-  std::unordered_map<std::string, u32> fn_by_key_;
+  std::unordered_map<std::string, u32, FnKeyHash, std::equal_to<>> fn_by_key_;
+  // The key of the call being answered, kept across calls so its capacity is
+  // taken once. A key is written and read before anything else runs, so the
+  // view a caller holds is never invalidated under it.
+  std::string fn_key_scratch_;
   // Where a function instantiation's arguments are, so a lookup does not have
   // to walk the package's instances: by (item, instantiation) for a body that
   // knows the context it was checked under, by (module, signature slot) for a
