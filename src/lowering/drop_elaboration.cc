@@ -75,6 +75,9 @@ struct Output {
   u32 current = 0;
 };
 
+// Room for the block plus the splits a guarded end makes of it.
+constexpr u32 INITIAL_OUT_BLOCKS = 4;
+
 }  // namespace
 
 void Lowerer::record_end(u32 mark, diag::Span span) {
@@ -1065,6 +1068,7 @@ void DropElaborator::run() {
   std::vector<Output> outputs(block_count);
   for (u32 b = 0; b < block_count; ++b) {
     Output& out = outputs[b];
+    out.blocks.reserve(INITIAL_OUT_BLOCKS);
     out.blocks.push_back(OutBlock{fn_blocks_[b], ir::InstrSeq{}});
     out.current = 0;
     const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
