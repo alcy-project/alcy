@@ -126,10 +126,49 @@ impl Parse for u32 {
   }
 }
 
+// The count of bits a value needs: 0 for zero, one past the index of
+// its highest set bit otherwise.
+fn u64_bit_count(value: u64) -> i32 {
+  mut count := 0i32
+  mut rest := value
+  while rest != 0u64 {
+    rest = rest >> 1u64
+    count = count + 1i32
+  }
+  ret count
+}
+
+// `mant * 2^exponent`, moving the binary point only. A power of two of
+// either sign is exact, so the significand keeps the bits rounding chose.
+fn times_power_of_two(mant: u64, exponent: i32) -> f64 {
+  mut value := mant as f64
+  mut e := exponent
+  while e > 0i32 {
+    value = value * 2.0f64
+    e = e - 1i32
+  }
+  while e < 0i32 {
+    value = value / 2.0f64
+    e = e + 1i32
+  }
+  ret value
+}
+
+// Negation that keeps the sign of a zero, so `"-0.0"` reads as the
+// literal does.
+fn apply_sign(value: f64, negative: bool) -> f64 {
+  if !negative {
+    ret value
+  }
+  ret value * (0.0f64 - 1.0f64)
+}
+
 // Parses a decimal floating point number with an optional sign and
 // fractional part. An exponent is not read, so `1e10` is rejected.
 // `None` when the bytes are not a number or the digits pass what a
-// `u64` numerator holds.
+// `u64` numerator holds. The result is the nearest `f64` to the
+// written decimal, so text and a literal of the same digits agree bit
+// for bit.
 impl Parse for f64 {
   fn parse(text: str) -> Option<f64> {
     n := str_len(text)
@@ -182,17 +221,55 @@ impl Parse for f64 {
     if !seen {
       ret Option::None
     }
-    // The integer part and the fraction are converted apart: one
-    // division of the whole numerator rounds twice, and a value just
-    // past 2^53 then answers one step off (`"9007199254740993.0"` read
-    // as 9007199254740994 while the literal reads 9007199254740992).
-    // The integer part is exact, and an integral value keeps it.
-    whole := numerator / scale
-    rem := numerator % scale
-    mut value := (whole as f64) + (rem as f64) / (scale as f64)
-    if negative {
-      value = 0.0f64 - value
+    // A numerator the significand holds exactly is divided once, and
+    // IEEE division of two exact operands is the nearest value already.
+    if numerator <= 9007199254740992u64 {
+      ret Option::Some(apply_sign((numerator as f64) / (scale as f64), negative))
     }
-    ret Option::Some(value)
+    // A longer numerator needs the quotient's bits: converting the
+    // integer part and the fraction apart rounds twice, and
+    // `"0.9876543210987654321"` then lands one step from the literal.
+    // The significand is assembled here with exact integer arithmetic
+    // and rounded once, to nearest and to even on a tie.
+    mut mantissa := numerator / scale
+    mut remainder := numerator % scale
+    mut exponent := 0i32
+    mut sticky := false
+    while u64_bit_count(mantissa) > 54i32 {
+      if (mantissa & 1u64) != 0u64 {
+        sticky = true
+      }
+      mantissa = mantissa >> 1u64
+      exponent = exponent + 1i32
+    }
+    while u64_bit_count(mantissa) < 54i32 && remainder != 0u64 {
+      // Doubling the remainder can pass 2^64, which the carry reads: the
+      // fraction stays below one, so the wrapped subtraction lands right.
+      carry := (remainder >> 63u64) != 0u64
+      remainder = remainder << 1u64
+      bit := carry || remainder >= scale
+      if bit {
+        remainder = wrapping_sub(remainder, scale)
+      }
+      mantissa = mantissa << 1u64
+      if bit {
+        mantissa = mantissa | 1u64
+      }
+      exponent = exponent - 1i32
+    }
+    if remainder != 0u64 {
+      sticky = true
+    }
+    if u64_bit_count(mantissa) == 54i32 {
+      // One guard bit plus the sticky tail; a tie goes to the even
+      // significand.
+      mut kept := mantissa >> 1u64
+      if (mantissa & 1u64) != 0u64 && (sticky || (kept & 1u64) != 0u64) {
+        kept = kept + 1u64
+      }
+      mantissa = kept
+      exponent = exponent + 1i32
+    }
+    ret Option::Some(apply_sign(times_power_of_two(mantissa, exponent), negative))
   }
 }
