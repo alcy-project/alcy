@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <cstring>
 #include <iterator>
 #include <span>
 #include <string_view>
@@ -125,7 +127,8 @@ struct Keyword {
   TokenKind kind;
 };
 
-// In spelling order, which is what lookup_keyword's search reads.
+// One entry per keyword, in spelling order for reading; the lookup packs
+// them into a keyed table at compile time.
 constexpr Keyword KEYWORDS[] = {
     {"Self", TokenKind::SelfType},
     {"as", TokenKind::As},
@@ -195,69 +198,122 @@ constexpr usize KEYWORD_MAX_LENGTH = [] {
   }
   return longest;
 }();
-constexpr usize KEYWORD_LENGTHS = KEYWORD_MAX_LENGTH - KEYWORD_MIN_LENGTH + 1;
+// A spelling's opening bytes, packed low byte first. Every keyword but
+// `intrinsic` fits in eight, so one integer and a length settle a word
+// against a spelling without walking its bytes.
+constexpr usize SPELLING_KEY_BYTES = 8;
 
-// A spelling's length is fixed and most words reaching the lookup are
-// identifiers no spelling matches, so grouping the table by length lets
-// the search skip every other length's entries. The table itself stays
-// ordered by spelling; this restates it length by length, each run in
-// table order.
-struct KeywordGroup {
-  usize begin = 0;
-  usize end = 0;
-};
-
-struct KeywordIndex {
-  std::array<Keyword, std::size(KEYWORDS)> entries{};
-  std::array<KeywordGroup, KEYWORD_LENGTHS> groups{};
-};
-
-constexpr KeywordIndex keyword_index() {
-  KeywordIndex index;
-  usize written = 0;
-  for (usize length = KEYWORD_MIN_LENGTH; length <= KEYWORD_MAX_LENGTH;
-       ++length) {
-    const usize group = length - KEYWORD_MIN_LENGTH;
-    index.groups[group].begin = written;
-    for (const Keyword& keyword : KEYWORDS) {
-      if (keyword.spelling.size() == length) {
-        index.entries[written++] = keyword;
-      }
-    }
-    index.groups[group].end = written;
+constexpr u64 packed_spelling_key(const char* word, usize packed) {
+  u64 key = 0;
+  for (usize i = 0; i < packed; ++i) {
+    key |= static_cast<u64>(static_cast<u8>(word[i])) << (8 * i);
   }
-  return index;
+  return key;
 }
 
-constexpr auto KEYWORD_INDEX = keyword_index();
+// The key is packed low byte first, so a big-endian host reverses the load
+// that produced it.
+[[maybe_unused]] constexpr u64 swap_key_bytes(u64 key) {
+  u64 swapped = 0;
+  for (usize i = 0; i < SPELLING_KEY_BYTES; ++i) {
+    swapped |= ((key >> (8 * i)) & 0xFF) << (8 * (SPELLING_KEY_BYTES - 1 - i));
+  }
+  return swapped;
+}
 
-// The table is in spelling order, which is what lets a word be looked up in
-// it. Every identifier and every keyword goes through here, so comparing the
-// word against each spelling in turn charged the lexer for the whole table
-// per token.
-TokenKind lookup_keyword(std::string_view word) {
-  const usize length = word.size();
+// `available` is how many bytes of `word` the file holds. While a whole key
+// is readable the opening bytes arrive in one load, which the mask trims to
+// the word's length; the file's last few bytes are packed one at a time.
+u64 spelling_key(const char* word, usize length, usize available) {
+  const usize packed = std::min(length, SPELLING_KEY_BYTES);
+  if (available < SPELLING_KEY_BYTES) {
+    return packed_spelling_key(word, packed);
+  }
+  u64 key = 0;
+  std::memcpy(&key, word, SPELLING_KEY_BYTES);
+  if constexpr (std::endian::native == std::endian::big) {
+    key = swap_key_bytes(key);
+  }
+  if (packed < SPELLING_KEY_BYTES) {
+    key &= (u64{1} << (8 * packed)) - 1;
+  }
+  return key;
+}
+
+// A word longer than a key carries the key of the bytes it opens with, so a
+// slot also records the length of the spelling it holds.
+struct KeywordSlot {
+  u64 key = 0;
+  TokenKind kind = TokenKind::Ident;
+  u8 length = 0;
+};
+
+// Fifty-two spellings sit in a table twice that size, so the home slot
+// answers most words that are one and the walk that follows stays short.
+constexpr usize KEYWORD_KEY_BITS = 7;
+constexpr usize KEYWORD_SLOTS = 1 << KEYWORD_KEY_BITS;
+
+constexpr usize keyword_home(u64 key) {
+  return static_cast<usize>((key * 0x9E3779B97F4A7C15ULL) >>
+                            (64 - KEYWORD_KEY_BITS));
+}
+
+constexpr std::array<KeywordSlot, KEYWORD_SLOTS> keyword_table() {
+  std::array<KeywordSlot, KEYWORD_SLOTS> table{};
+  for (const Keyword& keyword : KEYWORDS) {
+    const usize packed = std::min(keyword.spelling.size(), SPELLING_KEY_BYTES);
+    const KeywordSlot slot{
+        .key = packed_spelling_key(keyword.spelling.data(), packed),
+        .kind = keyword.kind,
+        .length = static_cast<u8>(keyword.spelling.size())};
+    usize home = keyword_home(slot.key);
+    while (table[home].key != 0) {
+      home = (home + 1) & (KEYWORD_SLOTS - 1);
+    }
+    table[home] = slot;
+  }
+  return table;
+}
+
+// Two spellings sharing a key and a length would be the same word, so each
+// one is reachable on its own.
+constexpr bool keyword_keys_distinct() {
+  for (usize i = 0; i < std::size(KEYWORDS); ++i) {
+    for (usize j = i + 1; j < std::size(KEYWORDS); ++j) {
+      const usize packed =
+          std::min(KEYWORDS[i].spelling.size(), SPELLING_KEY_BYTES);
+      if (KEYWORDS[i].spelling.size() == KEYWORDS[j].spelling.size() &&
+          packed_spelling_key(KEYWORDS[i].spelling.data(), packed) ==
+              packed_spelling_key(KEYWORDS[j].spelling.data(), packed)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static_assert(keyword_keys_distinct());
+
+constexpr auto KEYWORD_TABLE = keyword_table();
+
+// `key` is `spelling_key` of the word's opening bytes. Every identifier and
+// every keyword goes through here, so the comparison it makes is the lexer's
+// most repeated one.
+TokenKind lookup_keyword(usize length, u64 key) {
   if (length < KEYWORD_MIN_LENGTH || length > KEYWORD_MAX_LENGTH) {
     return TokenKind::Ident;
   }
-  const KeywordGroup& group = KEYWORD_INDEX.groups[length - KEYWORD_MIN_LENGTH];
-  const auto first = KEYWORD_INDEX.entries.begin() + group.begin;
-  const auto last = KEYWORD_INDEX.entries.begin() + group.end;
-  const auto found = std::lower_bound(
-      first, last, word, [](const Keyword& keyword, std::string_view spelling) {
-        // Both spellings carry the group's length, so their first bytes
-        // settle all but the searches that share a prefix.
-        const u8 candidate = static_cast<u8>(keyword.spelling[0]);
-        const u8 byte = static_cast<u8>(spelling[0]);
-        if (candidate != byte) {
-          return candidate < byte;
-        }
-        return keyword.spelling < spelling;
-      });
-  if (found != last && found->spelling == word) {
-    return found->kind;
+  usize home = keyword_home(key);
+  while (true) {
+    const KeywordSlot& slot = KEYWORD_TABLE[home];
+    if (slot.key == 0) {
+      return TokenKind::Ident;
+    }
+    if (slot.key == key && slot.length == length) {
+      return slot.kind;
+    }
+    home = (home + 1) & (KEYWORD_SLOTS - 1);
   }
-  return TokenKind::Ident;
 }
 
 bool is_valid_escape(char c) {
@@ -446,11 +502,14 @@ void Lexer::lex_identifier(std::vector<Token>& out) {
     ++end;
   }
   pos_ = end;
-  const std::string_view word = bytes_.substr(start, pos_ - start);
+  const usize length = pos_ - start;
   const TokenKind kind =
-      word == "_" ? TokenKind::Underscore : lookup_keyword(word);
+      length == 1 && data[start] == '_'
+          ? TokenKind::Underscore
+          : lookup_keyword(length,
+                           spelling_key(data + start, length, size - start));
   last_significant_ = kind;
-  out.push_back(Token{.kind = kind, .span = span_at(start, pos_ - start)});
+  out.push_back(Token{.kind = kind, .span = span_at(start, length)});
 }
 
 void Lexer::lex_number(std::vector<Token>& out) {
