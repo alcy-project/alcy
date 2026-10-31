@@ -13,7 +13,7 @@ return, so `fn answer() -> i32 { 42 }` and
 one way to return, not the way. The cost there outweighed that
 flexibility.
 
-That flexibility has costs the language has already voted against at
+That flexibility had costs the language has already voted against at
 the call site, where `ret` is the convention nearly everywhere in
 `lib/std`, the cases, and the docs:
 
