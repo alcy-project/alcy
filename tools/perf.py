@@ -532,10 +532,10 @@ def symbolized_binary(binary: Path) -> Path:
     return unstripped if unstripped.is_file() else binary
 
 
-def resolve_addresses(binary: Path, addresses: list) -> dict:
+def resolve_addresses(binary: Path, addresses: list[str]) -> dict[str, str]:
     """Map sampled addresses to the symbol and line they fall in."""
-    unique = sorted(set(addresses))
-    resolved = {}
+    unique = list(dict.fromkeys(addresses))
+    resolved: dict[str, str] = {}
     run = subprocess.run(
         ["addr2line", "-C", "-f", "-e", str(symbolized_binary(binary))],
         input="\n".join(unique) + "\n",
