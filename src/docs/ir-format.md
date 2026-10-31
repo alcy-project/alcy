@@ -279,7 +279,8 @@ register has no defining instruction.
 
 **INSTRUCTIONS**: `{ op u8, flags u8, pad u8[2], dst u32, measure u32,
 operands_head u32, operands_size u32 }`. `flags` keeps
-`InstructionFlags`' bit layout: bits 0–2 `rmw_op`, bit 3 the boolean.
+`InstructionFlags`' bit layout: bits 0–2 `rmw_op`, bit 3 the boolean,
+bits 4–7 zero.
 
 **OPERANDS**: `{ tag u8, pad u8[3], payload u32, type u32 }`. `tag` is
 the numeric value of `ir::Operand::TAG_OF<T>` for the operand's

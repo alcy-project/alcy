@@ -78,7 +78,7 @@ skips value binding for any producer with an invalid `dst`.
 | `Ret` | One operand, or none for `void` (`CreateRetVoid`). |
 | `Alloca` | The allocated element type comes from the destination register's type; the operand is the array size. |
 | `Load` / `Store` | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register. |
-| `Memcopy` | `[dst_ptr, src_ptr, len(integer)]`, discarded value; bytewise copy. |
+| `Memcopy` | `[dst_ptr, src_ptr, len(integer)]`, discarded value; bytewise copy. A reference operand promises its pointee's alignment; a bare pointer promises byte alignment only. |
 | `GetElementPtr` | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site when there is one, and otherwise from the base pointer's register type. |
 | `ElemOffset` | `[base_ptr(register), integer index]`. The destination register carries the element reference, so the borrow checker extends the buffer's place with one element step. |
 | `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second). |
@@ -89,10 +89,9 @@ skips value binding for any producer with an invalid `dst`.
 | `Select` | `[cond, true_value, false_value]`. |
 
 `InstructionFlags` carries the per-opcode facts that are not operands:
-`rmw_op` for `AtomicRmw`, `inbounds` for `GetElementPtr` and `ElemOffset`
-(the address is proved to stay inside the object it indexes), and
-`mem_align_log2` for `Memcopy` (the log2 of the alignment both pointers
-promise; zero means a backend may assume byte alignment only).
+`rmw_op` for `AtomicRmw` and `inbounds` for `GetElementPtr` and
+`ElemOffset` (the address is proved to stay inside the object it
+indexes).
 
 Aggregate-typed immediates and `Str`/`Function`-typed lowering are not
 supported; struct/array values travel through calls, allocas, and

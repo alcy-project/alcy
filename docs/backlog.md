@@ -102,13 +102,15 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] The IR resolves its semantic operations in place, step by step
   (the multi-level direction, MLIR-like without rebuilds): a construct
   whose meaning needs more than its types waits for the pass that
-  knows them - enum projections and `memcpy` alignment for the
-  backend, dispatch and drops for the specialization pass - and later
-  passes patch what they resolve instead of rebuilding the IR.
-  ADR-0079's landing started the boundary informally; generalize it,
-  and decide whether the borrow pass moves to the semantic side and
-  whether fine-grained in-place patching needs more than
-  `take_state` + `StorageBuilder`, when the profile asks.
+  knows them - dispatch and drops for the specialization pass - and
+  later passes patch what they resolve instead of rebuilding the IR.
+  Enum projections and a copy's alignment already resolve at emission;
+  that is the boundary's first shape. The decision
+  (`docs/adr/0079-a-generic-item-crosses-as-its-checked-body.md`)
+  started the boundary informally. Generalize it, and decide whether
+  the borrow pass moves to the semantic side and whether fine-grained
+  in-place patching needs more than `take_state` + `StorageBuilder`,
+  when the profile asks.
 
 - [ ] The generic boundary in a summary: a `needs_body` row is
   omitted, so a dependent that names a generic item reads "Unresolved

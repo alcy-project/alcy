@@ -28,7 +28,6 @@
 #include "ir/external_function.h"
 #include "ir/function.h"
 #include "ir/immutable.h"
-#include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/seq_builder.h"
@@ -1799,25 +1798,8 @@ Val Lowerer::lower_memcopy_intrinsic(
   if (failed || terminated_cur()) {
     return stopped_value();
   }
-  // Both pointers are the same storage type, so the element's
-  // alignment is the copy's: the backend may use it, and does not
-  // have to.
-  ir::InstructionFlags flags;
-  if (tag_of(dst.type) == ir::TypeTag::MutRef) {
-    const ir::TypeIdx pointee =
-        builder.ref_types()[builder.types()[dst.type.idx].as_ref()].pointee;
-    const u64 align =
-        ir::type_layout(builder.state(), type_origin(pointee), width).align;
-    u32 log2 = 0;
-    while (log2 < 15 && (static_cast<u64>(1) << log2) < align) {
-      ++log2;
-    }
-    if ((static_cast<u64>(1) << log2) == align) {
-      flags.mem_align_log2 = static_cast<u8>(log2);
-    }
-  }
   emit_void(ir::Opcode::Memcopy,
-            {use_value(dst), use_value(src), use_value(len)}, flags);
+            {use_value(dst), use_value(src), use_value(len)});
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 
