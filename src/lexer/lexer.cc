@@ -227,6 +227,13 @@ TokenKind lookup_keyword(std::string_view word) {
   const auto last = KEYWORD_INDEX.entries.begin() + group.end;
   const auto found = std::lower_bound(
       first, last, word, [](const Keyword& keyword, std::string_view spelling) {
+        // Both spellings carry the group's length, so their first bytes
+        // settle all but the searches that share a prefix.
+        const u8 candidate = static_cast<u8>(keyword.spelling[0]);
+        const u8 byte = static_cast<u8>(spelling[0]);
+        if (candidate != byte) {
+          return candidate < byte;
+        }
         return keyword.spelling < spelling;
       });
   if (found != last && found->spelling == word) {
