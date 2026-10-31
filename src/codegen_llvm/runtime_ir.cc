@@ -1230,6 +1230,21 @@ class RuntimeBuilder {
                        llvm::Value* data,
                        llvm::Value* len) {
     if (windows_) {
+      // The C runtime opens descriptors in text mode by default, which
+      // translates a newline on read and write; that would make the
+      // faithful descriptor call answer a byte count the caller never
+      // wrote. Put the descriptor in binary mode first, so the bytes
+      // pass through exactly as a raw descriptor call would give them.
+      // The mode sticks with the descriptor, so later calls see the
+      // same answer.
+      llvm::Function* set_mode =
+          libc("_setmode",
+               llvm::FunctionType::get(
+                   builder_.getInt32Ty(),
+                   {builder_.getInt32Ty(), builder_.getInt32Ty()}, false));
+      builder_.CreateCall(
+          set_mode,
+          {fd_value, llvm::ConstantInt::get(builder_.getInt32Ty(), 0x8000)});
       llvm::Function* function = libc(
           is_write ? "_write" : "_read",
           llvm::FunctionType::get(builder_.getInt32Ty(),
