@@ -243,6 +243,11 @@ class Checker {
   // once and never cleared.
   std::vector<u32> walk_mark;
   u32 walk_stamp = 0;
+  // Visit marks for the register clearing, stamped per function for the same
+  // reason: an instruction names its operands, so a register many of them
+  // share would otherwise be reset once per mention.
+  std::vector<u32> clear_mark;
+  u32 clear_stamp = 0;
 
   const ir::Instruction& instr_at(ir::InstructionIdx idx) const {
     return storage.instrs()[idx];
@@ -1784,6 +1789,7 @@ class Checker {
     reserved_receiver.assign(registers, 0);
     use_count_scratch_.assign(registers, 0);
     receiver_call_scratch_.assign(registers, 0);
+    clear_mark.assign(registers, 0);
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
@@ -1860,6 +1866,10 @@ class Checker {
     if (reg >= flow.size()) {
       return;
     }
+    if (clear_mark[reg] == clear_stamp) {
+      return;
+    }
+    clear_mark[reg] = clear_stamp;
     home[reg] = NO_ROOT;
     path[reg].clear();
     flow[reg].clear();
@@ -1874,6 +1884,10 @@ class Checker {
   // Clearing the whole program instead charged every function for every
   // register, which made a package quadratic in its own size.
   void reset_function(const ir::Function& fn) {
+    if (++clear_stamp == 0) {
+      std::fill(clear_mark.begin(), clear_mark.end(), 0);
+      clear_stamp = 1;
+    }
     for (ir::BlockIdx bidx : fn.blocks) {
       for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
         const ir::Instruction& instr = instr_at(iidx);
