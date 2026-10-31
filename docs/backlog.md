@@ -39,7 +39,9 @@ replaced. The foundations are in `roadmap.md`.
   stands in for: the drop walk's paths name fields and tuple slots, so
   the pass needs an element step that ends the elements the move left
   behind. A value moved out of a temporary array (`f().a[0]`) is the
-  same shape one level out.
+  same shape one level out. The refusal reports on its own: it ends
+  lowering for the refused expression, so a projection through the
+  binding taken from it stays silent (`err-move-out-of-element`).
 
 - [ ] Negative comp-arg cases for the loosened predicates: a runtime
   value inside a match arm or a block (`double(match runtime_val …)`,

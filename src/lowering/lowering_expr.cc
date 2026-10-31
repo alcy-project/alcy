@@ -5067,6 +5067,10 @@ Val Lowerer::lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     const u32 index = bag.emit<i18n::Key::LowerMoveOutOfElement>(
         DiagCode::MoveOutOfElement, ast.exprs[expr].span);
     (void)index;
+    // The refused move hands back an error type, which no projection can
+    // index into; without the flag the binding lowered from it reports a
+    // missing field on top of the refusal.
+    failed = true;
     return Val{size_one, error_type(), false, false};
   }
   // Only a rooted projection names storage: the field of a call's
