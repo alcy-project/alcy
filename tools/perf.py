@@ -266,6 +266,8 @@ def manifest_source(shape: str, modules: int) -> str:
 "alcy/std/alloc" = {}
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}
 "alcy/std/io" = {}
 """
     elif shape != "plain":
