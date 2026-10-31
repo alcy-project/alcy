@@ -416,6 +416,20 @@ void DropElaborator::run() {
   };
   const u32 block_count = static_cast<u32>(fn_blocks_.size());
   std::vector<std::vector<Point>> block_points(block_count);
+  // Each row is filled once from empty, so its growth would reallocate a
+  // handful of times per block. Counting first sizes every row exactly.
+  {
+    std::vector<u32> points_per_block(block_count, 0);
+    for (const OwnershipEvent& event : ownership_) {
+      ++points_per_block[at(event.block)];
+    }
+    for (const EndSite& site : end_sites_) {
+      ++points_per_block[at(site.block)];
+    }
+    for (u32 b = 0; b < block_count; ++b) {
+      block_points[b].reserve(points_per_block[b]);
+    }
+  }
   for (u32 i = 0; i < ownership_.size(); ++i) {
     const OwnershipEvent& event = ownership_[i];
     block_points[at(event.block)].push_back(
@@ -883,6 +897,21 @@ void DropElaborator::run() {
     u32 index = 0;
   };
   std::vector<std::vector<Action>> actions(block_count);
+  // Same as the point rows: each is filled once, so count the actions each
+  // block receives and size it exactly. A store contributes two.
+  {
+    std::vector<u32> actions_per_block(block_count, 0);
+    for (const OwnershipEvent& event : ownership_) {
+      actions_per_block[at(event.block)] +=
+          event.kind == OwnershipEvent::Kind::Store ? 2 : 1;
+    }
+    for (const EndSite& site : end_sites_) {
+      ++actions_per_block[at(site.block)];
+    }
+    for (u32 b = 0; b < block_count; ++b) {
+      actions[b].reserve(actions_per_block[b]);
+    }
+  }
   for (u32 si = 0; si < end_sites_.size(); ++si) {
     const EndSite& site = end_sites_[si];
     actions[at(site.block)].push_back(
