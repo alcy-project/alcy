@@ -1540,8 +1540,13 @@ ast::BlockIdx Parser::parse_block() {
       continue;
     }
     if (ast_.stmts[stmt].kind == ast::StmtKind::Expr &&
-        (check(lexer::TokenKind::RBrace) || at_end())) {
+        (check(lexer::TokenKind::RBrace) || at_end() ||
+         (check(lexer::TokenKind::Semicolon) &&
+          (pos_ + 1 >= tokens_.size() ||
+           tokens_[pos_ + 1].kind == lexer::TokenKind::RBrace ||
+           tokens_[pos_ + 1].kind == lexer::TokenKind::Eof)))) {
       value = ast_.stmts[stmt].payload.get<ast::StmtExpr>().value;
+      match(lexer::TokenKind::Semicolon);
       break;
     }
     statements.push_back(stmt);

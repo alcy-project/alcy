@@ -3,5 +3,6 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 fn main() {
-  add(1, 2);
+  add(1, 2)
+  ret
 }
