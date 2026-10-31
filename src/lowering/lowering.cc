@@ -1537,6 +1537,17 @@ void Lowerer::run() {
       }
     }
   }
+  // Every signature is seeded, so the body phase's operand, instruction
+  // and register counts are known to within a small constant per
+  // function. Sizing the storage once here keeps the tables from
+  // doubling a dozen times over the run: a discarded doubling costs as
+  // much as the block that replaces it.
+  {
+    const usize fn_count = fns.size();
+    builder.reserve_operands(fn_count * 90);
+    builder.reserve_instrs(fn_count * 61);
+    builder.reserve_registers(fn_count * 23);
+  }
   // Lower bodies, then publish functions in reservation order so
   // the pre-assigned indexes line up with storage positions.
   struct Done {

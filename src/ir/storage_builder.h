@@ -144,6 +144,12 @@ class StorageBuilder {
   }
   // Raw state for passes that query (never mutate) pre-build tables.
   const StorageState& state() const { return state_; }
+  // Sizes the tables a caller knows the population of before it fills
+  // them. A table grown by doubling halves its own headroom: every
+  // block discarded on the way is as large as the one that replaced it.
+  void reserve_operands(usize count) { state_.operands.reserve(count); }
+  void reserve_instrs(usize count) { state_.instrs.reserve(count); }
+  void reserve_registers(usize count) { state_.registers.reserve(count); }
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
     return state_.external_functions.emplace_back(external_function);
   }
