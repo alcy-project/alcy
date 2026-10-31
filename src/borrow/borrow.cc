@@ -149,6 +149,16 @@ struct Loan {
   // index so return-reachability becomes a summary. Never conflicts;
   // reification propagates the caller's own loans instead.
   u32 param = NO_ROOT;
+  // The loan this one is a reborrow of. A copy of a reference stands
+  // behind the loan it was read out of, which is what keeps the copy
+  // from conflicting with that loan. A loan only names a parent born
+  // before it, so the chain reaches NO_ROOT in bounded steps.
+  u32 parent = NO_ROOT;
+  // The loan stands for a region reached through a parameter, so its
+  // place records what the caller passed rather than a place this
+  // function may claim. Everything inside that place is still the
+  // receiver's to use.
+  bool param_derived = false;
 };
 
 // One way a returned reference reaches a parameter: which parameter,
@@ -629,6 +639,19 @@ class Checker {
               break;
             }
           }
+          // The field a read goes through is part of the place it names:
+          // without it every field of one struct is the same place, so
+          // two reads of different fields report as aliasing.
+          const bool projected =
+              addr < path_len.size() && path_len[addr] > referent.len;
+          if (projected) {
+            referent.head = path_head[addr];
+            referent.len = path_len[addr];
+          }
+          // Only a unique reference can be written through, so only its
+          // copy needs a loan of its own: a shared copy cannot change
+          // what any other loan reads.
+          const bool own_loan = projected && loaded == ir::TypeTag::MutRef;
           if (referent.root != NO_ROOT) {
             home[instr.dst.idx] = referent.root;
             set_row(instr.dst.idx, referent);
@@ -638,6 +661,43 @@ class Checker {
           } else {
             break;
           }
+          if (own_loan) {
+            // The copy is charged a loan of its own on the referent
+            // rather than inheriting the one it was read out of.
+            // Inheriting leaves a write through the field and a read
+            // through the copy naming one loan, so the write is
+            // authorised by it and a shared borrow of the buffer breaks
+            // with nothing to report.
+            u32 inherited = NO_ROOT;
+            for (u32 loan : flow[addr]) {
+              if (loan < loans.size() && loans[loan].place.root != NO_ROOT &&
+                  loans[loan].birth < pos) {
+                inherited = loan;
+                break;
+              }
+            }
+
+            Place into;
+            into.root = home[instr.dst.idx];
+            into.head = path_head[instr.dst.idx];
+            into.len = path_len[instr.dst.idx];
+            Loan fresh;
+            fresh.param_derived = root_is_param(into.root);
+            fresh.reg = instr.dst.idx;
+            fresh.place = into;
+            // The loan names the place the copy reads, which is what
+            // another write must be checked against. It is not
+            // authority to write: the reference's own type is, and a
+            // copy that is unique still reaches the caller as a loan
+            // of the place rather than as a borrow of the parameter.
+            fresh.exclusive = false;
+            fresh.birth = pos;
+            fresh.parent = inherited;
+            flow[instr.dst.idx].clear();
+            flow[instr.dst.idx].push_back(static_cast<u32>(loans.size()));
+            loans.push_back(fresh);
+          }
+
           push_path_step(instr.dst.idx, DEREF_STEP);
         }
         break;
@@ -824,14 +884,40 @@ class Checker {
           // the overlapping loans they are. The slot stands for the
           // view, not for the two words a copy of it owns, which is why
           // copying the view out is still a plain copy.
+          // The loan this one is taken through: the closest enclosing
+          // exclusive loan on the address, or the first one there is.
+          // Recording it is what lets a reborrow be told apart from a
+          // second, competing borrow of the same place.
+          u32 parent = NO_ROOT;
+          for (u32 held : flow[place_reg]) {
+            if (held >= loans.size()) {
+              continue;
+            }
+            if (parent == NO_ROOT || loans[held].exclusive) {
+              parent = held;
+            }
+            if (loans[held].exclusive) {
+              break;
+            }
+          }
+          const auto mint = [&](Place named) {
+            Loan fresh;
+            fresh.param_derived = root_is_param(named.root);
+            fresh.reg = instr.dst.idx;
+            fresh.place = named;
+            fresh.exclusive = exclusive;
+            fresh.birth = pos;
+            fresh.parent = parent;
+            loans.push_back(fresh);
+          };
           if (place.len == 0 && place.root < storage.registers().size() &&
               tag_of(storage.registers()[place.root].type) ==
                   ir::TypeTag::Str) {
             Place slot;
             slot.root = place.root;
-            loans.push_back({instr.dst.idx, slot, exclusive, pos});
+            mint(slot);
           }
-          loans.push_back({instr.dst.idx, place, exclusive, pos});
+          mint(place);
         }
         break;
       }
@@ -947,12 +1033,16 @@ class Checker {
         // Project each entry onto its argument: the result carries a
         // loan on the argument's referent extended by the recorded
         // path, so a loan into one field does not cover the whole
-        // argument. An entry with an empty path keeps the argument's
-        // own loans below. A projected place is exclusive when the
-        // entry is or when the result itself is an exclusive
-        // reference: returning an exclusive reference derived from a
-        // shared one is already rejected where it is taken, so a
-        // well-formed callee never records it.
+        // argument. The projected loan stands behind the loan the
+        // argument carries, since the callee reached its place through
+        // that one, which is what keeps a caller's write through the
+        // result from being reported against the loan it reborrowed. An
+        // entry with an empty path keeps the argument's own loans below.
+        // A projected place is exclusive when the entry is or when the
+        // result itself is an exclusive reference: returning an
+        // exclusive reference derived from a shared one is already
+        // rejected where it is taken, so a well-formed callee never
+        // records it.
         struct Projected {
           u32 param = NO_ROOT;
           Place place;
@@ -972,9 +1062,11 @@ class Checker {
             continue;
           }
           Place referent;
+          u32 source = NO_ROOT;
           for (u32 loan : flow[arg.as_register().idx]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
               referent = loans[loan].place;
+              source = loan;
               break;
             }
           }
@@ -982,8 +1074,9 @@ class Checker {
             continue;
           }
           const Place place = extend_place(referent, entry.path);
-          loans.push_back(
-              {instr.dst.idx, place, entry.exclusive || result_exclusive, pos});
+          loans.push_back({instr.dst.idx, place,
+                           entry.exclusive || result_exclusive, pos, NO_ROOT,
+                           source});
           union_flow(instr.dst.idx, static_cast<u32>(loans.size() - 1));
           projected.push_back({entry.param, place});
         }
@@ -1157,6 +1250,109 @@ class Checker {
       }
     }
     DCHECK(false);
+  }
+
+  // True when `inner` names a place strictly inside `outer`: the same
+  // root and a longer path that `outer` opens. A loan that is exclusive
+  // over `outer` holds every place inside it, so its holder is the one
+  // that decides what happens there.
+  bool nests_inside(const Place& outer, const Place& inner) const {
+    if (outer.root == NO_ROOT || outer.root != inner.root) {
+      return false;
+    }
+    if (outer.len >= inner.len) {
+      return false;
+    }
+    const std::span<const u32> prefix = steps_of(outer);
+    return std::equal(prefix.begin(), prefix.end(), steps_of(inner).begin());
+  }
+
+  // True when `root` is where a parameter's referent lives. The caller
+  // chose that place, so a loan naming it records what was passed
+  // rather than a place this function may claim.
+  bool root_is_param(u32 root) const {
+    for (const Loan& loan : loans) {
+      if (loan.param != NO_ROOT && loan.place.root == root) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // True when `inner` lies strictly inside a place a parameter names.
+  // A function cannot know what its caller passed, so reading inside
+  // that region is the receiver being used; whether the region is
+  // aliased is decided by the loans the caller holds.
+  bool inside_param_region(const Place& inner) const {
+    for (const Loan& loan : loans) {
+      if (loan.param != NO_ROOT && nests_inside(loan.place, inner)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // A loan stands behind the loan it was reborrowed from: the two are
+  // valid together by construction, so neither can be the conflict the
+  // other is reported against. Two reborrows of one loan name the same
+  // authority, which is what a read and a write of one field in a
+  // single expression are.
+  bool related_loans(u32 a, u32 b) const {
+    if (a < loans.size() && b < loans.size() && loans[a].parent != NO_ROOT &&
+        loans[a].parent == loans[b].parent) {
+      return true;
+    }
+    for (u32 cur = a, steps = 0; cur < loans.size() && steps < loans.size();
+         cur = loans[cur].parent, ++steps) {
+      if (cur == b) {
+        return true;
+      }
+      if (loans[cur].parent == NO_ROOT) {
+        break;
+      }
+    }
+    for (u32 cur = b, steps = 0; cur < loans.size() && steps < loans.size();
+         cur = loans[cur].parent, ++steps) {
+      if (cur == a) {
+        return true;
+      }
+      if (loans[cur].parent == NO_ROOT) {
+        break;
+      }
+    }
+    return false;
+  }
+
+  // Whether one loan stands behind another: a reborrow names the
+  // authority it was taken through, and every loan above that one in
+  // turn. The relation is directed, since a reborrow being live is what
+  // freezes its source, not the other way round.
+  bool stands_behind(u32 loan, u32 authority) const {
+    for (u32 cur = loan, steps = 0; cur < loans.size() && steps < loans.size();
+         cur = loans[cur].parent, ++steps) {
+      if (cur == authority) {
+        return true;
+      }
+      if (loans[cur].parent == NO_ROOT) {
+        break;
+      }
+    }
+    return false;
+  }
+
+  // The loan a reborrow of this address derives from: the first loan
+  // the address carries that was born before the read.
+  u32 reborrow_parent(u32 addr, u32 pos) const {
+    if (addr >= flow.size()) {
+      return NO_ROOT;
+    }
+    for (u32 loan : flow[addr]) {
+      if (loan < loans.size() && loans[loan].place.root != NO_ROOT &&
+          loans[loan].birth < pos) {
+        return loan;
+      }
+    }
+    return NO_ROOT;
   }
 
   bool live_at(u32 loan, ir::BlockIdx bidx, u32 pos) const {
@@ -1487,8 +1683,15 @@ class Checker {
         return false;
       }
       for (u32 held : flow[reg]) {
-        if (held == id) {
-          return true;
+        for (u32 cur = held, steps = 0;
+             cur < loans.size() && steps < loans.size();
+             cur = loans[cur].parent, ++steps) {
+          if (cur == id) {
+            return true;
+          }
+          if (loans[cur].parent == NO_ROOT) {
+            break;
+          }
         }
       }
       return false;
@@ -1517,6 +1720,16 @@ class Checker {
             }
             if (!live_at(id, bidx, pos) ||
                 !overlaps(loan.place, place, path_steps_)) {
+              continue;
+            }
+            // The read that mints a reborrow loan is the reborrow
+            // itself: it stands behind this loan, so it is not the
+            // conflict the loan is reported against.
+            if (instr.dst.is_valid() &&
+                stands_behind(reborrow_parent(addr_reg, pos), id)) {
+              continue;
+            }
+            if (inside_param_region(place)) {
               continue;
             }
             // A reserved receiver's window admits a read of data: the
@@ -1622,10 +1835,36 @@ class Checker {
         // enclosing borrow. It may not be *more* exclusive than what it
         // derives from, so an exclusive reborrow of a shared loan is
         // still a conflict.
+        u32 borrow_source = NO_ROOT;
+        (void)operand_reg(0, borrow_source);
         auto derived_from = [&](u32 id) {
+          // The address a borrow names carries the loans it was taken
+          // through, which is the authority the new loan stands behind.
+          if (borrow_source != NO_ROOT && borrow_source < flow.size() &&
+              flow[borrow_source].len != 0) {
+            for (u32 cur = id, steps = 0;
+                 cur < loans.size() && steps < loans.size();
+                 cur = loans[cur].parent, ++steps) {
+              for (u32 held : flow[borrow_source]) {
+                if (held == cur) {
+                  return true;
+                }
+              }
+              if (cur >= loans.size() || loans[cur].parent == NO_ROOT) {
+                break;
+              }
+            }
+          }
           for (u32 held : flow[instr.dst.idx]) {
-            if (held == id) {
-              return true;
+            for (u32 cur = held, steps = 0;
+                 cur < loans.size() && steps < loans.size();
+                 cur = loans[cur].parent, ++steps) {
+              if (cur == id) {
+                return true;
+              }
+              if (loans[cur].parent == NO_ROOT) {
+                break;
+              }
             }
           }
           return false;
@@ -1636,6 +1875,16 @@ class Checker {
             continue;
           }
           if (derived_from(id) && !(exclusive && !loan.exclusive)) {
+            continue;
+          }
+          // The read that mints a reborrow stands behind the loan it
+          // reborrows from, so that loan - and anything it is itself a
+          // reborrow of - is not the conflict this read is reported
+          // against.
+          u32 source = NO_ROOT;
+          if (operand_reg(0, source) &&
+              stands_behind(reborrow_parent(source, pos), id) &&
+              !(exclusive && !loan.exclusive)) {
             continue;
           }
           if (!live_at(id, bidx, pos) ||
@@ -1692,6 +1941,20 @@ class Checker {
               continue;
             }
             if (carries_loan(target, id)) {
+              continue;
+            }
+            // The place comes to hold the stored value, so a loan that
+            // value carries is still honoured after the write: dropping
+            // a view back into the field it was read from is not the
+            // write that ends it.
+            if (carries_loan(handed, id)) {
+              continue;
+            }
+            // The receiver of a method names its region only by
+            // convention: the loan taken for it covers everything the
+            // caller passed, so every field and element of it lies
+            // inside. A write there is that region being used.
+            if (loan.param_derived && nests_inside(loan.place, place)) {
               continue;
             }
             if (!live_at(id, bidx, pos) ||
@@ -1807,6 +2070,14 @@ class Checker {
             // A reborrow taken through the receiver stands behind it,
             // the way the borrow rule lets one taken through a loan.
             if (carries_loan(loan.reg, id)) {
+              continue;
+            }
+            // The reservation itself may be the reborrow: a call
+            // through a field borrows that field's place out of the
+            // loan the receiver already carries, so the loan it names
+            // is the one it stands behind, not one competing with it.
+            if (reserved.parent != NO_ROOT &&
+                related_loans(other, reserved.parent)) {
               continue;
             }
             // The call's own projection reifies the return's borrow of

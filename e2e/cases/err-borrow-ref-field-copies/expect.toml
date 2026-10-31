@@ -1,0 +1,6 @@
+# Two reads of the field yield two references to one buffer, so
+# the writes through them are writes to the same place while both
+# are live.
+exit = 4
+contains = ["borrowed"]
+not_contains = []

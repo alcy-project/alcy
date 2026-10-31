@@ -179,6 +179,51 @@ That is the whole of what was missing. It is narrower than it looks,
 because the rest of rule 1 already worked: a shared receiver already
 hands out borrows of its own fields.
 
+## Rule 1 landed for the copy out of a field
+
+Reading a reference-typed place charges the copy a loan of its own on
+the referent, and records the loan it was read out of as that loan's
+parent. The link is what keeps a reborrow from being reported against
+its own source: two reads of one field name one authority, so reading
+the field and writing it back in one expression is not a conflict.
+
+Two consequences follow, and rule 1 is unusable without both. A write
+*inside* a place a parameter names is that region being used - the
+caller's own loans are what decide whether the region is aliased - so
+`self.rest = str_slice(self.rest, ...)` and `self[i] = self[i - 1]`
+stay accepted. And a copy out of a field is a second path to the
+buffer the field points at, so a write through the field while the copy
+is live reports. `err-borrow-ref-field-read`,
+`err-borrow-ref-field-copies`, and `err-borrow-ref-field-alias` are the
+cases that must refuse; `*r = 5` through a `&mut` parameter,
+`core/string.al`, and `text/string.al` are the ones that must keep
+accepting.
+
+Two narrowings were needed to keep the corpus accepted. Only a copy
+of a *unique* reference is charged the loan: a shared copy cannot be
+written through, so it can change nothing any other loan reads, and a
+loan for it only turns reads of one receiver into conflicts. And the
+loan a copy is charged claims the place without being authority to
+write it: the reference's own type carries that, while a summary that
+reported the claim as exclusive handed every caller a borrow of the
+parameter nobody took, which refused `v.len()` next to a read through a
+returned view. Writes are checked against the places loans name, not
+against which of them may write, so the claim still refuses
+`*x.buf = 9` while a copy of that field is live.
+
+A loan a call reifies on its result stands behind the loan its
+argument carries, because the callee reached that place through it. That
+is what keeps a write through a returned `&mut` from being reported
+against the borrow it was taken from, and it is the same link the copy
+out of a field records. The relation is directed: the loan a read is
+taken *through*, and the loans above it, are the read's source, while a
+reborrow that is still live is frozen by a read of its parent. The rules
+corpus states the second half as `aliasing/parent-read-while-child-live`.
+
+The extent is still the last-use approximation, so this leaves the
+position above unchanged: the region solver replaces the approximation,
+not the loan.
+
 ## Rule 1 is narrower than it looks
 
 The unsound case above reads a place of reference type. A place of any
