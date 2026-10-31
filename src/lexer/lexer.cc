@@ -163,17 +163,73 @@ constexpr Keyword KEYWORDS[] = {
     {"while", TokenKind::While},
 };
 
+constexpr usize KEYWORD_MIN_LENGTH = [] {
+  usize shortest = KEYWORDS[0].spelling.size();
+  for (const Keyword& keyword : KEYWORDS) {
+    shortest = std::min(shortest, keyword.spelling.size());
+  }
+  return shortest;
+}();
+constexpr usize KEYWORD_MAX_LENGTH = [] {
+  usize longest = KEYWORDS[0].spelling.size();
+  for (const Keyword& keyword : KEYWORDS) {
+    longest = std::max(longest, keyword.spelling.size());
+  }
+  return longest;
+}();
+constexpr usize KEYWORD_LENGTHS = KEYWORD_MAX_LENGTH - KEYWORD_MIN_LENGTH + 1;
+
+// A spelling's length is fixed and most words reaching the lookup are
+// identifiers no spelling matches, so grouping the table by length lets
+// the search skip every other length's entries. The table itself stays
+// ordered by spelling; this restates it length by length, each run in
+// table order.
+struct KeywordGroup {
+  usize begin = 0;
+  usize end = 0;
+};
+
+struct KeywordIndex {
+  std::array<Keyword, std::size(KEYWORDS)> entries{};
+  std::array<KeywordGroup, KEYWORD_LENGTHS> groups{};
+};
+
+constexpr KeywordIndex keyword_index() {
+  KeywordIndex index;
+  usize written = 0;
+  for (usize length = KEYWORD_MIN_LENGTH; length <= KEYWORD_MAX_LENGTH;
+       ++length) {
+    const usize group = length - KEYWORD_MIN_LENGTH;
+    index.groups[group].begin = written;
+    for (const Keyword& keyword : KEYWORDS) {
+      if (keyword.spelling.size() == length) {
+        index.entries[written++] = keyword;
+      }
+    }
+    index.groups[group].end = written;
+  }
+  return index;
+}
+
+constexpr auto KEYWORD_INDEX = keyword_index();
+
 // The table is in spelling order, which is what lets a word be looked up in
 // it. Every identifier and every keyword goes through here, so comparing the
 // word against each spelling in turn charged the lexer for the whole table
 // per token.
 TokenKind lookup_keyword(std::string_view word) {
-  const auto found =
-      std::lower_bound(std::begin(KEYWORDS), std::end(KEYWORDS), word,
-                       [](const Keyword& keyword, std::string_view spelling) {
-                         return keyword.spelling < spelling;
-                       });
-  if (found != std::end(KEYWORDS) && found->spelling == word) {
+  const usize length = word.size();
+  if (length < KEYWORD_MIN_LENGTH || length > KEYWORD_MAX_LENGTH) {
+    return TokenKind::Ident;
+  }
+  const KeywordGroup& group = KEYWORD_INDEX.groups[length - KEYWORD_MIN_LENGTH];
+  const auto first = KEYWORD_INDEX.entries.begin() + group.begin;
+  const auto last = KEYWORD_INDEX.entries.begin() + group.end;
+  const auto found = std::lower_bound(
+      first, last, word, [](const Keyword& keyword, std::string_view spelling) {
+        return keyword.spelling < spelling;
+      });
+  if (found != last && found->spelling == word) {
     return found->kind;
   }
   return TokenKind::Ident;
