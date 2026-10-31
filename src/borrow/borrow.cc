@@ -207,6 +207,11 @@ class Checker {
   // used, so the capacity one sweep needed is the capacity the next reuses.
   std::vector<u32> live_in_scratch_;
   std::vector<u32> live_out_scratch_;
+  // The loans one block's live-out set holds, marked by stamp. Asking
+  // whether a loan is live on exit by scanning that set made the sweep's
+  // inner loop as long as the set, once per loan of the function.
+  std::vector<u32> live_mark;
+  u32 live_stamp = 0;
   std::vector<ir::BlockIdx> succs_scratch_;
   std::vector<ir::BlockIdx> stack_scratch_;
   std::vector<ir::BlockIdx> post_scratch_;
@@ -893,14 +898,7 @@ class Checker {
       }
     }
     build_preds(fn, order);
-    auto add_loan = [](std::vector<u32>& set, u32 loan) {
-      for (u32 prior : set) {
-        if (prior == loan) {
-          return;
-        }
-      }
-      set.push_back(loan);
-    };
+
     // Backward to a fixed point: a block is live out wherever any
     // successor is live in, and live in wherever it is read on a path
     // that reaches one of them.
@@ -920,11 +918,20 @@ class Checker {
       bool changed = false;
       for (ir::BlockIdx bidx : order) {
         live_out_scratch_.clear();
+        if (++live_stamp == 0) {
+          std::fill(live_mark.begin(), live_mark.end(), 0);
+          live_stamp = 1;
+        }
+        const u32 stamp = live_stamp;
         succs_scratch_.clear();
         successors(bidx, succs_scratch_);
         for (ir::BlockIdx succ : succs_scratch_) {
           for (u32 loan : live_in[succ.idx]) {
-            add_loan(live_out_scratch_, loan);
+            if (live_mark[loan] == stamp) {
+              continue;
+            }
+            live_mark[loan] = stamp;
+            live_out_scratch_.push_back(loan);
           }
         }
         if (live_out_scratch_ != live_out[bidx.idx]) {
@@ -937,22 +944,20 @@ class Checker {
         // exclusion is what stops a loan made in a loop body from
         // wrapping around the back edge and being live on the next
         // entry, where it would outlive the iteration that made it.
+        // The marks hold this block's live-out set, and index order keeps
+        // the set free of repeats.
         live_in_scratch_.clear();
+        const u32 first = block_first[bidx.idx];
+        const u32 last = block_last[bidx.idx];
         for (u32 loan = 0; loan < loans.size(); ++loan) {
           const u32 birth = loans[loan].birth;
-          if (birth >= block_first[bidx.idx] && birth <= block_last[bidx.idx]) {
+          if (birth >= first && birth <= last) {
             continue;
           }
-          bool live_here = loan_last_use[bidx.idx][loan] != 0;
-          for (u32 prior : live_out[bidx.idx]) {
-            if (prior == loan) {
-              live_here = true;
-              break;
-            }
+          if (loan_last_use[bidx.idx][loan] == 0 && live_mark[loan] != stamp) {
+            continue;
           }
-          if (live_here) {
-            add_loan(live_in_scratch_, loan);
-          }
+          live_in_scratch_.push_back(loan);
         }
         if (live_in_scratch_ != live_in[bidx.idx]) {
           live_in[bidx.idx] = live_in_scratch_;
@@ -1836,6 +1841,7 @@ class Checker {
       block_last[bidx.idx] = 0;
       loan_last_use[bidx.idx].assign(loans.size(), 0);
     }
+    live_mark.assign(loans.size(), 0);
   }
 
   // Predecessors of the blocks the fixpoints read. The walk covers the
