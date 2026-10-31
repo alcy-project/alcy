@@ -79,6 +79,9 @@ bool parse_one(PipelineContext& ctx,
   }
   lexer::Lexer lexer(bytes, file.id, bag);
   std::vector<lexer::Token> tokens;
+  // Source averages a little over three bytes per token, so a third of the
+  // length is a close upper estimate and the stream needs no regrowth.
+  tokens.reserve(bytes.size() / 3 + 16);
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "tokenize", "frontend");
     lexer.tokenize(tokens);
