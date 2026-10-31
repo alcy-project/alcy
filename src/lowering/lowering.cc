@@ -1547,6 +1547,8 @@ void Lowerer::run() {
     builder.reserve_operands(fn_count * 90);
     builder.reserve_instrs(fn_count * 61);
     builder.reserve_registers(fn_count * 23);
+    // One span per instruction, the drop pass's glue included.
+    instr_spans_.reserve(fn_count * 61);
   }
   // Lower bodies, then publish functions in reservation order so
   // the pre-assigned indexes line up with storage positions.
