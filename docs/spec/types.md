@@ -21,6 +21,9 @@
   and never follows the profile: an overflow in `+`, `-`, and `*` and
   a zero divisor are errors there, while an overshift and a signed
   `MIN / -1` keep the defined results above (ADR-0065).
+- `a ** b` is integer-only, repeated squaring under `*`'s checks: a
+  negative exponent panics, `x ** 0` is one (`0 ** 0` included), and a
+  float `**` is undefined - the operator is declared for integers only.
 - Casts: a cast between a float and an integer truncates toward zero,
   and a value the destination cannot hold saturates - its minimum below
   the destination's range and its maximum above it, with NaN becoming
