@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include "diag/bag.h"
@@ -941,6 +942,7 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
                                   alignof(std::string_view)))
                             : nullptr;
       u32 include_filled = 0;
+      std::unordered_set<std::string_view> include_seen;
       for (const toml::node& node : *include_array) {
         const auto entry = node.value<std::string_view>();
         if (!entry.has_value() || entry->empty()) {
@@ -953,11 +955,9 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
           modules.wildcard = true;
           continue;
         }
-        for (u32 i = 0; i < include_filled; ++i) {
-          if (include[i] == *entry) {
-            return semantic_error(bag, filename,
-                                  "duplicate [modules] include entry");
-          }
+        if (!include_seen.insert(*entry).second) {
+          return semantic_error(bag, filename,
+                                "duplicate [modules] include entry");
         }
         include[include_filled++] = copy_str(arena, *entry);
       }
@@ -1026,6 +1026,7 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
                                         alignof(std::string_view)))
                       : nullptr;
         u32 filled = 0;
+        std::unordered_set<std::string_view> seen;
         for (const toml::node& entry : *array) {
           const auto text = entry.value<std::string_view>();
           if (!text.has_value() || text->empty()) {
@@ -1034,14 +1035,7 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
             (void)index;
             return base::make_err(diag::Reported{});
           }
-          bool duplicate = false;
-          for (u32 i = 0; i < filled; ++i) {
-            if (names[i] == *text) {
-              duplicate = true;
-              break;
-            }
-          }
-          if (duplicate) {
+          if (!seen.insert(*text).second) {
             const u32 index = bag.emit<i18n::Key::PkgSpecSuiteOnlyDuplicate>(
                 DiagCode::ManifestSemanticError, filename, *text);
             (void)index;
@@ -1070,6 +1064,7 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
                                         alignof(std::string_view)))
                       : nullptr;
         u32 filled = 0;
+        std::unordered_set<std::string_view> seen;
         for (const toml::node& entry : *array) {
           const auto text = entry.value<std::string_view>();
           if (!text.has_value() || text->empty()) {
@@ -1078,14 +1073,7 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
             (void)index;
             return base::make_err(diag::Reported{});
           }
-          bool duplicate = false;
-          for (u32 i = 0; i < filled; ++i) {
-            if (names[i] == *text) {
-              duplicate = true;
-              break;
-            }
-          }
-          if (duplicate) {
+          if (!seen.insert(*text).second) {
             const u32 index = bag.emit<i18n::Key::PkgSpecImplementDuplicate>(
                 DiagCode::ManifestSemanticError, filename, *text);
             (void)index;
