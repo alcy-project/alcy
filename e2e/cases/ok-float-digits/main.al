@@ -9,10 +9,16 @@ fn main() -> i32 {
   smallest := 5e-324f64
   sparse := 1.4e-323f64
   least := 2.2250738585072014e-308f64
+  zero := 0.0f64
+  negative_zero := zero * (zero - 1.0f64)
   println("{:.17f}", tenth)
   println("{:.17f}", third)
   println("{}", smallest)
   println("{:.16f}", sparse)
   println("{:.16f}", least)
+  // A zero keeps the sign it carries, which a comparison alone cannot
+  // read.
+  println("{}|", negative_zero)
+  println("{:.2f}|", negative_zero)
   ret 0i32
 }

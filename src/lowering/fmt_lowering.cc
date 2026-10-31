@@ -932,8 +932,20 @@ void Lowerer::Fmt::emit_float(diag::Span span,
   }
   owner_.switch_to(finite_block);
   const ir::OperandIdx zero = f64_imm(0.0);
-  const ir::RegisterIdx negative = owner_.emit(
+  // A comparison reads the sign of every value but a zero, whose
+  // reciprocal carries the sign it drops; both are needed, because the
+  // reciprocal of -inf is -0.0.
+  const ir::RegisterIdx below_zero = owner_.emit(
       ir::Opcode::Lt, boolean, {owner_.to_operand(value, f64_ty), zero});
+  const ir::RegisterIdx reciprocal =
+      owner_.emit(ir::Opcode::FDiv, f64_ty,
+                  {f64_imm(1.0), owner_.to_operand(value, f64_ty)});
+  const ir::RegisterIdx reciprocal_below_zero = owner_.emit(
+      ir::Opcode::Lt, boolean, {owner_.to_operand(reciprocal, f64_ty), zero});
+  const ir::RegisterIdx negative =
+      owner_.emit(ir::Opcode::Or, boolean,
+                  {owner_.to_operand(below_zero, boolean),
+                   owner_.to_operand(reciprocal_below_zero, boolean)});
   const ir::RegisterIdx flipped = owner_.emit(
       ir::Opcode::FSub, f64_ty, {zero, owner_.to_operand(value, f64_ty)});
   const ir::RegisterIdx magnitude = owner_.emit(
