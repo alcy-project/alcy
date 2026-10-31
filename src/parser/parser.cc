@@ -593,6 +593,7 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
                                 u32* type_args_segment) {
   const usize mark = pos_;
   std::vector<ast::Ident> segments;
+  segments.reserve(2);
   while (true) {
     // A scalar may open a path only as a member's prefix: `i64::parse`
     // parses, a bare `i64` expression stays the spelling error it was.
