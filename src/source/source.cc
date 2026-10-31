@@ -104,6 +104,12 @@ std::optional<std::string_view> SourceManager::bytes(FileId id) const {
                        entry.mapping.size()});
 }
 
+void SourceManager::reset() {
+  entries_.clear();
+  by_name_.clear();
+  virtuals_.clear();
+}
+
 std::optional<std::string_view> SourceManager::name(FileId id) const {
   if (id >= entries_.size()) {
     return std::nullopt;

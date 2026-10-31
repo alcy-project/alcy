@@ -189,6 +189,12 @@ u32 run_fix_passes(pipeline::PipelineContext& ctx,
     if (files.empty()) {
       break;
     }
+    // apply_fixes will re-read the bytes and truncate the path through
+    // io::write_file. A writer cannot truncate a file that still has a
+    // mapped section; fpag's widened FILE_SHARE_WRITE already admits
+    // the open, but CreateFile still fails with ERROR_USER_MAPPED_FILE
+    // (1224), so the mappings must be released here first.
+    pass_ctx.sources.reset();
     const AppliedFixes applied = apply_fixes(files, bag);
     fixed += applied.edits;
     if (applied.failed || applied.edits == 0) {

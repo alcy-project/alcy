@@ -68,6 +68,14 @@ class SourceManager {
   // file, which keeps an unknown id distinguishable from a loaded file
   // whose content (or name) happens to be empty.
   std::optional<std::string_view> bytes(FileId id) const;
+  // Release every held mapping. A writer cannot truncate a file while a
+  // mapped section of it survives, which is what replacing the file's
+  // contents needs on Windows: the reader's share mode admits the open
+  // but does not lift that. Every caller must treat all ids it still
+  // holds as stale afterwards; the data the contexts that read through
+  // them need is already in hand.
+  void reset();
+
   std::optional<std::string_view> name(FileId id) const;
   // True when the source is memory-mapped rather than held in memory.
   bool is_mapped(FileId id) const;
