@@ -528,6 +528,55 @@ const Local* Lowerer::lookup_local(std::string_view name) const {
   return nullptr;
 }
 
+const Local* Lowerer::rooted_local(ast::ExprIdx place) const {
+  while (place.is_valid()) {
+    const ast::ExprNode& node = ast.exprs[place];
+    if (node.kind == ast::ExprKind::Field) {
+      place = node.payload.get<ast::ExprField>().receiver;
+    } else if (node.kind == ast::ExprKind::Index) {
+      place = node.payload.get<ast::ExprIndex>().receiver;
+    } else if (node.kind == ast::ExprKind::Deref) {
+      place = node.payload.get<ast::ExprDeref>().inner;
+    } else {
+      break;
+    }
+  }
+  if (!place.is_valid() || ast.exprs[place].kind != ast::ExprKind::Path) {
+    return nullptr;
+  }
+  const ast::Path& path =
+      ast.paths[ast.exprs[place].payload.get<ast::ExprPath>().idx];
+  if (path.segments.size() != 1) {
+    return nullptr;
+  }
+  return lookup_local(path.segments[0].name);
+}
+
+bool Lowerer::escapes_referent(ast::ExprIdx value, ast::ExprIdx place) const {
+  if (!value.is_valid() || ast.exprs[value].kind != ast::ExprKind::Borrow) {
+    return false;
+  }
+  const ast::ExprBorrow& borrow =
+      ast.exprs[value].payload.get<ast::ExprBorrow>();
+  const Local* referent = rooted_local(borrow.inner);
+  const Local* target = rooted_local(place);
+  if (referent == nullptr || target == nullptr) {
+    return false;
+  }
+  // Blocks are a stack: a local declared after the destination's is in
+  // the destination's block or deeper, so its slot cannot outlive the
+  // store it would receive.
+  const auto referent_index = static_cast<usize>(referent - locals.data());
+  const auto target_index = static_cast<usize>(target - locals.data());
+  if (referent_index <= target_index) {
+    return false;
+  }
+  const u32 index = bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
+      DiagCode::BlockReferenceEscapes, ast.exprs[value].span, referent->name);
+  (void)index;
+  return true;
+}
+
 const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(
     u32 mod,
     std::string_view name) const {

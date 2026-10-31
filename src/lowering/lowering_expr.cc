@@ -5436,6 +5436,15 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
     }
     case ast::StmtKind::Reassign: {
       const ast::StmtReassign& reassign = node.payload.get<ast::StmtReassign>();
+      // A borrow of a local declared inside the block, stored into a
+      // binding declared outside it, would outlive its referent: the
+      // slot ends with the block while the destination keeps reading it.
+      // The binding order is the extent here, because a later local
+      // cannot outlive an earlier one in the same function.
+      if (escapes_referent(reassign.value, reassign.place)) {
+        failed = true;
+        return;
+      }
       // The value is read before the place is taken: `v[i] = v[j] + 1`
       // reads through a shared borrow before the place asks for the
       // exclusive one, so the two do not overlap.

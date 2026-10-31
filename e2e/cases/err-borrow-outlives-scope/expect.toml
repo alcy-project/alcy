@@ -1,0 +1,4 @@
+exit = 4
+args = ["--color=always"]
+contains = ["Reference to local 'n' escapes the block that declares it", "\u001b[31m"]
+not_contains = []

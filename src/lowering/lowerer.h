@@ -286,6 +286,14 @@ class Lowerer {
   ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
   ir::OperandIdx use_value(Val v);
   const Local* lookup_local(std::string_view name) const;
+  // True when `value` borrows a local declared after `place`'s local, so
+  // storing it into `place` would leave the reference reading a slot
+  // whose block has ended. Only a borrow of a rooted local is read: a
+  // call's result and a temporary have no binding to compare.
+  bool escapes_referent(ast::ExprIdx value, ast::ExprIdx place) const;
+  // The local a place expression is rooted at, or nullptr when it is not
+  // rooted at one.
+  const Local* rooted_local(ast::ExprIdx place) const;
   const analyzer::CheckedModule::StaticInfo* lookup_static(
       u32 mod,
       std::string_view name) const;

@@ -18,15 +18,6 @@ replaced. The foundations are in `roadmap.md`.
   in another, asserting the JSON `cache` field, would name the
   failure.
 
-- [ ] A reference stored into a longer-lived place outlives its
-  referent: `mut r: &i32 := &0; { n := 5; r = &n; } *r` compiles, and
-  so does the same store through a struct field or an `if` arm, which
-  leaves `*r` reading storage the scope already ended.
-  `docs/spec/deferred.md` leaves the outlives constraints between
-  regions to the region-annotated captures work, so the check wants that
-  relation rather than a rule about one instruction; the case is here so
-  that work starts from a reproducer.
-
 - [ ] Float `**` is refused while the integer one is repeated
   squaring: a fractional exponent needs `pow`, and the direct-wasm
   target imports no libm and has no instruction for it, so admitting
