@@ -1,0 +1,6 @@
+# The result of `get` names the buffer the argument's reference
+# field points at, so a write through that field is a write to a
+# place the result reads.
+exit = 4
+contains = ["borrowed"]
+not_contains = []
