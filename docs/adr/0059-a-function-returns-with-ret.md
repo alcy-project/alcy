@@ -7,11 +7,11 @@
 ## Context
 
 A block's value is its last expression, and a function body is a
-block: `check_fn` checks the body against the declared return type, so
-a non-`()` function satisfies its return with a tail expression.
-`fn answer() -> i32 { 42 }` type-checks today, and so does
-`fn f() -> i32 { if c { 1 } else { 2 } }`; `ret` is one way to return,
-not the way.
+block. Previously `check_fn` accepted that tail expression as the
+return, so `fn answer() -> i32 { 42 }` and
+`fn f() -> i32 { if c { 1 } else { 2 } }` type-checked; `ret` was
+one way to return, not the way. The cost there outweighed that
+flexibility.
 
 That flexibility has costs the language has already voted against at
 the call site, where `ret` is the convention nearly everywhere in
