@@ -40,10 +40,12 @@ enum class DocKind : u8 {
 
 // One node of a layout document. kids holds the parts of a Concat, the
 // single part of a Nest or a Group, or the broken/flat pair of an
-// IfBreak.
+// IfBreak. text borrows its bytes: a document is rendered while the
+// source it describes is still alive, so a text node points into that
+// source instead of copying out of it.
 struct Doc {
   DocKind kind = DocKind::Empty;
-  std::string text;
+  std::string_view text;
   std::vector<Doc> kids;
   usize indent = 0;
 };
@@ -60,7 +62,8 @@ Doc doc_if_break(Doc broken, Doc flat);
 
 // Renders a document to bytes. width is the column the renderer aims to
 // keep lines within; a line may still exceed it when a single
-// unbreakable run does.
-std::string render(const Doc& doc, usize width);
+// unbreakable run does. bytes guesses the output's size, and only sizes
+// the buffer: an underestimate costs one growth more, no output.
+std::string render(const Doc& doc, usize width, usize bytes);
 
 }  // namespace alcy_fmt
