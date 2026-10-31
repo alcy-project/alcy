@@ -1597,566 +1597,717 @@ Val Lowerer::lower_extern_call(ast::ExprIdx expr,
 Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
                                   const analyzer::CheckedModule::FnSig& sig,
                                   const std::vector<ir::TypeIdx>& type_args) {
-  const ast::ExprNode& node = ast.exprs[expr];
   const std::string_view name = sig.name;
   if (name == "panic") {
     return lower_panic(expr);
   }
   if (name == "sys_write") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 2) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val fd = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val buf = lower_expr(call.args[1], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const Val material = materialize(buf);
-    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-    const ir::TypeIdx usize_ty = usize_type();
-    const ir::RegisterIdx bytes =
-        emit(ir::Opcode::ExtractValue, ptr_ty, {material.op, index_operand(0)});
-    const ir::RegisterIdx len = emit(ir::Opcode::ExtractValue, usize_ty,
-                                     {material.op, index_operand(1)});
-    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
-    const ir::ExternalFunctionIdx ext = declare_external(
-        "alcy_sys_write", i64_ty,
-        {builder.primitive(ir::TypeTag::I32), ptr_ty, usize_ty});
-    const ir::RegisterIdx dst = emit(
-        ir::Opcode::Call, i64_ty,
-        {builder.operand(ir::Operand::from_external_function(
-             ext, builder.primitive(ir::TypeTag::Function))),
-         use_value(fd), to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+    return lower_sys_write_intrinsic(expr, sig, type_args);
   }
   if (name == "sys_read") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 3) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val fd = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val out = lower_expr(call.args[1], &sig.params[1]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val len = lower_expr(call.args[2], &sig.params[2]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-    const ir::TypeIdx usize_ty = usize_type();
-    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
-    const ir::ExternalFunctionIdx ext = declare_external(
-        "alcy_sys_read", i64_ty,
-        {builder.primitive(ir::TypeTag::I32), ptr_ty, usize_ty});
-    const ir::RegisterIdx dst =
-        emit(ir::Opcode::Call, i64_ty,
-             {builder.operand(ir::Operand::from_external_function(
-                  ext, builder.primitive(ir::TypeTag::Function))),
-              use_value(fd), arg_for(out, sig.params[1]),
-              arg_for(len, sig.params[2])});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+    return lower_sys_read_intrinsic(expr, sig, type_args);
   }
   if (name == "error_kind") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val code = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
-    const ir::ExternalFunctionIdx ext =
-        declare_external("alcy_error_kind", i32_ty, {i32_ty});
-    const ir::RegisterIdx dst =
-        emit(ir::Opcode::Call, i32_ty,
-             {builder.operand(ir::Operand::from_external_function(
-                  ext, builder.primitive(ir::TypeTag::Function))),
-              use_value(code)});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(dst, i32_ty), i32_ty, false, false};
+    return lower_error_kind_intrinsic(expr, sig, type_args);
   }
   if (name == "memcopy") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 3) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val dst = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val src = lower_expr(call.args[1], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val len = lower_expr(call.args[2], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    // Both pointers are the same storage type, so the element's
-    // alignment is the copy's: the backend may use it, and does not
-    // have to.
-    ir::InstructionFlags flags;
-    if (tag_of(dst.type) == ir::TypeTag::MutRef) {
-      const ir::TypeIdx pointee =
-          builder.ref_types()[builder.types()[dst.type.idx].as_ref()].pointee;
-      const u64 align =
-          ir::type_layout(builder.state(), type_origin(pointee), width).align;
-      u32 log2 = 0;
-      while (log2 < 15 && (static_cast<u64>(1) << log2) < align) {
-        ++log2;
-      }
-      if ((static_cast<u64>(1) << log2) == align) {
-        flags.mem_align_log2 = static_cast<u8>(log2);
-      }
-    }
-    emit_void(ir::Opcode::Memcopy,
-              {use_value(dst), use_value(src), use_value(len)}, flags);
-    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    return lower_memcopy_intrinsic(expr, sig, type_args);
   }
   if (name == "drop_in_place") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 1 || type_args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val ptr = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const Val material = materialize(ptr);
-    // The end runs wherever the pass visits this point; the pointer is
-    // the caller's guarantee that the value is there.
-    record_drop_in_place(material.op, type_args[0], node.span);
-    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    return lower_drop_in_place_intrinsic(expr, sig, type_args);
   }
   if (name == "slice_at") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 2) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val s = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val index = lower_expr(call.args[1], &sig.params[1]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const Val material = materialize(s);
-    ir::OperandIdx bytes = ir::OperandIdx::invalid();
-    ir::OperandIdx len = ir::OperandIdx::invalid();
-    if (!slice_parts(material, bytes, len)) {
-      unsupported(node.span, "slice_at receiver");
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::TypeIdx slice_ty = slice_pointee(material.type);
-    const ir::SliceType& shape =
-        builder.state().slice_types[builder.state().types[slice_ty].as_slice()];
-    const ir::TypeIdx elem_ref = builder.reference_type(shape.element, false);
-    const ir::RegisterIdx element =
-        emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(index)});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(element, elem_ref), elem_ref, false, false};
+    return lower_slice_at_intrinsic(expr, sig, type_args);
   }
   if (name == "slice_at_mut") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 2) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val s = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val index = lower_expr(call.args[1], &sig.params[1]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const Val material = materialize(s);
-    ir::OperandIdx bytes = ir::OperandIdx::invalid();
-    ir::OperandIdx len = ir::OperandIdx::invalid();
-    if (!slice_parts(material, bytes, len)) {
-      unsupported(node.span, "slice_at_mut receiver");
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::TypeIdx slice_ty = slice_pointee(material.type);
-    const ir::SliceType& shape =
-        builder.state().slice_types[builder.state().types[slice_ty].as_slice()];
-    const ir::TypeIdx elem_ref = builder.reference_type(shape.element, true);
-    const ir::RegisterIdx element =
-        emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(index)});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(element, elem_ref), elem_ref, false, false};
+    return lower_slice_at_mut_intrinsic(expr, sig, type_args);
   }
   if (name == "read") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val ptr = lower_expr(call.args[0], &sig.params[0]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const Val material = materialize(ptr);
-    const ir::RegisterIdx value =
-        emit(ir::Opcode::Load, sig.ret, {material.op});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(value, sig.ret), sig.ret, false, false};
+    return lower_read_intrinsic(expr, sig, type_args);
   }
   if (name == "str_len" || name == "str_byte" || name == "str_slice") {
     return lower_str_intrinsic(expr, name);
   }
   if (name == "arg") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
-    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
-    Val index = lower_expr(call.args[0], &sig.params[0]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const ir::ExternalFunctionIdx ext =
-        declare_external("alcy_arg", str_ty, {i64_ty});
-    const ir::RegisterIdx dst =
-        emit(ir::Opcode::Call, str_ty,
-             {builder.operand(ir::Operand::from_external_function(
-                  ext, builder.primitive(ir::TypeTag::Function))),
-              arg_for(index, sig.params[0])});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(dst, str_ty), str_ty, false, false};
+    return lower_arg_intrinsic(expr, sig, type_args);
   }
   if (name == "arg_count") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (!call.args.empty()) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
-    const ir::ExternalFunctionIdx ext =
-        declare_external("alcy_arg_count", i64_ty, {});
-    const ir::RegisterIdx dst =
-        emit(ir::Opcode::Call, i64_ty,
-             {builder.operand(ir::Operand::from_external_function(
-                 ext, builder.primitive(ir::TypeTag::Function)))});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+    return lower_arg_count_intrinsic(expr, sig, type_args);
   }
   if (name == "file_size" || name == "read_file_into" ||
       name == "write_file_all") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    const usize arity =
-        name == "file_size" ? 1 : (name == "read_file_into" ? 3 : 2);
-    if (call.args.size() != arity) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-    const ir::TypeIdx usize_ty = usize_type();
-    const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
-    Val path = lower_expr(call.args[0], &sig.params[0]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const ir::OperandIdx path_val = arg_for(path, sig.params[0]);
-    const ir::RegisterIdx bytes =
-        emit(ir::Opcode::ExtractValue, ptr_ty, {path_val, index_operand(0)});
-    const ir::RegisterIdx len =
-        emit(ir::Opcode::ExtractValue, usize_ty, {path_val, index_operand(1)});
-    std::vector<ir::OperandIdx> ops;
-    if (name == "file_size") {
-      const ir::ExternalFunctionIdx ext =
-          declare_external("alcy_file_size", i64_ty, {ptr_ty, usize_ty});
-      ops.push_back(builder.operand(ir::Operand::from_external_function(
-          ext, builder.primitive(ir::TypeTag::Function))));
-      ops.push_back(to_operand(bytes, ptr_ty));
-      ops.push_back(to_operand(len, usize_ty));
-    } else if (name == "write_file_all") {
-      Val data = lower_expr(call.args[1], &sig.params[1]);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      const ir::OperandIdx data_val = arg_for(data, sig.params[1]);
-      const ir::RegisterIdx data_bytes =
-          emit(ir::Opcode::ExtractValue, ptr_ty, {data_val, index_operand(0)});
-      const ir::RegisterIdx data_len = emit(ir::Opcode::ExtractValue, usize_ty,
-                                            {data_val, index_operand(1)});
-      const ir::ExternalFunctionIdx ext = declare_external(
-          "alcy_write_file", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
-      ops.push_back(builder.operand(ir::Operand::from_external_function(
-          ext, builder.primitive(ir::TypeTag::Function))));
-      ops.push_back(to_operand(bytes, ptr_ty));
-      ops.push_back(to_operand(len, usize_ty));
-      ops.push_back(to_operand(data_bytes, ptr_ty));
-      ops.push_back(to_operand(data_len, usize_ty));
-    } else {
-      Val out = lower_expr(call.args[1], &sig.params[1]);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      Val out_len = lower_expr(call.args[2], &sig.params[2]);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      const ir::ExternalFunctionIdx ext = declare_external(
-          "alcy_read_file_into", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
-      ops.push_back(builder.operand(ir::Operand::from_external_function(
-          ext, builder.primitive(ir::TypeTag::Function))));
-      ops.push_back(to_operand(bytes, ptr_ty));
-      ops.push_back(to_operand(len, usize_ty));
-      ops.push_back(arg_for(out, sig.params[1]));
-      ops.push_back(arg_for(out_len, sig.params[2]));
-    }
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::RegisterIdx dst = emit(ir::Opcode::Call, i64_ty, ops);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+    return lower_file_intrinsic(expr, sig, type_args);
   }
   if (name == "elem_ptr" || name == "elem_ref" || name == "ptr_offset" ||
       name == "ptr_offset_mut") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 2) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    std::vector<ir::OperandIdx> args;
-    for (usize i = 0; i < 2; ++i) {
-      Val arg = lower_moved(call.args[i], &sig.params[i]);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      args.push_back(arg_for(arg, sig.params[i]));
-    }
-    const ir::RegisterIdx result = emit(ir::Opcode::ElemOffset, sig.ret, args);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(result, sig.ret), sig.ret, false, false};
+    return lower_elem_ptr_intrinsic(expr, sig, type_args);
   }
   if (name == "uninit_write" || name == "uninit_assume" ||
       name == "uninit_ref") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    const usize arity = name == "uninit_write" ? 2 : 1;
-    if (call.args.size() != arity) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val slot = lower_expr(call.args[0], &sig.params[0]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const ir::OperandIdx slot_op = arg_for(slot, sig.params[0]);
-    if (name == "uninit_assume" || name == "uninit_ref") {
-      // The wrapper is representation-transparent, so releasing the
-      // value is a relabel of the same address.
-      const ir::RegisterIdx held =
-          emit(ir::Opcode::TypeCast, sig.ret, {slot_op});
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
-      }
-      return Val{to_operand(held, sig.ret), sig.ret, false, false};
-    }
-    Val value = lower_moved(call.args[1], &sig.params[1]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    emit_void(ir::Opcode::Store, {use_value(value), slot_op});
-    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    return lower_uninit_intrinsic(expr, sig, type_args);
   }
   if (name == "size_of" || name == "align_of") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (!call.args.empty() || type_args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::RegisterIdx measured = emit_type_query(
-        name == "size_of" ? ir::Opcode::TypeSizeOf : ir::Opcode::TypeAlignOf,
-        type_args[0]);
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(measured, usize_type()), usize_type(), false, false};
+    return lower_size_of_intrinsic(expr, sig, type_args);
   }
   if (name == "wrapping_add" || name == "wrapping_sub" ||
       name == "wrapping_mul") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 2 || type_args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    const ir::TypeIdx type = type_args[0];
-    Val left = lower_expr(call.args[0], &type);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val right = lower_expr(call.args[1], &type);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const ir::Opcode op = name == "wrapping_add"   ? ir::Opcode::IntAddWrap
-                          : name == "wrapping_sub" ? ir::Opcode::IntSubWrap
-                                                   : ir::Opcode::IntMulWrap;
-    const ir::RegisterIdx result =
-        emit(op, type, {use_value(left), use_value(right)});
-    if (failed) {
-      return Val{size_one, error_type(), false, false};
-    }
-    return Val{to_operand(result, type), type, false, false};
+    return lower_wrapping_intrinsic(expr, sig, type_args);
   }
   if (name == "alloc" || name == "dealloc") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    const usize arity = name == "alloc" ? 1 : 2;
-    if (call.args.size() != arity || type_args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
+    return lower_alloc_intrinsic(expr, sig, type_args);
+  }
+  if (name == "slice_len") {
+    return lower_slice_len_intrinsic(expr, sig, type_args);
+  }
+  if (name == "slice_from_parts" || name == "slice_from_parts_mut") {
+    return lower_slice_from_parts_intrinsic(expr, sig, type_args);
+  }
+  if (name == "str_from_parts") {
+    return lower_str_from_parts_intrinsic(expr, sig, type_args);
+  }
+  internal(ast.exprs[expr].span, "unknown intrinsic");
+  return Val{size_one, error_type(), false, false};
+}
+
+Val Lowerer::lower_sys_write_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 2) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val fd = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val buf = lower_expr(call.args[1], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const Val material = materialize(buf);
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::RegisterIdx bytes =
+      emit(ir::Opcode::ExtractValue, ptr_ty, {material.op, index_operand(0)});
+  const ir::RegisterIdx len =
+      emit(ir::Opcode::ExtractValue, usize_ty, {material.op, index_operand(1)});
+  const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+  const ir::ExternalFunctionIdx ext =
+      declare_external("alcy_sys_write", i64_ty,
+                       {builder.primitive(ir::TypeTag::I32), ptr_ty, usize_ty});
+  const ir::RegisterIdx dst = emit(
+      ir::Opcode::Call, i64_ty,
+      {builder.operand(ir::Operand::from_external_function(
+           ext, builder.primitive(ir::TypeTag::Function))),
+       use_value(fd), to_operand(bytes, ptr_ty), to_operand(len, usize_ty)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+}
+
+Val Lowerer::lower_sys_read_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 3) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val fd = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val out = lower_expr(call.args[1], &sig.params[1]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val len = lower_expr(call.args[2], &sig.params[2]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+  const ir::ExternalFunctionIdx ext =
+      declare_external("alcy_sys_read", i64_ty,
+                       {builder.primitive(ir::TypeTag::I32), ptr_ty, usize_ty});
+  const ir::RegisterIdx dst =
+      emit(ir::Opcode::Call, i64_ty,
+           {builder.operand(ir::Operand::from_external_function(
+                ext, builder.primitive(ir::TypeTag::Function))),
+            use_value(fd), arg_for(out, sig.params[1]),
+            arg_for(len, sig.params[2])});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+}
+
+Val Lowerer::lower_error_kind_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val code = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
+  const ir::ExternalFunctionIdx ext =
+      declare_external("alcy_error_kind", i32_ty, {i32_ty});
+  const ir::RegisterIdx dst =
+      emit(ir::Opcode::Call, i32_ty,
+           {builder.operand(ir::Operand::from_external_function(
+                ext, builder.primitive(ir::TypeTag::Function))),
+            use_value(code)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(dst, i32_ty), i32_ty, false, false};
+}
+
+Val Lowerer::lower_memcopy_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 3) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val dst = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val src = lower_expr(call.args[1], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val len = lower_expr(call.args[2], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  // Both pointers are the same storage type, so the element's
+  // alignment is the copy's: the backend may use it, and does not
+  // have to.
+  ir::InstructionFlags flags;
+  if (tag_of(dst.type) == ir::TypeTag::MutRef) {
+    const ir::TypeIdx pointee =
+        builder.ref_types()[builder.types()[dst.type.idx].as_ref()].pointee;
+    const u64 align =
+        ir::type_layout(builder.state(), type_origin(pointee), width).align;
+    u32 log2 = 0;
+    while (log2 < 15 && (static_cast<u64>(1) << log2) < align) {
+      ++log2;
     }
-    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-    const ir::TypeIdx usize_ty = usize_type();
-    std::vector<ir::OperandIdx> args;
-    for (usize i = 0; i < arity; ++i) {
-      Val arg = lower_moved(call.args[i], &sig.params[i]);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      args.push_back(arg_for(arg, sig.params[i]));
+    if ((static_cast<u64>(1) << log2) == align) {
+      flags.mem_align_log2 = static_cast<u8>(log2);
     }
-    if (name == "dealloc") {
-      // The runtime counts bytes; the compiler supplies the element
-      // size and alignment it reserved them at.
-      const ir::RegisterIdx bytes =
-          emit_type_query(ir::Opcode::TypeSizeOf, type_args[0]);
-      const ir::RegisterIdx align =
-          emit_type_query(ir::Opcode::TypeAlignOf, type_args[0]);
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
-      }
-      const ir::RegisterIdx total = emit(
-          ir::Opcode::IntMul, usize_ty, {to_operand(bytes, usize_ty), args[1]});
-      if (failed) {
-        return Val{size_one, error_type(), false, false};
-      }
-      const ir::ExternalFunctionIdx ext =
-          declare_external("alcy_dealloc", builder.primitive(ir::TypeTag::Void),
-                           {ptr_ty, usize_ty, usize_ty});
-      emit_void(
-          ir::Opcode::Call,
-          {builder.operand(ir::Operand::from_external_function(
-               ext, builder.primitive(ir::TypeTag::Function))),
-           args[0], to_operand(total, usize_ty), to_operand(align, usize_ty)});
-      return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
+  emit_void(ir::Opcode::Memcopy,
+            {use_value(dst), use_value(src), use_value(len)}, flags);
+  return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+}
+
+Val Lowerer::lower_drop_in_place_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& type_args) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 1 || type_args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val ptr = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const Val material = materialize(ptr);
+  // The end runs wherever the pass visits this point; the pointer is
+  // the caller's guarantee that the value is there.
+  record_drop_in_place(material.op, type_args[0], node.span);
+  return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+}
+
+Val Lowerer::lower_slice_at_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 2) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val s = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val index = lower_expr(call.args[1], &sig.params[1]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const Val material = materialize(s);
+  ir::OperandIdx bytes = ir::OperandIdx::invalid();
+  ir::OperandIdx len = ir::OperandIdx::invalid();
+  if (!slice_parts(material, bytes, len)) {
+    unsupported(node.span, "slice_at receiver");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx slice_ty = slice_pointee(material.type);
+  const ir::SliceType& shape =
+      builder.state().slice_types[builder.state().types[slice_ty].as_slice()];
+  const ir::TypeIdx elem_ref = builder.reference_type(shape.element, false);
+  const ir::RegisterIdx element =
+      emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(index)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(element, elem_ref), elem_ref, false, false};
+}
+
+Val Lowerer::lower_slice_at_mut_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 2) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val s = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val index = lower_expr(call.args[1], &sig.params[1]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const Val material = materialize(s);
+  ir::OperandIdx bytes = ir::OperandIdx::invalid();
+  ir::OperandIdx len = ir::OperandIdx::invalid();
+  if (!slice_parts(material, bytes, len)) {
+    unsupported(node.span, "slice_at_mut receiver");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx slice_ty = slice_pointee(material.type);
+  const ir::SliceType& shape =
+      builder.state().slice_types[builder.state().types[slice_ty].as_slice()];
+  const ir::TypeIdx elem_ref = builder.reference_type(shape.element, true);
+  const ir::RegisterIdx element =
+      emit(ir::Opcode::ElemOffset, elem_ref, {bytes, use_value(index)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(element, elem_ref), elem_ref, false, false};
+}
+
+Val Lowerer::lower_read_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val ptr = lower_expr(call.args[0], &sig.params[0]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const Val material = materialize(ptr);
+  const ir::RegisterIdx value = emit(ir::Opcode::Load, sig.ret, {material.op});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(value, sig.ret), sig.ret, false, false};
+}
+
+Val Lowerer::lower_arg_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
+  const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+  Val index = lower_expr(call.args[0], &sig.params[0]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::ExternalFunctionIdx ext =
+      declare_external("alcy_arg", str_ty, {i64_ty});
+  const ir::RegisterIdx dst =
+      emit(ir::Opcode::Call, str_ty,
+           {builder.operand(ir::Operand::from_external_function(
+                ext, builder.primitive(ir::TypeTag::Function))),
+            arg_for(index, sig.params[0])});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(dst, str_ty), str_ty, false, false};
+}
+
+Val Lowerer::lower_arg_count_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (!call.args.empty()) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+  const ir::ExternalFunctionIdx ext =
+      declare_external("alcy_arg_count", i64_ty, {});
+  const ir::RegisterIdx dst =
+      emit(ir::Opcode::Call, i64_ty,
+           {builder.operand(ir::Operand::from_external_function(
+               ext, builder.primitive(ir::TypeTag::Function)))});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+}
+
+Val Lowerer::lower_file_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const std::string_view name = sig.name;
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  const usize arity =
+      name == "file_size" ? 1 : (name == "read_file_into" ? 3 : 2);
+  if (call.args.size() != arity) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
+  Val path = lower_expr(call.args[0], &sig.params[0]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::OperandIdx path_val = arg_for(path, sig.params[0]);
+  const ir::RegisterIdx bytes =
+      emit(ir::Opcode::ExtractValue, ptr_ty, {path_val, index_operand(0)});
+  const ir::RegisterIdx len =
+      emit(ir::Opcode::ExtractValue, usize_ty, {path_val, index_operand(1)});
+  std::vector<ir::OperandIdx> ops;
+  if (name == "file_size") {
+    const ir::ExternalFunctionIdx ext =
+        declare_external("alcy_file_size", i64_ty, {ptr_ty, usize_ty});
+    ops.push_back(builder.operand(ir::Operand::from_external_function(
+        ext, builder.primitive(ir::TypeTag::Function))));
+    ops.push_back(to_operand(bytes, ptr_ty));
+    ops.push_back(to_operand(len, usize_ty));
+  } else if (name == "write_file_all") {
+    Val data = lower_expr(call.args[1], &sig.params[1]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
     }
-    const ir::RegisterIdx labelled =
-        emit_heap_alloc(type_args[0], sig.ret, args[0], node.span);
+    const ir::OperandIdx data_val = arg_for(data, sig.params[1]);
+    const ir::RegisterIdx data_bytes =
+        emit(ir::Opcode::ExtractValue, ptr_ty, {data_val, index_operand(0)});
+    const ir::RegisterIdx data_len =
+        emit(ir::Opcode::ExtractValue, usize_ty, {data_val, index_operand(1)});
+    const ir::ExternalFunctionIdx ext = declare_external(
+        "alcy_write_file", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
+    ops.push_back(builder.operand(ir::Operand::from_external_function(
+        ext, builder.primitive(ir::TypeTag::Function))));
+    ops.push_back(to_operand(bytes, ptr_ty));
+    ops.push_back(to_operand(len, usize_ty));
+    ops.push_back(to_operand(data_bytes, ptr_ty));
+    ops.push_back(to_operand(data_len, usize_ty));
+  } else {
+    Val out = lower_expr(call.args[1], &sig.params[1]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    Val out_len = lower_expr(call.args[2], &sig.params[2]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    const ir::ExternalFunctionIdx ext = declare_external(
+        "alcy_read_file_into", i64_ty, {ptr_ty, usize_ty, ptr_ty, usize_ty});
+    ops.push_back(builder.operand(ir::Operand::from_external_function(
+        ext, builder.primitive(ir::TypeTag::Function))));
+    ops.push_back(to_operand(bytes, ptr_ty));
+    ops.push_back(to_operand(len, usize_ty));
+    ops.push_back(arg_for(out, sig.params[1]));
+    ops.push_back(arg_for(out_len, sig.params[2]));
+  }
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx dst = emit(ir::Opcode::Call, i64_ty, ops);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(dst, i64_ty), i64_ty, false, false};
+}
+
+Val Lowerer::lower_elem_ptr_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 2) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  std::vector<ir::OperandIdx> args;
+  for (usize i = 0; i < 2; ++i) {
+    Val arg = lower_moved(call.args[i], &sig.params[i]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    args.push_back(arg_for(arg, sig.params[i]));
+  }
+  const ir::RegisterIdx result = emit(ir::Opcode::ElemOffset, sig.ret, args);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(result, sig.ret), sig.ret, false, false};
+}
+
+Val Lowerer::lower_uninit_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const std::string_view name = sig.name;
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  const usize arity = name == "uninit_write" ? 2 : 1;
+  if (call.args.size() != arity) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val slot = lower_expr(call.args[0], &sig.params[0]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::OperandIdx slot_op = arg_for(slot, sig.params[0]);
+  if (name == "uninit_assume" || name == "uninit_ref") {
+    // The wrapper is representation-transparent, so releasing the
+    // value is a relabel of the same address.
+    const ir::RegisterIdx held = emit(ir::Opcode::TypeCast, sig.ret, {slot_op});
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    return Val{to_operand(labelled, sig.ret), sig.ret, false, false};
+    return Val{to_operand(held, sig.ret), sig.ret, false, false};
   }
-  if (name == "slice_len") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 1 || type_args.size() != 1) {
-      internal(node.span, "intrinsic arity");
+  Val value = lower_moved(call.args[1], &sig.params[1]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  emit_void(ir::Opcode::Store, {use_value(value), slot_op});
+  return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+}
+
+Val Lowerer::lower_size_of_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& type_args) {
+  const std::string_view name = sig.name;
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (!call.args.empty() || type_args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::RegisterIdx measured = emit_type_query(
+      name == "size_of" ? ir::Opcode::TypeSizeOf : ir::Opcode::TypeAlignOf,
+      type_args[0]);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(measured, usize_type()), usize_type(), false, false};
+}
+
+Val Lowerer::lower_wrapping_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& type_args) {
+  const std::string_view name = sig.name;
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 2 || type_args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx type = type_args[0];
+  Val left = lower_expr(call.args[0], &type);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val right = lower_expr(call.args[1], &type);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::Opcode op = name == "wrapping_add"   ? ir::Opcode::IntAddWrap
+                        : name == "wrapping_sub" ? ir::Opcode::IntSubWrap
+                                                 : ir::Opcode::IntMulWrap;
+  const ir::RegisterIdx result =
+      emit(op, type, {use_value(left), use_value(right)});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(result, type), type, false, false};
+}
+
+Val Lowerer::lower_alloc_intrinsic(ast::ExprIdx expr,
+                                   const analyzer::CheckedModule::FnSig& sig,
+                                   const std::vector<ir::TypeIdx>& type_args) {
+  const std::string_view name = sig.name;
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  const usize arity = name == "alloc" ? 1 : 2;
+  if (call.args.size() != arity || type_args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  std::vector<ir::OperandIdx> args;
+  for (usize i = 0; i < arity; ++i) {
+    Val arg = lower_moved(call.args[i], &sig.params[i]);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    args.push_back(arg_for(arg, sig.params[i]));
+  }
+  if (name == "dealloc") {
+    // The runtime counts bytes; the compiler supplies the element
+    // size and alignment it reserved them at.
+    const ir::RegisterIdx bytes =
+        emit_type_query(ir::Opcode::TypeSizeOf, type_args[0]);
+    const ir::RegisterIdx align =
+        emit_type_query(ir::Opcode::TypeAlignOf, type_args[0]);
+    if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    Val receiver = lower_moved(call.args[0], &sig.params[0]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const Val material = materialize(receiver);
-    ir::OperandIdx bytes = ir::OperandIdx::invalid();
-    ir::OperandIdx len = ir::OperandIdx::invalid();
-    if (!slice_parts(material, bytes, len)) {
+    const ir::RegisterIdx total = emit(ir::Opcode::IntMul, usize_ty,
+                                       {to_operand(bytes, usize_ty), args[1]});
+    if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    return Val{len, usize_type(), false, false};
+    const ir::ExternalFunctionIdx ext =
+        declare_external("alcy_dealloc", builder.primitive(ir::TypeTag::Void),
+                         {ptr_ty, usize_ty, usize_ty});
+    emit_void(
+        ir::Opcode::Call,
+        {builder.operand(ir::Operand::from_external_function(
+             ext, builder.primitive(ir::TypeTag::Function))),
+         args[0], to_operand(total, usize_ty), to_operand(align, usize_ty)});
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   }
-  if (name == "slice_from_parts" || name == "slice_from_parts_mut") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 2 || type_args.size() != 1) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val ptr = lower_expr(call.args[0], &sig.params[0]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val len = lower_expr(call.args[1], &sig.params[1]);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    return build_slice_value(use_value(ptr), use_value(len), sig.ret,
-                             node.span);
+  const ir::RegisterIdx labelled =
+      emit_heap_alloc(type_args[0], sig.ret, args[0], node.span);
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
   }
-  if (name == "str_from_parts") {
-    const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
-    if (call.args.size() != 2) {
-      internal(node.span, "intrinsic arity");
-      return Val{size_one, error_type(), false, false};
-    }
-    Val ptr = lower_expr(call.args[0], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    Val len = lower_expr(call.args[1], nullptr);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
-    const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
-    const ir::TypeIdx usize_ty = usize_type();
-    const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, str_ty, {size_one});
-    const ir::RegisterIdx field0 =
-        emit(ir::Opcode::GetElementPtr, ptr_ty,
-             {to_operand(addr, str_ty), zero_i32, index_operand(0)});
-    emit_void(ir::Opcode::Store, {use_value(ptr), to_operand(field0, ptr_ty)});
-    const ir::RegisterIdx field1 =
-        emit(ir::Opcode::GetElementPtr, usize_ty,
-             {to_operand(addr, str_ty), zero_i32, index_operand(1)});
-    emit_void(ir::Opcode::Store,
-              {use_value(len), to_operand(field1, usize_ty)});
-    return Val{to_operand(addr, str_ty), str_ty, true, false};
+  return Val{to_operand(labelled, sig.ret), sig.ret, false, false};
+}
+
+Val Lowerer::lower_slice_len_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& type_args) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 1 || type_args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
   }
-  internal(node.span, "unknown intrinsic");
-  return Val{size_one, error_type(), false, false};
+  Val receiver = lower_moved(call.args[0], &sig.params[0]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const Val material = materialize(receiver);
+  ir::OperandIdx bytes = ir::OperandIdx::invalid();
+  ir::OperandIdx len = ir::OperandIdx::invalid();
+  if (!slice_parts(material, bytes, len)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{len, usize_type(), false, false};
+}
+
+Val Lowerer::lower_slice_from_parts_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& type_args) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 2 || type_args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val ptr = lower_expr(call.args[0], &sig.params[0]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val len = lower_expr(call.args[1], &sig.params[1]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  return build_slice_value(use_value(ptr), use_value(len), sig.ret, node.span);
+}
+
+Val Lowerer::lower_str_from_parts_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 2) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val ptr = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val len = lower_expr(call.args[1], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
+  const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, str_ty, {size_one});
+  const ir::RegisterIdx field0 =
+      emit(ir::Opcode::GetElementPtr, ptr_ty,
+           {to_operand(addr, str_ty), zero_i32, index_operand(0)});
+  emit_void(ir::Opcode::Store, {use_value(ptr), to_operand(field0, ptr_ty)});
+  const ir::RegisterIdx field1 =
+      emit(ir::Opcode::GetElementPtr, usize_ty,
+           {to_operand(addr, str_ty), zero_i32, index_operand(1)});
+  emit_void(ir::Opcode::Store, {use_value(len), to_operand(field1, usize_ty)});
+  return Val{to_operand(addr, str_ty), str_ty, true, false};
 }
 
 ir::TypeIdx Lowerer::usize_type() {

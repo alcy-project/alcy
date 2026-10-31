@@ -436,6 +436,64 @@ class Lowerer {
   Val lower_intrinsic_call(ast::ExprIdx expr,
                            const analyzer::CheckedModule::FnSig& sig,
                            const std::vector<ir::TypeIdx>& type_args);
+  Val lower_sys_write_intrinsic(ast::ExprIdx expr,
+                                const analyzer::CheckedModule::FnSig& sig,
+                                const std::vector<ir::TypeIdx>& type_args);
+  Val lower_sys_read_intrinsic(ast::ExprIdx expr,
+                               const analyzer::CheckedModule::FnSig& sig,
+                               const std::vector<ir::TypeIdx>& type_args);
+  Val lower_error_kind_intrinsic(ast::ExprIdx expr,
+                                 const analyzer::CheckedModule::FnSig& sig,
+                                 const std::vector<ir::TypeIdx>& type_args);
+  Val lower_memcopy_intrinsic(ast::ExprIdx expr,
+                              const analyzer::CheckedModule::FnSig& sig,
+                              const std::vector<ir::TypeIdx>& type_args);
+  Val lower_drop_in_place_intrinsic(ast::ExprIdx expr,
+                                    const analyzer::CheckedModule::FnSig& sig,
+                                    const std::vector<ir::TypeIdx>& type_args);
+  Val lower_slice_at_intrinsic(ast::ExprIdx expr,
+                               const analyzer::CheckedModule::FnSig& sig,
+                               const std::vector<ir::TypeIdx>& type_args);
+  Val lower_slice_at_mut_intrinsic(ast::ExprIdx expr,
+                                   const analyzer::CheckedModule::FnSig& sig,
+                                   const std::vector<ir::TypeIdx>& type_args);
+  Val lower_read_intrinsic(ast::ExprIdx expr,
+                           const analyzer::CheckedModule::FnSig& sig,
+                           const std::vector<ir::TypeIdx>& type_args);
+  Val lower_arg_intrinsic(ast::ExprIdx expr,
+                          const analyzer::CheckedModule::FnSig& sig,
+                          const std::vector<ir::TypeIdx>& type_args);
+  Val lower_arg_count_intrinsic(ast::ExprIdx expr,
+                                const analyzer::CheckedModule::FnSig& sig,
+                                const std::vector<ir::TypeIdx>& type_args);
+  Val lower_file_intrinsic(ast::ExprIdx expr,
+                           const analyzer::CheckedModule::FnSig& sig,
+                           const std::vector<ir::TypeIdx>& type_args);
+  Val lower_elem_ptr_intrinsic(ast::ExprIdx expr,
+                               const analyzer::CheckedModule::FnSig& sig,
+                               const std::vector<ir::TypeIdx>& type_args);
+  Val lower_uninit_intrinsic(ast::ExprIdx expr,
+                             const analyzer::CheckedModule::FnSig& sig,
+                             const std::vector<ir::TypeIdx>& type_args);
+  Val lower_size_of_intrinsic(ast::ExprIdx expr,
+                              const analyzer::CheckedModule::FnSig& sig,
+                              const std::vector<ir::TypeIdx>& type_args);
+  Val lower_wrapping_intrinsic(ast::ExprIdx expr,
+                               const analyzer::CheckedModule::FnSig& sig,
+                               const std::vector<ir::TypeIdx>& type_args);
+  Val lower_alloc_intrinsic(ast::ExprIdx expr,
+                            const analyzer::CheckedModule::FnSig& sig,
+                            const std::vector<ir::TypeIdx>& type_args);
+  Val lower_slice_len_intrinsic(ast::ExprIdx expr,
+                                const analyzer::CheckedModule::FnSig& sig,
+                                const std::vector<ir::TypeIdx>& type_args);
+  Val lower_slice_from_parts_intrinsic(
+      ast::ExprIdx expr,
+      const analyzer::CheckedModule::FnSig& sig,
+      const std::vector<ir::TypeIdx>& type_args);
+  Val lower_str_from_parts_intrinsic(ast::ExprIdx expr,
+                                     const analyzer::CheckedModule::FnSig& sig,
+                                     const std::vector<ir::TypeIdx>& type_args);
   // An `extern "C"` call: the declaration names the symbol, arguments
   // pass by value, and the gate was checked at the call site.
   // A call into a package a summary answers for: its code lives in the
