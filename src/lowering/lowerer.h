@@ -677,10 +677,21 @@ class Lowerer {
                     const analyzer::CheckedModule::FnSig& sig);
 
    private:
+    // The running state of one expansion: where the pieces write, what
+    // bounds them, and the tuple they read their arguments from. The
+    // caller seeds it, then reads the offset and total back to learn
+    // what the pieces consumed.
     struct State {
       ir::RegisterIdx off_addr = ir::RegisterIdx::invalid();
       ir::RegisterIdx tot_addr = ir::RegisterIdx::invalid();
       ir::OperandIdx capacity = ir::OperandIdx::invalid();
+      ir::OperandIdx tup_op = ir::OperandIdx::invalid();
+      ir::OperandIdx dst_base = ir::OperandIdx::invalid();
+      std::vector<ir::TypeIdx> elem_types;
+      std::span<const ast::ExprIdx> arg_exprs;
+      // A measuring pass writes nothing and only accrues the total,
+      // which is how a growable buffer learns the size to reserve.
+      bool measure_only = false;
     };
     // Whether every placeholder's argument is convertible and every
     // `{:.N}` precision names a float; reports the reason when not.
@@ -689,13 +700,60 @@ class Lowerer {
                          const std::vector<ir::TypeIdx>& elem_types);
     bool emit_pieces(diag::Span span,
                      const std::vector<analyzer::FmtPiece>& pieces,
-                     ir::OperandIdx tup_op,
-                     const std::vector<ir::TypeIdx>& elem_types,
-                     std::span<const ast::ExprIdx> arg_exprs,
-                     ir::OperandIdx dst_base,
-                     ir::OperandIdx capacity,
-                     State& state,
-                     bool measure_only);
+                     State& state);
+    // The usize operand for value.
+    ir::OperandIdx usize_imm(u64 value);
+    // Moves the running offset by delta bytes.
+    void advance(ir::OperandIdx delta, State& state);
+    // Adds full to the running total.
+    void accumulate(ir::OperandIdx full, State& state);
+    // Copies [src, len) into the destination, bounded by its capacity:
+    // only the part that fits is copied, while `full` always accrues to
+    // the total. A measuring pass skips the copy and keeps the total.
+    bool bounded_copy(diag::Span span,
+                      ir::OperandIdx src,
+                      ir::OperandIdx len,
+                      ir::OperandIdx full,
+                      State& state);
+    // Interns `bytes` as a string constant and hands back the operands
+    // naming its pointer and its length.
+    bool const_str(const std::string& bytes,
+                   ir::OperandIdx& ptr_out,
+                   ir::OperandIdx& len_out);
+    // Writes `byte` when `present` holds and a blank otherwise.
+    bool emit_optional_byte(diag::Span span,
+                            u8 byte,
+                            ir::RegisterIdx present,
+                            State& state);
+    // Formats a nominal through `fmt`'s `Display`: the method's
+    // rendering is copied as far as the destination has room, and the
+    // total length is what a destination of its own would have taken.
+    bool emit_display_piece(diag::Span piece_span,
+                            ir::RegisterIdx elem_addr,
+                            ir::TypeIdx elem_ty,
+                            const analyzer::CheckedModule::CallTarget* target,
+                            State& state);
+    // Writes the decimal digits of `wide`, most significant first.
+    bool emit_u64_digits(diag::Span span, ir::RegisterIdx wide, State& state);
+    // Writes a non-negative float below 1e16 as its truncated integer
+    // part followed by `digits` fractional digits, rounded half-up.
+    // Trailing zeros drop when `trim` is set. `fold` makes a fraction
+    // that carries all the way print one digit and report it through
+    // `carry_out`, which is what a mantissa needs.
+    void emit_magnitude(diag::Span span,
+                        ir::RegisterIdx v,
+                        u32 digits,
+                        bool trim,
+                        bool fold,
+                        ir::RegisterIdx& carry_out,
+                        State& state);
+    // Writes a float in the decimal magnitude form the format string
+    // selects, whose placeholders become a mantissa and exponent
+    // outside [1e-4, 1e16).
+    void emit_float(diag::Span span,
+                    ir::RegisterIdx value,
+                    u8 precision,
+                    State& state);
     // Lowers a variadic call's remaining arguments into the tuple the
     // expansion reads (ADR-0055): one field per argument, allocated and
     // stored like a tuple literal. `first` is the index of the first
