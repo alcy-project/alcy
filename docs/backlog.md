@@ -261,27 +261,12 @@ replaced. The foundations are in `roadmap.md`.
   the member's package, with that module as the root of the analysis
   rather than a root package of its own.
 
-- [ ] `f64::parse` converts the integer part exactly and still divides a
-  fraction below one in f64, so a numerator past 2^53 rounds twice:
-  `"0.9876543210987654321".parse_f64()` answers 0.98765432109876550
-  where the literal `0.9876543210987654321` answers
-  0.98765432109876539, one step apart, and `"0.3333333333333333333"`
-  and `"0.6666666666666666667"` are the same shape. An integral value
-  is exact now (`"9007199254740993.0"` answers 2^53), so the hole is
-  the fraction whose numerator passes 2^53 with no factor of ten to
-  cancel; closing it wants a rounding decision over more than the u64
-  numerator, and the language has no wider word.
-
-- [ ] A request the allocator cannot meet is a panic in an ordinary
-  build and a sanitizer report in an instrumented one:
-  `Vec::<u8>::with_capacity(18446744073709551615u64)` prints `panic:
-  allocation failed` and exits 134, while the same program under the
-  address sanitizer stops inside `posix_memalign` with `requested
-  allocation size ... exceeds maximum supported size` before `alcy_alloc`
-  answers, so the instrumented gate cannot carry a case for it.
-  `doubled_capacity` refuses the doubling that would not fit a `usize`;
-  a guard over the byte count before the host allocator is what would
-  let the two builds say the same thing.
+- [ ] `f64::parse` rounds correctly only while the digits fit one
+  `u64` numerator, so `"18446744073709551616.0"` and
+  `"0.00000000000000000001"` are refused rather than read. Reading
+  them wants the conversion to run over two words or more, and the
+  language has no arithmetic wider than `u64` yet (`u128` is
+  deferred).
 
 - [ ] A value that carries a container's buffer loan cannot leave the
   function that owns the container: `fn take() -> Option<String> { mut v
