@@ -3,6 +3,7 @@
 
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "ast/ast.h"
 #include "fpag/base/numeric.h"
@@ -171,31 +172,67 @@ bool pattern_is_irrefutable(const LintContext& ctx, ast::PatternIdx pattern) {
          kind == ast::PatternKind::Ident || kind == ast::PatternKind::MutIdent;
 }
 
+// Whether two literal patterns name the same value. Their spelling is
+// compared rather than a computed value, which keeps the two apart that
+// an integer's base or a float's trailing zeros spell differently while
+// they denote one number; a checker that folds them is the place for
+// that, and this rule stays a reader of the source's own words.
+bool same_literal(const LintContext& ctx,
+                  ast::PatternIdx left,
+                  ast::PatternIdx right) {
+  if (ctx.ast.patterns[left].kind != ast::PatternKind::Literal ||
+      ctx.ast.patterns[right].kind != ast::PatternKind::Literal) {
+    return false;
+  }
+  const ast::Literal& a =
+      ctx.ast.literals[ctx.ast.patterns[left].payload.literal.value];
+  const ast::Literal& b =
+      ctx.ast.literals[ctx.ast.patterns[right].payload.literal.value];
+  return a.kind == b.kind && a.is_negative == b.is_negative &&
+         a.spelling == b.spelling;
+}
+
 // The arms a match can never reach: everything below the first arm that
-// matches anything. A guard tests after its pattern binds, so a guarded
-// arm covers nothing and the arm below it is still reachable. The
-// checker already rejects a repeated literal, which is the case a
-// pattern alone answers; what it does not see is an arm hidden behind
-// an anything-pattern.
+// matches anything, and every arm whose literal an earlier unguarded arm
+// already named. A guard tests after its pattern binds, so a guarded arm
+// covers nothing - not the arms below it, and not a later arm that
+// repeats its literal.
 void check_unreachable_pattern(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& node = ctx.ast.exprs[expr];
   if (node.kind != ast::ExprKind::Match) {
     return;
   }
   const ast::ExprMatch& match = node.payload.get<ast::ExprMatch>();
+  std::vector<ast::PatternIdx> seen;
   ast::PatternIdx covering = ast::PatternIdx::invalid();
   for (const ast::ExprMatchArm& arm : match.arms) {
-    if (covering.is_valid()) {
+    ast::PatternIdx covering_arm = covering;
+    if (!covering_arm.is_valid() && !arm.guard.is_valid()) {
+      for (const ast::PatternIdx earlier : seen) {
+        if (same_literal(ctx, earlier, arm.pattern)) {
+          covering_arm = earlier;
+          break;
+        }
+      }
+    }
+    if (covering_arm.is_valid()) {
       const ast::PatternNode& pattern = ctx.ast.patterns[arm.pattern];
-      const u32 finding =
-          ctx.report<i18n::Key::LintUnreachablePattern>(pattern.span);
-      ctx.label<i18n::Key::LintUnreachablePatternNote>(
-          finding, ctx.ast.patterns[covering].span);
+      const diag::Span note_at = ctx.ast.patterns[covering_arm].span;
+      if (covering.is_valid()) {
+        const u32 finding =
+            ctx.report<i18n::Key::LintUnreachablePattern>(pattern.span);
+        ctx.label<i18n::Key::LintUnreachablePatternNote>(finding, note_at);
+      } else {
+        const u32 finding =
+            ctx.report<i18n::Key::LintRepeatedPattern>(pattern.span);
+        ctx.label<i18n::Key::LintRepeatedPatternNote>(finding, note_at);
+      }
       continue;
     }
     if (arm.guard.is_valid()) {
       continue;
     }
+    seen.push_back(arm.pattern);
     if (pattern_is_irrefutable(ctx, arm.pattern)) {
       covering = arm.pattern;
     }

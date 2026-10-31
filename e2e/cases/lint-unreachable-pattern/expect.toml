@@ -1,4 +1,9 @@
 subcommand = "lint"
 exit = 0
-contains = ["warning[unreachable-pattern]", "the arm that matches anything is here"]
+contains = [
+  "warning[unreachable-pattern]",
+  "the arm that matches anything is here",
+  "an earlier arm already names it",
+  "the arm that names it first is here",
+]
 not_contains = ["error["]

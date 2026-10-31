@@ -42,13 +42,6 @@ replaced. The foundations are in `roadmap.md`.
   relation rather than a rule about one instruction; the case is here so
   that work starts from a reproducer.
 
-- [ ] An unreachable match arm is not reported: two arms with the same
-  literal pattern keep the first and the later one can never run, while
-  the compiler does warn about a statement after `ret` (WD003). The
-  complete check is pattern overlap - ranges, or-patterns, enum shapes -
-  and wants a decision on whether the duplicate is a warning or an
-  error; a guarded arm must not count as covering a later unguarded one.
-
 - [ ] Float `**` is refused while the integer one is repeated
   squaring: a fractional exponent needs `pow`, and the direct-wasm
   target imports no libm and has no instruction for it, so admitting

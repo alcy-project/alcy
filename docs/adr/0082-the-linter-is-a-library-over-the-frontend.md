@@ -145,7 +145,10 @@ covers it. The set of anything-patterns is the parser's, not a
 heuristic: only a wildcard and a lone underscore-or-lowercase name bind,
 while an uppercase or qualified name is a unit variant, so the rule
 never calls an arm dead that the compiler's exhaustiveness believes is
-reachable. The checker rejects a repeated literal and not this shape.
+reachable. A repeated literal is the rule's other shape: only an
+unguarded arm covers a later one, and the literals compare as source
+text so an integer's base and a float's trailing zeros keep their own
+arms apart.
 
 `unused-variant` reads a third usage table, the package's variant
 names: the walk records the last segment of every multi-segment value
