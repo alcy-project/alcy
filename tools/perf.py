@@ -554,6 +554,68 @@ def resolve_addresses(binary: Path, addresses: list[str]) -> dict[str, str]:
     return resolved
 
 
+def peak_rss_kib(binary: Path, corpus: Path, jobs: int) -> int:
+    """Peak resident set size for one check, in KiB."""
+    validate(binary, corpus)
+    argv = [
+        "/usr/bin/time",
+        "-v",
+        str(binary),
+        "check",
+        "-j",
+        str(jobs),
+        ".",
+    ]
+    done = subprocess.run(
+        argv, cwd=corpus, capture_output=True, text=True, timeout=3600
+    )
+    for line in done.stderr.splitlines():
+        if "Maximum resident set size" in line:
+            return int(line.split(":")[1].strip())
+    raise SystemExit(f"time reported no peak RSS for {corpus}")
+
+
+def cmd_rss(args: argparse.Namespace) -> int:
+    binary = binary_for(args.binary)
+    rows = []
+    for modules in args.sizes:
+        corpus = write_corpus(
+            args.shape,
+            modules,
+            args.main_calls if args.main_calls else modules,
+            Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
+        )
+        kib = min(peak_rss_kib(binary, corpus, args.jobs) for _ in range(args.runs))
+        rows.append((modules, kib))
+    calls = "fixed at " + str(args.main_calls) if args.main_calls else "one per module"
+    print(
+        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}"
+        f"  main calls={calls}"
+    )
+    print(f"{'modules':>9} {'peak RSS':>11} {'per module':>12} {'growth':>8}")
+    growth = float("nan")
+    for i, (modules, kib) in enumerate(rows):
+        if i:
+            before = rows[i - 1][1] / rows[i - 1][0]
+            growth = kib / modules / before
+        shown = f"{growth:.3f}" if i else "-"
+        print(f"{modules:>9} {kib:>10}K {kib / modules:>11.1f}K {shown:>8}")
+    if len(rows) >= 2:
+        first, last = rows[0], rows[-1]
+        per_module = [kib / modules for modules, kib in (first, last)]
+        slope = (per_module[1] - per_module[0]) / (last[0] - first[0])
+        intercept = per_module[0] - slope * first[0]
+        print(f"per module = {intercept:.1f}K + {slope:.1f}K x modules")
+        if slope <= 0:
+            print("the peak is a fixed base; per-module cost does not grow")
+        else:
+            share = slope * last[0] / per_module[1] if per_module[1] else 0.0
+            print(
+                f"at {last[0]} modules {share:.1%} of the peak grows with the package"
+            )
+    return 0
+
+
 def cmd_scale(args: argparse.Namespace) -> int:
     binary = binary_for(args.binary)
     rows = []
@@ -787,6 +849,21 @@ def parse_args() -> argparse.Namespace:
     )
     scale.add_argument("--jobs", type=int, default=1)
     scale.set_defaults(func=cmd_scale)
+
+    rss = subparsers.add_parser(
+        "rss", parents=[common], help="peak RSS per module at several sizes"
+    )
+    rss.add_argument("--shape", default="plain", choices=SHAPES)
+    rss.add_argument("--sizes", type=int, nargs="+", default=[300, 600, 1200])
+    rss.add_argument(
+        "--main-calls",
+        type=int,
+        default=0,
+        help="fix main's size, to separate per-item work from package scale",
+    )
+    rss.add_argument("--jobs", type=int, default=1)
+    rss.add_argument("--runs", type=int, default=3, help="repeats, keeping the low")
+    rss.set_defaults(func=cmd_rss)
 
     profile = subparsers.add_parser(
         "profile",
