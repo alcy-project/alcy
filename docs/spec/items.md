@@ -99,8 +99,11 @@
   - `alloc<T>(count: usize) -> &mut MaybeUninit<T>` reserves room for
     `count` elements of `T` at `T`'s own size and alignment, and
     returns the unique owning reference. A zero `count` still yields a
-    distinct, freeable pointer. A null result on allocation failure is
-    a runtime condition the caller must handle.
+    distinct, freeable pointer. A request the runtime cannot meet aborts
+    the process with the site-less `panic: allocation failed`
+    (ADR-0101), so the answer is never null; a size or alignment past
+    the largest object the address space can hold is refused the same
+    way, before the host allocator is asked.
   - `dealloc<T>(ptr: &mut MaybeUninit<T>, count: usize)` releases a
     block, consuming the reference. `count` must match the value passed
     to `alloc`. There is no garbage collector; dropping an owned

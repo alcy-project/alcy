@@ -1,0 +1,4 @@
+# No startup objects, no dynamic linker, and no C library: the
+# allocator reaches the kernel through mmap.
+# See docs/adr/0052-freestanding-is-a-link-mode.md.
+freestanding = true

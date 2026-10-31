@@ -1289,6 +1289,23 @@ class RuntimeBuilder {
     builder_.CreateUnreachable();
   }
 
+  // The largest object the address space can hold. A request past it is
+  // refused here rather than handed to the host allocator, which cannot
+  // answer for it: `posix_memalign` aborts inside a sanitizer instead of
+  // reporting failure, and the freestanding path's mapping length adds
+  // the alignment and the header to the size, a sum that would wrap into
+  // a block smaller than the caller asked for.
+  llvm::Value* unrepresentable_request(llvm::Value* size, llvm::Value* align) {
+    llvm::Constant* max_object = llvm::ConstantInt::get(
+        usize_, llvm::APInt::getSignedMaxValue(usize_->getBitWidth()));
+    llvm::Value* size_too_large =
+        builder_.CreateICmpUGT(size, max_object, "size_too_large");
+    llvm::Value* align_too_large =
+        builder_.CreateICmpUGT(align, max_object, "align_too_large");
+    return builder_.CreateOr(size_too_large, align_too_large,
+                             "unrepresentable");
+  }
+
   // The requested alignment must be a power of two. POSIX allocators
   // require at least pointer-sized alignment, so small alignments are
   // promoted before `posix_memalign`. A zero-size request still returns
@@ -1336,8 +1353,9 @@ class RuntimeBuilder {
     llvm::Value* masked = builder_.CreateAnd(align, lower, "masked");
     llvm::Value* not_power_of_two =
         builder_.CreateICmpNE(masked, zero, "not_power_of_two");
-    llvm::Value* invalid =
-        builder_.CreateOr(no_align, not_power_of_two, "invalid");
+    llvm::Value* invalid = builder_.CreateOr(
+        builder_.CreateOr(no_align, not_power_of_two, "bad_alignment"),
+        unrepresentable_request(size, align), "invalid");
     builder_.CreateCondBr(invalid, reject, prepare);
 
     builder_.SetInsertPoint(reject);
@@ -1463,8 +1481,9 @@ class RuntimeBuilder {
     llvm::Value* masked = builder_.CreateAnd(align, lower, "masked");
     llvm::Value* not_power_of_two =
         builder_.CreateICmpNE(masked, constant(0), "not_power_of_two");
-    llvm::Value* invalid =
-        builder_.CreateOr(no_align, not_power_of_two, "invalid");
+    llvm::Value* invalid = builder_.CreateOr(
+        builder_.CreateOr(no_align, not_power_of_two, "bad_alignment"),
+        unrepresentable_request(size, align), "invalid");
     builder_.CreateCondBr(invalid, reject, mapped);
 
     builder_.SetInsertPoint(reject);
