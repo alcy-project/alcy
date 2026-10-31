@@ -353,6 +353,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
                 encoding="utf-8",
                 cwd=work,
                 input=expected_input,
+                env=run_environment(instrumented=sanitize),
             )
         except OSError as e:
             return False, f"cannot execute '{exe_name}': {e}"
@@ -381,11 +382,16 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
         # A sanitizer writes its report to stderr and exits non-zero, which
         # the exit check may already have caught. This catches the case
         # where a case expects a non-zero exit, so a report would pass for
-        # an ordinary failure.
+        # an ordinary failure. A marker names a report rather than the
+        # instrument: an instrumented build also warns about a policy it
+        # applied, such as an allocation it answered with null, and the
+        # runtime's panic that follows is what such a case pins.
         for marker in (
-            "AddressSanitizer",
+            "ERROR: AddressSanitizer",
+            "ERROR: LeakSanitizer",
+            "AddressSanitizer:DEADLYSIGNAL",
+            "Sanitizer CHECK failed",
             "runtime error:",
-            "LeakSanitizer",
             "SEGV on unknown address",
         ):
             if marker in proc.stderr:
