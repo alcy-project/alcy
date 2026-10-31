@@ -1025,6 +1025,21 @@ bool Checker::bind_fn_slots(u32 module,
   return true;
 }
 
+void Checker::push_fn_instance(ast::ItemIdx item,
+                               u32 module,
+                               const std::vector<ir::TypeIdx>& args,
+                               u32 sig_index,
+                               u32 inst) {
+  const u64 head_key =
+      (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
+  const auto head = fn_instance_head_.find(head_key);
+  const u32 prev =
+      head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
+  fn_instance_head_[head_key] = static_cast<u32>(fn_instances.size());
+  FnInstance witness{item, module, prev, args, sig_index, inst};
+  fn_instances.push_back(std::move(witness));
+}
+
 // Instantiates a generic function or intrinsic against `args` and
 // checks its body. Returns null when the signature does not match the
 // intrinsic's canonical shape.
@@ -1033,9 +1048,14 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     u32 module,
     ast::ItemIdx item,
     const std::vector<ir::TypeIdx>& args) {
-  for (const FnInstance& instance : fn_instances) {
-    if (instance.module != module || instance.item != item ||
-        instance.args.size() != args.size()) {
+  const u64 head_key =
+      (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
+  const auto head = fn_instance_head_.find(head_key);
+  u32 at = head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
+  while (at != base::INVALID_IDX) {
+    const FnInstance& instance = fn_instances[at];
+    at = instance.prev_same_item;
+    if (instance.args.size() != args.size()) {
       continue;
     }
     bool same = true;
@@ -1106,15 +1126,14 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   // own pass checks its body once, in its own context (ADR-0079).
   if (parametric_mode()) {
     modules[module].functions[sig_index].inst = PARAM_INST;
-    fn_instances.push_back(
-        FnInstance{item, module, args, sig_index, PARAM_INST});
+    push_fn_instance(item, module, args, sig_index, PARAM_INST);
     type_params = kept_outer;
     value_params = kept_outer_values;
     return &modules[module].functions[sig_index];
   }
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.
-  fn_instances.push_back(FnInstance{item, module, args, sig_index, NO_INST});
+  push_fn_instance(item, module, args, sig_index, NO_INST);
   const u32 inst = static_cast<u32>(inst_numbering.size());
   inst_numbering.emplace_back(base::INVALID_IDX);
   inst_by_type_.emplace(base::INVALID_IDX, inst);

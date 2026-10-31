@@ -189,6 +189,9 @@ class Checker {
   std::unordered_map<u32, u32> instance_by_type_;
   std::vector<std::vector<u32>> instances_by_nominal_;
   std::vector<FnInstance> fn_instances;
+  // The last instance minted for each (module, item), so a request walks
+  // only the instances of the function it asks about.
+  std::unordered_map<u64, u32> fn_instance_head_;
   // Shared instantiation numbering that keys lowering side tables.
   // Holds each generic enum/struct instance type in creation order and
   // an invalid placeholder per generic function body, so both kinds
@@ -1401,6 +1404,13 @@ class Checker {
   ir::TypeIdx check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
   void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
+  // Appends one function instance and links it into the chain its item
+  // and module share.
+  void push_fn_instance(ast::ItemIdx item,
+                        u32 module,
+                        const std::vector<ir::TypeIdx>& args,
+                        u32 sig_index,
+                        u32 inst);
   // The per-function state a nested body check saves and restores.
   struct FnReturnScope {
     ir::TypeIdx ret = ir::TypeIdx::invalid();

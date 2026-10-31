@@ -367,6 +367,11 @@ struct FnInstance {
   // Module the signature registered in; `sig_index` indexes its
   // `functions`.
   u32 module = 0;
+  // Position in `Checker::fn_instance_head_`: the previous instance of
+  // the same item and module, or `base::INVALID_IDX` when this is the
+  // first. A request walks this chain instead of every instance the
+  // package has minted.
+  u32 prev_same_item = base::INVALID_IDX;
   std::vector<ir::TypeIdx> args;
   u32 sig_index = 0;
   // Key into the shared instantiation numbering that keys lowering
