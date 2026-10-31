@@ -3,6 +3,7 @@
 
 source_set("base") {
   sources = [
+    "flat_hash_map.h",
     "for_each.h",
     "hash.h",
     "nesting.cc",

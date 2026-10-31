@@ -12,6 +12,7 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
+#include "base/flat_hash_map.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "diag/span.h"
@@ -188,7 +189,7 @@ struct CheckedModule {
   // instantiation sits. A re-checked expression keeps its last answer
   // (a bare literal is re-checked against its sibling's type), so the
   // index is overwritten rather than first-won.
-  std::unordered_map<u64, u32> expr_type_by_key;
+  base::FlatHashMap<u32> expr_type_by_key;
   [[nodiscard]] static u64 expr_type_key(ast::ExprIdx expr, u32 inst) {
     return (static_cast<u64>(expr.idx) << 32) | static_cast<u64>(inst);
   }
@@ -232,9 +233,8 @@ struct CheckedModule {
   // stands.
   [[nodiscard]] const ExprType* expr_type_of(ast::ExprIdx expr,
                                              u32 inst) const {
-    const auto found = expr_type_by_key.find(expr_type_key(expr, inst));
-    return found == expr_type_by_key.end() ? nullptr
-                                           : &expr_types[found->second];
+    const u32* found = expr_type_by_key.find(expr_type_key(expr, inst));
+    return found == nullptr ? nullptr : &expr_types[*found];
   }
   [[nodiscard]] const CallTarget* callee_of(ast::ExprIdx callee,
                                             u32 inst) const {

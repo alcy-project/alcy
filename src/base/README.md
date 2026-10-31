@@ -40,6 +40,25 @@ whole files, so the counter is enough to keep the threads evenly loaded.
   from the range and the job count; a unit smaller than a slice is handed
   out whole, which is still correct and only costs balance.
 
+## Name-to-value tables
+
+`FlatHashMap<Value>` maps a packed `u64` key to a value in one flat array
+of slots: the home slot is the key's Fibonacci hash and a collision walks
+forward. It exists for the tables a stage keys once per expression or per
+name, where a node-based map spends an allocation per key and a pointer
+chain per lookup.
+
+### Input requirements
+
+- A value is small and default-constructible. Slots default-construct one,
+  and growing moves every value into a fresh array.
+- A caller reads a value through the pointer `find` returns and does not
+  keep it past the next `set` on the same table, which may grow the slots.
+- The table is keyed, not ordered, and is not walked. It has no erase and no
+  iteration because no caller has needed either, and a phase that would need
+  its table's order cannot use this one: the probe sequence is not the order
+  a document was read in (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`).
+
 ## Removed
 
 This module used to hold the process-wide logger. It was removed in

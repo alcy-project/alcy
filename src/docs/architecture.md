@@ -196,7 +196,7 @@ state between stages beyond the data explicitly passed along.
 | `i18n`                    | Stands for `internationalization`. The languages the compiler reports in, and the catalog that holds every message it can print.      | Catalog strings are static; the cli owns the composed copies.                      |
 | `text`                    | Text primitives shared across stages: escape decoding for string literals, and JSON reading and writing.                               | Owned strings; cold paths only.                                                   |
 | `symbol`                  | Mangling and demangling for linker-visible names, so a source name cannot collide with another package's symbol.                       | Owned name strings; cold paths only.                                              |
-| `base`, `debug`, `config` | Low-level shared facilities for numeric types, nesting limits, diagnostics/assertion helpers, and build-time flags.                  | Zero heap allocations.                                                            |
+| `base`, `debug`, `config` | Low-level shared facilities for numeric types, nesting limits, open-addressed tables, diagnostics/assertion helpers, and build-time flags.     | Zero heap allocations, apart from the table slots that grow on demand.            |
 
 Supporting targets include `tests` and `benchmarks`.
 
