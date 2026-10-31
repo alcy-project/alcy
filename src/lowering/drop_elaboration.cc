@@ -505,11 +505,16 @@ void DropElaborator::run() {
   };
 
   // Forward dataflow per place: in-states join the predecessors'
-  // out-states, and the block's events carry the state forward.
-  std::vector<std::vector<State>> in(
-      place_count, std::vector<State>(block_count, State::Moved));
-  std::vector<std::vector<State>> out(
-      place_count, std::vector<State>(block_count, State::Moved));
+  // out-states, and the block's events carry the state forward. A row is
+  // a byte per block, so the matrices are held flat: a vector per place
+  // would spend an allocation on every place to hold a few bytes.
+  std::vector<State> in(static_cast<usize>(place_count) * block_count,
+                        State::Moved);
+  std::vector<State> out(static_cast<usize>(place_count) * block_count,
+                         State::Moved);
+  const auto row = [block_count](u32 pi, u32 b) -> usize {
+    return static_cast<usize>(pi) * block_count + b;
+  };
   for (u32 pi = 0; pi < place_count; ++pi) {
     const Place& place = places[pi];
     bool changed = true;
@@ -520,21 +525,21 @@ void DropElaborator::run() {
       for (u32 b = 0; b < block_count; ++b) {
         State state = State::Moved;
         if (!preds[b].empty()) {
-          state = out[pi][preds[b][0]];
+          state = out[row(pi, preds[b][0])];
           for (usize k = 1; k < preds[b].size(); ++k) {
-            state = join_state(state, out[pi][preds[b][k]]);
+            state = join_state(state, out[row(pi, preds[b][k])]);
           }
         }
-        if (state != in[pi][b]) {
-          in[pi][b] = state;
+        if (state != in[row(pi, b)]) {
+          in[row(pi, b)] = state;
           changed = true;
         }
         State after = state;
         for (const Point& point : block_points[b]) {
           after = step_point(after, point, place);
         }
-        if (after != out[pi][b]) {
-          out[pi][b] = after;
+        if (after != out[row(pi, b)]) {
+          out[row(pi, b)] = after;
           changed = true;
         }
       }
@@ -555,7 +560,7 @@ void DropElaborator::run() {
     if (pi == base::INVALID_IDX) {
       return State::Owned;
     }
-    State state = in[pi][block];
+    State state = in[row(pi, block)];
     for (const Point& point : block_points[block]) {
       if (point.offset > offset ||
           (point.offset == offset && point.seq >= seq)) {
