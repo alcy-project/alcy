@@ -41,6 +41,7 @@ declare module "node:path" {
 
 declare module "node:url" {
   export function pathToFileURL(path: string): { href: string };
+  export function fileURLToPath(url: string | { href: string }): string;
 }
 
 declare module "node:test" {
@@ -62,3 +63,7 @@ declare const process: {
   stdout: { write(text: string): void };
   stderr: { write(text: string): void };
 };
+
+interface ImportMeta {
+  readonly url: string;
+}

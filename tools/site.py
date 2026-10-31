@@ -119,11 +119,12 @@ def fail(message: str) -> int:
 
 
 # The site's weight budgets. Every page loads the shell's CSS and module;
-# a guide page with code adds `guide.js`, and only the playground ever
-# loads the compiler. Bytes are what the server sends (gzip for text, as
-# GitHub Pages and `site.py serve` both do), because that is what a
-# reader pays for; the per-asset ceilings leave room for ordinary growth
-# and none for a module that quietly pulls in the playground's runtime.
+# a guide page with a runnable program adds `guide.js`, which imports
+# `guide-run.js`, and only the playground ever loads the compiler. Bytes
+# are what the server sends (gzip for text, as GitHub Pages and
+# `site.py serve` both do), because that is what a reader pays for; the
+# per-asset ceilings leave room for ordinary growth and none for a module
+# that quietly pulls in the playground's runtime.
 @dataclass(frozen=True)
 class Budget:
     path: str
@@ -226,7 +227,6 @@ def command_budget(args: argparse.Namespace) -> int:
         return 1
     log("budgets held")
     return 0
-
 
 
 def load_versions() -> Versions:
@@ -373,7 +373,8 @@ def prune_catalogs(source: str, language: str) -> str:
         if name == language:
             continue
         pattern = re.compile(
-            r"^(?:export )?const %s = \{\n[\s\S]*?^\};\n" % name, re.MULTILINE
+            rf"^(?:export )?const {re.escape(name)} = \{{\n[\s\S]*?^\}};\n",
+            re.MULTILINE,
         )
         pruned, count = pattern.subn("", pruned)
         if count != 1:

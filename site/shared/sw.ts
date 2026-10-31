@@ -33,8 +33,24 @@ const VERSION_FILE = "asset-version.json";
 
 // The site's own modules and stylesheets. These change with every
 // deploy, so they are network-first: the copy in the cache is only
-// there for the moment the network fails.
-const SHELL_NAMES = ["site.css", "site.js", "i18n.en.js", "i18n.ja.js", "shell.js", "guide.css", "guide.js"];
+// there for the moment the network fails. Every module a page imports
+// statically belongs here: one that is missing is fetched straight from
+// the network, which means it is simply absent when the network is.
+const SHELL_NAMES = [
+  "site.css",
+  "site.js",
+  "elements.js",
+  "search.js",
+  "i18n.en.js",
+  "i18n.ja.js",
+  "shell.js",
+  "guide.css",
+  "guide-copy.js",
+  "guide.js",
+  "guide-run.js",
+  "clipboard.js",
+  "compiler-client.js",
+];
 
 // The build fills this literal in when it writes the file; an empty
 // string means it did not, and the version file is read instead.

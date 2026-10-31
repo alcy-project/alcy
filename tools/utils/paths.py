@@ -14,6 +14,7 @@ default_out_dir: Path = out_dir / "build"
 
 config_toml_file: Path = project_root_dir / "config.toml"
 
+site_dir: Path = project_root_dir / "site"
 # include_dir: Path = project_root_dir / "include"
 src_dir: Path = project_root_dir / "src"
 fuzz_dir: Path = src_dir / "fuzz"

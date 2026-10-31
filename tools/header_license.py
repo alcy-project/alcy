@@ -11,11 +11,13 @@ from re import Pattern
 
 from utils.paths import (
     project_source_dirs,
+    site_dir,
     tools_dir,
 )
 from utils.source import (
     script_extensions,
     source_extensions,
+    web_extensions,
 )
 
 holder = "The Alcy Project Authors"
@@ -117,6 +119,19 @@ def apply_to_files(dry_run: bool) -> bool:
                 license_pattern_py,
                 any_copyright_pattern_py,
                 license_text_py,
+                dry_run,
+            )
+            if not success:
+                has_error = True
+            applied_any = True
+
+    for file_path in site_dir.rglob("*"):
+        if file_path.is_file() and file_path.suffix in web_extensions:
+            success = apply_license(
+                file_path,
+                license_pattern_c,
+                any_copyright_pattern_c,
+                license_text_c,
                 dry_run,
             )
             if not success:
