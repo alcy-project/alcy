@@ -32,6 +32,7 @@ const SPEC_ORDER = [
   "keywords.md",
   "values.md",
   "types.md",
+  "grammar.md",
   "items.md",
   "modules.md",
   "control.md",
@@ -47,12 +48,12 @@ const SPEC_ORDER = [
 export function discoverSpec(specDir: string): SpecSource[] {
   const names = markdownFiles(specDir);
   const pages: SpecSource[] = [];
-  // Filled as the files are read; a mention resolves against the whole
-  // set, so a file added without a place in the reading order still
-  // links. The set is complete before any page renders.
-  const published = new Set<string>();
+  // Every file is published, so a mention resolves against the whole
+  // directory and not only against the files that happened to be read
+  // first: `overview.md` names a file that sorts after it, and a page
+  // that points forward links like one that points back.
+  const published = new Set(names);
   for (const name of names) {
-    published.add(name);
     const blocks = linkSpecReferences(
       parseMarkdown(readFileSync(join(specDir, name), "utf8")),
       published,
