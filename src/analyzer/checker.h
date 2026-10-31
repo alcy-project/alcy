@@ -1401,6 +1401,21 @@ class Checker {
   ir::TypeIdx check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
   void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
+  // The per-function state a nested body check saves and restores.
+  struct FnReturnScope {
+    ir::TypeIdx ret = ir::TypeIdx::invalid();
+    u32 loop = 0;
+    bool in_fn = false;
+    bool bind_comp_known = false;
+    bool reported_too_deep = false;
+    u32 cur_inst = 0;
+    u32 comp_depth = 0;
+    usize specs = 0;
+    usize param_scope = 0;
+
+    void save(Checker& checker);
+    void restore(Checker& checker);
+  };
   void check_main(u32 module, ast::ItemIdx fn);
   void check_bodies();
   // Checks every generic body once, against its parameters (ADR-0079):

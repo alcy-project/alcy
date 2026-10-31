@@ -2334,13 +2334,8 @@ void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
   // so every field it writes is saved and restored. The callee keys its
   // expressions under its own instantiation, the way the evaluator
   // reads them.
-  const ir::TypeIdx saved_ret = fn_ret;
-  const u32 saved_loop = loop_depth;
-  const bool saved_in_fn = in_fn;
-  const bool saved_bind = bind_comp_known;
-  const bool saved_too_deep = reported_too_deep_;
-  const u32 saved_inst = cur_inst;
-  const u32 saved_comp = comp_depth;
+  FnReturnScope scope;
+  scope.save(*this);
   cur_inst = inst;
   // The callee is an ordinary function body wherever the precheck was
   // reached from; only its typed expressions are wanted, so the comp
@@ -2349,13 +2344,7 @@ void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
   ++prechecking_fn_;
   check_fn(module, fn.item, nullptr);
   --prechecking_fn_;
-  comp_depth = saved_comp;
-  cur_inst = saved_inst;
-  reported_too_deep_ = saved_too_deep;
-  bind_comp_known = saved_bind;
-  fn_ret = saved_ret;
-  loop_depth = saved_loop;
-  in_fn = saved_in_fn;
+  scope.restore(*this);
   type_params = std::move(saved);
   value_params = std::move(saved_values);
 }
@@ -2383,14 +2372,8 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
   const u32 module = where->second.first;
   constInitTables_.prechecked_fns_.insert(method.item.idx);
   const u32 inst = inst_index(method.self_type);
-  const ir::TypeIdx saved_ret = fn_ret;
-  const u32 saved_loop = loop_depth;
-  const bool saved_in_fn = in_fn;
-  const bool saved_bind = bind_comp_known;
-  const bool saved_too_deep = reported_too_deep_;
-  const u32 saved_inst = cur_inst;
-  const u32 saved_comp = comp_depth;
-  const usize saved_specs = spec_scope.size();
+  FnReturnScope scope;
+  scope.save(*this);
   cur_inst = inst;
   comp_depth = 0;
   if (method.spec != NO_SPEC) {
@@ -2399,14 +2382,7 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
   ++prechecking_fn_;
   check_fn(module, method.item, &method.self_type);
   --prechecking_fn_;
-  spec_scope.resize(saved_specs);
-  comp_depth = saved_comp;
-  cur_inst = saved_inst;
-  reported_too_deep_ = saved_too_deep;
-  bind_comp_known = saved_bind;
-  fn_ret = saved_ret;
-  loop_depth = saved_loop;
-  in_fn = saved_in_fn;
+  scope.restore(*this);
 }
 
 bool Checker::ensure_function_named(u32 module, std::string_view name) {
@@ -3578,19 +3554,11 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     }
     const u32 inst = inst_index(self_type);
     spec_scope.push_back(spec);
-    const ir::TypeIdx saved_ret = fn_ret;
-    const u32 saved_loop = loop_depth;
-    const bool saved_in_fn = in_fn;
-    const bool saved_bind = bind_comp_known;
-    const u32 saved_inst = cur_inst;
+    FnReturnScope scope;
+    scope.save(*this);
     cur_inst = inst;
     check_fn(impl_module, method_item, &self_type);
-    cur_inst = saved_inst;
-    fn_ret = saved_ret;
-    loop_depth = saved_loop;
-    in_fn = saved_in_fn;
-    bind_comp_known = saved_bind;
-    spec_scope.pop_back();
+    scope.restore(*this);
     type_params = std::move(outer_scope);
     value_params = std::move(outer_values);
     return entry;
@@ -4313,6 +4281,34 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
       return false;
     }
     default: return false;
+  }
+}
+
+void Checker::FnReturnScope::save(Checker& checker) {
+  ret = checker.fn_ret;
+  loop = checker.loop_depth;
+  in_fn = checker.in_fn;
+  bind_comp_known = checker.bind_comp_known;
+  reported_too_deep = checker.reported_too_deep_;
+  cur_inst = checker.cur_inst;
+  comp_depth = checker.comp_depth;
+  specs = checker.spec_scope.size();
+  param_scope = checker.param_scope_.size();
+}
+
+void Checker::FnReturnScope::restore(Checker& checker) {
+  while (checker.spec_scope.size() > specs) {
+    checker.spec_scope.pop_back();
+  }
+  checker.comp_depth = comp_depth;
+  checker.cur_inst = cur_inst;
+  checker.reported_too_deep_ = reported_too_deep;
+  checker.bind_comp_known = bind_comp_known;
+  checker.in_fn = in_fn;
+  checker.loop_depth = loop;
+  checker.fn_ret = ret;
+  while (checker.param_scope_.size() > param_scope) {
+    checker.param_scope_.pop_back();
   }
 }
 
