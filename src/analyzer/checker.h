@@ -225,6 +225,17 @@ class Checker {
   // instead of recursing, and so a later sweep does not register the
   // same declaration twice.
   std::unordered_set<u32> registered_items_;
+  // A module's own statics by the name they declare, each mapped to the
+  // position it holds in the module's list. A value path that named a
+  // static read that whole list, so one name cost the module.
+  std::vector<std::unordered_map<std::string_view, u32>> static_by_name_;
+  // The statics index, as the free `find_static` reads it.
+  StaticsByModule statics_index() const { return {static_by_name_}; }
+  // The scan ensure_function_named and ensure_static_named make for a
+  // name no table answers, by module and name: it looked at every item
+  // the module declares, so a name it did not find is one the module
+  // cannot declare, and asking again would walk the same items.
+  std::vector<std::unordered_set<std::string_view>> scanned_fns_;
   // Nonzero while a body is being checked by the const pre-pass.
   // A call reached there types its callee's body too, so the evaluator
   // finds the whole call graph typed.

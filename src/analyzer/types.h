@@ -431,6 +431,21 @@ const CheckedModule::StaticInfo* find_static(
     u32 module,
     std::string_view name);
 
+// Where each module's own statics sit, by the name they declare: the
+// question a value path asks of a module, answered without reading the
+// module's whole list. Addresses a reader holds stay valid, since a
+// module's static list is only ever appended to.
+struct StaticsByModule {
+  std::span<const std::unordered_map<std::string_view, u32>> by_name;
+};
+
+const CheckedModule::StaticInfo* find_static(
+    const StaticsByModule& index,
+    std::span<const CheckedModule> modules,
+    const ModuleTree& tree,
+    u32 module,
+    std::string_view name);
+
 // Resolves every type position in the package to interned TypeIdx:
 // nominal definitions (structs, enums), signatures, and generic
 // instantiations. Reports unknown, duplicate, recursive, and malformed

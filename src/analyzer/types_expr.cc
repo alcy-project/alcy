@@ -518,8 +518,8 @@ bool Checker::expr_comp_known(u32 module,
       // a comp-known value can have: a `const K: f64` names no value it
       // can read, and refusing it here is what keeps the evaluator's own
       // `literal is not comp-evaluable` off a user's path.
-      const CheckedModule::StaticInfo* info =
-          analyzer::find_static(modules, tree, module, segments[0].name);
+      const CheckedModule::StaticInfo* info = analyzer::find_static(
+          statics_index(), modules, tree, module, segments[0].name);
       return info != nullptr && type_comp_known(info->type);
     }
     case ast::ExprKind::Unary:
@@ -879,8 +879,8 @@ bool Checker::is_const_item(u32 module, ast::PathIdx path) const {
   if (segments.size() != 1) {
     return false;
   }
-  const CheckedModule::StaticInfo* info =
-      analyzer::find_static(modules, tree, module, segments[0].name);
+  const CheckedModule::StaticInfo* info = analyzer::find_static(
+      statics_index(), modules, tree, module, segments[0].name);
   return info != nullptr && info->is_const && info->init.is_valid();
 }
 
@@ -3927,8 +3927,8 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
               ast.paths[root.idx].segments;
           if (segments.size() == 1 &&
               lookup_local(segments[0].name) == nullptr) {
-            const CheckedModule::StaticInfo* info =
-                find_static(modules, tree, module, segments[0].name);
+            const CheckedModule::StaticInfo* info = find_static(
+                statics_index(), modules, tree, module, segments[0].name);
             if (info != nullptr && info->is_const) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerNotAnAssignablePlace>(

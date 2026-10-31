@@ -20,6 +20,7 @@
 #include "ast/verify.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
+#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
@@ -2409,6 +2410,9 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
 }
 
 bool Checker::ensure_function_named(u32 module, std::string_view name) {
+  if (module < scanned_fns_.size() && scanned_fns_[module].contains(name)) {
+    return false;
+  }
   for (ast::ItemIdx item : tree.modules[module]->items) {
     const ast::ItemNode& node = ast.items[item];
     if (node.kind != ast::ItemKind::Fn) {
@@ -2420,6 +2424,9 @@ bool Checker::ensure_function_named(u32 module, std::string_view name) {
     }
     register_fn_signature(module, item);
     return true;
+  }
+  if (module < scanned_fns_.size()) {
+    scanned_fns_[module].insert(name);
   }
   return false;
 }
@@ -2483,6 +2490,9 @@ void Checker::register_static(u32 module, ast::ItemIdx item) {
                                      : node.payload.get<ast::ItemStatic>().type;
   const ast::ExprIdx init = is_const ? node.payload.get<ast::ItemConst>().init
                                      : node.payload.get<ast::ItemStatic>().init;
+  DCHECK(module < static_by_name_.size());
+  static_by_name_[module].emplace(
+      name.name, static_cast<u32>(modules[module].statics.size()));
   modules[module].statics.push_back(
       {.name = name.name,
        .item = item,
@@ -2517,15 +2527,42 @@ const CheckedModule::StaticInfo* find_static(
   return nullptr;
 }
 
+const CheckedModule::StaticInfo* find_static(
+    const StaticsByModule& index,
+    std::span<const CheckedModule> modules,
+    const ModuleTree& tree,
+    u32 module,
+    std::string_view name) {
+  if (module < index.by_name.size()) {
+    const auto found = index.by_name[module].find(name);
+    if (found != index.by_name[module].end()) {
+      return &modules[module].statics[found->second];
+    }
+  }
+  for (const Import& import : tree.modules[module]->imports) {
+    if (import.ns != Namespace::Value || import.name != name) {
+      continue;
+    }
+    if (import.target_module < index.by_name.size()) {
+      const auto found =
+          index.by_name[import.target_module].find(import.member);
+      if (found != index.by_name[import.target_module].end()) {
+        return &modules[import.target_module].statics[found->second];
+      }
+    }
+  }
+  return nullptr;
+}
+
 const CheckedModule::StaticInfo* Checker::lookup_static(u32 module,
                                                         std::string_view name) {
   if (const CheckedModule::StaticInfo* info =
-          analyzer::find_static(modules, tree, module, name)) {
+          find_static(statics_index(), modules, tree, module, name)) {
     return info;
   }
   ensure_static_named(module, name);
   if (const CheckedModule::StaticInfo* info =
-          analyzer::find_static(modules, tree, module, name)) {
+          find_static(statics_index(), modules, tree, module, name)) {
     return info;
   }
   for (const Import& import : tree.modules[module]->imports) {
@@ -2534,7 +2571,7 @@ const CheckedModule::StaticInfo* Checker::lookup_static(u32 module,
     }
     ensure_static_named(import.target_module, import.member);
   }
-  return analyzer::find_static(modules, tree, module, name);
+  return find_static(statics_index(), modules, tree, module, name);
 }
 
 const CheckedModule::FnSig* Checker::lookup_function(u32 module,
@@ -4650,6 +4687,8 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   // resolve a name into a module the sweep has not reached, and a slot
   // past the constructed range would be read unbuilt.
   checker.modules.resize(tree.modules.size());
+  checker.static_by_name_.resize(tree.modules.size());
+  checker.scanned_fns_.resize(tree.modules.size());
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
     checker.modules[m] = checker.empty_module(m);
   }
