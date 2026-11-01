@@ -118,16 +118,14 @@ replaced. The foundations are in `roadmap.md`.
   the checks an earlier one dominates, and the `Switch` opcode stays
   unemitted for match chains.
 
-- [ ] Index the side tables the proportionality work left behind. Most
-  landed (ADR-0046); the tail is `expr_types` in both readers, the
-  per-module closure, closure-fn, and indirect-call tables,
-  `instantiate_fn`'s instance scan, `fn_args_for` and `closure_fn_index`,
-  and the module statics. `Lowerer::expr_type` scans backward ("last
-  entry wins") while `CompEvaluator::expr_type_in` scans forward ("first
-  wins"), so the readers can disagree on a duplicate key, and
-  `MAX_FN_ENTRIES = 8192` reports `ED013` at the call that spends the
-  last slot now, rather than failing at an unspecified internal span;
-  raising the budget itself waits for the indexing.
+- [ ] Raise the lowering's function budget. `MAX_FN_ENTRIES` caps the
+  functions one package may lower at 8192, and a package that needs more
+  is refused with `ED013` where the last slot is spent. Nothing
+  measures what a larger number would cost: the summary walks every
+  entry once, and the per-function and per-instantiation caches are
+  package-sized, so the cap moves on a measurement rather than a guess.
+  The side tables that made the scan-based readers expensive are indexed
+  now, which is the part the proportionality work (ADR-0046) closed.
 
 - [ ] Borrow-pass scratch sized by the program, not the function: the
   arrays are allocated at package size and each function clears only the
