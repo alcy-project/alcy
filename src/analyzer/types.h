@@ -12,7 +12,6 @@
 
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
-#include "base/flat_hash_map.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
 #include "diag/span.h"
@@ -179,19 +178,58 @@ struct CheckedModule {
   // and every checked call records its callee, so lowering never
   // re-resolves paths or re-derives types. `inst` keys entries
   // checked under a generic instantiation (NO_INST otherwise).
+  // No entry: the empty link, and the base of a module that has not
+  // recorded a type yet.
+  static constexpr u32 NO_ENTRY = base::INVALID_IDX;
   struct ExprType {
     ast::ExprIdx expr;
     ir::TypeIdx type;
     u32 inst = NO_INST;
+    // The entry this module recorded for the same expression just
+    // before this one. A re-checked expression keeps its last answer (a
+    // bare literal is re-checked against its sibling's type), so the
+    // newer entry becomes the one a lookup finds first.
+    u32 previous = NO_ENTRY;
   };
   std::vector<ExprType> expr_types;
-  // Where the last entry recorded for an expression under an
-  // instantiation sits. A re-checked expression keeps its last answer
-  // (a bare literal is re-checked against its sibling's type), so the
-  // index is overwritten rather than first-won.
-  base::FlatHashMap<u32> expr_type_by_key;
-  [[nodiscard]] static u64 expr_type_key(ast::ExprIdx expr, u32 inst) {
-    return (static_cast<u64>(expr.idx) << 32) | static_cast<u64>(inst);
+  // The newest entry recorded for each expression, indexed from
+  // `expr_base`. A module checks the expressions of its own items, so
+  // their indices form a short run and one slot per expression of it
+  // finds them without hashing the key: an expression is recorded once
+  // per instantiation it is checked under, and the chain behind each
+  // slot holds the earlier answers.
+  std::vector<u32> expr_head;
+  // The expression `expr_head` starts at, or NO_ENTRY while empty.
+  u32 expr_base = NO_ENTRY;
+  // Records the type a check gave an expression under an instantiation.
+  // Entries are appended, never overwritten, so a lookup is a walk down
+  // the chain an expression's latest answer starts.
+  void record_expr_type(ast::ExprIdx expr, ir::TypeIdx type, u32 inst) {
+    if (expr_base == NO_ENTRY || expr.idx < expr_base) {
+      grow_expr_head_down(expr.idx);
+    }
+    const usize slot = expr.idx - expr_base;
+    if (slot >= expr_head.size()) {
+      // A module's expressions arrive in a run that grows upwards, so
+      // growing by half again keeps the resizes rare without wasting
+      // slots on a run that turns out wide.
+      expr_head.resize(slot + 1 + (slot >> 1), NO_ENTRY);
+    }
+    const u32 head = expr_head[slot];
+    expr_types.push_back({expr, type, inst, head});
+    expr_head[slot] = static_cast<u32>(expr_types.size() - 1);
+  }
+  // Reaches back to an expression recorded before the ones this module
+  // has seen: only an item checked out of order does that.
+  void grow_expr_head_down(u32 expr) {
+    if (expr_base == NO_ENTRY) {
+      expr_base = expr;
+      expr_head.resize(1, NO_ENTRY);
+      return;
+    }
+    const usize added = expr_base - expr;
+    expr_head.insert(expr_head.begin(), added, NO_ENTRY);
+    expr_base = expr;
   }
   struct CallTarget {
     ast::ExprIdx callee;
@@ -233,8 +271,17 @@ struct CheckedModule {
   // stands.
   [[nodiscard]] const ExprType* expr_type_of(ast::ExprIdx expr,
                                              u32 inst) const {
-    const u32* found = expr_type_by_key.find(expr_type_key(expr, inst));
-    return found == nullptr ? nullptr : &expr_types[*found];
+    if (expr_base == NO_ENTRY || expr.idx < expr_base ||
+        expr.idx - expr_base >= expr_head.size()) {
+      return nullptr;
+    }
+    for (u32 entry = expr_head[expr.idx - expr_base]; entry != NO_ENTRY;
+         entry = expr_types[entry].previous) {
+      if (expr_types[entry].inst == inst) {
+        return &expr_types[entry];
+      }
+    }
+    return nullptr;
   }
   [[nodiscard]] const CallTarget* callee_of(ast::ExprIdx callee,
                                             u32 inst) const {

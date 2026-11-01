@@ -2902,10 +2902,7 @@ ir::TypeIdx Checker::check_borrow_of_index(u32 module,
   // The operands were checked here rather than through `check_expr` on
   // the index, so record its own type for lowering.
   CheckedModule& checked = modules[module];
-  checked.expr_types.push_back({borrow.inner, pointee, cur_inst});
-  checked.expr_type_by_key.set(
-      CheckedModule::expr_type_key(borrow.inner, cur_inst),
-      static_cast<u32>(checked.expr_types.size() - 1));
+  checked.record_expr_type(borrow.inner, pointee, cur_inst);
   const ir::TypeIdx type = builder.reference_type(pointee, borrow.is_mut);
   if (expected != nullptr) {
     return unify(*expected, type, node.span, "borrow");
@@ -3686,9 +3683,7 @@ ir::TypeIdx Checker::check_expr(u32 module,
               return check_expr_inner(module, expr, expected);
             }();
   CheckedModule& checked = modules[module];
-  checked.expr_types.push_back({expr, type, cur_inst});
-  checked.expr_type_by_key.set(CheckedModule::expr_type_key(expr, cur_inst),
-                               static_cast<u32>(checked.expr_types.size() - 1));
+  checked.record_expr_type(expr, type, cur_inst);
   return type;
 }
 
