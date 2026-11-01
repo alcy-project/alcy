@@ -237,7 +237,11 @@ class Checker {
   // a range, so a loan live on one branch is not live on its siblings.
   std::vector<std::vector<u32>> live_in;
   std::vector<std::vector<u32>> live_out;
-  std::vector<std::vector<u32>> loan_last_use;
+  // The last-use rows are a few words per block, so a vector per block would
+  // spend an allocation on every block to hold them. They are held flat
+  // instead: block b's row is loan_stride words at b * loan_stride.
+  std::vector<u32> loan_last_use;
+  u32 loan_stride = 0;
   // CFG shape for the two fixpoints, and the first and last instruction of
   // each block. Indexed by global block like the rows above, and filled by
   // build_preds and compute_liveness for one function at a time.
@@ -892,6 +896,8 @@ class Checker {
     // register carrying it, in the block that instruction is in.
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
+      u32* const row =
+          loan_last_use.data() + static_cast<usize>(bidx.idx) * loan_stride;
       for (ir::InstructionIdx iidx : block.instrs) {
         const ir::Instruction& instr = instr_at(iidx);
         for (u32 offset = 0; offset < instr.operands.size(); ++offset) {
@@ -905,9 +911,8 @@ class Checker {
             continue;
           }
           for (u32 loan : flow[reg]) {
-            if (loan < loan_last_use[bidx.idx].size() &&
-                iidx.idx > loan_last_use[bidx.idx][loan]) {
-              loan_last_use[bidx.idx][loan] = iidx.idx;
+            if (loan < loans.size() && iidx.idx > row[loan]) {
+              row[loan] = iidx.idx;
             }
           }
         }
@@ -965,12 +970,14 @@ class Checker {
         live_in_scratch_.clear();
         const u32 first = block_first[bidx.idx];
         const u32 last = block_last[bidx.idx];
+        const u32* const last_use =
+            loan_last_use.data() + static_cast<usize>(bidx.idx) * loan_stride;
         for (u32 loan = 0; loan < loans.size(); ++loan) {
           const u32 birth = loans[loan].birth;
           if (birth >= first && birth <= last) {
             continue;
           }
-          if (loan_last_use[bidx.idx][loan] == 0 && live_mark[loan] != stamp) {
+          if (last_use[loan] == 0 && live_mark[loan] != stamp) {
             continue;
           }
           live_in_scratch_.push_back(loan);
@@ -996,8 +1003,9 @@ class Checker {
         return true;
       }
     }
-    return loan < loan_last_use[bidx.idx].size() &&
-           loan_last_use[bidx.idx][loan] >= pos;
+    return loan < loans.size() &&
+           loan_last_use[static_cast<usize>(bidx.idx) * loan_stride + loan] >=
+               pos;
   }
 
   void check_place_use(const std::vector<Place>& moved,
@@ -1818,7 +1826,6 @@ class Checker {
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
-    loan_last_use.assign(blocks, {});
     moved_in.assign(blocks, {});
     moved_out.assign(blocks, {});
     preds.assign(blocks, {});
@@ -1851,6 +1858,13 @@ class Checker {
   // that is what the fixpoints walk. The last-use row is sized to the loans
   // the function has, which is why this waits until forward has run.
   void reset_blocks(const std::vector<ir::BlockIdx>& blocks) {
+    // A row is as wide as the widest function's loan list, and a block
+    // belongs to one function, so a block's row is written by that function
+    // alone and zeroing it here leaves no stale entry behind.
+    if (loans.size() > loan_stride) {
+      loan_stride = static_cast<u32>(loans.size());
+      loan_last_use.assign(storage.blocks().size() * loan_stride, 0);
+    }
     for (ir::BlockIdx bidx : blocks) {
       live_in[bidx.idx].clear();
       live_out[bidx.idx].clear();
@@ -1859,7 +1873,9 @@ class Checker {
       preds[bidx.idx].clear();
       block_first[bidx.idx] = 0;
       block_last[bidx.idx] = 0;
-      loan_last_use[bidx.idx].assign(loans.size(), 0);
+      const auto row =
+          loan_last_use.begin() + static_cast<usize>(bidx.idx) * loan_stride;
+      std::fill_n(row, loans.size(), 0);
     }
     live_mark.assign(loans.size(), 0);
   }
