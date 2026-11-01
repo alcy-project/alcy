@@ -3,6 +3,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <unordered_map>
@@ -109,10 +110,35 @@ struct DropElaborationInputs {
   std::function<ir::BlockIdx()> reserve_block;
 };
 
+// The tables the pass builds for one function: its places, blocks,
+// points, states, and actions. Every one of them is refilled from empty,
+// so the set outlives a single function and is cleared instead of
+// rebuilt, which carries each table's capacity across the functions that
+// come after it.
+class DropWorkingSet {
+ public:
+  // The rows themselves. Callers hold the set and never read it.
+  struct Tables;
+
+  DropWorkingSet();
+  ~DropWorkingSet();
+  DropWorkingSet(const DropWorkingSet&) = delete;
+  DropWorkingSet& operator=(const DropWorkingSet&) = delete;
+  DropWorkingSet(DropWorkingSet&&) = delete;
+  DropWorkingSet& operator=(DropWorkingSet&&) = delete;
+
+  [[nodiscard]] Tables& tables() { return *tables_; }
+
+ private:
+  std::unique_ptr<Tables> tables_;
+};
+
 // Solves ownership per place over the function's CFG and places each
 // end where the paths still own the value (ADR-0062). It rewrites the
 // streams the caller handed over, before their blocks are published,
 // and reports what it cannot place through the caller's diagnostics.
+void elaborate_drops(const DropElaborationInputs& inputs,
+                     DropWorkingSet& working);
 void elaborate_drops(const DropElaborationInputs& inputs);
 
 // The type a place path names, following the field and element slots

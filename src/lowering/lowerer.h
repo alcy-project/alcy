@@ -880,6 +880,9 @@ class Lowerer {
   // which solves ownership per place and places the ends (ADR-0062).
   // Runs after a body is lowered and before its blocks are published.
   void place_ends();
+  // The drop pass's tables, which it clears and refills one function at
+  // a time.
+  DropWorkingSet drop_working_set_;
 
   bool runs_destructor(ir::TypeIdx type) const;
   bool is_destructor(ast::ItemIdx item) const;

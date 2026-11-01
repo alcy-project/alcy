@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -75,10 +76,62 @@ struct Output {
   u32 current = 0;
 };
 
+// One boundary of a block: an ownership event or an end site, placed by
+// the offset and sequence it was recorded at.
+struct Point {
+  enum class Kind : u8 { Event, Site };
+  u32 offset = 0;
+  u32 seq = 0;
+  Kind kind = Kind::Event;
+  u32 index = 0;
+};
+
+// One action at one boundary of a block.
+struct Action {
+  enum class Kind : u8 { Site, Bind, Move, StoreEnd, StoreClear, DropHere };
+  u32 offset = 0;
+  u32 seq = 0;
+  Kind kind = Kind::Site;
+  u32 index = 0;
+};
+
+// A block's rows in one of the per-block tables sit in a shared arena
+// behind this window. A row is a handful of bytes and most blocks hold a
+// few, so a vector per block would spend an allocation on every block to
+// hold them.
+struct Window {
+  u32 head = 0;
+  u32 len = 0;
+};
+
 // Room for the block plus the splits a guarded end makes of it.
 constexpr u32 INITIAL_OUT_BLOCKS = 4;
 
 }  // namespace
+
+struct DropWorkingSet::Tables {
+  std::vector<Place> places;
+  std::vector<Point> points;
+  std::vector<Window> block_points;
+  std::vector<u32> pred_blocks;
+  std::vector<Window> preds;
+  std::vector<State> in;
+  std::vector<State> out;
+  std::vector<bool> flag_needed;
+  std::vector<ir::RegisterIdx> flag;
+  std::vector<Action> action_flat;
+  std::vector<Window> actions;
+  // The blocks each block's ends are emitted into, kept so their row
+  // keeps its capacity from the function before.
+  std::vector<Output> outputs;
+  // Per-block tallies and write cursors for the tables above, laid out
+  // back to back.
+  std::vector<u32> tally;
+};
+
+DropWorkingSet::DropWorkingSet() : tables_(std::make_unique<Tables>()) {}
+
+DropWorkingSet::~DropWorkingSet() = default;
 
 void Lowerer::record_end(u32 mark, diag::Span span) {
   if (failed || mark >= locals.size()) {
@@ -203,7 +256,8 @@ namespace {
 // reached through the lowerer (ADR-0062).
 class DropElaborator {
  public:
-  explicit DropElaborator(const DropElaborationInputs& inputs)
+  DropElaborator(const DropElaborationInputs& inputs,
+                 DropWorkingSet::Tables& tables)
       : needs_drop(inputs.needs_drop),
         not_movable(inputs.not_movable),
         drop_glue(inputs.drop_glue),
@@ -215,6 +269,7 @@ class DropElaborator {
         instr_spans_(inputs.instr_spans),
         streams_(inputs.streams),
         fn_blocks_(inputs.blocks),
+        tables_(tables),
         base_(inputs.base),
         type_origins_(inputs.type_origins),
         size_one(inputs.size_one),
@@ -309,10 +364,7 @@ class DropElaborator {
   std::vector<diag::Span>& instr_spans_;
   std::vector<ir::InstrSeq>& streams_;
   std::vector<ir::BlockIdx>& fn_blocks_;
-  // Per-block tallies and write cursors for the tables run() builds, laid
-  // out back to back. The buffer keeps its capacity, so building a table
-  // costs no allocation.
-  std::vector<u32> tally_;
+  DropWorkingSet::Tables& tables_;
   u32 base_ = 0;
   const std::unordered_map<u32, u32>& type_origins_;
   ir::OperandIdx size_one = ir::OperandIdx(0);
@@ -390,7 +442,8 @@ void DropElaborator::run() {
   for (const EndSite& site : end_sites_) {
     site_locals += site.locals.size();
   }
-  std::vector<Place> places;
+  std::vector<Place>& places = tables_.places;
+  places.clear();
   places.reserve(ownership_.size() + site_locals);
   auto place_of = [&](u32 local, const std::vector<u32>& path) -> u32 {
     for (u32 i = 0; i < places.size(); ++i) {
@@ -421,33 +474,20 @@ void DropElaborator::run() {
   // Blocks in lowering order, with their events and end sites in
   // (offset, seq) order. A site is a move: the end consumes the value,
   // so a later site sees it moved.
-  struct Point {
-    enum class Kind : u8 { Event, Site };
-    u32 offset = 0;
-    u32 seq = 0;
-    Kind kind = Kind::Event;
-    u32 index = 0;
-  };
-  // A block's rows in one of the per-block tables below sit in a shared
-  // arena behind this window. A row is a handful of bytes and most blocks
-  // hold a few, so a vector per block would spend an allocation on every
-  // block to hold them.
-  struct Window {
-    u32 head = 0;
-    u32 len = 0;
-  };
   const u32 block_count = static_cast<u32>(fn_blocks_.size());
   // Every table below is sized by a counting pass and then filled at its
   // final position, which takes a tally and a write cursor per block. They
   // share one buffer, three columns per table, whose capacity survives
   // across functions.
-  tally_.assign(static_cast<usize>(8) * block_count, 0);
+  tables_.tally.assign(static_cast<usize>(8) * block_count, 0);
   const auto column = [&](u32 index) {
-    return std::span<u32>(tally_).subspan(
-        static_cast<usize>(index) * block_count, block_count);
+    return std::span<u32>(tables_.tally)
+        .subspan(static_cast<usize>(index) * block_count, block_count);
   };
-  std::vector<Point> points;
-  std::vector<Window> block_points(block_count);
+  std::vector<Point>& points = tables_.points;
+  points.clear();
+  std::vector<Window>& block_points = tables_.block_points;
+  block_points.assign(block_count, Window{});
   {
     const std::span<u32> events = column(0);
     const std::span<u32> sites = column(1);
@@ -497,8 +537,10 @@ void DropElaborator::run() {
   }
 
   // Predecessors, from each block's terminator, in the same arena shape.
-  std::vector<u32> pred_blocks;
-  std::vector<Window> preds(block_count);
+  std::vector<u32>& pred_blocks = tables_.pred_blocks;
+  pred_blocks.clear();
+  std::vector<Window>& preds = tables_.preds;
+  preds.assign(block_count, Window{});
   {
     const std::span<u32> preds_per_block = column(3);
     for (u32 b = 0; b < block_count; ++b) {
@@ -587,10 +629,10 @@ void DropElaborator::run() {
   // out-states, and the block's events carry the state forward. A row is
   // a byte per block, so the matrices are held flat: a vector per place
   // would spend an allocation on every place to hold a few bytes.
-  std::vector<State> in(static_cast<usize>(place_count) * block_count,
-                        State::Moved);
-  std::vector<State> out(static_cast<usize>(place_count) * block_count,
-                         State::Moved);
+  std::vector<State>& in = tables_.in;
+  std::vector<State>& out = tables_.out;
+  in.assign(static_cast<usize>(place_count) * block_count, State::Moved);
+  out.assign(static_cast<usize>(place_count) * block_count, State::Moved);
   const auto row = [block_count](u32 pi, u32 b) -> usize {
     return static_cast<usize>(pi) * block_count + b;
   };
@@ -661,9 +703,10 @@ void DropElaborator::run() {
   // the value it replaces. Flags are created where the place binds,
   // which always precedes every use of it in lowering order.
   const ir::TypeIdx i1 = builder.primitive(ir::TypeTag::I1);
-  std::vector<bool> flag_needed(place_count, false);
-  std::vector<ir::RegisterIdx> flag(place_count,
-                                    ir::RegisterIdx(base::INVALID_IDX));
+  std::vector<bool>& flag_needed = tables_.flag_needed;
+  std::vector<ir::RegisterIdx>& flag = tables_.flag;
+  flag_needed.assign(place_count, false);
+  flag.assign(place_count, ir::RegisterIdx(base::INVALID_IDX));
   std::function<void(u32, const std::vector<u32>&, ir::TypeIdx, u32, u32, u32)>
       mark_maybe;
   mark_maybe = [&](u32 local, const std::vector<u32>& path, ir::TypeIdx type,
@@ -978,18 +1021,12 @@ void DropElaborator::run() {
     }
   };
 
-  // One action at one boundary of a block.
-  struct Action {
-    enum class Kind : u8 { Site, Bind, Move, StoreEnd, StoreClear, DropHere };
-    u32 offset = 0;
-    u32 seq = 0;
-    Kind kind = Kind::Site;
-    u32 index = 0;
-  };
   // Same arena shape as the point rows above. A store contributes two
   // actions, the end it places over the old value and the clear after it.
-  std::vector<Action> action_flat;
-  std::vector<Window> actions(block_count);
+  std::vector<Action>& action_flat = tables_.action_flat;
+  action_flat.clear();
+  std::vector<Window>& actions = tables_.actions;
+  actions.assign(block_count, Window{});
   {
     const std::span<u32> events = column(5);
     const std::span<u32> sites = column(6);
@@ -1165,9 +1202,13 @@ void DropElaborator::run() {
     emit_end(out, event.local, event.path, type, place, state_of, event.span);
   };
 
-  std::vector<Output> outputs(block_count);
+  std::vector<Output>& outputs = tables_.outputs;
+  if (outputs.size() < block_count) {
+    outputs.resize(block_count);
+  }
   for (u32 b = 0; b < block_count; ++b) {
     Output& out = outputs[b];
+    out.blocks.clear();
     out.blocks.reserve(INITIAL_OUT_BLOCKS);
     out.blocks.push_back(OutBlock{fn_blocks_[b], ir::InstrSeq{}});
     out.current = 0;
@@ -1277,12 +1318,18 @@ void Lowerer::place_ends() {
           },
       .reserve_block = [this] { return reserve_block(); },
   };
-  elaborate_drops(inputs);
+  elaborate_drops(inputs, drop_working_set_);
+}
+
+void elaborate_drops(const DropElaborationInputs& inputs,
+                     DropWorkingSet& working) {
+  DropElaborator pass(inputs, working.tables());
+  pass.run();
 }
 
 void elaborate_drops(const DropElaborationInputs& inputs) {
-  DropElaborator pass(inputs);
-  pass.run();
+  DropWorkingSet working;
+  elaborate_drops(inputs, working);
 }
 
 ir::TypeIdx type_at_path(ir::StorageBuilder& builder,
