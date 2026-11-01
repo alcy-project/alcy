@@ -854,6 +854,11 @@ void DropElaborator::run() {
     if (!runs_destructor(type) || end_exempt(local, path.empty())) {
       return;
     }
+    // Take the place before the end reads it: the tag load and the
+    // element addresses below name the place itself, so a marker after
+    // them leaves the borrow checker reading what the end is taking
+    // (ADR-0062).
+    pass_emit_void(seq_of(out), ir::Opcode::Drop, {place}, span);
     // A place may arrive byte-addressed: a payload field's address is
     // the area's byte pointer, and the projections below index the
     // type's own layout. Relabel the pointer with the type when the
@@ -884,7 +889,6 @@ void DropElaborator::run() {
         if (!fn.is_valid()) {
           return;
         }
-        pass_emit_void(seq_of(out), ir::Opcode::Drop, {place}, span);
         const ir::RegisterIdx value =
             pass_emit(seq_of(out), ir::Opcode::Load, type, {place}, span);
         // A binding's end marks the place moved; an explicit end does
