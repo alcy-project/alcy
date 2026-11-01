@@ -741,8 +741,23 @@ class Checker {
   std::span<const ast::GenericParam> nominal_params(const NominalEntry& entry);
   // Appends a storage copy of `type` and records its origin.
   ir::TypeIdx storage_copy(ir::TypeIdx type);
-  // Follows storage copies back to the type they were made from.
-  ir::TypeIdx type_origin(ir::TypeIdx type) const;
+  // Follows storage copies back to the type they were made from, which is
+  // the type the first copy was made from. The chain is walked here because
+  // the type checker asks at the head of every structural comparison, and
+  // most types are not copies at all.
+  ir::TypeIdx type_origin(ir::TypeIdx type) const {
+    ir::TypeIdx current = type;
+    for (u32 depth = 0; depth <= type_origins_.size(); ++depth) {
+      const u32 found = current.idx < type_origins_by_index_.size()
+                            ? type_origins_by_index_[current.idx]
+                            : base::INVALID_IDX;
+      if (found == base::INVALID_IDX) {
+        return current;
+      }
+      current = ir::TypeIdx(found);
+    }
+    return current;
+  }
   // Interns a nominal's type. Generic declarations defer: their type
   // is fixed later against the expectation or the scrutinee, so the
   // error type marks "resolve from context".

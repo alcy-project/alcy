@@ -198,23 +198,6 @@ u32 Checker::inst_index(ir::TypeIdx type) const {
   return found == inst_by_type_.end() ? NO_INST : found->second;
 }
 
-// Storage copies chain: a copy's origin can itself be a copy, so the
-// chain is followed to the type the first copy was made from.
-
-ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
-  ir::TypeIdx current = type;
-  for (u32 depth = 0; depth <= type_origins_.size(); ++depth) {
-    const u32 found = current.idx < type_origins_by_index_.size()
-                          ? type_origins_by_index_[current.idx]
-                          : base::INVALID_IDX;
-    if (found == base::INVALID_IDX) {
-      return current;
-    }
-    current = ir::TypeIdx(found);
-  }
-  return current;
-}
-
 std::span<const ast::GenericParam> Checker::nominal_params(
     const NominalEntry& entry) {
   const ast::ItemNode& node = ast.items[entry.item];
