@@ -130,6 +130,21 @@ struct GenericInstance {
   bool complete = false;
 };
 
+// Past this many entries a table that a lookup would otherwise walk
+// answers through an index: below it building one costs more than the
+// walk it saves.
+constexpr u32 INDEX_MIN = 64;
+
+// The methods of one self type: the entries in the order they
+// registered, and, once the type registers more than INDEX_MIN of them,
+// the first entry each name answers. A name answers an entry that is
+// neither a spec's registration nor one call's instantiation. A type
+// below the threshold holds no index, so a lookup reads the entries.
+struct MethodTable {
+  std::vector<std::pair<u32, u32>> entries;
+  std::unordered_map<std::string_view, u32> by_name;
+};
+
 class Checker {
  public:
   Checker(const ModuleTree& tree,
@@ -1053,10 +1068,10 @@ class Checker {
   // Glue keyed by the nominal shape a type node names, so a second
   // node over the same declaration answers with the same destructor.
   std::unordered_map<u64, CheckedModule::DropGlue> drop_glue_by_shape_;
-  // Methods by the type they are declared on, as (module, position). A call
-  // is resolved by walking the methods of the type it names, not every
-  // method in the package.
-  std::unordered_map<u32, std::vector<std::pair<u32, u32>>> methods_by_self_;
+  // Methods by the type they are declared on. A call is resolved by
+  // looking up the methods of the type it names, not every method in the
+  // package.
+  std::unordered_map<u32, MethodTable> methods_by_self_;
   // The nominal that declares a type, by the type it built. A field access
   // needs the declaration that names a field, a match on an enumeration needs
   // the one that names its variants, a method call needs the one its receiver

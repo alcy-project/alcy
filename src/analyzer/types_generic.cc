@@ -688,7 +688,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
     } else {
       const auto own = methods_by_self_.find(self.idx);
       if (own != methods_by_self_.end()) {
-        for (const auto& [owner, position] : own->second) {
+        for (const auto& [owner, position] : own->second.entries) {
           const CheckedModule::MethodInfo& method =
               modules[owner].methods[position];
           // An entry keyed by spelled arguments is one call's

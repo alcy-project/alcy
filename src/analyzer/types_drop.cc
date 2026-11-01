@@ -150,7 +150,24 @@ CheckedModule::MethodInfo& Checker::add_method(u32 module,
   target.methods.push_back(std::move(info));
   const CheckedModule::MethodInfo& method = target.methods.back();
   const u32 position = static_cast<u32>(target.methods.size() - 1);
-  methods_by_self_[method.self_type.idx].emplace_back(module, position);
+  MethodTable& table = methods_by_self_[method.self_type.idx];
+  table.entries.emplace_back(module, position);
+  const bool answers_name =
+      method.spec == NO_SPEC && method.method_args.empty();
+  if (table.entries.size() == INDEX_MIN + 1) {
+    for (u32 at = 0; at < table.entries.size(); ++at) {
+      const auto [owner, slot] = table.entries[at];
+      const CheckedModule::MethodInfo& entry = modules[owner].methods[slot];
+      if (entry.spec == NO_SPEC && entry.method_args.empty()) {
+        table.by_name.emplace(entry.name, at);
+      }
+    }
+  } else if (table.entries.size() > INDEX_MIN && answers_name) {
+    // A name the type already answers keeps its first entry. The index
+    // holds a position in the entries, not in the declaring module's list.
+    table.by_name.emplace(method.name,
+                          static_cast<u32>(table.entries.size() - 1));
+  }
   position_by_address_.emplace(&method, std::pair<u32, u32>{module, position});
   if (!method.is_drop) {
     return target.methods.back();

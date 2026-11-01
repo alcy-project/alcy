@@ -38,14 +38,6 @@
 #include "ir/type_util.h"
 #include "ir/verifier.h"
 
-namespace {
-
-// Past this many declarations a module answers its own names through an
-// index: below it building one costs more than reading the list.
-constexpr u32 INDEX_MIN = 64;
-
-}  // namespace
-
 namespace analyzer {
 
 // Whether a path head is one the module walk owns: the two relative
@@ -3063,23 +3055,36 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
     diag::Span span) {
   const auto own = methods_by_self_.find(self.idx);
   if (own != methods_by_self_.end()) {
-    for (const auto& [owner, position] : own->second) {
+    const MethodTable& table = own->second;
+    // What a name answers, whether the table indexed it or the walk found it.
+    const auto answer = [&](u32 owner,
+                            u32 position) -> const CheckedModule::MethodInfo* {
       const CheckedModule::MethodInfo& method =
           modules[owner].methods[position];
-      if (method.spec != NO_SPEC) {
-        continue;
+      const bool is_pub =
+          !method.item.is_valid() || ast.items[method.item].is_pub;
+      (void)check_item_access(module, owner, is_pub, span, name);
+      return &method;
+    };
+    if (table.entries.size() > INDEX_MIN) {
+      const auto found = table.by_name.find(name);
+      if (found != table.by_name.end()) {
+        const auto [owner, position] = table.entries[found->second];
+        return answer(owner, position);
       }
-      // An entry keyed by spelled arguments is one call's
-      // instantiation, not the impl's registration: a second call
-      // with other arguments re-instantiates.
-      if (!method.method_args.empty()) {
-        continue;
-      }
-      if (method.name == name) {
-        const bool is_pub =
-            !method.item.is_valid() || ast.items[method.item].is_pub;
-        (void)check_item_access(module, owner, is_pub, span, name);
-        return &method;
+    } else {
+      for (const auto& [owner, position] : table.entries) {
+        const CheckedModule::MethodInfo& method =
+            modules[owner].methods[position];
+        // An entry keyed by spelled arguments is one call's
+        // instantiation, not the impl's registration: a second call
+        // with other arguments re-instantiates.
+        if (method.spec != NO_SPEC || !method.method_args.empty()) {
+          continue;
+        }
+        if (method.name == name) {
+          return answer(owner, position);
+        }
       }
     }
   }
