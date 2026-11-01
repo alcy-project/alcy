@@ -528,14 +528,15 @@ const Local* Lowerer::lookup_local(std::string_view name) const {
   return nullptr;
 }
 
-const Local* Lowerer::rooted_local(ast::ExprIdx place) const {
+const Local* Lowerer::rooted_local(ast::ExprIdx place,
+                                   bool through_deref) const {
   while (place.is_valid()) {
     const ast::ExprNode& node = ast.exprs[place];
     if (node.kind == ast::ExprKind::Field) {
       place = node.payload.get<ast::ExprField>().receiver;
     } else if (node.kind == ast::ExprKind::Index) {
       place = node.payload.get<ast::ExprIndex>().receiver;
-    } else if (node.kind == ast::ExprKind::Deref) {
+    } else if (node.kind == ast::ExprKind::Deref && through_deref) {
       place = node.payload.get<ast::ExprDeref>().inner;
     } else {
       break;
@@ -1336,7 +1337,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   ownership_.clear();
   end_sites_.clear();
   record_seq_ = 0;
-  end_exempt_ = base::INVALID_IDX;
+  end_fields_only_ = base::INVALID_IDX;
   comp_scope_.clear();
   fn_blocks_.clear();
   streams_.clear();
@@ -1421,9 +1422,10 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   pending_params_.clear();
   binding_param_ = false;
   if (is_destructor(entry.item) && !locals.empty()) {
-    // A destructor ends the value it is given; ending it again on the
-    // way out would call the destructor on its own receiver forever.
-    end_exempt_ = 0;
+    // The fields of the receiver still end when this body exits, but
+    // the receiver's own destructor is the call this body is, so its
+    // end runs the destructor of each field alone (ADR-0086).
+    end_fields_only_ = 0;
   }
   if (failed) {
     return;
@@ -1462,7 +1464,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   ownership_.clear();
   end_sites_.clear();
   record_seq_ = 0;
-  end_exempt_ = base::INVALID_IDX;
+  end_fields_only_ = base::INVALID_IDX;
   comp_scope_.clear();
   fn_blocks_.clear();
   streams_.clear();

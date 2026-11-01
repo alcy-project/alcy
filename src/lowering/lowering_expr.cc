@@ -5304,13 +5304,49 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       // A rooted receiver is projected where it lives: reading a field
       // out of a copy would copy the whole value, and a field of a
       // borrowed place would look like a move out of the borrow.
-      Val base = is_rooted_place(field.receiver)
-                     ? place_addr(field.receiver)
-                     : lower_expr(field.receiver, nullptr);
+      const bool rooted = is_rooted_place(field.receiver);
+      Val base = rooted ? place_addr(field.receiver)
+                        : lower_expr(field.receiver, nullptr);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
-      return materialize(field_addr(base, field.name.name, node.span));
+      // A field read out of a value that stands in no place reads out of
+      // the aggregate the temporary holds. The temporary takes a slot of
+      // this frame and ends at the enclosing block, so the fields the
+      // read leaves behind are ended there and the one it hands on is a
+      // move from the aggregate.
+      bool temporary = false;
+      if (!rooted && runs_destructor(base.type)) {
+        if (!base.address) {
+          base = address_of(base);
+          if (failed) {
+            return stopped_value();
+          }
+        }
+        const ir::Operand& operand = builder.state().operands[base.op.idx];
+        u32 tracked = 0;
+        std::vector<u32> tracked_path;
+        if (operand.is<ir::RegisterIdx>() &&
+            !place_of_register(operand.as_register().idx, tracked,
+                               tracked_path)) {
+          locals.emplace_back(std::string_view(), operand.as_register(),
+                              base.type);
+          record_event(OwnershipEvent::Kind::Bind,
+                       static_cast<u32>(locals.size() - 1), {}, node.span);
+          temporary = true;
+        }
+      }
+      Val projected = field_addr(base, field.name.name, node.span);
+      if (temporary) {
+        // The read hands the field on, so it leaves the aggregate: the
+        // address is what places the move, and the value the expression
+        // returns is a load that names no storage of its own. The walk
+        // records the move where the field sits, the way a bind out of
+        // a local records it, and emits no marker for a place.
+        projected.place = true;
+        record_move_event(projected);
+      }
+      return materialize(projected);
     }
     case ast::ExprKind::Deref: {
       return materialize(place_addr(expr));
@@ -5597,6 +5633,19 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           place_of_register(target.as_register().idx, local_index, path)) {
         record_event(OwnershipEvent::Kind::Store, local_index, std::move(path),
                      node.span);
+      } else if (runs_destructor(place.type)) {
+        // An index or a projection is addressed through a computed
+        // offset, so the path walk cannot name what the store replaced.
+        // The address and the type it carries say enough to end it, and
+        // only a place that a local of this frame owns says a value is
+        // there: a store through a raw pointer claims nothing, which is
+        // what lets a buffer be filled by writing one slot at a time.
+        if (const Local* owned = rooted_local(reassign.place,
+                                              /*through_deref=*/false)) {
+          record_store_element(place.op, place.type,
+                               static_cast<u32>(owned - locals.data()),
+                               node.span);
+        }
       }
       return;
     }

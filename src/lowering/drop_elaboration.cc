@@ -143,9 +143,6 @@ void Lowerer::record_end(u32 mark, diag::Span span) {
   site.seq = record_seq_++;
   site.locals.reserve(locals.size() - mark);
   for (u32 i = mark; i < static_cast<u32>(locals.size()); ++i) {
-    if (i == end_exempt_) {
-      continue;
-    }
     site.locals.push_back(i);
   }
   if (site.locals.empty()) {
@@ -249,6 +246,28 @@ void Lowerer::record_drop_in_place(ir::OperandIdx place,
   ownership_.push_back(std::move(event));
 }
 
+void Lowerer::record_store_element(ir::OperandIdx place,
+                                   ir::TypeIdx type,
+                                   u32 root,
+                                   diag::Span span) {
+  if (failed) {
+    return;
+  }
+  OwnershipEvent event;
+  event.kind = OwnershipEvent::Kind::StoreElement;
+  event.place = place;
+  event.place_type = type;
+  // The root is the local the store writes into, when the address came
+  // from one: the pass consults its state before ending what the store
+  // replaces.
+  event.local = root;
+  event.block = cur_;
+  event.offset = streams_[at(cur_)].size();
+  event.seq = record_seq_++;
+  event.span = span;
+  ownership_.push_back(std::move(event));
+}
+
 namespace {
 
 // The drop pass as one unit: the journals lowering recorded, the
@@ -264,6 +283,7 @@ class DropElaborator {
         builder(inputs.builder),
         bag(inputs.bag),
         locals(inputs.locals),
+        fields_only(inputs.fields_only),
         ownership_(inputs.ownership),
         end_sites_(inputs.end_sites),
         instr_spans_(inputs.instr_spans),
@@ -359,6 +379,14 @@ class DropElaborator {
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
   std::span<const Local> locals;
+  u32 fields_only = base::INVALID_IDX;
+  // A destructor's receiver, which ends the fields it still holds and
+  // not the value as a whole; every other place ends whole, named or
+  // not. Only the receiver is that place: a field reached through it
+  // is a value of its own, with a destructor of its own to run.
+  bool ends_fields_only(u32 local, bool root) const {
+    return root && fields_only != base::INVALID_IDX && local == fields_only;
+  }
   std::span<const OwnershipEvent> ownership_;
   std::span<const EndSite> end_sites_;
   std::vector<diag::Span>& instr_spans_;
@@ -480,10 +508,9 @@ void DropElaborator::run() {
   };
   for (const OwnershipEvent& event : ownership_) {
     // A place a drop ends is tracked like any other: the owner's own
-    // drop still has to skip it. Only an untracked place (a temporary,
+    // drop still has to skip it. Only an untracked value (a temporary,
     // an element) names no local to hold the state.
-    if (event.kind == OwnershipEvent::Kind::DropInPlace &&
-        event.local == base::INVALID_IDX) {
+    if (event.local == base::INVALID_IDX) {
       continue;
     }
     place_of(event.local, event.path);
@@ -621,6 +648,7 @@ void DropElaborator::run() {
       case OwnershipEvent::Kind::Bind:
       case OwnershipEvent::Kind::Store: return State::Owned;
       case OwnershipEvent::Kind::Move: return State::Moved;
+      case OwnershipEvent::Kind::StoreElement:
       case OwnershipEvent::Kind::DropInPlace: return state;
     }
     return state;
@@ -848,8 +876,11 @@ void DropElaborator::run() {
     }
     // The same origin rule the collected call follows: a copy's
     // glue is the one the type it came from declared.
+    // The receiver of a destructor ends the fields it still holds;
+    // its own destructor is the call this end is inside.
     const ir::TypeIdx glue_type = type_origin(type);
-    if (glue_type.idx < drop_glue.size()) {
+    if (!ends_fields_only(local, path.empty()) &&
+        glue_type.idx < drop_glue.size()) {
       const analyzer::CheckedModule::DropGlue& glue = drop_glue[glue_type.idx];
       if (glue.index != base::INVALID_IDX) {
         const ir::FunctionIdx fn = drop_method(glue.module, glue.index);
@@ -1004,8 +1035,10 @@ void DropElaborator::run() {
     }
     if (node.tag != ir::TypeTag::Struct && node.tag != ir::TypeTag::Tuple) {
       // A place no walk reaches; the caller's value is left alone. The
-      // sites name a binding, the explicit end does not.
-      if (local < locals.size()) {
+      // sites name a binding, the explicit end does not. A destructor's
+      // receiver has no walk to reach its fields with either, and says
+      // nothing of it.
+      if (local < locals.size() && !ends_fields_only(local, path.empty())) {
         const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
             DiagCode::DropUnplaced, span, locals[local].name);
         (void)index;
@@ -1101,6 +1134,12 @@ void DropElaborator::run() {
           action_flat[at_cursor++] =
               Action{event.offset, event.seq, Action::Kind::StoreClear, ei};
           break;
+        case OwnershipEvent::Kind::StoreElement:
+          // The address names no path, so no flag names what the store
+          // replaced: only the end is placed.
+          action_flat[at_cursor++] =
+              Action{event.offset - 1, event.seq, Action::Kind::StoreEnd, ei};
+          break;
         case OwnershipEvent::Kind::DropInPlace:
           action_flat[at_cursor++] =
               Action{event.offset, event.seq, Action::Kind::DropHere, ei};
@@ -1183,8 +1222,41 @@ void DropElaborator::run() {
     }
   };
 
+  // The value a store over a place no path names replaces. Only the
+  // root's state says whether a value is there: an element the
+  // function may have moved out is not one to end.
+  const auto owned_path = [](const std::vector<u32>&) { return State::Owned; };
+  auto run_store_element_end = [&](u32 ei, Output& out) {
+    const OwnershipEvent& event = ownership_[ei];
+    if (!runs_destructor(event.place_type)) {
+      return;
+    }
+    if (event.local != base::INVALID_IDX) {
+      const State root = state_at(event.local, {}, at(event.block),
+                                  event.offset - 1, event.seq);
+      if (root == State::Moved) {
+        return;
+      }
+      const u32 pi = place_index(event.local, {});
+      if (root == State::Maybe && pi != base::INVALID_IDX &&
+          flag[pi].is_valid()) {
+        emit_guard(out, flag[pi], event.span, [&](Output& drop_out) {
+          emit_end(drop_out, base::INVALID_IDX, {}, event.place_type,
+                   event.place, owned_path, event.span);
+        });
+        return;
+      }
+    }
+    emit_end(out, base::INVALID_IDX, {}, event.place_type, event.place,
+             owned_path, event.span);
+  };
+
   auto run_store_end = [&](u32 ei, Output& out) {
     const OwnershipEvent& event = ownership_[ei];
+    if (event.kind == OwnershipEvent::Kind::StoreElement) {
+      run_store_element_end(ei, out);
+      return;
+    }
     const Local& info = locals[event.local];
     const ir::TypeIdx type = type_at_path(info.type, event.path);
     if (!runs_destructor(type)) {
@@ -1274,11 +1346,8 @@ void DropElaborator::run() {
           case Action::Kind::StoreEnd: run_store_end(action.index, out); break;
           case Action::Kind::DropHere: {
             const OwnershipEvent& event = ownership_[action.index];
-            const auto owned = [](const std::vector<u32>&) {
-              return State::Owned;
-            };
             emit_end(out, event.local, event.path, event.place_type,
-                     event.place, owned, event.span);
+                     event.place, owned_path, event.span);
             break;
           }
           case Action::Kind::StoreClear: {
@@ -1320,6 +1389,7 @@ void Lowerer::place_ends() {
       .builder = builder,
       .bag = bag,
       .locals = locals,
+      .fields_only = end_fields_only_,
       .ownership = ownership_,
       .end_sites = end_sites_,
       .instr_spans = instr_spans_,

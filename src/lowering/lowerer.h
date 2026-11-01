@@ -336,8 +336,11 @@ class Lowerer {
   // before the value was lowered.
   void note_referents(ir::TypeIdx type, usize first, usize sources_from);
   // The local a place expression is rooted at, or nullptr when it is not
-  // rooted at one.
-  const Local* rooted_local(ast::ExprIdx place) const;
+  // rooted at one. `through_deref` decides whether a dereference is a
+  // step of the path: the local an assignment names is the one this
+  // function owns, so the storage behind a pointer is somebody else's.
+  const Local* rooted_local(ast::ExprIdx place,
+                            bool through_deref = true) const;
   const analyzer::CheckedModule::StaticInfo* lookup_static(
       u32 mod,
       std::string_view name) const;
@@ -907,8 +910,10 @@ class Lowerer {
   std::vector<OwnershipEvent> ownership_;
   std::vector<EndSite> end_sites_;
   u32 record_seq_ = 0;
-  // A destructor ends its own receiver; the fallthrough must not.
-  u32 end_exempt_ = base::INVALID_IDX;
+  // The receiver of the function being lowered when that function is a
+  // destructor: its end runs the destructor of every field it still
+  // holds rather than its own once more (ADR-0086).
+  u32 end_fields_only_ = base::INVALID_IDX;
   void record_end(u32 mark, diag::Span span);
   void record_event(OwnershipEvent::Kind kind,
                     u32 local,
@@ -916,6 +921,12 @@ class Lowerer {
                     diag::Span span);
   void record_drop_in_place(ir::OperandIdx place,
                             ir::TypeIdx type,
+                            diag::Span span);
+  // Records a store that replaces the value at an address no path names.
+  // `root` is the local the address came from, or `INVALID_IDX`.
+  void record_store_element(ir::OperandIdx place,
+                            ir::TypeIdx type,
+                            u32 root,
                             diag::Span span);
   // Ends the value at `place` now by calling its glue, the way the
   // drop pass ends a local. The expansion's collected tuple is not a

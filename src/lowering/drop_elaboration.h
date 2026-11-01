@@ -49,7 +49,7 @@ struct Local {
 // the event was recorded: a Bind is after the binding's store, a Move
 // after the marker, a Store after the store.
 struct OwnershipEvent {
-  enum class Kind : u8 { Bind, Move, Store, DropInPlace };
+  enum class Kind : u8 { Bind, Move, Store, StoreElement, DropInPlace };
   Kind kind = Kind::Bind;
   u32 local = base::INVALID_IDX;
   std::vector<u32> path;
@@ -57,8 +57,9 @@ struct OwnershipEvent {
   u32 offset = 0;
   u32 seq = 0;
   diag::Span span;
-  // DropInPlace only: the value at this pointer is ended where it
-  // stands, whatever place (if any) it names.
+  // DropInPlace and StoreElement: the value at this pointer is ended
+  // where it stands. A store's place is the address it wrote over, which
+  // no path names: the element an index reached, or a slot of it.
   ir::OperandIdx place = ir::OperandIdx::invalid();
   ir::TypeIdx place_type = ir::TypeIdx(base::INVALID_IDX);
 };
@@ -88,6 +89,10 @@ struct DropElaborationInputs {
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
   std::span<const Local> locals;
+  // The receiver of a destructor, whose end runs the destructor of
+  // each field it still holds instead of its own once more. No local
+  // when the function is not one.
+  u32 fields_only = base::INVALID_IDX;
   std::span<const OwnershipEvent> ownership;
   std::span<const EndSite> end_sites;
   // One span per instruction of the function being lowered; the pass
