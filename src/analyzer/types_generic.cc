@@ -1470,9 +1470,10 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     if (!params.empty()) {
       receiver = classify_receiver(params[0], self_type);
     }
-    add_function(impl_module, {method_node.payload.get<ast::ItemFn>().name.name,
-                               params, ret, method_item})
-        .is_method = true;
+    add_function(impl_module,
+                 {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
+                  method_item},
+                 true);
     const u32 method_sig_index =
         static_cast<u32>(modules[impl_module].functions.size()) - 1;
     // A method of a spec impl keeps its spec on the entry, the way a

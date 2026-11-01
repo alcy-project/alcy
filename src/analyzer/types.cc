@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -36,6 +37,14 @@
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "ir/verifier.h"
+
+namespace {
+
+// Past this many declarations a module answers its own names through an
+// index: below it building one costs more than reading the list.
+constexpr u32 INDEX_MIN = 64;
+
+}  // namespace
 
 namespace analyzer {
 
@@ -1486,15 +1495,26 @@ bool Checker::check_intrinsic_signature(u32 module,
 void Checker::process_module(u32 module) {
   // The value namespace of this module: functions, intrinsics, statics,
   // and constants share it, and a second declaration under one name
-  // would resolve to whichever entry a lookup reached first.
+  // would resolve to whichever entry a lookup reached first. A short list
+  // answers the question until a module declares INDEX_MIN names; past
+  // that a scan per declaration would cost the module squared.
   std::vector<std::string_view> value_names;
-  const auto value_taken = [&value_names](std::string_view name) {
+  std::unordered_set<std::string_view> value_name_set;
+  const auto declare_value = [&](std::string_view name) -> bool {
+    if (!value_name_set.empty()) {
+      return value_name_set.insert(name).second;
+    }
     for (std::string_view declared : value_names) {
       if (declared == name) {
-        return true;
+        return false;
       }
     }
-    return false;
+    value_names.push_back(name);
+    if (value_names.size() > INDEX_MIN) {
+      value_name_set.insert(value_names.begin(), value_names.end());
+      value_names.clear();
+    }
+    return true;
   };
   const auto contains_name = [](const std::vector<std::string_view>& names,
                                 std::string_view name) {
@@ -1563,11 +1583,10 @@ void Checker::process_module(u32 module) {
       } break;
       case ast::ItemKind::Fn: {
         const ast::Ident& name = node.payload.get<ast::ItemFn>().name;
-        if (value_taken(name.name)) {
+        if (!declare_value(name.name)) {
           duplicate_value(name);
           break;
         }
-        value_names.push_back(name.name);
         // Generic functions register per instantiation at their call
         // sites; eager registration cannot bind their parameters. An
         // owning `fn(...)` parameter makes the item generic first
@@ -1579,11 +1598,10 @@ void Checker::process_module(u32 module) {
       case ast::ItemKind::Intrinsic: {
         const ast::ItemIntrinsic& intrinsic =
             node.payload.get<ast::ItemIntrinsic>();
-        if (value_taken(intrinsic.name.name)) {
+        if (!declare_value(intrinsic.name.name)) {
           duplicate_value(intrinsic.name);
           break;
         }
-        value_names.push_back(intrinsic.name.name);
         if (!is_known_intrinsic(intrinsic.name.name)) {
           const u32 index = bag.emit<i18n::Key::AnalyzerUnknownIntrinsic>(
               DiagCode::UnknownIntrinsic, intrinsic.name.span,
@@ -1650,11 +1668,10 @@ void Checker::process_module(u32 module) {
         // cannot lower honestly is refused here.
         const ast::ItemExtern& block = node.payload.get<ast::ItemExtern>();
         for (const ast::ItemExternFn& fn : block.fns) {
-          if (value_taken(fn.name.name)) {
+          if (!declare_value(fn.name.name)) {
             duplicate_value(fn.name);
             continue;
           }
-          value_names.push_back(fn.name.name);
           if (!fn.generic.empty()) {
             const u32 index = bag.emit<i18n::Key::AnalyzerExternGeneric>(
                 DiagCode::GenericArguments, fn.name.span, fn.name.name);
@@ -1714,11 +1731,10 @@ void Checker::process_module(u32 module) {
         const ast::Ident name = is_const
                                     ? node.payload.get<ast::ItemConst>().name
                                     : node.payload.get<ast::ItemStatic>().name;
-        if (value_taken(name.name)) {
+        if (!declare_value(name.name)) {
           duplicate_value(name);
           break;
         }
-        value_names.push_back(name.name);
         register_static(module, item);
         break;
       }
@@ -1863,10 +1879,11 @@ void Checker::process_module(u32 module) {
                 module, method_node.payload.get<ast::ItemFn>().return_type,
                 self_ok ? &self_type : nullptr);
           }
-          CheckedModule::FnSig& sig = add_function(
-              module, {method_node.payload.get<ast::ItemFn>().name.name,
-                       std::move(params), ret, method});
-          sig.is_method = true;
+          CheckedModule::FnSig& sig =
+              add_function(module,
+                           {method_node.payload.get<ast::ItemFn>().name.name,
+                            std::move(params), ret, method},
+                           true);
           CheckedModule::ReceiverKind receiver =
               CheckedModule::ReceiverKind::None;
           if (self_ok && !sig.params.empty()) {
@@ -2386,6 +2403,11 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
 }
 
 bool Checker::ensure_function_named(u32 module, std::string_view name) {
+  // Sound only while the sweep matches this scan's names and generics: it
+  // registers every signature the loop below could find.
+  if (signatures_swept_) {
+    return false;
+  }
   if (module < scanned_fns_.size() && scanned_fns_[module].contains(name)) {
     return false;
   }
@@ -2408,6 +2430,11 @@ bool Checker::ensure_function_named(u32 module, std::string_view name) {
 }
 
 bool Checker::ensure_static_named(u32 module, std::string_view name) {
+  // Sound only while the sweep matches this scan's kinds: it registers
+  // every const and static the loop below could find.
+  if (signatures_swept_) {
+    return false;
+  }
   for (ast::ItemIdx item : tree.modules[module]->items) {
     const ast::ItemNode& node = ast.items[item];
     std::string_view declared;
@@ -2555,17 +2582,27 @@ const CheckedModule::FnSig* Checker::lookup_function(u32 module,
   // A generic function's registered signatures are per instantiation;
   // the name still resolves through lookup_generic_fn so each call
   // rebinds its parameters. A method's signature shares the table but
-  // not the name: a bare call cannot reach it.
+  // not the name: a bare call cannot reach it, and add_function sets the
+  // flag as the entry goes in, so the index never holds one.
   const auto find =
       [this](u32 in_module,
              std::string_view wanted) -> const CheckedModule::FnSig* {
-    for (const CheckedModule::FnSig& fn : modules[in_module].functions) {
-      if (fn.name == wanted && !fn.is_method &&
-          fn_generic_params(fn.item).empty()) {
-        return &fn;
+    const std::unordered_map<std::string_view, u32>& index =
+        fn_by_name_[in_module];
+    if (modules[in_module].functions.size() <= INDEX_MIN) {
+      for (const CheckedModule::FnSig& fn : modules[in_module].functions) {
+        if (fn.name == wanted && !fn.is_method &&
+            fn_generic_params(fn.item).empty()) {
+          return &fn;
+        }
       }
+      return nullptr;
     }
-    return nullptr;
+    const auto found = index.find(wanted);
+    if (found == index.end()) {
+      return nullptr;
+    }
+    return &modules[in_module].functions[found->second];
   };
   if (const CheckedModule::FnSig* fn = find(module, name)) {
     return fn;
@@ -3531,9 +3568,10 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
       value_params = std::move(outer_values);
       return nullptr;
     }
-    add_function(impl_module, {method_node.payload.get<ast::ItemFn>().name.name,
-                               params, ret, method_item})
-        .is_method = true;
+    add_function(impl_module,
+                 {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
+                  method_item},
+                 true);
     CheckedModule::MethodInfo* entry = &add_method(
         impl_module, {self_type,
                       method_node.payload.get<ast::ItemFn>().name.name,
@@ -3597,13 +3635,32 @@ void Checker::record_call(u32 module,
 }
 
 CheckedModule::FnSig& Checker::add_function(u32 module,
-                                            CheckedModule::FnSig sig) {
+                                            CheckedModule::FnSig sig,
+                                            bool is_method) {
+  sig.is_method = is_method;
   CheckedModule& target = modules[module];
   target.functions.push_back(std::move(sig));
-  position_by_address_.emplace(
-      &target.functions.back(),
-      std::pair<u32, u32>{module,
-                          static_cast<u32>(target.functions.size() - 1)});
+  const u32 position = static_cast<u32>(target.functions.size() - 1);
+  const CheckedModule::FnSig& added = target.functions.back();
+  std::unordered_map<std::string_view, u32>& index = fn_by_name_[module];
+  if (target.functions.size() == INDEX_MIN + 1) {
+    // The module just grew past the threshold: one pass fills the index
+    // for everything it holds, and later additions keep it current.
+    u32 at = 0;
+    for (const CheckedModule::FnSig& fn : target.functions) {
+      if (!fn.is_method && fn_generic_params(fn.item).empty()) {
+        index.emplace(fn.name, at);
+      }
+      ++at;
+    }
+  } else if (target.functions.size() > INDEX_MIN && !added.is_method &&
+             fn_generic_params(added.item).empty()) {
+    // A name the module already answers keeps its first position: a bare
+    // call reaches the first entry that is neither a method nor generic.
+    index.emplace(added.name, position);
+  }
+  position_by_address_.emplace(&target.functions.back(),
+                               std::pair<u32, u32>{module, position});
   return target.functions.back();
 }
 
@@ -4690,6 +4747,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   // past the constructed range would be read unbuilt.
   checker.modules.resize(tree.modules.size());
   checker.static_by_name_.resize(tree.modules.size());
+  checker.fn_by_name_.resize(tree.modules.size());
   checker.scanned_fns_.resize(tree.modules.size());
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
     checker.modules[m] = checker.empty_module(m);
@@ -4703,6 +4761,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
       checker.process_module(m);
     }
   }
+  checker.signatures_swept_ = true;
   if (checker.name_table_exhausted_) {
     return base::make_err(diag::Reported{});
   }

@@ -232,11 +232,21 @@ class Checker {
   std::vector<std::unordered_map<std::string_view, u32>> static_by_name_;
   // The statics index, as the free `find_static` reads it.
   StaticsByModule statics_index() const { return {static_by_name_}; }
+  // Free functions by the name they declare once a module declares more
+  // than INDEX_MIN of them, each mapped to the position it holds in the
+  // module's list. Below that a bare call reads the whole list, which is
+  // shorter than building the index; above it one name would cost the
+  // module's size. A module below the threshold holds no map.
+  std::vector<std::unordered_map<std::string_view, u32>> fn_by_name_;
   // The scan ensure_function_named and ensure_static_named make for a
   // name no table answers, by module and name: it looked at every item
   // the module declares, so a name it did not find is one the module
   // cannot declare, and asking again would walk the same items.
   std::vector<std::unordered_set<std::string_view>> scanned_fns_;
+  // Set once process_module has visited every item of every module, which
+  // registers each declaration a scan could reach: from then on a name the
+  // tables do not answer is one the package does not declare.
+  bool signatures_swept_ = false;
   // Nonzero while a body is being checked by the const pre-pass.
   // A call reached there types its callee's body too, so the evaluator
   // finds the whole call graph typed.
@@ -1096,8 +1106,12 @@ class Checker {
   std::unordered_map<const void*, std::pair<u32, u32>, AddressHash>
       position_by_address_;
   // Registers a function and answers the slot it went into, which is what a
-  // call site holds and what the positions above are keyed by.
-  CheckedModule::FnSig& add_function(u32 module, CheckedModule::FnSig sig);
+  // call site holds and what the positions above are keyed by. `is_method`
+  // marks a method's signature as it goes in, before the index a bare call
+  // reads can see it.
+  CheckedModule::FnSig& add_function(u32 module,
+                                     CheckedModule::FnSig sig,
+                                     bool is_method = false);
   // Registers a method and returns it. Where two modules declare a
   // destructor for one type, the earlier module's is kept, which is what a
   // walk in module order would have found.

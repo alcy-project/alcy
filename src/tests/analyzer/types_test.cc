@@ -6450,4 +6450,29 @@ TEST_CASE("Check resolves an inherent impl's imported target") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Check leaves a method out of the names a bare call reaches") {
+  // A module that holds more than 64 functions indexes them by name. A
+  // method's signature shares that table, so the index takes none of them:
+  // a bare call reaches free functions only.
+  std::string source;
+  for (u32 at = 0; at < 66; ++at) {
+    source += "fn g";
+    source += std::to_string(at);
+    source += "() -> i32 {\n  ret 0\n}\n";
+  }
+  source +=
+      "struct A {\n  a: i32\n}\n"
+      "impl A {\n"
+      "  fn hidden(self: Self) -> i32 {\n    ret 1\n  }\n"
+      "}\n"
+      "fn main() -> i32 {\n  ret hidden()\n}\n";
+  VirtualDir dir;
+  dir.add("main.al", source);
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Unresolved value 'hidden'"));
+}
+
 }  // namespace analyzer

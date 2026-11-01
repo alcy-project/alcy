@@ -1771,8 +1771,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       return;
     }
     CheckedModule::FnSig& sig =
-        add_function(module, {name, params, ret, method_item});
-    sig.is_method = true;
+        add_function(module, {name, params, ret, method_item}, true);
     add_method(module, {self_type,
                         name,
                         sig.params,
