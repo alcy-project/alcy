@@ -63,6 +63,9 @@ enum class DiagCode : u8 {
   // guard falls through to the next arm, which would take the value a
   // second time.
   GuardMovesBinding = 14,
+  // A reference taken of a temporary is kept past the temporary: a call
+  // handed the reference stores it, and the storage outlives the slot.
+  TemporaryReferenceEscapes = 18,
 };
 
 }  // namespace lowering

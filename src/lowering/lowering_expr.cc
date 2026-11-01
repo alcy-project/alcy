@@ -128,6 +128,10 @@ bool Lowerer::is_ref_tag(ir::TypeTag tag) const {
          tag == ir::TypeTag::Ptr;
 }
 
+bool Lowerer::can_write_through(ir::TypeTag tag) {
+  return tag == ir::TypeTag::MutRef || tag == ir::TypeTag::Ptr;
+}
+
 ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
                                  const ir::TypeIdx* expected) {
   const ast::Literal& lit = ast.literals[value];
@@ -361,6 +365,9 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
                                 type);
             record_event(OwnershipEvent::Kind::Bind,
                          static_cast<u32>(locals.size() - 1), {}, node.span);
+            // A reference taken of the temporary names its slot, so a
+            // value the slot is stored into has to outlive it.
+            borrow_sources.push_back(static_cast<u32>(locals.size() - 1));
           }
         }
         return Val{place.op, type, true, true, false};
@@ -1331,17 +1338,34 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
+  // The places this call lends to the callee: a value it keeps can land
+  // in any of them, so it has to outlive them.
+  std::vector<ast::ExprIdx> borrowed_places;
+  for (usize i = 0; i < call.args.size(); ++i) {
+    if (can_write_through(tag_of(sig.params[i])) &&
+        is_rooted_place(call.args[i])) {
+      borrowed_places.push_back(call.args[i]);
+    }
+  }
+  std::vector<KeptValue> kept;
   usize comp_at = 0;
   for (usize i = 0; i < call.args.size(); ++i) {
     if (comp_at < comp.size() && comp[comp_at] == i) {
       ++comp_at;
       continue;
     }
+    const usize sources_from = borrow_sources.size();
     Val arg = lower_moved(call.args[i], &sig.params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
+    kept.push_back(
+        KeptValue{call.args[i], arg.type, sig.params[i], sources_from});
     ops.push_back(arg_for(arg, sig.params[i]));
+  }
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return stopped_value();
   }
   if (tag_of(sig.ret) == ir::TypeTag::Never) {
     emit_void(ir::Opcode::Call, ops);
@@ -1403,17 +1427,30 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
+  std::vector<ast::ExprIdx> borrowed_places;
+  for (usize i = 0; i < args.size(); ++i) {
+    if (can_write_through(tag_of(info.params[i])) && is_rooted_place(args[i])) {
+      borrowed_places.push_back(args[i]);
+    }
+  }
+  std::vector<KeptValue> kept;
   usize comp_at = 0;
   for (usize i = 0; i < args.size(); ++i) {
     if (comp_at < comp.size() && comp[comp_at] == i) {
       ++comp_at;
       continue;
     }
+    const usize sources_from = borrow_sources.size();
     Val arg = lower_moved(args[i], &info.params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
+    kept.push_back(KeptValue{args[i], arg.type, info.params[i], sources_from});
     ops.push_back(arg_for(arg, info.params[i]));
+  }
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {
     emit_void(ir::Opcode::Call, ops);
@@ -3191,17 +3228,42 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
   ops.push_back(arg_for(receiver, info.params[0]));
+  // The places this call lends to the callee. A value the callee keeps
+  // can land in any of them, so it has to outlive them.
+  std::vector<ast::ExprIdx> borrowed_places;
+  if (can_write_through(tag_of(info.params[0])) &&
+      is_rooted_place(receiver_expr)) {
+    borrowed_places.push_back(receiver_expr);
+  }
+  for (usize i = 0; i < method_args.size(); ++i) {
+    if (can_write_through(tag_of(info.params[i + 1])) &&
+        is_rooted_place(method_args[i])) {
+      borrowed_places.push_back(method_args[i]);
+    }
+  }
+  std::vector<KeptValue> kept;
   usize comp_at = 0;
   for (usize i = 0; i < method_args.size(); ++i) {
     if (comp_at < comp.size() && comp[comp_at] == i + 1) {
       ++comp_at;
       continue;
     }
+    const usize sources_from = borrow_sources.size();
     Val arg = lower_moved(method_args[i], &info.params[i + 1]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
+    kept.push_back(
+        KeptValue{method_args[i], arg.type, info.params[i + 1], sources_from});
     ops.push_back(arg_for(arg, info.params[i + 1]));
+  }
+  // A type parameter accepts the value into storage the callee owns, so
+  // its signature does not say whether the value is kept: `Vec::push`
+  // writes its element into the buffer (ADR-0135). The instance's type
+  // arguments are the parameters the callee called its own.
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {
     emit_void(ir::Opcode::Call, ops);

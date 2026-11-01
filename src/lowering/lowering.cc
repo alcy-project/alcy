@@ -635,12 +635,66 @@ bool Lowerer::escapes_referent(ir::TypeIdx type,
     if (source >= locals.size() || source <= target_index) {
       continue;
     }
-    const u32 index = bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
-        DiagCode::BlockReferenceEscapes, span, locals[source].name);
+    const std::string_view name = locals[source].name;
+    const u32 index = name.empty()
+                          ? bag.emit<i18n::Key::LowerTemporaryReferenceEscapes>(
+                                DiagCode::TemporaryReferenceEscapes, span)
+                          : bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
+                                DiagCode::BlockReferenceEscapes, span, name);
     (void)index;
     return true;
   }
   return false;
+}
+
+// A call may leave an argument in storage it owns - `Vec::push` writes
+// its element into the buffer - so a value that carries a borrow has to
+// outlive the place the call borrows (ADR-0135). `sources_from` is
+// where the argument's loans start in `borrow_sources`.
+bool Lowerer::check_kept_values(
+    const std::vector<KeptValue>& values,
+    const std::vector<ast::ExprIdx>& borrowed_places) {
+  if (borrowed_places.empty()) {
+    return false;
+  }
+  for (const KeptValue& value : values) {
+    // A parameter that is itself a view or a reference is borrowed for
+    // the call, so what it hands over is a pointee rather than a place
+    // of the callee's.
+    if (!value.param.is_valid()) {
+      continue;
+    }
+    const ir::TypeTag param_tag = tag_of(value.param);
+    if (is_ref_tag(param_tag) || param_tag == ir::TypeTag::Str) {
+      continue;
+    }
+    bool is_place = false;
+    for (ast::ExprIdx place : borrowed_places) {
+      is_place = is_place || place == value.expr;
+    }
+    if (is_place) {
+      continue;
+    }
+    for (ast::ExprIdx place : borrowed_places) {
+      if (check_kept_extent(value.type, ast.exprs[value.expr].span, place,
+                            value.sources_from)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool Lowerer::check_kept_extent(ir::TypeIdx type,
+                                diag::Span span,
+                                ast::ExprIdx place,
+                                usize sources_from) {
+  if (sources_from >= borrow_sources.size()) {
+    return false;
+  }
+  const std::span<const u32> sources(borrow_sources.data() + sources_from,
+                                     borrow_sources.size() - sources_from);
+  return escapes_referent(type, span, place, sources);
 }
 
 void Lowerer::note_referents(ir::TypeIdx type,

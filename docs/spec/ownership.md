@@ -36,6 +36,17 @@
   names what it was copied from. A reference from a parameter, or from a
   call that kept its input to itself, names no place in the body and
   passes.
+- A call that writes through a place may leave the values it is handed
+  in that place: `Vec::push` takes `&mut Vec<T>` and writes its
+  element into the buffer. A value given for a parameter that is
+  neither a view nor a reference is therefore compared with every place
+  the call can write through, the same way a store into that place
+  would be, because the signature does not say what the callee does with
+  a value it owns. A view of a temporary, or of a local the writable
+  place outlives, is refused at the call. A shared loan promises not to
+  write, and a parameter that is itself a view or a reference borrows
+  for the call only, so `env.get(name.as_str())` and
+  `s.contains(&format("x"))` still read their argument.
 - A non-`Copy` value cannot be moved out from under an array's element
   either: an array ends its elements whole, so a move out of one is
   refused until the drop walk can name an element. A value without a

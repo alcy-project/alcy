@@ -37,6 +37,16 @@ the syntax that spelled it.**
   declared after the destination.
 - A reference from a parameter, or from a call that kept its input to
   itself, names no place in the body and passes.
+- A call that writes through a place can keep what it is handed:
+  `Vec::push` writes its element into the buffer through an unsafe
+  intrinsic inside the library, so no place in the caller holds the
+  reference and the store never meets the rule. A value given for a
+  parameter that is neither a view nor a reference is compared with
+  every place the call can write through, as if the store happened at
+  the call, and a temporary's slot is a source like a named local is. A
+  shared loan cannot store, and a parameter that is itself a view or a
+  reference borrows for the call and keeps nothing, so a value handed
+  over that way passes.
 
 The check stays in lowering rather than in the borrow pass because the
 borrow pass reads IR, which keeps no scope extents: the passes' blocks
@@ -57,6 +67,10 @@ extent compared there would answer a different question.
   alternative is the outlives relation between regions that
   `docs/spec/deferred.md` leaves to the region-annotated captures work
   (ADR-0076), which this rule stands in for.
+- A view kept by a container is refused (`err-kept-reference-local`,
+  `err-kept-reference-temporary`) while the same view of a buffer the
+  container is declared after is accepted (`ok-view-outlives-container`),
+  which is the order the drop walk ends them in.
 - The rule is an extent rule, not a lifetime analysis: loans are still
   liveness-checked by the borrow pass, and a reference that never meets a
   store of a shallower binding is unaffected.

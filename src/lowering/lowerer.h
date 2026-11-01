@@ -233,6 +233,9 @@ class Lowerer {
   bool is_copy(ir::TypeIdx type) const;
   ir::TypeTag tag_of(ir::TypeIdx idx) const;
   bool is_ref_tag(ir::TypeTag tag) const;
+  // Whether a callee handed a place through such a parameter can write
+  // into it, which is what lets it leave a value there.
+  static bool can_write_through(ir::TypeTag tag);
   ir::RegisterIdx claim_reg();
   ir::OperandIdx to_operand(ir::RegisterIdx reg, ir::TypeIdx type);
   ir::OperandIdx to_operand(ir::ImmutableIdx imm, ir::TypeIdx type);
@@ -307,6 +310,27 @@ class Lowerer {
                         diag::Span span,
                         ast::ExprIdx place,
                         std::span<const u32> sources) const;
+  // An argument of a call, with where its loans start in `borrow_sources`.
+  struct KeptValue {
+    ast::ExprIdx expr;
+    ir::TypeIdx type;
+    ir::TypeIdx param;
+    usize sources_from;
+  };
+  // Applies the extent rule to the values a call may keep: the callee
+  // owns storage and can leave one there, so the value's loans have to
+  // outlive the places `borrowed_places` names, which are the places
+  // the call may write through. True when it refused.
+  bool check_kept_values(const std::vector<KeptValue>& values,
+                         const std::vector<ast::ExprIdx>& borrowed_places);
+  // Applies the extent rule to an argument a call may keep: the callee
+  // owns storage and can leave the value there, so the value's loans
+  // have to outlive the place the call borrows. `sources_from` is the
+  // `borrow_sources` length before the argument was lowered.
+  bool check_kept_extent(ir::TypeIdx type,
+                         diag::Span span,
+                         ast::ExprIdx place,
+                         usize sources_from);
   // Gives the locals a binding added from `first` onward the locals its
   // value borrowed from. `sources_from` is the `borrow_sources` length
   // before the value was lowered.
