@@ -415,6 +415,15 @@ TEST_CASE("A bracket a line comment hides does not swallow the code") {
   CHECK(idempotent(source, narrow));
 }
 
+TEST_CASE("A reference to a dereference keeps the dereference tight") {
+  // A prefix operator touches its operand, and the mutability in front
+  // of it is what lets the star read as one rather than as a product.
+  CHECK(once("fn f() { g(&mut *p) }") == "fn f() {\n  g(&mut *p)\n}\n");
+  CHECK(once("fn f() { ret take(&mut *(self as *mut S).y) }") ==
+        "fn f() {\n  ret take(&mut *(self as *mut S).y)\n}\n");
+  CHECK(idempotent_default("fn f() { g(&mut *p) }"));
+}
+
 TEST_CASE("Deeply nested input does not exhaust the stack") {
   std::string source;
   for (usize i = 0; i < 600; ++i) {

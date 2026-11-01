@@ -206,6 +206,7 @@ bool allows_prefix_after(lexer::TokenKind kind) {
     case lexer::TokenKind::Comma:
     case lexer::TokenKind::As:
     case lexer::TokenKind::In:
+    case lexer::TokenKind::Mut:
     case lexer::TokenKind::Ret:
     case lexer::TokenKind::If:
     case lexer::TokenKind::Else:

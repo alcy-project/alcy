@@ -19,7 +19,7 @@ fn through_reference() -> i32 {
 fn through_reborrow() -> i32 {
   x := 1
   r := &mut x
-  q := &mut * r
+  q := &mut *r
   *q = 5
   ret x - 5
 }
