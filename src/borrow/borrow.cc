@@ -490,25 +490,39 @@ class Checker {
     }
   }
 
-  // Names each borrowed capture's place as the referent behind its
-  // pointer: the environment holds a reference, so the name stands
-  // for what the reference points at, with the dereference in the
-  // path. That is what lets a move through the capture be told from
-  // a move of an owned value. A moved Copy capture is owned storage
-  // and needs none of this.
-  // The captured addresses, gathered once when the scratch is sized. Seeding
-  // them meant walking every name the package gave an address, once per
-  // function of every sweep.
-  void seed_capture_places() {
+  // Names a borrowed capture's place as the referent behind its pointer:
+  // the environment holds a reference, so the name stands for what the
+  // reference points at, with the dereference in the path. That is what lets
+  // a move through the capture be told from a move of an owned value. A moved
+  // Copy capture is owned storage and needs none of this.
+  void seed_capture(u32 addr) {
+    home[addr] = addr;
+    set_step(addr, DEREF_STEP);
+  }
+
+  // Seeds every capture once, when the scratch is sized; the seeding below
+  // covers the ones reset_function clears.
+  void seed_all_captures() {
     for (u32 addr : captures_) {
-      home[addr] = addr;
-      set_step(addr, DEREF_STEP);
+      seed_capture(addr);
     }
   }
 
-  void forward(const ir::Function& fn) {
+  // Re-seeds the captures inside a function's register range, which
+  // reset_function cleared with the rest of it. Seeding every capture of the
+  // package in every function made the sweep quadratic in the package's
+  // closure count.
+  void seed_capture_places(u32 reg_lo, u32 reg_hi) {
+    auto it = std::lower_bound(captures_.begin(), captures_.end(), reg_lo);
+    for (; it != captures_.end() && *it < reg_hi; ++it) {
+      seed_capture(*it);
+    }
+  }
+
+  void forward(ir::FunctionIdx fidx) {
+    const ir::Function& fn = storage.functions()[fidx];
     seed_param_loans(fn);
-    seed_capture_places();
+    seed_capture_places(fn_reg_lo[fidx.idx], fn_reg_hi[fidx.idx]);
     // Every alloca names its own storage, whichever block holds it.
     // A block is not visited in execution order, so a use in an early
     // block would otherwise miss an alloca defined in a later one.
@@ -1407,9 +1421,10 @@ class Checker {
     }
   }
 
-  void check_function(const ir::Function& fn) {
+  void check_function(ir::FunctionIdx fidx) {
+    const ir::Function& fn = storage.functions()[fidx];
     collect_reserved(fn);
-    forward(fn);
+    forward(fidx);
     std::vector<ir::BlockIdx> order;
     reverse_post_order(fn, order);
     reset_blocks(order);
@@ -2008,6 +2023,7 @@ class Checker {
     post_scratch_.reserve(blocks);
     index_register_bounds(registers);
     index_addrs();
+    seed_all_captures();
   }
 
   // The lowest and highest register a function names, as a destination or as
@@ -2058,6 +2074,11 @@ class Checker {
         captures_.push_back(entry.addr.idx);
       }
     }
+    // Sorted and deduplicated: a function re-seeds the captures its register
+    // range covers, which is a lookup rather than a walk of the package.
+    std::sort(captures_.begin(), captures_.end());
+    captures_.erase(std::unique(captures_.begin(), captures_.end()),
+                    captures_.end());
   }
 
   // Clears the rows indexed by block that a function reaches, the
@@ -2150,7 +2171,7 @@ class Checker {
         {
           PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                    "borrow-fn");
-          forward(fn);
+          forward(fidx);
         }
         if (update_summary(fidx)) {
           stable = false;
@@ -2167,7 +2188,7 @@ class Checker {
       {
         PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                  "borrow-fn");
-        check_function(fn);
+        check_function(fidx);
       }
     }
   }

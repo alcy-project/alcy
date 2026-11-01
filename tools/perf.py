@@ -25,7 +25,8 @@ directory it wrote so a command can point at it.
 `corpus` is a generator, not a benchmark suite: its shapes exist to put
 weight where a cost can hide. `plain` is the same module repeated, `generic`
 gives every module a generic type and two instantiations of it, and `drop`
-gives every module a destructor. A package with one module per file and a
+gives every module a destructor, and `closure` gives every module a closure
+that borrows a local. A package with one module per file and a
 `main` that names every one of them is what makes a cost proportional to the
 package visible: a shape whose modules do not mention each other would not.
 
@@ -77,7 +78,7 @@ WORK_DIR = "out/perf"
 # compare a phase with itself across two runs, not with its neighbour.
 PHASES = ("parse", "targets", "analyze", "lower", "borrow")
 
-SHAPES = ["plain", "generic", "drop", "adapt", "print", "comp"]
+SHAPES = ["plain", "generic", "drop", "adapt", "closure", "print", "comp"]
 
 # How many compile-time calls one module of the comp shape makes.
 COMP_CALLS = 8
@@ -226,6 +227,15 @@ pub fn run{i}(x: i32) -> i32 {{
   ret apply{i}(g, x) + apply{i}(inc{i}, x)
 }}
 """
+    if shape == "closure":
+        return f"""// Closures that borrow an enclosing local: every module carries
+// capture addresses, which the checker seeds before a function runs.
+pub fn run{i}(x: i32) -> i32 {{
+  base := x + 1
+  g := [&base] (v: i32) -> v + base
+  ret g(2)
+}}
+"""
     if shape == "print":
         return f"""// The call is a staged io one, so every call site asks the tree
 // whether the callee is the toolchain's.
@@ -262,6 +272,7 @@ def main_source(shape: str, modules: int, main_calls: int) -> str:
         "generic": "  total = total + m{i}::use{i}({k})",
         "comp": "  total = total + m{i}::use{i}({k})",
         "adapt": "  total = total + m{i}::run{i}({k})",
+        "closure": "  total = total + m{i}::run{i}({k})",
         "print": "  total = total + m{i}::say{i}({k})",
     }[shape]
     calls = "\n".join(call.format(i=i % modules, k=i % 7) for i in range(main_calls))

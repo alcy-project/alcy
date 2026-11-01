@@ -676,6 +676,47 @@ TEST_CASE("Borrow rejects escaping references") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Borrow accepts a read through a borrowed capture") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct M { v: i32 }\n"
+                                      "fn main() {\n"
+                                      "  m := M { v: 1 }\n"
+                                      "  g := [&m] (k: i32) -> m.v + k\n"
+                                      "  _ := g(0)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(check_case(dir, "main.al", {"main.al"}, f));
+}
+
+TEST_CASE("Borrow rejects a move through a borrowed capture") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct M { s: &mut i32 }\n"
+                                      "fn take(x: M) -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() {\n"
+                                      "  x := 1\n"
+                                      "  m := M { s: &mut x }\n"
+                                      "  g := [&m] (k: i32) -> take(m) + k\n"
+                                      "  _ := g(0)\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  CHECK(!check_case(dir, "main.al", {"main.al"}, f));
+  CHECK(f.bag.has_errors());
+}
+
 TEST_CASE("Borrow accepts parameter returns") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
