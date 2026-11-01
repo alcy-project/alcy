@@ -292,7 +292,16 @@ class Parser {
 
   // Reports the nesting budget once and returns true when the caller
   // must stop descending.
-  bool nesting_exhausted(diag::Span span);
+  bool nesting_exhausted(diag::Span span) {
+    if (!nesting_.exhausted()) {
+      return false;
+    }
+    report_exhausted_nesting(span);
+    return true;
+  }
+  // Reports the exceeded nesting budget once, at the first descent that
+  // finds it exceeded.
+  void report_exhausted_nesting(diag::Span span);
 };
 
 }  // namespace parser

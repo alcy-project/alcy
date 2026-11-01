@@ -1387,17 +1387,13 @@ bool Parser::parse_decimal_u64(u64* out) {
   return true;
 }
 
-bool Parser::nesting_exhausted(diag::Span span) {
-  if (!nesting_.exhausted()) {
-    return false;
-  }
+void Parser::report_exhausted_nesting(diag::Span span) {
   if (!reported_too_deep_) {
     reported_too_deep_ = true;
     const u32 index = bag_.emit<i18n::Key::ParserNestingTooDeep>(
         DiagCode::TooDeep, span, nesting_.limit());
     (void)index;
   }
-  return true;
 }
 
 ast::BlockIdx Parser::parse_header_block() {
