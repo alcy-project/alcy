@@ -65,6 +65,23 @@ and not the total: the base is the runtime and the heap the first modules
 touched, and it is what makes a small corpus look expensive per module. What
 the modules add is 24 to 50 KiB each, depending on the shape.
 
+The formatter and the linter scale the same way. `--subcommand` names the run
+to measure, as words:
+
+```bash
+uv run ./tools/perf.py scale --subcommand 'fmt --check' --sizes 300 600 1200
+uv run ./tools/perf.py scale --subcommand lint --sizes 300 600 1200
+```
+
+Both are linear, and neither is cheap: `fmt --check` runs 719.5K per module at
+300 modules and 710.5K at 1200, `lint` 642.0K and 631.4K, against 578.6K and
+568.0K for `check`. The formatter pays the most per module of the three
+because a package-wide run resolves the artifacts first - which parses every
+file it will later format - and then lexes each one again into the concrete
+syntax tree it prints. Only `check` has its corpus validated first: a
+formatter rewrites files and exits non-zero on a package it would change, and a
+linter reports findings, so both are measured as they run.
+
 The shapes exist to put weight where a cost can hide, and a corpus whose
 modules do not mention each other would not:
 

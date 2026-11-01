@@ -85,6 +85,10 @@ COMP_CALLS = 8
 
 INSTRUCTIONS = re.compile(r"^(\d+),,.*instructions")
 
+# The subcommand a measurement runs; the others are reachable through
+# --subcommand, so the formatter and the linter scale the same way as check.
+DEFAULT_COMMAND = "check"
+
 # One line of `perf report --no-children`, which is a share, a few columns, the
 # object kind, and the symbol.
 PROFILE_LINE = re.compile(r"^\s*([0-9]+\.[0-9]+)%\s+.*?\[([.k])\]\s+(.*)$")
@@ -336,17 +340,22 @@ def binary_for(binary: str) -> Path:
     return path
 
 
-MEASURED: set[tuple[Path, Path]] = set()
+MEASURED: set[tuple[Path, Path, str]] = set()
 
 
-def validate(binary: Path, corpus: Path) -> None:
+def validate(binary: Path, corpus: Path, command: str = DEFAULT_COMMAND) -> None:
     """Refuses to measure a corpus the compiler reports on.
 
     A corpus that does not check cleanly measures the diagnostic path: the
     renderer and its formatting take over the run, and the growth a
-    measurement reads is the errors' rather than the compiler's.
+    measurement reads is the errors' rather than the compiler's. Only check
+    reports that way: the other subcommands are measured as they run, because
+    a formatter that rewrites files and a linter that reports findings both
+    leave the parse path untouched.
     """
-    key = (binary, corpus)
+    if command.split()[0] != "check":
+        return
+    key = (binary, corpus, command)
     if key in MEASURED:
         return
     done = subprocess.run(
@@ -367,11 +376,13 @@ def validate(binary: Path, corpus: Path) -> None:
     MEASURED.add(key)
 
 
-def instructions(binary: Path, corpus: Path, jobs: int) -> int:
-    """Retired instructions for one check, which is the same number every run."""
+def instructions(
+    binary: Path, corpus: Path, jobs: int, command: str = DEFAULT_COMMAND
+) -> int:
+    """Retired instructions for one run, which is the same number every time."""
     if shutil.which("perf") is None:
         raise SystemExit("perf is not on PATH; instruction counts need it")
-    validate(binary, corpus)
+    validate(binary, corpus, command)
     argv = [
         "perf",
         "stat",
@@ -379,7 +390,7 @@ def instructions(binary: Path, corpus: Path, jobs: int) -> int:
         "-e",
         "instructions",
         str(binary),
-        "check",
+        *command.split(),
         "-j",
         str(jobs),
         ".",
@@ -583,14 +594,16 @@ def resolve_addresses(binary: Path, addresses: list[str]) -> dict[str, str]:
     return resolved
 
 
-def peak_rss_kib(binary: Path, corpus: Path, jobs: int) -> int:
-    """Peak resident set size for one check, in KiB."""
-    validate(binary, corpus)
+def peak_rss_kib(
+    binary: Path, corpus: Path, jobs: int, command: str = DEFAULT_COMMAND
+) -> int:
+    """Peak resident set size for one run, in KiB."""
+    validate(binary, corpus, command)
     argv = [
         "/usr/bin/time",
         "-v",
         str(binary),
-        "check",
+        *command.split(),
         "-j",
         str(jobs),
         ".",
@@ -614,11 +627,15 @@ def cmd_rss(args: argparse.Namespace) -> int:
             args.main_calls if args.main_calls else modules,
             Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
         )
-        kib = min(peak_rss_kib(binary, corpus, args.jobs) for _ in range(args.runs))
+        kib = min(
+            peak_rss_kib(binary, corpus, args.jobs, args.subcommand)
+            for _ in range(args.runs)
+        )
         rows.append((modules, kib))
     calls = "fixed at " + str(args.main_calls) if args.main_calls else "one per module"
+    run = "" if args.subcommand == DEFAULT_COMMAND else f"  run={args.subcommand}"
     print(
-        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}"
+        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}{run}"
         f"  main calls={calls}"
     )
     print(f"{'modules':>9} {'peak RSS':>11} {'per module':>12} {'growth':>8}")
@@ -655,11 +672,12 @@ def cmd_scale(args: argparse.Namespace) -> int:
             args.main_calls if args.main_calls else modules,
             Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
         )
-        count = instructions(binary, corpus, args.jobs)
+        count = instructions(binary, corpus, args.jobs, args.subcommand)
         rows.append((modules, count))
     calls = "fixed at " + str(args.main_calls) if args.main_calls else "one per module"
+    run = "" if args.subcommand == DEFAULT_COMMAND else f"  run={args.subcommand}"
     print(
-        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}"
+        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}{run}"
         f"  main calls={calls}"
     )
     print(f"{'modules':>9} {'instructions':>13} {'per module':>11} {'growth':>8}")
@@ -1008,7 +1026,9 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="fix main's size, to separate per-item work from package scale",
     )
+    subcommand_help = "subcommand to measure, as words: 'check', 'fmt --check', 'lint'"
     scale.add_argument("--jobs", type=int, default=1)
+    scale.add_argument("--subcommand", default=DEFAULT_COMMAND, help=subcommand_help)
     scale.set_defaults(func=cmd_scale)
 
     rss = subparsers.add_parser(
@@ -1023,6 +1043,7 @@ def parse_args() -> argparse.Namespace:
         help="fix main's size, to separate per-item work from package scale",
     )
     rss.add_argument("--jobs", type=int, default=1)
+    rss.add_argument("--subcommand", default=DEFAULT_COMMAND, help=subcommand_help)
     rss.add_argument("--runs", type=int, default=3, help="repeats, keeping the low")
     rss.set_defaults(func=cmd_rss)
 
