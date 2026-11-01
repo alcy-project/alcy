@@ -32,7 +32,8 @@ impl<I: Iterator<T>, T, U> Iterator < U > for MapIter<I, T, U> {
 }
 
 // An iterator that yields only the values `f` accepts; it pulls from
-// the source until one passes.
+// the source until one passes. The pull is a loop, so a long run of
+// rejected values costs no stack.
 pub struct FilterIter<I, T> {
   pub iter: I,
   pub f: (T) -> bool,
@@ -40,13 +41,15 @@ pub struct FilterIter<I, T> {
 
 impl<I: Iterator<T>, T> Iterator < T > for FilterIter<I, T> {
   fn next(mut self: &mut Self) -> Option<T> {
-    ret match self.iter.next() {
-      Option::Some(v) => if (self.f)(v) {
-        Option::Some(v)
-      } else {
-        self.next()
+    loop {
+      match self.iter.next() {
+        Option::Some(v) => {
+          if (self.f)(v) {
+            ret Option::Some(v)
+          }
+        }
+        Option::None => ret Option::None,
       }
-      Option::None => Option::None,
     }
   }
 }

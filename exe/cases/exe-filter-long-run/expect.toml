@@ -1,0 +1,5 @@
+exit = 0
+stdout = """
+built 1000000
+matched 0
+"""
