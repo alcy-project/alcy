@@ -1531,14 +1531,11 @@ void Lowerer::run() {
           sig.is_extern) {
         continue;
       }
-      bool is_method_copy = false;
-      for (const auto& method : checked.methods) {
-        if (method.item == sig.item) {
-          is_method_copy = true;
-          break;
-        }
-      }
-      if (is_method_copy) {
+      // A method's row among the functions is the signature the call table
+      // needs; the loop above seeded the body. Walking the module's methods
+      // to tell the two apart charged a module for its methods once per
+      // function it held.
+      if (sig.is_method) {
         continue;
       }
       // Generic free functions reserve per instantiation on first
