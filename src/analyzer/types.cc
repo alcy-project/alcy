@@ -2310,8 +2310,10 @@ bool Checker::ensure_const_checked(const CheckedModule::StaticInfo& info) {
     in_fn = false;
     scopes.emplace_back();
     ++comp_depth;
+    ++comp_eval_depth;
     const ir::TypeIdx actual = check_expr(info.module, info.init, &want);
     --comp_depth;
+    --comp_eval_depth;
     scopes.pop_back();
     in_fn = saved_in_fn;
     ok = !is_error(actual);
@@ -4584,6 +4586,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const ir::TypeIdx saved_fn_ret = fn_ret;
   const bool saved_in_fn = in_fn;
   const u32 saved_loop_depth = loop_depth;
+  const u32 saved_comp_eval = comp_eval_depth;
   const bool saved_reported_too_deep = reported_too_deep_;
   // One report per function: the budget is per function, and every
   // frame past it would otherwise repeat the same diagnostic.
@@ -4602,6 +4605,10 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
         DiagCode::UnmovableType, node.payload.get<ast::ItemFn>().name.span);
     (void)index;
   }
+  // A comp fn's body runs during compilation whoever reads it, so
+  // the comp evaluation rules hold there; an ordinary body keeps the
+  // caller's context out of its own checks.
+  comp_eval_depth = fn_is_comp(fn) ? saved_comp_eval + 1 : 0;
   in_fn = true;
   scopes.emplace_back();
   loop_depth = 0;
@@ -4657,6 +4664,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   in_fn = saved_in_fn;
   fn_ret = saved_fn_ret;
   loop_depth = saved_loop_depth;
+  comp_eval_depth = saved_comp_eval;
   reported_too_deep_ = saved_reported_too_deep;
 }
 
@@ -4802,10 +4810,12 @@ void Checker::check_bodies() {
           const bool entered_comp = is_const;
           if (entered_comp) {
             ++comp_depth;
+            ++comp_eval_depth;
           }
           const ir::TypeIdx actual = check_expr(m, init, &declared);
           if (entered_comp) {
             --comp_depth;
+            --comp_eval_depth;
           }
           unify(declared, actual, ast.exprs[init].span, "item initializer");
           scopes.pop_back();

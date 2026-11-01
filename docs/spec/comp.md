@@ -60,6 +60,9 @@ arrays composed of comp-known values.
   compilation: called from a `comp` block or another comp-evaluated
   context, with comp-known arguments, its result splices as a
   comp-known value.
+- A `comp fn`'s body is comp evaluation itself: the restrictions the
+  section below lists hold inside it, and it may call other
+  `comp fn`s.
 - Calling one outside comp evaluation, in a call or a value position,
   is a compile-time error. There is no `const fn`; `comp` is the one
   word for code evaluated during compilation.

@@ -404,8 +404,12 @@ class Checker {
   };
   ClosureTables closureTables_;
   u32 loop_depth = 0;
-  // Nonzero while checking comp evaluation contexts (comp block
-  // contents and comp declaration initializers).
+  // Nonzero while checking code that runs during compilation: the
+  // contents of a `comp` block, a comp declaration initializer, and
+  // the body of a `comp fn`.
+  u32 comp_eval_depth = 0;
+  // Nonzero while checking the contents of a `comp` block, whose
+  // boundary a `ret` may not cross.
   u32 comp_depth = 0;
   // Verifies comp-known-ness while block scopes are still alive
   // (comp blocks and their nested bodies).
