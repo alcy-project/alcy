@@ -10,6 +10,10 @@ struct B {
   a: A,
 }
 
+// A parameter asks whether a value of the type may be moved, and that
+// walk follows the fields too.
+fn take(a: A) {}
+
 fn main() -> i32 {
   ret 0
 }

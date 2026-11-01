@@ -1018,6 +1018,26 @@ TEST_CASE("Check rejects value-recursive types") {
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
+TEST_CASE("Check rejects a value-recursive type a parameter names") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct A { b: B }\n"
+                                      "struct B { a: A }\n"
+                                      "fn take(a: A) {}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  // The parameter asks whether a value of the type may be moved, and the
+  // structural walk that answers follows the fields: it stops at the
+  // cycle the checks refuse instead of following it to the stack end.
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
 
 TEST_CASE("Check accepts reference cycles") {
   VirtualDir dir;
