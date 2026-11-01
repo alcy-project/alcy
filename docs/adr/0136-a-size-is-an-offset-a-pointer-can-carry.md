@@ -46,6 +46,11 @@ is an error.**
 - The bound is not a practical limit: 2^63 bytes is beyond any target
   the compiler emits for, so the rule only names what wrap-around
   would otherwise answer.
+- A shape that holds itself has no size to bound, and the walk says so
+  rather than asking the layout for the number: the layout follows the
+  fields it is given, so a cycle left the walk where it started and the
+  compiler without a stack. The cycle checks refuse the shape (`EC007`)
+  and are the only voice on it (`err-recursive-type-without-indirection`).
 - `usize` arithmetic inside a program is unaffected; the rule bounds
   the compiler's layout, and a program that computes its own offsets
   keeps the panics `docs/spec/values.md` gives them.

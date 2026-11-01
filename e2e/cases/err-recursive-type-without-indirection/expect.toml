@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Recursive type 'A' without indirection", "Recursive type 'B' without indirection"]

@@ -449,8 +449,17 @@ class Checker {
   // given a wrapped number. Answers what the shape's size is, or
   // nothing when it has none.
   bool has_unbound(ir::TypeIdx type, std::vector<u32>& stack) const;
-  std::optional<u64> checked_size(ir::TypeIdx type,
-                                  std::vector<u32>& stack) const;
+  // What one shape's size walk answers: the size, and whether the walk
+  // turned back on a shape it was already inside. A shape that holds
+  // itself has no size the layout could report - the checks that refuse
+  // the cycle say why (EC007) - and the flag is how the walk says so
+  // without asking the layout for a number that is not there.
+  struct SizeWalk {
+    u64 size = 0;
+    bool cyclic = false;
+  };
+  std::optional<SizeWalk> checked_size(ir::TypeIdx type,
+                                       std::vector<u32>& stack) const;
   bool check_type_size(ir::TypeIdx type, diag::Span span);
   // The spec policy of `package`, or nullptr when the tree carries
   // none, which reads as every spec being open.

@@ -969,10 +969,11 @@ bool Checker::has_unbound(ir::TypeIdx type, std::vector<u32>& stack) const {
     default: return false;
   }
 }
-std::optional<u64> Checker::checked_size(ir::TypeIdx type,
-                                         std::vector<u32>& stack) const {
+std::optional<Checker::SizeWalk> Checker::checked_size(
+    ir::TypeIdx type,
+    std::vector<u32>& stack) const {
   if (!type.is_valid()) {
-    return u64{0};
+    return SizeWalk{};
   }
   const ir::TypeNode node = builder.types()[type];
   // A parameter or a const argument has no layout until the
@@ -986,38 +987,49 @@ std::optional<u64> Checker::checked_size(ir::TypeIdx type,
   };
   // A field list laid out the way `ir::fields_layout` lays it out, so a
   // size this walk accepts is the size the layout reports.
-  const auto list_size = [&](ir::TypeIdxRange fields) -> std::optional<u64> {
+  const auto list_size =
+      [&](ir::TypeIdxRange fields) -> std::optional<SizeWalk> {
     u64 size = 0;
     u64 align = 1;
     for (ir::TypeIdx field : fields) {
-      const std::optional<u64> field_size = checked_size(field, stack);
-      if (!field_size.has_value()) {
+      const std::optional<SizeWalk> field_walk = checked_size(field, stack);
+      if (!field_walk.has_value()) {
         return std::nullopt;
+      }
+      // The layout has no answer for a field that holds itself, and the
+      // size this list would give is not the one the caller reports, so
+      // the walk stops before it asks for it.
+      if (field_walk->cyclic) {
+        return SizeWalk{0, true};
       }
       const u64 field_align = align_of(field);
       const u64 offset = (size + field_align - 1) / field_align * field_align;
-      if (*field_size > MAX_TYPE_SIZE - offset) {
+      if (field_walk->size > MAX_TYPE_SIZE - offset) {
         return std::nullopt;
       }
-      size = offset + *field_size;
+      size = offset + field_walk->size;
       align = field_align > align ? field_align : align;
     }
-    return (size + align - 1) / align * align;
+    return SizeWalk{(size + align - 1) / align * align, false};
   };
   switch (node.tag) {
     case ir::TypeTag::Array: {
       const ir::ArrayType array = builder.array_types()[node.as_array()];
       if (array.count == 0) {
-        return u64{0};
+        return SizeWalk{};
       }
-      const std::optional<u64> element = checked_size(array.element, stack);
+      const std::optional<SizeWalk> element =
+          checked_size(array.element, stack);
       if (!element.has_value()) {
         return std::nullopt;
       }
-      if (*element != 0 && *element > MAX_TYPE_SIZE / array.count) {
+      if (element->cyclic) {
+        return SizeWalk{0, true};
+      }
+      if (element->size != 0 && element->size > MAX_TYPE_SIZE / array.count) {
         return std::nullopt;
       }
-      return *element * array.count;
+      return SizeWalk{element->size * array.count, false};
     }
     case ir::TypeTag::Struct:
     case ir::TypeTag::Tuple:
@@ -1025,10 +1037,10 @@ std::optional<u64> Checker::checked_size(ir::TypeIdx type,
       // A type that holds itself is a cycle the type checks refuse; the
       // stack stops this walk from following it until they run.
       if (std::find(stack.begin(), stack.end(), type.idx) != stack.end()) {
-        return u64{0};
+        return SizeWalk{0, true};
       }
       stack.push_back(type.idx);
-      std::optional<u64> size = u64{0};
+      std::optional<SizeWalk> size = SizeWalk{};
       if (node.tag == ir::TypeTag::Struct) {
         size = list_size(builder.struct_types()[node.as_struct()].fields);
       } else if (node.tag == ir::TypeTag::Tuple) {
@@ -1038,13 +1050,17 @@ std::optional<u64> Checker::checked_size(ir::TypeIdx type,
         // so the area is the largest payload rather than their sum.
         const ir::EnumType shape = builder.enum_types()[node.as_enum()];
         for (ir::EnumVariantTypeIdx variant : shape.variants) {
-          const std::optional<u64> variant_size =
+          const std::optional<SizeWalk> variant_size =
               list_size(builder.enum_variant_types()[variant].fields);
           if (!variant_size.has_value()) {
             size = std::nullopt;
             break;
           }
-          if (!size.has_value() || *variant_size > *size) {
+          if (variant_size->cyclic) {
+            size = variant_size;
+            break;
+          }
+          if (!size.has_value() || variant_size->size > size->size) {
             size = variant_size;
           }
         }
@@ -1053,8 +1069,10 @@ std::optional<u64> Checker::checked_size(ir::TypeIdx type,
       return size;
     }
     case ir::TypeTag::Param:
-    case ir::TypeTag::Const: return u64{0};
-    default: return ir::type_layout(builder.state(), type, width).size;
+    case ir::TypeTag::Const: return SizeWalk{};
+    default:
+      return SizeWalk{ir::type_layout(builder.state(), type, width).size,
+                      false};
   }
 }
 
@@ -1064,8 +1082,14 @@ bool Checker::check_type_size(ir::TypeIdx type, diag::Span span) {
     return true;
   }
   stack.clear();
-  const std::optional<u64> size = checked_size(type, stack);
-  if (size.has_value() && *size <= MAX_TYPE_SIZE) {
+  const std::optional<SizeWalk> walk = checked_size(type, stack);
+  // A shape that holds itself has no size, and the checks that refuse
+  // the cycle have already said so; asking the layout for the number
+  // would follow the cycle for as long as the stack lasts.
+  if (walk.has_value() && walk->cyclic) {
+    return true;
+  }
+  if (walk.has_value() && walk->size <= MAX_TYPE_SIZE) {
     return true;
   }
   const u32 index =
