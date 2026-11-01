@@ -413,9 +413,6 @@ class Checker {
   }
 
   bool carries_reference(ir::TypeIdx type) {
-    if (carry_memo_.size() <= type.idx) {
-      carry_memo_.resize(storage.types().size(), 0);
-    }
     u8& memo = carry_memo_[type.idx];
     if (memo == 0) {
       memo = value_may_carry(storage, type) ? 2 : 1;
@@ -1988,6 +1985,9 @@ class Checker {
     reserved_receiver.assign(registers, 0);
     use_count_scratch_.assign(registers, 0);
     receiver_call_scratch_.assign(registers, 0);
+    // Sized for the whole program: a type's shape does not change, so its
+    // answer holds across functions.
+    carry_memo_.assign(storage.types().size(), 0);
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
