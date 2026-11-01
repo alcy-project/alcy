@@ -52,10 +52,13 @@ constexpr u32 ELEMENT_STEP = 0xFFFFFFFEu;
 
 // A place: a root register (alloca or block parameter) plus a path.
 // Moves, borrows, and revives name overlapping places: one path prefixes
-// the other (or they are equal).
+// the other (or they are equal). The path is a window on the checker's
+// arena, which outlives every place a function builds: naming one copies
+// three words, and the steps are appended to the arena once.
 struct Place {
   u32 root = NO_ROOT;
-  std::vector<u32> path;
+  u32 head = 0;
+  u32 len = 0;
 };
 
 // Whether a value of the type can carry a loan: references and
@@ -122,14 +125,13 @@ bool steps_match(u32 a, u32 b) {
   return a == b;
 }
 
-bool overlaps(const Place& a, const Place& b) {
+bool overlaps(const Place& a, const Place& b, std::span<const u32> steps) {
   if (a.root != b.root) {
     return false;
   }
-  const usize common =
-      a.path.size() < b.path.size() ? a.path.size() : b.path.size();
-  for (usize i = 0; i < common; ++i) {
-    if (!steps_match(a.path[i], b.path[i])) {
+  const u32 common = a.len < b.len ? a.len : b.len;
+  for (u32 i = 0; i < common; ++i) {
+    if (!steps_match(steps[a.head + i], steps[b.head + i])) {
       return false;
     }
   }
@@ -275,6 +277,33 @@ class Checker {
                                 path_len[reg]);
   }
 
+  std::span<const u32> steps_of(const Place& place) const {
+    return std::span<const u32>(path_steps_.data() + place.head, place.len);
+  }
+
+  // Names a window the checker already holds for a register, without copying
+  // its steps: both rows read the same steps from then on.
+  void set_row(u32 reg, const Place& place) {
+    path_head[reg] = place.head;
+    path_len[reg] = place.len;
+  }
+
+  // A place whose window is another place's extended by the steps a summary
+  // recorded.
+  Place extend_place(const Place& base, std::span<const u32> steps) {
+    const u32 head = static_cast<u32>(path_steps_.size());
+    path_steps_.resize(head + base.len);
+    for (u32 i = 0; i < base.len; ++i) {
+      path_steps_[head + i] = path_steps_[base.head + i];
+    }
+    path_steps_.insert(path_steps_.end(), steps.begin(), steps.end());
+    Place place;
+    place.root = base.root;
+    place.head = head;
+    place.len = base.len + static_cast<u32>(steps.size());
+    return place;
+  }
+
   void clear_path(u32 reg) { path_len[reg] = 0; }
 
   void set_step(u32 reg, u32 step) {
@@ -388,8 +417,8 @@ class Checker {
       return false;
     }
     place.root = home[reg];
-    const std::span<const u32> steps = steps_of(reg);
-    place.path.assign(steps.begin(), steps.end());
+    place.head = path_head[reg];
+    place.len = path_len[reg];
     return true;
   }
 
@@ -519,18 +548,16 @@ class Checker {
           // so the first loan it carried is the referent; the rule
           // matrix cannot observe the difference, and a summary that
           // could say would remove the choice.
-          u32 referent = NO_ROOT;
-          const std::vector<u32>* referent_path = nullptr;
+          Place referent;
           for (u32 loan : flow[instr.dst.idx]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
-              referent = loans[loan].place.root;
-              referent_path = &loans[loan].place.path;
+              referent = loans[loan].place;
               break;
             }
           }
-          if (referent != NO_ROOT) {
-            home[instr.dst.idx] = referent;
-            set_path(instr.dst.idx, *referent_path);
+          if (referent.root != NO_ROOT) {
+            home[instr.dst.idx] = referent.root;
+            set_row(instr.dst.idx, referent);
           } else if (home[addr] != NO_ROOT) {
             home[instr.dst.idx] = home[addr];
             copy_path(instr.dst.idx, addr);
@@ -599,7 +626,7 @@ class Checker {
           for (u32 loan : flow[src]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
               home[instr.dst.idx] = loans[loan].place.root;
-              set_path(instr.dst.idx, loans[loan].place.path);
+              set_row(instr.dst.idx, loans[loan].place);
               break;
             }
           }
@@ -723,7 +750,7 @@ class Checker {
           // the overlapping loans they are. The slot stands for the
           // view, not for the two words a copy of it owns, which is why
           // copying the view out is still a plain copy.
-          if (place.path.empty() && place.root < storage.registers().size() &&
+          if (place.len == 0 && place.root < storage.registers().size() &&
               tag_of(storage.registers()[place.root].type) ==
                   ir::TypeTag::Str) {
             Place slot;
@@ -805,7 +832,7 @@ class Checker {
                       static_cast<u32>(loans.size() - 1));
                   if (!placed) {
                     home[instr.dst.idx] = loans[loan].place.root;
-                    set_path(instr.dst.idx, loans[loan].place.path);
+                    set_row(instr.dst.idx, loans[loan].place);
                     placed = true;
                   }
                 }
@@ -870,22 +897,17 @@ class Checker {
               arg.as_register().idx >= flow.size()) {
             continue;
           }
-          u32 referent = NO_ROOT;
-          std::vector<u32> referent_path;
+          Place referent;
           for (u32 loan : flow[arg.as_register().idx]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
-              referent = loans[loan].place.root;
-              referent_path = loans[loan].place.path;
+              referent = loans[loan].place;
               break;
             }
           }
-          if (referent == NO_ROOT) {
+          if (referent.root == NO_ROOT) {
             continue;
           }
-          Place place{referent, referent_path};
-          for (u32 step : entry.path) {
-            place.path.push_back(step);
-          }
+          const Place place = extend_place(referent, entry.path);
           loans.push_back(
               {instr.dst.idx, place, entry.exclusive || result_exclusive, pos});
           union_flow(instr.dst.idx, static_cast<u32>(loans.size() - 1));
@@ -917,12 +939,13 @@ class Checker {
                     proj.place.root != loans[loan].place.root) {
                   continue;
                 }
-                const std::vector<u32>& wide = loans[loan].place.path;
-                const std::vector<u32>& narrow = proj.place.path;
-                if (wide.size() < narrow.size()) {
+                const Place& wide = loans[loan].place;
+                const Place& narrow = proj.place;
+                if (wide.len < narrow.len) {
                   bool prefix = true;
-                  for (usize i = 0; i < wide.size(); ++i) {
-                    if (!steps_match(wide[i], narrow[i])) {
+                  for (u32 i = 0; i < wide.len; ++i) {
+                    if (!steps_match(path_steps_[wide.head + i],
+                                     path_steps_[narrow.head + i])) {
                       prefix = false;
                       break;
                     }
@@ -942,7 +965,7 @@ class Checker {
         }
         if (!projected.empty() && instr.dst.idx < home.size()) {
           home[instr.dst.idx] = projected.front().place.root;
-          set_path(instr.dst.idx, projected.front().place.path);
+          set_row(instr.dst.idx, projected.front().place);
         }
         break;
       }
@@ -1081,7 +1104,7 @@ class Checker {
                        diag::Span span,
                        std::string_view action) {
     for (const Place& gone : moved) {
-      if (overlaps(gone, place)) {
+      if (overlaps(gone, place, path_steps_)) {
         const u32 index = bag.emit<i18n::Key::BorrowUseAfterMove>(
             DiagCode::UseAfterMove, span, addr_name(place.root), action);
         (void)index;
@@ -1090,12 +1113,16 @@ class Checker {
     }
   }
 
-  static bool same_place(const Place& a, const Place& b) {
-    return a.root == b.root && a.path == b.path;
+  bool same_place(const Place& a, const Place& b) const {
+    if (a.root != b.root || a.len != b.len) {
+      return false;
+    }
+    const std::span<const u32> steps = steps_of(a);
+    return std::equal(steps.begin(), steps.end(), steps_of(b).begin());
   }
 
-  static bool same_state(const std::vector<Place>& a,
-                         const std::vector<Place>& b) {
+  bool same_state(const std::vector<Place>& a,
+                  const std::vector<Place>& b) const {
     if (a.size() != b.size()) {
       return false;
     }
@@ -1114,7 +1141,7 @@ class Checker {
     return true;
   }
 
-  static void add_moved(std::vector<Place>& state, const Place& place) {
+  void add_moved(std::vector<Place>& state, const Place& place) const {
     for (const Place& prior : state) {
       if (same_place(prior, place)) {
         return;
@@ -1123,9 +1150,9 @@ class Checker {
     state.push_back(place);
   }
 
-  static void kill_moved(std::vector<Place>& state, const Place& place) {
+  void kill_moved(std::vector<Place>& state, const Place& place) const {
     for (usize i = 0; i < state.size();) {
-      if (overlaps(state[i], place)) {
+      if (overlaps(state[i], place, path_steps_)) {
         state[i] = state.back();
         state.pop_back();
       } else {
@@ -1265,8 +1292,8 @@ class Checker {
         transfer(bidx, in, out);
         // IN is refreshed every visit for the check pass to read;
         // successors are fed from OUT, which alone drives convergence.
-        // The rows take the scratch by swap: a place's path is a vector,
-        // so copying a state would allocate once per place of it.
+        // The rows take the scratch by swap: a state is copied per place of
+        // it, and a copy names the same windows either way.
         moved_in[bidx.idx].swap(in);
         if (!same_state(out, moved_out[bidx.idx])) {
           moved_out[bidx.idx].swap(out);
@@ -1414,7 +1441,8 @@ class Checker {
             if (carries_loan(addr_reg, id)) {
               continue;
             }
-            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+            if (!live_at(id, bidx, pos) ||
+                !overlaps(loan.place, place, path_steps_)) {
               continue;
             }
             // A reserved receiver's window admits a read of data: the
@@ -1448,7 +1476,7 @@ class Checker {
         // whoever owns the place it reads. A borrowed capture names
         // exactly such a place, through its environment.
         bool borrowed = false;
-        for (u32 step : place.path) {
+        for (u32 step : steps_of(place)) {
           if (step == DEREF_STEP) {
             borrowed = true;
             break;
@@ -1483,7 +1511,8 @@ class Checker {
           if (loan.param != NO_ROOT) {
             continue;
           }
-          if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+          if (!live_at(id, bidx, pos) ||
+              !overlaps(loan.place, place, path_steps_)) {
             continue;
           }
           const u32 index = bag.emit<i18n::Key::BorrowMoveInvalidatesBorrow>(
@@ -1535,7 +1564,8 @@ class Checker {
           if (derived_from(id) && !(exclusive && !loan.exclusive)) {
             continue;
           }
-          if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+          if (!live_at(id, bidx, pos) ||
+              !overlaps(loan.place, place, path_steps_)) {
             continue;
           }
           // A shared borrow during a reserved receiver's window is the
@@ -1590,7 +1620,8 @@ class Checker {
             if (carries_loan(target, id)) {
               continue;
             }
-            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+            if (!live_at(id, bidx, pos) ||
+                !overlaps(loan.place, place, path_steps_)) {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
@@ -1617,7 +1648,8 @@ class Checker {
             if (carries_loan(target, id)) {
               continue;
             }
-            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+            if (!live_at(id, bidx, pos) ||
+                !overlaps(loan.place, place, path_steps_)) {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
@@ -1690,7 +1722,7 @@ class Checker {
               continue;
             }
             if (!live_at(other, bidx, pos) ||
-                !overlaps(loan.place, reserved.place)) {
+                !overlaps(loan.place, reserved.place, path_steps_)) {
               continue;
             }
             // A reborrow taken through the receiver stands behind it,
@@ -1802,7 +1834,8 @@ class Checker {
           if (param == NO_ROOT) {
             continue;
           }
-          relpath = entry.place.path;
+          const std::span<const u32> steps = steps_of(entry.place);
+          relpath.assign(steps.begin(), steps.end());
           if (param < param_types.size()) {
             const ir::TypeTag ptag = tag_of(param_types[param]);
             if ((ptag == ir::TypeTag::Ref || ptag == ir::TypeTag::MutRef) &&
