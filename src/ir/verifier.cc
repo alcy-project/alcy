@@ -316,7 +316,9 @@ VerificationResult verify_storage(const Storage& storage) {
   }
 
   // Register definitions: bound by block params or defined by instructions.
-  std::vector<bool> defined(storage.registers().size(), false);
+  // One byte per register, because every definition and every operand that
+  // names a register reads or writes this set through a bit proxy otherwise.
+  std::vector<u8> defined(storage.registers().size(), u8{0});
   for (BlockIdx bidx(0); bidx.idx < storage.blocks().size(); ++bidx) {
     const Block& block = storage.blocks()[bidx];
     const InstructionIdx instr_end(block.instrs.head().idx +
