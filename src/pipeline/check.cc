@@ -88,7 +88,14 @@ base::Result<CheckOutcome, diag::Reported> check_root(PipelineContext& ctx,
   if (tree.is_err()) {
     return fail();
   }
-  return finish_check(ctx, std::move(tree).unwrap(), 1);
+  base::Result<CheckOutcome, diag::Reported> outcome =
+      finish_check(ctx, std::move(tree).unwrap(), 1);
+  // The checker names a place once per instruction that reads it, so one
+  // move under a match reaches a reader as one finding per arm; the
+  // package entry point collapses those repeats, and a file named alone
+  // has to read the same.
+  ctx.bag.dedup();
+  return outcome;
 }
 
 base::Result<CheckOutcome, diag::Reported> check_package(
