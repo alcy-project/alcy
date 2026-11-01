@@ -56,6 +56,11 @@ enum class VerificationErrorKind : u8 {
   UnknownOpcode,
   // An instruction whose operand count cannot belong to its opcode.
   InstrOperandArity,
+  // A parametric callee row, its argument range, or a listed parametric
+  // function leaves the table it names.
+  ParametricCalleeOutOfRange,
+  ParametricCalleeArgsOutOfRange,
+  ParametricFunctionOutOfRange,
 };
 
 struct VerificationError {
@@ -103,6 +108,10 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::InvalidCallingConvention: return "InvalidCallingConvention";
     case K::UnknownOpcode: return "UnknownOpcode";
     case K::InstrOperandArity: return "InstrOperandArity";
+    case K::ParametricCalleeOutOfRange: return "ParametricCalleeOutOfRange";
+    case K::ParametricCalleeArgsOutOfRange:
+      return "ParametricCalleeArgsOutOfRange";
+    case K::ParametricFunctionOutOfRange: return "ParametricFunctionOutOfRange";
   }
 }
 

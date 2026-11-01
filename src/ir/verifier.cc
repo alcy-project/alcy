@@ -14,6 +14,7 @@
 #include "ir/function.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/storage.h"
 #include "ir/type_util.h"
 
@@ -63,7 +64,8 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::AtomicLoad:
     case O::Move:
     case O::Drop:
-    case O::Borrow: return {1, 1, true};
+    case O::Borrow:
+    case O::ParametricDrop: return {1, 1, true};
     case O::Store:
     case O::EnumTagSet:
     case O::ElemOffset:
@@ -315,6 +317,32 @@ VerificationResult verify_storage(const Storage& storage) {
     }
   }
 
+  // The parametric rows name the tables the specialization pass reads;
+  // a row whose indexes leave them could not be resolved, so the
+  // verifier refuses it here rather than in the pass.
+  for (ParametricCalleeIdx cidx(0);
+       cidx.idx < storage.parametric_callees().size(); ++cidx) {
+    const ParametricCallee& callee = storage.parametric_callees()[cidx];
+    if (callee.kind == ParametricCalleeKind::Generic) {
+      if (callee.function.idx >= storage.functions().size()) {
+        return err(VerificationErrorKind::ParametricCalleeOutOfRange, cidx.idx);
+      }
+    } else if (callee.spec.idx >= storage.types().size() ||
+               callee.method == str::INVALID_STRING_POOL_ID) {
+      return err(VerificationErrorKind::ParametricCalleeOutOfRange, cidx.idx);
+    }
+    if (!range_in_bounds(callee.args.head(), callee.args.size(),
+                         storage.types().size())) {
+      return err(VerificationErrorKind::ParametricCalleeArgsOutOfRange,
+                 cidx.idx);
+    }
+  }
+  for (const FunctionIdx fidx : storage.parametric_functions()) {
+    if (fidx.idx >= storage.functions().size()) {
+      return err(VerificationErrorKind::ParametricFunctionOutOfRange, fidx.idx);
+    }
+  }
+
   // Register definitions: bound by block params or defined by instructions.
   // One byte per register, because every definition and every operand that
   // names a register reads or writes this set through a bit proxy otherwise.
@@ -423,6 +451,13 @@ VerificationResult verify_storage(const Storage& storage) {
                          first_operand + offset);
             }
             break;
+          case Operand::TAG_OF<ParametricCalleeIdx>:
+            if (operand.as_parametric_callee().idx >=
+                storage.parametric_callees().size()) {
+              return err(VerificationErrorKind::OperandIdxOutOfRange,
+                         first_operand + offset);
+            }
+            break;
           case Operand::TAG_OF<void>:
             return err(VerificationErrorKind::UnknownOperandTag,
                        first_operand + offset);
@@ -434,6 +469,19 @@ VerificationResult verify_storage(const Storage& storage) {
             return err(VerificationErrorKind::InvalidCallee, iidx.idx);
           }
           const Operand& head = storage.operands()[instr.operands.head()];
+          if (head.is<ParametricCalleeIdx>()) {
+            // The call's signature is the callee operand's own type, the
+            // function type the definition-site check filled.
+            const TypeNode& callee_type = storage.types()[head.type.idx];
+            if (callee_type.tag != TypeTag::Func) {
+              return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+            }
+            const FuncType& sig = storage.func_types()[callee_type.as_func()];
+            if (instr.operands.size() - 1 != sig.params.size()) {
+              return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+            }
+            break;
+          }
           if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
             // A call through a function value carries the value: the
             // callee is a register of function type, and the operands

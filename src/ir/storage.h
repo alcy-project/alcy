@@ -20,6 +20,7 @@
 #include "ir/immutable.h"
 #include "ir/instruction.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/register.h"
 #include "ir/type.h"
 
@@ -41,6 +42,8 @@ struct StorageState {
   using Registers = base::Vec<Register, RegisterIdx, Alloc<Register>>;
   using ExternalFunctions =
       base::Vec<ExternalFunction, ExternalFunctionIdx, Alloc<ExternalFunction>>;
+  using ParametricCallees =
+      base::Vec<ParametricCallee, ParametricCalleeIdx, Alloc<ParametricCallee>>;
   using Operands = base::Vec<Operand, OperandIdx, Alloc<Operand>>;
   using Types = base::Vec<TypeNode, TypeIdx, Alloc<TypeNode>>;
   using StructTypes = base::Vec<StructType, StructTypeIdx, Alloc<StructType>>;
@@ -61,6 +64,12 @@ struct StorageState {
   Immutables immutables;
   Registers registers;
   ExternalFunctions external_functions;
+  ParametricCallees parametric_callees;
+  // The functions emitted once in their parametric form: the
+  // specialization pass clones them per instantiation, and no backend
+  // receives them (ADR-0079). Kept beside the table rather than in a
+  // range because their indexes are not consecutive.
+  std::vector<FunctionIdx> parametric_functions;
   Operands operands;
   Types types;
   StructTypes struct_types;
@@ -611,6 +620,12 @@ class Storage {
   const StorageState::Registers& registers() const { return state_.registers; }
   const StorageState::ExternalFunctions& external_functions() const {
     return state_.external_functions;
+  }
+  const StorageState::ParametricCallees& parametric_callees() const {
+    return state_.parametric_callees;
+  }
+  const std::vector<FunctionIdx>& parametric_functions() const {
+    return state_.parametric_functions;
   }
   const StorageState::Operands& operands() const { return state_.operands; }
   const StorageState::Types& types() const { return state_.types; }

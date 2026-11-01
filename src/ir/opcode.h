@@ -117,6 +117,12 @@ enum class Opcode : u8 {
   // enum place, carrying the field's type: operands = [place,
   // variant, field]. A niche-carrying enum's payload is the slot.
   EnumFieldAddr,
+  // Ends a place whose type the substitution still decides: operands =
+  // [place]. A parametric body cannot know whether the place runs a
+  // destructor, so the end waits for the specialization, which rewrites
+  // it to the concrete glue call or drops it. No backend meets one
+  // (ADR-0079).
+  ParametricDrop,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -192,8 +198,9 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
 
     case O::EnumTagLoad: return "EnumTagLoad";
     case O::EnumTagSet: return "EnumTagSet";
-    case O::EnumFieldAddr:
-      return "EnumFieldAddr";
+    case O::EnumFieldAddr: return "EnumFieldAddr";
+    case O::ParametricDrop:
+      return "ParametricDrop";
 
       // case O::BorrowBegin: return "BorrowBegin";
       // case O::BorrowEnd: return "BorrowEnd";

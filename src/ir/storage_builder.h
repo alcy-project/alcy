@@ -70,6 +70,11 @@ class StorageBuilder {
     state_.external_functions = std::move(external_functions);
     return *this;
   }
+  StorageBuilder& parametric_callees(
+      StorageState::ParametricCallees&& parametric_callees) {
+    state_.parametric_callees = std::move(parametric_callees);
+    return *this;
+  }
   StorageBuilder& operands(StorageState::Operands&& operands) {
     state_.operands = std::move(operands);
     return *this;
@@ -148,6 +153,13 @@ class StorageBuilder {
   void reserve_registers(usize count) { state_.registers.reserve(count); }
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
     return state_.external_functions.emplace_back(external_function);
+  }
+  ParametricCalleeIdx parametric_callee(ParametricCallee callee) {
+    return state_.parametric_callees.emplace_back(callee);
+  }
+  // Marks a function as emitted once in its parametric form.
+  void add_parametric_function(FunctionIdx function) {
+    state_.parametric_functions.push_back(function);
   }
   OperandIdx operand(Operand&& operand) {
     return state_.operands.emplace_back(std::move(operand));

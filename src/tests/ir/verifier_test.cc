@@ -15,6 +15,7 @@
 #include "ir/function.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -1044,6 +1045,41 @@ TEST_CASE("Verify function instantiation arguments") {
   });
   check_invalid(std::move(builder).build(),
                 VerificationErrorKind::FunctionGenericsOutOfRange);
+}
+
+TEST_CASE("Verify a parametric callee's function") {
+  // A Generic row names the parametric function its call clones; a row
+  // whose index leaves the table could not be resolved (ADR-0079).
+  StorageBuilder builder;
+  (void)builder.parametric_callee({.kind = ParametricCalleeKind::Generic,
+                                   .function = FunctionIdx(99999),
+                                   .spec = str::INVALID_STRING_POOL_ID,
+                                   .method = str::INVALID_STRING_POOL_ID,
+                                   .args = {}});
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::ParametricCalleeOutOfRange);
+}
+
+TEST_CASE("Verify a parametric callee's arguments") {
+  // The row's arguments index the type table, and the specialization
+  // substitutes them one by one.
+  StorageBuilder builder;
+  (void)builder.parametric_callee({.kind = ParametricCalleeKind::Dispatch,
+                                   .function = FunctionIdx(base::INVALID_IDX),
+                                   .spec = str::EMPTY_STRING_ID,
+                                   .method = str::EMPTY_STRING_ID,
+                                   .args = {TypeIdx(99999), 1}});
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::ParametricCalleeArgsOutOfRange);
+}
+
+TEST_CASE("Verify the parametric function list") {
+  // The borrow pass and the backends skip every listed function by its
+  // index, so one that leaves the table skips nothing.
+  StorageBuilder builder;
+  builder.add_parametric_function(FunctionIdx(99999));
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::ParametricFunctionOutOfRange);
 }
 
 TEST_CASE("Verify external function metadata") {

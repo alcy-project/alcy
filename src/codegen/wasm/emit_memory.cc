@@ -481,6 +481,10 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
     }
     case O::InsertValue:
       return unsupported(current_span_, "an aggregate construction");
+    case O::ParametricDrop:
+      // The specialization rewrites every one to a concrete end before
+      // emission; a parametric body never reaches a backend (ADR-0079).
+      return unsupported(current_span_, ir::opcode_to_str(instr.op));
     default: return unsupported(current_span_, ir::opcode_to_str(instr.op));
   }
 }

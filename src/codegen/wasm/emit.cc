@@ -749,6 +749,7 @@ Emitter::EmitResult Emitter::emit_instruction(ir::InstructionIdx instr_idx,
     case O::EnumTagLoad:
     case O::EnumTagSet:
     case O::EnumFieldAddr:
+    case O::ParametricDrop:
     case O::ExtractValue:
     case O::InsertValue: return emit_memory(instr);
 

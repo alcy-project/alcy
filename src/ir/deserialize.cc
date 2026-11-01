@@ -29,6 +29,7 @@
 #include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/register.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -677,6 +678,9 @@ bool read_operands(Parsed& parsed, std::span<const u8> payload) {
     } else if (tag == static_cast<u8>(Operand::TAG_OF<ExternalFunctionIdx>)) {
       operand = Operand::from_external_function(ExternalFunctionIdx(value),
                                                 TypeIdx(type));
+    } else if (tag == static_cast<u8>(Operand::TAG_OF<ParametricCalleeIdx>)) {
+      operand = Operand::from_parametric_callee(ParametricCalleeIdx(value),
+                                                TypeIdx(type));
     } else if (tag != static_cast<u8>(Operand::TAG_OF<void>)) {
       return false;
     } else {
@@ -787,6 +791,63 @@ bool read_externals(Parsed& parsed, std::span<const u8> payload) {
                  .owner = TypeIdx(owner)},
         .calling_conv = static_cast<CallingConvention>(cc),
     });
+  }
+  return true;
+}
+
+bool read_parametric_callees(Parsed& parsed, std::span<const u8> payload) {
+  const u32 count =
+      record_count(payload.size(), binary::PARAMETRIC_CALLEE_RECORD_SIZE);
+  if (count == NONE) {
+    return false;
+  }
+  Cursor cursor(payload);
+  u32 read = 0;
+  if (!cursor.read_u32(read) || read != count) {
+    return false;
+  }
+  for (u32 i = 0; i < count; ++i) {
+    u8 kind = 0;
+    u8 pad = 0;
+    u32 function = 0;
+    u32 spec = 0;
+    u32 method = 0;
+    u32 args_head = 0;
+    u32 args_size = 0;
+    if (!cursor.read_u8(kind) || !cursor.read_u8(pad) || !cursor.read_u8(pad) ||
+        !cursor.read_u8(pad) || !cursor.read_u32(function) ||
+        !cursor.read_u32(spec) || !cursor.read_u32(method) ||
+        !read_range(cursor, args_head, args_size)) {
+      return false;
+    }
+    if (kind != static_cast<u8>(ParametricCalleeKind::Generic) &&
+        kind != static_cast<u8>(ParametricCalleeKind::Dispatch)) {
+      return false;
+    }
+    parsed.state.parametric_callees.emplace_back(
+        static_cast<ParametricCalleeKind>(kind), FunctionIdx(function),
+        TypeIdx(spec), string_id(parsed, method),
+        TypeIdxRange{TypeIdx(args_head), args_size});
+  }
+  return true;
+}
+
+bool read_parametric_functions(Parsed& parsed, std::span<const u8> payload) {
+  const u32 count = record_count(payload.size(), 4);
+  if (count == NONE) {
+    return false;
+  }
+  Cursor cursor(payload);
+  u32 read = 0;
+  if (!cursor.read_u32(read) || read != count) {
+    return false;
+  }
+  for (u32 i = 0; i < count; ++i) {
+    u32 function = 0;
+    if (!cursor.read_u32(function)) {
+      return false;
+    }
+    parsed.state.parametric_functions.emplace_back(function);
   }
   return true;
 }
@@ -1095,13 +1156,17 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
     case Section::Consts: return read_consts(parsed, payload);
     case Section::Identity: return read_identity(parsed, payload);
     case Section::Summary: return read_summary(parsed, payload);
+    case Section::ParametricCallees:
+      return read_parametric_callees(parsed, payload);
+    case Section::ParametricFunctions:
+      return read_parametric_functions(parsed, payload);
   }
   return true;
 }
 
 bool known_kind(u32 kind) {
   return kind >= static_cast<u32>(Section::Strings) &&
-         kind <= static_cast<u32>(Section::Summary);
+         kind <= static_cast<u32>(Section::ParametricFunctions);
 }
 
 base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
@@ -1217,7 +1282,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   }
 
   for (u32 kind = static_cast<u32>(Section::Strings);
-       kind <= static_cast<u32>(Section::Summary); ++kind) {
+       kind <= static_cast<u32>(Section::ParametricFunctions); ++kind) {
     if (!sections[kind].present) {
       continue;
     }

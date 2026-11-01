@@ -28,6 +28,7 @@ source_set("ir") {
     "opcode.h",
     "operand.cc",
     "operand.h",
+    "parametric.h",
     "register.cc",
     "register.h",
     "seq_builder.cc",

@@ -434,6 +434,11 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       builder_->CreateFence(llvm::AtomicOrdering::SequentiallyConsistent);
       break;
     }
+    case Op::ParametricDrop: {
+      // The specialization rewrites every one to a concrete end before
+      // emission; a parametric body never reaches a backend (ADR-0079).
+      UNREACHABLE();
+    }
     default: {
       DLOG("Unknown memory opcode found: {}", i.op);
       UNREACHABLE();

@@ -614,6 +614,12 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       return write(operand_at(instr, 0).type, value, pointer.address, instr);
     }
     case Opcode::GetElementPtr: return execute_gep(instr, frame);
+    case Opcode::ParametricDrop:
+      // The specialization rewrites every one to a concrete end before
+      // evaluation; a parametric body never reaches the interpreter
+      // (ADR-0079).
+      return fail(IrRunError::Kind::Unsupported, instr,
+                  "parametric drop in comp evaluation");
     case Opcode::EnumTagLoad: {
       if (!ins.dst.is_valid()) {
         return fail(IrRunError::Kind::Internal, instr,

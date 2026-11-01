@@ -13,13 +13,18 @@ namespace ir::binary {
 // One place for both writers of the form: the reader lives in
 // deserialize.h and names the same constants.
 inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
-inline constexpr u16 MAJOR = 4;
+inline constexpr u16 MAJOR = 5;
 inline constexpr u16 MINOR = 0;
 // Bit 0: the payload is little-endian. Always set; a reader rejects a
 // file that clears it.
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;
 // Sections start on this boundary.
 inline constexpr usize SECTION_ALIGN = 8;
+// One parametric-callee row (ADR-0079): a kind byte, three reserved
+// bytes, the function or the spec and method, and the argument range.
+// The section's record count divides by it, so the writer's row and the
+// reader's stride must move together.
+inline constexpr usize PARAMETRIC_CALLEE_RECORD_SIZE = 24;
 
 // The trailing footer: the XXH3-128 digest of every byte before it.
 // The writer and the reader share this, so a cache that handed back
@@ -62,6 +67,15 @@ enum class Section : u8 {
   // index for the source name, the symbol kind, one flags byte, and two
   // reserved bytes. Absent means the package carries no summary.
   Summary = 25,
+  // The callees a parametric body cannot name (ADR-0079, ADR-0080).
+  // Rows: a u32 count, then per row a kind byte, three reserved bytes,
+  // the function (Generic) or the spec (Dispatch), the method's string
+  // index (Dispatch), and the argument range. Absent means none.
+  ParametricCallees = 26,
+  // The functions emitted once in their parametric form (ADR-0079).
+  // Rows: a u32 count, then that many function indexes. Absent means
+  // none.
+  ParametricFunctions = 27,
 };
 
 }  // namespace ir::binary

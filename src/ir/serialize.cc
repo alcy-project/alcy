@@ -29,6 +29,7 @@
 #include "ir/instruction.h"
 #include "ir/instruction_flags.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/register.h"
 #include "ir/storage.h"
 #include "ir/summary.h"
@@ -148,6 +149,14 @@ class Serializer {
     if (!summary_.empty()) {
       sections.push_back({Section::Summary, summary_section()});
     }
+    if (!state_.parametric_callees.empty()) {
+      sections.push_back(
+          {Section::ParametricCallees, parametric_callees_section()});
+    }
+    if (!state_.parametric_functions.empty()) {
+      sections.push_back(
+          {Section::ParametricFunctions, parametric_functions_section()});
+    }
 
     // The header and the table come first, so an offset depends on the
     // table's own size; compute them before writing anything.
@@ -253,6 +262,9 @@ class Serializer {
     for (const ExternalFunction& external : state_.external_functions) {
       collect_pool_id(external.meta.name, offsets);
       collect_pool_id(external.meta.path, offsets);
+    }
+    for (const ParametricCallee& callee : state_.parametric_callees) {
+      collect_pool_id(callee.method, offsets);
     }
     for (const StructType& strukt : state_.struct_types) {
       collect_pool_id(strukt.name, offsets);
@@ -521,6 +533,8 @@ class Serializer {
       case Payload::TagOf<ImmutableIdx>: return operand.as_immutable().idx;
       case Payload::TagOf<ExternalFunctionIdx>:
         return operand.as_external_function().idx;
+      case Payload::TagOf<ParametricCalleeIdx>:
+        return operand.as_parametric_callee().idx;
       default: return 0;
     }
   }
@@ -562,6 +576,31 @@ class Serializer {
       out.put_u32(find_name(files_.names[i]));
       out.put_u32(0);
       out.bytes(files_.hash_of(i).bytes());
+    }
+    return out;
+  }
+
+  ByteWriter parametric_callees_section() const {
+    ByteWriter out;
+    out.put_u32(static_cast<u32>(state_.parametric_callees.size()));
+    // Each row is `binary::PARAMETRIC_CALLEE_RECORD_SIZE` bytes: the
+    // reader's stride and this row move together.
+    for (const ParametricCallee& callee : state_.parametric_callees) {
+      out.put_u8(static_cast<u8>(callee.kind));
+      out.zeros(3);
+      out.put_u32(callee.function.idx);
+      out.put_u32(callee.spec.idx);
+      out.put_u32(string_index(callee.method));
+      write_range(out, callee.args);
+    }
+    return out;
+  }
+
+  ByteWriter parametric_functions_section() const {
+    ByteWriter out;
+    out.put_u32(static_cast<u32>(state_.parametric_functions.size()));
+    for (const FunctionIdx function : state_.parametric_functions) {
+      out.put_u32(function.idx);
     }
     return out;
   }

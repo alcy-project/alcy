@@ -343,6 +343,18 @@ is written for a library
 target and absent otherwise, and a reader answers empty for a file that
 carries none.
 
+**PARAMETRIC_CALLEES**: `count` × `{ kind u8, pad u8[3], function u32,
+spec u32, method u32, args_head u32, args_size u32 }`, the callees a
+parametric body cannot name (ADR-0079, ADR-0080). A `Generic` row puts
+the generic item's parametric function in `function`; a `Dispatch` row
+puts the spec's `TYPES` row in `spec` and the method's name in `method`.
+`args` is the type-argument range the definition-site check resolved, and
+the field the kind does not use is `U32_MAX`. Absent means none.
+
+**PARAMETRIC_FUNCTIONS**: `count` × `function u32`, the functions emitted
+once in their parametric form; the specialization pass clones them per
+instantiation and no backend receives them (ADR-0079). Absent means none.
+
 ### 3.5 Reading
 
 A reader MUST build a `StorageState`, re-intern `STRINGS`, remap every

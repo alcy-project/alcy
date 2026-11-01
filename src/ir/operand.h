@@ -16,7 +16,8 @@ struct Operand {
                                         BlockIdx,
                                         ImmutableIdx,
                                         ExternalFunctionIdx,
-                                        void>;
+                                        void,
+                                        ParametricCalleeIdx>;
   using Tag = Payload::Tag;
   template <typename T>
   static constexpr Tag TAG_OF = Payload::TagOf<T>;
@@ -52,6 +53,11 @@ struct Operand {
     return Operand{Payload{idx}, type};
   }
 
+  static constexpr Operand from_parametric_callee(ParametricCalleeIdx idx,
+                                                  TypeIdx type) {
+    return Operand{Payload{idx}, type};
+  }
+
   static constexpr Operand invalid() {
     // Default-constructed payload holds void.
     return Operand{Payload{}, primitive_idx(TypeTag::Void)};
@@ -81,6 +87,11 @@ struct Operand {
     DCHECK_MSG(is<ExternalFunctionIdx>(),
                "operand is not an external function");
     return data.get<ExternalFunctionIdx>();
+  }
+
+  constexpr ParametricCalleeIdx as_parametric_callee() const {
+    DCHECK_MSG(is<ParametricCalleeIdx>(), "operand is not a parametric callee");
+    return data.get<ParametricCalleeIdx>();
   }
 };
 

@@ -44,6 +44,9 @@ struct ExternalFunction;
 using ExternalFunctionIdx = details::Idx<ExternalFunction>;
 using ExternalFunctionIdxRange = base::IdxRange<ExternalFunctionIdx>;
 
+struct ParametricCallee;
+using ParametricCalleeIdx = details::Idx<ParametricCallee>;
+
 struct Operand;
 using OperandIdx = details::Idx<Operand>;
 using OperandIdxRange = base::IdxRange<OperandIdx>;

@@ -75,7 +75,7 @@ skips value binding for any producer with an invalid `dst`.
 
 | Category | Layout |
 |---|---|
-| `Call` | `operands[0]` is the callee (`Function`/`ExternalFunction`); the rest are arguments, count-checked against the signature. |
+| `Call` | `operands[0]` is the callee (`Function`/`ExternalFunction`, or a `ParametricCallee` the specialization resolves); the rest are arguments, count-checked against the signature. |
 | `Br` | `operands[0]` is the target block; `operands[1..]` fill its block parameters positionally. |
 | `CondBr` | Exactly `[cond(i1), true_block, false_block]`. Targets take no block parameters. |
 | `Switch` | `[value(integer), default_block, (case_imm, case_block)...]`; case values are integer immediates; targets take no block parameters. |
@@ -90,6 +90,7 @@ skips value binding for any producer with an invalid `dst`.
 | Comparisons | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only. |
 | Atomics | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent. |
 | `Move` / `Drop` | Register alias / ownership marker; no code emitted. |
+| `ParametricDrop` | `[place]`, discarded value; an end whose destructor only the substitution decides. The specialization rewrites it to the concrete glue call or removes it, and no backend meets one (ADR-0079). |
 | `Select` | `[cond, true_value, false_value]`. |
 
 `InstructionFlags` carries the per-opcode facts that are not operands:

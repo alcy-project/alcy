@@ -27,6 +27,7 @@
 #include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/register.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
@@ -371,6 +372,32 @@ class TextWriter {
       out_ += '\n';
       wrote = true;
     }
+    for (u32 i = 0; i < state_.parametric_callees.size(); ++i) {
+      const ParametricCallee& callee =
+          state_.parametric_callees[ParametricCalleeIdx(i)];
+      fmt::format_to(std::back_inserter(out_), "parametric callee #{}: ", i);
+      if (callee.kind == ParametricCalleeKind::Generic) {
+        out_ += function_name(callee.function);
+      } else {
+        write_type(callee.spec);
+        out_ += "::";
+        out_ += string_of(callee.method);
+      }
+      out_ += '<';
+      for (u32 a = 0; a < callee.args.size(); ++a) {
+        if (a > 0) {
+          out_ += ", ";
+        }
+        write_type(callee.args[a]);
+      }
+      out_ += ">\n";
+      wrote = true;
+    }
+    for (u32 i = 0; i < state_.parametric_functions.size(); ++i) {
+      fmt::format_to(std::back_inserter(out_), "parametric fn #{}: {}\n", i,
+                     function_name(state_.parametric_functions[i]));
+      wrote = true;
+    }
     if (wrote) {
       out_ += '\n';
     }
@@ -488,6 +515,12 @@ class TextWriter {
           out_ += ", ";
           write_operand(state_.operands[instr.operands.head() + i]);
         }
+        out_ += ')';
+        break;
+      }
+      case O::ParametricDrop: {
+        out_ += "parametricdrop(";
+        write_operand(state_.operands[instr.operands.head()]);
         out_ += ')';
         break;
       }
@@ -796,6 +829,10 @@ class TextWriter {
         return;
       case Payload::TagOf<ExternalFunctionIdx>:
         out_ += external_name(operand.as_external_function());
+        return;
+      case Payload::TagOf<ParametricCalleeIdx>:
+        fmt::format_to(std::back_inserter(out_), "pcallee{}",
+                       operand.as_parametric_callee().idx);
         return;
       default: out_ += '?'; return;
     }

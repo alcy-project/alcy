@@ -17,6 +17,8 @@
 #include "ir/binary_format.h"
 #include "ir/common.h"
 #include "ir/function.h"
+#include "ir/opcode.h"
+#include "ir/parametric.h"
 #include "ir/seq_builder.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
@@ -185,6 +187,130 @@ TEST_CASE("A type parameter survives the binary form") {
     CHECK(node.as_param().value == 0);
   }
   CHECK(found);
+}
+
+TEST_CASE("A parametric callee and drop survive the binary form") {
+  // The parametric form's tables and the operand that names a callee
+  // the specialization resolves (ADR-0079, ADR-0080).
+  ir::SymbolTable strings;
+  ir::StorageBuilder builder;
+  const TypeIdx void_ty = builder.primitive(TypeTag::Void);
+  const TypeIdx param = builder.param_type(0);
+  TypeSeq call_params;
+  call_params.push(param);
+  const TypeIdx call_sig = builder.func_type(call_params.finish(), void_ty);
+
+  const ParametricCalleeIdx generic = builder.parametric_callee({
+      .kind = ParametricCalleeKind::Generic,
+      .function = FunctionIdx(0),
+      .args = {param, 1},
+  });
+  (void)builder.parametric_callee({
+      .kind = ParametricCalleeKind::Dispatch,
+      .spec = param,
+      .method = strings.intern("show"),
+      .args = {param, 1},
+  });
+
+  const RegisterIdx v0(0);
+  builder.reg({.type = param, .def_idx = InstructionIdx::invalid()});
+  const BlockParamIdx bp = builder.block_param({.type = param, .reg = v0});
+  const OperandIdx place = builder.operand(Operand::from_register(v0, param));
+  const OperandIdx callee_op =
+      builder.operand(Operand::from_parametric_callee(generic, call_sig));
+  // The call's argument, in the operand row right after its callee.
+  builder.operand(Operand::from_register(v0, param));
+  const InstructionIdx drop = builder.instr({
+      .op = Opcode::ParametricDrop,
+      .flags = {},
+      .dst = RegisterIdx::invalid(),
+      .measure = TypeIdx::invalid(),
+      .operands = {place, 1},
+  });
+  const InstructionIdx call = builder.instr({
+      .op = Opcode::Call,
+      .flags = {},
+      .dst = RegisterIdx::invalid(),
+      .measure = TypeIdx::invalid(),
+      .operands = {callee_op, 2},
+  });
+  const InstructionIdx ret = builder.instr({
+      .op = Opcode::Ret,
+      .flags = {},
+      .dst = RegisterIdx::invalid(),
+      .measure = TypeIdx::invalid(),
+      .operands = {},
+  });
+  (void)call;
+  (void)ret;
+  const BlockIdx block =
+      builder.block({.instrs = {drop, 3}, .block_params = {bp, 1}});
+  builder.function({.meta = {.return_type = void_ty,
+                             .param_types = {param, 1},
+                             .name = strings.intern("f"),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = SymbolKind::Free,
+                             .generics = TypeIdxRange{}},
+                    .blocks = {block, 1}});
+  builder.add_parametric_function(FunctionIdx(0));
+
+  const Storage storage = std::move(builder).build().unwrap().unwrap();
+  const WriteInput input{
+      .storage = &storage,
+      .strings = &strings,
+      .instr_spans = {},
+      .files = {},
+      .addr_names = {},
+      .summary = {},
+      .prelude_functions = 0,
+      .width = PointerWidth::W64,
+      .compiler_version = "0.0.0-test",
+  };
+  const std::vector<u8> bytes = serialize(input);
+  base::Result<LoadedIr, IrLoadError> loaded = deserialize(bytes);
+  if (loaded.is_err()) {
+    const IrLoadError kind = std::move(loaded).unwrap_err();
+    CHECK_MESSAGE(false, "load error ", static_cast<i32>(kind));
+    return;
+  }
+  LoadedIr package = std::move(loaded).unwrap();
+  const Storage& read = *package.storage;
+
+  CHECK(read.parametric_functions().size() == 1);
+  CHECK(read.parametric_functions()[0].idx == 0);
+  CHECK(read.parametric_callees().size() == 2);
+  const ParametricCallee& read_generic =
+      read.parametric_callees()[ParametricCalleeIdx(0)];
+  CHECK(read_generic.kind == ParametricCalleeKind::Generic);
+  CHECK(read_generic.function.idx == 0);
+  CHECK(read_generic.args.size() == 1);
+  CHECK(read.types()[read_generic.args.head()].tag == TypeTag::Param);
+  const ParametricCallee& read_dispatch =
+      read.parametric_callees()[ParametricCalleeIdx(1)];
+  CHECK(read_dispatch.kind == ParametricCalleeKind::Dispatch);
+  CHECK(read.types()[read_dispatch.spec].tag == TypeTag::Param);
+  CHECK(read_dispatch.args.size() == 1);
+
+  const Function& fn = read.functions()[FunctionIdx(0)];
+  bool saw_drop = false;
+  bool saw_call = false;
+  for (const InstructionIdx iidx : read.blocks()[fn.blocks.head()].instrs) {
+    const Instruction& instr = read.instrs()[iidx];
+    if (instr.op == Opcode::ParametricDrop) {
+      saw_drop = true;
+    }
+    if (instr.op == Opcode::Call) {
+      const Operand& head = read.operands()[instr.operands.head()];
+      CHECK(head.is<ParametricCalleeIdx>());
+      if (head.is<ParametricCalleeIdx>()) {
+        saw_call =
+            read.parametric_callees()[head.as_parametric_callee()].kind ==
+            ParametricCalleeKind::Generic;
+      }
+    }
+  }
+  CHECK(saw_drop);
+  CHECK(saw_call);
 }
 
 TEST_CASE("A corrupt binary form is refused") {
