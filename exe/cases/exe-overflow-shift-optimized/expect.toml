@@ -1,0 +1,4 @@
+# The same abort with the release passes on.
+args = ["--optimize=on"]
+exit = "non-zero"
+stderr_contains = ["shift out of range"]

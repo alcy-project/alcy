@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "debug/dcheck.h"
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/immutable.h"
@@ -19,6 +20,7 @@
 #include "ir/type.h"
 #include "ir/type_util.h"
 #include "ir/verifier.h"
+#include "overlay/overlay.h"
 
 namespace opt {
 namespace {
@@ -181,10 +183,23 @@ bool fold_binary(Opcode op, TypeTag tag, u64 a, u64 b, u64& out) {
   }
 }
 
-void fold_and_propagate(StorageState& state) {
+void fold_and_propagate(StorageState& state, overlay::Checks& checks) {
   std::vector<Operand> known(state.registers.size(), unknown_operand());
   const usize count = state.instrs.size();
   for (usize i = 0; i < count; ++i) {
+    // A value a check reads keeps the form the checks were computed over:
+    // folding it would substitute a value a checked build never reaches
+    // (ADR-0068).
+    if (checks.raw[i]) {
+      continue;
+    }
+    // Only an overflow check reads the operation's own operands, so only
+    // that one can be folded out from under itself: the folded result
+    // settles whether the abort fires.
+    const overlay::Check check = checks.kinds[i];
+    if (check != overlay::Check::None && check != overlay::Check::Overflow) {
+      continue;
+    }
     ir::Instruction& instr =
         state.instrs[ir::InstructionIdx(static_cast<u32>(i))];
     if (!instr.dst.is_valid()) {
@@ -226,6 +241,15 @@ void fold_and_propagate(StorageState& state) {
     // words unsigned, where the source type is what ranks them.
     if (!fold_binary(instr.op, a_tag, a, b, out)) {
       continue;
+    }
+    if (check == overlay::Check::Overflow) {
+      // The folded operands are the values the check reads, so they settle
+      // it: an abort that fires keeps the instruction where it is, and one
+      // that does not is no longer a reason to leave it standing.
+      if (overlay::overflows(instr.op, a_tag, a, b)) {
+        continue;
+      }
+      checks.kinds[i] = overlay::Check::None;
     }
     const ir::ImmutableIdx imm =
         state.immutables.push_back(integer_immutable(dst_type, dst_tag, out));
@@ -292,7 +316,7 @@ bool prunable(Opcode op) {
   }
 }
 
-void eliminate_dead(StorageState& state) {
+void eliminate_dead(StorageState& state, const overlay::Checks& checks) {
   std::vector<u32> uses(state.registers.size(), 0);
   bool changed = true;
   while (changed) {
@@ -313,7 +337,9 @@ void eliminate_dead(StorageState& state) {
       if (!instr.dst.is_valid() || uses[instr.dst.idx] != 0) {
         continue;
       }
-      if (!prunable(instr.op)) {
+      // Pruning the operation a check reads, or the definition behind it,
+      // would leave the abort without the instruction that raises it.
+      if (checks.keeps(i) || !prunable(instr.op)) {
         continue;
       }
       instr.op = Opcode::Noop;
@@ -330,9 +356,14 @@ void eliminate_dead(StorageState& state) {
 base::Result<ir::VerifiedStorage, ir::VerificationError> optimize(
     ir::VerifiedStorage storage) {
   ir::Storage plain = std::move(storage).unwrap();
+  // What a checked build aborts on, read from the IR the passes receive:
+  // the profile decides whether the checks exist, so the passes cannot
+  // consult it (ADR-0067) and keep every operation that could carry one.
+  overlay::Checks checks = overlay::checked_instructions(plain);
   StorageState state = std::move(plain).take_state();
-  fold_and_propagate(state);
-  eliminate_dead(state);
+  DCHECK_EQ(checks.kinds.size(), state.instrs.size());
+  fold_and_propagate(state, checks);
+  eliminate_dead(state, checks);
   ir::StorageBuilder builder(std::move(state));
   return std::move(builder).build();
 }

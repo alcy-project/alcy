@@ -4,7 +4,6 @@
 #include "lowering/lowering.h"
 
 #include <charconv>
-#include <cstdlib>
 #include <initializer_list>
 #include <optional>
 #include <ranges>
@@ -1903,6 +1902,69 @@ void Lowerer::materialize(const FnEntry& entry,
                     .blocks = range});
 }
 
+// A function's streams are handed to the drop pass after its body is lowered,
+// and the pass rewrites them by copying the instructions it read into a fresh
+// range (ADR-0062). The instructions it read stay in the table with no block
+// referring to them: they carry spans, they define the registers the copies
+// define, and a register's definition still points at one of them. Dropping
+// them leaves one instruction per index a block owns, so a definition, a span,
+// and a pass reading the table all name the same instruction.
+void Lowerer::compact_instrs() {
+  ir::StorageState state = std::move(builder).take_state();
+  const usize count = state.instrs.size();
+  std::vector<bool> owned(count, false);
+  for (usize b = 0; b < state.blocks.size(); ++b) {
+    for (ir::InstructionIdx idx : state.blocks[ir::BlockIdx(b)].instrs) {
+      owned[idx.idx] = true;
+    }
+  }
+  usize kept = 0;
+  for (bool live : owned) {
+    kept += live ? 1 : 0;
+  }
+  if (kept == count) {
+    builder = ir::StorageBuilder(std::move(state));
+    return;
+  }
+  DCHECK_EQ(instr_spans_.size(), count);
+  std::vector<ir::InstructionIdx> moved(count, ir::InstructionIdx::invalid());
+  std::vector<ir::InstructionIdx> defines(state.registers.size(),
+                                          ir::InstructionIdx::invalid());
+  ir::StorageState::Instructions instrs;
+  instrs.reserve(kept);
+  std::vector<diag::Span> spans;
+  spans.reserve(kept);
+  for (usize i = 0; i < count; ++i) {
+    if (!owned[i]) {
+      continue;
+    }
+    const ir::Instruction& instr = state.instrs[ir::InstructionIdx(i)];
+    moved[i] = instrs.emplace_back(instr);
+    spans.push_back(instr_spans_[i]);
+    if (instr.dst.is_valid()) {
+      defines[instr.dst.idx] = moved[i];
+    }
+  }
+  for (usize b = 0; b < state.blocks.size(); ++b) {
+    ir::InstructionIdxRange& range = state.blocks[ir::BlockIdx(b)].instrs;
+    if (range.empty()) {
+      continue;
+    }
+    range = ir::InstructionIdxRange(moved[range.head().idx], range.size());
+  }
+  for (usize r = 0; r < state.registers.size(); ++r) {
+    ir::Register& reg = state.registers[ir::RegisterIdx(r)];
+    if (defines[r].is_valid()) {
+      reg.def_idx = defines[r];
+    } else if (reg.def_idx.is_valid()) {
+      reg.def_idx = moved[reg.def_idx.idx];
+    }
+  }
+  instr_spans_ = std::move(spans);
+  state.instrs = std::move(instrs);
+  builder = ir::StorageBuilder(std::move(state));
+}
+
 base::Result<ir::VerifiedStorage, ir::VerificationError> Lowerer::finish() && {
   return std::move(builder).build();
 }
@@ -2164,7 +2226,9 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<std::vector<ir::SummaryField>> summary_fields;
   std::vector<ir::SummaryEntry> summary =
       collect_summary(lowerer.pkg, ast, lowerer.fns, strings, summary_fields);
-  // Side tables move out before the builder, which finish() consumes.
+  // Side tables move out before the builder, which finish() consumes. The
+  // spans are one per instruction, so they are renumbered with the table.
+  lowerer.compact_instrs();
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   // The borrow pass reads both tables through the lowered package, so

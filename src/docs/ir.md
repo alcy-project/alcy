@@ -50,6 +50,10 @@ parameter/field lists) must reference **consecutive** vector entries.
   exist before the branching instruction references them. Declare the entry
   block empty, build the targets, then fill it with `set_block_instrs` /
   `set_block_params`.
+- Every instruction a published storage holds belongs to one block: lowering
+  drops the ones no block range covers and renumbers what stays, so an
+  `InstructionIdx` names an instruction the program runs. Side tables indexed
+  that way stay parallel to the instruction table.
 
 ## Verification
 

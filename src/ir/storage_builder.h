@@ -431,6 +431,10 @@ class StorageBuilder {
     return state_.types.emplace_back(state_.types[idx]);
   }
 
+  // Hands the tables to a pass that renumbers them wholesale; the
+  // builder is empty afterwards and has to be rebuilt from the result.
+  StorageState take_state() && { return std::move(state_); }
+
   // Verifies the built storage and returns it as proof-carrying
   // VerifiedStorage. Invalid builder output becomes a structured
   // error instead of corrupt IR downstream.

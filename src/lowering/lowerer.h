@@ -962,6 +962,10 @@ class Lowerer {
   // a time.
   DropWorkingSet drop_working_set_;
 
+  // Drops the instructions no block owns and renumbers every index the
+  // tables keep, so an instruction in the table is one a block runs.
+  void compact_instrs();
+
   bool runs_destructor(ir::TypeIdx type) const;
   bool is_destructor(ast::ItemIdx item) const;
   // Which items are a destructor, gathered once from the checked package.

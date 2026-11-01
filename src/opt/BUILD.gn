@@ -9,6 +9,7 @@ source_set("opt") {
   deps = [
     "//src:base_modules",
     "//src/ir",
+    "//src/overlay",
   ]
   configs += [ "//src:alcy_config" ]
 }

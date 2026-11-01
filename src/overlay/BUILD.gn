@@ -8,6 +8,7 @@ source_set("overlay") {
   ]
   deps = [
     "//src:base_modules",
+    "//src/comp",
     "//src/ir",
   ]
   configs += [ "//src:alcy_config" ]
