@@ -104,6 +104,7 @@
   F(AnalyzerArrayLiteralWithoutCount, Error, Analyzer, "Array literal needs elements or a repeat count") \
   F(AnalyzerArrayRepeatArity, Error, Analyzer, "Array expects {} elements, found repeat of {}") \
   F(AnalyzerArrayRepeatTooLarge, Error, Analyzer, "Array repeat count {} exceeds the limit of {}") \
+  F(AnalyzerArrayRepeatNotCopy, Error, Analyzer, "An array repeat copies its element once per slot, so the element must be Copy") \
   F(AnalyzerArrayRunNeedsBorrow, Error, Analyzer, "A run of a fixed array must be borrowed (`&a[..]`)") \
   F(AnalyzerAssignThroughShared, Error, Analyzer, "Cannot assign through a shared reference") \
   F(AnalyzerAssignToImmutable, Error, Analyzer, "Cannot assign to an immutable binding") \

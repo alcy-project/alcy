@@ -3721,6 +3721,15 @@ ir::TypeIdx Checker::check_array(u32 module,
     }
     const ir::TypeIdx element =
         check_expr(module, array.repeat, element_expected);
+    if (!is_copy(element)) {
+      // The repeat stores the one value it evaluated in every slot, so
+      // an element that is not Copy would reach the array as many
+      // owners of one value.
+      const u32 index = bag.emit<i18n::Key::AnalyzerArrayRepeatNotCopy>(
+          DiagCode::RepeatElementNotCopy, node.span);
+      (void)index;
+      return error_type();
+    }
     if (has_expected_count && expected_count != count) {
       const u32 index = bag.emit<i18n::Key::AnalyzerArrayRepeatArity>(
           DiagCode::ArityError, node.span, expected_count, count);

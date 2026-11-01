@@ -39,7 +39,10 @@
 
 - Array types `[T; N]` are fixed-size and homogeneous; `N` is a
   decimal length. Literals are lists (`[a, b]`) or repeats (`[e; N]`,
-  evaluated once); empty literals are rejected.
+  evaluated once); empty literals are rejected. A repeat fills every
+  slot with the one value it evaluated, so the element must be `Copy`:
+  a move-only element would reach the array as several owners of one
+  value, and each slot would end it.
 - Indexing reads and writes through places with panic-on-out-of-bounds
   semantics. Arrays are `Copy` if and only if their element is. The
   length is a decimal literal, a value parameter in scope (`[T; N]`

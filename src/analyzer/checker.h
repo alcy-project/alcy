@@ -431,6 +431,11 @@ class Checker {
   // Whether a value of the type may be moved (ADR-0085): the walk
   // normalizes storage copies through the checker's origin links.
   bool is_movable(ir::TypeIdx type) const;
+  // Whether a value of the type may be copied. Copy is structural
+  // (`docs/spec/values.md`), and a declared destructor or an anchor
+  // makes the type move-only, so the walk answers with the destructor
+  // walk the drop phase would run.
+  bool is_copy(ir::TypeIdx type);
   // ADR-0085: a type argument is Movable. A nominal checks its argument
   // list where it instantiates; a function's or a method's arguments
   // bind on paths of their own, so each instantiation asks this before
