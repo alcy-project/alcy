@@ -4579,14 +4579,20 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  if (base::Result<void, ast::VerificationError> verified =
-          ast::verify_file(ast);
-      verified.is_err()) {
-    const u32 index = bag.emit<i18n::Key::AnalyzerInvalidSyntaxTree>(
-        DiagCode::InvalidModuleTree,
-        ast::describe_verification_error(std::move(verified).unwrap_err()));
-    (void)index;
-    return base::make_err(diag::Reported{});
+  // A tree that arrived through the parser has been walked once already, and
+  // the passes here read it without appending to it, so the walk would find
+  // exactly what it found the first time.
+  if (!ast.verified()) {
+    if (base::Result<void, ast::VerificationError> verified =
+            ast::verify_file(ast);
+        verified.is_err()) {
+      const u32 index = bag.emit<i18n::Key::AnalyzerInvalidSyntaxTree>(
+          DiagCode::InvalidModuleTree,
+          ast::describe_verification_error(std::move(verified).unwrap_err()));
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
+    ast.mark_verified();
   }
 
   // A member the program already staged cannot be added again, so a

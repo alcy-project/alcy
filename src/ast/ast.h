@@ -1187,6 +1187,14 @@ struct AstArena {
            items.exhausted();
   }
 
+  // Whether a whole-arena verification passed on what this holds. Parsing is
+  // the only writer, so the answer stays true once it is set: the passes that
+  // follow read the tree and never append to it. A consumer that would repeat
+  // the walk reads this instead of paying for it twice.
+  void mark_verified() { verified_ = true; }
+
+  [[nodiscard]] bool verified() const { return verified_; }
+
   // How many parsers may append at once, set once before parsing begins.
   // One is exact; more leaves each append room for the appends that may
   // race with it, since the check and the append are not one step.
@@ -1225,6 +1233,8 @@ struct AstArena {
   NodeVec<ExprNode, ExprIdx> exprs{node_share(DEFAULT_NODE_CAPACITY, 571)};
   NodeVec<StmtNode, StmtIdx> stmts{node_share(DEFAULT_NODE_CAPACITY, 42)};
   NodeVec<ItemNode, ItemIdx> items{node_share(DEFAULT_NODE_CAPACITY, 67)};
+
+  bool verified_ = false;
 };
 
 }  // namespace ast

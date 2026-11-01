@@ -400,6 +400,7 @@ base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
     (void)index;
     return base::make_err(diag::Reported{});
   }
+  ast.mark_verified();
   return base::make_ok();
 }
 
