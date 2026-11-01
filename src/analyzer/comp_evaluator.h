@@ -275,6 +275,15 @@ class CompEvaluator {
                         ast::ExprIdx expr,
                         CompScope& scope,
                         CompVal& out);
+  // Applies an integer operator to two operands already masked to
+  // `tag`. The binary expression and the compound assignment ask the
+  // same question of the same table.
+  bool comp_int_binary(diag::Span span,
+                       ast::BinaryOp op,
+                       ir::TypeTag tag,
+                       u64 left,
+                       u64 right,
+                       CompValue& value);
 
   CompInputs inputs_;
   const ast::AstArena& ast;

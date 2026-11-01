@@ -4589,7 +4589,23 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       if (node.payload.get<ast::StmtReassign>().compound) {
         const ir::TypeTag tag = tag_of(place);
         const ast::BinaryOp op = node.payload.get<ast::StmtReassign>().op;
-        if (!is_integer_tag(tag) && !is_float_tag(tag)) {
+        if (is_float_tag(tag)) {
+          // A float answers the four rational operators and nothing
+          // else, the same admission the binary form makes.
+          if (op == ast::BinaryOp::Pow) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerPowerTypeUnsupported>(
+                DiagCode::InvalidOperation, node.span);
+            (void)index;
+            return builder.primitive(ir::TypeTag::Void);
+          }
+          if (op != ast::BinaryOp::Add && op != ast::BinaryOp::Sub &&
+              op != ast::BinaryOp::Mul && op != ast::BinaryOp::Div) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerInvalidBinaryOperand>(
+                DiagCode::InvalidOperation, node.span, pretty_tag(tag));
+            (void)index;
+            return builder.primitive(ir::TypeTag::Void);
+          }
+        } else if (!is_integer_tag(tag)) {
           // A nominal place reaches the operator spec the way the
           // binary form does; the call is recorded on the place for
           // lowering to find.

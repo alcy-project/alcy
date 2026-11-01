@@ -57,6 +57,12 @@ u32 integer_bits(ir::TypeTag tag) {
   }
 }
 
+// The tags whose operator answer is one backend instruction: an integer
+// reaches every operator, a float the four rational ones.
+bool is_scalar_operator_tag(ir::TypeTag tag) {
+  return ir::is_integer_type(tag) || ir::is_float_type(tag);
+}
+
 }  // namespace
 
 namespace lowering {
@@ -3955,6 +3961,52 @@ Val Lowerer::emit_element_eq(Val lhs, Val rhs, diag::Span span) {
   return Val{result, boolean, false, false};
 }
 
+Val Lowerer::lower_scalar_binary(diag::Span span,
+                                 ast::BinaryOp op,
+                                 Val lhs,
+                                 Val rhs,
+                                 ir::TypeTag tag) {
+  if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
+    ir::Opcode float_op = ir::Opcode::FDiv;
+    switch (op) {
+      case ast::BinaryOp::Add: float_op = ir::Opcode::FAdd; break;
+      case ast::BinaryOp::Sub: float_op = ir::Opcode::FSub; break;
+      case ast::BinaryOp::Mul: float_op = ir::Opcode::FMul; break;
+      case ast::BinaryOp::Div: float_op = ir::Opcode::FDiv; break;
+      default:
+        // Checking admits only these four on a float; anything else
+        // reaching here would silently become a division.
+        unsupported(span, "float operator");
+        return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx dst =
+        emit(float_op, lhs.type, {use_value(lhs), use_value(rhs)});
+    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  // Checking admits `**` on integers only; a float reaching here would
+  // have taken the float block's refusal above.
+  if (op == ast::BinaryOp::Pow) {
+    return lower_int_power(span, lhs, rhs, tag);
+  }
+  // A shift count rides modulo the type's width, so an overshift has
+  // one result instead of a backend-defined one.
+  if (op == ast::BinaryOp::Shl || op == ast::BinaryOp::Shr) {
+    const ir::RegisterIdx amount =
+        emit(ir::Opcode::And, lhs.type,
+             {use_value(rhs), int_operand(integer_bits(tag) - 1, lhs.type)});
+    const ir::RegisterIdx dst =
+        emit(int_binop(op, tag), lhs.type,
+             {use_value(lhs), to_operand(amount, lhs.type)});
+    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  if (op == ast::BinaryOp::Div || op == ast::BinaryOp::Mod) {
+    return lower_int_division(span, op, lhs, rhs, tag);
+  }
+  const ir::RegisterIdx dst =
+      emit(int_binop(op, tag), lhs.type, {use_value(lhs), use_value(rhs)});
+  return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+}
+
 Val Lowerer::lower_binary(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
@@ -4072,46 +4124,7 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
         emit(op, boolean, {use_value(lhs), use_value(rhs)});
     return Val{to_operand(dst, boolean), boolean, false, false};
   }
-  if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-    ir::Opcode op = ir::Opcode::FDiv;
-    switch (bin.op) {
-      case ast::BinaryOp::Add: op = ir::Opcode::FAdd; break;
-      case ast::BinaryOp::Sub: op = ir::Opcode::FSub; break;
-      case ast::BinaryOp::Mul: op = ir::Opcode::FMul; break;
-      case ast::BinaryOp::Div: op = ir::Opcode::FDiv; break;
-      default:
-        // Checking admits only these four on a float; anything else
-        // reaching here would silently become a division.
-        unsupported(node.span, "float operator");
-        return Val{size_one, error_type(), false, false};
-    }
-    const ir::RegisterIdx dst =
-        emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
-    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
-  }
-  // Checking admits `**` on integers only; a float reaching here would
-  // have taken the float block's refusal above.
-  if (bin.op == ast::BinaryOp::Pow) {
-    return lower_int_power(node.span, lhs, rhs, tag);
-  }
-  // A shift count rides modulo the type's width, so an overshift has
-  // one result instead of a backend-defined one.
-  if (bin.op == ast::BinaryOp::Shl || bin.op == ast::BinaryOp::Shr) {
-    const ir::RegisterIdx amount =
-        emit(ir::Opcode::And, lhs.type,
-             {use_value(rhs), int_operand(integer_bits(tag) - 1, lhs.type)});
-    const ir::RegisterIdx dst =
-        emit(int_binop(bin.op, tag), lhs.type,
-             {use_value(lhs), to_operand(amount, lhs.type)});
-    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
-  }
-  if (bin.op == ast::BinaryOp::Div || bin.op == ast::BinaryOp::Mod) {
-    return lower_int_division(node.span, bin.op, lhs, rhs, tag);
-  }
-  const ir::Opcode op = int_binop(bin.op, tag);
-  const ir::RegisterIdx dst =
-      emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
-  return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  return lower_scalar_binary(node.span, bin.op, lhs, rhs, tag);
 }
 
 // Stores an arm value into a result slot (callers skip Void).
@@ -5590,18 +5603,13 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           return;
         }
         const ir::TypeTag tag = tag_of(loaded.type);
-        ir::Opcode op = ir::Opcode::Noop;
-        if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-          switch (reassign.op) {
-            case ast::BinaryOp::Add: op = ir::Opcode::FAdd; break;
-            case ast::BinaryOp::Sub: op = ir::Opcode::FSub; break;
-            case ast::BinaryOp::Mul: op = ir::Opcode::FMul; break;
-            default: op = ir::Opcode::FDiv; break;
+        if (is_scalar_operator_tag(tag)) {
+          value =
+              lower_scalar_binary(node.span, reassign.op, loaded, value, tag);
+          if (failed) {
+            return;
           }
         } else {
-          op = int_binop(reassign.op, tag);
-        }
-        if (op == ir::Opcode::Noop) {
           // A nominal place has no backend operator: the checker
           // recorded the operator method on the place.
           const analyzer::CheckedModule::CallTarget* target =
@@ -5615,11 +5623,6 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           if (failed) {
             return;
           }
-        } else {
-          const ir::RegisterIdx result =
-              emit(op, loaded.type, {use_value(loaded), use_value(value)});
-          value =
-              Val{to_operand(result, loaded.type), loaded.type, false, false};
         }
       }
       ir::OperandIdx stored = use_value(value);

@@ -760,9 +760,6 @@ bool CompEvaluator::comp_eval_stmt(u32 mod,
     }
     case ast::StmtKind::Reassign: {
       const ast::StmtReassign& reassign = node.payload.get<ast::StmtReassign>();
-      if (reassign.compound) {
-        return fail(node.span, "compound assignment in comp evaluation");
-      }
       CompVal value;
       if (!comp_eval_expr(mod, reassign.value, scope, value)) {
         return false;
@@ -773,6 +770,25 @@ bool CompEvaluator::comp_eval_stmt(u32 mod,
       }
       if (slot.value == nullptr) {
         return fail(node.span, "place without binding");
+      }
+      if (reassign.compound) {
+        // `x op= y` answers the operation against the value the place
+        // holds, in the operand order the binary form reads.
+        const ir::TypeTag tag = tag_of(slot.type);
+        if (slot.value->tag != CompValue::Tag::Int ||
+            value.value.tag != CompValue::Tag::Int) {
+          return fail(node.span, "compound assignment without value");
+        }
+        const u64 mask = comp::mask(tag);
+        CompValue answer;
+        if (!comp_int_binary(node.span, reassign.op, tag,
+                             slot.value->int_value & mask,
+                             value.value.int_value & mask, answer)) {
+          return false;
+        }
+        *slot.value = std::move(answer);
+        out.kind = CompFlow::Kind::Value;
+        return true;
       }
       *slot.value = std::move(value.value);
       out.kind = CompFlow::Kind::Value;
@@ -1786,25 +1802,35 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
     out.value.bool_value = ordered;
     return true;
   }
-  out.value.tag = CompValue::Tag::Int;
-  switch (bin.op) {
+  return comp_int_binary(node.span, bin.op, tag, left, right, out.value);
+}
+
+bool CompEvaluator::comp_int_binary(diag::Span span,
+                                    ast::BinaryOp op,
+                                    ir::TypeTag tag,
+                                    u64 left,
+                                    u64 right,
+                                    CompValue& value) {
+  const u64 mask = comp::mask(tag);
+  value.tag = CompValue::Tag::Int;
+  switch (op) {
     case ast::BinaryOp::Add:
       if (comp::add_overflows(left, right, tag)) {
-        return fail_overflow(node.span, "integer overflow in comp evaluation");
+        return fail_overflow(span, "integer overflow in comp evaluation");
       }
-      out.value.int_value = (left + right) & mask;
+      value.int_value = (left + right) & mask;
       return true;
     case ast::BinaryOp::Sub:
       if (comp::sub_overflows(left, right, tag)) {
-        return fail_overflow(node.span, "integer overflow in comp evaluation");
+        return fail_overflow(span, "integer overflow in comp evaluation");
       }
-      out.value.int_value = (left - right) & mask;
+      value.int_value = (left - right) & mask;
       return true;
     case ast::BinaryOp::Mul:
       if (comp::mul_overflows(left, right, tag)) {
-        return fail_overflow(node.span, "integer overflow in comp evaluation");
+        return fail_overflow(span, "integer overflow in comp evaluation");
       }
-      out.value.int_value = (left * right) & mask;
+      value.int_value = (left * right) & mask;
       return true;
     case ast::BinaryOp::Pow: {
       // Repeated squaring over the runtime expansion's steps: the
@@ -1813,7 +1839,7 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
       // exponent has no integer answer, and an overflow refuses the
       // constant rather than reading as a wrapped value.
       if (comp::is_signed(tag) && comp::sign_extend(right, tag) < 0) {
-        return fail(node.span, "negative exponent in comp evaluation");
+        return fail(span, "negative exponent in comp evaluation");
       }
       u64 result = 1;
       u64 base = left;
@@ -1821,27 +1847,25 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
       while (remaining != 0) {
         if ((remaining & 1) != 0) {
           if (comp::mul_overflows(result, base, tag)) {
-            return fail_overflow(node.span,
-                                 "integer overflow in comp evaluation");
+            return fail_overflow(span, "integer overflow in comp evaluation");
           }
           result = (result * base) & mask;
         }
         remaining >>= 1;
         if (remaining != 0) {
           if (comp::mul_overflows(base, base, tag)) {
-            return fail_overflow(node.span,
-                                 "integer overflow in comp evaluation");
+            return fail_overflow(span, "integer overflow in comp evaluation");
           }
           base = (base * base) & mask;
         }
       }
-      out.value.int_value = result & mask;
+      value.int_value = result & mask;
       return true;
     }
     case ast::BinaryOp::Div:
     case ast::BinaryOp::Mod: {
       if (right == 0) {
-        return fail_div_zero(node.span, "division by zero in comp evaluation");
+        return fail_div_zero(span, "division by zero in comp evaluation");
       }
       if (comp::is_signed(tag)) {
         const i64 sl = comp::sign_extend(left, tag);
@@ -1849,28 +1873,27 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
         static constexpr i64 MIN = static_cast<i64>(static_cast<u64>(1) << 63);
         if (sl == MIN && sr == -1 && comp::int_bytes(tag) == 8) {
           // `MIN / -1` wraps to `MIN`; `MIN % -1` is zero.
-          out.value.int_value =
-              bin.op == ast::BinaryOp::Div ? static_cast<u64>(MIN) : 0;
+          value.int_value =
+              op == ast::BinaryOp::Div ? static_cast<u64>(MIN) : 0;
           return true;
         }
         const i64 quotient = sl / sr;
-        const i64 result = bin.op == ast::BinaryOp::Div ? quotient : (sl % sr);
-        out.value.int_value = static_cast<u64>(result) & mask;
+        const i64 result = op == ast::BinaryOp::Div ? quotient : (sl % sr);
+        value.int_value = static_cast<u64>(result) & mask;
         return true;
       }
-      out.value.int_value =
-          (bin.op == ast::BinaryOp::Div ? (left / right) : (left % right)) &
-          mask;
+      value.int_value =
+          (op == ast::BinaryOp::Div ? (left / right) : (left % right)) & mask;
       return true;
     }
     case ast::BinaryOp::BitAnd:
-      out.value.int_value = (left & right) & mask;
+      value.int_value = (left & right) & mask;
       return true;
     case ast::BinaryOp::BitOr:
-      out.value.int_value = (left | right) & mask;
+      value.int_value = (left | right) & mask;
       return true;
     case ast::BinaryOp::BitXor:
-      out.value.int_value = (left ^ right) & mask;
+      value.int_value = (left ^ right) & mask;
       return true;
     case ast::BinaryOp::Shl:
     case ast::BinaryOp::Shr: {
@@ -1878,21 +1901,21 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
       // runtime and both backends obey.
       const u64 amount =
           right & ((static_cast<u64>(comp::int_bytes(tag)) * 8) - 1);
-      if (bin.op == ast::BinaryOp::Shl) {
-        out.value.int_value = (left << amount) & mask;
+      if (op == ast::BinaryOp::Shl) {
+        value.int_value = (left << amount) & mask;
         return true;
       }
       if (comp::is_signed(tag)) {
-        out.value.int_value =
+        value.int_value =
             static_cast<u64>(comp::sign_extend(left, tag) >> amount) & mask;
         return true;
       }
-      out.value.int_value = (left >> amount) & mask;
+      value.int_value = (left >> amount) & mask;
       return true;
     }
     default: break;
   }
-  return fail(node.span, "operator is not comp-evaluable");
+  return fail(span, "operator is not comp-evaluable");
 }
 
 // Formats into a caller buffer by compile-time expansion: literal

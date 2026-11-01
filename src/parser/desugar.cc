@@ -264,27 +264,12 @@ class Desugarer {
         break;
       }
       case ast::StmtKind::Reassign: {
+        // `x op= y` reads the place once and stores the operation's
+        // result, so its place is visited once.
         const ast::StmtReassign& reassign =
             node.payload.get<ast::StmtReassign>();
-        if (reassign.compound) {
-          ast::ExprNode binary;
-          binary.kind = ast::ExprKind::Binary;
-          binary.span = ast.stmts[stmt].span;
-          binary.payload.set(ast::ExprBinary{
-              .op = reassign.op,
-              .lhs = reassign.place,
-              .rhs = reassign.value,
-          });
-          ast::StmtNode& target = ast.stmts[stmt];
-          target.payload.set(ast::StmtReassign{
-              .place = target.payload.get<ast::StmtReassign>().place,
-              .compound = false,
-              .op = target.payload.get<ast::StmtReassign>().op,
-              .value = ast.exprs.push_back(binary),
-          });
-        }
         visit_expr(reassign.place);
-        visit_expr(ast.stmts[stmt].payload.get<ast::StmtReassign>().value);
+        visit_expr(reassign.value);
         break;
       }
       case ast::StmtKind::Expr: {

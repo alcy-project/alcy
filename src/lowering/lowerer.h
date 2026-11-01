@@ -702,6 +702,16 @@ class Lowerer {
   // `*` policy (ADR-0068). A negative exponent has no integer answer
   // and panics the way a zero divisor does.
   Val lower_int_power(diag::Span span, Val lhs, Val rhs, ir::TypeTag tag);
+  // The backend form of `lhs op rhs` at `tag`: the four rational
+  // operators on a float, and on an integer the masked shift count, the
+  // divided-by-zero guard, and the power expansion. The binary
+  // expression and the compound assignment differ only in where their
+  // two operands come from.
+  Val lower_scalar_binary(diag::Span span,
+                          ast::BinaryOp op,
+                          Val lhs,
+                          Val rhs,
+                          ir::TypeTag tag);
   Val lower_binary(ast::ExprIdx expr);
   // The element-wise equality of two aggregates the checker admitted to
   // == or !=, walking tuples and arrays and comparing leaves directly.
