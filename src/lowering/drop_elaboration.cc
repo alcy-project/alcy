@@ -309,6 +309,10 @@ class DropElaborator {
   std::vector<diag::Span>& instr_spans_;
   std::vector<ir::InstrSeq>& streams_;
   std::vector<ir::BlockIdx>& fn_blocks_;
+  // Per-block tallies and write cursors for the tables run() builds, laid
+  // out back to back. The buffer keeps its capacity, so building a table
+  // costs no allocation.
+  std::vector<u32> tally_;
   u32 base_ = 0;
   const std::unordered_map<u32, u32>& type_origins_;
   ir::OperandIdx size_one = ir::OperandIdx(0);
@@ -424,46 +428,79 @@ void DropElaborator::run() {
     Kind kind = Kind::Event;
     u32 index = 0;
   };
+  // A block's rows in one of the per-block tables below sit in a shared
+  // arena behind this window. A row is a handful of bytes and most blocks
+  // hold a few, so a vector per block would spend an allocation on every
+  // block to hold them.
+  struct Window {
+    u32 head = 0;
+    u32 len = 0;
+  };
   const u32 block_count = static_cast<u32>(fn_blocks_.size());
-  std::vector<std::vector<Point>> block_points(block_count);
-  // Each row is filled once from empty, so its growth would reallocate a
-  // handful of times per block. Counting first sizes every row exactly.
+  // Every table below is sized by a counting pass and then filled at its
+  // final position, which takes a tally and a write cursor per block. They
+  // share one buffer, three columns per table, whose capacity survives
+  // across functions.
+  tally_.assign(static_cast<usize>(8) * block_count, 0);
+  const auto column = [&](u32 index) {
+    return std::span<u32>(tally_).subspan(
+        static_cast<usize>(index) * block_count, block_count);
+  };
+  std::vector<Point> points;
+  std::vector<Window> block_points(block_count);
   {
-    std::vector<u32> points_per_block(block_count, 0);
+    const std::span<u32> events = column(0);
+    const std::span<u32> sites = column(1);
+    const std::span<u32> cursor = column(2);
     for (const OwnershipEvent& event : ownership_) {
-      ++points_per_block[at(event.block)];
+      ++events[at(event.block)];
     }
     for (const EndSite& site : end_sites_) {
-      ++points_per_block[at(site.block)];
+      ++sites[at(site.block)];
+    }
+    u32 head = 0;
+    for (u32 b = 0; b < block_count; ++b) {
+      const u32 len = events[b] + sites[b];
+      block_points[b] = Window{head, len};
+      head += len;
+    }
+    points.resize(head);
+    // A block's events come before its sites, in the order the events and
+    // the sites were recorded.
+    for (u32 b = 0; b < block_count; ++b) {
+      cursor[b] = block_points[b].head;
+    }
+    for (u32 i = 0; i < ownership_.size(); ++i) {
+      const OwnershipEvent& event = ownership_[i];
+      const u32 b = at(event.block);
+      points[cursor[b]++] =
+          Point{event.offset, event.seq, Point::Kind::Event, i};
     }
     for (u32 b = 0; b < block_count; ++b) {
-      block_points[b].reserve(points_per_block[b]);
+      cursor[b] = block_points[b].head + events[b];
+    }
+    for (u32 i = 0; i < end_sites_.size(); ++i) {
+      const EndSite& site = end_sites_[i];
+      const u32 b = at(site.block);
+      points[cursor[b]++] = Point{site.offset, site.seq, Point::Kind::Site, i};
     }
   }
-  for (u32 i = 0; i < ownership_.size(); ++i) {
-    const OwnershipEvent& event = ownership_[i];
-    block_points[at(event.block)].push_back(
-        Point{event.offset, event.seq, Point::Kind::Event, i});
-  }
-  for (u32 i = 0; i < end_sites_.size(); ++i) {
-    const EndSite& site = end_sites_[i];
-    block_points[at(site.block)].push_back(
-        Point{site.offset, site.seq, Point::Kind::Site, i});
-  }
-  for (std::vector<Point>& list : block_points) {
-    std::sort(list.begin(), list.end(), [](const Point& a, const Point& b) {
-      if (a.offset != b.offset) {
-        return a.offset < b.offset;
-      }
-      return a.seq < b.seq;
-    });
+  for (const Window window : block_points) {
+    std::sort(points.begin() + window.head,
+              points.begin() + window.head + window.len,
+              [](const Point& a, const Point& b) {
+                if (a.offset != b.offset) {
+                  return a.offset < b.offset;
+                }
+                return a.seq < b.seq;
+              });
   }
 
-  // Predecessors, from each block's terminator. Counted first for the same
-  // reason the points above are: every row is filled once from empty.
-  std::vector<std::vector<u32>> preds(block_count);
+  // Predecessors, from each block's terminator, in the same arena shape.
+  std::vector<u32> pred_blocks;
+  std::vector<Window> preds(block_count);
   {
-    std::vector<u32> preds_per_block(block_count, 0);
+    const std::span<u32> preds_per_block = column(3);
     for (u32 b = 0; b < block_count; ++b) {
       const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
       if (range.size() == 0) {
@@ -480,22 +517,31 @@ void DropElaborator::run() {
         }
       }
     }
+    u32 head = 0;
     for (u32 b = 0; b < block_count; ++b) {
-      preds[b].reserve(preds_per_block[b]);
+      preds[b] = Window{head, preds_per_block[b]};
+      head += preds_per_block[b];
     }
+    pred_blocks.resize(head);
   }
-  for (u32 b = 0; b < block_count; ++b) {
-    const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
-    if (range.size() == 0) {
-      continue;
+  {
+    const std::span<u32> cursor = column(4);
+    for (u32 b = 0; b < block_count; ++b) {
+      cursor[b] = preds[b].head;
     }
-    const ir::InstructionIdx last = range[range.size() - 1];
-    for (ir::OperandIdx o : builder.state().instrs[last.idx].operands) {
-      const ir::Operand& operand = builder.state().operands[o.idx];
-      if (operand.is<ir::BlockIdx>()) {
-        const u32 target = at(operand.as_block());
-        if (target < block_count) {
-          preds[target].push_back(b);
+    for (u32 b = 0; b < block_count; ++b) {
+      const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
+      if (range.size() == 0) {
+        continue;
+      }
+      const ir::InstructionIdx last = range[range.size() - 1];
+      for (ir::OperandIdx o : builder.state().instrs[last.idx].operands) {
+        const ir::Operand& operand = builder.state().operands[o.idx];
+        if (operand.is<ir::BlockIdx>()) {
+          const u32 target = at(operand.as_block());
+          if (target < block_count) {
+            pred_blocks[cursor[target]++] = b;
+          }
         }
       }
     }
@@ -557,10 +603,13 @@ void DropElaborator::run() {
       ++rounds;
       for (u32 b = 0; b < block_count; ++b) {
         State state = State::Moved;
-        if (!preds[b].empty()) {
-          state = out[row(pi, preds[b][0])];
-          for (usize k = 1; k < preds[b].size(); ++k) {
-            state = join_state(state, out[row(pi, preds[b][k])]);
+        const Window pred_window = preds[b];
+        if (pred_window.len != 0) {
+          const u32 first = pred_blocks[pred_window.head];
+          state = out[row(pi, first)];
+          for (u32 k = 1; k < pred_window.len; ++k) {
+            state = join_state(state,
+                               out[row(pi, pred_blocks[pred_window.head + k])]);
           }
         }
         if (state != in[row(pi, b)]) {
@@ -568,8 +617,9 @@ void DropElaborator::run() {
           changed = true;
         }
         State after = state;
-        for (const Point& point : block_points[b]) {
-          after = step_point(after, point, place);
+        const Window point_window = block_points[b];
+        for (u32 k = 0; k < point_window.len; ++k) {
+          after = step_point(after, points[point_window.head + k], place);
         }
         if (after != out[row(pi, b)]) {
           out[row(pi, b)] = after;
@@ -594,7 +644,9 @@ void DropElaborator::run() {
       return State::Owned;
     }
     State state = in[row(pi, block)];
-    for (const Point& point : block_points[block]) {
+    const Window point_window = block_points[block];
+    for (u32 k = 0; k < point_window.len; ++k) {
+      const Point& point = points[point_window.head + k];
       if (point.offset > offset ||
           (point.offset == offset && point.seq >= seq)) {
         break;
@@ -934,61 +986,79 @@ void DropElaborator::run() {
     Kind kind = Kind::Site;
     u32 index = 0;
   };
-  std::vector<std::vector<Action>> actions(block_count);
-  // Same as the point rows: each is filled once, so count the actions each
-  // block receives and size it exactly. A store contributes two.
+  // Same arena shape as the point rows above. A store contributes two
+  // actions, the end it places over the old value and the clear after it.
+  std::vector<Action> action_flat;
+  std::vector<Window> actions(block_count);
   {
-    std::vector<u32> actions_per_block(block_count, 0);
+    const std::span<u32> events = column(5);
+    const std::span<u32> sites = column(6);
+    const std::span<u32> cursor = column(7);
     for (const OwnershipEvent& event : ownership_) {
-      actions_per_block[at(event.block)] +=
+      events[at(event.block)] +=
           event.kind == OwnershipEvent::Kind::Store ? 2 : 1;
     }
     for (const EndSite& site : end_sites_) {
-      ++actions_per_block[at(site.block)];
+      ++sites[at(site.block)];
+    }
+    u32 head = 0;
+    for (u32 b = 0; b < block_count; ++b) {
+      const u32 len = events[b] + sites[b];
+      actions[b] = Window{head, len};
+      head += len;
+    }
+    action_flat.resize(head);
+    // A block's sites come before its events.
+    for (u32 b = 0; b < block_count; ++b) {
+      cursor[b] = actions[b].head;
+    }
+    for (u32 si = 0; si < end_sites_.size(); ++si) {
+      const EndSite& site = end_sites_[si];
+      const u32 b = at(site.block);
+      action_flat[cursor[b]++] =
+          Action{site.offset, site.seq, Action::Kind::Site, si};
     }
     for (u32 b = 0; b < block_count; ++b) {
-      actions[b].reserve(actions_per_block[b]);
+      cursor[b] = actions[b].head + sites[b];
+    }
+    for (u32 ei = 0; ei < ownership_.size(); ++ei) {
+      const OwnershipEvent& event = ownership_[ei];
+      const u32 b = at(event.block);
+      u32& at_cursor = cursor[b];
+      switch (event.kind) {
+        case OwnershipEvent::Kind::Bind:
+          action_flat[at_cursor++] =
+              Action{event.offset, event.seq, Action::Kind::Bind, ei};
+          break;
+        case OwnershipEvent::Kind::Move:
+          action_flat[at_cursor++] =
+              Action{event.offset, event.seq, Action::Kind::Move, ei};
+          break;
+        case OwnershipEvent::Kind::Store:
+          action_flat[at_cursor++] =
+              Action{event.offset - 1, event.seq, Action::Kind::StoreEnd, ei};
+          action_flat[at_cursor++] =
+              Action{event.offset, event.seq, Action::Kind::StoreClear, ei};
+          break;
+        case OwnershipEvent::Kind::DropInPlace:
+          action_flat[at_cursor++] =
+              Action{event.offset, event.seq, Action::Kind::DropHere, ei};
+          break;
+      }
     }
   }
-  for (u32 si = 0; si < end_sites_.size(); ++si) {
-    const EndSite& site = end_sites_[si];
-    actions[at(site.block)].push_back(
-        Action{site.offset, site.seq, Action::Kind::Site, si});
-  }
-  for (u32 ei = 0; ei < ownership_.size(); ++ei) {
-    const OwnershipEvent& event = ownership_[ei];
-    const u32 b = at(event.block);
-    switch (event.kind) {
-      case OwnershipEvent::Kind::Bind:
-        actions[b].push_back(
-            Action{event.offset, event.seq, Action::Kind::Bind, ei});
-        break;
-      case OwnershipEvent::Kind::Move:
-        actions[b].push_back(
-            Action{event.offset, event.seq, Action::Kind::Move, ei});
-        break;
-      case OwnershipEvent::Kind::Store:
-        actions[b].push_back(
-            Action{event.offset - 1, event.seq, Action::Kind::StoreEnd, ei});
-        actions[b].push_back(
-            Action{event.offset, event.seq, Action::Kind::StoreClear, ei});
-        break;
-      case OwnershipEvent::Kind::DropInPlace:
-        actions[b].push_back(
-            Action{event.offset, event.seq, Action::Kind::DropHere, ei});
-        break;
-    }
-  }
-  for (std::vector<Action>& list : actions) {
-    std::sort(list.begin(), list.end(), [](const Action& a, const Action& b) {
-      if (a.offset != b.offset) {
-        return a.offset < b.offset;
-      }
-      if (a.seq != b.seq) {
-        return a.seq < b.seq;
-      }
-      return static_cast<u8>(a.kind) < static_cast<u8>(b.kind);
-    });
+  for (const Window window : actions) {
+    std::sort(action_flat.begin() + window.head,
+              action_flat.begin() + window.head + window.len,
+              [](const Action& a, const Action& b) {
+                if (a.offset != b.offset) {
+                  return a.offset < b.offset;
+                }
+                if (a.seq != b.seq) {
+                  return a.seq < b.seq;
+                }
+                return static_cast<u8>(a.kind) < static_cast<u8>(b.kind);
+              });
   }
 
   auto create_flag = [&](u32 pi, diag::Span span) {
@@ -1103,11 +1173,12 @@ void DropElaborator::run() {
     out.current = 0;
     const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
     const u32 count = range.size();
+    const Window action_window = actions[b];
     usize action_at = 0;
     for (u32 boundary = 0; boundary <= count; ++boundary) {
-      while (action_at < actions[b].size() &&
-             actions[b][action_at].offset == boundary) {
-        const Action& action = actions[b][action_at];
+      while (action_at < action_window.len &&
+             action_flat[action_window.head + action_at].offset == boundary) {
+        const Action& action = action_flat[action_window.head + action_at];
         ++action_at;
         switch (action.kind) {
           case Action::Kind::Site: run_site(action.index, out); break;
