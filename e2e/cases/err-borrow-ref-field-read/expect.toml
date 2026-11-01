@@ -1,0 +1,4 @@
+# `r` reads the buffer `*x.b` writes, so the write has to report.
+exit = 4
+contains = ["borrowed"]
+not_contains = []
