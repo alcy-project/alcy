@@ -805,11 +805,17 @@ void Checker::check_call_args(u32 module,
   }
   for (usize i = 0; i < args.size(); ++i) {
     const ir::TypeIdx param = params[fixed + i];
-    const ir::TypeIdx actual = check_expr(module, args[i], &param);
-    unify(param, actual, ast.exprs[args[i]].span, "argument");
     const bool comp_required =
         comp_eval_depth > 0 ||
         (fixed + i < comp_params.size() && comp_params[fixed + i]);
+    if (comp_required) {
+      ++comp_argument_depth_;
+    }
+    const ir::TypeIdx actual = check_expr(module, args[i], &param);
+    if (comp_required) {
+      --comp_argument_depth_;
+    }
+    unify(param, actual, ast.exprs[args[i]].span, "argument");
     // The argument's type must admit a comp-known value as well as its
     // expression shape: `&K` borrows a const, which the expression rule
     // admits, but the engine carries no reference and the evaluator
@@ -1078,7 +1084,10 @@ void Checker::record_fmt_display(u32 module,
                                  ast::ExprIdx arg,
                                  ir::TypeIdx element) {
   const ir::TypeTag tag = tag_of(element);
-  if (tag != ir::TypeTag::Struct && tag != ir::TypeTag::Enum) {
+  // A type parameter formats through the `Display` bound its parameter
+  // declares; the lookup resolves it the way a method call would.
+  if (tag != ir::TypeTag::Struct && tag != ir::TypeTag::Enum &&
+      tag != ir::TypeTag::Param) {
     return;
   }
   const u32 spec = fmt_spec("Display");

@@ -316,11 +316,22 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
     }
   }
 
+  // A parametric function never reaches a backend: the specialization
+  // pass clones it per instantiation (ADR-0079), and its types would
+  // not build here.
+  std::vector<bool> parametric(storage_->functions().size(), false);
+  for (const ir::FunctionIdx function_idx : storage_->parametric_functions()) {
+    parametric[function_idx.idx] = true;
+  }
+
   // Declare every function before defining any body so forward
   // calls resolve regardless of declaration order.
   llvm::Function* entry_function = nullptr;
   ir::TypeTag entry_return = ir::TypeTag::Void;
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
+    if (parametric[function_idx.idx]) {
+      continue;
+    }
     const ir::Function& function = storage_->functions()[function_idx];
 
     llvm::Function* llvm_function = nullptr;
@@ -358,6 +369,9 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   }
   // PERF: consider running this process concurrently.
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
+    if (parametric[function_idx.idx]) {
+      continue;
+    }
     const ir::Function& function = storage_->functions()[function_idx];
     // Bodies emit independently: no cross-function state moves between
     // iterations, which is also what the comment above is waiting on.

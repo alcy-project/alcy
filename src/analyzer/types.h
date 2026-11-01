@@ -427,6 +427,27 @@ struct FnInstance {
   u32 inst = NO_INST;
 };
 
+// One generic item whose body the definition-site check checked once
+// (ADR-0079): the signature it resolved under the item's own type
+// parameters, which the lowering emits as the parametric function.
+struct ParametricBody {
+  u32 module = 0;
+  ast::ItemIdx item = ast::ItemIdx::invalid();
+  std::vector<ir::TypeIdx> params;
+  ir::TypeIdx ret = ir::TypeIdx::invalid();
+  // The impl's self type for a method or associated function; invalid
+  // for a free function.
+  ir::TypeIdx self_type = ir::TypeIdx::invalid();
+  CheckedModule::ReceiverKind receiver = CheckedModule::ReceiverKind::None;
+  // The declared type parameters, impl's first; slots 0..param_count-1
+  // name the `Param` nodes the signature and body use.
+  u32 param_count = 0;
+  // A body whose compile-time values read a parameter's layout: the
+  // value is the instantiation's to answer, so the item stays checked
+  // at its calls (ADR-0079).
+  bool per_instantiation = false;
+};
+
 struct CheckedPackage {
   ModuleTree tree;
   // Verified when the checker built them; lowering reseeds its builder
@@ -440,6 +461,9 @@ struct CheckedPackage {
   // Type arguments bound to each generic function or intrinsic, in the
   // same instantiation order as the signature they registered.
   std::vector<FnInstance> fn_insts;
+  // The generic items the definition-site check checked once, in the
+  // order it reached them (ADR-0079).
+  std::vector<ParametricBody> parametric_bodies;
   // Maps a struct/enum field storage copy back to the type it was
   // copied from, as (copy, origin) pairs. Lowering follows these so a
   // field's copied type resolves to its declaring nominal.

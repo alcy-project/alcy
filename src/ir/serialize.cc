@@ -264,6 +264,7 @@ class Serializer {
       collect_pool_id(external.meta.path, offsets);
     }
     for (const ParametricCallee& callee : state_.parametric_callees) {
+      collect_pool_id(callee.spec, offsets);
       collect_pool_id(callee.method, offsets);
     }
     for (const StructType& strukt : state_.struct_types) {
@@ -589,7 +590,7 @@ class Serializer {
       out.put_u8(static_cast<u8>(callee.kind));
       out.zeros(3);
       out.put_u32(callee.function.idx);
-      out.put_u32(callee.spec.idx);
+      out.put_u32(string_index(callee.spec));
       out.put_u32(string_index(callee.method));
       write_range(out, callee.args);
     }

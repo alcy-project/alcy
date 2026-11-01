@@ -288,9 +288,15 @@ Emitter::EmitResult Emitter::choose_roots() {
   } else {
     // A library has no entry to prune from, so every free function is part
     // of its surface. The exported subset narrows when visibility reaches
-    // the IR.
+    // the IR. A parametric function is no part of it: the specialization
+    // clones it per instantiation (ADR-0079).
+    std::vector<bool> parametric(storage_.functions().size(), false);
+    for (const ir::FunctionIdx index : storage_.parametric_functions()) {
+      parametric[index.idx] = true;
+    }
     for (const ir::FunctionIdx index : storage_.functions().idx_range()) {
-      if (storage_.functions()[index].meta.kind == ir::SymbolKind::Free) {
+      if (storage_.functions()[index].meta.kind == ir::SymbolKind::Free &&
+          !parametric[index.idx]) {
         roots.push_back(index);
       }
     }

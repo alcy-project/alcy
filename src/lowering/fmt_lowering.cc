@@ -38,10 +38,12 @@ bool Lowerer::Fmt::check_arguments(diag::Span span,
     const ir::TypeIdx element = elem_types[piece.arg];
     const ir::TypeTag tag = owner_.tag_of(element);
     if (!analyzer::is_formattable_tag(tag)) {
-      // A nominal formats through `fmt`'s `Display`; the recorded call
-      // is what the expansion reads, and a missing one is reported
-      // where the piece is emitted.
-      if (tag != ir::TypeTag::Struct && tag != ir::TypeTag::Enum) {
+      // A nominal formats through `fmt`'s `Display`, and a type
+      // parameter through the bound's: the recorded call is what the
+      // expansion reads, and a missing one is reported where the piece
+      // is emitted.
+      if (tag != ir::TypeTag::Struct && tag != ir::TypeTag::Enum &&
+          tag != ir::TypeTag::Param) {
         owner_.unsupported(span, "argument is not formattable");
         return false;
       }
@@ -144,7 +146,8 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
       }
       continue;
     }
-    if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum) {
+    if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum ||
+        tag == ir::TypeTag::Param) {
       const analyzer::CheckedModule::CallTarget* target =
           piece.arg < state.arg_exprs.size()
               ? owner_.call_target(state.arg_exprs[piece.arg])

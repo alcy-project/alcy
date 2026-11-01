@@ -4578,6 +4578,19 @@ void Checker::FnStateScope::restore(Checker& checker) {
 
 void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const ast::ItemNode& node = ast.items[fn];
+  // The definition-site check records the signature it resolved, so
+  // lowering can emit the parametric function (ADR-0079). A body check
+  // can nest - the const pre-pass checks a called function while an
+  // enclosing body is mid-check - and the nested one is not the
+  // once-check's own, so only the outer check touches the record.
+  const bool recording = cur_inst == PARAM_INST && param_record_ == nullptr;
+  ParametricBody record;
+  ParametricBody* const saved_record = param_record_;
+  if (recording) {
+    param_record_ = &record;
+    record.module = module;
+    record.item = fn;
+  }
   // A body check can nest: the const pre-pass checks a called function
   // while an enclosing body is mid-check, so the per-function state is
   // saved and restored rather than left reset.
@@ -4596,6 +4609,9 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   if (node.payload.get<ast::ItemFn>().return_type.is_valid()) {
     fn_ret =
         resolve_type(module, node.payload.get<ast::ItemFn>().return_type, self);
+  }
+  if (recording) {
+    record.ret = fn_ret;
   }
   // ADR-0085: a parameter and a return is Movable. A destructor's
   // receiver is the exception: the value ends in place.
@@ -4627,6 +4643,9 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
       continue;
     }
     const ir::TypeIdx type = resolve_type(module, param.type, self);
+    if (recording) {
+      record.params.push_back(type);
+    }
     if (!is_destructor && !is_error(type) && !is_movable(type)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerUnmovableParameter>(
           DiagCode::UnmovableType, ast.patterns[param.pattern].span);
@@ -4676,6 +4695,20 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   verify_comp_known = saved_verify_comp;
   bind_comp_known = saved_bind_comp;
   reported_too_deep_ = saved_reported_too_deep;
+  if (recording) {
+    // A body the pass cannot stand in for stays checked at its calls:
+    // a compile-time value it reads depends on the instantiation
+    // (ADR-0079).
+    if (!record.per_instantiation) {
+      record.self_type = self != nullptr ? *self : ir::TypeIdx::invalid();
+      record.param_count = static_cast<u32>(type_params.size());
+      if (self != nullptr && !record.params.empty()) {
+        record.receiver = classify_receiver(record.params.front(), *self);
+      }
+      parametric_bodies.push_back(std::move(record));
+    }
+    param_record_ = saved_record;
+  }
 }
 
 void Checker::check_main(u32 module, ast::ItemIdx fn) {
@@ -5065,6 +5098,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
                          std::move(checker.modules),
                          std::move(checker.inst_numbering),
                          std::move(checker.fn_instances),
+                         {},
                          std::move(checker.type_origins_),
                          {},
                          {},
@@ -5076,6 +5110,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   package.needs_drop = std::move(checker.needs_drop_);
   package.not_movable = std::move(checker.not_movable_);
   package.comp_calls = std::move(checker.comp_calls_);
+  package.parametric_bodies = std::move(checker.parametric_bodies);
   package.specs.reserve(checker.specs.size());
   for (const SpecEntry& spec : checker.specs) {
     package.specs.push_back({spec.name, spec.item});

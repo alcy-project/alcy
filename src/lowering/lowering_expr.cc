@@ -30,6 +30,7 @@
 #include "ir/immutable.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -1329,6 +1330,30 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       pkg.tree.is_staged_item("io", sig.item)) {
     return fmt_lowering_.lower_print(expr, sig);
   }
+  if (sig.inst == analyzer::PARAM_INST ||
+      signature_mentions_param(sig.params, sig.ret, ir::TypeIdx::invalid())) {
+    // The callee is a generic item: the call records the arguments the
+    // definition-site check resolved, and the specialization
+    // instantiates it (ADR-0079).
+    if (call.args.size() != sig.params.size()) {
+      internal(node.span, "call arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    std::vector<ir::OperandIdx> args;
+    for (usize i = 0; i < call.args.size(); ++i) {
+      Val arg = lower_moved(call.args[i], &sig.params[i]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      args.push_back(arg_for(arg, sig.params[i]));
+    }
+    const ir::ParametricCalleeIdx callee = generic_callee(
+        sig.item, fn_instance_args(target->module, target->index), node.span);
+    if (failed) {
+      return stopped_value();
+    }
+    return emit_parametric_call(args, sig.params, sig.ret, callee, node.span);
+  }
   const std::vector<u32> comp = comp_positions(sig.item);
   std::vector<CompVal> comp_args;
   for (u32 pos : comp) {
@@ -1413,6 +1438,60 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
       pkg.tree.modules[target->module]->is_summary) {
     return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
                               target->module, args, std::nullopt);
+  }
+  if (!info.item.is_valid()) {
+    // An associated function a bound names: the parametric form knows
+    // the spec and the name, and the specialization resolves the
+    // implementation (ADR-0080).
+    if (args.size() != info.params.size()) {
+      internal(call.span, "call arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    std::vector<ir::OperandIdx> ops;
+    for (usize i = 0; i < args.size(); ++i) {
+      Val arg = lower_moved(args[i], &info.params[i]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      ops.push_back(arg_for(arg, info.params[i]));
+    }
+    const str::StringPoolId spec_name =
+        info.spec < pkg.specs.size() ? intern_name(pkg.specs[info.spec].name)
+                                     : str::INVALID_STRING_POOL_ID;
+    const ir::ParametricCalleeIdx callee = parametric_callee_record(
+        ir::ParametricCalleeKind::Dispatch, ir::FunctionIdx::invalid(),
+        spec_name, intern_name(info.name), {info.self_type});
+    if (failed) {
+      return stopped_value();
+    }
+    return emit_parametric_call(ops, info.params, info.ret, callee, call.span);
+  }
+  if (info.method_inst == analyzer::PARAM_INST ||
+      signature_mentions_param(info.params, info.ret, info.self_type)) {
+    // The associated function is a generic item: the call records it
+    // with the arguments the receiver's instantiation resolved.
+    if (args.size() != info.params.size()) {
+      internal(call.span, "call arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    std::vector<ir::OperandIdx> ops;
+    for (usize i = 0; i < args.size(); ++i) {
+      Val arg = lower_moved(args[i], &info.params[i]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      ops.push_back(arg_for(arg, info.params[i]));
+    }
+    std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+    for (const ir::TypeIdx arg : info.method_args) {
+      type_args.push_back(arg);
+    }
+    const ir::ParametricCalleeIdx callee =
+        generic_callee(info.item, type_args, call.span);
+    if (failed) {
+      return stopped_value();
+    }
+    return emit_parametric_call(ops, info.params, info.ret, callee, call.span);
   }
   const std::vector<u32> comp = comp_positions(info.item);
   std::vector<CompVal> comp_args;
@@ -3212,6 +3291,66 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   }
   const std::span<const ast::ExprIdx> method_args =
       method.payload.get<ast::ExprMethodCall>().args;
+  if (!info.item.is_valid()) {
+    // A call on a type parameter: the parametric form knows the bound's
+    // spec and the method, and the specialization resolves the
+    // implementation (ADR-0080).
+    const usize expected = info.params.empty() ? 0 : info.params.size() - 1;
+    if (method_args.size() != expected) {
+      internal(method.span, "call arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    const str::StringPoolId spec_name =
+        info.spec < pkg.specs.size() ? intern_name(pkg.specs[info.spec].name)
+                                     : str::INVALID_STRING_POOL_ID;
+    const ir::ParametricCalleeIdx callee = parametric_callee_record(
+        ir::ParametricCalleeKind::Dispatch, ir::FunctionIdx::invalid(),
+        spec_name, intern_name(info.name), {info.self_type});
+    if (failed) {
+      return stopped_value();
+    }
+    std::vector<ir::OperandIdx> ops;
+    ops.push_back(arg_for(receiver, info.params[0]));
+    for (usize i = 0; i < method_args.size(); ++i) {
+      Val arg = lower_moved(method_args[i], &info.params[i + 1]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      ops.push_back(arg_for(arg, info.params[i + 1]));
+    }
+    return emit_parametric_call(ops, info.params, info.ret, callee,
+                                method.span);
+  }
+  if (info.method_inst == analyzer::PARAM_INST ||
+      signature_mentions_param(info.params, info.ret, info.self_type)) {
+    // The method is a generic item: the call records it with the
+    // arguments the receiver's instantiation resolved (ADR-0079).
+    const usize expected = info.params.empty() ? 0 : info.params.size() - 1;
+    if (method_args.size() != expected) {
+      internal(method.span, "call arity");
+      return Val{size_one, error_type(), false, false};
+    }
+    std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+    for (const ir::TypeIdx arg : info.method_args) {
+      type_args.push_back(arg);
+    }
+    const ir::ParametricCalleeIdx callee =
+        generic_callee(info.item, type_args, method.span);
+    if (failed) {
+      return stopped_value();
+    }
+    std::vector<ir::OperandIdx> ops;
+    ops.push_back(arg_for(receiver, info.params[0]));
+    for (usize i = 0; i < method_args.size(); ++i) {
+      Val arg = lower_moved(method_args[i], &info.params[i + 1]);
+      if (failed || terminated_cur()) {
+        return stopped_value();
+      }
+      ops.push_back(arg_for(arg, info.params[i + 1]));
+    }
+    return emit_parametric_call(ops, info.params, info.ret, callee,
+                                method.span);
+  }
   if (target->module < pkg.tree.modules.size() &&
       pkg.tree.modules[target->module]->is_summary) {
     return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
@@ -3308,6 +3447,46 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
   if (failed) {
     return Val{size_one, error_type(), as_place, false};
   }
+  if (!info.item.is_valid() ||
+      signature_mentions_param(info.params, info.ret, info.self_type)) {
+    // Indexing a type parameter or a generic item: the parametric form
+    // records the call, and the specialization resolves it to the
+    // concrete method (ADR-0079, ADR-0080).
+    Val arg = lower_expr(index.index, &info.params[1]);
+    if (failed) {
+      return Val{size_one, error_type(), as_place, false};
+    }
+    ir::ParametricCalleeIdx callee = ir::ParametricCalleeIdx::invalid();
+    if (!info.item.is_valid()) {
+      const str::StringPoolId spec_name =
+          info.spec < pkg.specs.size() ? intern_name(pkg.specs[info.spec].name)
+                                       : str::INVALID_STRING_POOL_ID;
+      callee = parametric_callee_record(
+          ir::ParametricCalleeKind::Dispatch, ir::FunctionIdx::invalid(),
+          spec_name, intern_name(info.name), {info.self_type});
+    } else {
+      std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+      for (const ir::TypeIdx type_arg : info.method_args) {
+        type_args.push_back(type_arg);
+      }
+      callee = generic_callee(info.item, type_args, node.span);
+    }
+    if (failed) {
+      return Val{size_one, error_type(), as_place, false};
+    }
+    std::vector<ir::OperandIdx> ops;
+    ops.push_back(arg_for(receiver, info.params[0]));
+    ops.push_back(arg_for(arg, info.params[1]));
+    const Val call =
+        emit_parametric_call(ops, info.params, info.ret, callee, node.span);
+    if (failed) {
+      return Val{size_one, error_type(), as_place, false};
+    }
+    const ir::TypeIdx element =
+        builder.ref_types()[builder.types()[info.ret.idx].as_ref()].pointee;
+    const Val place{call.op, element, true, true, true};
+    return as_place ? place : materialize(place);
+  }
   const ir::FunctionIdx fn = fn_index(
       target->module, info.item, info.name, info.params, info.ret,
       callee_inst(target), std::vector<CompVal>{}, ir::SymbolKind::Method,
@@ -3346,6 +3525,36 @@ Val Lowerer::emit_spec_call(const analyzer::CheckedModule::CallTarget* target,
                             bool has_argument) {
   const analyzer::CheckedModule& def = pkg.modules[target->module];
   const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
+  if (!info.item.is_valid() ||
+      signature_mentions_param(info.params, info.ret, info.self_type)) {
+    // An operator on a type parameter or a generic item: the call is
+    // recorded and the specialization resolves it, with the receiver
+    // and the argument carried (ADR-0079, ADR-0080).
+    ir::ParametricCalleeIdx callee = ir::ParametricCalleeIdx::invalid();
+    if (!info.item.is_valid()) {
+      const str::StringPoolId spec_name =
+          info.spec < pkg.specs.size() ? intern_name(pkg.specs[info.spec].name)
+                                       : str::INVALID_STRING_POOL_ID;
+      callee = parametric_callee_record(
+          ir::ParametricCalleeKind::Dispatch, ir::FunctionIdx::invalid(),
+          spec_name, intern_name(info.name), {info.self_type});
+    } else {
+      std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+      for (const ir::TypeIdx type_arg : info.method_args) {
+        type_args.push_back(type_arg);
+      }
+      callee = generic_callee(info.item, type_args, span);
+    }
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    std::vector<ir::OperandIdx> ops;
+    ops.push_back(arg_for(receiver, info.params[0]));
+    if (has_argument) {
+      ops.push_back(arg_for(argument, info.params[1]));
+    }
+    return emit_parametric_call(ops, info.params, info.ret, callee, span);
+  }
   if (!comp_positions(info.item).empty()) {
     internal(span, "comp operator method");
     return Val{size_one, error_type(), false, false};

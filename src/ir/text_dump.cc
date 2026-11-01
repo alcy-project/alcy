@@ -379,7 +379,7 @@ class TextWriter {
       if (callee.kind == ParametricCalleeKind::Generic) {
         out_ += function_name(callee.function);
       } else {
-        write_type(callee.spec);
+        out_ += string_of(callee.spec);
         out_ += "::";
         out_ += string_of(callee.method);
       }

@@ -24,8 +24,13 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
+#include "ir/block.h"
+#include "ir/common.h"
+#include "ir/function.h"
 #include "ir/instruction.h"
 #include "ir/opcode.h"
+#include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/verifier.h"
@@ -877,6 +882,130 @@ TEST_CASE("Lowering ends a path at a diverging value") {
     return;
   }
   CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
+}
+
+TEST_CASE("A generic body lowers once in its parametric form") {
+  // The definition-site check's body is emitted once with `Param`
+  // types and listed, while concrete instantiations keep their own
+  // lowering (ADR-0079). A call inside it to another generic item is
+  // recorded, not resolved.
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "fn id<T>(x: T) -> T {\n"
+                   "  ret x\n"
+                   "}\n"
+                   "fn twice<T>(x: T) -> T {\n"
+                   "  ret id(x)\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := twice(1)\n"
+                   "}\n"}});
+
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *result.lowered->storage;
+  CHECK(ir::verify_storage(storage).is_ok());
+  CHECK(storage.parametric_functions().size() == 2);
+
+  bool saw_generic_call = false;
+  for (const ir::FunctionIdx idx : storage.parametric_functions()) {
+    const ir::FunctionMeta& meta = storage.functions()[idx].meta;
+    bool mentions = storage.types()[meta.return_type].tag == ir::TypeTag::Param;
+    for (const ir::TypeIdx param : meta.param_types) {
+      mentions = mentions || storage.types()[param].tag == ir::TypeTag::Param;
+    }
+    CHECK(mentions);
+    const ir::Function& body = storage.functions()[idx];
+    for (const ir::BlockIdx block : body.blocks) {
+      for (const ir::InstructionIdx iidx : storage.blocks()[block].instrs) {
+        const ir::Instruction& instr = storage.instrs()[iidx];
+        if (instr.op != ir::Opcode::Call || instr.operands.empty()) {
+          continue;
+        }
+        const ir::Operand& head = storage.operands()[instr.operands.head()];
+        if (!head.is<ir::ParametricCalleeIdx>()) {
+          continue;
+        }
+        saw_generic_call = true;
+        const ir::ParametricCallee& callee =
+            storage.parametric_callees()[head.as_parametric_callee()];
+        CHECK(callee.kind == ir::ParametricCalleeKind::Generic);
+        CHECK(callee.args.size() == 1);
+        CHECK(storage.types()[callee.args.head()].tag == ir::TypeTag::Param);
+      }
+    }
+  }
+  CHECK(saw_generic_call);
+}
+
+TEST_CASE("A parametric body records the dispatch it waits on") {
+  // A method a parameter's bound declares: the body cannot name the
+  // implementation, so it records the spec and the method by their
+  // names, and the specialization resolves them for the concrete type
+  // (ADR-0080).
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "spec Mark {\n"
+                   "  fn mark(self: &Self) -> i32;\n"
+                   "}\n"
+                   "struct Point {\n"
+                   "  x: i32,\n"
+                   "}\n"
+                   "impl Mark for Point {\n"
+                   "  fn mark(self: &Self) -> i32 {\n"
+                   "    ret self.x\n"
+                   "  }\n"
+                   "}\n"
+                   "fn marked<T: Mark>(x: T) -> i32 {\n"
+                   "  ret x.mark()\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := marked(Point { x: 1 })\n"
+                   "}\n"}});
+
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *result.lowered->storage;
+  CHECK(ir::verify_storage(storage).is_ok());
+  CHECK(storage.parametric_functions().size() == 1);
+  if (storage.parametric_functions().size() != 1) {
+    return;
+  }
+  bool saw_dispatch = false;
+  const ir::Function& body =
+      storage.functions()[storage.parametric_functions().front()];
+  for (const ir::BlockIdx block : body.blocks) {
+    for (const ir::InstructionIdx iidx : storage.blocks()[block].instrs) {
+      const ir::Instruction& instr = storage.instrs()[iidx];
+      if (instr.op != ir::Opcode::Call || instr.operands.empty()) {
+        continue;
+      }
+      const ir::Operand& head = storage.operands()[instr.operands.head()];
+      if (!head.is<ir::ParametricCalleeIdx>()) {
+        continue;
+      }
+      const ir::ParametricCallee& callee =
+          storage.parametric_callees()[head.as_parametric_callee()];
+      CHECK(callee.kind == ir::ParametricCalleeKind::Dispatch);
+      CHECK(callee.spec != str::INVALID_STRING_POOL_ID);
+      CHECK(callee.method != str::INVALID_STRING_POOL_ID);
+      // The receiver is the dispatch's one argument.
+      CHECK(callee.args.size() == 1);
+      CHECK(storage.types()[callee.args.head()].tag == ir::TypeTag::Param);
+      saw_dispatch = true;
+    }
+  }
+  CHECK(saw_dispatch);
 }
 
 }  // namespace lowering

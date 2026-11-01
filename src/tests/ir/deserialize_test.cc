@@ -207,7 +207,7 @@ TEST_CASE("A parametric callee and drop survive the binary form") {
   });
   (void)builder.parametric_callee({
       .kind = ParametricCalleeKind::Dispatch,
-      .spec = param,
+      .spec = strings.intern("Display"),
       .method = strings.intern("show"),
       .args = {param, 1},
   });
@@ -288,7 +288,8 @@ TEST_CASE("A parametric callee and drop survive the binary form") {
   const ParametricCallee& read_dispatch =
       read.parametric_callees()[ParametricCalleeIdx(1)];
   CHECK(read_dispatch.kind == ParametricCalleeKind::Dispatch);
-  CHECK(read.types()[read_dispatch.spec].tag == TypeTag::Param);
+  CHECK(read_dispatch.spec != str::INVALID_STRING_POOL_ID);
+  CHECK(read_dispatch.method != str::INVALID_STRING_POOL_ID);
   CHECK(read_dispatch.args.size() == 1);
 
   const Function& fn = read.functions()[FunctionIdx(0)];

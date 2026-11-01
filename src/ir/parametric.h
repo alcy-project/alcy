@@ -29,8 +29,10 @@ struct ParametricCallee {
   ParametricCalleeKind kind = ParametricCalleeKind::Generic;
   // A Generic row's item, as the parametric function it lowered to.
   FunctionIdx function = FunctionIdx::invalid();
-  // A Dispatch row's spec, and the method's source name.
-  TypeIdx spec = TypeIdx::invalid();
+  // A Dispatch row's spec and method, by the names the source wrote:
+  // a spec is a declaration, and its name is how the implementation is
+  // found once the argument's type is known (ADR-0080).
+  str::StringPoolId spec = str::INVALID_STRING_POOL_ID;
   str::StringPoolId method = str::INVALID_STRING_POOL_ID;
   // The type arguments the definition-site check resolved: the generic
   // item's arguments, or the parameter a dispatch acts on. The row

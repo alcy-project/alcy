@@ -826,7 +826,7 @@ bool read_parametric_callees(Parsed& parsed, std::span<const u8> payload) {
     }
     parsed.state.parametric_callees.emplace_back(
         static_cast<ParametricCalleeKind>(kind), FunctionIdx(function),
-        TypeIdx(spec), string_id(parsed, method),
+        string_id(parsed, spec), string_id(parsed, method),
         TypeIdxRange{TypeIdx(args_head), args_size});
   }
   return true;

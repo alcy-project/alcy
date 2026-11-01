@@ -83,8 +83,10 @@ struct LoweredPackage {
     bool is_capture = false;
   };
   std::vector<AddrInfo> addr_names;
-  // Lowered functions from prelude modules. Reported counts exclude
-  // them, matching files and modules.
+  // Lowered concrete functions from prelude modules. Reported counts
+  // exclude them, matching files and modules. A prelude parametric
+  // body is not a source function either, and counts through the
+  // storage's parametric list (ADR-0079).
   usize prelude_functions = 0;
   // Comp calls the IR engine also ran and matched (ADR-0054's
   // comparison before the switch). A construct outside the engine's

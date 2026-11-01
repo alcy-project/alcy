@@ -6544,4 +6544,35 @@ TEST_CASE("Check leaves a method out of the names a bare call reaches") {
   CHECK(has_message(f.bag, "Unresolved value 'hidden'"));
 }
 
+TEST_CASE(
+    "A generic whose const reads a parameter's layout stays at its calls") {
+  // `size_of::<T>()` in a compile-time position cannot be answered at
+  // the definition site, so the item keeps its per-instantiation
+  // bodies instead of a parametric one (ADR-0079).
+  VirtualDir dir;
+  write_all(dir, {{"mem.al", "pub intrinsic fn size_of<T>() -> usize;\n"},
+                  {"main.al",
+                   "fn width(comp n: usize) -> usize {\n"
+                   "  ret n\n"
+                   "}\n"
+                   "fn probe<T>(x: T) -> usize {\n"
+                   "  const k := size_of::<T>()\n"
+                   "  ret width(k)\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := probe(1u8)\n"
+                   "}\n"}});
+  static const std::initializer_list<
+      std::pair<std::string_view, std::string_view>>
+      PRELUDE = {{"core", "mem.al"}};
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
+                                         ir::PointerWidth::W64, PRELUDE);
+  CHECK(result.package.has_value());
+  if (!result.package.has_value()) {
+    return;
+  }
+  CHECK(result.package->parametric_bodies.empty());
+}
+
 }  // namespace analyzer

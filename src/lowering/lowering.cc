@@ -40,6 +40,7 @@
 #include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
+#include "ir/parametric.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -293,6 +294,76 @@ const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
   return pkg.fn_insts[found->second].args;
 }
 
+ir::TypeIdx Lowerer::func_signature(const std::vector<ir::TypeIdx>& params,
+                                    ir::TypeIdx ret) {
+  ir::TypeSeq seq;
+  for (const ir::TypeIdx param : params) {
+    seq.push(storage_copy(param));
+  }
+  return builder.func_type(seq.finish(), ret);
+}
+
+ir::ParametricCalleeIdx Lowerer::parametric_callee_record(
+    ir::ParametricCalleeKind kind,
+    ir::FunctionIdx function,
+    str::StringPoolId spec,
+    str::StringPoolId method,
+    const std::vector<ir::TypeIdx>& args) {
+  ir::TypeSeq seq;
+  for (const ir::TypeIdx arg : args) {
+    seq.push(storage_copy(arg));
+  }
+  return builder.parametric_callee(ir::ParametricCallee{
+      .kind = kind,
+      .function = kind == ir::ParametricCalleeKind::Generic
+                      ? function
+                      : ir::FunctionIdx::invalid(),
+      .spec = spec,
+      .method = method,
+      .args = seq.finish(),
+  });
+}
+
+ir::ParametricCalleeIdx Lowerer::generic_callee(
+    ast::ItemIdx item,
+    const std::vector<ir::TypeIdx>& args,
+    diag::Span span) {
+  const auto found = parametric_fn_by_item_.find(item.idx);
+  if (found == parametric_fn_by_item_.end()) {
+    internal(span, "a generic callee has no parametric body");
+    return ir::ParametricCalleeIdx(base::INVALID_IDX);
+  }
+  return parametric_callee_record(ir::ParametricCalleeKind::Generic,
+                                  found->second, str::INVALID_STRING_POOL_ID,
+                                  str::INVALID_STRING_POOL_ID, args);
+}
+
+Val Lowerer::emit_parametric_call(const std::vector<ir::OperandIdx>& ops,
+                                  const std::vector<ir::TypeIdx>& params,
+                                  ir::TypeIdx ret,
+                                  ir::ParametricCalleeIdx callee,
+                                  diag::Span span) {
+  (void)span;
+  const ir::TypeIdx sig_type = func_signature(params, ret);
+  std::vector<ir::OperandIdx> operands;
+  operands.reserve(ops.size() + 1);
+  operands.push_back(
+      builder.operand(ir::Operand::from_parametric_callee(callee, sig_type)));
+  operands.insert(operands.end(), ops.begin(), ops.end());
+  const ir::TypeTag ret_tag = tag_of(ret);
+  if (ret_tag == ir::TypeTag::Never) {
+    emit_void(ir::Opcode::Call, operands);
+    emit_void(ir::Opcode::Unreachable, {});
+    return Val{size_one, ret, false, false};
+  }
+  if (ret_tag == ir::TypeTag::Void) {
+    emit_void(ir::Opcode::Call, operands);
+    return Val{size_one, ret, false, false};
+  }
+  const ir::RegisterIdx dst = emit(ir::Opcode::Call, ret, operands);
+  return Val{to_operand(dst, ret), ret, false, false};
+}
+
 void Lowerer::emit_void(ir::Opcode op,
                         std::span<const ir::OperandIdx> ops,
                         ir::InstructionFlags flags) {
@@ -335,8 +406,12 @@ Val Lowerer::materialize(Val v) {
   // A borrowed place holds what its reference's owner still ends:
   // reading a non-`Copy` value out of it would leave that value owned
   // twice. A raw pointer names no owner, so its place reads as a move,
-  // and a reference is a pointer: moving it transfers no value.
-  if (v.borrowed && !is_copy(v.type) && !ir::is_pointer_type(tag_of(v.type))) {
+  // and a reference is a pointer: moving it transfers no value. A
+  // parametric body cannot decide Copy-ness yet; the specialization
+  // substitutes the argument and borrows the clone, which is where the
+  // read is admitted or refused (ADR-0079).
+  if (v.borrowed && !is_copy(v.type) && !ir::is_pointer_type(tag_of(v.type)) &&
+      cur_inst_ != analyzer::PARAM_INST) {
     const u32 index = bag.emit<i18n::Key::LowerMoveOutOfBorrow>(
         DiagCode::ValueOutOfBorrow, cur_span_);
     (void)index;
@@ -924,7 +999,7 @@ bool Lowerer::fn_budget_available() {
 // pointee, a sequence's element, a tuple's parts. Fields are not
 // walked: a signature names its types, and a parameter reaches one
 // through an argument the source wrote.
-static bool mentions_param(const ir::StorageState& state, ir::TypeIdx type) {
+static bool type_names_param(const ir::StorageState& state, ir::TypeIdx type) {
   if (!type.is_valid() || type.idx >= state.types.size()) {
     return false;
   }
@@ -936,14 +1011,16 @@ static bool mentions_param(const ir::StorageState& state, ir::TypeIdx type) {
     case T::MutRef:
     case T::RawPtr:
     case T::RawMutPtr:
-      return mentions_param(state, state.ref_types[node.as_ref()].pointee);
+      return type_names_param(state, state.ref_types[node.as_ref()].pointee);
     case T::Array:
-      return mentions_param(state, state.array_types[node.as_array()].element);
+      return type_names_param(state,
+                              state.array_types[node.as_array()].element);
     case T::Slice:
-      return mentions_param(state, state.slice_types[node.as_slice()].element);
+      return type_names_param(state,
+                              state.slice_types[node.as_slice()].element);
     case T::Tuple: {
       for (ir::TypeIdx element : state.tuple_types[node.as_tuple()].elements) {
-        if (mentions_param(state, element)) {
+        if (type_names_param(state, element)) {
           return true;
         }
       }
@@ -952,22 +1029,22 @@ static bool mentions_param(const ir::StorageState& state, ir::TypeIdx type) {
     case T::Func: {
       const ir::FuncType& shape = state.func_types[node.as_func()];
       for (ir::TypeIdx param : shape.params) {
-        if (mentions_param(state, param)) {
+        if (type_names_param(state, param)) {
           return true;
         }
       }
-      return mentions_param(state, shape.ret);
+      return type_names_param(state, shape.ret);
     }
     case T::Struct:
       for (ir::TypeIdx arg : state.struct_types[node.as_struct()].params) {
-        if (mentions_param(state, arg)) {
+        if (type_names_param(state, arg)) {
           return true;
         }
       }
       return false;
     case T::Enum:
       for (ir::TypeIdx arg : state.enum_types[node.as_enum()].params) {
-        if (mentions_param(state, arg)) {
+        if (type_names_param(state, arg)) {
           return true;
         }
       }
@@ -976,19 +1053,25 @@ static bool mentions_param(const ir::StorageState& state, ir::TypeIdx type) {
   }
 }
 
-static bool signature_mentions_param(const ir::StorageState& state,
-                                     const std::vector<ir::TypeIdx>& params,
-                                     ir::TypeIdx ret,
-                                     ir::TypeIdx owner) {
-  if (mentions_param(state, ret) || mentions_param(state, owner)) {
+static bool signature_names_param(const ir::StorageState& state,
+                                  const std::vector<ir::TypeIdx>& params,
+                                  ir::TypeIdx ret,
+                                  ir::TypeIdx owner) {
+  if (type_names_param(state, ret) || type_names_param(state, owner)) {
     return true;
   }
   for (const ir::TypeIdx param : params) {
-    if (mentions_param(state, param)) {
+    if (type_names_param(state, param)) {
       return true;
     }
   }
   return false;
+}
+
+bool Lowerer::signature_mentions_param(const std::vector<ir::TypeIdx>& params,
+                                       ir::TypeIdx ret,
+                                       ir::TypeIdx owner) const {
+  return lowering::signature_names_param(builder.state(), params, ret, owner);
 }
 
 // Enqueues lowering work on first encounter, so a recursive call sees
@@ -1002,12 +1085,15 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   std::vector<CompVal> comp_args,
                                   ir::SymbolKind kind,
                                   std::span<const ir::TypeIdx> extra_generics,
-                                  ir::TypeIdx owner) {
+                                  ir::TypeIdx owner,
+                                  bool parametric) {
   // A signature that names a type parameter belongs to the
-  // definition-site check, and only the specialization pass may lower
-  // one (ADR-0079). A row that gets here means the isolation broke:
-  // the failure is loud rather than a Param type at a backend.
-  if (signature_mentions_param(builder.state(), params, ret, owner)) {
+  // definition-site check, and only the parametric body itself or the
+  // specialization pass may lower one (ADR-0079). A row that gets here
+  // means the isolation broke: the failure is loud rather than a Param
+  // type at a backend.
+  if (!parametric &&
+      signature_names_param(builder.state(), params, ret, owner)) {
     internal(diag::Span{}, "a parametric signature reached lowering");
     return ir::FunctionIdx(base::INVALID_IDX);
   }
@@ -1015,7 +1101,11 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   const std::string_view key = fn_key_scratch_;
   const auto found = fn_by_key_.find(key);
   if (found != fn_by_key_.end()) {
-    return ir::FunctionIdx(found->second);
+    const ir::FunctionIdx existing(found->second);
+    if (parametric) {
+      parametric_fn_by_item_.emplace(item.idx, existing);
+    }
+    return existing;
   }
   if (!fn_budget_available()) {
     return ir::FunctionIdx(base::INVALID_IDX);
@@ -1036,26 +1126,37 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   entry.inst = inst;
   entry.kind = kind;
   entry.owner = owner;
-  // A generic body is named by the arguments it was instantiated with.
-  // A method's arguments come from the type it was instantiated on; a
-  // generic free function's from the signature it registered.
-  if (inst != analyzer::NO_INST && inst < pkg.generic_insts.size()) {
-    const ir::TypeIdx self = pkg.generic_insts[inst];
-    if (self.is_valid()) {
-      entry.generics = nominal_arguments(self);
+  if (parametric) {
+    entry.parametric = true;
+    // The parametric body is named by the parameters it is checked
+    // against: the `Param` nodes its item declared.
+    entry.generics.assign(extra_generics.begin(), extra_generics.end());
+  } else {
+    // A generic body is named by the arguments it was instantiated
+    // with. A method's arguments come from the type it was
+    // instantiated on; a generic free function's from the signature it
+    // registered.
+    if (inst != analyzer::NO_INST && inst < pkg.generic_insts.size()) {
+      const ir::TypeIdx self = pkg.generic_insts[inst];
+      if (self.is_valid()) {
+        entry.generics = nominal_arguments(self);
+      }
     }
-  }
-  if (entry.generics.empty()) {
-    entry.generics = fn_args_for(item, inst);
-  }
-  // A method's own type arguments join the symbol after the ones its
-  // receiver supplied.
-  for (ir::TypeIdx arg : extra_generics) {
-    entry.generics.push_back(arg);
+    if (entry.generics.empty()) {
+      entry.generics = fn_args_for(item, inst);
+    }
+    // A method's own type arguments join the symbol after the ones its
+    // receiver supplied.
+    for (ir::TypeIdx arg : extra_generics) {
+      entry.generics.push_back(arg);
+    }
   }
   entry.comp_args = std::move(comp_args);
   fns.push_back(std::move(entry));
   worklist_.push_back(fns.size() - 1);
+  if (parametric) {
+    parametric_fn_by_item_.emplace(item.idx, idx);
+  }
   return idx;
 }
 
@@ -1683,8 +1784,8 @@ void Lowerer::run() {
       // when the signature is concrete - a method called on a concrete
       // receiver inside a generic body carries one.
       if (method.method_inst == analyzer::PARAM_INST ||
-          signature_mentions_param(builder.state(), method.params, method.ret,
-                                   method.self_type)) {
+          signature_names_param(builder.state(), method.params, method.ret,
+                                method.self_type)) {
         continue;
       }
       // A method with its own type parameters is reserved at its call
@@ -1755,6 +1856,41 @@ void Lowerer::run() {
     builder.reserve_instrs(fn_count * INSTRUCTIONS_PER_FUNCTION);
     builder.reserve_registers(fn_count * REGISTERS_PER_FUNCTION);
     instr_spans_.reserve(fn_count * INSTRUCTIONS_PER_FUNCTION);
+  }
+  // The definition-site check's bodies: one function per generic item,
+  // emitted once with the `Param` nodes its signature resolved
+  // (ADR-0079). The list is what the specialization clones and what
+  // the borrow pass and the backends skip.
+  for (const analyzer::ParametricBody& body : pkg.parametric_bodies) {
+    if (body.module >= pkg.tree.modules.size() ||
+        pkg.tree.modules[body.module]->is_summary ||
+        body.item.idx >= ast.items.size()) {
+      continue;
+    }
+    const ast::ItemNode& node = ast.items[body.item];
+    if (node.kind != ast::ItemKind::Fn) {
+      continue;
+    }
+    const std::string_view name = node.payload.get<ast::ItemFn>().name.name;
+    const ir::SymbolKind kind =
+        !body.self_type.is_valid()
+            ? ir::SymbolKind::Free
+            : (body.receiver == analyzer::CheckedModule::ReceiverKind::None
+                   ? ir::SymbolKind::Assoc
+                   : ir::SymbolKind::Method);
+    std::vector<ir::TypeIdx> parameters;
+    parameters.reserve(body.param_count);
+    for (u32 i = 0; i < body.param_count; ++i) {
+      parameters.push_back(builder.param_type(i));
+    }
+    const ir::FunctionIdx fn =
+        fn_index(body.module, body.item, name, body.params, body.ret,
+                 analyzer::PARAM_INST, {}, kind, parameters, body.self_type,
+                 /*parametric=*/true);
+    if (failed || !fn.is_valid()) {
+      return;
+    }
+    builder.add_parametric_function(fn);
   }
   // Lower bodies, then publish functions in reservation order so
   // the pre-assigned indexes line up with storage positions.
@@ -1866,8 +2002,10 @@ bool Lowerer::resolve_names() {
 void Lowerer::materialize(const FnEntry& entry,
                           const std::vector<ir::BlockIdx>& blocks) {
   // Every staged module is toolchain sources, facades and siblings
-  // alike; only facades are preludes.
-  if (pkg.tree.modules[entry.mod]->is_staged) {
+  // alike; only facades are preludes. A parametric body counts
+  // through the storage's parametric list instead, because no source
+  // function stands for one (ADR-0079).
+  if (pkg.tree.modules[entry.mod]->is_staged && !entry.parametric) {
     ++prelude_functions_;
   }
   const std::vector<u32> comp = comp_positions(entry.item);

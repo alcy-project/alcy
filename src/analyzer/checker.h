@@ -61,6 +61,27 @@ inline bool is_value_param(const ast::AstArena& ast,
   }
 }
 
+// Whether a parameter's annotation is the owning-function bound
+// spelling (`F: Fn<...>`), written or desugared. Its witness is a fact
+// of the instantiation (ADR-0116), so an item that declares one stays
+// checked at its calls.
+inline bool is_fn_bound(const ast::AstArena& ast,
+                        const ast::GenericParam& param) {
+  if (!param.type.is_valid()) {
+    return false;
+  }
+  const ast::TypeNode& node = ast.types[param.type];
+  if (node.kind != ast::TypeKind::Path) {
+    return false;
+  }
+  const ast::PathIdx path = node.payload.get<ast::TypePath>().path;
+  if (!path.is_valid()) {
+    return false;
+  }
+  const std::span<const ast::Ident> segments = ast.paths[path].segments;
+  return !segments.empty() && segments.back().name == "Fn";
+}
+
 struct NominalEntry {
   u32 module;
   std::string_view name;
@@ -205,6 +226,12 @@ class Checker {
   // The last instance minted for each (module, item), so a request walks
   // only the instances of the function it asks about.
   std::unordered_map<u64, u32> fn_instance_head_;
+  // The definition-site check's bodies (ADR-0079), and the record the
+  // check in progress fills. A nested body check - a const dependency
+  // reached from inside one - must not touch it: only the check_fn the
+  // once-check called records.
+  std::vector<ParametricBody> parametric_bodies;
+  ParametricBody* param_record_ = nullptr;
   // Shared instantiation numbering that keys lowering side tables.
   // Holds each generic enum/struct instance type in creation order and
   // an invalid placeholder per generic function body, so both kinds
@@ -411,6 +438,9 @@ class Checker {
   // Nonzero while checking the contents of a `comp` block, whose
   // boundary a `ret` may not cross.
   u32 comp_depth = 0;
+  // Nonzero while checking an argument a comp parameter takes: the
+  // argument is a compile-time value the callee reads (ADR-0054).
+  u32 comp_argument_depth_ = 0;
   // Verifies comp-known-ness while block scopes are still alive
   // (comp blocks and their nested bodies).
   bool verify_comp_known = false;
@@ -859,6 +889,12 @@ class Checker {
   // Whether the backend compares the operand type directly: a scalar,
   // a thin address, or a tuple or array of comparable elements.
   bool is_builtin_comparable(ir::TypeIdx type) const;
+  // Whether a type's layout depends on a parameter: a `Param`, a
+  // nominal instance's arguments, a reference's pointee, a
+  // sequence's element, a tuple's parts. Fields are not walked: an
+  // instance names its parameters through its arguments, and every
+  // layout it has follows from them (ADR-0079).
+  bool type_names_param(ir::TypeIdx type) const;
   // The type a scalar spelling names (`i64`, `usize`), or an error
   // type for a spelling no scalar carries.
   ir::TypeIdx primitive_by_name(std::string_view name);

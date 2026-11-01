@@ -1392,6 +1392,18 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   if (!check_type_args_movable(bound, span)) {
     return nullptr;
   }
+  // A compile-time value the parameters decide cannot stand in: the
+  // call is answered once the argument is known, so the body that
+  // makes it stays checked at its calls (ADR-0079).
+  if (parametric_mode() && param_record_ != nullptr &&
+      (comp_eval_depth > 0 || comp_argument_depth_ > 0)) {
+    for (const ir::TypeIdx arg : bound) {
+      if (type_names_param(arg)) {
+        param_record_->per_instantiation = true;
+        break;
+      }
+    }
+  }
   std::vector<std::pair<std::string_view, ir::TypeIdx>> bounds;
   for (usize i = 0; i < params.size() && i < bound.size(); ++i) {
     bounds.emplace_back(params[i].name.name, bound[i]);
@@ -1599,12 +1611,13 @@ bool Checker::parametric_scope_ok(
     std::span<const ast::GenericParam> impl_params,
     std::span<const ast::GenericParam> own) const {
   for (const ast::GenericParam& param : impl_params) {
-    if (is_value_param(ast, param)) {
+    if (is_value_param(ast, param) || is_fn_bound(ast, param)) {
       return false;
     }
   }
   for (const ast::GenericParam& param : own) {
-    if (is_value_param(ast, param) || own_fn_slot(param.name.name) != nullptr) {
+    if (is_value_param(ast, param) || is_fn_bound(ast, param) ||
+        own_fn_slot(param.name.name) != nullptr) {
       return false;
     }
   }

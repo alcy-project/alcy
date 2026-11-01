@@ -30,6 +30,7 @@
 #include "ir/function.h"
 #include "ir/instruction_flags.h"
 #include "ir/opcode.h"
+#include "ir/parametric.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -115,6 +116,10 @@ class Lowerer {
     ir::TypeIdx ret = ir::TypeIdx(base::INVALID_IDX);
     // Generic instantiation lowered under (NO_INST for plain code).
     u32 inst = analyzer::NO_INST;
+    // The definition-site body of a generic item: lowered once with
+    // `Param` types and cloned per instantiation, so no source
+    // function stands for it (ADR-0079).
+    bool parametric = false;
     // What the symbol names. A method and an associated function share
     // an item, so the kind comes from the signature, not the item.
     ir::SymbolKind kind = ir::SymbolKind::Free;
@@ -149,7 +154,8 @@ class Lowerer {
   // The AST engine of compile-time evaluation; the entry points below
   // delegate to it.
   analyzer::CompEvaluator comp_;
-  // Lowered prelude functions, excluded from reported counts.
+  // Lowered concrete prelude functions, excluded from reported
+  // counts.
   usize prelude_functions_ = 0;
   // Instantiation under lowering; the comp evaluator is seeded with it
   // and side-table lookups match this context.
@@ -373,6 +379,12 @@ class Lowerer {
                      u32 inst,
                      std::span<const CompVal> comp_args,
                      std::span<const ir::TypeIdx> extra_generics = {});
+  // Whether a signature names an IR type parameter, or a nominal whose
+  // member does: a call it decides records a parametric callee
+  // (ADR-0079).
+  bool signature_mentions_param(const std::vector<ir::TypeIdx>& params,
+                                ir::TypeIdx ret,
+                                ir::TypeIdx owner) const;
   // Reserves (or finds) the IR function for one instantiation. `kind`
   // says what the symbol names, because a method and an associated
   // function share an item. `extra_generics` are the method's own type
@@ -386,8 +398,35 @@ class Lowerer {
                            std::vector<CompVal> comp_args,
                            ir::SymbolKind kind = ir::SymbolKind::Free,
                            std::span<const ir::TypeIdx> extra_generics = {},
-                           ir::TypeIdx owner = ir::TypeIdx(base::INVALID_IDX));
+                           ir::TypeIdx owner = ir::TypeIdx(base::INVALID_IDX),
+                           bool parametric = false);
   u32 callee_inst(const analyzer::CheckedModule::CallTarget* target) const;
+  // The `Func` type a parametric call's callee operand carries: the
+  // signature the definition-site check resolved, its parameters
+  // materialized consecutively so the range holds.
+  ir::TypeIdx func_signature(const std::vector<ir::TypeIdx>& params,
+                             ir::TypeIdx ret);
+  // The row a call the parametric form cannot name carries (ADR-0079,
+  // ADR-0080): a generic item's parametric function, or a bound's spec
+  // and method. `args` are the type arguments the call resolved.
+  ir::ParametricCalleeIdx parametric_callee_record(
+      ir::ParametricCalleeKind kind,
+      ir::FunctionIdx function,
+      str::StringPoolId spec,
+      str::StringPoolId method,
+      const std::vector<ir::TypeIdx>& args);
+  // The record for a call to a generic item, found by the item its
+  // once-checked body belongs to. Invalid when the item has none.
+  ir::ParametricCalleeIdx generic_callee(ast::ItemIdx item,
+                                         const std::vector<ir::TypeIdx>& args,
+                                         diag::Span span);
+  // Ends a parametric call: the callee operand is the record, and the
+  // value operands follow it.
+  Val emit_parametric_call(const std::vector<ir::OperandIdx>& ops,
+                           const std::vector<ir::TypeIdx>& params,
+                           ir::TypeIdx ret,
+                           ir::ParametricCalleeIdx callee,
+                           diag::Span span);
   // Type arguments of a nominal type, empty for a plain declaration.
   std::vector<ir::TypeIdx> nominal_arguments(ir::TypeIdx type) const;
   // Type arguments a generic free function or intrinsic bound.
@@ -994,6 +1033,9 @@ class Lowerer {
   // taken once. A key is written and read before anything else runs, so the
   // view a caller holds is never invalidated under it.
   std::string fn_key_scratch_;
+  // The generic items whose once-checked body was emitted, by item: a
+  // call the parametric form records resolves through it (ADR-0079).
+  std::unordered_map<u32, ir::FunctionIdx> parametric_fn_by_item_;
   // Where a function instantiation's arguments are, so a lookup does not have
   // to walk the package's instances: by (item, instantiation) for a body that
   // knows the context it was checked under, by (module, signature slot) for a

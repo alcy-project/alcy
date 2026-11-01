@@ -327,7 +327,7 @@ VerificationResult verify_storage(const Storage& storage) {
       if (callee.function.idx >= storage.functions().size()) {
         return err(VerificationErrorKind::ParametricCalleeOutOfRange, cidx.idx);
       }
-    } else if (callee.spec.idx >= storage.types().size() ||
+    } else if (callee.spec == str::INVALID_STRING_POOL_ID ||
                callee.method == str::INVALID_STRING_POOL_ID) {
       return err(VerificationErrorKind::ParametricCalleeOutOfRange, cidx.idx);
     }

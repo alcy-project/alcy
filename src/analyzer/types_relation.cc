@@ -106,6 +106,62 @@ bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
   return false;
 }
 
+// Whether a type's layout depends on a parameter (ADR-0079).
+bool Checker::type_names_param(ir::TypeIdx type) const {
+  if (!type.is_valid() || type.idx >= builder.types().size()) {
+    return false;
+  }
+  const ir::TypeNode node = builder.types()[type];
+  using T = ir::TypeTag;
+  switch (node.tag) {
+    case T::Param: return true;
+    case T::Ref:
+    case T::MutRef:
+    case T::RawPtr:
+    case T::RawMutPtr:
+      return type_names_param(builder.ref_types()[node.as_ref()].pointee);
+    case T::Array:
+      return type_names_param(builder.array_types()[node.as_array()].element);
+    case T::Slice:
+      return type_names_param(builder.slice_types()[node.as_slice()].element);
+    case T::Tuple: {
+      for (const ir::TypeIdx element :
+           builder.tuple_types()[node.as_tuple()].elements) {
+        if (type_names_param(element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case T::Func: {
+      const ir::FuncType shape = builder.func_types()[node.as_func()];
+      for (const ir::TypeIdx param : shape.params) {
+        if (type_names_param(param)) {
+          return true;
+        }
+      }
+      return type_names_param(shape.ret);
+    }
+    case T::Struct:
+      for (const ir::TypeIdx arg :
+           builder.struct_types()[node.as_struct()].params) {
+        if (type_names_param(arg)) {
+          return true;
+        }
+      }
+      return false;
+    case T::Enum:
+      for (const ir::TypeIdx arg :
+           builder.enum_types()[node.as_enum()].params) {
+        if (type_names_param(arg)) {
+          return true;
+        }
+      }
+      return false;
+    default: return false;
+  }
+}
+
 // User-facing type names: the table spells bool as `i1` and unit as
 // `void`, which read poorly in diagnostics.
 

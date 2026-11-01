@@ -57,10 +57,15 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage package_ir = std::move(lowered).unwrap();
+  // Reported counts exclude the parametric bodies: the specialization
+  // pass clones them, and no source function stands for one (ADR-0079).
+  // The storage's list is the authority, so a loaded package counts
+  // what a freshly lowered one does.
+  const usize hidden = package_ir.prelude_functions +
+                       package_ir.storage->parametric_functions().size();
   const usize function_count =
-      package_ir.storage->functions().size() > package_ir.prelude_functions
-          ? package_ir.storage->functions().size() -
-                package_ir.prelude_functions
+      package_ir.storage->functions().size() > hidden
+          ? package_ir.storage->functions().size() - hidden
           : 0;
   const bool borrows_ok = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "borrow",

@@ -135,10 +135,11 @@ stay: the specialization pass is what replaces them.
    which no concrete check and no lowering reads - the lowering leaves
    any signature that names a parameter for the specialization pass.
    What cannot stand in yet stays per-instantiation: a value parameter,
-   a `comp fn`, an owning `fn()` slot (ADR-0116), and an intrinsic's
-   shape a bare parameter would decide. An unsuffixed numeric literal
-   meeting a parameter adopts it, and the instantiation's own check
-   settles the width.
+   a `comp fn`, an owning `fn()` slot (ADR-0116), a parameter bounded
+   by the `Fn` spec (`F: Fn<...>`, whose witness is a fact of the
+   instantiation), and an intrinsic's shape a bare parameter would
+   decide. An unsuffixed numeric literal meeting a parameter adopts it,
+   and the instantiation's own check settles the width.
 3. A specialization pass over IR, before the borrow pass, in each
    package's build (the Decision above). The layout lowering would
    otherwise bake into a body landed ahead of the pass: enum accesses
@@ -146,7 +147,13 @@ stay: the specialization pass is what replaces them.
    the niche's spell, and the payload offsets at emission, and a copy's
    alignment is its operand's pointee, which the backend reads. A
    parametric body therefore holds no layout for the substitution to
-   touch.
+   touch. The parametric form landed next: lowering emits each
+   definition-site body once with the `Param` nodes its signature
+   resolved, lists it as a function no pass or backend receives, and
+   records what it cannot name - a call as the callee and arguments the
+   substitution settles, an end as `ParametricDrop` - so the pass has
+   the whole body to clone. What remains is the pass, its dispatch
+   resolution, and the summary that carries the body.
 4. The summary carries a generic body, and the `needs_body` flag
    goes.
 5. The AST-level instantiation walk is deleted.

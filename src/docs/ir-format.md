@@ -24,7 +24,7 @@ Both forms carry one lowered package:
 | instruction spans | one `diag::Span` per instruction, or none |
 | files | a name (and optionally a size and content hash) per `source::FileId` |
 | address names | `(register, name, is_param, is_capture)` per allocated place |
-| prelude count | how many storage functions are prelude |
+| prelude count | how many storage functions are concrete prelude |
 
 Indices are 32-bit and tables are dense; a range is a `(head, size)`
 pair of consecutive indices. Text keeps storage indices (`v12`, `b7`),
@@ -306,7 +306,9 @@ The section is absent or empty when the package carries no spans.
 **ADDR_NAMES**: `count` × `{ reg u32, name u32, flags u8, pad u8[3] }`,
 `flags` bit 0 `is_param`, bit 1 `is_capture`.
 
-**PRELUDE**: one `u32`, the package's prelude count. The section is
+**PRELUDE**: one `u32`, the package's concrete prelude count. A
+parametric body counts through the `PARAMETRIC_FUNCTIONS` section
+instead, because no source function stands for one. The section is
 absent when the count is zero.
 
 **CONSTS**: `count` × `{ value u64 }`, one row per compile-time value

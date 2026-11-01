@@ -2440,6 +2440,14 @@ class Checker {
   void run() {
     size_scratch();
     summaries.assign(storage.functions().size(), {});
+    // A parametric function is borrowed once per specialization, after
+    // the pass substitutes the arguments (ADR-0079); borrowing it in
+    // its parametric form would read types the borrow rules cannot
+    // answer.
+    std::vector<bool> parametric(storage.functions().size(), false);
+    for (const ir::FunctionIdx fidx : storage.parametric_functions()) {
+      parametric[fidx.idx] = true;
+    }
     // Bounded summary fixed-point over the call graph: one call edge
     // propagates per sweep, so a chain cannot exceed the function count
     // and the cap only fires on compiler bugs.
@@ -2449,6 +2457,9 @@ class Checker {
       stable = true;
       for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
            ++fidx) {
+        if (parametric[fidx.idx]) {
+          continue;
+        }
         const ir::Function& fn = storage.functions()[fidx];
         reset_function(fidx);
         {
@@ -2466,6 +2477,9 @@ class Checker {
     }
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
+      if (parametric[fidx.idx]) {
+        continue;
+      }
       const ir::Function& fn = storage.functions()[fidx];
       reset_function(fidx);
       {
