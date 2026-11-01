@@ -1,0 +1,5 @@
+# A method that borrows its receiver can hand the borrow back: the result
+# names what the receiver named, and the store then outlives the block.
+exit = 4
+contains = ["escapes the block that declares it"]
+not_contains = []

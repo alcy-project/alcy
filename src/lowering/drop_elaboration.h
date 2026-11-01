@@ -37,6 +37,11 @@ struct Local {
   std::string_view name;
   ir::RegisterIdx addr;
   ir::TypeIdx type;
+  // The locals a reference held here may point into: `p := &n` names n,
+  // and a binding from an alias copies what the alias named. Empty when
+  // the reference came from a parameter or from a call that kept its
+  // input to itself.
+  std::vector<u32> referents;
 };
 
 // One ownership event the drop pass reads (ADR-0062), in lowering

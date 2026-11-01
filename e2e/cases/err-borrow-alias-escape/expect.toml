@@ -1,0 +1,5 @@
+# An alias carries the loan, not the binding: `p` names `m`, so a copy
+# of `p` into a binding declared outside the block names `m` too.
+exit = 4
+contains = ["Reference to local 'm' escapes the block that declares it"]
+not_contains = []

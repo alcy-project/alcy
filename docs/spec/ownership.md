@@ -27,6 +27,15 @@
   nothing to end; an owning one becomes an unnamed local the drop walk
   ends at the enclosing block, so the borrow is read and retired once
   and no reference outlives it.
+- A reference stored where it outlives its referent is refused: the
+  destination's block outlasts the referent's when the referent is a
+  local declared at the destination or deeper, or a slot a temporary in
+  that block owns. The rule follows the loan rather than the syntax that
+  spelled it, so the result of a call names what its argument borrowed,
+  an aggregate names what its reference-typed fields name, and an alias
+  names what it was copied from. A reference from a parameter, or from a
+  call that kept its input to itself, names no place in the body and
+  passes.
 - A non-`Copy` value cannot be moved out from under an array's element
   either: an array ends its elements whole, so a move out of one is
   refused until the drop walk can name an element. A value without a

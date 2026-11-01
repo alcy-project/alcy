@@ -1,0 +1,5 @@
+# The alias and the call are two steps of one borrow: `p` names `m`, and
+# the result names what `p` named.
+exit = 4
+contains = ["Reference to local 'm' escapes the block that declares it"]
+not_contains = []

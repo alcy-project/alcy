@@ -552,29 +552,108 @@ const Local* Lowerer::rooted_local(ast::ExprIdx place) const {
   return lookup_local(path.segments[0].name);
 }
 
-bool Lowerer::escapes_referent(ast::ExprIdx value, ast::ExprIdx place) const {
-  if (!value.is_valid() || ast.exprs[value].kind != ast::ExprKind::Borrow) {
+bool Lowerer::carries_borrow(ir::TypeIdx type) const {
+  const auto found = type_origins_.find(type.idx);
+  if (found != type_origins_.end()) {
+    return carries_borrow(ir::TypeIdx(found->second));
+  }
+  const ir::TypeNode& node = builder.types()[type];
+  switch (node.tag) {
+    case ir::TypeTag::Ref:
+    case ir::TypeTag::MutRef:
+    case ir::TypeTag::Str:
+    case ir::TypeTag::Slice: return true;
+    case ir::TypeTag::Array:
+      return carries_borrow(builder.array_types()[node.as_array()].element);
+    case ir::TypeTag::Tuple:
+      for (ir::TypeIdx element :
+           builder.tuple_types()[node.as_tuple()].elements) {
+        if (carries_borrow(element)) {
+          return true;
+        }
+      }
+      return false;
+    case ir::TypeTag::Struct:
+      for (ir::TypeIdx field :
+           builder.struct_types()[node.as_struct()].fields) {
+        if (carries_borrow(field)) {
+          return true;
+        }
+      }
+      return false;
+    case ir::TypeTag::Enum: {
+      for (ir::EnumVariantTypeIdx variant :
+           builder.enum_types()[node.as_enum()].variants) {
+        for (ir::TypeIdx field : builder.enum_variant_types()[variant].fields) {
+          if (carries_borrow(field)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    default: return false;
+  }
+}
+
+void Lowerer::record_borrow_of(ast::ExprIdx place) {
+  const Local* local = rooted_local(place);
+  if (local == nullptr) {
+    return;
+  }
+  borrow_sources.push_back(static_cast<u32>(local - locals.data()));
+}
+
+void Lowerer::record_alias(const Local& local) {
+  borrow_sources.insert(borrow_sources.end(), local.referents.begin(),
+                        local.referents.end());
+}
+
+void Lowerer::record_place_alias(ast::ExprIdx place) {
+  const Local* local = rooted_local(place);
+  if (local != nullptr) {
+    record_alias(*local);
+  }
+}
+
+bool Lowerer::escapes_referent(ir::TypeIdx type,
+                               diag::Span span,
+                               ast::ExprIdx place,
+                               std::span<const u32> sources) const {
+  if (!carries_borrow(type)) {
     return false;
   }
-  const ast::ExprBorrow& borrow =
-      ast.exprs[value].payload.get<ast::ExprBorrow>();
-  const Local* referent = rooted_local(borrow.inner);
   const Local* target = rooted_local(place);
-  if (referent == nullptr || target == nullptr) {
+  if (target == nullptr) {
     return false;
   }
   // Blocks are a stack: a local declared after the destination's is in
   // the destination's block or deeper, so its slot cannot outlive the
   // store it would receive.
-  const auto referent_index = static_cast<usize>(referent - locals.data());
   const auto target_index = static_cast<usize>(target - locals.data());
-  if (referent_index <= target_index) {
-    return false;
+  for (u32 source : sources) {
+    if (source >= locals.size() || source <= target_index) {
+      continue;
+    }
+    const u32 index = bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
+        DiagCode::BlockReferenceEscapes, span, locals[source].name);
+    (void)index;
+    return true;
   }
-  const u32 index = bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
-      DiagCode::BlockReferenceEscapes, ast.exprs[value].span, referent->name);
-  (void)index;
-  return true;
+  return false;
+}
+
+void Lowerer::note_referents(ir::TypeIdx type,
+                             usize first,
+                             usize sources_from) {
+  if (!carries_borrow(type)) {
+    return;
+  }
+  const std::span<const u32> sources(borrow_sources.data() + sources_from,
+                                     borrow_sources.size() - sources_from);
+  for (usize i = first; i < locals.size(); ++i) {
+    locals[i].referents.assign(sources.begin(), sources.end());
+  }
 }
 
 const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(

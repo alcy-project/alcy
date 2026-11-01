@@ -164,6 +164,9 @@ class Lowerer {
   // Per-function state.
   u32 module = 0;
   std::vector<Local> locals;
+  // The locals borrowed while a value was lowered, in order: a statement
+  // reads the tail its own lowering added.
+  std::vector<u32> borrow_sources;
   // Bounds the recursive tree walk; see base::MAX_NESTING. The analyzer
   // rejects a tree this deep before lowering sees it, so tripping this
   // means the budget is the only thing between a hostile input and the
@@ -286,11 +289,28 @@ class Lowerer {
   ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
   ir::OperandIdx use_value(Val v);
   const Local* lookup_local(std::string_view name) const;
-  // True when `value` borrows a local declared after `place`'s local, so
-  // storing it into `place` would leave the reference reading a slot
-  // whose block has ended. Only a borrow of a rooted local is read: a
-  // call's result and a temporary have no binding to compare.
-  bool escapes_referent(ast::ExprIdx value, ast::ExprIdx place) const;
+  // True when a value of `type` carries a borrow, either itself or in a
+  // field of an aggregate.
+  bool carries_borrow(ir::TypeIdx type) const;
+  // Records what `&place` borrows, and what a read of `local` names, so
+  // a reference reaches the extent rule even when a call, an aggregate,
+  // or an alias stands between them.
+  void record_borrow_of(ast::ExprIdx place);
+  void record_alias(const Local& local);
+  // Records what a place read takes a reference out of: `holder.p` and
+  // `v[i]` name what the local they are rooted at names.
+  void record_place_alias(ast::ExprIdx place);
+  // True when a value of `type` borrows a local that outlives `place`:
+  // storing it would leave the reference reading a slot whose block has
+  // ended. `sources` are the locals the value's lowering borrowed from.
+  bool escapes_referent(ir::TypeIdx type,
+                        diag::Span span,
+                        ast::ExprIdx place,
+                        std::span<const u32> sources) const;
+  // Gives the locals a binding added from `first` onward the locals its
+  // value borrowed from. `sources_from` is the `borrow_sources` length
+  // before the value was lowered.
+  void note_referents(ir::TypeIdx type, usize first, usize sources_from);
   // The local a place expression is rooted at, or nullptr when it is not
   // rooted at one.
   const Local* rooted_local(ast::ExprIdx place) const;

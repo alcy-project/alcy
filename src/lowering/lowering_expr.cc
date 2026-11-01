@@ -737,6 +737,11 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       if (tag_of(local->type) == ir::TypeTag::Void) {
         return Val{size_one, local->type, false, false};
       }
+      // A read of a reference is a read of whatever it names, so the
+      // binding it reaches keeps the referent, not the alias.
+      if (carries_borrow(local->type)) {
+        record_alias(*local);
+      }
       return Val{to_operand(local->addr, local->type), local->type, true, true};
     }
     // Comp bindings never take runtime addresses; splice the value.
@@ -3140,9 +3145,13 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       ast.exprs[receiver_expr].kind == ast::ExprKind::Index &&
       is_range_type(expr_type(
           ast.exprs[receiver_expr].payload.get<ast::ExprIndex>().index));
-  Val receiver = is_ref_tag(tag_of(info.params[0])) && !receiver_is_run
-                     ? place_addr(receiver_expr)
-                     : lower_expr(receiver_expr, nullptr);
+  const bool receiver_borrows =
+      is_ref_tag(tag_of(info.params[0])) && !receiver_is_run;
+  if (receiver_borrows) {
+    record_borrow_of(receiver_expr);
+  }
+  Val receiver = receiver_borrows ? place_addr(receiver_expr)
+                                  : lower_expr(receiver_expr, nullptr);
   // A by-value receiver that names a field moves it out of its owner,
   // so the owner's drop skips it; a local already carries the marker.
   if (!is_ref_tag(tag_of(info.params[0]))) {
@@ -5180,6 +5189,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Borrow: {
       const ast::ExprBorrow& borrow = node.payload.get<ast::ExprBorrow>();
+      record_borrow_of(borrow.inner);
       if (ast.exprs[borrow.inner].kind == ast::ExprKind::Index) {
         const ast::ExprIndex& index =
             ast.exprs[borrow.inner].payload.get<ast::ExprIndex>();
@@ -5411,6 +5421,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       }
       // Moving into the binding consumes a field rather than loading a
       // copy: the owner's drop walk has to see the partial move.
+      const usize sources_before = borrow_sources.size();
       Val init = lower_moved(decl.init, nullptr);
       if (failed || terminated_cur()) {
         return;
@@ -5430,27 +5441,44 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         return;
       }
       // Moving into the binding consumes a non-Copy place.
+      record_place_alias(decl.init);
+      const usize bound_from = locals.size();
       const ir::OperandIdx moved = use_value(init);
       bind_pattern(decl.pattern, Val{moved, init.type, false, false});
+      note_referents(init.type, bound_from, sources_before);
       return;
     }
     case ast::StmtKind::Reassign: {
       const ast::StmtReassign& reassign = node.payload.get<ast::StmtReassign>();
+      // The value is read before the place is taken: `v[i] = v[j] + 1`
+      // reads through a shared borrow before the place asks for the
+      // exclusive one, so the two do not overlap.
+      const usize sources_before = borrow_sources.size();
+      Val value = lower_moved(reassign.value, nullptr);
+      if (failed || terminated_cur()) {
+        return;
+      }
+      record_place_alias(reassign.value);
+      const std::span<const u32> sources(
+          borrow_sources.data() + sources_before,
+          borrow_sources.size() - sources_before);
       // A borrow of a local declared inside the block, stored into a
       // binding declared outside it, would outlive its referent: the
       // slot ends with the block while the destination keeps reading it.
       // The binding order is the extent here, because a later local
-      // cannot outlive an earlier one in the same function.
-      if (escapes_referent(reassign.value, reassign.place)) {
+      // cannot outlive an earlier one in the same function. The store
+      // reaches the reference the same way a read does: through a call,
+      // an aggregate, or an alias.
+      if (escapes_referent(value.type, ast.exprs[reassign.value].span,
+                           reassign.place, sources)) {
         failed = true;
         return;
       }
-      // The value is read before the place is taken: `v[i] = v[j] + 1`
-      // reads through a shared borrow before the place asks for the
-      // exclusive one, so the two do not overlap.
-      Val value = lower_moved(reassign.value, nullptr);
-      if (failed || terminated_cur()) {
-        return;
+      if (ast.exprs[reassign.place].kind == ast::ExprKind::Path) {
+        if (const Local* target = rooted_local(reassign.place)) {
+          locals[target - locals.data()].referents.assign(sources.begin(),
+                                                          sources.end());
+        }
       }
       Val place = place_addr(reassign.place);
       if (failed || terminated_cur()) {
