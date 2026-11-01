@@ -275,14 +275,16 @@ impl<T, N: usize>[T; N] {
     ret N == 0
   }
 
-  // The array as a shared view.
+  // The array as a shared view. The base is the array's own address,
+  // read without the index check, so an array of no elements has a
+  // view too: element zero is where the array starts whatever `N` is.
   pub fn as_slice(self: &Self) -> &[T] {
-    ret unsafe { slice_from_parts(&(*self)[0], N) }
+    ret unsafe { slice_from_parts(&*(self as *T), N) }
   }
 
   // The array as a mutable view.
   pub fn as_mut_slice(mut self: &mut Self) -> &mut [T] {
-    ret unsafe { slice_from_parts_mut(&mut (*self)[0], N) }
+    ret unsafe { slice_from_parts_mut(&mut *(self as *mut T), N) }
   }
 
   pub fn iter(self: &Self) -> SliceIter<T> {
