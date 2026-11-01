@@ -1173,9 +1173,11 @@ class Checker {
         transfer(bidx, in, out);
         // IN is refreshed every visit for the check pass to read;
         // successors are fed from OUT, which alone drives convergence.
-        moved_in[bidx.idx] = in;
+        // The rows take the scratch by swap: a place's path is a vector,
+        // so copying a state would allocate once per place of it.
+        moved_in[bidx.idx].swap(in);
         if (!same_state(out, moved_out[bidx.idx])) {
-          moved_out[bidx.idx] = out;
+          moved_out[bidx.idx].swap(out);
           changed = true;
         }
       }
@@ -1247,7 +1249,9 @@ class Checker {
     compute_liveness(fn, order);
     std::vector<Place> state;
     for (ir::BlockIdx bidx : order) {
-      state = moved_in[bidx.idx];
+      // The block's entry state is the last thing the row is read for, so
+      // the check pass takes it rather than copying every place in it.
+      state = std::move(moved_in[bidx.idx]);
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {
         check_instr(fn, bidx, iidx, state);
