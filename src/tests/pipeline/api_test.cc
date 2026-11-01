@@ -8,6 +8,7 @@
 #include "analyzer/resolve.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
+#include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
@@ -72,6 +73,44 @@ TEST_CASE("Pipeline build produces object file") {
       ctx, dir.join("main.al"), obj_path, BuildPlan{},
       pipeline::EmitMode::Object, pipeline::full_std_selection());
   CHECK(res.is_ok());
+}
+
+TEST_CASE("A file built alone reports one finding per problem") {
+  // The checker names a place once per instruction that reads it, so one
+  // borrow conflict arrives once per reading instruction. A package build
+  // and a check collapse those repeats; a single-file build used to hand
+  // every one of them to the reader.
+  io::TempDir dir = io::TempDir::create_unique("pipeline_build_repeat_test_");
+  const bool setup = dir.write_file("main.al",
+                                    "fn main() -> i32 {\n"
+                                    "  mut v := Vec::<i32>::new()\n"
+                                    "  v.push(1)\n"
+                                    "  s := v.as_mut_slice()\n"
+                                    "  mut k := 0\n"
+                                    "  while k < 64 {\n"
+                                    "    v.push(2)\n"
+                                    "    k = k + 1\n"
+                                    "  }\n"
+                                    "  s[0] = 9\n"
+                                    "  println(\"{}\", v.len())\n"
+                                    "  ret 0\n"
+                                    "}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  const std::string obj_path = std::string(dir.path()) + "/main.o";
+  auto res = pipeline::build_single_file(
+      ctx, dir.join("main.al"), obj_path, BuildPlan{},
+      pipeline::EmitMode::Object, pipeline::full_std_selection());
+  CHECK(res.is_err());
+  u32 conflicts = 0;
+  ctx.bag.for_each([&](const diag::Diagnostic& diagnostic) {
+    conflicts += diagnostic.message == "Conflicting borrows of 'v'" ? 1 : 0;
+  });
+  CHECK(conflicts == 1);
 }
 
 TEST_CASE("Pipeline build produces executable") {

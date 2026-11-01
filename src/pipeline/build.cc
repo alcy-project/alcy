@@ -777,7 +777,11 @@ base::Result<std::string, diag::Reported> build_single_file(
   return build_single_root(ctx, root, output_path, plan, mode, selection);
 }
 
-base::Result<std::string, diag::Reported> build_single_root(
+namespace {
+
+// One root built alone, before the findings it produced are settled into
+// the set a reader sees.
+base::Result<std::string, diag::Reported> build_one_root(
     PipelineContext& ctx,
     source::FileId root,
     std::string_view output,
@@ -797,6 +801,24 @@ base::Result<std::string, diag::Reported> build_single_root(
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
   return emit_output(ctx, lowered, plan, mode, std::string(output), false, {});
+}
+
+}  // namespace
+
+base::Result<std::string, diag::Reported> build_single_root(
+    PipelineContext& ctx,
+    source::FileId root,
+    std::string_view output,
+    BuildPlan plan,
+    EmitMode mode,
+    const StdSelection& selection) {
+  base::Result<std::string, diag::Reported> result =
+      build_one_root(ctx, root, output, plan, mode, selection);
+  // The checker names a place once per instruction that reads it, so one
+  // hazard reaches the bag more than once; a package build and `check`
+  // report the set once, and a file built alone has to read the same.
+  ctx.bag.dedup();
+  return result;
 }
 
 // The front half of a target's lifecycle - the cache lookup, the compile
