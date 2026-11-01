@@ -57,6 +57,14 @@ Run every shape before concluding a run is linear: the constant ranges from
 545K to 884K per module across them, so a change that moves one shape's
 constant proves nothing about another's.
 
+Memory reads the same way. `perf.py rss --shape plain --sizes 300 600 1200`
+prints the peak per module at each size; across the shapes the peak is 65-71
+MiB at 300 modules and 86-114 MiB at 1200, so the per-module figure falls from
+221-243K to 73-97K and the fit's slope is at or below zero. Read the marginal
+and not the total: the base is the runtime and the heap the first modules
+touched, and it is what makes a small corpus look expensive per module. What
+the modules add is 24 to 50 KiB each, depending on the shape.
+
 The shapes exist to put weight where a cost can hide, and a corpus whose
 modules do not mention each other would not:
 
