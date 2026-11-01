@@ -26,18 +26,6 @@ namespace parser {
 
 namespace {
 
-bool is_reserved(lexer::TokenKind kind) {
-  switch (kind) {
-    case lexer::TokenKind::Async:
-    case lexer::TokenKind::Await:
-    case lexer::TokenKind::Union:
-    case lexer::TokenKind::Register:
-    case lexer::TokenKind::Where:
-    case lexer::TokenKind::Dyn: return true;
-    default: return false;
-  }
-}
-
 // The primitive type tokens, for the declaration a neighboring
 // language spells with the type first.
 bool is_primitive_type_token(lexer::TokenKind kind) {
@@ -142,14 +130,6 @@ Parser::Parser(std::span<const lexer::Token> tokens,
   skip_insignificant();
 }
 
-bool Parser::at_end() const {
-  return pos_ >= tokens_.size() || tokens_[pos_].kind == lexer::TokenKind::Eof;
-}
-
-lexer::TokenKind Parser::peek_kind() const {
-  return peek().kind;
-}
-
 lexer::TokenKind Parser::peek_kind(usize ahead) const {
   usize i = pos_;
   while (i < tokens_.size()) {
@@ -164,14 +144,6 @@ lexer::TokenKind Parser::peek_kind(usize ahead) const {
     ++i;
   }
   return lexer::TokenKind::Eof;
-}
-
-lexer::Token Parser::peek() const {
-  return tokens_[pos_];
-}
-
-lexer::Token Parser::previous() const {
-  return tokens_[pos_ - 1];
 }
 
 void Parser::skip_insignificant() {
@@ -199,24 +171,6 @@ void Parser::skip_insignificant() {
     }
     break;
   }
-}
-
-void Parser::advance() {
-  previous_span_ = tokens_[pos_].span;
-  ++pos_;
-  skip_insignificant();
-}
-
-bool Parser::check(lexer::TokenKind kind) const {
-  return !at_end() && peek_kind() == kind;
-}
-
-bool Parser::match(lexer::TokenKind kind) {
-  if (!check(kind)) {
-    return false;
-  }
-  advance();
-  return true;
 }
 
 bool Parser::expect(lexer::TokenKind kind, std::string_view what) {

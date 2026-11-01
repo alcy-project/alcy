@@ -45,6 +45,26 @@ struct FnSignature {
 base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
                                                 diag::DiagBag& bag);
 
+// Kinds the cursor never rests on: lexer errors (already diagnosed), doc
+// comments (trivia the item above claims), and reserved words, which the
+// skip diagnoses with guidance.
+constexpr bool is_reserved(lexer::TokenKind kind) {
+  switch (kind) {
+    case lexer::TokenKind::Async:
+    case lexer::TokenKind::Await:
+    case lexer::TokenKind::Union:
+    case lexer::TokenKind::Register:
+    case lexer::TokenKind::Where:
+    case lexer::TokenKind::Dyn: return true;
+    default: return false;
+  }
+}
+
+constexpr bool is_insignificant(lexer::TokenKind kind) {
+  return kind == lexer::TokenKind::Error ||
+         kind == lexer::TokenKind::DocComment || is_reserved(kind);
+}
+
 // Hand-written recursive-descent parser over a token stream. Parsing is
 // error-tolerant: failures report a diagnostic and synchronize at item,
 // statement, or arm boundaries, so one bad construct never hides the
@@ -69,17 +89,40 @@ class Parser {
 
  private:
   // Token cursor. Never rests on skipped kinds.
-  bool at_end() const;
-  lexer::TokenKind peek_kind() const;
+  //
+  // The grammar tests the cursor at nearly every step - a lookahead in the
+  // statement, expression, and type parsers is one - so the tests are
+  // defined here and inline into their call sites. Only the walk over the
+  // kinds a cursor never rests on, and the diagnostics it emits, stay out
+  // of line.
+  bool at_end() const {
+    return pos_ >= tokens_.size() ||
+           tokens_[pos_].kind == lexer::TokenKind::Eof;
+  }
+  lexer::TokenKind peek_kind() const { return peek().kind; }
   // The nth significant token after the cursor (0 is the cursor
   // itself), skipping what `skip_insignificant` skips.
   lexer::TokenKind peek_kind(usize ahead) const;
-  lexer::Token peek() const;
-  lexer::Token previous() const;
-  void advance();
+  lexer::Token peek() const { return tokens_[pos_]; }
+  lexer::Token previous() const { return tokens_[pos_ - 1]; }
+  void advance() {
+    previous_span_ = tokens_[pos_].span;
+    ++pos_;
+    if (pos_ < tokens_.size() && is_insignificant(tokens_[pos_].kind)) {
+      skip_insignificant();
+    }
+  }
   void skip_insignificant();
-  bool check(lexer::TokenKind kind) const;
-  bool match(lexer::TokenKind kind);
+  bool check(lexer::TokenKind kind) const {
+    return !at_end() && tokens_[pos_].kind == kind;
+  }
+  bool match(lexer::TokenKind kind) {
+    if (!check(kind)) {
+      return false;
+    }
+    advance();
+    return true;
+  }
   bool expect(lexer::TokenKind kind, std::string_view what);
   diag::Span span_from(usize mark) const;
 
