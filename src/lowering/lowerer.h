@@ -103,9 +103,6 @@ class Lowerer {
 
   struct FnEntry {
     ast::ItemIdx item = ast::ItemIdx::invalid();
-    // Specialization key over comp argument values; empty for
-    // functions without comp parameters.
-    std::string comp_key;
     ir::FunctionIdx idx = ir::FunctionIdx(base::INVALID_IDX);
     u32 mod = 0;
     std::string name;

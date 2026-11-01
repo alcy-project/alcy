@@ -842,7 +842,6 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   fn_by_key_.emplace(std::string(key), idx.idx);
   FnEntry entry;
   entry.item = item;
-  entry.comp_key = std::string(key);
   entry.idx = idx;
   entry.mod = mod;
   entry.name = std::string(name);
