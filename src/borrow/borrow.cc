@@ -273,6 +273,14 @@ class Checker {
   std::vector<ir::BlockIdx> succs_scratch_;
   std::vector<ir::BlockIdx> stack_scratch_;
   std::vector<ir::BlockIdx> post_scratch_;
+  // The block order the check pass walks, and the state it reads a block
+  // with. Both are rebuilt for every function, and both keep the capacity
+  // the widest function needed rather than returning it to the heap.
+  std::vector<ir::BlockIdx> block_order_;
+  std::vector<Place> state_scratch_;
+  // The two states the may-move fixpoint exchanges with its rows.
+  std::vector<Place> move_in_scratch_;
+  std::vector<Place> move_out_scratch_;
   std::vector<u32> use_count_scratch_;
   std::vector<u8> receiver_call_scratch_;
   // Entry-block allocas holding a block parameter, paired with that
@@ -1340,26 +1348,24 @@ class Checker {
   // May-move fixpoint: back-edges carry loop moves to the next
   // iteration (bounded; the place universe is finite).
   void compute_moved(const std::vector<ir::BlockIdx>& order) {
-    std::vector<Place> in;
-    std::vector<Place> out;
     const usize cap = order.size() * 10 + 10;
     for (usize iter = 0; iter < cap; ++iter) {
       bool changed = false;
       for (ir::BlockIdx bidx : order) {
-        in.clear();
+        move_in_scratch_.clear();
         for (ir::BlockIdx pred : preds[bidx.idx]) {
           for (const Place& place : moved_out[pred.idx]) {
-            add_moved(in, place);
+            add_moved(move_in_scratch_, place);
           }
         }
-        transfer(bidx, in, out);
+        transfer(bidx, move_in_scratch_, move_out_scratch_);
         // IN is refreshed every visit for the check pass to read;
         // successors are fed from OUT, which alone drives convergence.
         // The rows take the scratch by swap: a state is copied per place of
         // it, and a copy names the same windows either way.
-        moved_in[bidx.idx].swap(in);
-        if (!same_state(out, moved_out[bidx.idx])) {
-          moved_out[bidx.idx].swap(out);
+        moved_in[bidx.idx].swap(move_in_scratch_);
+        if (!same_state(move_out_scratch_, moved_out[bidx.idx])) {
+          moved_out[bidx.idx].swap(move_out_scratch_);
           changed = true;
         }
       }
@@ -1425,22 +1431,23 @@ class Checker {
     const ir::Function& fn = storage.functions()[fidx];
     collect_reserved(fn);
     forward(fidx);
-    std::vector<ir::BlockIdx> order;
-    reverse_post_order(fn, order);
-    reset_blocks(order);
+    block_order_.clear();
+    reverse_post_order(fn, block_order_);
+    reset_blocks(block_order_);
     // Both fixpoints walk the same CFG of the same function, so its rows are
     // built once here.
-    build_preds(fn, order);
-    compute_moved(order);
-    compute_liveness(fn, order);
-    std::vector<Place> state;
-    for (ir::BlockIdx bidx : order) {
-      // The block's entry state is the last thing the row is read for, so
-      // the check pass takes it rather than copying every place in it.
-      state = std::move(moved_in[bidx.idx]);
+    build_preds(fn, block_order_);
+    compute_moved(block_order_);
+    compute_liveness(fn, block_order_);
+    for (ir::BlockIdx bidx : block_order_) {
+      // The entry state is copied rather than moved out of its row: the row
+      // keeps its buffer, and the copy lands in the scratch the previous
+      // block left, so the pass allocates nothing per block. A state is a
+      // handful of places, each of them a window on the shared step arena.
+      state_scratch_ = moved_in[bidx.idx];
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {
-        check_instr(fn, bidx, iidx, state);
+        check_instr(fn, bidx, iidx, state_scratch_);
       }
     }
   }
