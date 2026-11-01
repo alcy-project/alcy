@@ -48,6 +48,13 @@
 - A view (`str`, a slice, a reference) cannot have a destructor; it
   has nothing to end. Any other type may declare one, and the
   declaration makes it move-only.
+- The body owns the receiver while it runs, so ending what the
+  receiver still holds is the declaration's job. A field the body
+  passes to `drop_in_place` ends where it stands, a field it moves
+  into a binding ends with that binding, and a field it leaves alone
+  is not ended. A destructor is the one scope the compiler cannot
+  prove, because what a body has already ended has no spelling
+  (ADR-0137).
 - Scope exit runs the destructors of the values that block declared,
   innermost first, and a `return` runs the destructors of everything
   still alive. A destructor that ends a value of a generic type is
@@ -62,9 +69,10 @@
   the result first, then ends what is still alive in the same order.
 - A struct's or tuple's fields end in declaration order, an enum's
   live payload in declaration order, and an array's elements in index
-  order. A type with its own destructor runs it first; the fields of
-  its receiver end when the destructor's scope exits, in the same
-  order. The std's sequences end their elements from first to last.
+  order. A type with its own destructor runs it in their place, and
+  what its receiver still holds ends from the body, in the order the
+  body states (ADR-0137). The std's sequences end their elements from
+  first to last.
 - There is no `forget` and no `ManuallyDrop`-shaped wrapper: a value's
   destructor runs at its end, or the program panics and leaves what it
   owned to the process. Deliberately leaking a value has no spelling.

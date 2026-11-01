@@ -45,9 +45,8 @@ API that forgets a value.**
   for the same reason.
 - A struct's or tuple's fields end in declaration order, an enum's
   live payload ends in declaration order, and an array's elements end
-  in index order. A type with its own destructor runs it first; the
-  fields of its receiver end when the destructor's scope exits, in
-  the same order.
+  in index order. A type with its own destructor runs it in their
+  place; see the amendment below for what its receiver ends.
 - The std's sequences end their elements from first to last; a
   container's own destructor states its element order where it is
   written.
@@ -60,6 +59,25 @@ API that forgets a value.**
   (ADR-0085).
 - Destructors do not run on the panic path, as recorded; this record
   does not change that.
+
+## Amended at the destructor receiver's landing
+
+This record first said the fields of a destructor's receiver end when
+the destructor's scope exits, in the same order. They do not: the walk
+places no end on a receiver or on its fields, and the body ends what
+the receiver still holds itself (ADR-0137).
+
+The sentence could not be implemented. A partly ended value has no
+spelling — the language has no `forget` and no `ManuallyDrop`-shaped
+wrapper (ADR-0013), so every binding of `[T; N]` ends all `N`
+elements — and a by-value cursor such as `ArrayIntoIter<T, N>` must
+keep its consumed slots and end only the tail. Ending its array after
+the body ran freed the tail twice.
+
+What this record states about order still holds, for the ends the
+compiler places and for the receiver whose fields the body ends: the
+receiver's body states its own order, and the ends it places follow
+this record's rules where it uses them.
 
 ## Consequences
 

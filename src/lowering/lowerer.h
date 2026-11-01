@@ -911,9 +911,11 @@ class Lowerer {
   std::vector<EndSite> end_sites_;
   u32 record_seq_ = 0;
   // The receiver of the function being lowered when that function is a
-  // destructor: its end runs the destructor of every field it still
-  // holds rather than its own once more (ADR-0086).
-  u32 end_fields_only_ = base::INVALID_IDX;
+  // destructor. The destructor's body ends it, so the walk does not
+  // end it again: there is no way to spell a partly ended value, and
+  // the body is where the decision of what is still held lives
+  // (ADR-0137).
+  u32 end_exempt_ = base::INVALID_IDX;
   void record_end(u32 mark, diag::Span span);
   void record_event(OwnershipEvent::Kind kind,
                     u32 local,

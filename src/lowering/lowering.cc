@@ -1337,7 +1337,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   ownership_.clear();
   end_sites_.clear();
   record_seq_ = 0;
-  end_fields_only_ = base::INVALID_IDX;
+  end_exempt_ = base::INVALID_IDX;
   comp_scope_.clear();
   fn_blocks_.clear();
   streams_.clear();
@@ -1422,10 +1422,10 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   pending_params_.clear();
   binding_param_ = false;
   if (is_destructor(entry.item) && !locals.empty()) {
-    // The fields of the receiver still end when this body exits, but
-    // the receiver's own destructor is the call this body is, so its
-    // end runs the destructor of each field alone (ADR-0086).
-    end_fields_only_ = 0;
+    // The receiver ends from this body: the walk would run the
+    // destructor this body is, and a value it has partly ended has no
+    // spelling (ADR-0137).
+    end_exempt_ = 0;
   }
   if (failed) {
     return;
@@ -1464,7 +1464,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   ownership_.clear();
   end_sites_.clear();
   record_seq_ = 0;
-  end_fields_only_ = base::INVALID_IDX;
+  end_exempt_ = base::INVALID_IDX;
   comp_scope_.clear();
   fn_blocks_.clear();
   streams_.clear();

@@ -283,7 +283,7 @@ class DropElaborator {
         builder(inputs.builder),
         bag(inputs.bag),
         locals(inputs.locals),
-        fields_only(inputs.fields_only),
+        end_exempt_(inputs.end_exempt),
         ownership_(inputs.ownership),
         end_sites_(inputs.end_sites),
         instr_spans_(inputs.instr_spans),
@@ -379,13 +379,13 @@ class DropElaborator {
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
   std::span<const Local> locals;
-  u32 fields_only = base::INVALID_IDX;
-  // A destructor's receiver, which ends the fields it still holds and
-  // not the value as a whole; every other place ends whole, named or
-  // not. Only the receiver is that place: a field reached through it
-  // is a value of its own, with a destructor of its own to run.
-  bool ends_fields_only(u32 local, bool root) const {
-    return root && fields_only != base::INVALID_IDX && local == fields_only;
+  u32 end_exempt_ = base::INVALID_IDX;
+  // A destructor's receiver ends from its own body alone (ADR-0137).
+  // Every other place ends whole, named or not: a field reached
+  // through an ordinary value is a value of its own, with its own
+  // destructor to run.
+  bool end_exempt(u32 local, bool root) const {
+    return root && end_exempt_ != base::INVALID_IDX && local == end_exempt_;
   }
   std::span<const OwnershipEvent> ownership_;
   std::span<const EndSite> end_sites_;
@@ -851,7 +851,7 @@ void DropElaborator::run() {
                  ir::TypeIdx type, ir::OperandIdx place,
                  const std::function<State(const std::vector<u32>&)>& state_of,
                  diag::Span span) {
-    if (!runs_destructor(type)) {
+    if (!runs_destructor(type) || end_exempt(local, path.empty())) {
       return;
     }
     // A place may arrive byte-addressed: a payload field's address is
@@ -876,11 +876,8 @@ void DropElaborator::run() {
     }
     // The same origin rule the collected call follows: a copy's
     // glue is the one the type it came from declared.
-    // The receiver of a destructor ends the fields it still holds;
-    // its own destructor is the call this end is inside.
     const ir::TypeIdx glue_type = type_origin(type);
-    if (!ends_fields_only(local, path.empty()) &&
-        glue_type.idx < drop_glue.size()) {
+    if (glue_type.idx < drop_glue.size()) {
       const analyzer::CheckedModule::DropGlue& glue = drop_glue[glue_type.idx];
       if (glue.index != base::INVALID_IDX) {
         const ir::FunctionIdx fn = drop_method(glue.module, glue.index);
@@ -1035,10 +1032,8 @@ void DropElaborator::run() {
     }
     if (node.tag != ir::TypeTag::Struct && node.tag != ir::TypeTag::Tuple) {
       // A place no walk reaches; the caller's value is left alone. The
-      // sites name a binding, the explicit end does not. A destructor's
-      // receiver has no walk to reach its fields with either, and says
-      // nothing of it.
-      if (local < locals.size() && !ends_fields_only(local, path.empty())) {
+      // sites name a binding, the explicit end does not.
+      if (local < locals.size()) {
         const u32 index = bag.emit<i18n::Key::LowerDestructorNotRun>(
             DiagCode::DropUnplaced, span, locals[local].name);
         (void)index;
@@ -1389,7 +1384,7 @@ void Lowerer::place_ends() {
       .builder = builder,
       .bag = bag,
       .locals = locals,
-      .fields_only = end_fields_only_,
+      .end_exempt = end_exempt_,
       .ownership = ownership_,
       .end_sites = end_sites_,
       .instr_spans = instr_spans_,

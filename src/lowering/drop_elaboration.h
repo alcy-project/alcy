@@ -89,10 +89,12 @@ struct DropElaborationInputs {
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
   std::span<const Local> locals;
-  // The receiver of a destructor, whose end runs the destructor of
-  // each field it still holds instead of its own once more. No local
-  // when the function is not one.
-  u32 fields_only = base::INVALID_IDX;
+  // The receiver of a destructor. Its end belongs to the destructor's
+  // own body, so the walk leaves it alone: there is no way to spell a
+  // value that has been partly ended, and the body is where a value
+  // that has been is written (ADR-0137). No local when the function is
+  // not a destructor.
+  u32 end_exempt = base::INVALID_IDX;
   std::span<const OwnershipEvent> ownership;
   std::span<const EndSite> end_sites;
   // One span per instruction of the function being lowered; the pass
