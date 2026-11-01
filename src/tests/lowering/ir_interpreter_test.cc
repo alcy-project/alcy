@@ -443,6 +443,62 @@ TEST_CASE("IR interpreter agrees on casts and signed shifts") {
   check_same_value(storage, scenario.asts[0], run.value);
 }
 
+TEST_CASE("Both engines widen a negative value by its sign") {
+  VirtualDir dir;
+  Scenario scenario;
+  // The engines are one implementation of the arithmetic in two places,
+  // so a value both of them agree on proves nothing; these assert what
+  // the widened value is.
+  const bool built = build_scenario(dir,
+                                    "comp fn widen(x: i32) -> i64 {\n"
+                                    "  ret x as i64\n"
+                                    "}\n"
+                                    "const R: i64 = widen(0 - 81)\n"
+                                    "const N: i32 = ((0 - 84) as i8) as i32\n"
+                                    "const M: u32 = ((0 - 1) as u16) as u32\n"
+                                    "fn main() {\n"
+                                    "}\n",
+                                    {"R", "N", "M"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  CHECK(scenario.asts.size() == 3);
+  if (scenario.asts.size() != 3) {
+    return;
+  }
+  check_int_value(storage, scenario.asts[0], static_cast<u64>(-81));
+  check_int_value(storage, scenario.asts[1], static_cast<u64>(-84));
+  // `0 - 1` written as u16 is 65535, so widening it keeps 65535 while
+  // the same bits written as i16 widen to the whole mask.
+  check_int_value(storage, scenario.asts[2], 0xFFFFu);
+
+  const ir::FunctionIdx fn =
+      find_function(storage, scenario.fixture.strings, "widen");
+  CHECK(fn.is_valid());
+  if (!fn.is_valid()) {
+    return;
+  }
+  const std::vector<comp::CompVal> args =
+      int_args(storage, fn, {static_cast<u64>(-81)});
+  CHECK(args.size() == 1);
+  if (args.size() != 1) {
+    return;
+  }
+  const RunResult run = run_function(scenario.fixture, storage, fn, args,
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (!run.ok) {
+    return;
+  }
+  check_int_value(storage, run.value, static_cast<u64>(-81));
+}
+
 TEST_CASE("IR interpreter agrees on unsigned bitwise operations") {
   VirtualDir dir;
   Scenario scenario;

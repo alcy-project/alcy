@@ -1182,18 +1182,15 @@ bool Interpreter::execute_cast(ir::InstructionIdx instr, Frame& frame) {
                   "integer operand is not a scalar");
     }
     u64 bits = source.bits & int_mask(source_tag);
+    if (is_signed(source_tag)) {
+      // A signed value extends by its own sign to the full word before
+      // the target width keeps the low bits, so widening preserves it.
+      bits = static_cast<u64>(sign_extend(bits, source_tag));
+    }
     if (target_tag == TypeTag::I1) {
       bits = bits != 0 ? 1 : 0;
     } else {
       bits &= int_mask(target_tag);
-      if (is_signed(target_tag) && is_signed(source_tag)) {
-        const u32 bytes = int_bytes(target_tag);
-        const u64 sign = bytes >= 8 ? static_cast<u64>(1) << 63
-                                    : static_cast<u64>(1) << (bytes * 8 - 1);
-        if ((bits & sign) != 0) {
-          bits |= ~int_mask(target_tag);
-        }
-      }
     }
     frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, bits, 0};
     return true;

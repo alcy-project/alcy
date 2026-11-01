@@ -1388,19 +1388,16 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         return fail(node.span, "cast without value");
       }
       out.value.tag = CompValue::Tag::Int;
-      u64 bits = inner.value.int_value & comp::mask(tag_of(inner.type));
-      if (comp::is_signed(target) && comp::is_signed(tag_of(inner.type))) {
-        const u32 bytes = comp::int_bytes(target);
-        const u64 sign = bytes >= 8 ? static_cast<u64>(1) << 63
-                                    : (static_cast<u64>(1) << (bytes * 8 - 1));
-        bits &= comp::mask(target);
-        if ((bits & sign) != 0) {
-          bits |= ~comp::mask(target);
-        }
-      } else {
-        bits &= comp::mask(target);
-      }
-      out.value.int_value = bits;
+      const ir::TypeTag source = tag_of(inner.type);
+      // A signed value extends by its own sign to the full word before
+      // the target width keeps the low bits, so `-81 as i64` stays
+      // negative and widening never turns it into a large positive one.
+      const u64 extended =
+          comp::is_signed(source)
+              ? static_cast<u64>(comp::sign_extend(
+                    inner.value.int_value & comp::mask(source), source))
+              : inner.value.int_value;
+      out.value.int_value = extended & comp::mask(target);
       return true;
     }
     case ast::ExprKind::Call: return comp_eval_call(mod, expr, scope, out);
