@@ -4,6 +4,7 @@
 #include "analyzer/types.h"
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -688,6 +689,9 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
     }
     builder.fill_enum(entry.type, variants.finish(), ir::TypeIdxRange{});
   }
+  if (!check_type_size(entry.type, node.span)) {
+    return error_type();
+  }
   entry.complete = true;
   // Whatever kind it is: a structure whose fields are being read, an
   // enumeration whose variants are being matched, a type a method is looked up
@@ -910,6 +914,166 @@ bool Checker::resolve_value_argument(u32 module,
   return false;
 }
 
+namespace {
+// A pointer steps by an `isize`-wide offset, so a size above
+// `isize::MAX` names no run of bytes the target can address.
+constexpr u64 MAX_TYPE_SIZE = static_cast<u64>(std::numeric_limits<i64>::max());
+}  // namespace
+
+// A shape that holds a type parameter or a const argument has no size
+// until an instantiation binds it, and the body it binds is checked then,
+// so a walk over the unspecialized shape answers nothing to check.
+bool Checker::has_unbound(ir::TypeIdx type, std::vector<u32>& stack) const {
+  if (!type.is_valid()) {
+    return false;
+  }
+  const ir::TypeNode node = builder.types()[type];
+  const auto any_unbound = [&](ir::TypeIdxRange fields) {
+    for (ir::TypeIdx field : fields) {
+      if (has_unbound(field, stack)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  switch (node.tag) {
+    case ir::TypeTag::Param:
+    case ir::TypeTag::Const: return true;
+    case ir::TypeTag::Array:
+      return has_unbound(builder.array_types()[node.as_array()].element, stack);
+    case ir::TypeTag::Struct:
+    case ir::TypeTag::Tuple:
+    case ir::TypeTag::Enum: {
+      // A cycle the type checks refuse is not this walk's to follow.
+      if (std::find(stack.begin(), stack.end(), type.idx) != stack.end()) {
+        return false;
+      }
+      stack.push_back(type.idx);
+      bool unbound = false;
+      if (node.tag == ir::TypeTag::Struct) {
+        unbound = any_unbound(builder.struct_types()[node.as_struct()].fields);
+      } else if (node.tag == ir::TypeTag::Tuple) {
+        unbound = any_unbound(builder.tuple_types()[node.as_tuple()].elements);
+      } else {
+        for (ir::EnumVariantTypeIdx variant :
+             builder.enum_types()[node.as_enum()].variants) {
+          if (any_unbound(builder.enum_variant_types()[variant].fields)) {
+            unbound = true;
+            break;
+          }
+        }
+      }
+      stack.pop_back();
+      return unbound;
+    }
+    default: return false;
+  }
+}
+std::optional<u64> Checker::checked_size(ir::TypeIdx type,
+                                         std::vector<u32>& stack) const {
+  if (!type.is_valid()) {
+    return u64{0};
+  }
+  const ir::TypeNode node = builder.types()[type];
+  // A parameter or a const argument has no layout until the
+  // instantiation binds it, and the body it binds is checked then.
+  const auto align_of = [&](ir::TypeIdx field) -> u64 {
+    const ir::TypeTag tag = builder.types()[field].tag;
+    if (tag == ir::TypeTag::Param || tag == ir::TypeTag::Const) {
+      return 1;
+    }
+    return ir::type_layout(builder.state(), field, width).align;
+  };
+  // A field list laid out the way `ir::fields_layout` lays it out, so a
+  // size this walk accepts is the size the layout reports.
+  const auto list_size = [&](ir::TypeIdxRange fields) -> std::optional<u64> {
+    u64 size = 0;
+    u64 align = 1;
+    for (ir::TypeIdx field : fields) {
+      const std::optional<u64> field_size = checked_size(field, stack);
+      if (!field_size.has_value()) {
+        return std::nullopt;
+      }
+      const u64 field_align = align_of(field);
+      const u64 offset = (size + field_align - 1) / field_align * field_align;
+      if (*field_size > MAX_TYPE_SIZE - offset) {
+        return std::nullopt;
+      }
+      size = offset + *field_size;
+      align = field_align > align ? field_align : align;
+    }
+    return (size + align - 1) / align * align;
+  };
+  switch (node.tag) {
+    case ir::TypeTag::Array: {
+      const ir::ArrayType array = builder.array_types()[node.as_array()];
+      if (array.count == 0) {
+        return u64{0};
+      }
+      const std::optional<u64> element = checked_size(array.element, stack);
+      if (!element.has_value()) {
+        return std::nullopt;
+      }
+      if (*element != 0 && *element > MAX_TYPE_SIZE / array.count) {
+        return std::nullopt;
+      }
+      return *element * array.count;
+    }
+    case ir::TypeTag::Struct:
+    case ir::TypeTag::Tuple:
+    case ir::TypeTag::Enum: {
+      // A type that holds itself is a cycle the type checks refuse; the
+      // stack stops this walk from following it until they run.
+      if (std::find(stack.begin(), stack.end(), type.idx) != stack.end()) {
+        return u64{0};
+      }
+      stack.push_back(type.idx);
+      std::optional<u64> size = u64{0};
+      if (node.tag == ir::TypeTag::Struct) {
+        size = list_size(builder.struct_types()[node.as_struct()].fields);
+      } else if (node.tag == ir::TypeTag::Tuple) {
+        size = list_size(builder.tuple_types()[node.as_tuple()].elements);
+      } else {
+        // A variant payload earns its room only when it is the widest,
+        // so the area is the largest payload rather than their sum.
+        const ir::EnumType shape = builder.enum_types()[node.as_enum()];
+        for (ir::EnumVariantTypeIdx variant : shape.variants) {
+          const std::optional<u64> variant_size =
+              list_size(builder.enum_variant_types()[variant].fields);
+          if (!variant_size.has_value()) {
+            size = std::nullopt;
+            break;
+          }
+          if (!size.has_value() || *variant_size > *size) {
+            size = variant_size;
+          }
+        }
+      }
+      stack.pop_back();
+      return size;
+    }
+    case ir::TypeTag::Param:
+    case ir::TypeTag::Const: return u64{0};
+    default: return ir::type_layout(builder.state(), type, width).size;
+  }
+}
+
+bool Checker::check_type_size(ir::TypeIdx type, diag::Span span) {
+  std::vector<u32> stack;
+  if (has_unbound(type, stack)) {
+    return true;
+  }
+  stack.clear();
+  const std::optional<u64> size = checked_size(type, stack);
+  if (size.has_value() && *size <= MAX_TYPE_SIZE) {
+    return true;
+  }
+  const u32 index =
+      bag.emit<i18n::Key::AnalyzerTypeTooLarge>(DiagCode::TypeTooLarge, span);
+  (void)index;
+  return false;
+}
+
 ir::TypeIdx Checker::resolve_type(u32 module,
                                   ast::TypeIdx type,
                                   const ir::TypeIdx* self,
@@ -956,7 +1120,11 @@ ir::TypeIdx Checker::resolve_type(u32 module,
         // equality sees through the contiguity copies.
         seq.push(storage_copy(element));
       }
-      return builder.tuple_type(seq.finish());
+      const ir::TypeIdx tuple = builder.tuple_type(seq.finish());
+      if (!check_type_size(tuple, node.span)) {
+        return error_type();
+      }
+      return tuple;
     }
     case ast::TypeKind::Array: {
       const ast::TypeArray& array = node.payload.get<ast::TypeArray>();
@@ -966,7 +1134,11 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           !const_array_length(module, array.length_path, node.span, count)) {
         return error_type();
       }
-      return builder.array_type(element, count);
+      const ir::TypeIdx shape = builder.array_type(element, count);
+      if (!check_type_size(shape, node.span)) {
+        return error_type();
+      }
+      return shape;
     }
     case ast::TypeKind::Ref: {
       ir::TypeIdx pointee = resolve_type(

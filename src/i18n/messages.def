@@ -106,6 +106,7 @@
   F(AnalyzerArrayRepeatTooLarge, Error, Analyzer, "Array repeat count {} exceeds the limit of {}") \
   F(AnalyzerArrayRepeatNotCopy, Error, Analyzer, "An array repeat copies its element once per slot, so the element must be Copy") \
   F(AnalyzerArrayRunNeedsBorrow, Error, Analyzer, "A run of a fixed array must be borrowed (`&a[..]`)") \
+  F(AnalyzerTypeTooLarge, Error, Analyzer, "The size of this type does not fit in `isize`, so it has no layout") \
   F(AnalyzerAssignThroughShared, Error, Analyzer, "Cannot assign through a shared reference") \
   F(AnalyzerAssignToImmutable, Error, Analyzer, "Cannot assign to an immutable binding") \
   F(AnalyzerMutMethodNeedsMut, Error, Analyzer, "Cannot call '{}' on an immutable binding; declare it `mut`") \

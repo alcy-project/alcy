@@ -443,6 +443,15 @@ class Checker {
   // type argument.
   bool check_type_args_movable(std::span<const ir::TypeIdx> args,
                                diag::Span span);
+  // Whether the type has a size the target can address: an array is
+  // its element times its length, an aggregate is its fields in order,
+  // and a shape whose size does not fit `isize` is refused rather than
+  // given a wrapped number. Answers what the shape's size is, or
+  // nothing when it has none.
+  bool has_unbound(ir::TypeIdx type, std::vector<u32>& stack) const;
+  std::optional<u64> checked_size(ir::TypeIdx type,
+                                  std::vector<u32>& stack) const;
+  bool check_type_size(ir::TypeIdx type, diag::Span span);
   // The spec policy of `package`, or nullptr when the tree carries
   // none, which reads as every spec being open.
   const PackagePolicy* policy_of(std::string_view package) const;

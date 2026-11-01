@@ -65,6 +65,10 @@
 - Sizedness is an invariant, not a bound. No declaration spells it,
   nothing relaxes it, and there is no negative form; the compiler
   derives a type's size from its shape the way it derives `Copy`.
+- A size fits `isize`: an array is its element's size times its
+  length, and an aggregate is its fields laid out in order. A shape
+  whose size does not fit is refused (ADR-0136), so every size the
+  compiler reports is one a pointer can be offset by.
 - A type argument is sized: a slice or a trait object is never a type
   argument, and generic code that wants one spells a borrow (`&[T]`).
 - There is no owned unsized value: `Box<[T]>`, `Box<str>`, and a

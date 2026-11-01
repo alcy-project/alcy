@@ -110,6 +110,9 @@ enum class DiagCode : u8 {
   // owners of one value, and its destructor would end that value once
   // per slot.
   RepeatElementNotCopy = 49,
+  // A size is an offset a pointer can carry: a shape whose size does
+  // not fit has no layout to allocate, index, or step past.
+  TypeTooLarge = 50,
 };
 
 }  // namespace analyzer

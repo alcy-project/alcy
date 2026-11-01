@@ -461,6 +461,9 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     }
     builder.fill_enum(reserved, variants.finish(), args_seq.finish());
   }
+  if (!check_type_size(reserved, node.span)) {
+    return error_type();
+  }
   while (type_params.size() > pushed) {
     type_params.pop_back();
   }

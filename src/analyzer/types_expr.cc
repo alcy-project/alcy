@@ -3737,6 +3737,9 @@ ir::TypeIdx Checker::check_array(u32 module,
       return error_type();
     }
     const ir::TypeIdx type = builder.array_type(element, count);
+    if (!check_type_size(type, node.span)) {
+      return error_type();
+    }
     if (expected != nullptr) {
       return unify(*expected, type, node.span, "array");
     }
@@ -3760,6 +3763,9 @@ ir::TypeIdx Checker::check_array(u32 module,
     unify(element, next, ast.exprs[array.elements[i]].span, "array element");
   }
   const ir::TypeIdx type = builder.array_type(element, array.elements.size());
+  if (!check_type_size(type, node.span)) {
+    return error_type();
+  }
   if (expected != nullptr) {
     return unify(*expected, type, node.span, "array");
   }
@@ -3819,6 +3825,9 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         seq.push(storage_copy(element));
       }
       const ir::TypeIdx type = builder.tuple_type(seq.finish());
+      if (!check_type_size(type, node.span)) {
+        return error_type();
+      }
       if (expected != nullptr) {
         return unify(*expected, type, node.span, "tuple");
       }
