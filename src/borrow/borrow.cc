@@ -1999,6 +1999,13 @@ class Checker {
     block_first.assign(blocks, 0);
     block_last.assign(blocks, 0);
     walk_mark.assign(blocks, 0);
+    // The flat successor arena and the walk's stacks are cleared per
+    // function; sizing them for the whole program here keeps the clear
+    // from re-growing a buffer for every function it holds.
+    succ_flat.reserve(3 * blocks);
+    succs_scratch_.reserve(3);
+    stack_scratch_.reserve(blocks);
+    post_scratch_.reserve(blocks);
     index_register_bounds(registers);
     index_addrs();
   }
