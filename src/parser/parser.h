@@ -246,6 +246,13 @@ class Parser {
   // shape and is parsed normally.
   std::optional<ast::StmtIdx> parse_spelled_declaration(usize mark);
   std::optional<ast::StmtIdx> parse_spelled_return(usize mark);
+  // The `=` that ends a declaration spelled with `=` for `:=`, scanned
+  // from the token at `first`: the flag says whether an ascription led
+  // up to it. Brackets nest, and `;`, `}`, and `:=` end the scan. A
+  // line that reaches no `=` has no value, and neither does one that
+  // must carry an ascription but does not.
+  std::optional<bool> spelled_equals(usize first,
+                                     bool require_ascription) const;
 
   // A closure literal: an optional capture list, parameter list,
   // `->`, and body. The caller scanned the shape, so the brackets

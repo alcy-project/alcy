@@ -1549,6 +1549,41 @@ ast::BlockIdx Parser::parse_block() {
   return ast_.blocks.push_back(block);
 }
 
+std::optional<bool> Parser::spelled_equals(usize first,
+                                           bool require_ascription) const {
+  using K = lexer::TokenKind;
+  bool ascription = false;
+  i32 depth = 0;
+  for (usize ahead = first;; ++ahead) {
+    const K kind = peek_kind(ahead);
+    if (kind == K::Eof) {
+      break;
+    }
+    if (depth == 0) {
+      if (kind == K::Semicolon || kind == K::RBrace || kind == K::ColonEq) {
+        break;
+      }
+      if (kind == K::Eq) {
+        if (require_ascription && !ascription) {
+          break;
+        }
+        return ascription;
+      }
+      if (kind == K::Colon) {
+        ascription = true;
+      }
+    }
+    if (kind == K::LParen || kind == K::LBracket || kind == K::LBrace) {
+      ++depth;
+    } else if ((kind == K::RParen || kind == K::RBracket ||
+                kind == K::RBrace) &&
+               depth > 0) {
+      --depth;
+    }
+  }
+  return std::nullopt;
+}
+
 std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
   using K = lexer::TokenKind;
   const lexer::Token start = peek();
@@ -1574,12 +1609,23 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
       keyword = true;
       matched = true;
     }
-  } else if (start.kind == K::Mut && peek_kind(1) == K::Ident &&
-             peek_kind(2) == K::Eq) {
-    const u32 index = bag_.emit<i18n::Key::ParserMutDeclarationSpelling>(
-        DiagCode::Spelling, start.span);
-    (void)index;
-    matched = true;
+  } else if (start.kind == K::Mut && peek_kind(1) == K::Ident) {
+    // `mut a = ...` and `mut a: T = ...`: the mutable spelling wrote
+    // `=` for `:=`, with or without an ascription of its own. The
+    // ascription decides which form of the declaration to name.
+    const std::optional<bool> ascription = spelled_equals(2, false);
+    if (ascription.has_value()) {
+      if (*ascription) {
+        const u32 index = bag_.emit<i18n::Key::ParserTypedDeclarationSpelling>(
+            DiagCode::Spelling, start.span);
+        (void)index;
+      } else {
+        const u32 index = bag_.emit<i18n::Key::ParserMutDeclarationSpelling>(
+            DiagCode::Spelling, start.span);
+        (void)index;
+      }
+      matched = true;
+    }
   } else if (is_primitive_type_token(start.kind) && peek_kind(1) == K::Ident &&
              (peek_kind(2) == K::Eq || peek_kind(2) == K::ColonEq)) {
     const u32 index = bag_.emit<i18n::Key::ParserTypeFirstDeclarationSpelling>(
@@ -1591,40 +1637,11 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
     // `a: T = ...`: a typed declaration that wrote `=` for `:=`. A
     // plain `a = ...` has no ascription and stays an ordinary
     // reassignment for the analyzer to judge.
-    bool ascription = false;
-    i32 depth = 0;
-    for (usize ahead = 1;; ++ahead) {
-      const K kind = peek_kind(ahead);
-      if (kind == K::Eof) {
-        break;
-      }
-      if (depth == 0) {
-        if (kind == K::Semicolon || kind == K::RBrace) {
-          break;
-        }
-        if (kind == K::ColonEq) {
-          break;
-        }
-        if (kind == K::Eq) {
-          matched = ascription;
-          break;
-        }
-        if (kind == K::Colon) {
-          ascription = true;
-        }
-      }
-      if (kind == K::LParen || kind == K::LBracket || kind == K::LBrace) {
-        ++depth;
-      } else if ((kind == K::RParen || kind == K::RBracket ||
-                  kind == K::RBrace) &&
-                 depth > 0) {
-        --depth;
-      }
-    }
-    if (matched) {
+    if (spelled_equals(1, true).has_value()) {
       const u32 index = bag_.emit<i18n::Key::ParserTypedDeclarationSpelling>(
           DiagCode::Spelling, start.span);
       (void)index;
+      matched = true;
     }
   }
   if (!matched) {

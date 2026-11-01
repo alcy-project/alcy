@@ -1878,6 +1878,11 @@ TEST_CASE("A spelled declaration reports the alcy form once") {
        "a mutable declaration is `mut x := ...`; `=` only reassigns"},
       {"fn main() {\n  a: i32 = 1\n}\n",
        "a typed declaration is `x: T := ...`; `=` only reassigns"},
+      // The ascription, not the `mut`, decides which spelling is named:
+      // a mutable declaration that writes `=` after its type gets the
+      // typed form's report rather than a parse error at `mut`.
+      {"fn main() {\n  mut a: i32 = 1\n}\n",
+       "a typed declaration is `x: T := ...`; `=` only reassigns"},
       {"fn main() {\n  i32 a = 1\n}\n",
        "a declaration puts the type after the name: `x: T := ...`"},
   };
