@@ -4,6 +4,7 @@
 #include "borrow/borrow.h"
 
 #include <algorithm>
+#include <span>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -183,7 +184,13 @@ class Checker {
 
   // Per-function scratch, indexed by global register.
   std::vector<u32> home;
-  std::vector<std::vector<u32>> path;
+  // A place path is a handful of steps, and forward names one per
+  // instruction that carries a place, so a row is a window on a shared arena
+  // rather than a vector of its own: naming a path appends its steps and the
+  // row holds where they start, which keeps the copy off the heap.
+  std::vector<u32> path_steps_;
+  std::vector<u32> path_head;
+  std::vector<u32> path_len;
   std::vector<std::vector<u32>> flow;
   std::vector<Loan> loans;
   // Two-phase borrows: an exclusive receiver whose only use is the call
@@ -263,6 +270,64 @@ class Checker {
   // reads the answer. 0 is unanswered, 1 says no, 2 says yes.
   std::vector<u8> carry_memo_;
 
+  std::span<const u32> steps_of(u32 reg) const {
+    return std::span<const u32>(path_steps_.data() + path_head[reg],
+                                path_len[reg]);
+  }
+
+  void clear_path(u32 reg) { path_len[reg] = 0; }
+
+  void set_step(u32 reg, u32 step) {
+    path_head[reg] = static_cast<u32>(path_steps_.size());
+    path_len[reg] = 1;
+    path_steps_.push_back(step);
+  }
+
+  // Naming a path the arena already holds: the steps are copied by index, so
+  // growing the arena cannot move the source out from under the copy.
+  void copy_path(u32 dst, u32 src) {
+    if (dst == src) {
+      return;
+    }
+    const u32 head = path_head[src];
+    const u32 len = path_len[src];
+    const u32 new_head = static_cast<u32>(path_steps_.size());
+    path_steps_.resize(new_head + len);
+    for (u32 i = 0; i < len; ++i) {
+      path_steps_[new_head + i] = path_steps_[head + i];
+    }
+    path_head[dst] = new_head;
+    path_len[dst] = len;
+  }
+
+  // Naming a path held outside the arena: a loan's place, or one a summary
+  // projection wrote.
+  void set_path(u32 dst, std::span<const u32> steps) {
+    path_head[dst] = static_cast<u32>(path_steps_.size());
+    path_len[dst] = static_cast<u32>(steps.size());
+    path_steps_.insert(path_steps_.end(), steps.begin(), steps.end());
+  }
+
+  void push_path_step(u32 reg, u32 step) {
+    const u32 head = path_head[reg];
+    const u32 len = path_len[reg];
+    // A row still at the arena's end grows in place; any other has its steps
+    // written again behind the new one.
+    if (static_cast<usize>(head) + len == path_steps_.size()) {
+      path_steps_.push_back(step);
+      path_len[reg] = len + 1;
+      return;
+    }
+    const u32 new_head = static_cast<u32>(path_steps_.size());
+    path_steps_.resize(new_head + len + 1);
+    for (u32 i = 0; i < len; ++i) {
+      path_steps_[new_head + i] = path_steps_[head + i];
+    }
+    path_steps_[new_head + len] = step;
+    path_head[reg] = new_head;
+    path_len[reg] = len + 1;
+  }
+
   bool carries_reference(ir::TypeIdx type) {
     if (carry_memo_.size() <= type.idx) {
       carry_memo_.resize(storage.types().size(), 0);
@@ -323,7 +388,8 @@ class Checker {
       return false;
     }
     place.root = home[reg];
-    place.path = path[reg];
+    const std::span<const u32> steps = steps_of(reg);
+    place.path.assign(steps.begin(), steps.end());
     return true;
   }
 
@@ -355,7 +421,7 @@ class Checker {
   void seed_capture_places() {
     for (u32 addr : captures_) {
       home[addr] = addr;
-      path[addr] = {DEREF_STEP};
+      set_step(addr, DEREF_STEP);
     }
   }
 
@@ -464,14 +530,14 @@ class Checker {
           }
           if (referent != NO_ROOT) {
             home[instr.dst.idx] = referent;
-            path[instr.dst.idx] = *referent_path;
+            set_path(instr.dst.idx, *referent_path);
           } else if (home[addr] != NO_ROOT) {
             home[instr.dst.idx] = home[addr];
-            path[instr.dst.idx] = path[addr];
+            copy_path(instr.dst.idx, addr);
           } else {
             break;
           }
-          path[instr.dst.idx].push_back(DEREF_STEP);
+          push_path_step(instr.dst.idx, DEREF_STEP);
         }
         break;
       }
@@ -528,12 +594,12 @@ class Checker {
         }
         if (home[src] != NO_ROOT) {
           home[instr.dst.idx] = home[src];
-          path[instr.dst.idx] = path[src];
+          copy_path(instr.dst.idx, src);
         } else {
           for (u32 loan : flow[src]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
               home[instr.dst.idx] = loans[loan].place.root;
-              path[instr.dst.idx] = loans[loan].place.path;
+              set_path(instr.dst.idx, loans[loan].place.path);
               break;
             }
           }
@@ -550,7 +616,7 @@ class Checker {
           break;
         }
         home[instr.dst.idx] = home[base];
-        path[instr.dst.idx] = path[base];
+        copy_path(instr.dst.idx, base);
         for (u32 offset = 2; offset < instr.operands.size(); ++offset) {
           const ir::Operand& index =
               storage.operands()[instr.operands.head() + offset];
@@ -558,7 +624,8 @@ class Checker {
             continue;
           }
           const ir::Immutable& imm = storage.immutables()[index.as_immutable()];
-          path[instr.dst.idx].push_back(
+          push_path_step(
+              instr.dst.idx,
               static_cast<u32>(imm.as_u64_integer(tag_of(imm.type))));
         }
         flow[instr.dst.idx] = flow[base];
@@ -578,7 +645,7 @@ class Checker {
           break;
         }
         home[instr.dst.idx] = home[base];
-        path[instr.dst.idx] = path[base];
+        copy_path(instr.dst.idx, base);
         for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
           const ir::Operand& index =
               storage.operands()[instr.operands.head() + offset];
@@ -586,7 +653,8 @@ class Checker {
             continue;
           }
           const ir::Immutable& imm = storage.immutables()[index.as_immutable()];
-          path[instr.dst.idx].push_back(
+          push_path_step(
+              instr.dst.idx,
               static_cast<u32>(imm.as_u64_integer(tag_of(imm.type))));
         }
         flow[instr.dst.idx] = flow[base];
@@ -614,12 +682,12 @@ class Checker {
           break;
         }
         home[instr.dst.idx] = home[src];
-        path[instr.dst.idx] = path[src];
+        copy_path(instr.dst.idx, src);
         if (instr.op == ir::Opcode::ElemOffset) {
           // The index is a runtime value, so it is a step that names no
           // field: any element of the buffer, which is what lets a store
           // to the buffer itself conflict with a loan into one element.
-          path[instr.dst.idx].push_back(ELEMENT_STEP);
+          push_path_step(instr.dst.idx, ELEMENT_STEP);
         }
         flow[instr.dst.idx] = flow[src];
         break;
@@ -737,7 +805,7 @@ class Checker {
                       static_cast<u32>(loans.size() - 1));
                   if (!placed) {
                     home[instr.dst.idx] = loans[loan].place.root;
-                    path[instr.dst.idx] = loans[loan].place.path;
+                    set_path(instr.dst.idx, loans[loan].place.path);
                     placed = true;
                   }
                 }
@@ -874,7 +942,7 @@ class Checker {
         }
         if (!projected.empty() && instr.dst.idx < home.size()) {
           home[instr.dst.idx] = projected.front().place.root;
-          path[instr.dst.idx] = projected.front().place.path;
+          set_path(instr.dst.idx, projected.front().place.path);
         }
         break;
       }
@@ -1500,11 +1568,13 @@ class Checker {
           // move of the slot does not take.
           u32 handed = NO_ROOT;
           Place handed_place;
-          if (operand_reg(0, handed) && handed < path.size() &&
-              std::find(path[handed].begin(), path[handed].end(), DEREF_STEP) ==
-                  path[handed].end() &&
-              operand_place(0, handed_place)) {
-            check_place_use(moved, handed_place, span, "read");
+          if (operand_reg(0, handed) && handed < path_len.size()) {
+            const std::span<const u32> steps = steps_of(handed);
+            if (std::find(steps.begin(), steps.end(), DEREF_STEP) ==
+                    steps.end() &&
+                operand_place(0, handed_place)) {
+              check_place_use(moved, handed_place, span, "read");
+            }
           }
           kill_moved(moved, place);
           // Writing through a loan is what the loan is for, so a store
@@ -1817,7 +1887,11 @@ class Checker {
   void size_scratch() {
     const usize registers = storage.registers().size();
     home.assign(registers, NO_ROOT);
-    path.assign(registers, {});
+    // One step stands at the arena's head so every empty path reads as a
+    // window on it rather than on nothing.
+    path_steps_.assign(1, 0);
+    path_head.assign(registers, 0);
+    path_len.assign(registers, 0);
     flow.assign(registers, {});
     reserved_receiver.assign(registers, 0);
     use_count_scratch_.assign(registers, 0);
@@ -1913,7 +1987,7 @@ class Checker {
     }
     clear_mark[reg] = clear_stamp;
     home[reg] = NO_ROOT;
-    path[reg].clear();
+    clear_path(reg);
     flow[reg].clear();
     use_count_scratch_[reg] = 0;
     receiver_call_scratch_[reg] = 0;
