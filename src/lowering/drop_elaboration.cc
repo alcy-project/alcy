@@ -88,6 +88,7 @@ void Lowerer::record_end(u32 mark, diag::Span span) {
   site.block = cur_;
   site.offset = streams_[at(cur_)].size();
   site.seq = record_seq_++;
+  site.locals.reserve(locals.size() - mark);
   for (u32 i = mark; i < static_cast<u32>(locals.size()); ++i) {
     if (i == end_exempt_) {
       continue;
@@ -458,8 +459,31 @@ void DropElaborator::run() {
     });
   }
 
-  // Predecessors, from each block's terminator.
+  // Predecessors, from each block's terminator. Counted first for the same
+  // reason the points above are: every row is filled once from empty.
   std::vector<std::vector<u32>> preds(block_count);
+  {
+    std::vector<u32> preds_per_block(block_count, 0);
+    for (u32 b = 0; b < block_count; ++b) {
+      const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
+      if (range.size() == 0) {
+        continue;
+      }
+      const ir::InstructionIdx last = range[range.size() - 1];
+      for (ir::OperandIdx o : builder.state().instrs[last.idx].operands) {
+        const ir::Operand& operand = builder.state().operands[o.idx];
+        if (operand.is<ir::BlockIdx>()) {
+          const u32 target = at(operand.as_block());
+          if (target < block_count) {
+            ++preds_per_block[target];
+          }
+        }
+      }
+    }
+    for (u32 b = 0; b < block_count; ++b) {
+      preds[b].reserve(preds_per_block[b]);
+    }
+  }
   for (u32 b = 0; b < block_count; ++b) {
     const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
     if (range.size() == 0) {
