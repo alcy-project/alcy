@@ -253,6 +253,22 @@ class Checker {
   // share would otherwise be reset once per mention.
   std::vector<u32> clear_mark;
   u32 clear_stamp = 0;
+  // Whether a type carries a reference is a property of the type, and the
+  // module's types do not change while it is checked, so the walk over the
+  // shape of a type runs once and every load or indirect result that asks
+  // reads the answer. 0 is unanswered, 1 says no, 2 says yes.
+  std::vector<u8> carry_memo_;
+
+  bool carries_reference(ir::TypeIdx type) {
+    if (carry_memo_.size() <= type.idx) {
+      carry_memo_.resize(storage.types().size(), 0);
+    }
+    u8& memo = carry_memo_[type.idx];
+    if (memo == 0) {
+      memo = value_may_carry(storage, type) ? 2 : 1;
+    }
+    return memo == 2;
+  }
 
   const ir::Instruction& instr_at(ir::InstructionIdx idx) const {
     return storage.instrs()[idx];
@@ -412,8 +428,8 @@ class Checker {
         // `d := v.pop()` on a `Vec<Point>` must not read as a borrow
         // of `v` that refuses the next `v.push`. The predicate is the
         // one an indirect call's result already tracks through.
-        const bool carries_reference = value_may_carry(storage, loaded_ty);
-        if (carries_reference) {
+        const bool loaded_carries = carries_reference(loaded_ty);
+        if (loaded_carries) {
           flow[instr.dst.idx] = flow[addr];
         } else {
           flow[instr.dst.idx].clear();
@@ -434,17 +450,17 @@ class Checker {
           // matrix cannot observe the difference, and a summary that
           // could say would remove the choice.
           u32 referent = NO_ROOT;
-          std::vector<u32> referent_path;
+          const std::vector<u32>* referent_path = nullptr;
           for (u32 loan : flow[instr.dst.idx]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
               referent = loans[loan].place.root;
-              referent_path = loans[loan].place.path;
+              referent_path = &loans[loan].place.path;
               break;
             }
           }
           if (referent != NO_ROOT) {
             home[instr.dst.idx] = referent;
-            path[instr.dst.idx] = std::move(referent_path);
+            path[instr.dst.idx] = *referent_path;
           } else if (home[addr] != NO_ROOT) {
             home[instr.dst.idx] = home[addr];
             path[instr.dst.idx] = path[addr];
@@ -696,7 +712,7 @@ class Checker {
           if (callee.is<ir::RegisterIdx>()) {
             const ir::TypeIdx dst_type =
                 storage.registers()[instr.dst.idx].type;
-            if (value_may_carry(storage, dst_type)) {
+            if (carries_reference(dst_type)) {
               const bool result_exclusive =
                   storage.types()[dst_type.idx].tag == ir::TypeTag::MutRef;
               bool placed = false;
