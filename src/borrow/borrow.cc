@@ -317,11 +317,10 @@ class Checker {
   // once and never cleared.
   std::vector<u32> walk_mark;
   u32 walk_stamp = 0;
-  // Visit marks for the register clearing, stamped per function for the same
-  // reason: an instruction names its operands, so a register many of them
-  // share would otherwise be reset once per mention.
-  std::vector<u32> clear_mark;
-  u32 clear_stamp = 0;
+  // The range of registers each function names, so that clearing one walks
+  // its registers rather than its instructions.
+  std::vector<u32> fn_reg_lo;
+  std::vector<u32> fn_reg_hi;
   // Whether a type carries a reference is a property of the type, and the
   // module's types do not change while it is checked, so the walk over the
   // shape of a type runs once and every load or indirect result that asks
@@ -1989,7 +1988,6 @@ class Checker {
     reserved_receiver.assign(registers, 0);
     use_count_scratch_.assign(registers, 0);
     receiver_call_scratch_.assign(registers, 0);
-    clear_mark.assign(registers, 0);
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
@@ -2001,7 +1999,41 @@ class Checker {
     block_first.assign(blocks, 0);
     block_last.assign(blocks, 0);
     walk_mark.assign(blocks, 0);
+    index_register_bounds(registers);
     index_addrs();
+  }
+
+  // The lowest and highest register a function names, as a destination or as
+  // a register operand, clamped to the register table. A register past the
+  // table cannot be reached through a place, so the range ends at it.
+  void index_register_bounds(usize registers) {
+    const usize functions = storage.functions().size();
+    fn_reg_lo.assign(functions, 0);
+    fn_reg_hi.assign(functions, 0);
+    for (usize fidx = 0; fidx < functions; ++fidx) {
+      u32 lo = static_cast<u32>(registers);
+      u32 hi = 0;
+      for (ir::BlockIdx bidx : storage.functions()[fidx].blocks) {
+        for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
+          const ir::Instruction& instr = instr_at(iidx);
+          if (instr.dst.is_valid()) {
+            lo = std::min(lo, instr.dst.idx);
+            hi = std::max(hi, instr.dst.idx + 1);
+          }
+          for (ir::OperandIdx oidx : instr.operands) {
+            const ir::Operand& operand = storage.operands()[oidx];
+            if (!operand.is<ir::RegisterIdx>()) {
+              continue;
+            }
+            const u32 reg = operand.as_register().idx;
+            lo = std::min(lo, reg);
+            hi = std::max(hi, reg + 1);
+          }
+        }
+      }
+      fn_reg_hi[fidx] = std::min(hi, static_cast<u32>(registers));
+      fn_reg_lo[fidx] = std::min(lo, fn_reg_hi[fidx]);
+    }
   }
 
   // What the package named, by the address it named. A diagnostic asks for one
@@ -2075,47 +2107,20 @@ class Checker {
     }
   }
 
-  void clear_register(u32 reg) {
-    // A register an instruction names can sit past the table, which is why
-    // every read bounds-checks it first.
-    if (reg >= flow.size()) {
-      return;
-    }
-    if (clear_mark[reg] == clear_stamp) {
-      return;
-    }
-    clear_mark[reg] = clear_stamp;
-    home[reg] = NO_ROOT;
-    clear_path(reg);
-    flow[reg].clear();
-    use_count_scratch_[reg] = 0;
-    receiver_call_scratch_[reg] = 0;
-  }
-
-  // Clears the scratch for one function. Every register a function reads or
-  // writes is named by one of its instructions, as a destination or as a
-  // register operand, and the places a register stands for are reached
-  // through those, so what it does not name cannot be observed through it.
-  // Clearing the whole program instead charged every function for every
-  // register, which made a package quadratic in its own size.
-  void reset_function(const ir::Function& fn) {
-    if (++clear_stamp == 0) {
-      std::fill(clear_mark.begin(), clear_mark.end(), 0);
-      clear_stamp = 1;
-    }
-    for (ir::BlockIdx bidx : fn.blocks) {
-      for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
-        const ir::Instruction& instr = instr_at(iidx);
-        if (instr.dst.is_valid()) {
-          clear_register(instr.dst.idx);
-        }
-        for (ir::OperandIdx oidx : instr.operands) {
-          const ir::Operand& operand = storage.operands()[oidx];
-          if (operand.is<ir::RegisterIdx>()) {
-            clear_register(operand.as_register().idx);
-          }
-        }
-      }
+  // Clears the scratch for one function. Every register it reads or writes is
+  // named by one of its instructions, as a destination or as a register
+  // operand, and the places a register stands for are reached through those,
+  // so what it does not name cannot be observed through it. Clearing the whole
+  // program instead charged every function for every register, which made a
+  // package quadratic in its own size.
+  void reset_function(ir::FunctionIdx fidx) {
+    const u32 hi = fn_reg_hi[fidx.idx];
+    for (u32 reg = fn_reg_lo[fidx.idx]; reg < hi; ++reg) {
+      home[reg] = NO_ROOT;
+      clear_path(reg);
+      flow[reg].clear();
+      use_count_scratch_[reg] = 0;
+      receiver_call_scratch_[reg] = 0;
     }
     loans.clear();
     param_homes.clear();
@@ -2134,7 +2139,7 @@ class Checker {
       for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
            ++fidx) {
         const ir::Function& fn = storage.functions()[fidx];
-        reset_function(fn);
+        reset_function(fidx);
         {
           PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                    "borrow-fn");
@@ -2151,7 +2156,7 @@ class Checker {
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
       const ir::Function& fn = storage.functions()[fidx];
-      reset_function(fn);
+      reset_function(fidx);
       {
         PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                  "borrow-fn");
