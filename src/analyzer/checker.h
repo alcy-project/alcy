@@ -1409,8 +1409,10 @@ class Checker {
                         const std::vector<ir::TypeIdx>& args,
                         u32 sig_index,
                         u32 inst);
-  // The per-function state a nested body check saves and restores.
-  struct FnReturnScope {
+  // The per-function state a nested body check writes: every field
+  // `check_fn` mutates on its way through a body, plus the two scopes a
+  // nested check appends to.
+  struct FnStateScope {
     ir::TypeIdx ret = ir::TypeIdx::invalid();
     u32 loop = 0;
     bool in_fn = false;

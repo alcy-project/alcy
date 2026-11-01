@@ -1640,7 +1640,11 @@ void Checker::check_generic_body(u32 module,
   std::vector<ValueParam> saved_values = std::move(value_params);
   type_params.clear();
   value_params.clear();
-  const usize saved_scope = param_scope_.size();
+  // check_fn resets the per-body state and leaves it reset, and this
+  // pass checks the body in the middle of its own item walk, so every
+  // field it writes is saved and restored.
+  FnStateScope scope;
+  scope.save(*this);
   u32 slot = 0;
   for (const ast::GenericParam& param : impl_params) {
     param_scope_.push_back(&param);
@@ -1654,35 +1658,14 @@ void Checker::check_generic_body(u32 module,
   if (has_target) {
     self = resolve_type(module, target, nullptr, true);
   }
-  // Every per-body field a nested check could see is saved, the way
-  // the const pre-pass does; only `cur_inst` differs, keying the
-  // records where no other reader looks.
-  const ir::TypeIdx saved_ret = fn_ret;
-  const u32 saved_loop = loop_depth;
-  const bool saved_in_fn = in_fn;
-  const bool saved_bind = bind_comp_known;
-  const bool saved_too_deep = reported_too_deep_;
-  const u32 saved_inst = cur_inst;
-  const u32 saved_comp = comp_depth;
-  const usize saved_specs = spec_scope.size();
+  // The records of this pass key off the parameter instantiation, where
+  // no other reader looks.
   cur_inst = PARAM_INST;
   // The comp rules of the enclosing phase do not apply: this is an
   // ordinary body check.
   comp_depth = 0;
   check_fn(module, item, has_target ? &self : nullptr);
-  while (spec_scope.size() > saved_specs) {
-    spec_scope.pop_back();
-  }
-  comp_depth = saved_comp;
-  cur_inst = saved_inst;
-  reported_too_deep_ = saved_too_deep;
-  bind_comp_known = saved_bind;
-  in_fn = saved_in_fn;
-  loop_depth = saved_loop;
-  fn_ret = saved_ret;
-  while (param_scope_.size() > saved_scope) {
-    param_scope_.pop_back();
-  }
+  scope.restore(*this);
   type_params = std::move(saved_types);
   value_params = std::move(saved_values);
 }

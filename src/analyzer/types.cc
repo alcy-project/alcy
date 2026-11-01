@@ -2334,7 +2334,7 @@ void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
   // so every field it writes is saved and restored. The callee keys its
   // expressions under its own instantiation, the way the evaluator
   // reads them.
-  FnReturnScope scope;
+  FnStateScope scope;
   scope.save(*this);
   cur_inst = inst;
   // The callee is an ordinary function body wherever the precheck was
@@ -2372,7 +2372,7 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
   const u32 module = where->second.first;
   constInitTables_.prechecked_fns_.insert(method.item.idx);
   const u32 inst = inst_index(method.self_type);
-  FnReturnScope scope;
+  FnStateScope scope;
   scope.save(*this);
   cur_inst = inst;
   comp_depth = 0;
@@ -3554,7 +3554,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     }
     const u32 inst = inst_index(self_type);
     spec_scope.push_back(spec);
-    FnReturnScope scope;
+    FnStateScope scope;
     scope.save(*this);
     cur_inst = inst;
     check_fn(impl_module, method_item, &self_type);
@@ -4284,7 +4284,7 @@ bool Checker::contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited) {
   }
 }
 
-void Checker::FnReturnScope::save(Checker& checker) {
+void Checker::FnStateScope::save(Checker& checker) {
   ret = checker.fn_ret;
   loop = checker.loop_depth;
   in_fn = checker.in_fn;
@@ -4296,7 +4296,7 @@ void Checker::FnReturnScope::save(Checker& checker) {
   param_scope = checker.param_scope_.size();
 }
 
-void Checker::FnReturnScope::restore(Checker& checker) {
+void Checker::FnStateScope::restore(Checker& checker) {
   while (checker.spec_scope.size() > specs) {
     checker.spec_scope.pop_back();
   }
