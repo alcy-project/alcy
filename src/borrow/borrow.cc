@@ -304,6 +304,13 @@ class Checker {
   // each block. Indexed by global block like the rows above, and filled by
   // build_preds and compute_liveness for one function at a time.
   std::vector<std::vector<ir::BlockIdx>> preds;
+  // Successors of every block of the function being fixed, held flat: block
+  // b's row is succ_len[b] entries at succ_head[b]. A terminator does not
+  // change while its function is checked, so each sweep of the backward
+  // fixpoint reads the rows instead of re-deriving the targets.
+  std::vector<ir::BlockIdx> succ_flat;
+  std::vector<u32> succ_head;
+  std::vector<u32> succ_len;
   std::vector<u32> block_first;
   std::vector<u32> block_last;
   // Visit marks for the block walk, stamped per call so the table is sized
@@ -1058,11 +1065,10 @@ class Checker {
         }
       }
     }
-    build_preds(fn, order);
-
     // Backward to a fixed point: a block is live out wherever any
     // successor is live in, and live in wherever it is read on a path
-    // that reaches one of them.
+    // that reaches one of them. The CFG rows this reads are the ones
+    // build_preds filled before the may-move fixpoint, which runs first.
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
       if (block.instrs.empty()) {
@@ -1084,9 +1090,10 @@ class Checker {
           live_stamp = 1;
         }
         const u32 stamp = live_stamp;
-        succs_scratch_.clear();
-        successors(bidx, succs_scratch_);
-        for (ir::BlockIdx succ : succs_scratch_) {
+        const u32 succ_begin = succ_head[bidx.idx];
+        const u32 succ_end = succ_begin + succ_len[bidx.idx];
+        for (u32 si = succ_begin; si < succ_end; ++si) {
+          const ir::BlockIdx succ = succ_flat[si];
           for (u32 loan : live_in[succ.idx]) {
             if (live_mark[loan] == stamp) {
               continue;
@@ -1322,10 +1329,7 @@ class Checker {
 
   // May-move fixpoint: back-edges carry loop moves to the next
   // iteration (bounded; the place universe is finite).
-  void compute_moved(const ir::Function& fn,
-                     const std::vector<ir::BlockIdx>& order) {
-    build_preds(fn, order);
-    std::vector<ir::BlockIdx> succs;
+  void compute_moved(const std::vector<ir::BlockIdx>& order) {
     std::vector<Place> in;
     std::vector<Place> out;
     const usize cap = order.size() * 10 + 10;
@@ -1413,7 +1417,10 @@ class Checker {
     std::vector<ir::BlockIdx> order;
     reverse_post_order(fn, order);
     reset_blocks(order);
-    compute_moved(fn, order);
+    // Both fixpoints walk the same CFG of the same function, so its rows are
+    // built once here.
+    build_preds(fn, order);
+    compute_moved(order);
     compute_liveness(fn, order);
     std::vector<Place> state;
     for (ir::BlockIdx bidx : order) {
@@ -1989,6 +1996,8 @@ class Checker {
     moved_in.assign(blocks, {});
     moved_out.assign(blocks, {});
     preds.assign(blocks, {});
+    succ_head.assign(blocks, 0);
+    succ_len.assign(blocks, 0);
     block_first.assign(blocks, 0);
     block_last.assign(blocks, 0);
     walk_mark.assign(blocks, 0);
@@ -2040,21 +2049,25 @@ class Checker {
     live_mark.assign(loans.size(), 0);
   }
 
-  // Predecessors of the blocks the fixpoints read. The walk covers the
-  // function's own blocks as before, and the clearing covers every block the
-  // fixpoints reach, which leaves no row another function filled where one
-  // is read.
+  // Predecessors and successors of the blocks the fixpoints read. The walk
+  // covers the function's own blocks as before, and the clearing covers every
+  // block the fixpoints reach, which leaves no row another function filled
+  // where one is read.
   void build_preds(const ir::Function& fn,
                    const std::vector<ir::BlockIdx>& order) {
     for (ir::BlockIdx bidx : order) {
       preds[bidx.idx].clear();
+      succ_len[bidx.idx] = 0;
     }
-    std::vector<ir::BlockIdx>& succs = succs_scratch_;
+    succ_flat.clear();
     for (ir::BlockIdx bidx : fn.blocks) {
-      // successors appends, so the list belongs to one block.
-      succs.clear();
-      successors(bidx, succs);
-      for (ir::BlockIdx succ : succs) {
+      // successors appends, so the range belongs to one block.
+      const u32 head = static_cast<u32>(succ_flat.size());
+      successors(bidx, succ_flat);
+      succ_head[bidx.idx] = head;
+      succ_len[bidx.idx] = static_cast<u32>(succ_flat.size()) - head;
+      for (usize i = head; i < succ_flat.size(); ++i) {
+        const ir::BlockIdx succ = succ_flat[i];
         if (succ.idx < preds.size()) {
           preds[succ.idx].push_back(bidx);
         }
