@@ -1,0 +1,7 @@
+# The in-bounds removal happens first; the index past the end then
+# panics, which is what the case asserts.
+exit = "non-zero"
+stdout = """
+1
+"""
+stderr_contains = ["Vec swap_remove index out of bounds"]

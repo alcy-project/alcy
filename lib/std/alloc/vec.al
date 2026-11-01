@@ -121,11 +121,16 @@ impl<T> Vec<T> {
     ret Option::Some(unsafe { uninit_assume(elem_ptr(self.buf, index)) })
   }
 
-  // Exchanges the elements at `i` and `j`, both below the length.
+  // Exchanges the elements at `i` and `j`. Both indices are checked,
+  // so one past the end panics the way the index operator does
+  // instead of reaching outside the block the buffer owns.
   // Both values are read out first and written back crossed, so the
   // two slots are briefly uninitialized - which is what `read` leaves
   // behind and what `uninit_write` expects.
   pub fn swap(mut self: &mut Self, i: usize, j: usize) {
+    if i >= self.len || j >= self.len {
+      panic("Vec swap index out of bounds")
+    }
     if i == j {
       ret
     }
@@ -318,8 +323,11 @@ impl<T> Vec<T> {
   }
 
   // Inserts `value` at `index`, shifting the rest up. `index` may
-  // equal the length, which appends.
+  // equal the length, which appends; a larger index panics.
   pub fn insert(mut self: &mut Self, index: usize, value: T) {
+    if index > self.len {
+      panic("Vec insert index out of bounds")
+    }
     self.push(value)
     mut i := self.len - 1
     while i > index {
@@ -343,8 +351,11 @@ impl<T> Vec<T> {
   }
 
   // Removes and answers the element at `index`, shifting the rest
-  // down and keeping their order. `index` is in bounds.
+  // down and keeping their order. An index past the end panics.
   pub fn remove(mut self: &mut Self, index: usize) -> T {
+    if index >= self.len {
+      panic("Vec remove index out of bounds")
+    }
     mut i := index
     while i + 1 < self.len {
       self.swap(i, i + 1)
@@ -355,9 +366,12 @@ impl<T> Vec<T> {
 
   // Removes and answers the element at `index`, moving the last
   // element into its place. The order of the rest is not kept, which
-  // is what makes it a swap rather than a shift. `index` is in
-  // bounds.
+  // is what makes it a swap rather than a shift. An index past the
+  // end panics.
   pub fn swap_remove(mut self: &mut Self, index: usize) -> T {
+    if index >= self.len {
+      panic("Vec swap_remove index out of bounds")
+    }
     self.swap(index, self.len - 1)
     ret self.pop().or_panic_with_message("the vec is not empty")
   }
