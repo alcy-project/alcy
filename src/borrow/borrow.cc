@@ -162,6 +162,54 @@ struct SummaryEntry {
   bool exclusive = false;
 };
 
+// A register's loan set: a window on the checker's arena. Naming a row copies
+// another row's window instead of its loans, and appending to a shared window
+// first moves it to the arena's end, so a function's flow costs an append
+// rather than a heap block per register it names.
+struct FlowRow {
+  std::vector<u32>* arena = nullptr;
+  u32 head = 0;
+  u32 len = 0;
+
+  // A window moves as the arena grows, so the iterator reads through the row
+  // rather than caching the arena's data.
+  class Iter {
+   public:
+    Iter(const FlowRow& row, u32 pos) : row_(row), pos_(pos) {}
+    u32 operator*() const { return (*row_.arena)[row_.head + pos_]; }
+    Iter& operator++() {
+      ++pos_;
+      return *this;
+    }
+    bool operator!=(const Iter& other) const { return pos_ != other.pos_; }
+
+   private:
+    const FlowRow& row_;
+    u32 pos_;
+  };
+
+  Iter begin() const { return Iter(*this, 0); }
+  Iter end() const { return Iter(*this, len); }
+  void clear() { len = 0; }
+
+  void push_back(u32 loan) {
+    std::vector<u32>& steps = *arena;
+    if (head + len == steps.size()) {
+      steps.push_back(loan);
+      ++len;
+      return;
+    }
+    const u32 moved = static_cast<u32>(steps.size());
+    steps.resize(moved + len + 1);
+    for (u32 i = 0; i < len; ++i) {
+      steps[moved + i] = steps[head + i];
+    }
+    steps[moved + len] = loan;
+    head = moved;
+    ++len;
+  }
+};
+
 class Checker {
  public:
   Checker(const lowering::LoweredPackage& lowered,
@@ -193,7 +241,8 @@ class Checker {
   std::vector<u32> path_steps_;
   std::vector<u32> path_head;
   std::vector<u32> path_len;
-  std::vector<std::vector<u32>> flow;
+  std::vector<u32> flow_steps;
+  std::vector<FlowRow> flow;
   std::vector<Loan> loans;
   // Two-phase borrows: an exclusive receiver whose only use is the call
   // it serves. The borrow is a reservation until the call activates it,
@@ -1925,7 +1974,11 @@ class Checker {
     path_steps_.assign(1, 0);
     path_head.assign(registers, 0);
     path_len.assign(registers, 0);
-    flow.assign(registers, {});
+    flow_steps.clear();
+    flow.assign(registers, FlowRow{});
+    for (FlowRow& row : flow) {
+      row.arena = &flow_steps;
+    }
     reserved_receiver.assign(registers, 0);
     use_count_scratch_.assign(registers, 0);
     receiver_call_scratch_.assign(registers, 0);
