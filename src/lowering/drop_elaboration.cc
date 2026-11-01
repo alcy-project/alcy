@@ -379,8 +379,14 @@ void DropElaborator::run() {
   }
 
   // Places: every (local, path) an event names, and the root of every
-  // local an end site names.
+  // local an end site names. Filled once from empty, so the table is sized
+  // up front rather than regrown a place at a time.
+  usize site_locals = 0;
+  for (const EndSite& site : end_sites_) {
+    site_locals += site.locals.size();
+  }
   std::vector<Place> places;
+  places.reserve(ownership_.size() + site_locals);
   auto place_of = [&](u32 local, const std::vector<u32>& path) -> u32 {
     for (u32 i = 0; i < places.size(); ++i) {
       if (places[i].local == local && places[i].path == path) {

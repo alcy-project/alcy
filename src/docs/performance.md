@@ -193,6 +193,12 @@ from the idea.
   (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`). Those phases
   need per-module storage merged in module order, which is a design of its own
   rather than a loop to mark parallel.
+- **Sorting the drop-elaboration place table.** Building that table by
+  appending every key and deduplicating once with a sort, instead of scanning
+  it per event, costs `+0.14%` on `plain1200`: the table holds a few hundred
+  places, so the scan it replaces is short, while the sort pays `log n` per key.
+  Sizing the same table up front instead removes its growth copies and is worth
+  `-0.20%`.
 
 ## Tracing
 
