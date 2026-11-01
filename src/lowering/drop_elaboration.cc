@@ -435,6 +435,30 @@ void DropElaborator::run() {
     return;
   }
 
+  // Everything this pass emits is a guard, a flag or a call for a value whose
+  // type runs a destructor, so a function whose places are all copy types has
+  // nothing to place.
+  bool has_end = false;
+  for (const EndSite& site : end_sites_) {
+    for (u32 local : site.locals) {
+      has_end = has_end || runs_destructor(locals[local].type);
+    }
+  }
+  for (const OwnershipEvent& event : ownership_) {
+    if (has_end) {
+      break;
+    }
+    if (event.kind == OwnershipEvent::Kind::DropInPlace) {
+      has_end = runs_destructor(event.place_type);
+    } else if (event.kind == OwnershipEvent::Kind::Store) {
+      has_end =
+          runs_destructor(type_at_path(locals[event.local].type, event.path));
+    }
+  }
+  if (!has_end) {
+    return;
+  }
+
   // Places: every (local, path) an event names, and the root of every
   // local an end site names. Filled once from empty, so the table is sized
   // up front rather than regrown a place at a time.
