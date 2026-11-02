@@ -43,10 +43,10 @@ SpecEntry* Checker::find_spec(u32 module, std::string_view name) {
   return nullptr;
 }
 
-bool Checker::is_movable(ir::TypeIdx type) const {
+bool Checker::is_movable(ir::TypeIdx type) {
   return ir::is_movable_type(
       builder.state(), type, not_movable_,
-      [this](ir::TypeIdx idx) { return type_origin(idx); });
+      [this](ir::TypeIdx idx) { return type_origin(idx); }, movable_inside_);
 }
 
 bool Checker::is_copy(ir::TypeIdx type) {
@@ -61,7 +61,8 @@ bool Checker::is_copy(ir::TypeIdx type) {
   // before the drop phase runs, so the walk fills in what it needs.
   std::vector<u32> stack;
   drop_scan(type, stack);
-  return ir::is_copy_type(builder.state(), type, needs_drop_, not_movable_);
+  return ir::is_copy_type(builder.state(), type, needs_drop_, not_movable_,
+                          copy_inside_);
 }
 
 bool Checker::check_type_args_movable(std::span<const ir::TypeIdx> args,

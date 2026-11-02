@@ -211,6 +211,10 @@ class Lowerer {
   };
   std::vector<LoopTarget> break_targets_;
   std::vector<LoopTarget> continue_targets_;
+  // The copy walk's path of shapes it is inside, kept across queries. The
+  // path is empty between them: a walk pushes as it descends and pops as it
+  // returns.
+  std::vector<u32> copy_inside_;
   static bool is_block_terminator(ir::Opcode op);
   usize at(ir::BlockIdx block) const;
   ir::BlockIdx reserve_block();
@@ -254,7 +258,7 @@ class Lowerer {
   // is not known at compile time; the detail names the operation.
   void comp_not_evaluable(diag::Span span, std::string_view what);
   ir::TypeIdx error_type();
-  bool is_copy(ir::TypeIdx type) const;
+  bool is_copy(ir::TypeIdx type);
   ir::TypeTag tag_of(ir::TypeIdx idx) const;
   bool is_ref_tag(ir::TypeTag tag) const;
   // Whether a callee handed a place through such a parameter can write

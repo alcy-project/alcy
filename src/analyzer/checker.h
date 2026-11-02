@@ -318,6 +318,11 @@ class Checker {
   // Marked where the anchor interns; the walk that reads it is
   // structural, so only the anchor itself needs an entry.
   std::vector<u8> not_movable_;
+  // A structural walk's path of shapes it is inside, kept across queries.
+  // The path is empty between them: a walk pushes as it descends and pops
+  // as it returns.
+  std::vector<u32> movable_inside_;
+  std::vector<u32> copy_inside_;
   // Comp fn calls the const pre-pass answered, carried on the checked
   // package so lowering can compare them against the IR engine once the
   // storage exists (ADR-0054).
@@ -499,7 +504,7 @@ class Checker {
   std::string_view package_of(u32 module) const;
   // Whether a value of the type may be moved (ADR-0085): the walk
   // normalizes storage copies through the checker's origin links.
-  bool is_movable(ir::TypeIdx type) const;
+  bool is_movable(ir::TypeIdx type);
   // Whether a value of the type may be copied. Copy is structural
   // (`docs/spec/values.md`), and a declared destructor or an anchor
   // makes the type move-only, so the walk answers with the destructor
