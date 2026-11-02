@@ -68,9 +68,9 @@ arrays composed of comp-known values.
   word for code evaluated during compilation.
 - A receiver method with the marker is deferred; `comp fn` is a free
   function for now, and the marker does not combine with `unsafe` yet.
-- Only a tail `ret` is supported by the AST evaluator; an early `ret`
-  reached through a branch is a compile-time error until the IR
-  interpreter lands (see Deferred).
+- A `ret` ends the evaluation with its value, whether it is the
+  body's tail or reached through a branch: a taken arm hands the return
+  to the body that owns it.
 
 ## Blocks
 

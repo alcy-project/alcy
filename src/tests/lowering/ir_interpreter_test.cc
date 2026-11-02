@@ -253,6 +253,34 @@ bool build_scenario(VirtualDir& dir,
   return true;
 }
 
+// The AST engine's value for the `index`-th const item and the IR
+// engine's for the same call carry one value.
+bool check_engines_agree(const Scenario& scenario,
+                         std::string_view name,
+                         std::initializer_list<u64> args,
+                         u32 index) {
+  const ir::Storage& storage = *scenario.storage;
+  const ir::FunctionIdx fn =
+      find_function(storage, scenario.fixture.strings, name);
+  CHECK(fn.is_valid());
+  if (!fn.is_valid() || index >= scenario.asts.size()) {
+    return false;
+  }
+  const std::vector<comp::CompVal> call_args = int_args(storage, fn, args);
+  CHECK(call_args.size() == args.size());
+  if (call_args.size() != args.size()) {
+    return false;
+  }
+  const RunResult run = run_function(scenario.fixture, storage, fn, call_args,
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (!run.ok) {
+    return false;
+  }
+  check_same_value(storage, scenario.asts[index], run.value);
+  return true;
+}
+
 }  // namespace
 
 TEST_CASE("IR interpreter agrees on branches and arithmetic") {
@@ -1139,6 +1167,114 @@ TEST_CASE("The AST engine falls back from a definition-site method row") {
   }
   CHECK(fallback->value.tag == comp::CompValue::Tag::Bool);
   CHECK(fallback->value.bool_value);
+}
+
+// An early `ret` reached inside a branch hands the return to the body
+// that owns it, so both engines end the call with the same value.
+TEST_CASE("IR interpreter agrees on an early return") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "comp fn clamp_high(n: i32) -> i32 {\n"
+                                    "  if n > 10 {\n"
+                                    "    ret 10\n"
+                                    "  }\n"
+                                    "  ret n\n"
+                                    "}\n"
+                                    "comp fn pick(kind: i32) -> i32 {\n"
+                                    "  match kind {\n"
+                                    "    0 => ret 7,\n"
+                                    "    _ => {}\n"
+                                    "  }\n"
+                                    "  ret kind\n"
+                                    "}\n"
+                                    "comp fn inner(n: i32) -> i32 {\n"
+                                    "  {\n"
+                                    "    if n > 0 {\n"
+                                    "      ret 5\n"
+                                    "    }\n"
+                                    "  }\n"
+                                    "  ret n\n"
+                                    "}\n"
+                                    "const A: i32 = clamp_high(42)\n"
+                                    "const B: i32 = pick(0)\n"
+                                    "const C: i32 = inner(2)\n"
+                                    "fn main() {\n"
+                                    "}\n",
+                                    {"A", "B", "C"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  CHECK(scenario.asts.size() == 3);
+  if (scenario.asts.size() != 3) {
+    return;
+  }
+  check_int_value(storage, scenario.asts[0], 10);
+  check_int_value(storage, scenario.asts[1], 7);
+  check_int_value(storage, scenario.asts[2], 5);
+  CHECK(check_engines_agree(scenario, "clamp_high", {42}, 0));
+  CHECK(check_engines_agree(scenario, "pick", {0}, 1));
+  CHECK(check_engines_agree(scenario, "inner", {2}, 2));
+}
+
+TEST_CASE("IR interpreter agrees on a jump in a match arm") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "comp fn stop_at() -> i32 {\n"
+                                    "  mut i := 0\n"
+                                    "  mut out := 0\n"
+                                    "  while i < 4 {\n"
+                                    "    match i {\n"
+                                    "      2 => break,\n"
+                                    "      _ => {}\n"
+                                    "    }\n"
+                                    "    out = out + i\n"
+                                    "    i = i + 1\n"
+                                    "  }\n"
+                                    "  ret out\n"
+                                    "}\n"
+                                    "comp fn skip_three() -> i32 {\n"
+                                    "  mut i := 0\n"
+                                    "  mut out := 0\n"
+                                    "  while i < 4 {\n"
+                                    "    i = i + 1\n"
+                                    "    match i {\n"
+                                    "      3 => continue,\n"
+                                    "      _ => {}\n"
+                                    "    }\n"
+                                    "    out = out + i\n"
+                                    "  }\n"
+                                    "  ret out\n"
+                                    "}\n"
+                                    "const A: i32 = stop_at()\n"
+                                    "const B: i32 = skip_three()\n"
+                                    "fn main() {\n"
+                                    "}\n",
+                                    {"A", "B"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  CHECK(scenario.asts.size() == 2);
+  if (scenario.asts.size() != 2) {
+    return;
+  }
+  check_int_value(storage, scenario.asts[0], 1);
+  check_int_value(storage, scenario.asts[1], 7);
+  CHECK(check_engines_agree(scenario, "stop_at", {}, 0));
+  CHECK(check_engines_agree(scenario, "skip_three", {}, 1));
 }
 
 }  // namespace lowering

@@ -606,9 +606,9 @@ bool CompEvaluator::comp_eval_block(u32 mod,
     return true;
   }
   // A trailing `ret` is the block's value in the syntax and a return
-  // in the flow: the evaluator needs the difference, so an early
-  // return reached through a branch fails loudly rather than splicing
-  // a wrong value.
+  // in the flow: the evaluator needs the difference, so the value is
+  // not spliced where the block sits and the flow carries the return
+  // out to the evaluation that ends.
   if (ast.exprs[node.value].kind == ast::ExprKind::Return) {
     const ast::ExprReturn& ret =
         ast.exprs[node.value].payload.get<ast::ExprReturn>();
@@ -836,8 +836,8 @@ bool CompEvaluator::comp_eval_stmt(u32 mod,
         out.value = std::move(value);
         return true;
       }
-      // An `if`, `match`, or block statement whose taken arm ends the
-      // loop carries that change to the loop; every other expression is
+      // An `if`, `match`, or block statement whose taken arm changes
+      // the flow carries that change outward; every other expression is
       // an ordinary value.
       CompVal discarded;
       CompFlow flow;
@@ -1551,7 +1551,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         }
       }
       if (flow.kind != CompFlow::Kind::Value) {
-        if (flow_out != nullptr && flow.kind != CompFlow::Kind::Return) {
+        if (flow_out != nullptr) {
           out.value.tag = CompValue::Tag::Void;
           *flow_out = std::move(flow);
           return true;
@@ -1605,7 +1605,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
           return false;
         }
         if (flow.kind != CompFlow::Kind::Value) {
-          if (flow_out != nullptr && flow.kind != CompFlow::Kind::Return) {
+          if (flow_out != nullptr) {
             out.value.tag = CompValue::Tag::Void;
             *flow_out = std::move(flow);
             return true;
@@ -1625,7 +1625,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         return false;
       }
       if (flow.kind != CompFlow::Kind::Value) {
-        if (flow_out != nullptr && flow.kind != CompFlow::Kind::Return) {
+        if (flow_out != nullptr) {
           out.value.tag = CompValue::Tag::Void;
           *flow_out = std::move(flow);
           return true;
@@ -1659,7 +1659,35 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
     }
     case ast::ExprKind::Break:
     case ast::ExprKind::Continue:
-    case ast::ExprKind::Return:
+    case ast::ExprKind::Return: {
+      // A jump in value position, such as a match arm's body, produces
+      // no value of its own: the flow carries out to the construct that
+      // owns it, which ends there.
+      out.type = expr_type_in(mod, expr);
+      out.value.tag = CompValue::Tag::Void;
+      if (flow_out == nullptr) {
+        return fail(node.span, "control escapes the comp expression");
+      }
+      CompFlow flow;
+      if (node.kind == ast::ExprKind::Break) {
+        flow.kind = CompFlow::Kind::Break;
+      } else if (node.kind == ast::ExprKind::Continue) {
+        flow.kind = CompFlow::Kind::Continue;
+      } else {
+        flow.kind = CompFlow::Kind::Return;
+        const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
+        if (ret.value.is_valid()) {
+          if (!comp_eval_expr(mod, ret.value, scope, flow.value)) {
+            return false;
+          }
+        } else {
+          flow.value.value.tag = CompValue::Tag::Void;
+          flow.value.type = builder.primitive(ir::TypeTag::Void);
+        }
+      }
+      *flow_out = std::move(flow);
+      return true;
+    }
     case ast::ExprKind::Range:
     case ast::ExprKind::Closure: break;
     case ast::ExprKind::Tuple: {
