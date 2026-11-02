@@ -12,7 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/resolve.h"
 #include "cli/cli_config.h"
 #include "cli/output.h"
 #include "cli/result_code.h"
@@ -25,6 +24,7 @@
 #include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/artifact.h"
+#include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
@@ -111,43 +111,31 @@ void print_diff(const std::string& path,
   }
 }
 
+// Every source under the package root, not only the ones the entry
+// reaches and the ones spelling already parses: a formatter works on
+// the files a reader has, whatever state they are in. A nested
+// package is its own tree, so the walk stops at one.
 base::Result<std::vector<std::string>, diag::Reported> collect_package_files(
     pipeline::PipelineContext& ctx,
-    const path::Path& root,
-    source::FileId manifest_file,
-    std::string_view manifest_name,
+    std::string_view root,
     const std::vector<std::string_view>& excludes) {
-  base::Result<std::vector<pipeline::Artifact>, diag::Reported> targets =
-      pipeline::resolve_artifacts(ctx, root, manifest_file, manifest_name,
-                                  pipeline::ArtifactScope::All);
-  if (targets.is_err() || ctx.bag.has_errors()) {
+  base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
+      pipeline::discover_sources(root, ctx.sources, ctx.bag);
+  if (discovered.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  std::vector<pipeline::Artifact> resolved = std::move(targets).unwrap();
-  std::set<std::string> seen;
   std::vector<std::string> out;
-  for (pipeline::Artifact& target : resolved) {
-    for (analyzer::ModuleNode* module : target.tree.modules) {
-      if (module->is_staged || module->is_prelude) {
-        continue;
-      }
-      if (module->file == source::UNKNOWN_FILE) {
-        continue;
-      }
-      std::optional<std::string_view> name = ctx.sources.name(module->file);
-      if (!name.has_value()) {
-        continue;
-      }
-      std::string path(*name);
-      if (excluded(path, excludes)) {
-        continue;
-      }
-      if (seen.insert(path).second) {
-        out.push_back(std::move(path));
-      }
+  for (source::FileId file : std::move(discovered).unwrap().files) {
+    std::optional<std::string_view> name = ctx.sources.name(file);
+    if (!name.has_value()) {
+      continue;
     }
+    std::string path(*name);
+    if (excluded(path, excludes)) {
+      continue;
+    }
+    out.push_back(std::move(path));
   }
-  std::sort(out.begin(), out.end());
   return base::make_ok(std::move(out));
 }
 
@@ -357,8 +345,8 @@ ResultCode run_fmt(const CliConfig& config,
         }
         pipeline::ManifestProbe member = std::move(member_probe).unwrap();
         base::Result<std::vector<std::string>, diag::Reported> collected =
-            collect_package_files(ctx, member.root, member.manifest,
-                                  member.manifest_name, config.fmt_exclude);
+            collect_package_files(ctx, member.root.as_view(),
+                                  config.fmt_exclude);
         if (collected.is_err()) {
           return ResultCode::FmtFailed;
         }
@@ -368,8 +356,7 @@ ResultCode run_fmt(const CliConfig& config,
       }
     } else {
       base::Result<std::vector<std::string>, diag::Reported> collected =
-          collect_package_files(ctx, found.root, found.manifest,
-                                found.manifest_name, config.fmt_exclude);
+          collect_package_files(ctx, found.root.as_view(), config.fmt_exclude);
       if (collected.is_err()) {
         return ResultCode::FmtFailed;
       }
