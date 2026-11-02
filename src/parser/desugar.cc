@@ -18,6 +18,7 @@
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
 #include "parser/diag_code.h"
+#include "parser/parser.h"
 
 namespace parser {
 
@@ -55,14 +56,12 @@ class Desugarer {
     if (!nesting_.exhausted()) {
       return false;
     }
-    if (!reported_too_deep_) {
-      reported_too_deep_ = true;
-      const u32 index = bag.emit<i18n::Key::ParserNestingTooDeep>(
-          DiagCode::TooDeep, span, nesting_.limit());
-      (void)index;
-    }
+    report_exhausted_nesting(span);
     return true;
   }
+
+  // Reports it once, at the first descent that finds the budget exceeded.
+  void report_exhausted_nesting(diag::Span span);
 
   void push_scope() { scopes.emplace_back(); }
 
@@ -728,6 +727,13 @@ class Desugarer {
     }
   }
 };
+
+void Desugarer::report_exhausted_nesting(diag::Span span) {
+  if (!reported_too_deep_) {
+    reported_too_deep_ = true;
+    emit_nesting_too_deep(bag, span, nesting_.limit());
+  }
+}
 
 }  // namespace
 

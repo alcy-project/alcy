@@ -177,18 +177,22 @@ bool Parser::expect(lexer::TokenKind kind, std::string_view what) {
   if (match(kind)) {
     return true;
   }
+  report_unexpected(what);
+  return false;
+}
+
+void Parser::report_unexpected(std::string_view what) {
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedFoundEndOfFile>(
         DiagCode::UnexpectedToken, span_from(pos_), what);
     (void)index;
-    return false;
+    return;
   }
   const diag::Span span = peek().span;
   const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
       DiagCode::UnexpectedToken, span, what,
       bytes_.substr(span.offset, span.length));
   (void)index;
-  return false;
 }
 
 diag::Span Parser::span_from(usize mark) const {
@@ -1406,12 +1410,16 @@ bool Parser::parse_decimal_u64(u64* out) {
   return true;
 }
 
+void emit_nesting_too_deep(diag::DiagBag& bag, diag::Span span, u32 limit) {
+  const u32 index =
+      bag.emit<i18n::Key::ParserNestingTooDeep>(DiagCode::TooDeep, span, limit);
+  (void)index;
+}
+
 void Parser::report_exhausted_nesting(diag::Span span) {
   if (!reported_too_deep_) {
     reported_too_deep_ = true;
-    const u32 index = bag_.emit<i18n::Key::ParserNestingTooDeep>(
-        DiagCode::TooDeep, span, nesting_.limit());
-    (void)index;
+    emit_nesting_too_deep(bag_, span, nesting_.limit());
   }
 }
 

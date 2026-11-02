@@ -45,6 +45,11 @@ struct FnSignature {
 base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
                                                 diag::DiagBag& bag);
 
+// Reports the exceeded nesting budget, which both the parser and the
+// desugarer walk under. Out of line because the message formats a string, and
+// a copy of that would grow the frame of each walker's per-node step.
+void emit_nesting_too_deep(diag::DiagBag& bag, diag::Span span, u32 limit);
+
 // Kinds the cursor never rests on: lexer errors (already diagnosed), doc
 // comments (trivia the item above claims), and reserved words, which the
 // skip diagnoses with guidance.
@@ -124,6 +129,9 @@ class Parser {
     return true;
   }
   bool expect(lexer::TokenKind kind, std::string_view what);
+  // Reports that the cursor is not on `what`, out of line for the sake of the
+  // check above, which inlines at every step of the grammar.
+  void report_unexpected(std::string_view what);
   diag::Span span_from(usize mark) const;
 
   // Error recovery: skips to a boundary token, tracking nesting so
