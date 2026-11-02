@@ -131,7 +131,7 @@ void Checker::register_nominals() {
         (void)index;
         continue;
       }
-      nominals.push_back(NominalEntry{m, name, item, span, ir::TypeIdx(0)});
+      nominals.emplace_back(m, name, item, span, ir::TypeIdx(0));
       nominals_of_module[m].push_back(static_cast<u32>(nominals.size() - 1));
     }
   }
@@ -2204,6 +2204,27 @@ usize Checker::scope_of(std::string_view name) const {
     }
   }
   return depth;
+}
+
+bool Checker::indexed_field(NominalEntry& entry,
+                            std::span<const ast::ItemStructField> fields,
+                            std::string_view name,
+                            u32& index,
+                            bool& is_pub,
+                            diag::Span& span) {
+  if (entry.field_by_name.empty()) {
+    for (u32 i = 0; i < static_cast<u32>(fields.size()); ++i) {
+      entry.field_by_name.emplace(fields[i].name.name, i);
+    }
+  }
+  const auto found = entry.field_by_name.find(name);
+  if (found == entry.field_by_name.end()) {
+    return false;
+  }
+  index = found->second;
+  is_pub = fields[index].is_pub;
+  span = fields[index].name.span;
+  return true;
 }
 
 ir::TypeIdx Checker::primitive_by_name(std::string_view name) {

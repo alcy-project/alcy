@@ -2132,32 +2132,16 @@ ir::TypeIdx Checker::check_field(u32 module,
     bool named = false;
     bool is_pub = false;
     diag::Span declaration{};
-    // The index, the access rights, and the declaration span of a name are
-    // all read from the same field list, so one walk of it answers all
-    // three.
-    const auto find_field = [&](ast::ItemIdx item) -> std::optional<u32> {
-      u32 i = 0;
-      for (const ast::ItemStructField& decl_field :
-           ast.items[item].payload.get<ast::ItemStruct>().fields) {
-        if (decl_field.name.name == field_name.name) {
-          is_pub = decl_field.is_pub;
-          declaration = decl_field.name.span;
-          return i;
-        }
-        ++i;
-      }
-      return std::nullopt;
-    };
     // A field's type is a storage copy of the declared type, so owner
     // lookup follows the copy back to its origin.
     const ir::TypeIdx origin = type_origin(receiver);
     const auto declaring = nominal_by_type_.find(origin.idx);
     if (declaring != nominal_by_type_.end()) {
       NominalEntry& entry = nominals[declaring->second];
-      if (const std::optional<u32> found = find_field(entry.item)) {
+      named =
+          find_field(entry, field_name.name, field_index, is_pub, declaration);
+      if (named) {
         owner = &entry;
-        field_index = *found;
-        named = true;
       }
     }
     if (owner == nullptr) {
@@ -2167,10 +2151,8 @@ ir::TypeIdx Checker::check_field(u32 module,
       // one it was, per field read.
       if (const GenericInstance* instance = generic_find(origin)) {
         owner = &nominals[instance->nominal];
-        if (const std::optional<u32> found = find_field(owner->item)) {
-          field_index = *found;
-          named = true;
-        }
+        named = find_field(*owner, field_name.name, field_index, is_pub,
+                           declaration);
       }
     }
     if (owner == nullptr) {
@@ -2310,20 +2292,9 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
   for (const ast::ExprFieldInit& field :
        node.payload.get<ast::ExprStruct>().init) {
     u32 index = 0;
-    bool found = false;
     bool is_pub = false;
     diag::Span declaration{};
-    for (const ast::ItemStructField& decl_field :
-         decl.payload.get<ast::ItemStruct>().fields) {
-      if (decl_field.name.name == field.name.name) {
-        found = true;
-        is_pub = decl_field.is_pub;
-        declaration = decl_field.name.span;
-        break;
-      }
-      ++index;
-    }
-    if (!found) {
+    if (!find_field(*nominal, field.name.name, index, is_pub, declaration)) {
       const u32 diag = bag.emit<i18n::Key::AnalyzerUnknownField>(
           DiagCode::UnknownValue, field.name.span, field.name.name);
       (void)diag;

@@ -83,6 +83,13 @@ inline bool is_fn_bound(const ast::AstArena& ast,
 }
 
 struct NominalEntry {
+  NominalEntry(u32 module,
+               std::string_view name,
+               ast::ItemIdx item,
+               diag::Span span,
+               ir::TypeIdx type)
+      : module(module), name(name), item(item), span(span), type(type) {}
+
   u32 module;
   std::string_view name;
   ast::ItemIdx item;
@@ -90,6 +97,9 @@ struct NominalEntry {
   ir::TypeIdx type;
   bool started = false;
   bool complete = false;
+  // The index each field name answers, for a declaration longer than
+  // INDEX_MIN fields. Empty until the first lookup needs it.
+  std::unordered_map<std::string_view, u32> field_by_name;
 };
 
 // A declared capability: `spec Name<params>`. Method signatures live
@@ -982,6 +992,39 @@ class Checker {
   // none does. Locals shadow outward, so this is the level a use
   // resolves at.
   usize scope_of(std::string_view name) const;
+  // The index of the field `name` in `entry`'s declaration, with the
+  // access rights and the declaration span a walk of the field list
+  // would report.
+  bool find_field(NominalEntry& entry,
+                  std::string_view name,
+                  u32& index,
+                  bool& is_pub,
+                  diag::Span& span) {
+    const std::span<const ast::ItemStructField> fields =
+        ast.items[entry.item].payload.get<ast::ItemStruct>().fields;
+    if (fields.size() > INDEX_MIN) {
+      return indexed_field(entry, fields, name, index, is_pub, span);
+    }
+    u32 walk = 0;
+    for (const ast::ItemStructField& field : fields) {
+      if (field.name.name == name) {
+        index = walk;
+        is_pub = field.is_pub;
+        span = field.name.span;
+        return true;
+      }
+      ++walk;
+    }
+    return false;
+  }
+  // The lookup of a declaration long enough to answer through an index,
+  // built on the first name it is asked for.
+  bool indexed_field(NominalEntry& entry,
+                     std::span<const ast::ItemStructField> fields,
+                     std::string_view name,
+                     u32& index,
+                     bool& is_pub,
+                     diag::Span& span);
   bool classify_suffix(std::string_view spelling,
                        ir::TypeTag& tag,
                        bool& is_float,
