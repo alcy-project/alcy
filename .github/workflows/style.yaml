@@ -15,6 +15,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The format dry run is not here: the first shard of the lint job in
+  # ci.yaml already runs it over the whole tree with clang-format
+  # already set up, so a job of its own would pay for the toolchain
+  # twice for the same answer.
   spelling:
     name: Spell Check
     runs-on: ubuntu-24.04
@@ -28,26 +32,6 @@ jobs:
 
       - name: Spell Check Repository
         uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b
-
-  format:
-    name: Format
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Setup Build Environment
-        uses: ./.github/actions/setup-build
-        with:
-          nix: "false"
-          os: Linux
-
-      - name: Check Formatting
-        run: uv run ./tools/format.py --dry-run
 
   specification:
     name: Specification
