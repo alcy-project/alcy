@@ -82,4 +82,10 @@ TEST_CASE("fmt reads the named files instead of standard input") {
   config.fmt_files = {"main.al"};
   CHECK_FALSE(reads_stdin(config));
 }
+TEST_CASE("fmt leaves standard input alone when it names a package") {
+  CliConfig config{};
+  config.subcommand = Subcommand::Fmt;
+  config.input = "proj";
+  CHECK_FALSE(reads_stdin(config));
+}
 }  // namespace cli
