@@ -276,6 +276,12 @@ class Checker {
   // How many loans the root index covers: it runs only once the set is long
   // enough to want it, and then keeps up with the loans taken after it.
   usize indexed_loans = 0;
+  // The loans a parameter's region stands under: the summary tokens seeded
+  // for the parameter allocas and the loans projected from them. A check for
+  // a parameter place would otherwise walk every loan a function has, which
+  // is what makes a wide function's check outgrow its work.
+  std::vector<u32> param_loan_ids;
+  usize scanned_param_loans = 0;
   // Two-phase borrows: an exclusive receiver whose only use is the call
   // it serves. The borrow is a reservation until the call activates it,
   // so the argument evaluation between the two is the window ADR-0012
@@ -1419,12 +1425,24 @@ class Checker {
     return std::equal(prefix.begin(), prefix.end(), steps_of(inner).begin());
   }
 
+  // The loans of a parameter's region, brought up to date with the loans
+  // taken since the last check.
+  std::span<const u32> param_loans() {
+    const usize count = loans.size();
+    for (; scanned_param_loans < count; ++scanned_param_loans) {
+      if (loans[scanned_param_loans].param != NO_ROOT) {
+        param_loan_ids.push_back(static_cast<u32>(scanned_param_loans));
+      }
+    }
+    return param_loan_ids;
+  }
+
   // True when `root` is where a parameter's referent lives. The caller
   // chose that place, so a loan naming it records what was passed
   // rather than a place this function may claim.
-  bool root_is_param(u32 root) const {
-    for (const Loan& loan : loans) {
-      if (loan.param != NO_ROOT && loan.place.root == root) {
+  bool root_is_param(u32 root) {
+    for (const u32 id : param_loans()) {
+      if (loans[id].place.root == root) {
         return true;
       }
     }
@@ -1435,9 +1453,9 @@ class Checker {
   // A function cannot know what its caller passed, so reading inside
   // that region is the receiver being used; whether the region is
   // aliased is decided by the loans the caller holds.
-  bool inside_param_region(const Place& inner) const {
-    for (const Loan& loan : loans) {
-      if (loan.param != NO_ROOT && nests_inside(loan.place, inner)) {
+  bool inside_param_region(const Place& inner) {
+    for (const u32 id : param_loans()) {
+      if (nests_inside(loans[id].place, inner)) {
         return true;
       }
     }
@@ -2660,6 +2678,8 @@ class Checker {
     loan_ids.clear();
     loans_by_root.clear();
     indexed_loans = 0;
+    param_loan_ids.clear();
+    scanned_param_loans = 0;
     param_homes.clear();
   }
 
