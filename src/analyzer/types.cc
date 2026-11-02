@@ -20,6 +20,7 @@
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "ast/verify.h"
+#include "base/hash.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "debug/dcheck.h"
@@ -2146,8 +2147,38 @@ void Checker::process_module(u32 module) {
   }
 }
 
+// The scope width above which a name is settled on its key: below it a
+// walk reads so few names that a key of the name sought costs more than
+// the names it saves.
+constexpr usize K_SCOPE_KEY_LIMIT = 8;
+
+const Checker::Local* Checker::scan_scope(const std::vector<Local>& scope,
+                                          std::string_view name) const {
+  if (scope.size() > K_SCOPE_KEY_LIMIT) {
+    const u64 key = base::hash64(name);
+    for (const Local& local : scope) {
+      if (local.name_key == key && local.name == name) {
+        return &local;
+      }
+    }
+    return nullptr;
+  }
+  for (const Local& local : scope) {
+    if (local.name == name) {
+      return &local;
+    }
+  }
+  return nullptr;
+}
+
 const Checker::Local* Checker::lookup_local(std::string_view name) const {
-  for (usize i = scopes.size(); i-- > 0;) {
+  if (scopes.empty()) {
+    return nullptr;
+  }
+  if (const Local* found = scan_scope(scopes.back(), name)) {
+    return found;
+  }
+  for (usize i = scopes.size() - 1; i-- > 0;) {
     for (const Local& local : scopes[i]) {
       if (local.name == name) {
         return &local;
@@ -2158,14 +2189,21 @@ const Checker::Local* Checker::lookup_local(std::string_view name) const {
 }
 
 usize Checker::scope_of(std::string_view name) const {
-  for (usize i = scopes.size(); i-- > 0;) {
+  const usize depth = scopes.size();
+  if (depth == 0) {
+    return depth;
+  }
+  if (scan_scope(scopes.back(), name) != nullptr) {
+    return depth - 1;
+  }
+  for (usize i = depth - 1; i-- > 0;) {
     for (const Local& local : scopes[i]) {
       if (local.name == name) {
         return i;
       }
     }
   }
-  return scopes.size();
+  return depth;
 }
 
 ir::TypeIdx Checker::primitive_by_name(std::string_view name) {

@@ -15,6 +15,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/hash.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
@@ -383,7 +384,16 @@ class Checker {
 
   // Body-checking state, reset per function.
   struct Local {
+    Local(std::string_view name, ir::TypeIdx type, bool is_mut)
+        : name(name),
+          name_key(base::hash64(name)),
+          type(type),
+          is_mut(is_mut) {}
+
     std::string_view name;
+    // A key of `name`: a walk of a long scope settles most entries on an
+    // integer compare rather than on the bytes.
+    u64 name_key;
     ir::TypeIdx type;
     bool is_mut;
     bool comp_known = false;
@@ -963,6 +973,10 @@ class Checker {
                     ir::TypeIdx actual,
                     diag::Span span,
                     std::string_view what);
+  // A walk of one scope for `name`. Names are settled on their key
+  // when the scope is long enough that a key pays for itself.
+  const Local* scan_scope(const std::vector<Local>& scope,
+                          std::string_view name) const;
   const Local* lookup_local(std::string_view name) const;
   // The scope level binding `name`, or one past the last scope when
   // none does. Locals shadow outward, so this is the level a use

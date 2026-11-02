@@ -85,7 +85,7 @@ void Checker::bind_error_idents(u32 module, ast::PatternIdx pattern) {
   collect_pattern_idents(pattern, names);
   (void)module;
   for (std::string_view name : names) {
-    scopes.back().push_back({name, error_type(), false});
+    scopes.back().emplace_back(name, error_type(), false);
   }
 }
 // A binding behind a reference yields a shared reference to the field,
@@ -121,21 +121,21 @@ bool Checker::bind_pattern(u32 module,
   switch (node.kind) {
     case ast::PatternKind::Wildcard: return false;
     case ast::PatternKind::Ident: {
-      scopes.back().push_back({.name = node.payload.ident.name.name,
-                               .type = borrow_binding(type, by_ref),
-                               .is_mut = false,
-                               .comp_known = comp,
-                               .own_fn = own_fn,
-                               .span = node.payload.ident.name.span});
+      Local local(node.payload.ident.name.name, borrow_binding(type, by_ref),
+                  false);
+      local.comp_known = comp;
+      local.own_fn = own_fn;
+      local.span = node.payload.ident.name.span;
+      scopes.back().push_back(local);
       return false;
     }
     case ast::PatternKind::MutIdent: {
-      scopes.back().push_back({.name = node.payload.mut_ident.name.name,
-                               .type = borrow_binding(type, by_ref),
-                               .is_mut = true,
-                               .comp_known = comp,
-                               .own_fn = own_fn,
-                               .span = node.payload.mut_ident.name.span});
+      Local local(node.payload.mut_ident.name.name,
+                  borrow_binding(type, by_ref), true);
+      local.comp_known = comp;
+      local.own_fn = own_fn;
+      local.span = node.payload.mut_ident.name.span;
+      scopes.back().push_back(local);
       return false;
     }
     case ast::PatternKind::Literal: {
@@ -1443,24 +1443,20 @@ ir::TypeIdx Checker::check_closure(u32 module,
   // other modes own their place in the environment and may write it.
   for (usize i = 0; i < entries.size(); ++i) {
     const CaptureEntry& entry = entries[i];
-    scopes.back().push_back({.name = entry.name,
-                             .type = entry.type,
-                             .is_mut = entry.mode != ast::CaptureMode::Shared,
-                             .comp_known = false,
-                             .own_fn = entry.own_fn,
-                             .capture = static_cast<u32>(i),
-                             .span = entry.span});
+    Local local(entry.name, entry.type, entry.mode != ast::CaptureMode::Shared);
+    local.own_fn = entry.own_fn;
+    local.capture = static_cast<u32>(i);
+    local.span = entry.span;
+    scopes.back().push_back(local);
   }
   for (usize i = 0; i < closure.params.size(); ++i) {
     const ast::ClosureParam& param = closure.params[i];
     if (param.is_wildcard) {
       continue;
     }
-    scopes.back().push_back({.name = param.name.name,
-                             .type = param_types[i],
-                             .is_mut = param.is_mut,
-                             .comp_known = false,
-                             .span = param.name.span});
+    Local local(param.name.name, param_types[i], param.is_mut);
+    local.span = param.name.span;
+    scopes.back().push_back(local);
   }
   closureTables_.closure_bounds.push_back(
       {scopes.size() - 1, std::move(entries)});
