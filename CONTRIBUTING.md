@@ -224,7 +224,8 @@ prefer a scope that is already a `BUILD.gn` module over one invented for a singl
 it only when a change genuinely spans the tree and any one scope would mislead.
 
 The subject is imperative and lowercase, with no trailing period: what the change does, not
-what was done. `fix: two at_mut results is a receiver conflict`, not `Fixed the at_mut issue`.
+what was done. `fix: report two at_mut results as a receiver conflict`, not
+`Fixed the at_mut issue`.
 
 A `feat` or `fix` may carry a `BREAKING CHANGE:` footer, one per blank line after the body, for
 a change that invalidates previous behaviour. The tree is young enough that none has been needed
