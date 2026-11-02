@@ -163,6 +163,22 @@ jobs:
           help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
           echo "$help_out"
 
+      # A failed run's log holds what each step printed. Which edges the
+      # build ran, in what order, and under which configuration is not in
+      # it, and those three files answer a question that rebuilding the same
+      # tree elsewhere cannot.
+      - name: Upload the Build Record
+        if: failure() && inputs.build_type == 'debug'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: build-record-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}
+          path: |
+            out/build/.ninja_log
+            out/build/args.gn
+            out/build/toolchain.ninja
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
 
       # The cache is kept for the next run's build, and a build wants the
       # objects: `all` already made the tests and the benchmarks, and their
