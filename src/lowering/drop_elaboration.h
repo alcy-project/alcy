@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "analyzer/types.h"
+#include "base/hash.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -34,7 +35,7 @@ namespace lowering {
 // place holds and what to call it in a diagnostic.
 struct Local {
   Local(std::string_view name, ir::RegisterIdx addr, ir::TypeIdx type)
-      : name(name), addr(addr), type(type) {}
+      : name(name), addr(addr), type(type), name_key(base::hash64(name)) {}
 
   std::string_view name;
   ir::RegisterIdx addr;
@@ -46,6 +47,9 @@ struct Local {
   // when the slot is this frame's own. A borrowed capture's place has
   // the outer slot's extent, not the capture list's position.
   u32 outer_index = ~0u;
+  // A key of `name`: a walk of a long table settles most entries on an
+  // integer compare rather than on the bytes.
+  u64 name_key;
   // The locals a reference held here may point into: `p := &n` names n,
   // and a binding from an alias copies what the alias named. Empty when
   // the reference came from a parameter or from a call that kept its

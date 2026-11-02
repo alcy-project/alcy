@@ -22,6 +22,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/hash.h"
 #include "comp/comp_value.h"
 #include "comp/ir_interpreter.h"
 #include "debug/dcheck.h"
@@ -1056,9 +1057,23 @@ str::StringPoolId Lowerer::intern_copied(std::string_view name) {
   return intern_result(strings.intern_copied(name));
 }
 
+// The local count above which a lookup settles entries on a key of the
+// name: below it a walk reads so few names that a key costs more than
+// the names it saves.
+constexpr usize K_LOCAL_KEY_LIMIT = 8;
+
 const Local* Lowerer::lookup_local(std::string_view name) const {
+  if (locals.size() <= K_LOCAL_KEY_LIMIT) {
+    for (const auto& local : locals | std::views::reverse) {
+      if (local.name == name) {
+        return &local;
+      }
+    }
+    return nullptr;
+  }
+  const u64 key = base::hash64(name);
   for (const auto& local : locals | std::views::reverse) {
-    if (local.name == name) {
+    if (local.name_key == key && local.name == name) {
       return &local;
     }
   }
