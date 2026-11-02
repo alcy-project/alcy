@@ -1082,4 +1082,63 @@ TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
   check_same_value(storage, scenario.asts[2], empty.value);
 }
 
+// A method row recorded at the definition site names no instantiation:
+// its body was checked against declared parameters, so a reader that
+// reaches one falls back to the receiver's key instead of trusting the
+// row (ADR-0079).
+TEST_CASE("The AST engine falls back from a definition-site method row") {
+  VirtualDir dir;
+  Fixture fixture;
+  write_all(dir, {{"main.al",
+                   "struct Counter {\n"
+                   "  n: i32,\n"
+                   "}\n"
+                   "impl Counter {\n"
+                   "  fn bump(self: Counter) -> i32 {\n"
+                   "    ret self.n + 1\n"
+                   "  }\n"
+                   "}\n"
+                   "const V: bool = comp {\n"
+                   "  c := Counter { n: 41 }\n"
+                   "  c.bump() == 42\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := V\n"
+                   "}\n"}});
+  CheckCase checked = check_case(dir, "main.al", {"main.al"}, fixture);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+  analyzer::CheckedPackage& package = *checked.checked;
+  const std::optional<comp::CompVal> concrete =
+      ast_value(fixture, package, "V");
+  CHECK(concrete.has_value());
+  if (!concrete.has_value()) {
+    return;
+  }
+  CHECK(concrete->value.tag == comp::CompValue::Tag::Bool);
+  CHECK(concrete->value.bool_value);
+  bool poked = false;
+  for (analyzer::CheckedModule& module : package.modules) {
+    for (analyzer::CheckedModule::MethodInfo& method : module.methods) {
+      if (method.name != "bump") {
+        continue;
+      }
+      method.method_inst = analyzer::PARAM_INST;
+      poked = true;
+    }
+  }
+  CHECK(poked);
+  const std::optional<comp::CompVal> fallback =
+      ast_value(fixture, package, "V");
+  CHECK(fallback.has_value());
+  if (!fallback.has_value()) {
+    return;
+  }
+  CHECK(fallback->value.tag == comp::CompValue::Tag::Bool);
+  CHECK(fallback->value.bool_value);
+}
+
 }  // namespace lowering

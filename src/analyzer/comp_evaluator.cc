@@ -216,13 +216,25 @@ u32 CompEvaluator::callee_inst(const CheckedModule::CallTarget* target) const {
     if (target->index >= def.methods.size()) {
       return NO_INST;
     }
-    return generic_inst_index(def.methods[target->index].self_type);
+    const CheckedModule::MethodInfo& info = def.methods[target->index];
+    // A method with its own type arguments carries the instantiation its
+    // body was checked under; a plain method's is its receiver's. The
+    // definition-site key the generic pass writes names no instantiation
+    // (ADR-0079), so it falls back rather than reading a body that was
+    // recorded against declared parameters as if it were a value.
+    if (info.method_inst != NO_INST && info.method_inst != PARAM_INST) {
+      return info.method_inst;
+    }
+    return generic_inst_index(info.self_type);
   }
   const CheckedModule& def = inputs_.modules[target->module];
   if (target->index >= def.functions.size()) {
     return NO_INST;
   }
-  return def.functions[target->index].inst;
+  const u32 inst = def.functions[target->index].inst;
+  // A free function's definition-site row keys a body that only the
+  // parametric pass reads, so nothing is left to read here.
+  return inst == PARAM_INST ? NO_INST : inst;
 }
 
 bool CompEvaluator::evaluate(
@@ -939,12 +951,11 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     return fail(span, "comp call depth exhausted");
   }
   ++call_depth_;
-  const u32 saved_inst = inst_;
-  inst_ = inst;
   CompScope callee_scope;
   callee_scope.frames.emplace_back();
   std::vector<CompVal> accepted_args;
   std::vector<CompVal> comp_actuals;
+  std::vector<usize> bound_params;
   bool ok = true;
   for (usize i = 0; i < args.size() && ok; ++i) {
     // A `comp fn`'s arguments all bind as comp values; an ordinary
@@ -953,6 +964,9 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     if (!fn.params[i].is_comp && !fn.is_comp) {
       continue;
     }
+    // An argument is an expression of the caller's body, so its types
+    // answer the caller's instantiation; the callee's takes over for
+    // its parameters and its body.
     CompVal arg;
     if (!comp_eval_expr(caller_module, args[i], caller_scope, arg)) {
       ok = false;
@@ -962,8 +976,15 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     if (fn.params[i].is_comp) {
       comp_actuals.push_back(arg);
     }
-    if (!comp_bind_pattern(def_module, fn.params[i].pattern, arg, callee_scope,
-                           ast.exprs[args[i]].span)) {
+    bound_params.push_back(i);
+  }
+  const u32 saved_inst = inst_;
+  inst_ = inst;
+  for (usize k = 0; k < bound_params.size() && ok; ++k) {
+    const usize param = bound_params[k];
+    if (!comp_bind_pattern(def_module, fn.params[param].pattern,
+                           accepted_args[k], callee_scope,
+                           ast.exprs[args[param]].span)) {
       ok = false;
     }
   }
