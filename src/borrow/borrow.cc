@@ -2008,11 +2008,13 @@ class Checker {
         // still a conflict.
         u32 borrow_source = NO_ROOT;
         (void)operand_reg(0, borrow_source);
+        const bool source_holds = borrow_source != NO_ROOT &&
+                                  borrow_source < flow.size() &&
+                                  flow[borrow_source].len != 0;
         auto derived_from = [&](u32 id) {
           // The address a borrow names carries the loans it was taken
           // through, which is the authority the new loan stands behind.
-          if (borrow_source != NO_ROOT && borrow_source < flow.size() &&
-              flow[borrow_source].len != 0) {
+          if (source_holds) {
             for (u32 cur = id, steps = 0;
                  cur < loans.size() && steps < loans.size();
                  cur = loans[cur].parent, ++steps) {
@@ -2040,9 +2042,18 @@ class Checker {
           }
           return false;
         };
+        u32 source = NO_ROOT;
+        const bool has_source = operand_reg(0, source);
         for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
           const Loan& loan = loans[id];
           if (loan.reg == instr.dst.idx || loan.param != NO_ROOT) {
+            continue;
+          }
+          // Liveness and overlap read a handful of words and reject most
+          // of the set; the derivation walks below follow loan chains, so
+          // they run only for a loan that still forbids this borrow.
+          if (!live_at(id, bidx, pos) ||
+              !overlaps(loan.place, place, path_steps_)) {
             continue;
           }
           if (derived_from(id) && !(exclusive && !loan.exclusive)) {
@@ -2052,14 +2063,8 @@ class Checker {
           // reborrows from, so that loan - and anything it is itself a
           // reborrow of - is not the conflict this read is reported
           // against.
-          u32 source = NO_ROOT;
-          if (operand_reg(0, source) &&
-              stands_behind(reborrow_parent(source, pos), id) &&
+          if (has_source && stands_behind(reborrow_parent(source, pos), id) &&
               !(exclusive && !loan.exclusive)) {
-            continue;
-          }
-          if (!live_at(id, bidx, pos) ||
-              !overlaps(loan.place, place, path_steps_)) {
             continue;
           }
           // A shared borrow during a reserved receiver's window is the
