@@ -338,3 +338,49 @@ jobs:
     uses: ./.github/workflows/generate-summary.yaml
     with:
       artifact_pattern: "*"
+
+  # The single check to require. Branch protection names this job and
+  # nothing else, so a job added above is required by construction and no
+  # list of names lives in the repository settings. A job that did not run
+  # is not a pass, and every conclusion is printed so the line that failed
+  # is the line that is red.
+  gate:
+    name: Gate
+    needs:
+      - debug
+      - release
+      - wasm-debug
+      - wasm-release
+      - lint
+      - coverage
+      - sanitizers
+      - grammar-vs-compiler
+      - harness
+      - benchmarks
+      - fuzz
+      - cross-gen
+      - summary
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read the Job Conclusions
+        shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - "$NEEDS" <<'PY'
+          import json
+          import sys
+
+          results = json.loads(sys.argv[1])
+          for name in sorted(results):
+              print(f"{results[name].get('result', ''):<9} {name}")
+
+          failed = {n: j.get("result") for n, j in results.items()
+                    if j.get("result") != "success"}
+          if failed:
+              print()
+              print("not a pass: " + ", ".join(f"{n} ({r})" for n, r in sorted(failed.items())))
+              sys.exit(1)
+          PY
