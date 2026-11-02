@@ -1,0 +1,16 @@
+exit = 0
+stdout = """
+DROP 1
+after store
+DROP 3
+DROP 2
+taken 4
+DROP 4
+after maybe store
+DROP 6
+DROP 5
+taken 7
+DROP 7
+after maybe exit
+DROP 8
+"""

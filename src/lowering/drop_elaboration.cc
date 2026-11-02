@@ -69,6 +69,44 @@ bool is_prefix(std::span<const u32> prefix, std::span<const u32> of) {
   return true;
 }
 
+// The type a path step selects inside `type`, or the error type when the
+// step names no child. A struct field and a tuple slot are picked by
+// position; an array slot by its index.
+ir::TypeIdx step_type(ir::StorageBuilder& builder,
+                      const std::unordered_map<u32, u32>& type_origins,
+                      ir::TypeIdx type,
+                      u32 step) {
+  const auto origin_of = [&](ir::TypeIdx idx) {
+    const auto found = type_origins.find(idx.idx);
+    return found == type_origins.end() ? idx : ir::TypeIdx(found->second);
+  };
+  const ir::TypeNode& node = builder.types()[origin_of(type)];
+  switch (node.tag) {
+    case ir::TypeTag::Struct: {
+      const ir::StructType& shape = builder.struct_types()[node.as_struct()];
+      if (step < shape.fields.size()) {
+        return origin_of(shape.fields[step]);
+      }
+      return builder.error_type();
+    }
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& shape = builder.tuple_types()[node.as_tuple()];
+      if (step < shape.elements.size()) {
+        return origin_of(shape.elements[step]);
+      }
+      return builder.error_type();
+    }
+    case ir::TypeTag::Array: {
+      const ir::ArrayType& shape = builder.array_types()[node.as_array()];
+      if (step < shape.count) {
+        return origin_of(shape.element);
+      }
+      return builder.error_type();
+    }
+    default: return builder.error_type();
+  }
+}
+
 // One block the pass is building. Blocks are appended as they are
 // spawned; `current` names the one being filled.
 struct OutBlock {
@@ -809,15 +847,21 @@ void DropElaborator::run() {
         flag_needed[pi] = true;
       }
     }
+    // A struct field and a tuple slot are places of their own, which a
+    // path can move out and so leave maybe. An array's slots end through
+    // one loop over the whole array and no path moves one out.
     const ir::TypeNode& node = builder.types()[type];
-    if (node.tag != ir::TypeTag::Struct) {
-      return;
+    u32 children = 0;
+    if (node.tag == ir::TypeTag::Struct) {
+      children = builder.struct_types()[node.as_struct()].fields.size();
+    } else if (node.tag == ir::TypeTag::Tuple) {
+      children = builder.tuple_types()[node.as_tuple()].elements.size();
     }
-    const ir::StructType& fields = builder.struct_types()[node.as_struct()];
-    for (u32 i = 0; i < fields.fields.size(); ++i) {
+    for (u32 i = 0; i < children; ++i) {
       std::vector<u32> child = path;
       child.push_back(i);
-      mark_maybe(local, child, fields.fields[i], block, offset, seq);
+      mark_maybe(local, child, step_type(builder, type_origins_, type, i),
+                 block, offset, seq);
     }
   };
   for (const EndSite& site : end_sites_) {
@@ -1342,17 +1386,15 @@ void DropElaborator::run() {
     ir::OperandIdx place = to_operand(info.addr, info.type);
     ir::TypeIdx walked = info.type;
     for (u32 step : event.path) {
-      const ir::TypeNode& node = builder.types()[walked];
-      if (node.tag != ir::TypeTag::Struct) {
+      const ir::TypeIdx child = step_type(builder, type_origins_, walked, step);
+      if (child.idx == builder.error_type().idx) {
         return;
       }
-      const ir::TypeIdx field =
-          builder.struct_types()[node.as_struct()].fields[step];
       const ir::RegisterIdx gep =
-          pass_emit(seq_of(out), ir::Opcode::GetElementPtr, field,
+          pass_emit(seq_of(out), ir::Opcode::GetElementPtr, child,
                     {place, zero_i32, index_operand(step)}, event.span);
-      place = to_operand(gep, field);
-      walked = field;
+      place = to_operand(gep, child);
+      walked = child;
     }
     if (state == State::Maybe) {
       const u32 pi = place_index(event.local, event.path);
@@ -1516,26 +1558,11 @@ ir::TypeIdx type_at_path(ir::StorageBuilder& builder,
                          const std::unordered_map<u32, u32>& type_origins,
                          ir::TypeIdx type,
                          std::span<const u32> path) {
-  const auto origin_of = [&](ir::TypeIdx idx) {
-    return canonical_origin(type_origins, idx);
-  };
-  ir::TypeIdx current = origin_of(type);
+  ir::TypeIdx current = canonical_origin(type_origins, type);
   for (u32 index : path) {
-    const ir::TypeNode& node = builder.types()[current];
-    if (node.tag == ir::TypeTag::Struct) {
-      const ir::StructType& fields = builder.struct_types()[node.as_struct()];
-      if (index >= fields.fields.size()) {
-        return builder.error_type();
-      }
-      current = origin_of(fields.fields[index]);
-    } else if (node.tag == ir::TypeTag::Tuple) {
-      const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
-      if (index >= tuple.elements.size()) {
-        return builder.error_type();
-      }
-      current = origin_of(tuple.elements[index]);
-    } else {
-      return builder.error_type();
+    current = step_type(builder, type_origins, current, index);
+    if (current.idx == builder.error_type().idx) {
+      return current;
     }
   }
   return current;

@@ -27,12 +27,14 @@ replaced. The foundations are in `roadmap.md`.
   agrees to carry.
 
 - [ ] Moving an element out of an owned array, which the refusal above
-  stands in for: the drop walk's paths name fields and tuple slots, so
-  the pass needs an element step that ends the elements the move left
-  behind. A value moved out of a temporary array (`f().a[0]`) is the
-  same shape one level out. The refusal reports on its own: it ends
-  lowering for the refused expression, so a projection through the
-  binding taken from it stays silent (`err-move-out-of-element`).
+  stands in for: the drop walk reads a constant index as a path step, so
+  a store ends the element it replaces, but a move-out needs an end for
+  the elements the move leaves behind, which the loop that ends a whole
+  array does not know. A value moved out of a temporary array
+  (`f().a[0]`) is the same shape one level out. The refusal reports on
+  its own: it ends lowering for the refused expression, so a projection
+  through the binding taken from it stays silent
+  (`err-move-out-of-element`).
 
 - [ ] The compiler's stack on a small-stack host: compiling to an
   object needs most of 64 KiB even natively, so the wasm test binary

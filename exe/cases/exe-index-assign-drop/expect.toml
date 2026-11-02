@@ -1,6 +1,11 @@
 exit = 0
 stdout = """
-after
+DROP 1
 DROP 3
+DROP 5
+after
+DROP 7
+DROP 6
+DROP 4
 DROP 2
 """
