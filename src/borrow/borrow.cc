@@ -50,6 +50,10 @@ constexpr u32 DEREF_STEP = 0xFFFFFFFFu;
 // them to specific elements, so it cannot claim they are disjoint.
 constexpr u32 ELEMENT_STEP = 0xFFFFFFFEu;
 
+// Above this many loans in a function, one walk of the root groups costs
+// less than one walk of every loan.
+constexpr usize K_ROOT_GROUP_MIN = 64;
+
 // A place: a root register (alloca or block parameter) plus a path.
 // Moves, borrows, and revives name overlapping places: one path prefixes
 // the other (or they are equal). The path is a window on the checker's
@@ -263,6 +267,15 @@ class Checker {
   std::vector<u32> flow_steps;
   std::vector<FlowRow> flow;
   std::vector<Loan> loans;
+  // The ids the loans were taken under, and, for each placement root, the
+  // ids of the loans that stand on it: a loan can only conflict with a
+  // place of its own root, so a check reads the group instead of the whole
+  // set once the set is long enough for the groups to pay for themselves.
+  std::vector<u32> loan_ids;
+  std::unordered_map<u32, std::vector<u32>> loans_by_root;
+  // How many loans the root index covers: it runs only once the set is long
+  // enough to want it, and then keeps up with the loans taken after it.
+  usize indexed_loans = 0;
   // Two-phase borrows: an exclusive receiver whose only use is the call
   // it serves. The borrow is a reservation until the call activates it,
   // so the argument evaluation between the two is the window ADR-0012
@@ -511,6 +524,35 @@ class Checker {
     return true;
   }
 
+  // Records a loan and the root it stands on, answering the id it was
+  // taken under.
+  u32 add_loan(const Loan& loan) {
+    const u32 id = static_cast<u32>(loans.size());
+    loans.push_back(loan);
+    loan_ids.push_back(id);
+    return id;
+  }
+
+  // Extends the root index over the loans taken since it last ran, keeping
+  // each group in the order the loans were taken.
+  void index_loans() {
+    for (usize index = indexed_loans; index < loans.size(); ++index) {
+      loans_by_root[loans[index].place.root].push_back(static_cast<u32>(index));
+    }
+    indexed_loans = loans.size();
+  }
+
+  // The loans that stand on the place's root, ascending. A loan of another
+  // root can never overlap the place, so only these can answer it.
+  std::span<const u32> conflicts_at_root(const Place& place) {
+    index_loans();
+    const auto found = loans_by_root.find(place.root);
+    if (found == loans_by_root.end()) {
+      return {};
+    }
+    return found->second;
+  }
+
   // Seeds one summary token per parameter alloca before analysis.
   // Parameters arrive already borrowed; the token makes their flow
   // to the return observable without creating conflicts.
@@ -522,8 +564,7 @@ class Checker {
       }
       Place place;
       place.root = alloca;
-      loans.push_back({alloca, place, false, 0, index});
-      flow[alloca].push_back(static_cast<u32>(loans.size() - 1));
+      flow[alloca].push_back(add_loan({alloca, place, false, 0, index}));
     }
   }
 
@@ -779,8 +820,7 @@ class Checker {
             fresh.birth = pos;
             fresh.parent = inherited;
             flow[instr.dst.idx].clear();
-            flow[instr.dst.idx].push_back(static_cast<u32>(loans.size()));
-            loans.push_back(fresh);
+            flow[instr.dst.idx].push_back(add_loan(fresh));
           }
 
           push_path_step(instr.dst.idx, DEREF_STEP);
@@ -1021,7 +1061,7 @@ class Checker {
             fresh.exclusive = exclusive;
             fresh.birth = pos;
             fresh.parent = parent;
-            loans.push_back(fresh);
+            (void)add_loan(fresh);
           };
           if (place.len == 0 && place.root < storage.registers().size() &&
               tag_of(storage.registers()[place.root].type) ==
@@ -1099,11 +1139,9 @@ class Checker {
                   if (loan >= loans.size()) {
                     continue;
                   }
-                  loans.push_back({instr.dst.idx, loans[loan].place,
-                                   loans[loan].exclusive || result_exclusive,
-                                   pos});
-                  flow[instr.dst.idx].push_back(
-                      static_cast<u32>(loans.size() - 1));
+                  flow[instr.dst.idx].push_back(add_loan(
+                      {instr.dst.idx, loans[loan].place,
+                       loans[loan].exclusive || result_exclusive, pos}));
                   if (!placed) {
                     home[instr.dst.idx] = loans[loan].place.root;
                     set_row(instr.dst.idx, loans[loan].place);
@@ -1188,10 +1226,10 @@ class Checker {
             continue;
           }
           const Place place = extend_place(referent, entry.path);
-          loans.push_back({instr.dst.idx, place,
-                           entry.exclusive || result_exclusive, pos, NO_ROOT,
-                           source});
-          union_flow(instr.dst.idx, static_cast<u32>(loans.size() - 1));
+          union_flow(instr.dst.idx,
+                     add_loan({instr.dst.idx, place,
+                               entry.exclusive || result_exclusive, pos,
+                               NO_ROOT, source}));
           projected.push_back({entry.param, place});
         }
         for (const SummaryEntry& entry : summaries[target.idx]) {
@@ -1850,7 +1888,10 @@ class Checker {
           // included. Reading through a loan is exempt, since the
           // address carries the loan it was taken by; reading the same
           // place by another route is the conflict.
-          for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+          const std::span<const u32> candidates =
+              loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
+                                              : conflicts_at_root(place);
+          for (const u32 id : candidates) {
             const Loan& loan = loans[id];
             if (loan.param != NO_ROOT || !loan.exclusive) {
               continue;
@@ -2044,7 +2085,10 @@ class Checker {
         };
         u32 source = NO_ROOT;
         const bool has_source = operand_reg(0, source);
-        for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+        const std::span<const u32> candidates =
+            loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
+                                            : conflicts_at_root(place);
+        for (const u32 id : candidates) {
           const Loan& loan = loans[id];
           if (loan.reg == instr.dst.idx || loan.param != NO_ROOT) {
             continue;
@@ -2111,7 +2155,10 @@ class Checker {
           // other loan reaching the place still forbids it, which is
           // what makes a write through one reference a conflict with a
           // loan taken through another.
-          for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
+          const std::span<const u32> candidates =
+              loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
+                                              : conflicts_at_root(place);
+          for (const u32 id : candidates) {
             const Loan& loan = loans[id];
             if (loan.param != NO_ROOT) {
               continue;
@@ -2610,6 +2657,9 @@ class Checker {
       receiver_call_scratch_[reg] = 0;
     }
     loans.clear();
+    loan_ids.clear();
+    loans_by_root.clear();
+    indexed_loans = 0;
     param_homes.clear();
   }
 
