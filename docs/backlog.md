@@ -176,13 +176,15 @@ replaced. The foundations are in `roadmap.md`.
   names the discard, is the decision; it wants one answer for the
   whole std rather than a `_` at each call site.
 
-- [ ] A spec method's *receiver* bound is still unchecked: a
-  declaration stating `fn take<U: PartialEq>(self: &Self) where Self:
-  Ordered` has its `U` checked at the call (`check_spec_method_bounds`,
-  `757074b3`) and its `Self` not, because the impl fixes the receiver
-  when it is written and nothing compares the two. The helper already
-  binds the specification's parameters; the missing piece is a check
-  over `declaration.params` in the bounds the impl recorded.
+- [ ] An impl's type parameter that the target type never names is
+  accepted and then lost: `impl<U> Tagged<U> for P` registers with the
+  parameter unresolved, so `check_spec_impl_bodies` types the method
+  body with `U` unbound and reports `Unknown type 'U'` at the
+  parameter that declares it, and a call reports `No method`. An
+  inherent `impl<U> P` reports only the second. An impl is specialized
+  per receiver instantiation (`docs/spec/items.md`), so a parameter the
+  target does not carry has no instantiation to bind it: the diagnostic
+  belongs at the `impl`'s parameter list.
 
 - [ ] A value's type is named in three places, and a place is not a
   value: a register's row, the operand that names it, and the

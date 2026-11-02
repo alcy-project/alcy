@@ -718,6 +718,25 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
       (void)index;
       return nullptr;
     }
+    // A concrete record reaches its registered method without an
+    // instantiation, so the declaration's bounds on the spec's own
+    // parameters are compared with what the call names here.
+    if (!generic_record) {
+      std::vector<ir::TypeIdx> declared_args;
+      declared_args.reserve(entry.spec_args.size());
+      bool concrete = true;
+      for (const SpecTarget::Arg& shape : entry.spec_args) {
+        if (shape.is_param || shape.is_value || !shape.type.is_valid()) {
+          concrete = false;
+          break;
+        }
+        declared_args.push_back(shape.type);
+      }
+      if (concrete && !check_spec_method_bounds(entry.spec, name, declared_args,
+                                                {}, span)) {
+        return nullptr;
+      }
+    }
     if (generic_record) {
       const ast::ItemImpl& impl =
           ast.items[entry.item].payload.get<ast::ItemImpl>();

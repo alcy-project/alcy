@@ -150,10 +150,12 @@
 ## Bounds over specs
 
 - A type parameter takes bounds where it is declared - on free
-  functions, methods, spec methods, and impl blocks, never on structs
-  or enums: `fn show_all<T: Display + PartialEq>(items: &[T])`. Inside
-  the body `T` answers the bound specs' methods, and a call
+  functions, methods, spec methods, specs, and impl blocks, never on
+  structs or enums: `fn show_all<T: Display + PartialEq>(items: &[T])`.
+  Inside the body `T` answers the bound specs' methods, and a call
   instantiates only when each argument's type implements each bound.
+  A spec's own parameters are such a declaration: an implementation
+  may leave a bound off, and the call still owes it.
   The refusal names the caller's type at the call rather than a line
   inside the library, which is where an unbounded body's failure used
   to surface. Multiple bounds join with `+`; `where` stays reserved.

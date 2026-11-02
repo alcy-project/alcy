@@ -630,12 +630,24 @@ bool Checker::check_spec_method_bounds(u32 spec,
     for (usize i = 0; i < method.generic.size(); ++i) {
       bindings.emplace_back(method.generic[i].name.name, method_args[i]);
     }
+    std::vector<std::pair<std::string_view, ir::TypeIdx>> spec_bindings;
+    spec_bindings.reserve(declaration.params.size());
+    for (usize i = 0; i < declaration.params.size(); ++i) {
+      spec_bindings.emplace_back(declaration.params[i].name.name, spec_args[i]);
+    }
     const usize pushed = type_params.size();
     for (usize i = 0; i < declaration.params.size(); ++i) {
       type_params.emplace_back(declaration.params[i].name.name, spec_args[i]);
     }
-    const bool ok = check_declared_bounds(specs[spec].module, method.generic,
-                                          bindings, span);
+    // The spec's own parameters carry bounds in the same way, and the
+    // call is where the arguments they were written for become
+    // concrete: the implementation fixes them when it is declared, so
+    // nothing else compares the two.
+    const bool params_ok = check_declared_bounds(
+        specs[spec].module, declaration.params, spec_bindings, span);
+    const bool ok =
+        params_ok && check_declared_bounds(specs[spec].module, method.generic,
+                                           bindings, span);
     while (type_params.size() > pushed) {
       type_params.pop_back();
     }
