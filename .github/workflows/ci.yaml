@@ -201,13 +201,14 @@ jobs:
 
   # A subcommand of the driver is what a check is about, so a subcommand
   # is what a check is named after. Each entry below is one command, so the
-  # four share one definition and the matrix names them apart. The format
-  # check compiles nothing, so it takes the driver the matrix built; the
-  # three that make an executable build the tree again, so that a failure
-  # lands on the verb that broke rather than on a binary this run did not
-  # make. The language server is the one check that stays in the matrix,
-  # because what it exercises is a pipe, which is a platform's answer to
-  # give.
+  # three share one definition and the matrix names them apart, and each
+  # runs the driver the matrix built rather than a tree of its own.
+  #
+  # What is left here is what the host does not answer for: the formatter
+  # and the borrow rules read source and ask the driver about it, and a wasm
+  # module comes out of the driver's own backend to be run by the same bun
+  # on every platform. A corpus whose cases link a program or run one is a
+  # question the platform answers, and those stay in the matrix.
   harness:
     name: ${{ matrix.name }}
     needs: [debug]
@@ -218,31 +219,17 @@ jobs:
           - name: Format (alcy fmt)
             command: uv run ./tools/check_fmt.py --build-subdir=build
             bun: false
-            driver: true
-          # The type-check cases and the borrow rules are the two halves
-          # of what `alcy check` answers, so they are one job.
-          - name: Type Check (alcy check)
-            command: |
-              uv run ./tools/check_e2e.py --build-subdir=build
-              uv run ./tools/check_borrow_rules.py --build-subdir=build
+          - name: Borrow Rules (alcy check)
+            command: uv run ./tools/check_borrow_rules.py --build-subdir=build
             bun: false
-            driver: false
-          # The sample programs stay in the matrix, which is where a
-          # question about linking and printing belongs.
-          - name: Compile & Run (alcy build)
-            command: uv run ./tools/check_exe.py --build-subdir=build
-            bun: false
-            driver: false
           - name: Wasm Acceptance (alcy build --target=wasm)
             command: uv run ./tools/check_wasm.py --build-subdir=build
             bun: true
-            driver: false
     uses: ./.github/workflows/harness.yaml
     with:
       name: ${{ matrix.name }}
       command: ${{ matrix.command }}
       bun: ${{ matrix.bun }}
-      driver: ${{ matrix.driver }}
 
   # The engine is built and run, and what comes out is checked for shape:
   # every case present, every sample counted, a clock named, a figure

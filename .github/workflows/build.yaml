@@ -123,20 +123,31 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
 
+      # A corpus whose cases link a program or run one is a question the
+      # platform answers: what the linker names the objects, what the frame
+      # walk finds, what the runtime prints. Both corpora are asked in every
+      # entry, then. The checks that read source without producing a host
+      # binary - the formatter, the borrow rules, the wasm output - run
+      # once each in the CI workflow's `harness` job.
+      - name: Run E2E Cases
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
+
+      - name: Run Exe Cases
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
+
       # The language server is a process an editor talks to over a pipe,
-      # and a pipe is what a platform answers for, so this stays here while
-      # the subcommand corpora run once in the CI workflow's `harness` job.
-      # It drives the built binary through one session, so the framing, the
-      # diagnostics, and the formatter edit are exercised as a whole.
+      # and a pipe is what a platform answers for: Windows and a Unix
+      # disagree about how a handle is opened and read. It drives the built
+      # binary through one session, so the framing, the diagnostics, and
+      # the formatter edit are exercised as a whole.
       - name: Run LSP Smoke
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_lsp.py --build-subdir=build
 
-      # The corpora of subcommand cases - the type-check cases, the borrow
-      # rules, the compile-and-run cases, and the wasm cases - run once each
-      # in the CI workflow's `harness` job, where a failure lands on the verb
-      # that broke. What runs here is what a platform answers differently: a
-      # sample kept as an example still compiles, links, and prints.
+      # A sample kept as an example still compiles, links, and prints, so
+      # what it shows is the platform's answer to those three.
       - name: Run Samples
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build --cases-root=samples

@@ -6,10 +6,8 @@ name: Harness
 # The runner is Linux and the environment is the one the build matrix
 # uses: a subcommand check is about what the driver does with a case, not
 # about the platform it is doing it on, and the platform question is
-# already the matrix's. A check that compiles nothing takes the driver the
-# matrix built on that platform; one that does rebuilds the tree, with the
-# cache holding that to the delta since the last run that touched the
-# sources.
+# already the matrix's. Every check here runs the driver the matrix built
+# on that platform, and none of them needs a toolchain of its own.
 on:
   workflow_call:
     inputs:
@@ -23,11 +21,6 @@ on:
         required: true
       bun:
         description: "Whether the check runs WebAssembly output under bun"
-        type: boolean
-        required: false
-        default: false
-      driver:
-        description: "Whether the check takes the Linux debug driver from the matrix instead of building it"
         type: boolean
         required: false
         default: false
@@ -56,38 +49,20 @@ jobs:
         with:
           nix: "false"
           os: Linux
-          toolchain: ${{ !inputs.driver }}
+          toolchain: false
 
-      # A check that runs the compiler without compiling anything starts
-      # from the binary the matrix already built rather than building the
-      # same tree a third time in the same run.
+      # The binary the matrix already built, rather than the same tree a
+      # second time in the same run. `download-artifact` does not carry the
+      # mode across, so the copy is made executable here.
       - name: Take the Driver
-        if: inputs.driver
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: alcy-driver-linux-x86_64-debug
           path: out/build
 
       - name: Make the Driver Executable
-        if: inputs.driver
         shell: bash
         run: chmod +x out/build/alcy
-
-      # The same key the matrix's Linux debug entry writes, so the tree
-      # arrives built and the build below is the delta rather than the
-      # whole compiler.
-      - name: Cache Build Directory
-        if: ${{ !inputs.driver }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: out/build
-          key: ${{ runner.os }}-linux-x86_64-debug-false-build-dir-${{ hashFiles('.gn', 'BUILD.gn', 'src/**', 'config.toml') }}
-          restore-keys: ${{ runner.os }}-linux-x86_64-debug-false-build-dir-
-
-      - name: Build All
-        if: ${{ !inputs.driver }}
-        shell: bash
-        run: uv run ./tools/build.py --target=all --mode=debug --build-subdir=build
 
       - name: Read the pinned bun
         if: inputs.bun
