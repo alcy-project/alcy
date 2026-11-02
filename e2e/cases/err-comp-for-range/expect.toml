@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Comp `for` iterable is not comp-known"]

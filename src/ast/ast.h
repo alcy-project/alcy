@@ -811,6 +811,10 @@ struct StmtDecl {
   // `const x := expr`: the initializer is a compile-time value and the
   // binding is immutable (ADR-0054).
   bool is_const = false;
+  // The `for` desugar sets this on the cursor declaration it builds:
+  // the declaration is not in the source, so a diagnostic about its
+  // initializer names the loop instead.
+  bool for_cursor = false;
 };
 
 struct StmtReassign {

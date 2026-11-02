@@ -93,8 +93,10 @@ The following are compile-time errors inside comp evaluation:
 - I/O (`print`, `println`) and `panic` (`panic` aborts nothing at
   compile time; it diagnoses instead).
 - Reading `static` items (storage exists only at runtime).
-- Loops whose conditions are not comp-known; comp-known loops are
-  unrolled.
+- Loops whose conditions are not comp-known; comp-known `while` loops
+  are unrolled. A `for` loop is refused: iteration goes through a
+  cursor that holds a raw pointer into the iterable, and a
+  compile-time value has no pointer form.
 - References in the spliced result, except `str` (references may appear
   during evaluation; the compiler materializes them as constant data).
 - Exhausting the evaluation quota. Every function call and every loop

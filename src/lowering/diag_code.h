@@ -66,6 +66,10 @@ enum class DiagCode : u8 {
   // A reference taken of a temporary is kept past the temporary: a call
   // handed the reference stores it, and the storage outlives the slot.
   TemporaryReferenceEscapes = 18,
+  // The evaluator reached an operation with no constant form, so the
+  // value the expression would answer with is not known at compile
+  // time; the message names the operation.
+  CompNotEvaluable = 19,
 };
 
 }  // namespace lowering

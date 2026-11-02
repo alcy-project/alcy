@@ -4517,9 +4517,13 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       if ((decl.is_const || verify_comp_known) &&
           !comp_checked_in_scope(decl.init) &&
           !comp_known_value(module, decl.init, init)) {
+        const diag::Span span = ast.exprs[decl.init].span;
         const u32 index =
-            bag.emit<i18n::Key::AnalyzerConstDeclarationInitializer>(
-                DiagCode::NotCompKnown, ast.exprs[decl.init].span);
+            decl.for_cursor
+                ? bag.emit<i18n::Key::AnalyzerCompForIterable>(
+                      DiagCode::NotCompKnown, span)
+                : bag.emit<i18n::Key::AnalyzerConstDeclarationInitializer>(
+                      DiagCode::NotCompKnown, span);
         (void)index;
       }
       bind_comp_known = decl.is_const;

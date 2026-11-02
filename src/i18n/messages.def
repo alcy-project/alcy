@@ -144,6 +144,7 @@
   F(AnalyzerCompCondition, Error, Analyzer, "Comp condition is not comp-known") \
   F(AnalyzerCompConditionInitializer, Error, Analyzer, "Comp condition initializer is not comp-known") \
   F(AnalyzerConditionAlwaysMatches, Error, Analyzer, "This pattern always matches; write a plain condition or a refutable pattern") \
+  F(AnalyzerCompForIterable, Error, Analyzer, "Comp `for` iterable is not comp-known") \
   F(AnalyzerCompFunctionOutsideComp, Error, Analyzer, "Function '{}' is a `comp fn`; it can only be used during compilation") \
   F(AnalyzerCompMatchScrutinee, Error, Analyzer, "Comp match scrutinee is not comp-known") \
   F(AnalyzerCompParameterArgument, Error, Analyzer, "Argument for `comp` parameter must be comp-known") \
@@ -323,6 +324,7 @@
   F(LowerCompDivisionByZero, Error, Lowering, "Division by zero in constant evaluation") \
   F(LowerCompOutOfBounds, Error, Lowering, "Index out of bounds in constant evaluation") \
   F(LowerCompBudget, Error, Lowering, "Constant evaluation exhausted its budget") \
+  F(LowerCompNotEvaluable, Error, Lowering, "Constant evaluation cannot continue: {}") \
   F(LowerFunctionBudgetExhausted, Error, Lowering, "The compiler's function budget cannot hold the specialized functions this package needs") \
   F(LowerGuardMovesBinding, Error, Lowering, "A guard cannot bind '{}' by value: a false guard falls through to the next arm after the value is taken") \
   F(LowerIrVerificationFailed, Error, Lowering, "Lowered IR failed verification") \

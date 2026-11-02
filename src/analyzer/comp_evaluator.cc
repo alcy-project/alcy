@@ -144,6 +144,13 @@ bool CompEvaluator::fail_internal(diag::Span span, std::string_view what) {
   return fail_as(Failure::Internal, span, what);
 }
 
+bool CompEvaluator::fail_intrinsic(diag::Span span, std::string_view name) {
+  std::string what{"intrinsic '"};
+  what.append(name);
+  what.append("' has no compile-time form");
+  return fail(span, what);
+}
+
 bool CompEvaluator::fail_overflow(diag::Span span, std::string_view what) {
   return fail_as(Failure::Overflow, span, what);
 }
@@ -1112,7 +1119,7 @@ bool CompEvaluator::comp_eval_intrinsic(
     return true;
   }
   if (name != "str_len" && name != "str_byte" && name != "str_slice") {
-    return fail(span, "intrinsic is not comp-evaluable");
+    return fail_intrinsic(span, name);
   }
   CompVal receiver;
   if (!comp_eval_expr(mod, args[0], scope, receiver)) {
@@ -1180,7 +1187,7 @@ bool CompEvaluator::comp_eval_call(u32 mod,
     const std::string_view name = segments[0].name;
     if (name == "print" || name == "println" || name == "eprint" ||
         name == "eprintln" || name == "panic") {
-      return fail(node.span, "intrinsic is not comp-evaluable");
+      return fail_intrinsic(node.span, name);
     }
   }
   const analyzer::CheckedModule::CallTarget* target =

@@ -229,6 +229,9 @@ class Lowerer {
   void comp_div_zero(diag::Span span);
   void comp_oob(diag::Span span);
   void comp_budget(diag::Span span);
+  // The evaluator reached an operation it cannot follow, so the value
+  // is not known at compile time; the detail names the operation.
+  void comp_not_evaluable(diag::Span span, std::string_view what);
   ir::TypeIdx error_type();
   bool is_copy(ir::TypeIdx type) const;
   ir::TypeTag tag_of(ir::TypeIdx idx) const;

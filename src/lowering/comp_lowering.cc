@@ -218,7 +218,8 @@ void Lowerer::Comp::report_failure() {
     case analyzer::CompEvaluator::Failure::Program:
     case analyzer::CompEvaluator::Failure::None: break;
   }
-  owner_.unsupported(owner_.comp_.failure_span(), owner_.comp_.failure());
+  owner_.comp_not_evaluable(owner_.comp_.failure_span(),
+                            owner_.comp_.failure());
 }
 
 }  // namespace lowering

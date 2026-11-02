@@ -160,6 +160,9 @@ class CompEvaluator {
   bool fail_oob(diag::Span span, std::string_view what);
   // An engine limit: the evaluation ran past its quota of branches.
   bool fail_budget(diag::Span span, std::string_view what);
+  // The operation has no compile-time form. The message names it,
+  // because which one it was is the whole of what a reader needs.
+  bool fail_intrinsic(diag::Span span, std::string_view name);
   // Spends one quota unit; false once the quota is exhausted.
   bool spend(diag::Span span);
 
@@ -296,7 +299,7 @@ class CompEvaluator {
   u32 call_depth_ = 0;
   Failure failure_ = Failure::None;
   diag::Span fail_span_{};
-  std::string_view fail_what_;
+  std::string fail_what_;
   // The indexes the evaluator used to walk for: a type's instantiation
   // number, a variant use by path and instantiation, and the same
   // shapes the lowering indexes for its own lookups.

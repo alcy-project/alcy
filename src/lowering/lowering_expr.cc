@@ -109,6 +109,13 @@ void Lowerer::comp_budget(diag::Span span) {
   failed = true;
 }
 
+void Lowerer::comp_not_evaluable(diag::Span span, std::string_view what) {
+  const u32 index = bag.emit<i18n::Key::LowerCompNotEvaluable>(
+      DiagCode::CompNotEvaluable, span, what);
+  (void)index;
+  failed = true;
+}
+
 ir::TypeIdx Lowerer::error_type() {
   return builder.error_type();
 }
