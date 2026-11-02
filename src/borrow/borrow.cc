@@ -353,12 +353,23 @@ class Checker {
   std::vector<std::vector<u32>> live_out;
   // The last-use rows are a few words per block, so a vector per block would
   // spend an allocation on every block to hold them. They are held flat
-  // instead: block b's row is loan_stride words at b * loan_stride.
+  // instead: a block's row is loan_stride words at its offset from block_base,
+  // which numbers the rows within the function being checked. Sizing the table
+  // for the whole program charged every function for every block before it.
   std::vector<u32> loan_last_use;
   u32 loan_stride = 0;
+  // Rows the table holds, and the block its first row belongs to.
+  u32 rows_allocated = 0;
+  u32 block_base = 0;
+
+  // The first word of a block's last-use row. The blocks of a function are one
+  // contiguous range, so the offset is the distance from the first of them.
+  usize row_offset(ir::BlockIdx bidx) const {
+    return static_cast<usize>(bidx.idx - block_base) * loan_stride;
+  }
   // CFG shape for the two fixpoints, and the first and last instruction of
-  // each block. Indexed by global block like the rows above, and filled by
-  // build_preds and compute_liveness for one function at a time.
+  // each block. Indexed by global block, and filled by build_preds and
+  // compute_liveness for one function at a time.
   std::vector<std::vector<ir::BlockIdx>> preds;
   // Successors of every block of the function being fixed, held flat: block
   // b's row is succ_len[b] entries at succ_head[b]. A terminator does not
@@ -1312,8 +1323,7 @@ class Checker {
     // register carrying it, in the block that instruction is in.
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
-      u32* const row =
-          loan_last_use.data() + static_cast<usize>(bidx.idx) * loan_stride;
+      u32* const row = loan_last_use.data() + row_offset(bidx);
       for (ir::InstructionIdx iidx : block.instrs) {
         const ir::Instruction& instr = instr_at(iidx);
         for (u32 offset = 0; offset < instr.operands.size(); ++offset) {
@@ -1386,8 +1396,7 @@ class Checker {
         live_in_scratch_.clear();
         const u32 first = block_first[bidx.idx];
         const u32 last = block_last[bidx.idx];
-        const u32* const last_use =
-            loan_last_use.data() + static_cast<usize>(bidx.idx) * loan_stride;
+        const u32* const last_use = loan_last_use.data() + row_offset(bidx);
         for (u32 loan = 0; loan < loans.size(); ++loan) {
           const u32 birth = loans[loan].birth;
           if (birth >= first && birth <= last) {
@@ -1534,9 +1543,7 @@ class Checker {
         return true;
       }
     }
-    return loan < loans.size() &&
-           loan_last_use[static_cast<usize>(bidx.idx) * loan_stride + loan] >=
-               pos;
+    return loan < loans.size() && loan_last_use[row_offset(bidx) + loan] >= pos;
   }
 
   void check_place_use(const std::vector<Place>& moved,
@@ -1826,7 +1833,7 @@ class Checker {
     forward(fidx);
     block_order_.clear();
     reverse_post_order(fn, block_order_);
-    reset_blocks(block_order_);
+    reset_blocks(fn, block_order_);
     // Both fixpoints walk the same CFG of the same function, so its rows are
     // built once here.
     build_preds(fn, block_order_);
@@ -2606,19 +2613,28 @@ class Checker {
   }
 
   // Clears the rows indexed by block that a function reaches, the
-  // counterpart of clear_register for the CFG-shaped scratch. The list is
-  // the function's block closure rather than its declared blocks, because
-  // that is what the fixpoints walk. The last-use row is sized to the loans
-  // the function has, which is why this waits until forward has run.
-  void reset_blocks(const std::vector<ir::BlockIdx>& blocks) {
-    // A row is as wide as the widest function's loan list, and a block
-    // belongs to one function, so a block's row is written by that function
-    // alone and zeroing it here leaves no stale entry behind.
+  // counterpart of clear_register for the CFG-shaped scratch. The live sets
+  // are cleared over the function's block closure rather than its declared
+  // blocks, because that is what the fixpoints walk; the last-use rows cover
+  // every declared block, since the sweep that fills them reads all of them.
+  // The last-use row is sized to the loans the function has, which is why this
+  // waits until forward has run.
+  void reset_blocks(const ir::Function& fn,
+                    const std::vector<ir::BlockIdx>& order) {
+    // A row is as wide as the widest function's loan list, and every row the
+    // function reads is zeroed below, so a slot keeps no value from the
+    // function that used it before.
+    block_base = fn.blocks.head().idx;
+    const u32 rows = fn.blocks.size();
     if (loans.size() > loan_stride) {
       loan_stride = static_cast<u32>(loans.size());
-      loan_last_use.assign(storage.blocks().size() * loan_stride, 0);
+      rows_allocated = 0;
     }
-    for (ir::BlockIdx bidx : blocks) {
+    if (rows > rows_allocated) {
+      rows_allocated = rows;
+      loan_last_use.assign(static_cast<usize>(rows_allocated) * loan_stride, 0);
+    }
+    for (ir::BlockIdx bidx : order) {
       live_in[bidx.idx].clear();
       live_out[bidx.idx].clear();
       moved_in[bidx.idx].clear();
@@ -2626,9 +2642,10 @@ class Checker {
       preds[bidx.idx].clear();
       block_first[bidx.idx] = 0;
       block_last[bidx.idx] = 0;
-      const auto row =
-          loan_last_use.begin() + static_cast<usize>(bidx.idx) * loan_stride;
-      std::fill_n(row, loans.size(), 0);
+    }
+    // Declared order, matching the sweep that fills these rows.
+    for (ir::BlockIdx bidx : fn.blocks) {
+      std::fill_n(loan_last_use.data() + row_offset(bidx), loans.size(), 0);
     }
     live_mark.assign(loans.size(), 0);
   }
