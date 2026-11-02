@@ -165,6 +165,15 @@ struct Loan {
   bool param_derived = false;
 };
 
+// The loans that stand on one placement root, and the exclusive ones among
+// them. A shared loan is live over a read without forbidding it, so a
+// question only an exclusive loan can answer reads the shorter list, which
+// keeps a function taking many shared borrows of one place linear.
+struct RootGroup {
+  std::vector<u32> all;
+  std::vector<u32> exclusive;
+};
+
 // One way a returned reference reaches a parameter: which parameter,
 // and the path from that parameter to the reference. An empty path is
 // the parameter itself; a field index names a projection through it.
@@ -272,7 +281,7 @@ class Checker {
   // place of its own root, so a check reads the group instead of the whole
   // set once the set is long enough for the groups to pay for themselves.
   std::vector<u32> loan_ids;
-  std::unordered_map<u32, std::vector<u32>> loans_by_root;
+  std::unordered_map<u32, RootGroup> loans_by_root;
   // How many loans the root index covers: it runs only once the set is long
   // enough to want it, and then keeps up with the loans taken after it.
   usize indexed_loans = 0;
@@ -554,20 +563,30 @@ class Checker {
   // each group in the order the loans were taken.
   void index_loans() {
     for (usize index = indexed_loans; index < loans.size(); ++index) {
-      loans_by_root[loans[index].place.root].push_back(static_cast<u32>(index));
+      const Loan& loan = loans[index];
+      RootGroup& group = loans_by_root[loan.place.root];
+      group.all.push_back(static_cast<u32>(index));
+      if (loan.exclusive) {
+        group.exclusive.push_back(static_cast<u32>(index));
+      }
     }
     indexed_loans = loans.size();
   }
 
   // The loans that stand on the place's root, ascending. A loan of another
-  // root can never overlap the place, so only these can answer it.
-  std::span<const u32> conflicts_at_root(const Place& place) {
+  // root can never overlap the place, so only these can answer it. A read
+  // among reads conflicts with nothing, so a shared borrow asks the group's
+  // exclusive loans: a shared one is live over the read without forbidding
+  // it, and the rest of the group is dead weight for that question.
+  std::span<const u32> conflicts_at_root(const Place& place,
+                                         bool exclusive_only) {
     index_loans();
     const auto found = loans_by_root.find(place.root);
     if (found == loans_by_root.end()) {
       return {};
     }
-    return found->second;
+    return exclusive_only ? std::span<const u32>(found->second.exclusive)
+                          : std::span<const u32>(found->second.all);
   }
 
   // Seeds one summary token per parameter alloca before analysis.
@@ -1915,7 +1934,7 @@ class Checker {
           // place by another route is the conflict.
           const std::span<const u32> candidates =
               loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
-                                              : conflicts_at_root(place);
+                                              : conflicts_at_root(place, true);
           for (const u32 id : candidates) {
             const Loan& loan = loans[id];
             if (loan.param != NO_ROOT || !loan.exclusive) {
@@ -2111,8 +2130,9 @@ class Checker {
         u32 source = NO_ROOT;
         const bool has_source = operand_reg(0, source);
         const std::span<const u32> candidates =
-            loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
-                                            : conflicts_at_root(place);
+            loans.size() < K_ROOT_GROUP_MIN
+                ? std::span<const u32>(loan_ids)
+                : conflicts_at_root(place, !exclusive);
         for (const u32 id : candidates) {
           const Loan& loan = loans[id];
           if (loan.reg == instr.dst.idx || loan.param != NO_ROOT) {
@@ -2182,7 +2202,7 @@ class Checker {
           // loan taken through another.
           const std::span<const u32> candidates =
               loans.size() < K_ROOT_GROUP_MIN ? std::span<const u32>(loan_ids)
-                                              : conflicts_at_root(place);
+                                              : conflicts_at_root(place, false);
           for (const u32 id : candidates) {
             const Loan& loan = loans[id];
             if (loan.param != NO_ROOT) {
