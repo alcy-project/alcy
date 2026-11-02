@@ -75,7 +75,7 @@ jobs:
   # and it belongs beside the builds rather than in a workflow that a
   # documentation change also triggers.
   lint:
-    name: Lint (${{ matrix.shard }})
+    name: Tree Lint (${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -199,36 +199,46 @@ jobs:
         shell: bash
         run: uv run ./tools/check_treesitter.py --differential --build-subdir=build
 
-  # The formatter's own gate, over every source in the tree rather than
-  # a sample: the tree is what it would write, formatting formatted
-  # output changes nothing, and the compiler's verdict about a file
-  # survives its formatting. It needs the binary and nothing else, so
-  # it rides alone like the grammar's differential half rather than in
-  # every matrix entry, which would ask the same question ten times.
-  fmt:
-    name: Formatter
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: recursive
-          fetch-depth: 1
-
-      - name: Setup Build Environment
-        uses: ./.github/actions/setup-build
-        with:
-          nix: "false"
-          os: Linux
-
-      - name: Build All
-        shell: bash
-        run: uv run ./tools/build.py --target=all --mode=debug --build-subdir=build
-
-      - name: Check the Formatter
-        shell: bash
-        run: uv run ./tools/check_fmt.py --build-subdir=build
+  # A subcommand of the driver is what a check is about, so a subcommand
+  # is what a check is named after. Each entry below is a Linux build and
+  # one command, so the five share one definition and the matrix names
+  # them apart. The build is the one the matrix also makes; it is made
+  # again here so that a failure lands on the verb that broke.
+  harness:
+    name: ${{ matrix.name }}
+    needs: [debug]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Format (alcy fmt)
+            command: uv run ./tools/check_fmt.py --build-subdir=build
+            bun: false
+          - name: Language Server (alcy lsp)
+            command: uv run ./tools/check_lsp.py --build-subdir=build
+            bun: false
+          # The type-check cases and the borrow rules are the two halves
+          # of what `alcy check` answers, so they are one job.
+          - name: Type Check (alcy check)
+            command: |
+              uv run ./tools/check_e2e.py --build-subdir=build
+              uv run ./tools/check_borrow_rules.py --build-subdir=build
+            bun: false
+          # The samples ride with the cases here rather than in the matrix,
+          # which asked the same question of the same program ten times.
+          - name: Compile & Run (alcy build)
+            command: |
+              uv run ./tools/check_exe.py --build-subdir=build
+              uv run ./tools/check_exe.py --build-subdir=build --cases-root=samples
+            bun: false
+          - name: Wasm Acceptance (alcy build --target=wasm)
+            command: uv run ./tools/check_wasm.py --build-subdir=build
+            bun: true
+    uses: ./.github/workflows/harness.yaml
+    with:
+      name: ${{ matrix.name }}
+      command: ${{ matrix.command }}
+      bun: ${{ matrix.bun }}
 
   # The engine is built and run, and what comes out is checked for shape:
   # every case present, every sample counted, a clock named, a figure

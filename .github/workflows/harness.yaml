@@ -1,0 +1,83 @@
+name: Harness
+
+# One subcommand of the driver per job, so a red check names the verb that
+# broke rather than a matrix entry that runs six worth of them at once.
+#
+# The runner is Linux and the environment is the one the build matrix
+# uses: a subcommand check is about what the driver does with a case, not
+# about the platform it is doing it on, and the platform question is
+# already the matrix's. Each job rebuilds the tree it needs; the cache
+# holds that to the delta since the last run that touched the sources.
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: "The name the check runs under"
+        type: string
+        required: true
+      command:
+        description: "The shell command that runs the check"
+        type: string
+        required: true
+      bun:
+        description: "Whether the check runs WebAssembly output under bun"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: ${{ inputs.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    env:
+      COLORTERM: 256color
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+
+      # The same key the matrix's Linux debug entry writes, so the tree
+      # arrives built and the build below is the delta rather than the
+      # whole compiler.
+      - name: Cache Build Directory
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: out/build
+          key: ${{ runner.os }}-linux-x86_64-debug-false-build-dir-${{ hashFiles('.gn', 'BUILD.gn', 'src/**', 'config.toml') }}
+          restore-keys: ${{ runner.os }}-linux-x86_64-debug-false-build-dir-
+
+      - name: Build All
+        shell: bash
+        run: uv run ./tools/build.py --target=all --mode=debug --build-subdir=build
+
+      - name: Read the pinned bun
+        if: inputs.bun
+        id: versions
+        shell: bash
+        run: |
+          py=$(command -v python3 || command -v python)
+          echo "bun=$("$py" tools/config_values.py --get bun_version)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        if: inputs.bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: ${{ steps.versions.outputs.bun }}
+
+      - name: Run the Check
+        shell: bash
+        run: ${{ inputs.command }}

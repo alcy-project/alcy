@@ -119,38 +119,11 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_lsp.py --build-subdir=build
 
-      - name: Run e2e Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
-
-      # The wasm cases run under bun, at the series config.toml pins.
-      - name: Read the pinned bun
-        id: versions
-        shell: bash
-        run: |
-          py=$(command -v python3 || command -v python)
-          echo "bun=$("$py" tools/config_values.py --get bun_version)" >> "$GITHUB_OUTPUT"
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: ${{ steps.versions.outputs.bun }}
-
-      - name: Run Wasm Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_wasm.py --build-subdir=build
-
-      - name: Check Borrow Rules
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_borrow_rules.py --build-subdir=build
-
-      - name: Run exe Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
-
-      # The samples run through the same harness as the test cases, so a
-      # program kept as an example is also a program that still compiles
-      # and still prints what it says it prints.
+      # The corpora of subcommand cases - the type-check cases, the borrow
+      # rules, the compile-and-run cases, and the wasm cases - run once each
+      # in the CI workflow's `harness` job, where a failure lands on the verb
+      # that broke. What runs here is what a platform answers differently: a
+      # sample kept as an example still compiles, links, and prints.
       - name: Run Samples
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build --cases-root=samples
