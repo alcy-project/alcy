@@ -1253,6 +1253,11 @@ class Checker {
   // belongs to, and a diagnostic needs the one to call the type by. Each asked
   // by walking every nominal in the package, so one question cost the package.
   std::unordered_map<u32, u32> nominal_by_type_;
+  // The names of the fieldless variants of an enum type, by the type it
+  // built, for a declaration past INDEX_MIN of them. Holding no entry says
+  // the matrix has not asked about the type yet.
+  std::unordered_map<u32, std::unordered_set<std::string_view>>
+      fieldless_names_by_type_;
   // The generic impls of the package, by the nominal they target, and the
   // nominal count the index was built against.
   std::vector<std::vector<std::pair<u32, ast::ItemIdx>>>
@@ -1591,6 +1596,11 @@ class Checker {
   const ast::ItemNode* nominal_decl(ir::TypeIdx type, ast::ItemKind kind);
   // The variants of an enum type, when the type names one.
   std::span<const ast::ItemEnumVariant> enum_variants(ir::TypeIdx type);
+  // Whether `name` spells a fieldless variant of `type`. The exhaustiveness
+  // matrix asks this once per arm and row, so a declaration long enough for
+  // the walk to cost the arm count times the variant count answers from an
+  // index instead.
+  bool spells_fieldless_variant(ir::TypeIdx type, std::string_view name);
   // The fields of a struct type, when the type names one.
   std::span<const ast::ItemStructField> struct_fields(ir::TypeIdx type);
   // Whether the pattern rows cover every value of their columns:

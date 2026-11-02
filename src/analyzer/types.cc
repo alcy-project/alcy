@@ -1739,9 +1739,28 @@ void Checker::process_module(u32 module) {
     }
     return true;
   };
-  const auto contains_name = [](const std::vector<std::string_view>& names,
-                                std::string_view name) {
-    return std::ranges::find(names, name) != names.end();
+  // The member names of one declaration, in declaration order, with the
+  // index that answers whether a name is already there once the list grows
+  // past INDEX_MIN: a scan per member would cost a wide declaration
+  // squared.
+  const auto declare_member = [](std::vector<std::string_view>& names,
+                                 std::unordered_set<std::string_view>& name_set,
+                                 std::string_view name) -> bool {
+    if (!name_set.empty()) {
+      if (!name_set.insert(name).second) {
+        return false;
+      }
+    } else {
+      if (std::ranges::find(names, name) != names.end()) {
+        return false;
+      }
+      if (names.size() >= INDEX_MIN) {
+        name_set.insert(names.begin(), names.end());
+        name_set.insert(name);
+      }
+    }
+    names.push_back(name);
+    return true;
   };
   const auto duplicate_value = [this](const ast::Ident& name) {
     const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateDefinition>(
@@ -1769,23 +1788,22 @@ void Checker::process_module(u32 module) {
           // and a second variant would resolve to whichever entry a
           // lookup reached first.
           std::vector<std::string_view> members;
+          std::unordered_set<std::string_view> member_set;
           if (node.kind == ast::ItemKind::Struct) {
             for (const ast::ItemStructField& field :
                  node.payload.get<ast::ItemStruct>().fields) {
-              if (contains_name(members, field.name.name)) {
+              if (!declare_member(members, member_set, field.name.name)) {
                 duplicate_value(field.name);
                 continue;
               }
-              members.push_back(field.name.name);
             }
           } else {
             for (const ast::ItemEnumVariant& variant :
                  node.payload.get<ast::ItemEnum>().variants) {
-              if (contains_name(members, variant.name.name)) {
+              if (!declare_member(members, member_set, variant.name.name)) {
                 duplicate_value(variant.name);
                 continue;
               }
-              members.push_back(variant.name.name);
             }
           }
           // Generic declarations intern per instantiation on use; the

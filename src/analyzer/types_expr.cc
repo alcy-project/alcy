@@ -3141,14 +3141,10 @@ bool Checker::pattern_is_wildcard(ir::TypeIdx type, ast::PatternIdx pattern) {
     case ast::PatternKind::Ident: {
       // A bare name that spells a fieldless variant is a constructor:
       // `match e { A => ... }` leaves `B` with no arm.
-      if (tag_of(type) == ir::TypeTag::Enum) {
-        for (const ast::ItemEnumVariant& variant : enum_variants(type)) {
-          if (variant.fields.empty() &&
-              variant.name.name ==
-                  ast.patterns[pattern].payload.ident.name.name) {
-            return false;
-          }
-        }
+      if (tag_of(type) == ir::TypeTag::Enum &&
+          spells_fieldless_variant(
+              type, ast.patterns[pattern].payload.ident.name.name)) {
+        return false;
       }
       return true;
     }
@@ -3225,6 +3221,28 @@ std::span<const ast::ItemEnumVariant> Checker::enum_variants(ir::TypeIdx type) {
     return {};
   }
   return decl->payload.get<ast::ItemEnum>().variants;
+}
+
+bool Checker::spells_fieldless_variant(ir::TypeIdx type,
+                                       std::string_view name) {
+  const std::span<const ast::ItemEnumVariant> variants = enum_variants(type);
+  if (variants.size() <= INDEX_MIN) {
+    for (const ast::ItemEnumVariant& variant : variants) {
+      if (variant.fields.empty() && variant.name.name == name) {
+        return true;
+      }
+    }
+    return false;
+  }
+  const auto [entry, inserted] = fieldless_names_by_type_.try_emplace(type.idx);
+  if (inserted) {
+    for (const ast::ItemEnumVariant& variant : variants) {
+      if (variant.fields.empty()) {
+        entry->second.insert(variant.name.name);
+      }
+    }
+  }
+  return entry->second.contains(name);
 }
 
 std::span<const ast::ItemStructField> Checker::struct_fields(ir::TypeIdx type) {
