@@ -114,23 +114,20 @@ void print_diff(const std::string& path,
 // Every source under the package root, not only the ones the entry
 // reaches and the ones spelling already parses: a formatter works on
 // the files a reader has, whatever state they are in. A nested
-// package is its own tree, so the walk stops at one.
+// package is its own tree, so the walk stops at one. The walk lists
+// names and reads none of them: a source kept mapped by the source
+// manager cannot be truncated, which Windows refuses outright.
 base::Result<std::vector<std::string>, diag::Reported> collect_package_files(
     pipeline::PipelineContext& ctx,
     std::string_view root,
     const std::vector<std::string_view>& excludes) {
-  base::Result<pipeline::DiscoveredSources, diag::Reported> discovered =
-      pipeline::discover_sources(root, ctx.sources, ctx.bag);
+  base::Result<pipeline::DiscoveredSourcePaths, diag::Reported> discovered =
+      pipeline::discover_source_paths(root, ctx.bag);
   if (discovered.is_err()) {
     return base::make_err(diag::Reported{});
   }
   std::vector<std::string> out;
-  for (source::FileId file : std::move(discovered).unwrap().files) {
-    std::optional<std::string_view> name = ctx.sources.name(file);
-    if (!name.has_value()) {
-      continue;
-    }
-    std::string path(*name);
+  for (std::string& path : std::move(discovered).unwrap().files) {
     if (excluded(path, excludes)) {
       continue;
     }

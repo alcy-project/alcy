@@ -18,6 +18,20 @@ namespace pipeline {
 // Source discovery convention: `<dir>/**/*.al`, walked recursively and
 // sorted lexically for deterministic builds. Subdirectories containing
 // alcy.toml are nested packages and are skipped.
+struct DiscoveredSourcePaths {
+  // Directory as given (not canonicalized).
+  std::string root;
+  std::vector<std::string> files;
+};
+
+// Discovers the name of every source file under dir without reading one.
+// A caller that only lists the files - the formatter rewrites what it
+// finds - takes this one: a loaded source stays mapped, and Windows will
+// not truncate a file a view of it still exists for.
+base::Result<DiscoveredSourcePaths, diag::Reported> discover_source_paths(
+    std::string_view dir,
+    diag::DiagBag& bag);
+
 struct DiscoveredSources {
   // Directory as given (not canonicalized).
   std::string root;

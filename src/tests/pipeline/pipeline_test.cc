@@ -72,6 +72,8 @@ TEST_CASE("Discover finds nested sources in sorted order") {
   if (discovered.files.size() != 3) {
     return;
   }
+  // Discovery reads what it lists: every listed source reached the manager.
+  CHECK(f.sources.file_count() == 3);
   // Sorted: a.al, main.al, util.al.
   CHECK(f.sources.name(discovered.files[0]).value_or(std::string_view{}) ==
         dir.join("a.al"));
@@ -79,6 +81,35 @@ TEST_CASE("Discover finds nested sources in sorted order") {
         dir.join("main.al"));
   CHECK(f.sources.name(discovered.files[2]).value_or(std::string_view{}) ==
         dir.join("util.al"));
+}
+
+TEST_CASE("Listing names the sources without reading them") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_pipeline_listing_test_");
+  const bool setup = dir.write_file("main.al", "fn main() {}\n") &&
+                     dir.write_file("util.al", "");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture f;
+  base::Result<DiscoveredSourcePaths, diag::Reported> result =
+      discover_source_paths(dir.path(), f.bag);
+  CHECK(result.is_ok());
+  if (!result.is_ok()) {
+    return;
+  }
+  const DiscoveredSourcePaths listed = std::move(result).unwrap();
+  CHECK(!f.bag.has_errors());
+  CHECK(listed.root == dir.path());
+  CHECK(listed.files.size() == 2);
+  if (listed.files.size() != 2) {
+    return;
+  }
+  // Sorted: main.al, util.al.
+  CHECK(listed.files[0] == dir.join("main.al"));
+  CHECK(listed.files[1] == dir.join("util.al"));
+  CHECK(f.sources.file_count() == 0);
 }
 
 TEST_CASE("Discover reports missing directories") {
