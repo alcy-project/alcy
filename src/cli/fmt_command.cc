@@ -259,7 +259,8 @@ std::string render_diff(std::string_view path,
 }
 
 bool reads_stdin(const CliConfig& config) {
-  // Standard input is a source only when `--stdin` names it.
+  // Standard input is a source only when `--stdin` names it;
+  // naming no file means the package in the current directory.
   return config.fmt_stdin;
 }
 
@@ -297,11 +298,7 @@ ResultCode run_fmt(const CliConfig& config,
       envelope.outcome = Outcome::Checked;
       return ResultCode::Success;
     }
-    if (config.fmt_stdout) {
-      io::write(io::STDOUT_FD, formatted.data(), formatted.size());
-    } else {
-      io::write(io::STDOUT_FD, formatted.data(), formatted.size());
-    }
+    io::write(io::STDOUT_FD, formatted.data(), formatted.size());
     envelope.status = Status::Ok;
     envelope.outcome = Outcome::Piped;
     return ResultCode::Success;
@@ -399,7 +396,18 @@ ResultCode run_fmt(const CliConfig& config,
     return ResultCode::Success;
   }
 
+  // A stream carries one file's layout, so a target that names or
+  // discovers more than one is refused rather than written in place:
+  // --stdout asked for the result on standard output.
+  if (config.fmt_stdout && files.size() != 1) {
+    ctx.bag.emit_message(
+        diag::Severity::Error,
+        i18n::format<i18n::Key::CliFmtStdoutTakesOneFile>(config.language));
+    return ResultCode::ArgParseError;
+  }
+
   bool failed = false;
+  bool piped = false;
   usize unclean = 0;
   for (const std::string& named : files) {
     if (!io::is_file(named)) {
@@ -411,10 +419,10 @@ ResultCode run_fmt(const CliConfig& config,
     }
     const std::string source = io::read_file(named);
     const std::string formatted = alcy_fmt::format(source, layout);
-    if (formatted == source) {
-      continue;
-    }
     if (check_only || config.fmt_diff) {
+      if (formatted == source) {
+        continue;
+      }
       if (config.fmt_diff) {
         print_diff(named, source, formatted);
       } else {
@@ -425,11 +433,15 @@ ResultCode run_fmt(const CliConfig& config,
       ++unclean;
       continue;
     }
+    // A layout that matches its source still leaves through the stream:
+    // a reader of the pipe asked for the file's text, not for a change.
     if (config.fmt_stdout) {
-      if (files.size() == 1) {
-        io::write(io::STDOUT_FD, formatted.data(), formatted.size());
-        continue;
-      }
+      io::write(io::STDOUT_FD, formatted.data(), formatted.size());
+      piped = true;
+      continue;
+    }
+    if (formatted == source) {
+      continue;
     }
     const std::span<const u8> bytes{
         reinterpret_cast<const u8*>(formatted.data()), formatted.size()};
@@ -448,8 +460,12 @@ ResultCode run_fmt(const CliConfig& config,
     return ResultCode::FmtNotClean;
   }
   envelope.status = Status::Ok;
-  envelope.outcome =
-      check_only || config.fmt_diff ? Outcome::Checked : Outcome::Formatted;
+  if (piped) {
+    envelope.outcome = Outcome::Piped;
+  } else {
+    envelope.outcome =
+        check_only || config.fmt_diff ? Outcome::Checked : Outcome::Formatted;
+  }
   return ResultCode::Success;
 }
 

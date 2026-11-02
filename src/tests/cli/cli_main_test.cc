@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cli/result_code.h"
 #include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
@@ -1436,6 +1437,77 @@ TEST_CASE("Startup gives the debug logger a sink") {
   SilencedOutput silenced;
   CHECK(run_check_on(dir, "missing.al") != 0);
   CHECK(debug::debug_logger.has_sink());
+}
+
+namespace {
+
+// The formatting command's argv, for the cases that name files rather
+// than a directory to walk.
+i32 run_fmt_args(std::span<const std::string_view> arguments) {
+  std::vector<std::string> storage{"alcy", "fmt"};
+  for (const std::string_view argument : arguments) {
+    storage.emplace_back(argument);
+  }
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& argument : storage) {
+    argv.push_back(argument.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+
+constexpr std::string_view UNALIGNED_PROGRAM =
+    "fn main() -> i32 {\n"
+    "      ret 0\n"
+    "}\n";
+constexpr std::string_view ALIGNED_PROGRAM =
+    "fn main() -> i32 {\n"
+    "  ret 0\n"
+    "}\n";
+
+}  // namespace
+
+TEST_CASE("fmt --stdout carries the formatted text and nothing else") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_fmt_stdout_");
+  const bool setup = write_all(dir, "one.al", UNALIGNED_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CapturedStdout captured(dir.join("captured.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
+  }
+  const std::string file = dir.join("one.al");
+  const std::vector<std::string_view> args{"--stdout", "--file", file};
+  CHECK(run_fmt_args(std::span<const std::string_view>(args)) == 0);
+  CHECK(captured.text() == ALIGNED_PROGRAM);
+  // --stdout answers a stream, so the file keeps its layout.
+  CHECK(io::read_file(dir.join("one.al")) == UNALIGNED_PROGRAM);
+}
+
+TEST_CASE("fmt --stdout refuses a target that names more than one file") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_fmt_stdout_many_");
+  const bool setup = write_all(dir, "one.al", UNALIGNED_PROGRAM) &&
+                     write_all(dir, "two.al", UNALIGNED_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    const std::string one = dir.join("one.al");
+    const std::string two = dir.join("two.al");
+    const std::vector<std::string_view> args{"--stdout", "--file", one,
+                                             "--file", two};
+    CHECK(run_fmt_args(std::span<const std::string_view>(args)) ==
+          static_cast<i32>(ResultCode::ArgParseError));
+  }
+  // Neither file is rewritten in place on the way to the refusal.
+  CHECK(io::read_file(dir.join("one.al")) == UNALIGNED_PROGRAM);
+  CHECK(io::read_file(dir.join("two.al")) == UNALIGNED_PROGRAM);
 }
 
 }  // namespace cli

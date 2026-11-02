@@ -496,6 +496,7 @@
   F(CliFmtNotFormatted, Note, Pipeline, "'{}' needs formatting") \
   F(CliFmtReadFailed, Note, Pipeline, "Cannot read '{}'") \
   F(CliFmtWriteFailed, Note, Pipeline, "Cannot write '{}'") \
+  F(CliFmtStdoutTakesOneFile, Note, Pipeline, "The `--stdout` flag takes one file") \
   F(CliFunctionPlural, Note, Pipeline, "functions") \
   F(CliFunctionSingular, Note, Pipeline, "function") \
   F(CliInitAbout, Note, Pipeline, "Create a package in an existing directory") \

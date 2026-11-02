@@ -530,7 +530,7 @@ arg::Parser build_parser(i18n::Language language) {
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("stdout")
-                       .help("Write the result to standard output.")
+                       .help("Write one file's result to standard output.")
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("check")
