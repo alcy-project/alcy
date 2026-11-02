@@ -91,6 +91,10 @@ struct PipelineContext {
   // summary steers lowering the way a source does, so the cache key
   // carries them.
   std::vector<base::Digest128> summary_digests;
+  // The files the run read to plan the build rather than to lower it: the
+  // profile table and the toolchain. Nothing in them reaches the lowered
+  // form, so the cache key leaves their bytes out.
+  std::vector<source::FileId> plan_files;
 
   // `span_capacity` is the syntax arena's reservation. A case that has
   // to spend it can ask for less, the way `ast::AstArena` allows.

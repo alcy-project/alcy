@@ -102,3 +102,13 @@ content hash, and the named target, and an entry's name carries 32 hex
 digits. The decision's shape is unchanged — one digest over the inputs
 that steer the artifact — and the envelope's `hit`, `miss`, and `off`
 are what a caller reads.
+
+**The key leaves the goal's configuration out.** The context above named
+the toolchain among the inputs that steer the lowered package. It steers
+the plan instead: ADR-0019 keeps the driver and its arguments as choices
+of the goal package, and ADR-0052's `freestanding` selects the entry a
+backend emits. Neither reaches the checked, lowered package, so the two
+files a run reads to plan a build — `.alcy/toolchain.toml` and
+`.alcy/profile.toml` — hold a slot in the source table without keying
+it. A project that retunes its driver, its link arguments, or its
+profile answers from the entry it already has.

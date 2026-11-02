@@ -19,6 +19,7 @@
 #include "pipeline/build_plan.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/profile.h"
 
 namespace pipeline {
 
@@ -84,6 +85,34 @@ Built build_in(io::TempDir& dir, std::string_view rel, bool no_cache) {
 
 Built build_once(io::TempDir& dir, bool no_cache) {
   return build_in(dir, "proj", no_cache);
+}
+
+// Builds one package the way a command does: the configuration beside the
+// package is read into the context before any target is walked, as every
+// command reads it, and the build starts from there.
+Built build_configured(io::TempDir& dir, std::string_view rel) {
+  Built built;
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<ManifestProbe, diag::Reported> probe =
+      require_package_manifest(ctx, dir.join(rel), false);
+  if (probe.is_err()) {
+    return built;
+  }
+  ManifestProbe found = std::move(probe).unwrap();
+  if (load_profiles(ctx, found.root).is_err() ||
+      load_toolchain(ctx, found.root).is_err()) {
+    return built;
+  }
+  base::Result<std::string, diag::Reported> res =
+      build_package(ctx, found.root, found.manifest, found.manifest_name, "",
+                    BuildPlan{}, EmitMode::IrBinary);
+  if (res.is_err() || ctx.bag.has_errors()) {
+    return built;
+  }
+  built.ok = true;
+  built.outcome = ctx.cache_outcome;
+  built.bytes = io::read_file(std::move(res).unwrap());
+  return built;
 }
 
 bool write_package(io::TempDir& dir, std::string_view program) {
@@ -162,6 +191,29 @@ TEST_CASE("A changed source misses the cache again") {
   CHECK(second.ok);
   CHECK(second.outcome == CacheOutcome::Miss);
   CHECK(second.bytes != first.bytes);
+}
+
+TEST_CASE("A package's configuration does not steer its entry") {
+  // The profile table and the toolchain say how a build optimizes and
+  // links, so no lowered form holds either. Editing one has to answer from
+  // the entry the last build stored: a settings change rebuilds nothing.
+  io::TempDir dir = io::TempDir::create_unique("alcy_cache_config_test_");
+  CHECK(write_package(dir, PROGRAM));
+  CHECK(dir.write_file("proj/.alcy/profile.toml", "[fast]\noptimize = true\n"));
+  CHECK(dir.write_file("proj/.alcy/toolchain.toml", "linker = \"lld\"\n"));
+
+  const Built first = build_configured(dir, "proj");
+  CHECK(first.ok);
+  CHECK(first.outcome == CacheOutcome::Miss);
+  CHECK(!first.bytes.empty());
+
+  CHECK(
+      dir.write_file("proj/.alcy/profile.toml", "[fast]\noptimize = false\n"));
+  CHECK(dir.write_file("proj/.alcy/toolchain.toml", "linker = \"cc\"\n"));
+  const Built second = build_configured(dir, "proj");
+  CHECK(second.ok);
+  CHECK(second.outcome == CacheOutcome::Hit);
+  CHECK(second.bytes == first.bytes);
 }
 
 TEST_CASE("The targets of one package do not answer from one entry") {

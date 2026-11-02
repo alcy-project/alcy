@@ -3,14 +3,6 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
-- [ ] The run-after-build cache hit is the promise the run cache
-  makes, and nothing pins it across processes: the key covers the
-  loaded-file table, so a build and a run that load different
-  auxiliary files (toolchain, profiles, a suite manifest) silently
-  miss instead of hitting. A test that builds in one process and runs
-  in another, asserting the JSON `cache` field, would name the
-  failure.
-
 - [ ] Float `**` is refused while the integer one is repeated
   squaring: a fractional exponent needs `pow`, and the direct-wasm
   target imports no libm and has no instruction for it, so admitting

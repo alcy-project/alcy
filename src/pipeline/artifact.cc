@@ -1099,6 +1099,7 @@ base::Result<pkg::Toolchain, diag::Reported> load_toolchain(
     return base::make_ok(pkg::Toolchain{});
   }
   const source::FileId loaded = std::move(file).unwrap();
+  ctx.plan_files.push_back(loaded);
   const std::optional<std::string_view> bytes = ctx.sources.bytes(loaded);
   if (!bytes.has_value()) {
     const u32 index = ctx.bag.emit<i18n::Key::PkgToolchainNotLoaded>(

@@ -481,12 +481,20 @@ struct SourceFiles {
 // The file table over the loaded sources: names in FileId order with
 // the content hash of each, so a cache tells two programs under one
 // name apart. A file whose bytes are gone hashes the empty input
-// rather than claiming no hash was computed.
+// rather than claiming no hash was computed. A file the run read to
+// plan the build leaves its slot empty instead: no lowered form holds
+// a profile's opt level or a toolchain's driver, and a slot that keyed
+// one would miss on an edit that changes only the plan. The slot
+// itself stays, because an instruction span names its file by index.
 SourceFiles source_file_table(PipelineContext& ctx) {
   SourceFiles files;
   files.names.resize(ctx.sources.file_count());
   files.hashes.resize(files.names.size());
   for (u32 id = 0; id < files.names.size(); ++id) {
+    if (std::find(ctx.plan_files.begin(), ctx.plan_files.end(), id) !=
+        ctx.plan_files.end()) {
+      continue;
+    }
     files.names[id] = ctx.sources.name(id).value_or(std::string_view{});
     const std::string_view bytes =
         ctx.sources.bytes(id).value_or(std::string_view{});
