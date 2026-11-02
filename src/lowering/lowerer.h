@@ -765,6 +765,16 @@ class Lowerer {
   bool struct_field_index(ir::TypeIdx type,
                           std::string_view name,
                           u32& index_out);
+  // The position of `name` in the names of the type `key` names, by a name
+  // order built once per type: for a list long enough that walking it costs
+  // more, as a structure of a thousand fields cost every read of one of them
+  // the whole list.
+  bool name_index_of(u32 key,
+                     std::span<const std::string_view> names,
+                     std::string_view name,
+                     u32& index_out);
+  const std::vector<u32>& name_order(u32 key,
+                                     std::span<const std::string_view> names);
   ir::TypeIdx field_type_of(ir::TypeIdx base, u32 index, diag::Span span);
   void bind_pattern(ast::PatternIdx pattern, Val init);
   Val lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected);
@@ -1409,6 +1419,10 @@ class Lowerer {
   std::unordered_map<u32, const analyzer::CheckedModule::EnumInfo*> enums_;
   std::unordered_map<u64, const analyzer::CheckedModule::VariantUse*> variants_;
   std::unordered_map<u32, u32> generic_insts_;
+  // A structure's or an enumeration's names as positions into its own list,
+  // in name order, for a list long enough that searching it is cheaper than
+  // walking it.
+  std::unordered_map<u32, std::vector<u32>> name_orders_;
   // Where a specialization key already has an entry. Lowering asks this of
   // every call site, and walking the entries so far to compare keys charged
   // one call site for every function lowered before it.

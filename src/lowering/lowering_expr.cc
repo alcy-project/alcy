@@ -66,6 +66,11 @@ bool is_scalar_operator_tag(ir::TypeTag tag) {
   return ir::is_integer_type(tag) || ir::is_float_type(tag);
 }
 
+// The longest list of names walked rather than searched: below it a walk
+// reads a handful of entries, above it a table of a name order pays for
+// itself.
+constexpr std::size_t K_NAME_WALK_LIMIT = 8;
+
 }  // namespace
 
 namespace lowering {
@@ -613,6 +618,37 @@ ir::OperandIdx Lowerer::index_operand(u32 index) {
   return to_operand(builder.immutable(imm), i32_ty);
 }
 
+const std::vector<u32>& Lowerer::name_order(
+    u32 key,
+    std::span<const std::string_view> names) {
+  const auto cached = name_orders_.find(key);
+  if (cached != name_orders_.end()) {
+    return cached->second;
+  }
+  std::vector<u32> order(names.size());
+  for (u32 i = 0; i < static_cast<u32>(names.size()); ++i) {
+    order[i] = i;
+  }
+  std::sort(order.begin(), order.end(),
+            [names](u32 a, u32 b) { return names[a] < names[b]; });
+  return name_orders_.emplace(key, std::move(order)).first->second;
+}
+
+bool Lowerer::name_index_of(u32 key,
+                            std::span<const std::string_view> names,
+                            std::string_view name,
+                            u32& index_out) {
+  const std::vector<u32>& order = name_order(key, names);
+  const auto found = std::lower_bound(
+      order.begin(), order.end(), name,
+      [names](u32 at, std::string_view wanted) { return names[at] < wanted; });
+  if (found == order.end() || names[*found] != name) {
+    return false;
+  }
+  index_out = *found;
+  return true;
+}
+
 bool Lowerer::struct_field_index(ir::TypeIdx type,
                                  std::string_view name,
                                  u32& index_out) {
@@ -625,6 +661,9 @@ bool Lowerer::struct_field_index(ir::TypeIdx type,
     return false;
   }
   const auto& fields = declaring->second->fields;
+  if (fields.size() > K_NAME_WALK_LIMIT) {
+    return name_index_of(origin.idx, fields, name, index_out);
+  }
   for (u32 i = 0; i < static_cast<u32>(fields.size()); ++i) {
     if (fields[i] == name) {
       index_out = i;
@@ -972,8 +1011,12 @@ bool Lowerer::variant_index(ir::TypeIdx enum_type,
   if (info == nullptr) {
     return false;
   }
-  for (u32 i = 0; i < static_cast<u32>(info->variants.size()); ++i) {
-    if (info->variants[i] == name) {
+  const std::span<const std::string_view> names = info->variants;
+  if (names.size() > K_NAME_WALK_LIMIT) {
+    return name_index_of(type_origin(enum_type).idx, names, name, index_out);
+  }
+  for (u32 i = 0; i < static_cast<u32>(names.size()); ++i) {
+    if (names[i] == name) {
       index_out = i;
       return true;
     }
