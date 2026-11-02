@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "base/hash.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
@@ -28,11 +29,22 @@ bool is_keyword_name(std::string_view name) {
   return name == "self" || name == "package" || name == "Self";
 }
 
+// The scope width above which a name is settled on its key: below it a
+// walk reads so few names that a key of the name sought costs more than
+// the names it saves.
+constexpr usize K_SCOPE_KEY_LIMIT = 8;
+
 class Desugarer {
  public:
   struct Binding {
+    Binding(std::string_view orig, std::string_view fresh)
+        : orig(orig), fresh(fresh), key(base::hash64(orig)) {}
+
     std::string_view orig;
     std::string_view fresh;
+    // A key of `orig`: a walk of a long scope settles most entries on an
+    // integer compare rather than on the bytes.
+    u64 key;
     // Pre-seeded from a sibling or-pattern alternative: reuse without
     // declaring, and track whether the name actually reappears.
     bool preseeded = false;
@@ -70,7 +82,17 @@ class Desugarer {
   std::vector<Binding>& current() { return scopes.back(); }
 
   Binding* find_innermost(std::string_view name) {
-    for (Binding& binding : scopes.back()) {
+    std::vector<Binding>& scope = scopes.back();
+    if (scope.size() > K_SCOPE_KEY_LIMIT) {
+      const u64 key = base::hash64(name);
+      for (Binding& binding : scope) {
+        if (binding.key == key && binding.orig == name) {
+          return &binding;
+        }
+      }
+      return nullptr;
+    }
+    for (Binding& binding : scope) {
       if (binding.orig == name) {
         return &binding;
       }
@@ -83,6 +105,15 @@ class Desugarer {
       return name;
     }
     for (const std::vector<Binding>& scope : scopes | std::views::reverse) {
+      if (scope.size() > K_SCOPE_KEY_LIMIT) {
+        const u64 key = base::hash64(name);
+        for (const Binding& binding : scope) {
+          if (binding.key == key && binding.orig == name) {
+            return binding.fresh;
+          }
+        }
+        continue;
+      }
       for (const Binding& binding : scope) {
         if (binding.orig == name) {
           return binding.fresh;
@@ -135,11 +166,11 @@ class Desugarer {
       }
     }
     if (!shadowed) {
-      current().push_back(Binding{.orig = ident.name, .fresh = ident.name});
+      current().emplace_back(ident.name, ident.name);
       return ident.name;
     }
     const std::string_view fresh = fresh_name(ident.name);
-    current().push_back(Binding{.orig = ident.name, .fresh = fresh});
+    current().emplace_back(ident.name, fresh);
     return fresh;
   }
 
