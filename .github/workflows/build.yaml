@@ -108,13 +108,26 @@ jobs:
           # reachable without paying for ninety days of them.
           retention-days: 14
 
+      # The checks that read the compiler without compiling anything take
+      # this instead of building the same tree in the same run.
+      - name: Upload the Driver
+        if: matrix.plat == 'linux' && !matrix.nix && inputs.build_type == 'debug'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: alcy-driver-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}
+          path: out/build/alcy
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Run Tests
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
 
-      # The language server is a process an editor talks to over a pipe;
-      # this drives the built binary through one session so the framing,
-      # the diagnostics, and the formatter edit are exercised as a whole.
+      # The language server is a process an editor talks to over a pipe,
+      # and a pipe is what a platform answers for, so this stays here while
+      # the subcommand corpora run once in the CI workflow's `harness` job.
+      # It drives the built binary through one session, so the framing, the
+      # diagnostics, and the formatter edit are exercised as a whole.
       - name: Run LSP Smoke
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_lsp.py --build-subdir=build
@@ -149,6 +162,7 @@ jobs:
 
           help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
           echo "$help_out"
+
 
       # The cache is kept for the next run's build, and a build wants the
       # objects: `all` already made the tests and the benchmarks, and their

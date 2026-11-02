@@ -1,7 +1,9 @@
 # Shared toolchain setup for the standard (prebuilt LLVM) and Nix build
-# environments. Callers must check out the repository (with submodules)
-# before invoking this action: the LLVM pin is read from config.toml
-# here, so a caller cannot pass a version it never read.
+# environments. A check that reads the build product without building it
+# takes the venv from here and passes `toolchain: false`. Callers must
+# check out the repository (with submodules) before invoking this action:
+# the LLVM pin is read from config.toml here, so a caller cannot pass a
+# version it never read.
 #
 # Dependabot updates the actions the workflow files name and does not see
 # this file, so the pins below are bumped by hand alongside the workflows.
@@ -18,6 +20,10 @@ inputs:
     description: "Value forwarded to cxx-gn-setup (e.g. runner.os). Ignored for Nix."
     required: false
     default: ""
+  toolchain:
+    description: "'false' installs the Python venv alone, for a check that reads the compiler without building anything."
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -31,14 +37,14 @@ runs:
 
     - name: Read the pinned LLVM
       id: versions
-      if: inputs.nix != 'true'
+      if: inputs.nix != 'true' && inputs.toolchain == 'true'
       shell: bash
       run: |
         py=$(command -v python3 || command -v python)
         echo "llvm_toolchain_version=$("$py" tools/config_values.py --get llvm_toolchain_version)" >> "$GITHUB_OUTPUT"
 
     - name: Setup Build Environment (Standard)
-      if: inputs.nix != 'true'
+      if: inputs.nix != 'true' && inputs.toolchain == 'true'
       uses: pug523/actions/cxx-gn-setup@6a99c1e7020935c77ea80adc3ed0e9365ec8a209
       with:
         os: ${{ inputs.os }}
@@ -48,7 +54,7 @@ runs:
     # GN resolves libc++ headers and libraries through these variables
     # (see docs/build.md). Windows uses the MSVC STL instead.
     - name: Setup Environment Variables (Standard)
-      if: inputs.nix != 'true'
+      if: inputs.nix != 'true' && inputs.toolchain == 'true'
       shell: bash
       run: |
         echo "${{ env.LLVM_PATH }}/bin" >> $GITHUB_PATH
