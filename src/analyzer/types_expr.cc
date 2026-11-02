@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -2132,22 +2133,35 @@ ir::TypeIdx Checker::check_field(u32 module,
         builder.struct_types()[builder.types()[receiver].as_struct()];
     NominalEntry* owner = nullptr;
     u32 field_index = 0;
+    bool named = false;
+    bool is_pub = false;
+    diag::Span declaration{};
+    // The index, the access rights, and the declaration span of a name are
+    // all read from the same field list, so one walk of it answers all
+    // three.
+    const auto find_field = [&](ast::ItemIdx item) -> std::optional<u32> {
+      u32 i = 0;
+      for (const ast::ItemStructField& decl_field :
+           ast.items[item].payload.get<ast::ItemStruct>().fields) {
+        if (decl_field.name.name == field_name.name) {
+          is_pub = decl_field.is_pub;
+          declaration = decl_field.name.span;
+          return i;
+        }
+        ++i;
+      }
+      return std::nullopt;
+    };
     // A field's type is a storage copy of the declared type, so owner
     // lookup follows the copy back to its origin.
     const ir::TypeIdx origin = type_origin(receiver);
     const auto declaring = nominal_by_type_.find(origin.idx);
     if (declaring != nominal_by_type_.end()) {
       NominalEntry& entry = nominals[declaring->second];
-      const ast::ItemNode& owner_node = ast.items[entry.item];
-      u32 i = 0;
-      for (const ast::ItemStructField& decl_field :
-           owner_node.payload.get<ast::ItemStruct>().fields) {
-        if (decl_field.name.name == field_name.name) {
-          owner = &entry;
-          field_index = i;
-          break;
-        }
-        ++i;
+      if (const std::optional<u32> found = find_field(entry.item)) {
+        owner = &entry;
+        field_index = *found;
+        named = true;
       }
     }
     if (owner == nullptr) {
@@ -2157,16 +2171,9 @@ ir::TypeIdx Checker::check_field(u32 module,
       // one it was, per field read.
       if (const GenericInstance* instance = generic_find(origin)) {
         owner = &nominals[instance->nominal];
-      }
-      if (owner != nullptr) {
-        u32 i = 0;
-        for (const ast::ItemStructField& decl_field :
-             ast.items[owner->item].payload.get<ast::ItemStruct>().fields) {
-          if (decl_field.name.name == field_name.name) {
-            field_index = i;
-            break;
-          }
-          ++i;
+        if (const std::optional<u32> found = find_field(owner->item)) {
+          field_index = *found;
+          named = true;
         }
       }
     }
@@ -2177,18 +2184,6 @@ ir::TypeIdx Checker::check_field(u32 module,
       return error_type();
     }
     // A missing name on a resolved owner must not index past the end.
-    bool named = false;
-    bool is_pub = false;
-    diag::Span declaration{};
-    for (const ast::ItemStructField& decl_field :
-         ast.items[owner->item].payload.get<ast::ItemStruct>().fields) {
-      if (decl_field.name.name == field_name.name) {
-        named = true;
-        is_pub = decl_field.is_pub;
-        declaration = decl_field.name.span;
-        break;
-      }
-    }
     if (!named) {
       const u32 index = bag.emit<i18n::Key::AnalyzerUnknownField>(
           DiagCode::UnknownValue, field_name.span, field_name.name);
