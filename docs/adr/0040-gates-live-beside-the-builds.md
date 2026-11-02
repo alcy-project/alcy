@@ -46,8 +46,8 @@ answering one question ten times over.
 | `sanitizers` | `tools/check_exe.py --sanitize` | Needs a build, then clang on the output |
 | `benchmarks` | `tools/run_benchmarks.py smoke` | One entry's worth of work, asked once |
 
-`style.yaml` keeps `spelling`, `format`, and a new `specification` job, and
-loses `lint`. The spec check moves out of the lint job because it reads
+`style.yaml` keeps `spelling` and a new `specification` job, and loses
+`lint`. The spec check moves out of the lint job because it reads
 documents: it needs the repository, `uv`, and nothing else - no toolchain, no
 submodules - and giving it a job that pays for all three is how a fast check
 ends up looking like a slow one.
