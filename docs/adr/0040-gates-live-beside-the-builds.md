@@ -123,3 +123,53 @@ them, and a release workflow that was never handed an LLVM version built
 with none. Each job now reads the pin it uses from config.toml itself, so
 a workflow cannot forget to ask for a value it uses, and the reusable
 build workflows take no version inputs at all.
+
+**The matrix asks what a platform answers, and a job asks what a verb
+does.** `build.yaml` ran the e2e corpus, the exe acceptance, the borrow
+rules, the wasm acceptance, and the benchmark smoke in each of its ten
+entries, so one question about one corpus had ten answers at ten times the
+cost. The benchmark smoke, the borrow rules, the wasm acceptance, and the
+format check now run once, in `ci.yaml`'s `harness` matrix, where each
+entry is one command and the job is named after the verb: `Format (alcy
+fmt)`, `Borrow Rules (alcy check)`, `Wasm Acceptance (alcy build
+--target=wasm)`. Those three read source and ask the driver about it, and
+a wasm module comes out of the driver's own backend to be run by the same
+bun on every platform: the host answers for none of them.
+
+The e2e corpus and the exe acceptance stay in all ten entries. A case in
+either one links a program or runs one, and what the linker names the
+objects, what the frame walk finds, and what the runtime prints are
+answers a Unix and Windows give differently. `samples` is not a subset of
+them -- six example programs, none of them an exe case -- so pointing one
+entry's step at it left the other nine unasked about three hundred and
+eighty cases, and the failures that arrive on one platform and not the
+others arrive there.
+
+**A check that compiles nothing takes the binary instead of making one.**
+The format check rebuilt the tree to run a compiler that builds nothing,
+which was 543 s of a run for a second copy of a binary the Linux debug
+entry had just made. It takes that binary from the entry's artifacts, and
+`setup-build` grew the switch that installs the Python venv without the
+toolchain. That switch is the only setting the harness passes: nothing it
+runs builds a tree, so it has no cache and no build step of its own.
+
+**The first lint shard is the format job.** `tools/lint.py` runs the whole
+tree's format dry run from its first shard, so `style.yaml`'s `format` job
+paid a toolchain download and a gn generation to ask what the lint job asks
+with both already in place: 319 s of setup, 168 s of build, and 161 s of
+check. Style now runs no toolchain at all.
+
+**The cache holds the objects, not the binaries.** Ten debug entries of
+2.8 GB filled a 10 GB cache, and an entry is written by the run that reads
+it next, so entries were evicted as fast as they were made and a run
+compiled the tree from nothing. A link's output is most of that size and a
+second of work: a build directory now drops the linked outputs before it is
+saved and keeps every object.
+
+**One job is what a branch requires.** Each check still stands on its own --
+one command, one red, a name that says which verb broke -- but protection
+names one context, `Gate`, whose single step reads the conclusions of the
+jobs it needs and fails unless every one of them succeeded. A required
+context has to be edited whenever a job is added to it, and a list that has
+to be remembered is a list that goes stale; `always()` over `toJSON(needs)`
+is a job that cannot forget a neighbour.
