@@ -297,3 +297,10 @@ replaced. The foundations are in `roadmap.md`.
   (de)serialization (ADR-0129, ADR-0130). Its record lands with the
   design, after expansion; the floor is read-only and comp-only, with
   no runtime type information and no generative types.
+
+- [ ] `fmt` with no file argument formats the package in the current
+  directory, and only its predicate says so: `check_e2e.py` appends a
+  positional to every case, and a unit test would have to move the test
+  process into the package, which formats the repository when the run
+  happens under a manifest. A runner option that sets a case's working
+  directory pins it the way the other package verbs are pinned.
