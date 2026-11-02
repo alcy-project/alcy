@@ -159,17 +159,51 @@ paid a toolchain download and a gn generation to ask what the lint job asks
 with both already in place: 319 s of setup, 168 s of build, and 161 s of
 check. Style now runs no toolchain at all.
 
-**The cache holds the objects, not the binaries.** Ten debug entries of
-2.8 GB filled a 10 GB cache, and an entry is written by the run that reads
-it next, so entries were evicted as fast as they were made and a run
-compiled the tree from nothing. A link's output is most of that size and a
-second of work: a build directory now drops the linked outputs before it is
-saved and keeps every object.
+**The cache holds the objects, not the binaries.** A debug tree built the
+way CI builds it is 1.8 GB, and 894 MB of that is the three binaries a link
+produces -- `alcy`, `tests`, and `benchmarks` -- which are also the part a
+second run remakes in one step from objects it already has. A 10 GB budget
+holds five entries of that size and the matrix keeps ten, and an entry is
+written by the run that reads it next, so a run evicted what the next run of
+that platform wanted and compiled the tree from nothing. A build directory
+now drops the linked outputs before it is saved and keeps every object: the
+same tree is 0.94 GB, the budget holds ten of those where it held five, and
+what is left is mostly the LLVM install, which changes when the pin does.
+
+**What a run keeps, and for how long.** A build artifact is kept 14 days,
+which is the span in which a `main` commit is still read to find out what
+broke. A wasm artifact is kept as long for the same reason. The driver the
+harness takes is kept one day: the run that made it and the run that reads
+it are the same run, and nothing after that downloads it. A failed entry's
+`build-record` is kept 7 days, because it answers a question about a commit
+someone is fixing now -- nothing downloads it, and by the following week the
+log has either been read or the fix has landed.
 
 **One job is what a branch requires.** Each check still stands on its own --
 one command, one red, a name that says which verb broke -- but protection
 names one context, `Gate`, whose single step reads the conclusions of the
 jobs it needs and fails unless every one of them succeeded. A required
-context has to be edited whenever a job is added to it, and a list that has
+context had to be edited whenever a job was added to it, and a list that has
 to be remembered is a list that goes stale; `always()` over `toJSON(needs)`
-is a job that cannot forget a neighbour.
+is a job that cannot forget a neighbour. It cannot forget a job either: the
+step reads the job names out of `ci.yaml` and fails when the list it waits
+for is missing one, so a job added there is required by a line in this
+repository and by no edit to the settings. What it does not do is remove the
+line. `needs` is a key of the file and not an expression, so the enumeration
+stays, and the gate is what keeps it honest instead of the memory of whoever
+adds a job.
+
+**A required context has to report on every pull request.** `style.yaml` has
+no `paths` filter, so its four jobs report on every change and can stay the
+contexts they are. `site.yaml` becomes advisory: it deploys, its filter means
+it cannot report on every change, and the run that builds the site is what
+says a site broke. `ci.yaml` loses its own filter for the same reason the
+others keep theirs -- a workflow a filter skipped reports nothing, and a
+change to prose alone would leave `Gate` "Expected" with nothing left that
+could make it green, so the one context required would block exactly the
+merges it was meant to unblock. The workflow runs on every change instead,
+and a `Changed Paths` job reads the diff: prose and the site skip the jobs
+that read a tree, and every other path runs them. A `skipped` conclusion
+passes only when there was nothing to read -- a job skipped on a change that
+did reach CI is as red as a failure, so a mistake in that list reads as a
+lost run rather than a silent green.
