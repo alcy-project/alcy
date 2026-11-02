@@ -713,6 +713,35 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
   bool pending_break = false;
   bool suppress = false;
 
+  // Pins gap bytes so a second pass sees the same stream. A break in the
+  // gap is a break in the layout too: written as bytes inside one text a
+  // group would read the stop as its own line ending and lay the rest of
+  // the flow out flat around it, which the next pass, reading real breaks,
+  // would not. The blanks a break ends in are the one part of the gap the
+  // pin does not keep: the hardline writes the indent where it lands, and
+  // the bytes would be counted twice.
+  const auto pin_gap_bytes = [&](std::string_view gap) {
+    usize run_start = 0;
+    for (usize i = 0; i < gap.size(); ++i) {
+      if (gap[i] != '\n') {
+        continue;
+      }
+      if (i > run_start) {
+        pieces.push_back(
+            Piece{doc_text(gap.substr(run_start, i - run_start)), Sep::None});
+      }
+      pieces.push_back(Piece{doc_hardline(), Sep::None});
+      while (i + 1 < gap.size() && (gap[i + 1] == ' ' || gap[i + 1] == '\t')) {
+        ++i;
+      }
+      run_start = i + 1;
+    }
+    if (run_start < gap.size()) {
+      pieces.push_back(Piece{
+          doc_text(gap.substr(run_start, gap.size() - run_start)), Sep::None});
+    }
+  };
+
   const auto is_error_token = [](const cst::Node* node) {
     return node != nullptr && node->kind == cst::NodeKind::Token &&
            node->token == lexer::TokenKind::Error;
@@ -740,9 +769,7 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
       return;
     }
     if (to.offset > gap_start) {
-      pieces.push_back(
-          Piece{doc_text(source_.substr(gap_start, to.offset - gap_start)),
-                Sep::None});
+      pin_gap_bytes(source_.substr(gap_start, to.offset - gap_start));
     }
   };
 
@@ -1132,6 +1159,9 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
   // starting one of its own, or the layout would move it on the pass
   // over this layout's own output.
   bool after_separator = false;
+  // The separator just consumed was a semicolon, so a semicolon spelled
+  // right after it terminates the statement that separator ended.
+  bool after_semicolon = false;
   const auto flush = [&]() {
     if (!current.nodes.empty()) {
       chunks.push_back(std::move(current));
@@ -1144,12 +1174,22 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
         node.token == lexer::TokenKind::Semicolon) {
       // A semicolon with no chunk in front of it ends nothing: the
       // grammar skips a stray one, and its flag must not leak into the
-      // chunk that follows.
+      // chunk that follows. The one exception is the pair the source
+      // spells on the line after a break the lexer already ended the
+      // statement at: both terminate the same statement, and the chunk
+      // has to learn that the source wrote one, because the layout keeps
+      // a spelled semicolon wherever the line break it would leave
+      // reads differently. The chunk it lands on holds code: a comment
+      // chunk terminates nothing, so the flag stays off one.
       if (!current.nodes.empty()) {
         current.explicit_semi = !node.synthetic_semi;
+      } else if (!node.synthetic_semi && after_semicolon && !chunks.empty() &&
+                 !chunks.back().is_comment) {
+        chunks.back().explicit_semi = true;
       }
       flush();
       after_separator = true;
+      after_semicolon = true;
       separator_end = node.offset + node.length;
       continue;
     }
@@ -1157,6 +1197,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
         node.token == lexer::TokenKind::Comma) {
       flush();
       after_separator = true;
+      after_semicolon = false;
       separator_end = node.offset + node.length;
       continue;
     }
@@ -1183,6 +1224,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
         comment.newlines_before = node.newlines_before;
         chunks.push_back(std::move(comment));
       }
+      after_semicolon = false;
       continue;
     }
     if (current.nodes.empty()) {
@@ -1190,6 +1232,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
     }
     current.nodes.push_back(&node);
     after_separator = false;
+    after_semicolon = false;
   }
   flush();
   return chunks;

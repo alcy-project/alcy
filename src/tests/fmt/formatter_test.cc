@@ -424,6 +424,36 @@ TEST_CASE("A reference to a dereference keeps the dereference tight") {
   CHECK(idempotent_default("fn f() { g(&mut *p) }"));
 }
 
+TEST_CASE("A spelled semicolon ends the chunk the break before it ended") {
+  // The lexer ends the statement at the line break and writes the
+  // semicolon itself, so the one the source spelled on the next line
+  // stands alone. A closer on the line after it suppresses the breaks the
+  // layout writes between chunks, so the chunk the pair ends has to carry
+  // the spelled flag: the layout then writes the semicolon, and the gap
+  // the source left stays a gap the pass over the layout finds again.
+  const std::string source = "a\n;)b";
+  CHECK(once(source) == "a;\n\n) b\n");
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent_default(source));
+  CHECK(idempotent(source, narrow));
+}
+
+TEST_CASE("A break in a pinned gap lays the flow out broken") {
+  // The gap around an error token is pinned so a second pass re-lexes the
+  // same stream; a break in it is a break in the layout too. Left as
+  // bytes inside one text, a group reads the stop as its own line ending
+  // and keeps the rest of the flow flat, which the next pass, reading
+  // real breaks, does not write back.
+  const std::string source = "'\n;>{{\xbb>";
+  CHECK(idempotent_default(source));
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, narrow));
+}
+
 TEST_CASE("Deeply nested input does not exhaust the stack") {
   std::string source;
   for (usize i = 0; i < 600; ++i) {
