@@ -21,7 +21,9 @@ jobs:
   build:
     name: Build & Test (${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ inputs.role }}${{ matrix.nix && '-nix' || '' }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # The slowest entry finishes inside fifteen minutes, and a cold cache
+    # roughly doubles that; an hour still returns a stuck job's slot.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
