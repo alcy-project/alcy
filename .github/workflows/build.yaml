@@ -149,3 +149,18 @@ jobs:
 
           help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
           echo "$help_out"
+
+      # The cache is kept for the next run's build, and a build wants the
+      # objects: `all` already made the tests and the benchmarks, and their
+      # objects are what the next run reuses. What a link produces is the
+      # rest of the tree's size and a second to remake, so it goes before
+      # the entry is written.
+      - name: Drop the Linked Outputs
+        if: always()
+        shell: bash
+        run: |
+          for name in alcy alcy.exe tests tests.exe benchmarks benchmarks.exe exe.unstripped; do
+            rm -f "out/build/$name" "out/build/$name.pdb"
+          done
+          rm -f out/build/*.a out/build/*.so out/build/*.o out/build/*.d
+
