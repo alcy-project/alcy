@@ -1855,12 +1855,15 @@ class Checker {
             if (loan.param != NO_ROOT || !loan.exclusive) {
               continue;
             }
-            operand_reg(0, addr_reg);
-            if (carries_loan(addr_reg, id)) {
-              continue;
-            }
+            // Liveness and overlap read a handful of words; the carried-loan
+            // walk crosses the flow graph, so it runs only for a loan that
+            // could still forbid this read.
             if (!live_at(id, bidx, pos) ||
                 !overlaps(loan.place, place, path_steps_)) {
+              continue;
+            }
+            operand_reg(0, addr_reg);
+            if (carries_loan(addr_reg, id)) {
               continue;
             }
             // The read that mints a reborrow loan is the reborrow
@@ -2108,6 +2111,10 @@ class Checker {
             if (loan.param != NO_ROOT) {
               continue;
             }
+            if (!live_at(id, bidx, pos) ||
+                !overlaps(loan.place, place, path_steps_)) {
+              continue;
+            }
             if (carries_loan(target, id)) {
               continue;
             }
@@ -2123,10 +2130,6 @@ class Checker {
             // caller passed, so every field and element of it lies
             // inside. A write there is that region being used.
             if (loan.param_derived && nests_inside(loan.place, place)) {
-              continue;
-            }
-            if (!live_at(id, bidx, pos) ||
-                !overlaps(loan.place, place, path_steps_)) {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
@@ -2150,11 +2153,11 @@ class Checker {
             if (loan.param != NO_ROOT) {
               continue;
             }
-            if (carries_loan(target, id)) {
-              continue;
-            }
             if (!live_at(id, bidx, pos) ||
                 !overlaps(loan.place, place, path_steps_)) {
+              continue;
+            }
+            if (carries_loan(target, id)) {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
