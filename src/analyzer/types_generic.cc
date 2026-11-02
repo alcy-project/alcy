@@ -1650,9 +1650,6 @@ void Checker::check_generic_body(u32 module,
   // The records of this pass key off the parameter instantiation, where
   // no other reader looks.
   cur_inst = PARAM_INST;
-  // The comp rules of the enclosing phase do not apply: this is an
-  // ordinary body check.
-  comp_depth = 0;
   check_fn(module, item, has_target ? &self : nullptr);
   scope.restore(*this);
   type_params = std::move(saved_types);

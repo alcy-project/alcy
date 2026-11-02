@@ -2548,10 +2548,6 @@ void Checker::precheck_fn_body(const CheckedModule::FnSig& fn) {
   FnStateScope scope;
   scope.save(*this);
   cur_inst = inst;
-  // The callee is an ordinary function body wherever the precheck was
-  // reached from; only its typed expressions are wanted, so the comp
-  // rules of the caller do not apply to it.
-  comp_depth = 0;
   ++prechecking_fn_;
   check_fn(module, fn.item, nullptr);
   --prechecking_fn_;
@@ -2567,8 +2563,11 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
   }
   // A method of a generic impl was checked under its instantiation the
   // first time a call resolved it, so only a concrete impl waits for
-  // the bodies sweep.
-  if (generic_find(method.self_type) != nullptr) {
+  // the bodies sweep. An array receiver is compound and has no nominal
+  // to look its instance up by, so the instantiation key is the record
+  // that the body was checked; a parametric body owns its checks
+  // itself (ADR-0079).
+  if (parametric_mode() || inst_index(method.self_type) != NO_INST) {
     return;
   }
   const ast::ItemNode& node = ast.items[method.item];
@@ -2586,7 +2585,6 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
   FnStateScope scope;
   scope.save(*this);
   cur_inst = inst;
-  comp_depth = 0;
   if (method.spec != NO_SPEC) {
     spec_scope.push_back(method.spec);
   }
@@ -4587,6 +4585,9 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const bool saved_in_fn = in_fn;
   const u32 saved_loop_depth = loop_depth;
   const u32 saved_comp_eval = comp_eval_depth;
+  const u32 saved_comp = comp_depth;
+  const bool saved_verify_comp = verify_comp_known;
+  const bool saved_bind_comp = bind_comp_known;
   const bool saved_reported_too_deep = reported_too_deep_;
   // One report per function: the budget is per function, and every
   // frame past it would otherwise repeat the same diagnostic.
@@ -4607,8 +4608,14 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   }
   // A comp fn's body runs during compilation whoever reads it, so
   // the comp evaluation rules hold there; an ordinary body keeps the
-  // caller's context out of its own checks.
+  // caller's context out of its own checks. The same holds for the
+  // comp-knownness the caller happened to be verifying.
   comp_eval_depth = fn_is_comp(fn) ? saved_comp_eval + 1 : 0;
+  verify_comp_known = comp_eval_depth > 0;
+  bind_comp_known = false;
+  // A comp block bounds the `ret` of the body that encloses it, not
+  // the `ret` of a callee whose body is checked while the block is open.
+  comp_depth = 0;
   in_fn = true;
   scopes.emplace_back();
   loop_depth = 0;
@@ -4665,6 +4672,9 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   fn_ret = saved_fn_ret;
   loop_depth = saved_loop_depth;
   comp_eval_depth = saved_comp_eval;
+  comp_depth = saved_comp;
+  verify_comp_known = saved_verify_comp;
+  bind_comp_known = saved_bind_comp;
   reported_too_deep_ = saved_reported_too_deep;
 }
 
