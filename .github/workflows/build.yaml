@@ -104,6 +104,9 @@ jobs:
             *.${{ matrix.archive }}
             *.sha256
           if-no-files-found: error
+          # Ten archives per run: two weeks keeps a merged commit's build
+          # reachable without paying for ninety days of them.
+          retention-days: 14
 
       - name: Run Tests
         shell: bash

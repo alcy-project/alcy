@@ -111,6 +111,7 @@ jobs:
             *.tar.zst
             *.sha256
           if-no-files-found: error
+          retention-days: 14
 
       - name: Run Tests
         shell: bash
