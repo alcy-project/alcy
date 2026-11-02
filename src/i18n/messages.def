@@ -192,6 +192,7 @@
   F(AnalyzerUnmovableTypeArgument, Error, Analyzer, "A type argument is Movable, and this one holds an anchor (ADR-0085)") \
   F(AnalyzerBuiltinImplOutsideItsSuite, Error, Analyzer, "A builtin type belongs to the staged suite: '{}' cannot be implemented here") \
   F(AnalyzerImplOutsideItsHome, Error, Analyzer, "An implementation lives where the type or the spec lives: '{}' is declared in package '{}' and '{}' in package '{}'") \
+  F(AnalyzerImplParameterNotInTarget, Error, Analyzer, "Impl parameter '{}' does not appear in the impl's target type") \
   F(AnalyzerInherentImplOutsideItsType, Error, Analyzer, "An inherent implementation lives where the type does: '{}' is declared in package '{}'") \
   F(AnalyzerIntegerLiteralOutOfRange, Error, Analyzer, "Integer literal is out of range for its type") \
   F(AnalyzerIntegerSuffixOnFloat, Error, Analyzer, "Integer suffix on a float literal") \

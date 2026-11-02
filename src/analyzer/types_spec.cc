@@ -1297,6 +1297,24 @@ void Checker::check_superspecs() {
   }
 }
 
+// A block's parameters are bound by its target type's arguments, which
+// is the only place an instantiation reads them from.
+bool Checker::check_impl_type_params(ast::ItemIdx item) {
+  const ast::ItemImpl& impl = ast.items[item].payload.get<ast::ItemImpl>();
+  bool ok = true;
+  for (const ast::GenericParam& param : impl.params) {
+    if (type_mentions_params(ast, impl.type,
+                             std::span<const ast::GenericParam>(&param, 1))) {
+      continue;
+    }
+    ok = false;
+    const u32 index = bag.emit<i18n::Key::AnalyzerImplParameterNotInTarget>(
+        DiagCode::GenericArguments, param.name.span, param.name.name);
+    (void)index;
+  }
+  return ok;
+}
+
 // A declaration recognized by its reserved name rather than by path.
 // Range and Bound are reserved, so a tree holds at most one of each.
 

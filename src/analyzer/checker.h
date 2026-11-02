@@ -527,6 +527,10 @@ class Checker {
   // Verifies a staged compiler-owned spec against the canonical table
   // (ADR-0053, ADR-0116); true for every other spec.
   bool check_operator_spec(const ast::ItemSpec& declaration);
+  // Whether every parameter an impl block declares is named by its
+  // target type, which is where a block's parameters bind; false when
+  // one is not, which leaves the block with nothing to specialize on.
+  bool check_impl_type_params(ast::ItemIdx item);
   // Registers one `impl S for T`: resolves the spec and the target,
   // enforces coherence, and checks the methods against the declared
   // signatures. Generic targets defer bodies to call-site

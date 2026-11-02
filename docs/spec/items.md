@@ -23,7 +23,9 @@
   (`comp.md`).
 - Inherent `impl` blocks are part of the language. A parameter list
   (`impl<T> ...`) makes the block generic; its methods are checked and
-  specialized per receiver instantiation.
+  specialized per receiver instantiation. The target type's arguments
+  are what bind those parameters, so a parameter the target never names
+  leaves the block with nothing to specialize on and is an error.
 - A `spec` declares a capability as method signatures, and
   `impl S for T` opts one type in. Specs live in the type namespace:
   `use` imports them and a prelude facade re-exports core's, which is

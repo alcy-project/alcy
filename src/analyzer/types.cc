@@ -402,9 +402,21 @@ bool type_mentions_params(const ast::AstArena& ast,
       }
       return false;
     }
-    case ast::TypeKind::Array:
-      return type_mentions_params(
-          ast, node.payload.get<ast::TypeArray>().element, params);
+    case ast::TypeKind::Array: {
+      // An array's length is a value position, and a value parameter
+      // written there names it as much as an element type does.
+      const ast::TypeArray& array = node.payload.get<ast::TypeArray>();
+      if (array.length_path.is_valid() &&
+          ast.paths[array.length_path].segments.size() == 1) {
+        for (const ast::GenericParam& param : params) {
+          if (param.name.name ==
+              ast.paths[array.length_path].segments[0].name) {
+            return true;
+          }
+        }
+      }
+      return type_mentions_params(ast, array.element, params);
+    }
     case ast::TypeKind::Slice:
       return type_mentions_params(
           ast, node.payload.get<ast::TypeSlice>().element, params);
@@ -1945,6 +1957,12 @@ void Checker::process_module(u32 module) {
         break;
       }
       case ast::ItemKind::Impl: {
+        // A block's parameters bind through its target type's arguments,
+        // so one the target never names has nowhere to bind and no
+        // method of the block is reachable.
+        if (!check_impl_type_params(item)) {
+          break;
+        }
         // An owning `fn(...)` parameter desugars before any method of
         // the block registers (ADR-0075); the method path infers the
         // witness from the call's arguments like a free function's.

@@ -176,16 +176,6 @@ replaced. The foundations are in `roadmap.md`.
   names the discard, is the decision; it wants one answer for the
   whole std rather than a `_` at each call site.
 
-- [ ] An impl's type parameter that the target type never names is
-  accepted and then lost: `impl<U> Tagged<U> for P` registers with the
-  parameter unresolved, so `check_spec_impl_bodies` types the method
-  body with `U` unbound and reports `Unknown type 'U'` at the
-  parameter that declares it, and a call reports `No method`. An
-  inherent `impl<U> P` reports only the second. An impl is specialized
-  per receiver instantiation (`docs/spec/items.md`), so a parameter the
-  target does not carry has no instantiation to bind it: the diagnostic
-  belongs at the `impl`'s parameter list.
-
 - [ ] A value's type is named in three places, and a place is not a
   value: a register's row, the operand that names it, and the
   lowering's own value each carry a type, and the verifier compares
