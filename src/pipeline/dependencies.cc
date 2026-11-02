@@ -425,33 +425,47 @@ bool load_suite_members(PipelineContext& ctx,
       return false;
     }
   }
-  const path::Path manifest_path = dir.join(pkg::MANIFEST_FILE_NAME);
-  base::Result<pkg::SuiteManifest, diag::Reported> read =
-      read_suite_manifest(ctx, dir, manifest_path);
-  if (read.is_err()) {
-    return false;
+  // A suite root loads no package, so the staged table has no entry under
+  // its directory: the manifest is read here, and a run that reaches the
+  // suite again answers from this one.
+  StagedDependencies& store = resolution.store;
+  const std::string key(dir.as_view());
+  const pkg::SuiteManifest* suite = nullptr;
+  if (const auto found = store.by_suite_dir.find(key);
+      found != store.by_suite_dir.end()) {
+    suite = &found->second->manifest;
+  } else {
+    const path::Path manifest_path = dir.join(pkg::MANIFEST_FILE_NAME);
+    base::Result<pkg::SuiteManifest, diag::Reported> read =
+        read_suite_manifest(ctx, dir, manifest_path);
+    if (read.is_err()) {
+      return false;
+    }
+    store.suites.push_back(StagedSuite{key, std::move(read).unwrap()});
+    const StagedSuite* staged = &store.suites.back();
+    store.by_suite_dir.emplace(staged->dir, staged);
+    suite = &staged->manifest;
   }
-  const pkg::SuiteManifest suite = std::move(read).unwrap();
-  if (suite.owner != dep.owner || suite.name != dep.suite) {
+  if (suite->owner != dep.owner || suite->name != dep.suite) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineDependencySuiteMismatch>(
         DiagCode::DependencySuiteMismatch, dep.spec, dep.owner, dep.suite,
-        dir.as_view(), suite.owner, suite.name);
+        dir.as_view(), suite->owner, suite->name);
     (void)index;
     return false;
   }
   std::vector<std::string_view> members;
   if (dep.suite_glob) {
-    members.reserve(suite.package_count);
-    for (u32 i = 0; i < suite.package_count; ++i) {
-      members.push_back(suite.packages[i]);
+    members.reserve(suite->package_count);
+    for (u32 i = 0; i < suite->package_count; ++i) {
+      members.push_back(suite->packages[i]);
     }
   } else {
     // The address names the member's package; the path the suite
     // lists is found by its last segment.
     std::string_view listed;
-    for (u32 i = 0; i < suite.package_count; ++i) {
-      if (pkg::suite_member_name(suite.packages[i]) == dep.member) {
-        listed = suite.packages[i];
+    for (u32 i = 0; i < suite->package_count; ++i) {
+      if (pkg::suite_member_name(suite->packages[i]) == dep.member) {
+        listed = suite->packages[i];
         break;
       }
     }
@@ -485,7 +499,7 @@ bool load_suite_members(PipelineContext& ctx,
       member_spec += std::string(member);
     }
     if (!load_dependency(ctx, resolution, dir.join(member), member_spec,
-                         member_suite, pkg::suite_member_name(member), &suite,
+                         member_suite, pkg::suite_member_name(member), suite,
                          contributed)) {
       return false;
     }

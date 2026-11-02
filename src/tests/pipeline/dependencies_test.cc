@@ -665,9 +665,9 @@ TEST_CASE("Suites share members two specifiers name") {
     return;
   }
 
-  // The suite reads twice, but each member stages once: naming
-  // `cli` beside the glob is not two packages behind one
-  // identity.
+  // Two edges reach the suite, and one manifest answers both: naming
+  // `cli` beside the glob is not two packages behind one identity, and
+  // is not two reads of the same file either.
   PipelineContext ctx{i18n::Language::EnUs};
   base::Result<CheckOutcome, diag::Reported> outcome = check_proj(ctx, dir);
   CHECK(outcome.is_ok());
@@ -675,6 +675,7 @@ TEST_CASE("Suites share members two specifiers name") {
   if (outcome.is_err()) {
     return;
   }
+  CHECK(ctx.staged_dependencies().suites.size() == 1);
   CHECK(std::move(outcome).unwrap().file_count == 3);
 }
 

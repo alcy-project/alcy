@@ -46,6 +46,12 @@ struct LoadedDependency {
   std::string_view object;
 };
 
+// A suite's manifest, with the directory it was read from.
+struct StagedSuite {
+  std::string dir;
+  pkg::SuiteManifest manifest;
+};
+
 // The dependencies one run has staged, keyed by the directory they were
 // read from. A suite build resolves every member's dependencies and the
 // members share theirs, so a directory is read, hashed, and deserialized
@@ -57,6 +63,13 @@ struct StagedDependencies {
   // what its dependencies brought, in traversal order. A resolution that
   // reaches the directory again takes this instead of reading it.
   std::unordered_map<std::string, std::vector<const LoadedDependency*>> by_dir;
+  // The suites one run has read, in the order their first edge reached
+  // them. A suite root loads no package, so `by_dir` holds nothing under
+  // its directory, and two edges into one suite - the glob and a named
+  // member, or two packages that name it - would read its manifest twice.
+  // They meet here instead, and the manifest parses once per suite.
+  std::deque<StagedSuite> suites;
+  std::unordered_map<std::string, const StagedSuite*> by_suite_dir;
 };
 
 // The dependencies one resolution reached, in traversal order. An entry
