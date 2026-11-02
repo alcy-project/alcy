@@ -102,6 +102,171 @@ struct Edit {
 // print the same lines twice.
 constexpr usize DIFF_CONTEXT = 3;
 
+// The lines of either side a change moves through, found as the shortest
+// script that rewrites one layout into the other. A table of shared runs
+// answers for the sizes a reader compares by hand; anything larger is
+// walked along its diagonals, whose cost follows the changes rather than
+// the lines around them.
+constexpr usize DIFF_TABLE_CELLS = static_cast<usize>(1) << 20;
+// Steps the diagonal walk takes over a whole file before the two sides
+// read as unrelated, and the deepest diagonal it follows at all: each
+// step keeps the row it started from, so the walk's memory follows the
+// changes too.
+constexpr usize DIFF_WALK_STEPS = static_cast<usize>(1) << 25;
+constexpr usize DIFF_WALK_DEPTH = static_cast<usize>(1) << 10;
+
+// table[i][j] is the length of the longest run of lines the two layouts
+// share from old_lines[i] and new_lines[j] on, held as one flat row of
+// u32 because no run is longer than the shorter side.
+std::vector<Edit> table_script(const std::vector<std::string>& old_lines,
+                               const std::vector<std::string>& new_lines) {
+  const usize n = old_lines.size();
+  const usize m = new_lines.size();
+  const usize width = m + 1;
+  std::vector<u32> table((n + 1) * width, 0);
+  for (usize i = n; i-- > 0;) {
+    const usize row = i * width;
+    const usize next = (i + 1) * width;
+    for (usize j = m; j-- > 0;) {
+      table[row + j] = old_lines[i] == new_lines[j]
+                           ? table[next + j + 1] + 1
+                           : std::max(table[next + j], table[row + j + 1]);
+    }
+  }
+  std::vector<Edit> script;
+  script.reserve(n + m);
+  usize i = 0;
+  usize j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && old_lines[i] == new_lines[j]) {
+      script.push_back(Edit{Edit::Kind::Keep, i});
+      ++i;
+      ++j;
+    } else if (j < m && (i == n || table[i * width + j + 1] >
+                                       table[(i + 1) * width + j])) {
+      script.push_back(Edit{Edit::Kind::Insert, j});
+      ++j;
+    } else {
+      script.push_back(Edit{Edit::Kind::Delete, i});
+      ++i;
+    }
+  }
+  return script;
+}
+
+// Myers' diagonal walk: step d holds how far each diagonal reaches within
+// d edits, and every step keeps the row it started from so the script can
+// be read back out of it. False means the sides need more edits than a
+// file this size is worth walking.
+bool walk_script(const std::vector<std::string>& old_lines,
+                 const std::vector<std::string>& new_lines,
+                 std::vector<Edit>& script) {
+  const isize n = static_cast<isize>(old_lines.size());
+  const isize m = static_cast<isize>(new_lines.size());
+  const isize reach = n + m;
+  const isize offset = reach + 1;
+  std::vector<i32> furthest(static_cast<usize>(2 * reach + 3), 0);
+  std::vector<std::vector<i32>> rows;
+  const isize depth = std::min<isize>(
+      static_cast<isize>(DIFF_WALK_DEPTH),
+      static_cast<isize>(DIFF_WALK_STEPS) / std::max<isize>(1, reach));
+  isize last = -1;
+  for (isize d = 0; d <= depth && last < 0; ++d) {
+    rows.emplace_back(furthest.begin() + (offset - d - 1),
+                      furthest.begin() + (offset + d + 2));
+    for (isize k = -d; k <= d; k += 2) {
+      isize x = k == -d || (k != d &&
+                            furthest[offset + k - 1] < furthest[offset + k + 1])
+                    ? furthest[offset + k + 1]
+                    : furthest[offset + k - 1] + 1;
+      isize y = x - k;
+      while (x < n && y < m &&
+             old_lines[static_cast<usize>(x)] ==
+                 new_lines[static_cast<usize>(y)]) {
+        ++x;
+        ++y;
+      }
+      furthest[offset + k] = static_cast<i32>(x);
+      if (x >= n && y >= m) {
+        last = d;
+        break;
+      }
+    }
+  }
+  if (last < 0) {
+    return false;
+  }
+  script.reserve(static_cast<usize>(n + m));
+  isize x = n;
+  isize y = m;
+  for (isize d = last; d >= 0; --d) {
+    const std::vector<i32>& row = rows[static_cast<usize>(d)];
+    const isize row_offset = d + 1;
+    const isize k = x - y;
+    const isize prev_k =
+        k == -d || (k != d && row[row_offset + k - 1] < row[row_offset + k + 1])
+            ? k + 1
+            : k - 1;
+    const isize prev_x = row[row_offset + prev_k];
+    const isize prev_y = prev_x - prev_k;
+    while (x > prev_x && y > prev_y) {
+      --x;
+      --y;
+      script.push_back(Edit{Edit::Kind::Keep, static_cast<usize>(x)});
+    }
+    if (d > 0) {
+      if (x == prev_x) {
+        --y;
+        script.push_back(Edit{Edit::Kind::Insert, static_cast<usize>(y)});
+      } else {
+        --x;
+        script.push_back(Edit{Edit::Kind::Delete, static_cast<usize>(x)});
+      }
+    }
+    x = prev_x;
+    y = prev_y;
+  }
+  std::reverse(script.begin(), script.end());
+  return true;
+}
+
+// A layout rewritten past what a walk can follow: the lines both start
+// with are kept and the rest of the file reads as one replacement.
+std::vector<Edit> replacement_script(
+    const std::vector<std::string>& old_lines,
+    const std::vector<std::string>& new_lines) {
+  const usize n = old_lines.size();
+  const usize m = new_lines.size();
+  std::vector<Edit> script;
+  script.reserve(n + m);
+  usize kept = 0;
+  while (kept < n && kept < m && old_lines[kept] == new_lines[kept]) {
+    script.push_back(Edit{Edit::Kind::Keep, kept});
+    ++kept;
+  }
+  for (usize k = kept; k < n; ++k) {
+    script.push_back(Edit{Edit::Kind::Delete, k});
+  }
+  for (usize k = kept; k < m; ++k) {
+    script.push_back(Edit{Edit::Kind::Insert, k});
+  }
+  return script;
+}
+
+std::vector<Edit> edit_script(const std::vector<std::string>& old_lines,
+                              const std::vector<std::string>& new_lines) {
+  const usize n = old_lines.size();
+  const usize m = new_lines.size();
+  if (n + 1 <= DIFF_TABLE_CELLS / (m + 1)) {
+    return table_script(old_lines, new_lines);
+  }
+  std::vector<Edit> script;
+  if (walk_script(old_lines, new_lines, script)) {
+    return script;
+  }
+  return replacement_script(old_lines, new_lines);
+}
+
 void print_diff(const std::string& path,
                 const std::string& original,
                 const std::string& formatted) {
@@ -147,38 +312,7 @@ std::string render_diff(std::string_view path,
                         std::string_view formatted) {
   const std::vector<std::string> old_lines = diff_lines(std::string(original));
   const std::vector<std::string> new_lines = diff_lines(std::string(formatted));
-  const usize n = old_lines.size();
-  const usize m = new_lines.size();
-  // dp[i][j] is the length of the longest run of lines the two layouts
-  // share from old_lines[i] and new_lines[j] on: the edit script is
-  // whatever walks it downhill.
-  std::vector<std::vector<usize>> dp(n + 1, std::vector<usize>(m + 1, 0));
-  for (usize i = n; i-- > 0;) {
-    for (usize j = m; j-- > 0;) {
-      if (old_lines[i] == new_lines[j]) {
-        dp[i][j] = dp[i + 1][j + 1] + 1;
-      } else {
-        dp[i][j] = std::max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-  }
-  std::vector<Edit> script;
-  script.reserve(n + m);
-  usize i = 0;
-  usize j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && old_lines[i] == new_lines[j]) {
-      script.push_back(Edit{Edit::Kind::Keep, i});
-      ++i;
-      ++j;
-    } else if (j < m && (i == n || dp[i][j + 1] > dp[i + 1][j])) {
-      script.push_back(Edit{Edit::Kind::Insert, j});
-      ++j;
-    } else {
-      script.push_back(Edit{Edit::Kind::Delete, i});
-      ++i;
-    }
-  }
+  const std::vector<Edit> script = edit_script(old_lines, new_lines);
   std::vector<usize> changes;
   for (usize k = 0; k < script.size(); ++k) {
     if (script[k].kind != Edit::Kind::Keep) {
