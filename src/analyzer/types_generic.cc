@@ -1096,13 +1096,15 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     value_params = kept_outer_values;
     return nullptr;
   }
-  add_function(module, {.name = fn_name(item),
-                        .params = sig_params,
-                        .ret = ret,
-                        .item = item,
-                        .inst = NO_INST,
-                        .is_unsafe = fn_is_unsafe(item),
-                        .is_comp = fn_is_comp(item)});
+  add_function(module,
+               {.name = fn_name(item),
+                .params = sig_params,
+                .ret = ret,
+                .item = item,
+                .inst = NO_INST,
+                .is_unsafe = fn_is_unsafe(item),
+                .is_comp = fn_is_comp(item)},
+               false);
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // The definition-site check records under its own key: no numbering
   // slot is claimed and no body is checked here - each generic item's

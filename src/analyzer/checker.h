@@ -1126,7 +1126,7 @@ class Checker {
   // reads can see it.
   CheckedModule::FnSig& add_function(u32 module,
                                      CheckedModule::FnSig sig,
-                                     bool is_method = false);
+                                     bool is_method);
   // Registers a method and returns it. Where two modules declare a
   // destructor for one type, the earlier module's is kept, which is what a
   // walk in module order would have found.

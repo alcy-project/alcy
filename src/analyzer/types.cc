@@ -1646,11 +1646,13 @@ void Checker::process_module(u32 module) {
         if (!check_intrinsic_signature(module, intrinsic, params, ret)) {
           break;
         }
-        add_function(module, {.name = intrinsic.name.name,
-                              .params = std::move(params),
-                              .ret = ret,
-                              .item = item,
-                              .is_unsafe = intrinsic.is_unsafe});
+        add_function(module,
+                     {.name = intrinsic.name.name,
+                      .params = std::move(params),
+                      .ret = ret,
+                      .item = item,
+                      .is_unsafe = intrinsic.is_unsafe},
+                     false);
         break;
       }
       case ast::ItemKind::Extern: {
@@ -1708,12 +1710,14 @@ void Checker::process_module(u32 module) {
           if (!abi_ok) {
             continue;
           }
-          add_function(module, {.name = fn.name.name,
-                                .params = std::move(params),
-                                .ret = ret,
-                                .item = item,
-                                .is_unsafe = true,
-                                .is_extern = true});
+          add_function(module,
+                       {.name = fn.name.name,
+                        .params = std::move(params),
+                        .ret = ret,
+                        .item = item,
+                        .is_unsafe = true,
+                        .is_extern = true},
+                       false);
         }
         break;
       }
@@ -2464,13 +2468,15 @@ void Checker::register_fn_signature(u32 module, ast::ItemIdx item) {
   if (fn.return_type.is_valid()) {
     ret = resolve_type(module, fn.return_type, nullptr);
   }
-  add_function(module, {.name = fn.name.name,
-                        .params = std::move(params),
-                        .ret = ret,
-                        .item = item,
-                        .is_unsafe = fn.is_unsafe,
-                        .is_comp = fn.is_comp,
-                        .is_variadic = is_variadic});
+  add_function(module,
+               {.name = fn.name.name,
+                .params = std::move(params),
+                .ret = ret,
+                .item = item,
+                .is_unsafe = fn.is_unsafe,
+                .is_comp = fn.is_comp,
+                .is_variadic = is_variadic},
+               false);
 }
 
 void Checker::register_static(u32 module, ast::ItemIdx item) {
