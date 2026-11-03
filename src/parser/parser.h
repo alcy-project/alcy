@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -50,24 +51,63 @@ base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
 // a copy of that would grow the frame of each walker's per-node step.
 void emit_nesting_too_deep(diag::DiagBag& bag, diag::Span span, u32 limit);
 
-// Kinds the cursor never rests on: lexer errors (already diagnosed), doc
-// comments (trivia the item above claims), and reserved words, which the
-// skip diagnoses with guidance.
+// What the parser asks of a token kind besides its grammar role, one byte
+// per kind. The cursor tests the byte at every step and the statement-lead
+// scan at every token it walks, so a table read and a mask replace a chain
+// of comparisons that grows with the answer set.
+enum TokenFlag : u8 {
+  // Kinds the cursor never rests on: lexer errors (already diagnosed), doc
+  // comments (trivia the item above claims), and reserved words, which the
+  // skip diagnoses with guidance.
+  kTokenInsignificant = 1 << 0,
+  kTokenReserved = 1 << 1,
+  // What the statement-lead scan looks for.
+  kTokenDeclLead = 1 << 2,
+  kTokenReassignLead = 1 << 3,
+  // The compound assignment operators, which read as a reassignment.
+  kTokenCompoundAssign = 1 << 4,
+  // A statement ends here: no lead precedes this token.
+  kTokenStmtEnd = 1 << 5,
+  // Bracket depth, so a nested lead is not the construct's own.
+  kTokenOpens = 1 << 6,
+  kTokenCloses = 1 << 7,
+};
+
+constexpr std::array<u8, 256> token_flags() {
+  std::array<u8, 256> flags{};
+  const auto mark = [&flags](u8 bits, auto... kinds) {
+    ((flags[static_cast<u8>(kinds)] |= bits), ...);
+  };
+  mark(kTokenInsignificant, lexer::TokenKind::Error,
+       lexer::TokenKind::DocComment);
+  mark(kTokenReserved | kTokenInsignificant, lexer::TokenKind::Async,
+       lexer::TokenKind::Await, lexer::TokenKind::Union,
+       lexer::TokenKind::Register, lexer::TokenKind::Where,
+       lexer::TokenKind::Dyn);
+  mark(kTokenDeclLead, lexer::TokenKind::ColonEq);
+  mark(kTokenReassignLead, lexer::TokenKind::Eq);
+  mark(kTokenCompoundAssign | kTokenReassignLead, lexer::TokenKind::PlusEq,
+       lexer::TokenKind::MinusEq, lexer::TokenKind::StarEq,
+       lexer::TokenKind::SlashEq, lexer::TokenKind::PercentEq,
+       lexer::TokenKind::StarStarEq, lexer::TokenKind::AmpEq,
+       lexer::TokenKind::PipeEq, lexer::TokenKind::CaretEq,
+       lexer::TokenKind::LessLessEq, lexer::TokenKind::GreaterGreaterEq);
+  mark(kTokenStmtEnd, lexer::TokenKind::Semicolon, lexer::TokenKind::Eof);
+  mark(kTokenStmtEnd | kTokenCloses, lexer::TokenKind::RBrace);
+  mark(kTokenOpens, lexer::TokenKind::LParen, lexer::TokenKind::LBrace,
+       lexer::TokenKind::LBracket);
+  mark(kTokenCloses, lexer::TokenKind::RParen, lexer::TokenKind::RBracket);
+  return flags;
+}
+
+constexpr std::array<u8, 256> TOKEN_FLAGS = token_flags();
+
 constexpr bool is_reserved(lexer::TokenKind kind) {
-  switch (kind) {
-    case lexer::TokenKind::Async:
-    case lexer::TokenKind::Await:
-    case lexer::TokenKind::Union:
-    case lexer::TokenKind::Register:
-    case lexer::TokenKind::Where:
-    case lexer::TokenKind::Dyn: return true;
-    default: return false;
-  }
+  return (TOKEN_FLAGS[static_cast<u8>(kind)] & kTokenReserved) != 0;
 }
 
 constexpr bool is_insignificant(lexer::TokenKind kind) {
-  return kind == lexer::TokenKind::Error ||
-         kind == lexer::TokenKind::DocComment || is_reserved(kind);
+  return (TOKEN_FLAGS[static_cast<u8>(kind)] & kTokenInsignificant) != 0;
 }
 
 // Hand-written recursive-descent parser over a token stream. Parsing is

@@ -66,20 +66,7 @@ bool is_primitive_type_token(lexer::TokenKind kind) {
 }
 
 bool is_compound_assign(lexer::TokenKind kind) {
-  switch (kind) {
-    case lexer::TokenKind::PlusEq:
-    case lexer::TokenKind::MinusEq:
-    case lexer::TokenKind::StarEq:
-    case lexer::TokenKind::SlashEq:
-    case lexer::TokenKind::PercentEq:
-    case lexer::TokenKind::StarStarEq:
-    case lexer::TokenKind::AmpEq:
-    case lexer::TokenKind::PipeEq:
-    case lexer::TokenKind::CaretEq:
-    case lexer::TokenKind::LessLessEq:
-    case lexer::TokenKind::GreaterGreaterEq: return true;
-    default: return false;
-  }
+  return (TOKEN_FLAGS[static_cast<u8>(kind)] & kTokenCompoundAssign) != 0;
 }
 
 ast::BinaryOp compound_op(lexer::TokenKind kind) {
@@ -148,8 +135,7 @@ lexer::TokenKind Parser::peek_kind(usize ahead) const {
   usize i = pos_;
   while (i < tokens_.size()) {
     const lexer::TokenKind kind = tokens_[i].kind;
-    if (kind != lexer::TokenKind::Error &&
-        kind != lexer::TokenKind::DocComment && !is_reserved(kind)) {
+    if (!is_insignificant(kind)) {
       if (ahead == 0) {
         return kind;
       }
@@ -255,36 +241,30 @@ void Parser::synchronize() {
 
 Parser::StmtLead Parser::scan_lead() const {
   i32 depth = 0;
-  for (usize i = pos_; i < tokens_.size();) {
-    const lexer::TokenKind kind = tokens_[i].kind;
-    if (kind == lexer::TokenKind::Error ||
-        kind == lexer::TokenKind::DocComment || is_reserved(kind)) {
+  const usize count = tokens_.size();
+  for (usize i = pos_; i < count;) {
+    const u8 flags = TOKEN_FLAGS[static_cast<u8>(tokens_[i].kind)];
+    if ((flags & kTokenInsignificant) != 0) {
       ++i;
       continue;
     }
     if (depth == 0) {
-      if (kind == lexer::TokenKind::ColonEq) {
+      if ((flags & kTokenDeclLead) != 0) {
         return StmtLead::Decl;
       }
-      if (kind == lexer::TokenKind::Eq || is_compound_assign(kind)) {
+      if ((flags & kTokenReassignLead) != 0) {
         return StmtLead::Reassign;
       }
       // A `{` is not a boundary by itself: a struct pattern in a
       // declaration or a condition carries one before the `:=`, so
       // braces count as nesting here like parens and brackets.
-      if (kind == lexer::TokenKind::Semicolon ||
-          kind == lexer::TokenKind::RBrace || kind == lexer::TokenKind::Eof) {
+      if ((flags & kTokenStmtEnd) != 0) {
         return StmtLead::None;
       }
     }
-    if (kind == lexer::TokenKind::LBrace ||
-        kind == lexer::TokenKind::LBracket ||
-        kind == lexer::TokenKind::LParen) {
+    if ((flags & kTokenOpens) != 0) {
       ++depth;
-    } else if ((kind == lexer::TokenKind::RBrace ||
-                kind == lexer::TokenKind::RBracket ||
-                kind == lexer::TokenKind::RParen) &&
-               depth > 0) {
+    } else if ((flags & kTokenCloses) != 0 && depth > 0) {
       --depth;
     }
     ++i;
