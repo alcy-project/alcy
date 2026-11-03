@@ -86,8 +86,9 @@ TEST_CASE("The drop pass ends a bound local at its site") {
   fx.streams.emplace_back();
   fx.blocks.emplace_back(0);
 
+  const DestructorQuery drops{fx.needs_drop, fx.builder, fx.type_origins};
   const DropElaborationInputs inputs{
-      .needs_drop = fx.needs_drop,
+      .drops = drops,
       .not_movable = {},
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
@@ -151,8 +152,9 @@ TEST_CASE("The drop pass leaves a moved local alone") {
   fx.streams.emplace_back();
   fx.blocks.emplace_back(0);
 
+  const DestructorQuery drops{fx.needs_drop, fx.builder, fx.type_origins};
   const DropElaborationInputs inputs{
-      .needs_drop = fx.needs_drop,
+      .drops = drops,
       .not_movable = {},
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
@@ -208,8 +210,9 @@ std::vector<u32> placed_calls(Fixture& fx,
                               const std::vector<EndSite>& sites) {
   fx.streams.emplace_back();
   fx.blocks.emplace_back(0);
+  const DestructorQuery drops{fx.needs_drop, fx.builder, fx.type_origins};
   const DropElaborationInputs inputs{
-      .needs_drop = fx.needs_drop,
+      .drops = drops,
       .not_movable = {},
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,

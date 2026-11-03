@@ -158,7 +158,8 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
                                  pkg.type_origins, pkg.fn_insts},
             ast,
             builder,
-            width) {
+            width),
+      drops_(pkg.needs_drop, builder, type_origins_) {
   // The checker's answers are compared too; then this pass records its
   // own through the same recorder.
   comp_calls_ = std::move(pkg.comp_calls);
@@ -840,8 +841,7 @@ bool Lowerer::is_destructor(ast::ItemIdx item) const {
 }
 
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
-  return lowering::runs_destructor(pkg.needs_drop, builder, type_origins_,
-                                   type);
+  return drops_.runs(type);
 }
 
 bool Lowerer::may_end(ir::TypeIdx type) const {

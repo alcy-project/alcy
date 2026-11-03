@@ -96,15 +96,57 @@ struct EndSite {
   diag::Span span;
 };
 
+// Whether a value of a type ends with code: the analyzer's table
+// answers for the types it sized, and a type the lowering interned
+// answers only from its structure, following a storage copy back to
+// the declaration it came from. Lowering asks this of nearly every
+// instruction, so each type's answer is kept.
+class DestructorQuery {
+ public:
+  DestructorQuery(std::span<const u8> needs_drop,
+                  const ir::StorageBuilder& builder,
+                  const std::unordered_map<u32, u32>& type_origins)
+      : needs_drop_(needs_drop),
+        builder_(builder),
+        type_origins_(type_origins) {}
+
+  [[nodiscard]] bool runs(ir::TypeIdx type) const {
+    if (type.idx < needs_drop_.size()) {
+      return needs_drop_[type.idx] != 0;
+    }
+    const usize slot = type.idx - needs_drop_.size();
+    if (slot >= interned_.size()) {
+      return walks(type);
+    }
+    const u8 answer = interned_[slot];
+    if (answer == 0) {
+      return walks(type);
+    }
+    return answer == 2;
+  }
+
+ private:
+  // The answer for a type past the end of the analyzer's table: read from
+  // the type's structure once and kept.
+  [[nodiscard]] bool walks(ir::TypeIdx type) const;
+
+  std::span<const u8> needs_drop_;
+  const ir::StorageBuilder& builder_;
+  const std::unordered_map<u32, u32>& type_origins_;
+  // One byte per type past the end of the analyzer's table, indexed from
+  // where it ends: `0` unanswered, `1` no, `2` yes.
+  mutable std::vector<u8> interned_;
+};
+
 // What the drop pass reads, rewrites, and asks of its caller: the
 // journals, the local table, the streams of the function being
 // lowered, and nothing of the lowerer's own (ADR-0062). The pass owns
 // the solving; the caller owns the bookkeeping that the block numbers
 // and the instruction spans need.
 struct DropElaborationInputs {
-  // The two analyzer tables the pass reads: whether a type ends with
-  // code, and the glue method it ends through.
-  std::span<const u8> needs_drop;
+  // Whether a type ends with code, kept across the functions the caller
+  // lowers.
+  const DestructorQuery& drops;
   // Types that are never moved (ADR-0085): their end only ends.
   std::span<const u8> not_movable;
   // Parallel to the type table: whether a type a summary brought in
@@ -197,16 +239,6 @@ void elaborate_drops(const DropElaborationInputs& inputs);
     ir::TypeIdx type,
     std::span<const u32> path);
 
-// Whether a value of the type ends with code: the analyzer's table
-// answers for the types it sized, and a type the lowering interned
-// answers from its structure, following a storage copy back to the
-// declaration it came from.
-[[nodiscard]] bool runs_destructor(
-    std::span<const u8> needs_drop,
-    const ir::StorageBuilder& builder,
-    const std::unordered_map<u32, u32>& type_origins,
-    ir::TypeIdx type);
-
 // Whether ending a value of the type can run code: an end the analyzer
 // measured, or a type that names a parameter, which the substitution
 // may turn into one (ADR-0079).
@@ -229,5 +261,4 @@ void emit_summary_drop_not_carried(diag::DiagBag& bag,
                                    const ir::SymbolTable& strings,
                                    diag::Span span,
                                    ir::TypeIdx type);
-
 }  // namespace lowering

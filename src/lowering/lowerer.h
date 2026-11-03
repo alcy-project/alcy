@@ -1440,6 +1440,8 @@ class Lowerer {
   // Where each type copy came from, and where each struct's shape is
   // recorded, both answered by table.
   std::unordered_map<u32, u32> type_origins_;
+  // Whether a type ends with code, answered once per type.
+  DestructorQuery drops_;
   std::unordered_map<u32, const analyzer::CheckedModule::StructInfo*> structs_;
   // An enumeration's shape and where a path's variant was recorded, by what a
   // caller knows when it asks. Each was a walk over every module in the

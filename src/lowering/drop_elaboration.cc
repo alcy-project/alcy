@@ -351,7 +351,7 @@ class DropElaborator {
  public:
   DropElaborator(const DropElaborationInputs& inputs,
                  DropWorkingSet::Tables& tables)
-      : needs_drop(inputs.needs_drop),
+      : drops_(inputs.drops),
         not_movable(inputs.not_movable),
         summary_drops(inputs.summary_drops),
         drop_glue(inputs.drop_glue),
@@ -401,7 +401,7 @@ class DropElaborator {
     return builder.operand(ir::Operand::from_immutable(imm, type));
   }
   [[nodiscard]] bool runs_destructor(ir::TypeIdx type) const {
-    return lowering::runs_destructor(needs_drop, builder, type_origins_, type);
+    return drops_.runs(type);
   }
   [[nodiscard]] bool movable(ir::TypeIdx type) const {
     return ir::is_movable_type(
@@ -473,7 +473,7 @@ class DropElaborator {
                   u32 offset,
                   u32 seq);
 
-  std::span<const u8> needs_drop;
+  const DestructorQuery& drops_;
   std::span<const u8> not_movable;
   std::span<const u8> summary_drops;
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
@@ -1594,7 +1594,7 @@ void Lowerer::place_ends() {
     return;
   }
   const DropElaborationInputs inputs{
-      .needs_drop = pkg.needs_drop,
+      .drops = drops_,
       .not_movable = pkg.not_movable,
       .summary_drops = summary_drops_,
       .drop_glue = pkg.drop_glue,
@@ -1668,10 +1668,12 @@ ir::TypeIdx type_at_path(ir::StorageBuilder& builder,
   return current;
 }
 
-bool runs_destructor(std::span<const u8> needs_drop,
-                     const ir::StorageBuilder& builder,
-                     const std::unordered_map<u32, u32>& type_origins,
-                     ir::TypeIdx type) {
+namespace {
+
+bool walks_destructor(std::span<const u8> needs_drop,
+                      const ir::StorageBuilder& builder,
+                      const std::unordered_map<u32, u32>& type_origins,
+                      ir::TypeIdx type) {
   if (type.idx < needs_drop.size()) {
     return needs_drop[type.idx] != 0;
   }
@@ -1686,26 +1688,26 @@ bool runs_destructor(std::span<const u8> needs_drop,
   const ir::TypeIdx origin =
       found == type_origins.end() ? type : ir::TypeIdx(found->second);
   if (origin.idx != type.idx) {
-    return runs_destructor(needs_drop, builder, type_origins, origin);
+    return walks_destructor(needs_drop, builder, type_origins, origin);
   }
   const ir::TypeNode& node = builder.types()[type];
   switch (node.tag) {
     case ir::TypeTag::Tuple: {
       const ir::TupleType& tuple = builder.tuple_types()[node.as_tuple()];
       for (ir::TypeIdx element : tuple.elements) {
-        if (runs_destructor(needs_drop, builder, type_origins, element)) {
+        if (walks_destructor(needs_drop, builder, type_origins, element)) {
           return true;
         }
       }
       return false;
     }
     case ir::TypeTag::Array:
-      return runs_destructor(needs_drop, builder, type_origins,
-                             builder.array_types()[node.as_array()].element);
+      return walks_destructor(needs_drop, builder, type_origins,
+                              builder.array_types()[node.as_array()].element);
     case ir::TypeTag::Struct: {
       const ir::StructType& shape = builder.struct_types()[node.as_struct()];
       for (const ir::TypeIdx field : shape.fields) {
-        if (runs_destructor(needs_drop, builder, type_origins, field)) {
+        if (walks_destructor(needs_drop, builder, type_origins, field)) {
           return true;
         }
       }
@@ -1718,7 +1720,7 @@ bool runs_destructor(std::span<const u8> needs_drop,
            vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
         const ir::EnumVariantType& variant = builder.enum_variant_types()[vidx];
         for (const ir::TypeIdx field : variant.fields) {
-          if (runs_destructor(needs_drop, builder, type_origins, field)) {
+          if (walks_destructor(needs_drop, builder, type_origins, field)) {
             return true;
           }
         }
@@ -1733,7 +1735,7 @@ bool may_end(std::span<const u8> needs_drop,
              const ir::StorageBuilder& builder,
              const std::unordered_map<u32, u32>& type_origins,
              ir::TypeIdx type) {
-  return runs_destructor(needs_drop, builder, type_origins, type) ||
+  return walks_destructor(needs_drop, builder, type_origins, type) ||
          ir::type_names_param(builder.state(), type);
 }
 
@@ -1754,6 +1756,17 @@ void emit_summary_drop_not_carried(diag::DiagBag& bag,
   const u32 index = bag.emit<i18n::Key::LowerSummaryDropNotCarried>(
       DiagCode::SummaryDropNotCarried, span, name);
   (void)index;
+}  // namespace
+
+bool DestructorQuery::walks(ir::TypeIdx type) const {
+  const usize slot = type.idx - needs_drop_.size();
+  if (slot >= interned_.size()) {
+    interned_.resize(std::max(slot + 1, interned_.size() * 2), 0);
+  }
+  const bool answer =
+      walks_destructor(needs_drop_, builder_, type_origins_, type);
+  interned_[slot] = answer ? 2 : 1;
+  return answer;
 }
 
 }  // namespace lowering
