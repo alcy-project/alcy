@@ -3108,55 +3108,55 @@ void Lowerer::compact_instrs() {
   ir::StorageState state = std::move(builder).take_state();
   const usize count = state.instrs.size();
   std::vector<bool> owned(count, false);
+  usize kept = 0;
   for (usize b = 0; b < state.blocks.size(); ++b) {
     for (ir::InstructionIdx idx : state.blocks[ir::BlockIdx(b)].instrs) {
-      owned[idx.idx] = true;
+      if (!owned[idx.idx]) {
+        owned[idx.idx] = true;
+        ++kept;
+      }
     }
-  }
-  usize kept = 0;
-  for (bool live : owned) {
-    kept += live ? 1 : 0;
   }
   if (kept == count) {
     builder = ir::StorageBuilder(std::move(state));
     return;
   }
   DCHECK_EQ(instr_spans_.size(), count);
-  std::vector<ir::InstructionIdx> moved(count, ir::InstructionIdx::invalid());
-  std::vector<ir::InstructionIdx> defines(state.registers.size(),
-                                          ir::InstructionIdx::invalid());
-  ir::StorageState::Instructions instrs;
-  instrs.reserve(kept);
-  std::vector<diag::Span> spans;
-  spans.reserve(kept);
+  // The table compacts in place: kept entries slide towards the front, and a
+  // destination is never above a source the walk has already read.
+  std::vector<u32> moved(count, 0);
+  ir::Instruction* const instrs = state.instrs.data();
+  u32 next = 0;
   for (usize i = 0; i < count; ++i) {
     if (!owned[i]) {
       continue;
     }
-    const ir::Instruction& instr = state.instrs[ir::InstructionIdx(i)];
-    moved[i] = instrs.emplace_back(instr);
-    spans.push_back(instr_spans_[i]);
-    if (instr.dst.is_valid()) {
-      defines[instr.dst.idx] = moved[i];
-    }
+    const u32 to = next++;
+    moved[i] = to;
+    instrs[to] = instrs[i];
+    instr_spans_[to] = instr_spans_[i];
   }
+  // Instruction is not default constructible, and this only ever shrinks.
+  state.instrs.resize(kept, instrs[0]);
+  instr_spans_.resize(kept);
   for (usize b = 0; b < state.blocks.size(); ++b) {
     ir::InstructionIdxRange& range = state.blocks[ir::BlockIdx(b)].instrs;
     if (range.empty()) {
       continue;
     }
-    range = ir::InstructionIdxRange(moved[range.head().idx], range.size());
+    DCHECK(owned[range.head().idx]);
+    range = ir::InstructionIdxRange(ir::InstructionIdx(moved[range.head().idx]),
+                                    range.size());
   }
   for (usize r = 0; r < state.registers.size(); ++r) {
     ir::Register& reg = state.registers[ir::RegisterIdx(r)];
-    if (defines[r].is_valid()) {
-      reg.def_idx = defines[r];
-    } else if (reg.def_idx.is_valid()) {
-      reg.def_idx = moved[reg.def_idx.idx];
+    if (!reg.def_idx.is_valid()) {
+      continue;
     }
+    reg.def_idx = owned[reg.def_idx.idx]
+                      ? ir::InstructionIdx(moved[reg.def_idx.idx])
+                      : ir::InstructionIdx::invalid();
   }
-  instr_spans_ = std::move(spans);
-  state.instrs = std::move(instrs);
   builder = ir::StorageBuilder(std::move(state));
 }
 
