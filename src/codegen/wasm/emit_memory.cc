@@ -63,12 +63,6 @@ std::optional<Access> access_for(ir::TypeTag tag) {
   }
 }
 
-bool is_aggregate_tag(ir::TypeTag tag) {
-  using T = ir::TypeTag;
-  return tag == T::Struct || tag == T::Tuple || tag == T::Enum ||
-         tag == T::Array;
-}
-
 }  // namespace
 
 Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {

@@ -86,12 +86,6 @@ bool needs_slot(const ir::Instruction& instr) {
          instr.op == O::InsertValue;
 }
 
-bool is_aggregate_tag(ir::TypeTag tag) {
-  using T = ir::TypeTag;
-  return tag == T::Struct || tag == T::Tuple || tag == T::Enum ||
-         tag == T::Array;
-}
-
 // What the allocator's failure path reports before it exits: the
 // memory could not grow to satisfy the request.
 constexpr std::string_view ALLOC_FAILURE = "allocation failed";

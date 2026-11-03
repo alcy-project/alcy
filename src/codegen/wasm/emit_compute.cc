@@ -353,9 +353,9 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         }
       } else if (is_word_int(src_tag) && is_thin_pointer(dst_tag)) {
         canonicalize(body_, dst_tag);
-      } else if (is_thin_pointer(src_tag) && is_thin_pointer(dst_tag)) {
+      } else if (rides_as_address(src_tag) && rides_as_address(dst_tag)) {
         // Relabelling: the address is unchanged, and the destination
-        // names what it points at.
+        // names what it points at, or the words that live there.
       } else if (is_thin_pointer(src_tag) && ir::is_integer_type(dst_tag)) {
         if (is_wide_int(dst_tag)) {
           op(0xAD);  // i64.extend_i32_u: the address zero-extends.

@@ -44,6 +44,21 @@ inline bool is_thin_pointer(ir::TypeTag tag) {
          tag == ir::TypeTag::MutRef || tag == ir::TypeTag::Function;
 }
 
+// A value whose words live elsewhere: a struct, a tuple, an enum, and an
+// array occupy storage of their own, and the value that names them is
+// that storage's address.
+inline bool is_aggregate_tag(ir::TypeTag tag) {
+  return tag == ir::TypeTag::Struct || tag == ir::TypeTag::Tuple ||
+         tag == ir::TypeTag::Enum || tag == ir::TypeTag::Array;
+}
+
+// A value that rides as one address word. A thin pointer names where the
+// pointee lives, and an aggregate names where its own words live, so a
+// cast between the two relabels the same word rather than converting it.
+inline bool rides_as_address(ir::TypeTag tag) {
+  return is_thin_pointer(tag) || is_aggregate_tag(tag);
+}
+
 // Turns the program's reachable IR into one wasm module: the program's
 // functions, the `alcy_*` runtime they call, and a WASI `_start` when the
 // request owns the entry.
