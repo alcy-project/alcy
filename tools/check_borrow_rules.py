@@ -457,6 +457,46 @@ fn main() -> i32 {
 }""",
 )
 
+# A call that takes its receiver exclusively may keep what it was handed
+# in the receiver's region, so the place the receiver names carries the
+# loan of a borrowed argument. Handing that place to the caller would
+# leave the element reading storage the frame owns.
+case(
+    "returned",
+    "borrowed-element-in-container",
+    "reject",
+    """fn take() -> Vec<&i32> {
+  n := 7i32
+  mut v := Vec::<&i32>::new()
+  v.push(&n)
+  ret v
+}
+
+fn main() -> i32 {
+  v := take()
+  ret v.len() as i32 - 1
+}""",
+)
+
+# The same shape reached through a parameter borrows the caller's
+# storage, which outlives the return.
+case(
+    "returned",
+    "borrowed-element-from-parameter",
+    "accept",
+    """fn take(n: &i32) -> Vec<&i32> {
+  mut v := Vec::<&i32>::new()
+  v.push(n)
+  ret v
+}
+
+fn main() -> i32 {
+  n := 7i32
+  v := take(&n)
+  ret v.len() as i32 - 1
+}""",
+)
+
 # --- extent across control flow ---------------------------------------
 case(
     "extent",

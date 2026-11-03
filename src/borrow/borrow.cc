@@ -202,6 +202,15 @@ struct FlowRow {
   Iter end() const { return Iter(*this, len); }
   void clear() { len = 0; }
 
+  bool contains(u32 loan) const {
+    for (u32 held : *this) {
+      if (held == loan) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void push_back(u32 loan) {
     std::vector<u32>& steps = *arena;
     if (head + len == steps.size()) {
@@ -544,6 +553,72 @@ class Checker {
     auto it = std::lower_bound(captures_.begin(), captures_.end(), reg_lo);
     for (; it != captures_.end() && *it < reg_hi; ++it) {
       seed_capture(*it);
+    }
+  }
+
+  // A call that takes its receiver exclusively may store what it was handed
+  // inside the receiver's region, so the place the receiver names comes to
+  // carry the loan of each borrowed argument. Handing that place out of the
+  // frame would then hand out a view of storage this frame owns.
+  void inherit_argument_loans(const ir::Instruction& instr) {
+    if (instr.operands.size() < 3) {
+      return;
+    }
+    const ir::Operand& receiver = storage.operands()[instr.operands.head() + 1];
+    if (!receiver.is<ir::RegisterIdx>()) {
+      return;
+    }
+    const u32 receiver_reg = receiver.as_register().idx;
+    if (receiver_reg >= storage.registers().size() ||
+        tag_of(storage.registers()[receiver_reg].type) != ir::TypeTag::MutRef) {
+      return;
+    }
+    u32 root = NO_ROOT;
+    for (const Loan& reserved : loans) {
+      if (reserved.reg == receiver_reg && reserved.param == NO_ROOT &&
+          reserved.place.root != NO_ROOT) {
+        root = reserved.place.root;
+        break;
+      }
+    }
+    if (root == NO_ROOT || root >= flow.size()) {
+      return;
+    }
+    for (u32 offset = 2; offset < instr.operands.size(); ++offset) {
+      inherit_argument_loan(storage.operands()[instr.operands.head() + offset],
+                            root);
+    }
+  }
+
+  void inherit_argument_loan(const ir::Operand& arg, u32 root) {
+    if (!arg.is<ir::RegisterIdx>() || arg.as_register().idx >= flow.size()) {
+      return;
+    }
+    const u32 arg_reg = arg.as_register().idx;
+    const ir::TypeTag arg_tag = tag_of(storage.registers()[arg_reg].type);
+    if (arg_tag != ir::TypeTag::Ref && arg_tag != ir::TypeTag::MutRef) {
+      return;
+    }
+    for (u32 loan : flow[arg_reg]) {
+      if (loan >= loans.size() || loans[loan].param != NO_ROOT) {
+        continue;
+      }
+      // The loan to carry is the one at the outermost end of the chain: a
+      // reborrow names the local it was taken from, while the borrow behind
+      // it names the storage both read. A chain that ends at a parameter
+      // hands nothing of this frame out.
+      u32 source = loan;
+      while (source < loans.size() && loans[source].parent != NO_ROOT &&
+             loans[source].parent < loans.size() &&
+             loans[source].parent != source) {
+        source = loans[source].parent;
+      }
+      if (loans[source].param != NO_ROOT || loans[source].param_derived) {
+        continue;
+      }
+      if (!flow[root].contains(source)) {
+        flow[root].push_back(source);
+      }
     }
   }
 
@@ -966,6 +1041,7 @@ class Checker {
         if (instr.operands.empty()) {
           break;
         }
+        inherit_argument_loans(instr);
         const ir::Operand& callee = storage.operands()[instr.operands.head()];
         if (!instr.dst.is_valid()) {
           break;

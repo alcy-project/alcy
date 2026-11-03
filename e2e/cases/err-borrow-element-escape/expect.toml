@@ -1,0 +1,6 @@
+# A call that takes its receiver exclusively may store what it was handed
+# in the receiver's region, so the container carries the loan of the
+# borrowed element and cannot leave the frame that owns it.
+exit = 4
+contains = ["Returns reference to local 'value'"]
+not_contains = []

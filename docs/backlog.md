@@ -256,6 +256,22 @@ replaced. The foundations are in `roadmap.md`.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
 
+- [ ] A `str` view stored in a container escapes the frame that owns
+  the buffer: `fn take() -> Vec<str> { x := String::from("abc"); mut v
+  := Vec::<str>::new(); v.push(x.as_str()); ret v }` compiles and the
+  caller reads the dropped buffer, and `Map::<i32>::insert(x.as_str(),
+  7i32)` keyed by the view of a local reaches the caller the same way.
+  A borrowed argument whose type is a reference reaches the receiver's
+  place as a loan, which is what refuses the `Vec<&i32>` shape
+  (`err-borrow-element-escape`,
+  `returned/borrowed-element-in-container`); a view cannot take the
+  same road because whether the receiver stores or copies it depends on
+  the receiver's element type - `String::push_str` copies,
+  `Vec<str>::push` does not - and only the region a loan carries
+  distinguishes them (ADR-0012). Both directions are pinned by accepted
+  programs: `ok-mini-pipeline` and `ok-grouping` pass views to a
+  receiver that copies them.
+
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the
   compiler's version string does not identify the binary that wrote an
