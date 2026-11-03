@@ -275,6 +275,27 @@ LineColumn line_column(std::string_view bytes, u32 offset) {
   return {.line = info.line, .column = info.col};
 }
 
+LineColumn LineCursor::locate(std::string_view bytes, u32 offset) {
+  if (offset > bytes.size()) {
+    offset = static_cast<u32>(bytes.size());
+  }
+  if (bytes.data() != scanned_.data() || bytes.size() != scanned_.size() ||
+      offset < offset_) {
+    scanned_ = bytes;
+    offset_ = 0;
+    line_ = 1;
+    line_start_ = 0;
+  }
+  for (u32 i = offset_; i < offset; ++i) {
+    if (bytes[i] == '\n') {
+      ++line_;
+      line_start_ = i + 1;
+    }
+  }
+  offset_ = offset;
+  return {.line = line_, .column = display_column(bytes, line_start_, offset)};
+}
+
 std::string render(const Diagnostic& diag, const RenderOptions& options) {
   fmt::memory_buffer out;
   render(diag, out, options);

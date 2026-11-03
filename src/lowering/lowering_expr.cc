@@ -3458,7 +3458,7 @@ ir::OperandIdx Lowerer::where_operand(diag::Span span) {
   if (!name.has_value() || !bytes.has_value()) {
     return str_operand("");
   }
-  const diag::LineColumn at = diag::line_column(*bytes, span.offset);
+  const diag::LineColumn at = where_scan_.locate(*bytes, span.offset);
   const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
   const str::StringPoolId id =
       intern_copied(fmt::format("{}:{}:{}", *name, at.line, at.column));

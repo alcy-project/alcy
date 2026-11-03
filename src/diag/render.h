@@ -32,6 +32,27 @@ struct LineColumn {
 
 LineColumn line_column(std::string_view bytes, u32 offset);
 
+// The line and column of offsets in one text, each answer continuing the
+// scan the previous one stopped at. A caller that asks in source order
+// pays one pass over the text; one that asks out of order, or about
+// another text, falls back to the scan line_column makes. The text stays
+// the caller's and has to outlive the cursor.
+class LineCursor {
+ public:
+  // Counts a line and a column the way line_column does, and clamps an
+  // offset past the end the same way.
+  LineColumn locate(std::string_view bytes, u32 offset);
+
+ private:
+  // The text the fields below describe.
+  std::string_view scanned_;
+  // The offset the scan reached, and the line and line start it found
+  // there.
+  u32 offset_ = 0;
+  u32 line_ = 1;
+  u32 line_start_ = 0;
+};
+
 // Returns the source text for a file id, or std::nullopt when the id does
 // not name a known file - distinct from a known file whose bytes are
 // empty. Must never allocate.

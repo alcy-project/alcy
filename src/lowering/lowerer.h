@@ -24,6 +24,7 @@
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
+#include "diag/render.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
@@ -1035,6 +1036,10 @@ class Lowerer {
   // The `<file>:<line>:<column>` `span` names, interned. Empty when the
   // lowerer was handed no sources or the span names no file.
   ir::OperandIdx where_operand(diag::Span span);
+  // The site the last spelling asked about. A body lowers in source order,
+  // so the next question about the same file usually lies past this one and
+  // the line count continues instead of restarting at the file's first byte.
+  diag::LineCursor where_scan_;
   ir::OperandIdx str_operand(std::string_view message);
   Val lower_method_call(ast::ExprIdx expr);
   // `a[i]` where the checker resolved an `Index`/`IndexMut` impl: the
