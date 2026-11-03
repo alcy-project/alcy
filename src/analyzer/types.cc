@@ -150,13 +150,41 @@ NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
   if (module >= nominals_of_module.size()) {
     return nullptr;
   }
-  for (u32 pos : nominals_of_module[module]) {
-    NominalEntry& entry = nominals[pos];
-    if (entry.name == name) {
-      return &entry;
+  const std::vector<u32>& declared = nominals_of_module[module];
+  if (declared.size() <= INDEX_MIN) {
+    for (u32 pos : declared) {
+      NominalEntry& entry = nominals[pos];
+      if (entry.name == name) {
+        return &entry;
+      }
     }
+    return nullptr;
   }
-  return nullptr;
+  return find_nominal_wide(module, name);
+}
+
+// A module that declares more nominals than INDEX_MIN of them answers by name
+// through the table it keeps, which takes the declarations registration adds.
+NominalEntry* Checker::find_nominal_wide(u32 module, std::string_view name) {
+  const std::vector<u32>& declared = nominals_of_module[module];
+  if (nominal_names_.size() <= module) {
+    nominal_names_.resize(module + 1);
+    nominal_names_indexed_.resize(module + 1, 0);
+  }
+  std::unordered_map<std::string_view, u32>& names = nominal_names_[module];
+  u32& indexed = nominal_names_indexed_[module];
+  if (indexed > declared.size()) {
+    names.clear();
+    indexed = 0;
+  }
+  // Registration asks this once per declaration it is about to add, so the
+  // table takes the entries it does not hold yet rather than being rebuilt.
+  for (u32 k = indexed; k < declared.size(); ++k) {
+    names.emplace(nominals[declared[k]].name, declared[k]);
+  }
+  indexed = static_cast<u32>(declared.size());
+  const auto found = names.find(name);
+  return found == names.end() ? nullptr : &nominals[found->second];
 }
 
 std::string_view Checker::package_of(u32 module) const {

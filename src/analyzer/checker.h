@@ -558,6 +558,7 @@ class Checker {
   // records ride the checked package to lowering (ADR-0054).
   static void record_comp_call(void* context, const CompCallRecord& record);
   NominalEntry* find_nominal(u32 module, std::string_view name);
+  NominalEntry* find_nominal_wide(u32 module, std::string_view name);
   // A spec declaration by module and name; at most one per module.
   SpecEntry* find_spec(u32 module, std::string_view name);
   // The package `module` belongs to, by the identity a `use` spells:
@@ -1331,6 +1332,12 @@ class Checker {
   // names instead of walking every method the block holds.
   std::unordered_map<u32, std::unordered_map<std::string_view, ast::ItemIdx>>
       impl_methods_by_name_;
+  // The nominal a module declares under a name, for a module that declares
+  // more than INDEX_MIN of them, and how many declarations each table took.
+  // A type reference spells the name it means, so no lookup has to walk the
+  // module's declarations. Registration adds them to the table as it goes.
+  std::vector<std::unordered_map<std::string_view, u32>> nominal_names_;
+  std::vector<u32> nominal_names_indexed_;
   // The nominal that declares a type, by the type it built. A field access
   // needs the declaration that names a field, a match on an enumeration needs
   // the one that names its variants, a method call needs the one its receiver
