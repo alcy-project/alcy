@@ -54,11 +54,13 @@ std::size_t block_size(std::uint32_t class_index) {
          (std::size_t{class_index} - kSmallClasses + 1) * kLargeStep;
 }
 
-void* allocate(std::size_t size) {
-  if (size == 0) {
-    size = 1;
-  }
-  if (size > kLargeLimit) {
+// A free list answers most requests, so the two paths behind it - a fresh
+// block from the bump region and a block the system owns - stay out of the
+// allocating function: no register it saves outlives the fast path, and the
+// region refill it rarely takes is not competing for the cache lines it reads.
+[[gnu::noinline, gnu::cold]] Header* carve(std::uint32_t class_index,
+                                           std::size_t size) {
+  if (class_index == kSystem) {
     // A block above the largest class is owned by the system allocator and
     // handed back by the matching free below.
     // ast-grep-ignore: no-c-heap
@@ -67,12 +69,7 @@ void* allocate(std::size_t size) {
       std::abort();
     }
     header->class_index = kSystem;
-    return header + 1;
-  }
-  const std::uint32_t class_index = class_of(size);
-  if (void* block = free_lists[class_index]; block != nullptr) {
-    free_lists[class_index] = *static_cast<void**>(block);
-    return block;
+    return header;
   }
   const std::size_t span = block_size(class_index) + kAlign;
   if (bump == nullptr || static_cast<std::size_t>(bump_end - bump) < span) {
@@ -86,7 +83,22 @@ void* allocate(std::size_t size) {
   auto* header = reinterpret_cast<Header*>(bump);
   bump += span;
   header->class_index = class_index;
-  return header + 1;
+  return header;
+}
+
+void* allocate(std::size_t size) {
+  if (size == 0) {
+    size = 1;
+  }
+  if (size > kLargeLimit) {
+    return carve(kSystem, size) + 1;
+  }
+  const std::uint32_t class_index = class_of(size);
+  if (void* block = free_lists[class_index]; block != nullptr) {
+    free_lists[class_index] = *static_cast<void**>(block);
+    return block;
+  }
+  return carve(class_index, size) + 1;
 }
 
 void deallocate(void* payload) noexcept {
