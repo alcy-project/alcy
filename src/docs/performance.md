@@ -238,8 +238,9 @@ from the idea.
   `plain1200`: the calls between the levels are what the attribute removes. The
   build pays for it: a level that inlines two copies of the level below makes
   the tower exponential, and the file goes from `5 s` to `228 s` to compile.
-  The overhead is real, and a precedence table is what would remove it without
-  the copies; the attribute is not.
+  The overhead is real, and `parse_binary`'s precedence table is what removes
+  it without the copies: `-1.9%`, for a file that then compiles in `2.7 s`
+  instead of `5 s`. The attribute is not.
 
 ## Tracing
 

@@ -296,13 +296,7 @@ class Parser {
   ast::ExprIdx parse_or();
   ast::ExprIdx parse_and();
   ast::ExprIdx parse_cmp();
-  ast::ExprIdx parse_bitor();
-  ast::ExprIdx parse_bitxor();
-  ast::ExprIdx parse_bitand();
-  ast::ExprIdx parse_shift();
-  ast::ExprIdx parse_add();
-  ast::ExprIdx parse_mul();
-  ast::ExprIdx parse_pow();
+  ast::ExprIdx parse_binary(u8 min_prec);
   ast::ExprIdx parse_cast();
   ast::ExprIdx parse_unary();
   ast::ExprIdx parse_postfix();

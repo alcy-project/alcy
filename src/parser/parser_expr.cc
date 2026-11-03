@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <array>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -46,6 +47,49 @@ bool starts_range_end(lexer::TokenKind kind) {
     default: return true;
   }
 }
+
+// The binary operators below comparison, indexed by the token that spells them:
+// the binding power sits in the low nibble, one step per level of the grammar
+// from `|` to `**`, a zero power is a token no binary operator spells, and the
+// high byte is the operator the node carries. `**` alone groups to the right.
+constexpr u16 BINARY_PREC_MASK = 0x0F;
+constexpr u16 BINARY_RIGHT_ASSOC = 0x10;
+constexpr u8 BINARY_PREC_BIT_OR = 4;
+
+constexpr u16 binary_entry(ast::BinaryOp op, u8 prec, bool right_assoc) {
+  return static_cast<u16>(static_cast<u16>(op) << 8) |
+         static_cast<u16>(
+             static_cast<u16>(right_assoc ? BINARY_RIGHT_ASSOC : 0) | prec);
+}
+
+constexpr std::array<u16, 256> binary_op_table() {
+  std::array<u16, 256> table{};
+  table[static_cast<u8>(lexer::TokenKind::Pipe)] =
+      binary_entry(ast::BinaryOp::BitOr, 4, false);
+  table[static_cast<u8>(lexer::TokenKind::Caret)] =
+      binary_entry(ast::BinaryOp::BitXor, 5, false);
+  table[static_cast<u8>(lexer::TokenKind::Amp)] =
+      binary_entry(ast::BinaryOp::BitAnd, 6, false);
+  table[static_cast<u8>(lexer::TokenKind::LessLess)] =
+      binary_entry(ast::BinaryOp::Shl, 7, false);
+  table[static_cast<u8>(lexer::TokenKind::GreaterGreater)] =
+      binary_entry(ast::BinaryOp::Shr, 7, false);
+  table[static_cast<u8>(lexer::TokenKind::Plus)] =
+      binary_entry(ast::BinaryOp::Add, 8, false);
+  table[static_cast<u8>(lexer::TokenKind::Minus)] =
+      binary_entry(ast::BinaryOp::Sub, 8, false);
+  table[static_cast<u8>(lexer::TokenKind::Star)] =
+      binary_entry(ast::BinaryOp::Mul, 9, false);
+  table[static_cast<u8>(lexer::TokenKind::Slash)] =
+      binary_entry(ast::BinaryOp::Div, 9, false);
+  table[static_cast<u8>(lexer::TokenKind::Percent)] =
+      binary_entry(ast::BinaryOp::Mod, 9, false);
+  table[static_cast<u8>(lexer::TokenKind::StarStar)] =
+      binary_entry(ast::BinaryOp::Pow, 10, true);
+  return table;
+}
+
+constexpr std::array<u16, 256> BINARY_OP_TABLE = binary_op_table();
 
 }  // namespace
 
@@ -156,7 +200,7 @@ ast::ExprIdx Parser::parse_and() {
 
 ast::ExprIdx Parser::parse_cmp() {
   const usize mark = pos_;
-  ast::ExprIdx lhs = parse_bitor();
+  ast::ExprIdx lhs = parse_binary(BINARY_PREC_BIT_OR);
   if (!lhs.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -171,7 +215,7 @@ ast::ExprIdx Parser::parse_cmp() {
     default: return lhs;
   }
   advance();
-  ast::ExprIdx rhs = parse_bitor();
+  ast::ExprIdx rhs = parse_binary(BINARY_PREC_BIT_OR);
   if (!rhs.is_valid()) {
     return ast::ExprIdx::invalid();
   }
@@ -186,195 +230,35 @@ ast::ExprIdx Parser::parse_cmp() {
   return ast_.exprs.push_back(node);
 }
 
-ast::ExprIdx Parser::parse_bitor() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_bitxor();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (match(lexer::TokenKind::Pipe)) {
-    ast::ExprIdx rhs = parse_bitxor();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = ast::BinaryOp::BitOr,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-  return lhs;
-}
-
-ast::ExprIdx Parser::parse_bitxor() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_bitand();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (match(lexer::TokenKind::Caret)) {
-    ast::ExprIdx rhs = parse_bitand();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = ast::BinaryOp::BitXor,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-  return lhs;
-}
-
-ast::ExprIdx Parser::parse_bitand() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_shift();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (match(lexer::TokenKind::Amp)) {
-    ast::ExprIdx rhs = parse_shift();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = ast::BinaryOp::BitAnd,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-  return lhs;
-}
-
-ast::ExprIdx Parser::parse_shift() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_add();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (true) {
-    ast::BinaryOp op = ast::BinaryOp::Add;
-    if (match(lexer::TokenKind::LessLess)) {
-      op = ast::BinaryOp::Shl;
-    } else if (match(lexer::TokenKind::GreaterGreater)) {
-      op = ast::BinaryOp::Shr;
-    } else {
-      return lhs;
-    }
-    ast::ExprIdx rhs = parse_add();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = op,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-}
-
-ast::ExprIdx Parser::parse_add() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_mul();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (true) {
-    ast::BinaryOp op = ast::BinaryOp::Add;
-    if (match(lexer::TokenKind::Plus)) {
-      op = ast::BinaryOp::Add;
-    } else if (match(lexer::TokenKind::Minus)) {
-      op = ast::BinaryOp::Sub;
-    } else {
-      return lhs;
-    }
-    ast::ExprIdx rhs = parse_mul();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = op,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-}
-
-ast::ExprIdx Parser::parse_mul() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_pow();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (true) {
-    ast::BinaryOp op = ast::BinaryOp::Add;
-    if (match(lexer::TokenKind::Star)) {
-      op = ast::BinaryOp::Mul;
-    } else if (match(lexer::TokenKind::Slash)) {
-      op = ast::BinaryOp::Div;
-    } else if (match(lexer::TokenKind::Percent)) {
-      op = ast::BinaryOp::Mod;
-    } else {
-      return lhs;
-    }
-    ast::ExprIdx rhs = parse_pow();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = op,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-}
-
-ast::ExprIdx Parser::parse_pow() {
+ast::ExprIdx Parser::parse_binary(u8 min_prec) {
   const usize mark = pos_;
   ast::ExprIdx lhs = parse_cast();
   if (!lhs.is_valid()) {
     return ast::ExprIdx::invalid();
   }
-  if (!match(lexer::TokenKind::StarStar)) {
-    return lhs;
+  while (true) {
+    const u16 entry = BINARY_OP_TABLE[static_cast<u8>(peek_kind())];
+    const u8 prec = static_cast<u8>(entry & BINARY_PREC_MASK);
+    if (prec == 0 || prec < min_prec) {
+      return lhs;
+    }
+    const u8 next_prec =
+        (entry & BINARY_RIGHT_ASSOC) != 0 ? prec : static_cast<u8>(prec + 1);
+    advance();
+    ast::ExprIdx rhs = parse_binary(next_prec);
+    if (!rhs.is_valid()) {
+      return ast::ExprIdx::invalid();
+    }
+    ast::ExprNode node;
+    node.kind = ast::ExprKind::Binary;
+    node.span = span_from(mark);
+    node.payload.set(ast::ExprBinary{
+        .op = static_cast<ast::BinaryOp>(entry >> 8),
+        .lhs = lhs,
+        .rhs = rhs,
+    });
+    lhs = ast_.exprs.push_back(node);
   }
-  ast::ExprIdx rhs = parse_pow();
-  if (!rhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  ast::ExprNode node;
-  node.kind = ast::ExprKind::Binary;
-  node.span = span_from(mark);
-  node.payload.set(ast::ExprBinary{
-      .op = ast::BinaryOp::Pow,
-      .lhs = lhs,
-      .rhs = rhs,
-  });
-  return ast_.exprs.push_back(node);
 }
 
 ast::ExprIdx Parser::parse_cast() {
