@@ -128,13 +128,12 @@ build workflows take no version inputs at all.
 does.** `build.yaml` ran the e2e corpus, the exe acceptance, the borrow
 rules, the wasm acceptance, and the benchmark smoke in each of its ten
 entries, so one question about one corpus had ten answers at ten times the
-cost. The benchmark smoke, the borrow rules, the wasm acceptance, and the
-format check now run once, in `ci.yaml`'s `harness` matrix, where each
-entry is one command and the job is named after the verb: `Format (alcy
-fmt)`, `Borrow Rules (alcy check)`, `Wasm Acceptance (alcy build
---target=wasm)`. Those three read source and ask the driver about it, and
-a wasm module comes out of the driver's own backend to be run by the same
-bun on every platform: the host answers for none of them.
+cost. The borrow rules and the wasm acceptance now run once, in `ci.yaml`'s
+`harness` matrix, where each entry is one command and the job is named
+after the verb: `Borrow Rules (alcy check)`, `Wasm Acceptance (alcy build
+--target=wasm)`. Both read source and ask the driver about it, and the wasm
+module comes out of the driver's own backend to be run by the same bun on
+every platform: the host answers for none of them.
 
 The e2e corpus and the exe acceptance stay in all ten entries. A case in
 either one links a program or runs one, and what the linker names the
