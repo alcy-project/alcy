@@ -232,7 +232,11 @@ replaced. The foundations are in `roadmap.md`.
   `"0.00000000000000000001"` are refused rather than read. Reading
   them wants the conversion to run over two words or more, and the
   language has no arithmetic wider than `u64` yet (`u128` is
-  deferred).
+  deferred). The same budget bounds the exponent: a positive power
+  folds into the numerator as factors of five with the twos riding the
+  binary exponent, so `6.02e23` rounds once from exact digits, while
+  `1e308` and `1e-400` are refused where a two-word numerator would
+  read them.
 
 - [ ] A value that carries a container's buffer loan cannot leave the
   function that owns the container: `fn take() -> Option<String> { mut v

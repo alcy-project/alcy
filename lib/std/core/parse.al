@@ -141,7 +141,12 @@ fn u64_bit_count(value: u64) -> i32 {
 // `mant * 2^exponent`, moving the binary point only. A power of two of
 // either sign is exact, so the significand keeps the bits rounding chose.
 fn times_power_of_two(mant: u64, exponent: i32) -> f64 {
-  mut value := mant as f64
+  ret scale_by_power_of_two(mant as f64, exponent)
+}
+
+// The same scaling for a value that already carries its quotient.
+fn scale_by_power_of_two(base: f64, exponent: i32) -> f64 {
+  mut value := base
   mut e := exponent
   while e > 0i32 {
     value = value * 2.0f64
@@ -163,12 +168,14 @@ fn apply_sign(value: f64, negative: bool) -> f64 {
   ret value * (0.0f64 - 1.0f64)
 }
 
-// Parses a decimal floating point number with an optional sign and
-// fractional part. An exponent is not read, so `1e10` is rejected.
-// `None` when the bytes are not a number or the digits pass what a
-// `u64` numerator holds. The result is the nearest `f64` to the
-// written decimal, so text and a literal of the same digits agree bit
-// for bit.
+// Parses a decimal floating point number with an optional sign,
+// fractional part and exponent, the spelling a float literal takes, so
+// the exponent form the formatter writes reads back. `None` when the
+// bytes are not a number, when the exponent is empty, or when the digits,
+// their scale and the exponent's power of ten pass what a `u64` holds; a
+// magnitude past that budget is refused rather than read approximately.
+// Otherwise the result is the nearest `f64` to the written decimal, so
+// text and a literal of the same digits agree bit for bit.
 impl Parse for f64 {
   fn parse(text: str) -> Option<f64> {
     n := str_len(text)
@@ -201,6 +208,9 @@ impl Parse for f64 {
         i = i + 1
         continue
       }
+      if d == 0x65u8 || d == 0x45u8 {
+        break
+      }
       if d < 0x30u8 || d > 0x39u8 {
         ret Option::None
       }
@@ -221,10 +231,70 @@ impl Parse for f64 {
     if !seen {
       ret Option::None
     }
+    // An exponent moves the binary point the digits settle, so the
+    // quotient below scales the digits once, the same way a fraction
+    // does. Its magnitude is bounded first, which keeps the scaling
+    // loop short whatever the text asks for.
+    mut power := 0i32
+    mut power_negative := false
+    if i < n {
+      i = i + 1
+      if i < n {
+        s := str_byte(text, i)
+        if s == 0x2du8 {
+          power_negative = true
+          i = i + 1
+        } else if s == 0x2bu8 {
+          i = i + 1
+        }
+      }
+      mut digits := 0
+      while i < n {
+        d := str_byte(text, i)
+        if d < 0x30u8 || d > 0x39u8 {
+          ret Option::None
+        }
+        if power > 4096i32 {
+          ret Option::None
+        }
+        power = power * 10i32 + ((d - 0x30u8) as i32)
+        digits = digits + 1
+        i = i + 1
+      }
+      if digits == 0 {
+        ret Option::None
+      }
+      if power_negative {
+        power = 0i32 - power
+      }
+    }
+    if numerator == 0u64 {
+      ret Option::Some(apply_sign(0.0f64, negative))
+    }
+    // A positive power folds into the numerator as many factors of five,
+    // which a `u64` holds longer than factors of ten, and the twos ride
+    // the binary exponent afterwards, where scaling is exact.
+    mut binary_power := 0i32
+    while power > 0i32 {
+      if numerator > 3689348814741910323u64 {
+        ret Option::None
+      }
+      numerator = numerator * 5u64
+      binary_power = binary_power + 1i32
+      power = power - 1i32
+    }
+    while power < 0i32 {
+      if scale > 1844674407370955161u64 {
+        ret Option::None
+      }
+      scale = scale * 10u64
+      power = power + 1i32
+    }
     // A numerator the significand holds exactly is divided once, and
     // IEEE division of two exact operands is the nearest value already.
     if numerator <= 9007199254740992u64 {
-      ret Option::Some(apply_sign((numerator as f64) / (scale as f64), negative))
+      quotient := scale_by_power_of_two((numerator as f64) / (scale as f64), binary_power)
+      ret Option::Some(apply_sign(quotient, negative))
     }
     // A longer numerator needs the quotient's bits: converting the
     // integer part and the fraction apart rounds twice, and
@@ -270,7 +340,7 @@ impl Parse for f64 {
       mantissa = kept
       exponent = exponent + 1i32
     }
-    ret Option::Some(apply_sign(times_power_of_two(mantissa, exponent), negative))
+    ret Option::Some(apply_sign(times_power_of_two(mantissa, exponent + binary_power), negative))
   }
 }
 

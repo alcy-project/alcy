@@ -1,5 +1,7 @@
 // A decimal float folds its digits into one numerator, and the quotient
-// is rounded once to the nearest value.
+// is rounded once to the nearest value. An exponent scales the digits by
+// a power of ten, which lands in the numerator and in the binary exponent
+// so the rounding stays single.
 fn main() -> i32 {
   if f64::parse("3.5").or_panic_with_message("expected a value") != 3.5 {
     ret 1
@@ -84,6 +86,55 @@ fn main() -> i32 {
   }
   if f64::parse("0.00000000000000000001").is_some() {
     ret 24
+  }
+  // The exponent form the formatter writes reads back to the same value.
+  if f64::parse("1e10").or_panic_with_message("expected a value") != 1.0e10 {
+    ret 26
+  }
+  if f64::parse("2.5e-3").or_panic_with_message("expected a value") != 2.5e-3 {
+    ret 27
+  }
+  if f64::parse("6.02E23").or_panic_with_message("expected a value") != 6.02e23 {
+    ret 28
+  }
+  if f64::parse("+2e+3").or_panic_with_message("expected a value") != 2000.0 {
+    ret 29
+  }
+  if f64::parse("-1.5e-5").or_panic_with_message("expected a value") != 0.0f64 - 1.5e-5 {
+    ret 30
+  }
+  if f64::parse("9007199254740993e0").or_panic_with_message("expected a value") != 9007199254740993.0 {
+    ret 31
+  }
+  if f64::parse("0.9876543210987654321e0").or_panic_with_message("expected a value") != 0.9876543210987654321 {
+    ret 32
+  }
+  if f64::parse("0e400").or_panic_with_message("expected a value") != 0.0 {
+    ret 33
+  }
+  round_trip := format("{}", 6.02e23)
+  if f64::parse(round_trip.as_str()).or_panic_with_message("expected a value") != 6.02e23 {
+    ret 34
+  }
+  // An exponent needs digits, and a power of ten past what the numerator
+  // and the scale hold is refused the way a long fraction is.
+  if f64::parse("1e").is_some() {
+    ret 35
+  }
+  if f64::parse("1e+").is_some() {
+    ret 36
+  }
+  if f64::parse("e5").is_some() {
+    ret 37
+  }
+  if f64::parse("1e1.5").is_some() {
+    ret 38
+  }
+  if f64::parse("1e400").is_some() {
+    ret 39
+  }
+  if f64::parse("1e-400").is_some() {
+    ret 40
   }
   ret 0
 }
