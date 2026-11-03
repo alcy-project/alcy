@@ -1871,15 +1871,17 @@ class Checker {
     compute_moved(block_order_);
     compute_liveness(fn, block_order_);
     for (ir::BlockIdx bidx : block_order_) {
-      // The entry state is copied rather than moved out of its row: the row
-      // keeps its buffer, and the copy lands in the scratch the previous
-      // block left, so the pass allocates nothing per block. A state is a
-      // handful of places, each of them a window on the shared step arena.
-      state_scratch_ = moved_in[bidx.idx];
+      // The row and the scratch trade buffers instead of copying the state:
+      // the block walks in with what the row holds and leaves the moved-on
+      // state in it, which the next function's reset clears before the row
+      // is read again. A state is a handful of places, each of them a window
+      // on the shared step arena.
+      state_scratch_.swap(moved_in[bidx.idx]);
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {
         check_instr(fn, bidx, iidx, state_scratch_);
       }
+      state_scratch_.swap(moved_in[bidx.idx]);
     }
   }
 

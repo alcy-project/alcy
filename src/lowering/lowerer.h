@@ -1506,6 +1506,7 @@ class Lowerer {
   std::unordered_map<u64, u32> first_fn_args_by_item_;
   std::unordered_map<u64, u32> fn_args_by_slot_;
   void index_fn_insts();
+  void reserve_fn_tables();
   // Where a closure body's entry already is. What names one body is the
   // module, the expression, and the instantiation, so those are the key and
   // the entries under it are compared the way the walk compared them: a

@@ -185,6 +185,7 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
       spec_body_items_[impl.spec].push_back(method.idx);
     }
   }
+  reserve_fn_tables();
 }
 
 void Lowerer::index_fn_insts() {
@@ -1711,13 +1712,22 @@ void Lowerer::fn_key(std::string& key,
                      u32 inst,
                      std::span<const CompVal> comp_args,
                      std::span<const ir::TypeIdx> extra_generics) {
-  key.clear();
-  append_index(key, item.idx, '|');
-  append_index(key, inst, '|');
+  // The numeric fields go into the string's own bytes: a key is rebuilt at
+  // every call site, and handing each field to the string paid a grow check,
+  // a size update, and a terminator write of its own.
+  key.resize(11 * (3 + params.size()));
+  char* cursor = key.data();
+  const auto put_index = [&cursor](u32 value, char separator) {
+    cursor = std::to_chars(cursor, cursor + 10, value).ptr;
+    *cursor++ = separator;
+  };
+  put_index(item.idx, '|');
+  put_index(inst, '|');
   for (ir::TypeIdx param : params) {
-    append_index(key, param.idx, ',');
+    put_index(param.idx, ',');
   }
-  append_index(key, ret.idx, '|');
+  put_index(ret.idx, '|');
+  key.resize(static_cast<usize>(cursor - key.data()));
   for (const CompVal& arg : comp_args) {
     comp_key_into(key, arg.value);
   }
@@ -1782,6 +1792,20 @@ bool Lowerer::try_run_comp_ir(u32 def_module,
   out.type = ret;
   ++comp_engine_answered_;
   return true;
+}
+
+// The function table and its key index grow to the package's function
+// count, which the checked package already carries: sizing them once keeps
+// every append from re-homing the entries a block of functions added
+// before.
+void Lowerer::reserve_fn_tables() {
+  usize functions = 0;
+  for (const analyzer::CheckedModule& checked : pkg.modules) {
+    functions += checked.functions.size();
+  }
+  const usize bound = std::min(functions + pkg.fn_insts.size(), max_functions);
+  fns.reserve(bound);
+  fn_by_key_.reserve(bound);
 }
 
 bool Lowerer::fn_budget_available(diag::Span span) {
