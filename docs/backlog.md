@@ -163,16 +163,19 @@ replaced. The foundations are in `roadmap.md`.
 
 - [ ] A value's type is named in three places, and a place is not a
   value: a register's row, the operand that names it, and the
-  lowering's own value each carry a type, and the verifier compares
-  none of them. The direct-wasm backend reads the operand's, so a
-  lowering site that disagrees with the register writes a word of the
-  wrong width - the borrowed binding's fix restamped one operand to
-  match, and the backend's `is_address` case and the `Val` constructions
-  around `lowering_expr.cc:377` are the same gap. A place's address is a
-  pointer value, but a register that holds one is declared with the
-  pointee's type, so the IR cannot say what the register holds. One
-  home for a value's type, and a place that is not a value, is the
-  fix; the verifier's silence is what let it drift.
+  lowering's own value each carry a type. The verifier compares the
+  first two for a primitive tag, where a disagreement writes a word of
+  the wrong width; the two may name different indexes of that tag,
+  since a type index can be resolved in place. Every other tag stays
+  uncompared, because a place's address is a pointer value while a
+  register that holds one is declared with the pointee's type, so the
+  IR cannot say what such a register holds. The direct-wasm backend
+  reads the operand's, which is why the borrowed binding's fix
+  restamped one operand to match, and the backend's `is_address` case
+  and the `Val` constructions around `lowering_expr.cc:377` are the same
+  gap. One home for a value's type, and a place that is not a value, is
+  the fix: a register that declared whether it holds an address or the
+  pointee would let the check cover every tag.
 
 - [ ] The direct-wasm backend has no allocation model: every SSA
   register gets a wasm local of its own, against ADR-0049's slot model,

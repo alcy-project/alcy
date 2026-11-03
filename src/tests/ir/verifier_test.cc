@@ -239,6 +239,51 @@ TEST_CASE("Verify undefined register") {
                 VerificationErrorKind::UndefinedRegister);
 }
 
+TEST_CASE("Verify an operand naming a register of another type") {
+  StorageBuilder builder;
+  InstrSeq instrs;
+  const ImmutableIdx imm = builder.immutable(
+      {.type = primitive_idx(TypeTag::I32), .data = {.i32_value = 1}});
+  const OperandIdx alloc_arg = builder.operand(
+      Operand::from_immutable(imm, primitive_idx(TypeTag::I32)));
+  const InstructionIdx inst_alloc = builder.instr({
+      .op = Opcode::Alloca,
+      .flags = {},
+      .dst = RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {alloc_arg, 1},
+  });
+  instrs.push(inst_alloc);
+  builder.reg({.type = primitive_idx(TypeTag::I32), .def_idx = inst_alloc});
+  // The register's row declares i32 while the operand naming it declares
+  // i64: a reader taking the operand's type reads half a word past it.
+  const OperandIdx ret_arg = builder.operand(
+      Operand::from_register(RegisterIdx(0), primitive_idx(TypeTag::I64)));
+  const InstructionIdx inst_ret = builder.instr({
+      .op = Opcode::Ret,
+      .flags = {},
+      .dst = RegisterIdx(base::INVALID_IDX),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {ret_arg, 1},
+  });
+  instrs.push(inst_ret);
+  const BlockIdx block = builder.block({
+      .instrs = instrs.finish(),
+      .block_params = {},
+  });
+  builder.function({
+      .meta = {.return_type = primitive_idx(TypeTag::I32),
+               .param_types = {},
+               .name = str::EMPTY_STRING_ID,
+               .path = str::EMPTY_STRING_ID,
+               .kind = SymbolKind::Foreign,
+               .generics = TypeIdxRange{}},
+      .blocks = {block, 1},
+  });
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::OperandTypeMismatch);
+}
+
 TEST_CASE("Verify redefined register") {
   StorageBuilder builder;
   InstrSeq instrs;

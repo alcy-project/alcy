@@ -494,6 +494,22 @@ VerificationResult verify_storage(const Storage& storage) {
               return err(VerificationErrorKind::UndefinedRegister,
                          operand.as_register().idx);
             }
+            {
+              // A register's row and the operand that names it are two
+              // places a value's type is written. They need not name the
+              // same index, since a type index can be resolved in place,
+              // but a reader takes the tag as the width of the word.
+              const TypeIdx row_type =
+                  storage.registers()[operand.as_register()].type;
+              const TypeTag row_tag = storage.types()[row_type.idx].tag;
+              const TypeTag op_tag = storage.types()[operand.type.idx].tag;
+              if (row_tag != op_tag &&
+                  static_cast<u8>(row_tag) < static_cast<u8>(TypeTag::Str) &&
+                  static_cast<u8>(op_tag) < static_cast<u8>(TypeTag::Str)) {
+                return err(VerificationErrorKind::OperandTypeMismatch,
+                           first_operand + offset);
+              }
+            }
             break;
           case Operand::TAG_OF<FunctionIdx>:
             if (operand.as_function().idx >= storage.functions().size()) {

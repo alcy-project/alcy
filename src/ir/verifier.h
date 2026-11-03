@@ -71,6 +71,11 @@ enum class VerificationErrorKind : u8 {
   // A type parameter in a body the specialization pass resolved: no
   // layout answers for it, and no pass replaces it (ADR-0079).
   MisplacedParametricType,
+  // An operand that names a register of another primitive type: the
+  // register's row and the operand naming it are two of the places a
+  // value's type is written, and a reader of the artifact takes one of
+  // them as the width of the word.
+  OperandTypeMismatch,
 };
 
 struct VerificationError {
@@ -125,6 +130,7 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::MisplacedParametricDrop: return "MisplacedParametricDrop";
     case K::MisplacedParametricCall: return "MisplacedParametricCall";
     case K::MisplacedParametricType: return "MisplacedParametricType";
+    case K::OperandTypeMismatch: return "OperandTypeMismatch";
   }
 }
 
