@@ -10,12 +10,13 @@
 // `data-theme` before first paint; the settings menu's toggle drives it
 // afterwards.
 //
-// The stamper in `tools/site.py` points the catalog import at the one
-// module for this page's tree, so a reader downloads one language's
-// strings rather than the table of all of them; `i18n.ts` is the source
-// both modules are cut from.
+// The catalog arrives under the name the page's import map gives it, and
+// that map names the one module for this page's tree, so a reader
+// downloads one language's strings rather than the table of all of them.
+// The generator writes the map into every page it emits; `i18n.ts` is
+// the source each tree's module is cut from.
 
-import * as catalog from "./i18n.js";
+import * as catalog from "alcy:i18n";
 import type { Language, MessageKey, MessageParams } from "./i18n.js";
 
 const THEME_KEY = "alcy-site-theme";

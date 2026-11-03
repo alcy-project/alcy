@@ -3,6 +3,9 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
+    "paths": {
+      "alcy:i18n": ["./shared/i18n.ts"]
+    },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "noUncheckedIndexedAccess": true,

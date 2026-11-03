@@ -38,6 +38,7 @@ import http.server
 import io
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -354,9 +355,9 @@ def copy_shared(dist_dir: Path) -> None:
 
 
 # The languages the generator emits a page tree for. A tree's script
-# loads one language's strings, not the table of all of them: each tree
-# gets its own copy of `shared/i18n.js` with the other catalog removed.
-# The module keeps every exported name, so nothing else changes.
+# loads one language's strings, not the table of all of them: the build
+# writes one module per language with the other catalog removed, and each
+# page names the module for its tree in its import map.
 SITE_LANGUAGES = ("en", "ja")
 DEFAULT_LANGUAGE = "en"
 
@@ -397,40 +398,83 @@ def write_catalogs(dist_dir: Path) -> None:
     log(f"catalogs: {', '.join(SITE_LANGUAGES)}")
 
 
-# The catalog import the shared modules carry. The build rewrites it in
-# the tree's copy, which is the thing the compiler cannot know: one
-# source serves every tree, and only the stamper knows which tree a page
-# belongs to. A playground page reaches the shell through its own entry,
-# so both entries are rewritten.
-CATALOG_IMPORT = 'from "./i18n.js"'
-SHARED_CATALOG_IMPORT = 'from "../shared/i18n.js"'
+# The catalog import the shared modules carry. One set of shared modules
+# serves every tree, so the import names the catalog instead of a file and
+# each page's import map says which file that name is. A page that carries
+# no map runs its scripts with no catalog at all, and its toggle dies on
+# the first label it tries to read.
+SHARED_CATALOG_IMPORT = re.compile(
+    r'^import \* as catalog from "([^"]+)";$', re.MULTILINE
+)
+IMPORT_MAP = re.compile(r'<script type="importmap">(.+?)</script>', re.DOTALL)
+# An import map is only consulted for loads that happen after it, so it
+# has to come before the first module the page pulls.
+MODULE_LOAD = re.compile('type="module"|rel="modulepreload"')
 
 
-def catalog_users(route: str) -> list[Path]:
-    """The modules that import the catalog on behalf of `route`'s tree."""
-    users = [Path("shared") / "site.js"]
-    if route.startswith(f"{PAGE_SUBDIR}/") or route.rstrip("/") == PAGE_SUBDIR:
-        users.append(Path(PAGE_SUBDIR) / "app.js")
-    return users
-
-
-def stamp_catalog(dist_dir: Path, route: str, language: str) -> None:
-    """Points the tree's catalog imports at that language's module."""
-    for relative in catalog_users(route):
-        module = dist_dir / relative
-        source = module.read_text(encoding="utf-8")
-        needle = (
-            CATALOG_IMPORT if relative.parts[0] == "shared" else SHARED_CATALOG_IMPORT
+def catalog_specifier(dist_dir: Path) -> str:
+    """The name the shared modules import their catalog by."""
+    source = (dist_dir / "shared" / "site.js").read_text(encoding="utf-8")
+    found = SHARED_CATALOG_IMPORT.findall(source)
+    if len(found) != 1:
+        raise RuntimeError(
+            "shared/site.js does not import exactly one catalog as catalog; "
+            "the pages have no name to answer for"
         )
-        count = source.count(needle)
-        if count == 0 or f"i18n.{language}.js" in source:
-            continue
-        if count != 1:
-            raise RuntimeError(f"{relative} does not import the catalog exactly once")
-        module.write_text(
-            source.replace(needle, needle.replace("i18n.js", f"i18n.{language}.js")),
-            encoding="utf-8",
+    specifier = found[0]
+    if specifier.startswith((".", "/")):
+        raise RuntimeError(
+            f"shared/site.js imports the catalog by {specifier}, a path that "
+            "cannot point at a tree; the import must be a bare specifier"
         )
+    return specifier
+
+
+def page_imports(relative: Path, body: str) -> dict[str, str]:
+    """The pairs the import map a page carries states."""
+    try:
+        imports = json.loads(body)["imports"]
+    except ValueError:
+        raise RuntimeError(
+            f"{relative} has an import map that does not parse"
+        ) from None
+    except KeyError:
+        raise RuntimeError(f"{relative} has an import map with no imports") from None
+    return imports
+
+
+def expected_catalog(relative: Path) -> str:
+    """The catalog module a page names, written from the page."""
+    first = relative.parts[0] if len(relative.parts) > 1 else DEFAULT_LANGUAGE
+    language = first if first in SITE_LANGUAGES else DEFAULT_LANGUAGE
+    return posixpath.relpath(
+        f"shared/i18n.{language}.js", start=relative.parent.as_posix()
+    )
+
+
+def check_page_catalogs(dist_dir: Path) -> None:
+    """Fails unless every page names the catalog of its own tree."""
+    specifier = catalog_specifier(dist_dir)
+    pages = sorted(dist_dir.rglob("*.html"))
+    for page in pages:
+        relative = page.relative_to(dist_dir)
+        text = page.read_text(encoding="utf-8")
+        maps = list(IMPORT_MAP.finditer(text))
+        if len(maps) != 1:
+            raise RuntimeError(f"{relative} carries {len(maps)} import maps, not one")
+        load = MODULE_LOAD.search(text)
+        if load is not None and load.start() < maps[0].start():
+            raise RuntimeError(f"{relative} loads a module before its import map")
+        imports = page_imports(relative, maps[0].group(1))
+        expected = expected_catalog(relative)
+        if imports.get(specifier) != expected:
+            raise RuntimeError(
+                f"{relative} names {imports.get(specifier)} as {specifier}, "
+                f"not {expected}, the catalog of its tree"
+            )
+        if not (page.parent / expected).is_file():
+            raise RuntimeError(f"{relative} names a catalog module that is missing")
+    log(f"catalogs: {len(pages)} pages name the module of their tree")
 
 
 # The service worker must sit at the site's root for its scope.
@@ -666,12 +710,6 @@ def build_guide(dist_dir: Path) -> None:
     else:
         log("guide: compiler wasm is missing; alcy fences were not compiled")
     subprocess.run(command, check=True, cwd=project_root_dir)
-    # English is the tree at the site root, so its modules are the ones
-    # the build already copied; every other language lives under its own
-    # prefix, which is how `tools/site.py` names the trees it stamps.
-    for language in SITE_LANGUAGES:
-        route = "" if language == DEFAULT_LANGUAGE else f"{language}/"
-        stamp_catalog(dist_dir, route, language)
 
 
 def command_build(args: argparse.Namespace) -> int:
@@ -709,6 +747,7 @@ def command_build(args: argparse.Namespace) -> int:
     )
     stamp_service_worker(dist_dir, write_asset_version(dist_dir))
     build_guide(dist_dir)
+    check_page_catalogs(dist_dir)
 
     errors: list[str] = []
     for budget in PAGE_BUDGETS + ASSET_BUDGETS:

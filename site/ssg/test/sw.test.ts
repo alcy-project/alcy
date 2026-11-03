@@ -7,13 +7,14 @@
 // name therefore works online and fails offline, silently. This test
 // follows the guide's imports far enough to notice.
 
-import { match } from "node:assert/strict";
+import { match, ok } from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { Block } from "../src/markdown.js";
+import { CATALOG_SPECIFIER } from "../src/render.js";
 import { renderPage } from "./page.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +45,10 @@ function shippedName(name: string): string {
   return name === "i18n.js" ? "i18n.en.js" : name;
 }
 
+// The catalog modules a tree can load. The import names the catalog rather
+// than a path, so the page's import map decides which one a tree fetches.
+const CATALOG_MODULES = ["i18n.en.js", "i18n.ja.js"];
+
 // The shared modules a page's own modules import, followed to a fixed
 // point: whatever the browser must fetch before the page can run. A
 // module imported only inside a function body is deferred by the caller,
@@ -58,6 +63,11 @@ function importedModules(entry: string): string[] {
     }
     seen.add(name);
     const source = readFileSync(join(shared, name.replace(/\.js$/, ".ts")), "utf8");
+    if (source.includes(`"${CATALOG_SPECIFIER}"`)) {
+      for (const catalog of CATALOG_MODULES) {
+        seen.add(catalog);
+      }
+    }
     for (const found of source.matchAll(/^import[^;]*from "\.\/([a-z0-9-]+)\.js"/gm)) {
       queue.push(`${found[1] as string}.js`);
     }
@@ -75,6 +85,13 @@ test("every module a guide page runs is one the worker caches", () => {
     for (const name of importedModules(entry)) {
       match(names, new RegExp(`\\b${name.replace(/\./g, "\\.")}\\b`));
     }
+  }
+  // A page reaches its catalog through the page's import map rather than
+  // by path, so the walk has to be told where to look; without that it
+  // would stop at the shared modules and check nothing about the strings.
+  const shell = importedModules("shell.js");
+  for (const catalog of CATALOG_MODULES) {
+    ok(shell.includes(catalog), `the walk reaches ${catalog}`);
   }
 });
 

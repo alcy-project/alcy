@@ -205,6 +205,9 @@ export type Language = "en" | "ja";
 
 export const LANGUAGES: Language[] = ["en", "ja"];
 
+// The tree the site serves at its root.
+export const DEFAULT_LANGUAGE: Language = "en";
+
 // The name of a language in that language, which is what a switcher
 // should show.
 export const LANGUAGE_NAMES: Record<Language, string> = {
@@ -216,12 +219,16 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
 // a key it does not carry falls back to the English text.
 export type Catalog = Partial<Record<MessageKey, string>>;
 
-const CATALOGS: Record<Language, Catalog> = { en, ja };
+// The build cuts every catalog but one tree's out of a module, so the
+// table names that language and the others are simply absent.
+const CATALOGS: Partial<Record<Language, Catalog>> = { en, ja };
 
 // A page's `<html lang>` names its tree; a value outside the catalog
 // falls back to English so a hand-edited page still renders.
 export function toLanguage(value: string): Language {
-  return LANGUAGES.includes(value as Language) ? (value as Language) : "en";
+  return LANGUAGES.includes(value as Language)
+    ? (value as Language)
+    : DEFAULT_LANGUAGE;
 }
 
 export function translate(
@@ -229,7 +236,9 @@ export function translate(
   key: MessageKey,
   params?: MessageParams,
 ): string {
-  const template = CATALOGS[language][key] ?? en[key];
+  // A key the loaded catalog lacks falls back to English, then to the key.
+  const template =
+    CATALOGS[language]?.[key] ?? CATALOGS[DEFAULT_LANGUAGE]?.[key] ?? key;
   if (params === undefined) {
     return template;
   }
@@ -241,5 +250,5 @@ export function translate(
 // A guard for the template stamper, so a typo in `{{t:...}}` fails the
 // build instead of rendering as "undefined".
 export function isMessageKey(key: string): key is MessageKey {
-  return key in en;
+  return key in (CATALOGS[DEFAULT_LANGUAGE] ?? {});
 }

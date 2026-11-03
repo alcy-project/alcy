@@ -12,7 +12,7 @@ import { escapeHtml } from "../../shared/highlight.js";
 import { translate } from "../../shared/i18n.js";
 import type { MessageKey, MessageParams } from "../../shared/i18n.js";
 import type { GuidePage } from "./guide.js";
-import { otherLanguages, prefixOf } from "./languages.js";
+import { DEFAULT_LANGUAGE, otherLanguages, prefixOf } from "./languages.js";
 import type { Language } from "./languages.js";
 import { renderInline } from "./markdown.js";
 import type { Block } from "./markdown.js";
@@ -351,6 +351,21 @@ export function speculation(): string {
   return speculationRules();
 }
 
+// The name the shared modules import their catalog by. A page's import map
+// resolves it, so the same `site.js` serves every tree.
+export const CATALOG_SPECIFIER = "alcy:i18n";
+
+// The map that names the catalog module of the tree a page was generated
+// into. Rewriting the import in the one shared module would instead leave
+// whichever tree was stamped last answering for all of them; here each page
+// states its own language, and a page is readable without the map because
+// the labels were stamped at build time.
+export function catalogMap(assets: string, language: Language): string {
+  const href = `${assets}shared/i18n.${language}.js`;
+  const imports = { [CATALOG_SPECIFIER]: href };
+  return `<script type="importmap">${JSON.stringify({ imports })}</script>`;
+}
+
 // The guide and the reference are written in English in every tree: a
 // translation is a translated source beside the English one, not a
 // property of the tree (ADR-0058). The tree's language therefore governs
@@ -393,6 +408,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
     <meta name="description" content="${escapeHtml(description)}" />
     <title>${escapeHtml(page.title)} · alcy</title>
     <script>${options.boot}</script>
+    ${catalogMap(assets, page.language)}
     <link rel="stylesheet" href="${assets}shared/site.css" />${guideCss}
     <link rel="modulepreload" href="${assets}shared/shell.js" />
     ${hasCode ? `<link rel="modulepreload" href="${assets}shared/guide-copy.js" />` : ""}
@@ -456,6 +472,7 @@ export function renderTreeIndex(
     <meta name="description" content="${escapeHtml(t(tree.summary))}" />
     <title>${label} · alcy</title>
     <script>${boot}</script>
+    ${catalogMap(assets, language)}
     <link rel="stylesheet" href="${assets}shared/site.css" />
     <link rel="modulepreload" href="${assets}shared/shell.js" />
     <link rel="icon" href="${assets}favicon.svg" />
@@ -518,6 +535,7 @@ export function renderNotFound(
       })();
     </script>
     <script>${boot}</script>
+    ${catalogMap("", DEFAULT_LANGUAGE)}
     <link rel="stylesheet" href="shared/site.css" />
     <link rel="stylesheet" href="shared/guide.css" />
     <link rel="icon" href="favicon.svg" />

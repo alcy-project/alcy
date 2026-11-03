@@ -39,6 +39,7 @@ import type { Language } from "./languages.js";
 import { createLinkChecker } from "./links.js";
 import type { LinkChecker } from "./links.js";
 import {
+  catalogMap,
   GUIDE_TREE,
   REFERENCE_TREE,
   renderGuidePage,
@@ -232,15 +233,17 @@ function templateValues(
   const other = otherLanguages(language)[0];
   const switchHref =
     other === undefined ? "" : posix.relative(dir, prefixOf(other) + treePath);
+  const assets = dist === "" ? "" : `${dist}/`;
   return {
     lang: language,
-    dist: dist === "" ? "" : `${dist}/`,
+    dist: assets,
     home: home === "" ? "./" : `${home}/`,
     switch: switchHref,
     settings: renderSettings({ language, switchHref }),
     pageLinks: pageLinks(language, treePath),
     social: templateSocial(language, treePath, route),
     boot: `<script>${boot}</script>`,
+    catalog: catalogMap(assets, language),
     stamp: stampMark(stamp),
     speculation: speculation(),
   };
