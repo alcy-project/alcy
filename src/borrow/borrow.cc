@@ -402,6 +402,12 @@ class Checker {
   // shape of a type runs once and every load or indirect result that asks
   // reads the answer. 0 is unanswered, 1 says no, 2 says yes.
   std::vector<u8> carry_memo_;
+  // Whether a function can hand one of its loans back to its caller, which is
+  // the only thing a summary records: an entry is read from the loans of the
+  // returned register, and a loan only ever names a register that carries a
+  // reference. The summary sweep skips the functions that cannot, and gives up
+  // entirely on a package where no function returns a reference.
+  std::vector<u8> may_return_loan_;
 
   std::span<const u32> steps_of(u32 reg) const {
     return std::span<const u32>(path_steps_.data() + path_head[reg],
@@ -2584,12 +2590,26 @@ class Checker {
     const usize functions = storage.functions().size();
     fn_reg_lo.assign(functions, 0);
     fn_reg_hi.assign(functions, 0);
+    may_return_loan_.assign(functions, 0);
     for (usize fidx = 0; fidx < functions; ++fidx) {
+      const ir::Function& fn = storage.functions()[fidx];
       u32 lo = static_cast<u32>(registers);
       u32 hi = 0;
-      for (ir::BlockIdx bidx : storage.functions()[fidx].blocks) {
+      u8 returns_loan = carries_reference(fn.meta.return_type) ? 1 : 0;
+      for (ir::BlockIdx bidx : fn.blocks) {
         for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
           const ir::Instruction& instr = instr_at(iidx);
+          if (returns_loan == 0 && instr.op == ir::Opcode::Ret &&
+              !instr.operands.empty()) {
+            const ir::Operand& value =
+                storage.operands()[instr.operands.head()];
+            if (value.is<ir::RegisterIdx>() &&
+                value.as_register().idx < registers &&
+                carries_reference(
+                    storage.registers()[value.as_register().idx].type)) {
+              returns_loan = 1;
+            }
+          }
           if (instr.dst.is_valid()) {
             lo = std::min(lo, instr.dst.idx);
             hi = std::max(hi, instr.dst.idx + 1);
@@ -2607,6 +2627,7 @@ class Checker {
       }
       fn_reg_hi[fidx] = std::min(hi, static_cast<u32>(registers));
       fn_reg_lo[fidx] = std::min(lo, fn_reg_hi[fidx]);
+      may_return_loan_[fidx] = returns_loan;
     }
   }
 
@@ -2740,7 +2761,9 @@ class Checker {
       stable = true;
       for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
            ++fidx) {
-        if (parametric[fidx.idx]) {
+        if (parametric[fidx.idx] || may_return_loan_[fidx.idx] == 0) {
+          // A function that cannot return a loan has no summary to compute,
+          // and nothing else the sweep does outlives the function.
           continue;
         }
         const ir::Function& fn = storage.functions()[fidx];
