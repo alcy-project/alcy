@@ -394,9 +394,11 @@ class Checker {
   std::vector<u32> walk_mark;
   u32 walk_stamp = 0;
   // The range of registers each function names, so that clearing one walks
-  // its registers rather than its instructions.
+  // its registers rather than its instructions. A row is filled when the
+  // checker first visits the function; a set flag says the row is complete.
   std::vector<u32> fn_reg_lo;
   std::vector<u32> fn_reg_hi;
+  std::vector<u8> fn_reg_indexed_;
   // Whether a type carries a reference is a property of the type, and the
   // module's types do not change while it is checked, so the walk over the
   // shape of a type runs once and every load or indirect result that asks
@@ -714,6 +716,7 @@ class Checker {
   void forward(ir::FunctionIdx fidx) {
     const ir::Function& fn = storage.functions()[fidx];
     seed_param_loans(fn);
+    ensure_register_bounds(fidx);
     seed_capture_places(fn_reg_lo[fidx.idx], fn_reg_hi[fidx.idx]);
     // Every alloca names its own storage, whichever block holds it.
     // A block is not visited in execution order, so a use in an early
@@ -2587,19 +2590,20 @@ class Checker {
     seed_all_captures();
   }
 
-  // The lowest and highest register a function names, as a destination or as
-  // a register operand, clamped to the register table. A register past the
-  // table cannot be reached through a place, so the range ends at it.
-  void index_register_bounds(usize registers) {
+  // Whether the package holds a function the checker walks at all: a borrow
+  // or a move can be diagnosed and a returned loan is walked for the escape
+  // check. A package with neither needs no table, because every answer a walk
+  // would reach is the answer for a function with nothing to walk.
+  bool index_function_flags(usize registers) {
     const usize functions = storage.functions().size();
     fn_reg_lo.assign(functions, 0);
     fn_reg_hi.assign(functions, 0);
+    fn_reg_indexed_.assign(functions, 0);
     may_return_loan_.assign(functions, 0);
     needs_body_check_.assign(functions, 0);
+    bool any = false;
     for (usize fidx = 0; fidx < functions; ++fidx) {
       const ir::Function& fn = storage.functions()[fidx];
-      u32 lo = static_cast<u32>(registers);
-      u32 hi = 0;
       u8 returns_loan = carries_reference(fn.meta.return_type) ? 1 : 0;
       u8 needs_check = 0;
       for (ir::BlockIdx bidx : fn.blocks) {
@@ -2609,9 +2613,8 @@ class Checker {
           if (needs_check == 0 &&
               (op == ir::Opcode::Move || op == ir::Opcode::Borrow)) {
             needs_check = 1;
-          }
-          if (returns_loan == 0 && op == ir::Opcode::Ret &&
-              !instr.operands.empty()) {
+          } else if (returns_loan == 0 && op == ir::Opcode::Ret &&
+                     !instr.operands.empty()) {
             const ir::Operand& value =
                 storage.operands()[instr.operands.head()];
             if (value.is<ir::RegisterIdx>() &&
@@ -2621,25 +2624,53 @@ class Checker {
               returns_loan = 1;
             }
           }
-          if (instr.dst.is_valid()) {
-            lo = std::min(lo, instr.dst.idx);
-            hi = std::max(hi, instr.dst.idx + 1);
-          }
-          for (ir::OperandIdx oidx : instr.operands) {
-            const ir::Operand& operand = storage.operands()[oidx];
-            if (!operand.is<ir::RegisterIdx>()) {
-              continue;
-            }
-            const u32 reg = operand.as_register().idx;
-            lo = std::min(lo, reg);
-            hi = std::max(hi, reg + 1);
-          }
         }
       }
-      fn_reg_hi[fidx] = std::min(hi, static_cast<u32>(registers));
-      fn_reg_lo[fidx] = std::min(lo, fn_reg_hi[fidx]);
       may_return_loan_[fidx] = returns_loan;
       needs_body_check_[fidx] = needs_check;
+      any = any || needs_check != 0 || returns_loan != 0;
+    }
+    return any;
+  }
+
+  // Fills the register range of a function, the lowest and highest register it
+  // names as a destination or as a register operand, clamped to the register
+  // table: a register past the table cannot be reached through a place, so the
+  // range ends at it.
+  void index_register_bounds(ir::FunctionIdx fidx) {
+    const usize registers = storage.registers().size();
+    const ir::Function& fn = storage.functions()[fidx];
+    u32 lo = static_cast<u32>(registers);
+    u32 hi = 0;
+    for (ir::BlockIdx bidx : fn.blocks) {
+      for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
+        const ir::Instruction& instr = instr_at(iidx);
+        if (instr.dst.is_valid()) {
+          lo = std::min(lo, instr.dst.idx);
+          hi = std::max(hi, instr.dst.idx + 1);
+        }
+        for (ir::OperandIdx oidx : instr.operands) {
+          const ir::Operand& operand = storage.operands()[oidx];
+          if (!operand.is<ir::RegisterIdx>()) {
+            continue;
+          }
+          const u32 reg = operand.as_register().idx;
+          lo = std::min(lo, reg);
+          hi = std::max(hi, reg + 1);
+        }
+      }
+    }
+    fn_reg_hi[fidx.idx] = std::min(hi, static_cast<u32>(registers));
+    fn_reg_lo[fidx.idx] = std::min(lo, fn_reg_hi[fidx.idx]);
+    fn_reg_indexed_[fidx.idx] = 1;
+  }
+
+  // The range is what clearing a function walks, so it is gathered for the
+  // functions the checker visits and the operands of the ones it skips are
+  // never read.
+  void ensure_register_bounds(ir::FunctionIdx fidx) {
+    if (fn_reg_indexed_[fidx.idx] == 0) {
+      index_register_bounds(fidx);
     }
   }
 
@@ -2736,6 +2767,7 @@ class Checker {
   // program instead charged every function for every register, which made a
   // package quadratic in its own size.
   void reset_function(ir::FunctionIdx fidx) {
+    ensure_register_bounds(fidx);
     const u32 hi = fn_reg_hi[fidx.idx];
     for (u32 reg = fn_reg_lo[fidx.idx]; reg < hi; ++reg) {
       home[reg] = NO_ROOT;
@@ -2754,20 +2786,10 @@ class Checker {
   }
 
   void run() {
-    // The scan that ranges each function's registers also answers whether the
-    // function has a borrow or a move in it, and a package where that is true
-    // of none needs no table: every answer a walk would reach is the answer
-    // for a function with nothing to walk.
     // Sized for the whole program: a type's shape does not change, so its
     // answer holds across functions.
     carry_memo_.assign(storage.types().size(), 0);
-    index_register_bounds(storage.registers().size());
-    bool check_any = false;
-    for (usize fidx = 0; fidx < needs_body_check_.size() && !check_any;
-         ++fidx) {
-      check_any = needs_body_check_[fidx] != 0 || may_return_loan_[fidx] != 0;
-    }
-    if (!check_any) {
+    if (!index_function_flags(storage.registers().size())) {
       return;
     }
     size_scratch();
