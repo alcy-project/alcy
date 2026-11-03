@@ -343,10 +343,7 @@ bool Checker::bind_pattern(u32 module,
             (void)index;
           }
         }
-        scopes.back().erase(
-            scopes.back().begin() +
-                static_cast<std::vector<Local>::difference_type>(mark),
-            scopes.back().end());
+        scopes.back().truncate(mark);
       }
       return refutable;
     }

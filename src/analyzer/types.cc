@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -2165,23 +2166,41 @@ void Checker::process_module(u32 module) {
   }
 }
 
-// The scope width above which a name is settled on its key: below it a
-// walk reads so few names that a key of the name sought costs more than
-// the names it saves.
-constexpr usize K_SCOPE_KEY_LIMIT = 8;
+void Checker::LocalScope::index_last() {
+  const usize index = entries_.size() - 1;
+  if (!index_) {
+    index_ = std::make_unique<KeyIndex>();
+    for (usize i = 0; i <= index; ++i) {
+      index_->by_key[entries_[i].name_key].push_back(static_cast<u32>(i));
+    }
+    return;
+  }
+  index_->by_key[entries_[index].name_key].push_back(static_cast<u32>(index));
+}
 
-const Checker::Local* Checker::scan_scope(const std::vector<Local>& scope,
-                                          std::string_view name) const {
-  if (scope.size() > K_SCOPE_KEY_LIMIT) {
-    const u64 key = base::hash64(name);
-    for (const Local& local : scope) {
-      if (local.name_key == key && local.name == name) {
-        return &local;
+void Checker::LocalScope::truncate(usize size) {
+  while (entries_.size() > size) {
+    if (index_) {
+      const auto found = index_->by_key.find(entries_.back().name_key);
+      if (found != index_->by_key.end()) {
+        found->second.pop_back();
+        if (found->second.empty()) {
+          index_->by_key.erase(found);
+        }
       }
     }
+    entries_.pop_back();
+  }
+}
+
+const Checker::Local* Checker::LocalScope::find_keyed(
+    std::string_view name) const {
+  const auto found = index_->by_key.find(base::hash64(name));
+  if (found == index_->by_key.end()) {
     return nullptr;
   }
-  for (const Local& local : scope) {
+  for (const u32 index : found->second) {
+    const Local& local = entries_[index];
     if (local.name == name) {
       return &local;
     }
@@ -2193,14 +2212,12 @@ const Checker::Local* Checker::lookup_local(std::string_view name) const {
   if (scopes.empty()) {
     return nullptr;
   }
-  if (const Local* found = scan_scope(scopes.back(), name)) {
+  if (const Local* found = scopes.back().find(name)) {
     return found;
   }
   for (usize i = scopes.size() - 1; i-- > 0;) {
-    for (const Local& local : scopes[i]) {
-      if (local.name == name) {
-        return &local;
-      }
+    if (const Local* found = scopes[i].find(name)) {
+      return found;
     }
   }
   return nullptr;
@@ -2211,14 +2228,12 @@ usize Checker::scope_of(std::string_view name) const {
   if (depth == 0) {
     return depth;
   }
-  if (scan_scope(scopes.back(), name) != nullptr) {
+  if (scopes.back().find(name) != nullptr) {
     return depth - 1;
   }
   for (usize i = depth - 1; i-- > 0;) {
-    for (const Local& local : scopes[i]) {
-      if (local.name == name) {
-        return i;
-      }
+    if (scopes[i].find(name) != nullptr) {
+      return i;
     }
   }
   return depth;

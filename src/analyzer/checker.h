@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <deque>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -424,12 +426,71 @@ class Checker {
   };
   // The capture index that names no capture binding.
   static constexpr u32 NO_CAPTURE = 0xFFFFFFFFu;
+  // The bindings of one scope. Each name key settles on the entries that
+  // spell it, so a lookup among a thousand bindings reads the few that can
+  // match rather than all of them.
+  class LocalScope {
+   public:
+    // The scope width above which a name is settled on its key: below it
+    // a walk reads so few names that a key of the name sought costs more
+    // than the names it saves.
+    static constexpr usize K_KEY_LIMIT = 8;
+
+    void push_back(const Local& local) {
+      entries_.push_back(local);
+      widen();
+    }
+
+    Local& emplace_back(std::string_view name, ir::TypeIdx type, bool is_mut) {
+      entries_.emplace_back(name, type, is_mut);
+      widen();
+      return entries_.back();
+    }
+
+    // Drops the bindings from `size` on.
+    void truncate(usize size);
+
+    usize size() const { return entries_.size(); }
+
+    const Local& operator[](usize index) const { return entries_[index]; }
+    Local& operator[](usize index) { return entries_[index]; }
+
+    // The binding of `name` this scope declares first, or nullptr.
+    const Local* find(std::string_view name) const {
+      if (!index_) {
+        for (const Local& local : entries_) {
+          if (local.name == name) {
+            return &local;
+          }
+        }
+        return nullptr;
+      }
+      return find_keyed(name);
+    }
+
+   private:
+    void widen() {
+      if (index_ || entries_.size() > K_KEY_LIMIT) {
+        index_last();
+      }
+    }
+    void index_last();
+    const Local* find_keyed(std::string_view name) const;
+
+    std::vector<Local> entries_;
+    // The entry indices of each name key, ascending. Built once the scope
+    // holds more names than a key of the name sought costs.
+    struct KeyIndex {
+      std::unordered_map<u64, std::vector<u32>> by_key;
+    };
+    std::unique_ptr<KeyIndex> index_;
+  };
   bool in_fn = false;
   // Nonzero while binding a pattern read through a `&mut` scrutinee:
   // the bindings name exclusive references to what it points at.
   bool bind_mut_ref_ = false;
 
-  std::vector<std::vector<Local>> scopes;
+  std::vector<LocalScope> scopes;
   // Nonzero inside an `unsafe { ... }` block: the operations the opt-in
   // covers may appear there (ADR-0050). A closure literal written
   // inside the block inherits it, because the rule is lexical.
@@ -988,10 +1049,6 @@ class Checker {
                     ir::TypeIdx actual,
                     diag::Span span,
                     std::string_view what);
-  // A walk of one scope for `name`. Names are settled on their key
-  // when the scope is long enough that a key pays for itself.
-  const Local* scan_scope(const std::vector<Local>& scope,
-                          std::string_view name) const;
   const Local* lookup_local(std::string_view name) const;
   // The scope level binding `name`, or one past the last scope when
   // none does. Locals shadow outward, so this is the level a use
