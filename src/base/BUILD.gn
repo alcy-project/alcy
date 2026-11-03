@@ -3,6 +3,7 @@
 
 source_set("base") {
   sources = [
+    "allocator.cc",
     "flat_hash_map.h",
     "for_each.h",
     "hash.h",
