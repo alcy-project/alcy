@@ -1110,6 +1110,12 @@ void LlvmIrEmitter::setup_immutables() {
 
     const ir::TypeTag tag = storage_->types()[immutable.type.idx].tag;
 
+    if (tag == ir::TypeTag::Param) {
+      // A parameter widens where the substitution names the type, so a
+      // parametric body is the only holder of one, and no body the
+      // emitter walks reaches it (ADR-0079).
+      continue;
+    }
     if (ir::is_integer_type(tag)) {
       // TODO: Add i128, u128, i256, u256, and arbitrary bit support with
       // llvm::APInt

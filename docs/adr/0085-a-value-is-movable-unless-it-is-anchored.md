@@ -89,6 +89,14 @@ is used through borrows, and ends in place.**
   processes sharing mapped memory — belongs to that record, not this
   one.
 
+Amended at the specialization pass's landing: a body checked once
+against its parameters emits a move for every value before the
+substitution says whether its type is `Copy`, so the borrow pass asks
+the question on the resolved body, and the lowered package carries the
+destructor table beside the origin links and the never-moved marks to
+answer it (ADR-0079). A move of a `Copy` type is a copy: the source
+stays owned, and the destructor table is what tells the two apart.
+
 ## Consequences
 
 - There is no `Pin`, no `Unpin` bound, no projection boilerplate, and

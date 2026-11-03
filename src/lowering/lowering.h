@@ -101,11 +101,19 @@ struct LoweredPackage {
   // row; the rows borrow them. Growing the container moves the runs,
   // which keeps each run's own buffer where the rows point.
   std::vector<std::vector<ir::SummaryField>> summary_fields;
-  // Where each type copy came from, and which types are never moved
-  // (ADR-0085). The borrow pass reads both through them.
+  // Where each type copy came from, which types carry a destructor,
+  // and which are never moved (ADR-0085). The borrow pass reads them:
+  // a move of a `Copy` type is a copy, which only the destructor table
+  // can tell.
   std::unordered_map<u32, u32> type_origins;
   std::vector<u8> not_movable;
+  std::vector<u8> needs_drop;
 };
+
+// Whether a type names an IR type parameter anywhere in its parts: a
+// place, a signature, or a value that does waits for the
+// specialization pass (ADR-0079).
+bool type_names_param(const ir::StorageState& state, ir::TypeIdx type);
 
 base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,

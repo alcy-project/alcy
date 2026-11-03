@@ -1082,6 +1082,48 @@ TEST_CASE("Verify the parametric function list") {
                 VerificationErrorKind::ParametricFunctionOutOfRange);
 }
 
+TEST_CASE("Verify a parametric end outside a parametric body") {
+  // Only the specialization pass rewrites a ParametricDrop, and it
+  // walks the listed bodies: one in a body it already resolved would
+  // reach a backend as an opcode it does not know (ADR-0079).
+  const auto build = [](bool parametric) {
+    StorageBuilder builder;
+    InstrSeq instrs;
+    const RegisterIdx value(0);
+    const OperandIdx place = builder.operand(
+        Operand::from_register(value, primitive_idx(TypeTag::I32)));
+    const InstructionIdx drop = builder.instr({
+        .op = Opcode::ParametricDrop,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = primitive_idx(TypeTag::I32),
+        .operands = {place, 1},
+    });
+    instrs.push(drop);
+    const InstructionIdx ret = builder.instr({
+        .op = Opcode::Ret,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = TypeIdx::invalid(),
+        .operands = {},
+    });
+    instrs.push(ret);
+    const BlockParamIdx param = builder.block_param(
+        {.type = primitive_idx(TypeTag::I32), .reg = value});
+    builder.reg({.type = primitive_idx(TypeTag::I32),
+                 .def_idx = InstructionIdx::invalid()});
+    const BlockIdx block =
+        builder.block({.instrs = instrs.finish(), .block_params = {param, 1}});
+    builder.function({.meta = void_meta(), .blocks = {block, 1}});
+    if (parametric) {
+      builder.add_parametric_function(FunctionIdx(0));
+    }
+    return std::move(builder).build();
+  };
+  check_invalid(build(false), VerificationErrorKind::MisplacedParametricDrop);
+  CHECK(build(true).is_ok());
+}
+
 TEST_CASE("Verify external function metadata") {
   // `build_external` produces an otherwise valid package whose one
   // external carries the metadata under test; consumers dereference

@@ -89,7 +89,25 @@ class StorageBuilder {
   FunctionIdx function(Function function) {
     return state_.functions.emplace_back(function);
   }
+  // Backpatches a function's block range: a caller that must see its own
+  // index while its body is still being built reserves the row first
+  // (the specialization pass does).
+  // A function's name is known once the gather interned it: the
+  // reservation creates the row, and the handle lands here.
+  void set_function_name(FunctionIdx idx, str::StringPoolId name) {
+    state_.functions[idx].meta.name = name;
+  }
+  void set_function_blocks(FunctionIdx idx, BlockIdxRange blocks) {
+    DCHECK(idx.idx < state_.functions.size());
+    state_.functions[idx].blocks = blocks;
+  }
   BlockIdx block(Block block) { return state_.blocks.emplace_back(block); }
+  // Backpatches an instruction's operand range, for a rewrite that
+  // re-appends the operands: a range must stay contiguous.
+  void set_instruction_operands(InstructionIdx idx, OperandIdxRange operands) {
+    DCHECK(idx.idx < state_.instrs.size());
+    state_.instrs[idx].operands = operands;
+  }
 
   // Backpatches a block's instruction range. Branch targets must exist before
   // the branching instruction can reference them, while LLVM requires the
@@ -160,6 +178,16 @@ class StorageBuilder {
   // Marks a function as emitted once in its parametric form.
   void add_parametric_function(FunctionIdx function) {
     state_.parametric_functions.push_back(function);
+  }
+  // Marks a specialization of a staged item, which a reported count
+  // excludes (ADR-0079).
+  void add_prelude_specialization(FunctionIdx function) {
+    state_.prelude_specializations.push_back(function);
+  }
+  // Marks a body the specialization pass synthesized, which a reported
+  // count excludes too (ADR-0079).
+  void add_synthetic_function(FunctionIdx function) {
+    state_.synthetic_functions.push_back(function);
   }
   OperandIdx operand(Operand&& operand) {
     return state_.operands.emplace_back(std::move(operand));

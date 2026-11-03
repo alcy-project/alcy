@@ -154,6 +154,7 @@ std::optional<lowering::LoweredPackage> cache_load(
                                   // compiler that checked it, so the
                                   // borrow pass needs no tables from it.
                                   {},
+                                  {},
                                   {}};
 }
 

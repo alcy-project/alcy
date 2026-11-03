@@ -154,8 +154,17 @@ class Serializer {
           {Section::ParametricCallees, parametric_callees_section()});
     }
     if (!state_.parametric_functions.empty()) {
+      sections.push_back({Section::ParametricFunctions,
+                          function_list_section(state_.parametric_functions)});
+    }
+    if (!state_.prelude_specializations.empty()) {
       sections.push_back(
-          {Section::ParametricFunctions, parametric_functions_section()});
+          {Section::PreludeSpecializations,
+           function_list_section(state_.prelude_specializations)});
+    }
+    if (!state_.synthetic_functions.empty()) {
+      sections.push_back({Section::SyntheticFunctions,
+                          function_list_section(state_.synthetic_functions)});
     }
 
     // The header and the table come first, so an offset depends on the
@@ -317,6 +326,10 @@ class Serializer {
       case TypeTag::U64: return immutable.data.u64_value;
       case TypeTag::F32: return std::bit_cast<u32>(immutable.data.f32_value);
       case TypeTag::F64: return std::bit_cast<u64>(immutable.data.f64_value);
+      // A parameter's literal keeps canonical 64 bits - an integer's
+      // value or a float's IEEE pattern - until the substitution names
+      // the type (ADR-0079).
+      case TypeTag::Param: return immutable.data.u64_value;
       default: return immutable.data.ptr;
     }
   }
@@ -503,7 +516,9 @@ class Serializer {
     for (const Instruction& instr : state_.instrs) {
       out.put_u8(static_cast<u8>(instr.op));
       const u8 flags = static_cast<u8>(static_cast<u8>(instr.flags.rmw_op)) |
-                       static_cast<u8>(instr.flags.inbounds ? 1u : 0u) << 3;
+                       static_cast<u8>(instr.flags.inbounds ? 1u : 0u) << 3 |
+                       static_cast<u8>(instr.flags.maybe_copy ? 1u : 0u) << 4 |
+                       static_cast<u8>(instr.flags.end_moved ? 1u : 0u) << 5;
       out.put_u8(flags);
       out.zeros(2);
       out.put_u32(instr.dst.is_valid() ? instr.dst.idx : NONE);
@@ -597,10 +612,12 @@ class Serializer {
     return out;
   }
 
-  ByteWriter parametric_functions_section() const {
+  // The list sections share one spelling: a count, then an index each.
+  static ByteWriter function_list_section(
+      std::span<const FunctionIdx> functions) {
     ByteWriter out;
-    out.put_u32(static_cast<u32>(state_.parametric_functions.size()));
-    for (const FunctionIdx function : state_.parametric_functions) {
+    out.put_u32(static_cast<u32>(functions.size()));
+    for (const FunctionIdx function : functions) {
       out.put_u32(function.idx);
     }
     return out;

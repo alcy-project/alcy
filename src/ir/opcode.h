@@ -118,9 +118,10 @@ enum class Opcode : u8 {
   // variant, field]. A niche-carrying enum's payload is the slot.
   EnumFieldAddr,
   // Ends a place whose type the substitution still decides: operands =
-  // [place]. A parametric body cannot know whether the place runs a
-  // destructor, so the end waits for the specialization, which rewrites
-  // it to the concrete glue call or drops it. No backend meets one
+  // [place], and `measure` carries the value's type, because the place
+  // may be an address. A parametric body cannot know whether the place
+  // runs a destructor, so the end waits for the specialization, which
+  // rewrites it to the concrete end or drops it. No backend meets one
   // (ADR-0079).
   ParametricDrop,
 };

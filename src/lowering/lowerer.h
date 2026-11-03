@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -64,6 +65,10 @@ struct FnKeyHash {
     return std::hash<std::string_view>{}(key);
   }
 };
+
+// The name a synthesized drop body binds its parameter to: the address
+// table keeps the view, so it must outlive the pass.
+inline constexpr std::string_view DROP_VALUE_NAME = "value";
 
 class Lowerer {
  public:
@@ -261,10 +266,12 @@ class Lowerer {
                        ir::InstructionFlags flags = {});
   void emit_void(ir::Opcode op,
                  std::span<const ir::OperandIdx> ops,
-                 ir::InstructionFlags flags = {});
+                 ir::InstructionFlags flags = {},
+                 ir::TypeIdx measure = ir::TypeIdx::invalid());
   void emit_void(ir::Opcode op,
                  std::initializer_list<ir::OperandIdx> ops,
-                 ir::InstructionFlags flags = {});
+                 ir::InstructionFlags flags = {},
+                 ir::TypeIdx measure = ir::TypeIdx::invalid());
   // Emits a type query, which measures a type instead of consuming
   // operands: the measured type rides on the instruction.
   ir::RegisterIdx emit_type_query(ir::Opcode op, ir::TypeIdx measure);
@@ -326,6 +333,14 @@ class Lowerer {
     ir::TypeIdx param;
     usize sources_from;
   };
+  // Lowers one argument a call may keep, in the callee's parameter
+  // type: the places it lends to the callee and the loans the value
+  // carries are recorded for the kept-value check, which asks that the
+  // value outlive them (ADR-0135).
+  Val lower_kept_argument(ast::ExprIdx expr,
+                          ir::TypeIdx param,
+                          std::vector<ast::ExprIdx>& borrowed_places,
+                          std::vector<KeptValue>& kept);
   // Applies the extent rule to the values a call may keep: the callee
   // owns storage and can leave one there, so the value's loans have to
   // outlive the places `borrowed_places` names, which are the places
@@ -367,11 +382,27 @@ class Lowerer {
       ast::ExprIdx expr) const;
   std::vector<u32> comp_positions(ast::ItemIdx item) const;
   static void comp_key_into(std::string& key, const CompValue& value);
+  // The identity of one specialization: the declaration, the type
+  // arguments it clones under. It is written into `key` so a caller can
+  // hand in storage it reuses, the way `fn_key` is.
+  void specialization_key(ast::ItemIdx item,
+                          const std::vector<ir::TypeIdx>& args,
+                          std::string& key);
   // The identity of one specialization: the declaration, the
   // instantiation, the signature, and the comp argument values. Used
   // where a function is reserved and where the differential pass looks
   // one up. It is written into `key` so that a caller can hand in
   // storage it reuses: every call site builds one of these.
+  // Creates the row a reservation names, so every function's index is
+  // decided when it is reserved: a clone or a synthesized body created
+  // in between can no longer take the index a later publish expects.
+  void reserve_function_row(const FnEntry& entry,
+                            std::span<const ir::TypeIdx> params);
+  // Reserves a function whose meta is already final and whose body the
+  // caller emits itself (`clone`, `display$`, `drop$`): the entry keeps
+  // the two tables in step, and the row takes the index.
+  ir::FunctionIdx reserve_body_function(ir::FunctionMeta meta);
+  static void append_index(std::string& out, u32 value, char separator);
   static void fn_key(std::string& key,
                      ast::ItemIdx item,
                      const std::vector<ir::TypeIdx>& params,
@@ -427,12 +458,107 @@ class Lowerer {
                            ir::TypeIdx ret,
                            ir::ParametricCalleeIdx callee,
                            diag::Span span);
+
+  // --- Specialization (ADR-0079) ---
+  //
+  // The pass replaces every parametric callee a body carries with the
+  // function its arguments decide, cloning the definition-site body
+  // once per (item, arguments) pair. It runs after every body lowered
+  // and before the storage is built, so the borrow pass and the
+  // backends meet monomorphic code only.
+  //
+  // One clone in flight: the source register and block of every part,
+  // the address names the clone's allocas keep, and the substitution
+  // its types take.
+  struct CloneState {
+    const std::vector<ir::TypeIdx>* args = nullptr;
+    std::unordered_map<u32, ir::RegisterIdx> registers;
+    std::unordered_map<u32, ir::BlockIdx> blocks;
+    std::unordered_map<u32, LoweredPackage::AddrInfo> addr_names;
+  };
+  // One instruction of a clone, staged until its operands can be
+  // appended as a single contiguous run.
+  struct StagedInstruction {
+    ir::Opcode op = ir::Opcode::Noop;
+    ir::InstructionFlags flags;
+    ir::RegisterIdx dst = ir::RegisterIdx::invalid();
+    ir::TypeIdx measure = ir::TypeIdx::invalid();
+    diag::Span span;
+    std::vector<ir::Operand> operands;
+  };
+  void specialize();
+  // Clones one definition-site body under `args`.
+  void clone_body(ir::FunctionIdx source,
+                  ir::FunctionIdx clone,
+                  const std::vector<ir::TypeIdx>& args);
+  void translate_instruction(ir::InstructionIdx source,
+                             CloneState& state,
+                             std::vector<StagedInstruction>& out);
+  // Resolves an end whose destructor the substitution decided: the
+  // concrete end's markers, load, and glue call, or nothing. `place` is
+  // the translated operand and `dropped` the type it ends.
+  void resolve_parametric_drop(const ir::Operand& place,
+                               ir::TypeIdx dropped,
+                               bool end_moved,
+                               CloneState& state,
+                               diag::Span span,
+                               std::vector<StagedInstruction>& out);
+  ir::RegisterIdx clone_register(ir::RegisterIdx source,
+                                 ir::TypeIdx type,
+                                 CloneState& state);
+  // The function a generic item's body specializes to for `args`,
+  // cloned on first need.
+  ir::FunctionIdx specialize_generic(ast::ItemIdx item,
+                                     const std::vector<ir::TypeIdx>& args,
+                                     diag::Span span);
+  // A type under a specialization's substitution: a `Param` becomes the
+  // argument it names, and a composite rebuilds from its parts.
+  ir::TypeIdx substitute_type(ir::TypeIdx type,
+                              const std::vector<ir::TypeIdx>& args);
+  // The minted instance of a nominal declaration with `args`, or an
+  // invalid type when none exists.
+  ir::TypeIdx nominal_instance(ast::ItemIdx item,
+                               const std::vector<ir::TypeIdx>& args);
+  // Mints the concrete instance of a nominal declaration when no
+  // equivalent was minted before: its shape is the generic one under
+  // the same substitution.
+  ir::TypeIdx mint_nominal(ir::TypeIdx generic_type,
+                           ast::ItemIdx item,
+                           const std::vector<ir::TypeIdx>& args);
+  // Follows storage copies to the type they came from.
+  ir::TypeIdx canonical_type(ir::TypeIdx type) const;
+  // Whether two types are the same declaration under copies: equal
+  // indexes, or equal once copies and composite parts resolve.
+  bool type_equivalent(ir::TypeIdx a, ir::TypeIdx b) const;
+  // The implementation a dispatch record names (ADR-0080).
+  ir::FunctionIdx resolve_dispatch(str::StringPoolId spec,
+                                   str::StringPoolId method,
+                                   ir::TypeIdx receiver,
+                                   diag::Span span);
+  // The function an implementation's method lowers to: a further
+  // specialization when the impl is generic, its instantiation otherwise.
+  ir::FunctionIdx method_function(
+      u32 module,
+      const analyzer::CheckedModule::MethodInfo& info,
+      diag::Span span);
+  // The function one callee record resolves to. `subst` is the
+  // substitution of the body the record sits in, or null for a concrete
+  // body; the record's own arguments are substituted under it.
+  ir::FunctionIdx resolve_callee(ir::ParametricCalleeIdx callee,
+                                 const std::vector<ir::TypeIdx>* subst,
+                                 diag::Span span);
+  // Rewrites a concrete body's call whose callee is a record.
+  void resolve_record_call(ir::InstructionIdx instr);
   // Type arguments of a nominal type, empty for a plain declaration.
   std::vector<ir::TypeIdx> nominal_arguments(ir::TypeIdx type) const;
+  // The type arguments a generic receiver's declaration takes: a
+  // nominal's parameters, or a slice's element (an `impl<T> [T]`).
+  std::vector<ir::TypeIdx> receiver_type_args(ir::TypeIdx type) const;
   // Type arguments a generic free function or intrinsic bound.
   std::vector<ir::TypeIdx> fn_args_for(ast::ItemIdx item, u32 inst) const;
   u32 generic_inst_index(ir::TypeIdx type) const;
-  const analyzer::CheckedModule::StructInfo* struct_info(ir::TypeIdx type);
+  const analyzer::CheckedModule::StructInfo* struct_info(
+      ir::TypeIdx type) const;
   // Follows a field storage copy back to the type it was copied from.
   ir::TypeIdx type_origin(ir::TypeIdx type) const;
   ir::TypeIdx storage_copy(ir::TypeIdx type);
@@ -525,6 +651,22 @@ class Lowerer {
   // value, and the signature comes from its function type.
   Val lower_indirect_call(ast::ExprIdx expr);
   void lower_closure_fn(const FnEntry& entry);
+  // The function a builtin's `Display` dispatch answers with: the
+  // inline expansion, emitted once per type with the spec method's own
+  // signature (ADR-0053, ADR-0079).
+  ir::FunctionIdx display_fn_for(ir::TypeIdx type);
+  void lower_display_fn(ir::FunctionIdx fn,
+                        ir::TypeIdx type,
+                        ir::TypeIdx self_ty,
+                        ir::TypeIdx view_ty);
+  // The function that ends a value of the type: the drop pass's walk,
+  // emitted once per type, which a specialization's end calls (the
+  // clone's blocks are fixed before its body is translated).
+  ir::FunctionIdx drop_fn_for(ir::TypeIdx type);
+  void lower_drop_fn(ir::FunctionIdx fn, ir::TypeIdx type);
+  // Publishes the body a synthesized function just emitted: the
+  // reserved blocks in order, the entry one carrying the parameters.
+  void publish_body(ir::FunctionIdx fn);
   ir::ExternalFunctionIdx declare_external(
       std::string_view name,
       ir::TypeIdx ret,
@@ -859,6 +1001,16 @@ class Lowerer {
     // to the standard-output hook (ADR-0055).
     Val lower_print(ast::ExprIdx expr,
                     const analyzer::CheckedModule::FnSig& sig);
+    // The inline expansion for one value of a formattable type, as a
+    // function's whole body: the receiver's reference and the
+    // destination view are the function's parameters, and the total the
+    // expansion would take is the answer (ADR-0053, ADR-0079).
+    bool emit_scalar_display(diag::Span span,
+                             ir::TypeIdx type,
+                             ir::RegisterIdx value_ref,
+                             ir::RegisterIdx view,
+                             ir::TypeIdx view_ty,
+                             ir::RegisterIdx& total);
 
    private:
     // The running state of one expansion: where the pieces write, what
@@ -1009,6 +1161,11 @@ class Lowerer {
   void compact_instrs();
 
   bool runs_destructor(ir::TypeIdx type) const;
+  // Whether ending a value of the type can run code. A type that names
+  // a parameter may once the substitution says what it stands for, so
+  // a parametric body records the end and the specialization decides
+  // (ADR-0079).
+  bool may_end(ir::TypeIdx type) const;
   bool is_destructor(ast::ItemIdx item) const;
   // Which items are a destructor, gathered once from the checked package.
   // Lowering asks this of every function it lowers, and answering by walking
@@ -1033,9 +1190,30 @@ class Lowerer {
   // taken once. A key is written and read before anything else runs, so the
   // view a caller holds is never invalidated under it.
   std::string fn_key_scratch_;
+  // The key of the specialization being looked up, kept across calls so
+  // its capacity is taken once.
+  std::string specialization_key_scratch_;
+  // The items the once-check emitted a parametric body for, so seeding
+  // does not also emit their instantiations.
+  std::unordered_set<u32> parametric_body_items_;
   // The generic items whose once-checked body was emitted, by item: a
   // call the parametric form records resolves through it (ADR-0079).
   std::unordered_map<u32, ir::FunctionIdx> parametric_fn_by_item_;
+  // The reverse, for a record that names the emitted body.
+  std::unordered_map<u32, u32> parametric_item_by_fn_;
+  // Specializations every call site reaches, keyed by (item, args).
+  std::unordered_map<std::string, u32, FnKeyHash, std::equal_to<>>
+      specialization_by_key_;
+  // Whether the pass built its item and instance indexes.
+  bool specialize_indexes_ready_ = false;
+  // Minted nominal instances by declaring item, so a substitution finds
+  // the concrete shape instead of minting a second one.
+  std::unordered_map<u32, std::vector<ir::TypeIdx>> struct_instances_;
+  std::unordered_map<u32, std::vector<ir::TypeIdx>> enum_instances_;
+  // Compiler-owned wrappers (`MaybeUninit`) have no registered
+  // declaration item; their instances are keyed by name instead.
+  std::unordered_map<u32, std::vector<ir::TypeIdx>> named_struct_instances_;
+  std::unordered_map<u32, std::vector<ir::TypeIdx>> named_enum_instances_;
   // Where a function instantiation's arguments are, so a lookup does not have
   // to walk the package's instances: by (item, instantiation) for a body that
   // knows the context it was checked under, by (module, signature slot) for a
@@ -1066,6 +1244,10 @@ class Lowerer {
   };
   std::unordered_map<ClosureKey, std::vector<u32>, ClosureKeyHash>
       closures_by_key_;
+  // The synthesized `Display` bodies, by the type they expand.
+  std::unordered_map<u32, u32> display_fn_by_type_;
+  // The synthesized drop walks, by the type they end.
+  std::unordered_map<u32, u32> drop_fn_by_type_;
   // Every `comp fn` call the AST engine answered (ADR-0054), so the IR
   // engine can be asked the same question once lowering is complete.
   std::vector<analyzer::CompCallRecord> comp_calls_;
@@ -1106,6 +1288,10 @@ class Lowerer {
   void index_origins();
   void index_structs();
   void lower_fn(const FnEntry& entry);
+  // Starts a body: the per-function state every entry resets, and the
+  // reservation counter catching up with the table clones may have
+  // grown between bodies.
+  void begin_body();
 
   // Registers backing the current entry-block parameter list, consumed
   // by lower_fn while binding patterns.

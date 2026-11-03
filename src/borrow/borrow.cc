@@ -1512,6 +1512,15 @@ class Checker {
     }
   }
 
+  // A move of a `Copy` type is a copy: the source stays owned, so the
+  // move neither retires the place nor conflicts with a loan. The
+  // parametric bodies emit moves for every value before the
+  // substitution says whether the type is `Copy` (ADR-0079).
+  bool copy_move(ir::TypeIdx type) const {
+    return ir::is_copy_type(storage.state(), type, lowered.needs_drop,
+                            lowered.not_movable);
+  }
+
   // Moves a block state forward without diagnostics.
   void transfer(ir::BlockIdx bidx,
                 const std::vector<Place>& in,
@@ -1522,7 +1531,9 @@ class Checker {
       const ir::Instruction& instr = instr_at(iidx);
       if (instr.op == ir::Opcode::Move && !instr.operands.empty()) {
         Place place;
-        if (place_of(storage.operands()[instr.operands.head()], place)) {
+        const ir::TypeIdx type = storage.operands()[instr.operands.head()].type;
+        if (place_of(storage.operands()[instr.operands.head()], place) &&
+            !(instr.flags.maybe_copy && copy_move(type))) {
           add_moved(out, place);
         }
       } else if (instr.op == ir::Opcode::Drop && !instr.operands.empty()) {
@@ -1755,6 +1766,12 @@ class Checker {
       case ir::Opcode::Move: {
         Place place;
         if (!operand_place(0, place)) {
+          break;
+        }
+        // A `Copy` value moves by copying: nothing is left unowned and
+        // no loan is invalidated (its parametric body could not tell).
+        if (instr.flags.maybe_copy &&
+            copy_move(storage.operands()[instr.operands.head()].type)) {
           break;
         }
         // A place reached through a reference is borrowed content:

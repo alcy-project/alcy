@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <bit>
 #include <cstdlib>
 #include <optional>
 #include <span>
@@ -198,6 +199,34 @@ ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
   return is_float ? ir::TypeTag::F64 : ir::TypeTag::I32;
 }
 
+// The value an integer literal spells, negative sign included: the
+// source's magnitude wraps the way the release arithmetic does.
+u64 integer_literal_value(const ast::Literal& lit, bool negative) {
+  if (lit.kind == ast::LiteralKind::Bool) {
+    return lit.spelling == "true" ? 1 : 0;
+  }
+  const u64 value = comp::parse_numeric_value(lit.spelling);
+  return negative ? 0 - value : value;
+}
+
+// The value a float literal spells, as the widest float.
+f64 float_literal_value(const ast::Literal& lit, bool negative) {
+  std::string digits;
+  for (char c : lit.spelling) {
+    if (c == '_') {
+      continue;
+    }
+    if ((c >= '0' && c <= '9') || c == '.' || c == 'e' || c == 'E' ||
+        c == '+' || c == '-') {
+      digits.push_back(c);
+    } else {
+      break;
+    }
+  }
+  const f64 value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
+  return negative ? -value : value;
+}
+
 Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
                            const ir::TypeIdx* expected,
                            bool negate) {
@@ -206,6 +235,23 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
   // arrives as its own node, so only a pattern or a folding caller sets
   // this.
   const bool negative = lit.is_negative != negate;
+  // An unsuffixed literal whose slot is a type parameter: the checker
+  // adopted the parameter, so the value rides as canonical 64 bits - the
+  // integer itself, or a float's IEEE pattern - and the specialization
+  // re-encodes it for the type the substitution names (ADR-0079).
+  if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Param &&
+      (lit.kind == ast::LiteralKind::Integer ||
+       lit.kind == ast::LiteralKind::Float) &&
+      !comp::has_type_suffix(lit.spelling)) {
+    const u64 bits =
+        lit.kind == ast::LiteralKind::Float
+            ? std::bit_cast<u64>(float_literal_value(lit, negative))
+            : integer_literal_value(lit, negative);
+    const ir::Immutable imm =
+        lowering::immutable_from_u64(ir::TypeTag::Param, *expected, bits);
+    return Val{to_operand(builder.immutable(imm), *expected), *expected, false,
+               false};
+  }
   const ir::TypeTag tag = literal_tag(lit_idx, expected);
   const ir::TypeIdx type = builder.primitive(tag);
   if (tag == ir::TypeTag::Str) {
@@ -226,22 +272,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     return Val{to_operand(imm, type), type, false, false};
   }
   if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-    std::string digits;
-    for (char c : lit.spelling) {
-      if (c == '_') {
-        continue;
-      }
-      if ((c >= '0' && c <= '9') || c == '.' || c == 'e' || c == 'E' ||
-          c == '+' || c == '-') {
-        digits.push_back(c);
-      } else {
-        break;
-      }
-    }
-    f64 value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
-    if (negative) {
-      value = -value;
-    }
+    const f64 value = float_literal_value(lit, negative);
     ir::Immutable imm{.type = type, .data = {}};
     if (tag == ir::TypeTag::F32) {
       imm.data.f32_value = static_cast<f32>(value);
@@ -251,18 +282,8 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     const ir::ImmutableIdx idx = builder.immutable(imm);
     return Val{to_operand(idx, type), type, false, false};
   }
-  u64 value = 0;
-  if (tag == ir::TypeTag::I1) {
-    value = lit.spelling == "true" ? 1 : 0;
-  } else {
-    value = comp::parse_numeric_value(lit.spelling);
-    // Negation wraps, matching the two's-complement release semantics
-    // the rest of the literal path already uses.
-    if (negative) {
-      value = 0 - value;
-    }
-  }
-  return Val{imm_from_u64(tag, type, value), type, false, false};
+  return Val{imm_from_u64(tag, type, integer_literal_value(lit, negative)),
+             type, false, false};
 }
 
 ir::OperandIdx Lowerer::imm_from_u64(ir::TypeTag tag,
@@ -372,7 +393,7 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
         if (failed) {
           return Val{size_one, error_type(), true, false};
         }
-        if (runs_destructor(type)) {
+        if (may_end(type)) {
           const ir::Operand& operand = builder.state().operands[place.op.idx];
           if (operand.is<ir::RegisterIdx>()) {
             locals.emplace_back(std::string_view(), operand.as_register(),
@@ -630,7 +651,7 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
       // it, so a destructured field nothing binds still runs its
       // destructor. A wildcard parameter keeps the value for the
       // function's own scope exit.
-      if (!binding_param_ && init.address && runs_destructor(init.type)) {
+      if (!binding_param_ && init.address && may_end(init.type)) {
         record_drop_in_place(init.op, init.type, node.span);
       }
       break;
@@ -1139,7 +1160,7 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
-    if (runs_destructor(env_ty)) {
+    if (may_end(env_ty)) {
       locals.emplace_back("$closure", slot, env_ty);
       // The captures are in the slot by now, so the place owns what
       // it holds; without the event the walk reads the slot as never
@@ -1252,6 +1273,22 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
   return Val{to_operand(dst, ret), ret, false, false};
 }
 
+Val Lowerer::lower_kept_argument(ast::ExprIdx expr,
+                                 ir::TypeIdx param,
+                                 std::vector<ast::ExprIdx>& borrowed_places,
+                                 std::vector<KeptValue>& kept) {
+  if (can_write_through(tag_of(param)) && is_rooted_place(expr)) {
+    borrowed_places.push_back(expr);
+  }
+  const usize sources_from = borrow_sources.size();
+  Val arg = lower_moved(expr, &param);
+  if (failed || terminated_cur()) {
+    return arg;
+  }
+  kept.push_back(KeptValue{expr, arg.type, param, sources_from});
+  return arg;
+}
+
 Val Lowerer::lower_call(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
@@ -1331,7 +1368,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return fmt_lowering_.lower_print(expr, sig);
   }
   if (sig.inst == analyzer::PARAM_INST ||
-      signature_mentions_param(sig.params, sig.ret, ir::TypeIdx::invalid())) {
+      signature_mentions_param(sig.params, sig.ret, ir::TypeIdx::invalid()) ||
+      parametric_fn_by_item_.contains(sig.item.idx)) {
     // The callee is a generic item: the call records the arguments the
     // definition-site check resolved, and the specialization
     // instantiates it (ADR-0079).
@@ -1339,13 +1377,22 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       internal(node.span, "call arity");
       return Val{size_one, error_type(), false, false};
     }
+    // The places this call lends to the callee: a value it keeps can
+    // land in any of them, so it has to outlive them (ADR-0135).
+    std::vector<ast::ExprIdx> borrowed_places;
+    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> args;
     for (usize i = 0; i < call.args.size(); ++i) {
-      Val arg = lower_moved(call.args[i], &sig.params[i]);
+      Val arg = lower_kept_argument(call.args[i], sig.params[i],
+                                    borrowed_places, kept);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
       args.push_back(arg_for(arg, sig.params[i]));
+    }
+    if (check_kept_values(kept, borrowed_places)) {
+      failed = true;
+      return stopped_value();
     }
     const ir::ParametricCalleeIdx callee = generic_callee(
         sig.item, fn_instance_args(target->module, target->index), node.span);
@@ -1392,13 +1439,11 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       ++comp_at;
       continue;
     }
-    const usize sources_from = borrow_sources.size();
-    Val arg = lower_moved(call.args[i], &sig.params[i]);
+    Val arg =
+        lower_kept_argument(call.args[i], sig.params[i], borrowed_places, kept);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
-    kept.push_back(
-        KeptValue{call.args[i], arg.type, sig.params[i], sources_from});
     ops.push_back(arg_for(arg, sig.params[i]));
   }
   if (check_kept_values(kept, borrowed_places)) {
@@ -1467,22 +1512,31 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
     return emit_parametric_call(ops, info.params, info.ret, callee, call.span);
   }
   if (info.method_inst == analyzer::PARAM_INST ||
-      signature_mentions_param(info.params, info.ret, info.self_type)) {
+      signature_mentions_param(info.params, info.ret, info.self_type) ||
+      (info.item.is_valid() &&
+       parametric_fn_by_item_.contains(info.item.idx))) {
     // The associated function is a generic item: the call records it
     // with the arguments the receiver's instantiation resolved.
     if (args.size() != info.params.size()) {
       internal(call.span, "call arity");
       return Val{size_one, error_type(), false, false};
     }
+    std::vector<ast::ExprIdx> borrowed_places;
+    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> ops;
     for (usize i = 0; i < args.size(); ++i) {
-      Val arg = lower_moved(args[i], &info.params[i]);
+      Val arg =
+          lower_kept_argument(args[i], info.params[i], borrowed_places, kept);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
       ops.push_back(arg_for(arg, info.params[i]));
     }
-    std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+    if (check_kept_values(kept, borrowed_places)) {
+      failed = true;
+      return stopped_value();
+    }
+    std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
     for (const ir::TypeIdx arg : info.method_args) {
       type_args.push_back(arg);
     }
@@ -1532,12 +1586,11 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
       ++comp_at;
       continue;
     }
-    const usize sources_from = borrow_sources.size();
-    Val arg = lower_moved(args[i], &info.params[i]);
+    Val arg =
+        lower_kept_argument(args[i], info.params[i], borrowed_places, kept);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
-    kept.push_back(KeptValue{args[i], arg.type, info.params[i], sources_from});
     ops.push_back(arg_for(arg, info.params[i]));
   }
   if (check_kept_values(kept, borrowed_places)) {
@@ -3309,20 +3362,39 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
     if (failed) {
       return stopped_value();
     }
+    std::vector<ast::ExprIdx> borrowed_places;
+    if (can_write_through(tag_of(info.params[0])) &&
+        is_rooted_place(receiver_expr)) {
+      borrowed_places.push_back(receiver_expr);
+    }
+    for (usize i = 0; i < method_args.size(); ++i) {
+      if (can_write_through(tag_of(info.params[i + 1])) &&
+          is_rooted_place(method_args[i])) {
+        borrowed_places.push_back(method_args[i]);
+      }
+    }
+    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> ops;
     ops.push_back(arg_for(receiver, info.params[0]));
     for (usize i = 0; i < method_args.size(); ++i) {
-      Val arg = lower_moved(method_args[i], &info.params[i + 1]);
+      Val arg = lower_kept_argument(method_args[i], info.params[i + 1],
+                                    borrowed_places, kept);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
       ops.push_back(arg_for(arg, info.params[i + 1]));
     }
+    if (check_kept_values(kept, borrowed_places)) {
+      failed = true;
+      return stopped_value();
+    }
     return emit_parametric_call(ops, info.params, info.ret, callee,
                                 method.span);
   }
   if (info.method_inst == analyzer::PARAM_INST ||
-      signature_mentions_param(info.params, info.ret, info.self_type)) {
+      signature_mentions_param(info.params, info.ret, info.self_type) ||
+      (info.item.is_valid() &&
+       parametric_fn_by_item_.contains(info.item.idx))) {
     // The method is a generic item: the call records it with the
     // arguments the receiver's instantiation resolved (ADR-0079).
     const usize expected = info.params.empty() ? 0 : info.params.size() - 1;
@@ -3330,7 +3402,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       internal(method.span, "call arity");
       return Val{size_one, error_type(), false, false};
     }
-    std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+    std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
     for (const ir::TypeIdx arg : info.method_args) {
       type_args.push_back(arg);
     }
@@ -3339,14 +3411,31 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
     if (failed) {
       return stopped_value();
     }
+    std::vector<ast::ExprIdx> borrowed_places;
+    if (can_write_through(tag_of(info.params[0])) &&
+        is_rooted_place(receiver_expr)) {
+      borrowed_places.push_back(receiver_expr);
+    }
+    for (usize i = 0; i < method_args.size(); ++i) {
+      if (can_write_through(tag_of(info.params[i + 1])) &&
+          is_rooted_place(method_args[i])) {
+        borrowed_places.push_back(method_args[i]);
+      }
+    }
+    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> ops;
     ops.push_back(arg_for(receiver, info.params[0]));
     for (usize i = 0; i < method_args.size(); ++i) {
-      Val arg = lower_moved(method_args[i], &info.params[i + 1]);
+      Val arg = lower_kept_argument(method_args[i], info.params[i + 1],
+                                    borrowed_places, kept);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
       ops.push_back(arg_for(arg, info.params[i + 1]));
+    }
+    if (check_kept_values(kept, borrowed_places)) {
+      failed = true;
+      return stopped_value();
     }
     return emit_parametric_call(ops, info.params, info.ret, callee,
                                 method.span);
@@ -3400,13 +3489,11 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       ++comp_at;
       continue;
     }
-    const usize sources_from = borrow_sources.size();
-    Val arg = lower_moved(method_args[i], &info.params[i + 1]);
+    Val arg = lower_kept_argument(method_args[i], info.params[i + 1],
+                                  borrowed_places, kept);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
-    kept.push_back(
-        KeptValue{method_args[i], arg.type, info.params[i + 1], sources_from});
     ops.push_back(arg_for(arg, info.params[i + 1]));
   }
   // A type parameter accepts the value into storage the callee owns, so
@@ -3448,7 +3535,9 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
     return Val{size_one, error_type(), as_place, false};
   }
   if (!info.item.is_valid() ||
-      signature_mentions_param(info.params, info.ret, info.self_type)) {
+      signature_mentions_param(info.params, info.ret, info.self_type) ||
+      (info.item.is_valid() &&
+       parametric_fn_by_item_.contains(info.item.idx))) {
     // Indexing a type parameter or a generic item: the parametric form
     // records the call, and the specialization resolves it to the
     // concrete method (ADR-0079, ADR-0080).
@@ -3465,7 +3554,7 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
           ir::ParametricCalleeKind::Dispatch, ir::FunctionIdx::invalid(),
           spec_name, intern_name(info.name), {info.self_type});
     } else {
-      std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+      std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
       for (const ir::TypeIdx type_arg : info.method_args) {
         type_args.push_back(type_arg);
       }
@@ -3526,7 +3615,9 @@ Val Lowerer::emit_spec_call(const analyzer::CheckedModule::CallTarget* target,
   const analyzer::CheckedModule& def = pkg.modules[target->module];
   const analyzer::CheckedModule::MethodInfo& info = def.methods[target->index];
   if (!info.item.is_valid() ||
-      signature_mentions_param(info.params, info.ret, info.self_type)) {
+      signature_mentions_param(info.params, info.ret, info.self_type) ||
+      (info.item.is_valid() &&
+       parametric_fn_by_item_.contains(info.item.idx))) {
     // An operator on a type parameter or a generic item: the call is
     // recorded and the specialization resolves it, with the receiver
     // and the argument carried (ADR-0079, ADR-0080).
@@ -3539,7 +3630,7 @@ Val Lowerer::emit_spec_call(const analyzer::CheckedModule::CallTarget* target,
           ir::ParametricCalleeKind::Dispatch, ir::FunctionIdx::invalid(),
           spec_name, intern_name(info.name), {info.self_type});
     } else {
-      std::vector<ir::TypeIdx> type_args = nominal_arguments(info.self_type);
+      std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
       for (const ir::TypeIdx type_arg : info.method_args) {
         type_args.push_back(type_arg);
       }
@@ -3837,7 +3928,7 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
       const ir::OperandIdx src_op = to_operand(src, element_type);
       if (seen[i]) {
         // The initializer wrote this field, so the base's copy ends here.
-        if (runs_destructor(element_type)) {
+        if (may_end(element_type)) {
           record_drop_in_place(src_op, element_type, node.span);
         }
         continue;
@@ -4623,7 +4714,7 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
             continue;
           }
           if (ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard &&
-              runs_destructor(fields[i])) {
+              may_end(fields[i])) {
             // The arm discards this payload: end it in place rather than
             // loading a copy nothing owns.
             const ir::RegisterIdx addr = enum_field_addr(
@@ -4653,7 +4744,7 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         discard.push_back(!arm_borrowed_ &&
                           ast.patterns[elements[i]].kind ==
                               ast::PatternKind::Wildcard &&
-                          runs_destructor(payloads[i]));
+                          may_end(payloads[i]));
         places.push_back(Val{to_operand(addr, payloads[i]), payloads[i], true,
                              scrut_addr.place});
       }
@@ -5138,7 +5229,7 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
           // arm the pattern did not take ends the value in place rather
           // than moving it and leaving its destructor unrun. Ending it
           // is itself the move the borrow walk sees.
-          if (runs_destructor(addr.type)) {
+          if (may_end(addr.type)) {
             record_drop_in_place(addr.op, addr.type, node.span);
           } else {
             mark_move(addr);
@@ -5545,7 +5636,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       // read leaves behind are ended there and the one it hands on is a
       // move from the aggregate.
       bool temporary = false;
-      if (!rooted && runs_destructor(base.type)) {
+      if (!rooted && may_end(base.type)) {
         if (!base.address) {
           base = address_of(base);
           if (failed) {
@@ -5754,7 +5845,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         return;
       }
       if (ast.patterns[decl.pattern].kind == ast::PatternKind::Wildcard &&
-          runs_destructor(init.type)) {
+          may_end(init.type)) {
         // Discarding ends the value where it stands: the place is
         // consumed first, so a later use is refused and the owner does
         // not end it again, and the pass runs the glue over the slot
@@ -5852,7 +5943,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           place_of_register(target.as_register().idx, local_index, path)) {
         record_event(OwnershipEvent::Kind::Store, local_index, std::move(path),
                      node.span);
-      } else if (runs_destructor(place.type)) {
+      } else if (may_end(place.type)) {
         // An index or a projection is addressed through a computed
         // offset, so the path walk cannot name what the store replaced.
         // The address and the type it carries say enough to end it, and
@@ -5874,7 +5965,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       if (failed || terminated_cur()) {
         return;
       }
-      if (runs_destructor(value.type)) {
+      if (may_end(value.type)) {
         // The checker warns about the unused value; ending it is what
         // discarding means. The place is consumed first so a later use
         // is refused and the owner does not end it again.

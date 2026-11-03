@@ -118,9 +118,10 @@ carries into ADR-0079's second slice.
 
 ## Staged landing
 
-**The node and the once-check landed; the rest follows.** A dependent
-still cannot name a generic item, and the per-instantiation checks
-stay: the specialization pass is what replaces them.
+**The node, the once-check, and the pass landed; the rest follows.** A
+dependent still cannot name a generic item, and the per-instantiation
+checks stay: deleting the AST-level walk is what removes them, and the
+pass consumes the same bodies until then.
 
 1. Landed. A type parameter in the IR: a type node that names a
    parameter of the item it belongs to (`1ed02420`).
@@ -140,8 +141,8 @@ stay: the specialization pass is what replaces them.
    instantiation), and an intrinsic's shape a bare parameter would
    decide. An unsuffixed numeric literal meeting a parameter adopts it,
    and the instantiation's own check settles the width.
-3. A specialization pass over IR, before the borrow pass, in each
-   package's build (the Decision above). The layout lowering would
+3. Landed. A specialization pass over IR, before the borrow pass, in
+   each package's build (the Decision above). The layout lowering would
    otherwise bake into a body landed ahead of the pass: enum accesses
    are semantic opcodes whose operands' types settle the discriminant,
    the niche's spell, and the payload offsets at emission, and a copy's
@@ -152,8 +153,17 @@ stay: the specialization pass is what replaces them.
    resolved, lists it as a function no pass or backend receives, and
    records what it cannot name - a call as the callee and arguments the
    substitution settles, an end as `ParametricDrop` - so the pass has
-   the whole body to clone. What remains is the pass, its dispatch
-   resolution, and the summary that carries the body.
+   the whole body to clone. The pass resolves what those records left:
+   a generic callee against the function its arguments instantiate,
+   memoized by (item, arguments), and a dispatch against the
+   implementation the receiver's type has (ADR-0080), while a builtin
+   that satisfies an operator or `Display` without an implementation
+   answers with the opcode or the inline expansion the concrete body
+   would have used (ADR-0053). It rewrites each resolved call and
+   substitutes the clone's types, names, and ends as it copies, and it
+   runs before the borrow pass, so the borrow pass sees the clones and
+   no parametric body. What remains is the summary that carries the
+   body.
 4. The summary carries a generic body, and the `needs_body` flag
    goes.
 5. The AST-level instantiation walk is deleted.

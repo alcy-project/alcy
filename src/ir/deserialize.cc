@@ -635,6 +635,8 @@ bool read_instructions(Parsed& parsed, std::span<const u8> payload) {
     InstructionFlags instruction_flags{};
     instruction_flags.rmw_op = static_cast<AtomicRmwOp>(flags & 0x07u);
     instruction_flags.inbounds = (flags & 0x08u) != 0;
+    instruction_flags.maybe_copy = (flags & 0x10u) != 0;
+    instruction_flags.end_moved = (flags & 0x20u) != 0;
     parsed.state.instrs.emplace_back(Instruction{
         .op = static_cast<Opcode>(op),
         .flags = instruction_flags,
@@ -743,6 +745,11 @@ bool read_immutables(Parsed& parsed, std::span<const u8> payload) {
       case TypeTag::F64:
         immutable.data.f64_value = std::bit_cast<f64>(value);
         break;
+      case TypeTag::Param:
+        // Canonical 64 bits; the specialization re-encodes them once
+        // the substitution names the type (ADR-0079).
+        immutable.data.u64_value = value;
+        break;
       default: immutable.data.ptr = value; break;
     }
     parsed.state.immutables.emplace_back(immutable);
@@ -832,7 +839,8 @@ bool read_parametric_callees(Parsed& parsed, std::span<const u8> payload) {
   return true;
 }
 
-bool read_parametric_functions(Parsed& parsed, std::span<const u8> payload) {
+bool read_function_list(std::span<const u8> payload,
+                        std::vector<FunctionIdx>& into) {
   const u32 count = record_count(payload.size(), 4);
   if (count == NONE) {
     return false;
@@ -847,9 +855,21 @@ bool read_parametric_functions(Parsed& parsed, std::span<const u8> payload) {
     if (!cursor.read_u32(function)) {
       return false;
     }
-    parsed.state.parametric_functions.emplace_back(function);
+    into.emplace_back(function);
   }
   return true;
+}
+
+bool read_parametric_functions(Parsed& parsed, std::span<const u8> payload) {
+  return read_function_list(payload, parsed.state.parametric_functions);
+}
+
+bool read_prelude_specializations(Parsed& parsed, std::span<const u8> payload) {
+  return read_function_list(payload, parsed.state.prelude_specializations);
+}
+
+bool read_synthetic_functions(Parsed& parsed, std::span<const u8> payload) {
+  return read_function_list(payload, parsed.state.synthetic_functions);
 }
 
 bool read_files(Parsed& parsed, std::span<const u8> payload) {
@@ -1160,13 +1180,17 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
       return read_parametric_callees(parsed, payload);
     case Section::ParametricFunctions:
       return read_parametric_functions(parsed, payload);
+    case Section::PreludeSpecializations:
+      return read_prelude_specializations(parsed, payload);
+    case Section::SyntheticFunctions:
+      return read_synthetic_functions(parsed, payload);
   }
   return true;
 }
 
 bool known_kind(u32 kind) {
   return kind >= static_cast<u32>(Section::Strings) &&
-         kind <= static_cast<u32>(Section::ParametricFunctions);
+         kind <= static_cast<u32>(Section::SyntheticFunctions);
 }
 
 base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {

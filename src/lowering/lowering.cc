@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "analyzer/comp_evaluator.h"
+#include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
@@ -56,11 +57,8 @@
 
 namespace lowering {
 
-// An operand holding an integer constant of the given type.
-ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
-                            ir::TypeTag tag,
-                            ir::TypeIdx type,
-                            u64 value) {
+// An immutable of the given type from canonical 64 bits.
+ir::Immutable immutable_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value) {
   ir::Immutable imm{.type = type, .data = {}};
   switch (tag) {
     case ir::TypeTag::I1: imm.data.i1_value = value != 0; break;
@@ -73,6 +71,15 @@ ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
     case ir::TypeTag::U32: imm.data.u32_value = static_cast<u32>(value); break;
     default: imm.data.u64_value = value; break;
   }
+  return imm;
+}
+
+// An operand holding an integer constant of the given type.
+ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
+                            ir::TypeTag tag,
+                            ir::TypeIdx type,
+                            u64 value) {
+  const ir::Immutable imm = immutable_from_u64(tag, type, value);
   return builder.operand(
       ir::Operand::from_immutable(builder.immutable(imm), type));
 }
@@ -154,6 +161,9 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
   index_origins();
   index_structs();
   index_fn_insts();
+  for (const analyzer::ParametricBody& body : pkg.parametric_bodies) {
+    parametric_body_items_.insert(body.item.idx);
+  }
 }
 
 void Lowerer::index_fn_insts() {
@@ -366,7 +376,8 @@ Val Lowerer::emit_parametric_call(const std::vector<ir::OperandIdx>& ops,
 
 void Lowerer::emit_void(ir::Opcode op,
                         std::span<const ir::OperandIdx> ops,
-                        ir::InstructionFlags flags) {
+                        ir::InstructionFlags flags,
+                        ir::TypeIdx measure) {
   // A store through a pointer to the unit type writes nothing. The
   // value a `()` expression carries is a placeholder with a width of
   // its own, and spilling it would land on whatever the layout put at
@@ -385,7 +396,7 @@ void Lowerer::emit_void(ir::Opcode op,
       builder.instr({.op = op,
                      .flags = flags,
                      .dst = ir::RegisterIdx(base::INVALID_IDX),
-                     .measure = ir::TypeIdx::invalid(),
+                     .measure = measure,
                      .operands = range});
   streams_[at(cur_)].push(void_instr);
   stream_last_[at(cur_)] = void_instr;
@@ -394,9 +405,10 @@ void Lowerer::emit_void(ir::Opcode op,
 
 void Lowerer::emit_void(ir::Opcode op,
                         std::initializer_list<ir::OperandIdx> ops,
-                        ir::InstructionFlags flags) {
-  emit_void(op, std::span<const ir::OperandIdx>(ops.begin(), ops.size()),
-            flags);
+                        ir::InstructionFlags flags,
+                        ir::TypeIdx measure) {
+  emit_void(op, std::span<const ir::OperandIdx>(ops.begin(), ops.size()), flags,
+            measure);
 }
 
 Val Lowerer::materialize(Val v) {
@@ -511,7 +523,12 @@ void Lowerer::emit_move_marker(Val v) {
   if (closure_entry(v.type) != nullptr && !runs_destructor(v.type)) {
     return;
   }
-  const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op});
+  // A value whose type parameter has not settled `Copy`-ness moves
+  // conservatively: the borrow pass re-decides for the substitution's
+  // type (ADR-0079).
+  ir::InstructionFlags flags;
+  flags.maybe_copy = type_names_param(builder.state(), v.type);
+  const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op}, flags);
   (void)marker;
 }
 
@@ -554,6 +571,11 @@ bool Lowerer::is_destructor(ast::ItemIdx item) const {
 bool Lowerer::runs_destructor(ir::TypeIdx type) const {
   return lowering::runs_destructor(pkg.needs_drop, builder, type_origins_,
                                    type);
+}
+
+bool Lowerer::may_end(ir::TypeIdx type) const {
+  return runs_destructor(type) ||
+         lowering::type_names_param(builder.state(), type);
 }
 
 ir::OperandIdx Lowerer::use_value(Val v) {
@@ -885,15 +907,15 @@ namespace {
 // index in. A key is built at every call site, so the digits go to a buffer
 // that is handed over once: growing the string a character at a time paid the
 // bookkeeping of an append for each one.
-void append_index(std::string& out, u32 value, char separator) {
+}  // namespace
+
+void Lowerer::append_index(std::string& out, u32 value, char separator) {
   // A u32 in decimal takes at most ten digits, and the separator one more.
   char digits[11];
   char* const last = std::to_chars(digits, digits + 10, value).ptr;
   *last = separator;
   out.append(digits, static_cast<usize>(last + 1 - digits));
 }
-
-}  // namespace
 
 // The signature does not identify an instantiation: two of them can
 // share parameters and result while differing only inside the body,
@@ -999,10 +1021,19 @@ bool Lowerer::fn_budget_available() {
 // pointee, a sequence's element, a tuple's parts. Fields are not
 // walked: a signature names its types, and a parameter reaches one
 // through an argument the source wrote.
-static bool type_names_param(const ir::StorageState& state, ir::TypeIdx type) {
+static bool type_names_param_impl(const ir::StorageState& state,
+                                  ir::TypeIdx type,
+                                  std::vector<u32>& path) {
   if (!type.is_valid() || type.idx >= state.types.size()) {
     return false;
   }
+  // A recursive type reaches itself; a cycle contributes nothing new.
+  for (const u32 seen : path) {
+    if (seen == type.idx) {
+      return false;
+    }
+  }
+  path.push_back(type.idx);
   const ir::TypeNode& node = state.types[type];
   using T = ir::TypeTag;
   switch (node.tag) {
@@ -1011,16 +1042,17 @@ static bool type_names_param(const ir::StorageState& state, ir::TypeIdx type) {
     case T::MutRef:
     case T::RawPtr:
     case T::RawMutPtr:
-      return type_names_param(state, state.ref_types[node.as_ref()].pointee);
+      return type_names_param_impl(
+          state, state.ref_types[node.as_ref()].pointee, path);
     case T::Array:
-      return type_names_param(state,
-                              state.array_types[node.as_array()].element);
+      return type_names_param_impl(
+          state, state.array_types[node.as_array()].element, path);
     case T::Slice:
-      return type_names_param(state,
-                              state.slice_types[node.as_slice()].element);
+      return type_names_param_impl(
+          state, state.slice_types[node.as_slice()].element, path);
     case T::Tuple: {
       for (ir::TypeIdx element : state.tuple_types[node.as_tuple()].elements) {
-        if (type_names_param(state, element)) {
+        if (type_names_param_impl(state, element, path)) {
           return true;
         }
       }
@@ -1029,28 +1061,52 @@ static bool type_names_param(const ir::StorageState& state, ir::TypeIdx type) {
     case T::Func: {
       const ir::FuncType& shape = state.func_types[node.as_func()];
       for (ir::TypeIdx param : shape.params) {
-        if (type_names_param(state, param)) {
+        if (type_names_param_impl(state, param, path)) {
           return true;
         }
       }
-      return type_names_param(state, shape.ret);
+      return type_names_param_impl(state, shape.ret, path);
     }
-    case T::Struct:
-      for (ir::TypeIdx arg : state.struct_types[node.as_struct()].params) {
-        if (type_names_param(state, arg)) {
+    case T::Struct: {
+      const ir::StructType& shape = state.struct_types[node.as_struct()];
+      for (ir::TypeIdx arg : shape.params) {
+        if (type_names_param_impl(state, arg, path)) {
+          return true;
+        }
+      }
+      // A field can name one where the instance's arguments do not: an
+      // instance minted before a substitution completed.
+      for (ir::TypeIdx field : shape.fields) {
+        if (type_names_param_impl(state, field, path)) {
           return true;
         }
       }
       return false;
-    case T::Enum:
-      for (ir::TypeIdx arg : state.enum_types[node.as_enum()].params) {
-        if (type_names_param(state, arg)) {
+    }
+    case T::Enum: {
+      const ir::EnumType& shape = state.enum_types[node.as_enum()];
+      for (ir::TypeIdx arg : shape.params) {
+        if (type_names_param_impl(state, arg, path)) {
           return true;
         }
       }
+      for (ir::EnumVariantTypeIdx vidx : shape.variants) {
+        for (ir::TypeIdx field : state.enum_variant_types[vidx].fields) {
+          if (type_names_param_impl(state, field, path)) {
+            return true;
+          }
+        }
+      }
       return false;
+    }
     default: return false;
   }
+}
+
+bool type_names_param(const ir::StorageState& state, ir::TypeIdx type) {
+  static thread_local std::vector<u32> path;
+  path.clear();
+  return type_names_param_impl(state, type, path);
 }
 
 static bool signature_names_param(const ir::StorageState& state,
@@ -1152,11 +1208,60 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     }
   }
   entry.comp_args = std::move(comp_args);
+  reserve_function_row(entry, entry.params);
   fns.push_back(std::move(entry));
   worklist_.push_back(fns.size() - 1);
   if (parametric) {
     parametric_fn_by_item_.emplace(item.idx, idx);
   }
+  return idx;
+}
+
+// Creates the row a reservation names: the meta the publish would
+// otherwise build, minus the name the gather interns later. Every
+// function's index is therefore decided when it is reserved, so a clone
+// or a synthesized body created between the reservation and the publish
+// cannot take the index the entry expects.
+void Lowerer::reserve_function_row(const FnEntry& entry,
+                                   std::span<const ir::TypeIdx> params) {
+  const std::vector<u32> comp = comp_positions(entry.item);
+  ir::TypeSeq kept;
+  usize comp_at = 0;
+  for (usize i = 0; i < params.size(); ++i) {
+    if (comp_at < comp.size() && comp[comp_at] == i) {
+      ++comp_at;
+      continue;
+    }
+    kept.push(storage_copy(params[i]));
+  }
+  ir::TypeSeq generics;
+  for (const ir::TypeIdx arg : entry.generics) {
+    generics.push(storage_copy(arg));
+  }
+  const ir::FunctionIdx row = builder.function(
+      {.meta = {.return_type = entry.ret,
+                .param_types = kept.finish(),
+                .name = str::INVALID_STRING_POOL_ID,
+                .path = intern_name(pkg.tree.modules[entry.mod]->path),
+                .kind = entry.kind,
+                .generics = generics.finish(),
+                .owner = entry.owner},
+       .blocks = {}});
+  DCHECK(row.idx == entry.idx.idx);
+  (void)row;
+}
+
+ir::FunctionIdx Lowerer::reserve_body_function(ir::FunctionMeta meta) {
+  const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
+  const ir::FunctionIdx row =
+      builder.function(ir::Function{.meta = meta, .blocks = {}});
+  DCHECK(row.idx == idx.idx);
+  (void)row;
+  FnEntry entry;
+  entry.idx = idx;
+  entry.name = std::string(strings.get(meta.name));
+  entry.ret = meta.return_type;
+  fns.push_back(std::move(entry));
   return idx;
 }
 
@@ -1217,6 +1322,7 @@ ir::FunctionIdx Lowerer::closure_fn_index(
   entry.ret = ret;
   entry.inst = inst;
   entry.kind = ir::SymbolKind::Free;
+  reserve_function_row(entry, entry.params);
   fns.push_back(std::move(entry));
   worklist_.push_back(fns.size() - 1);
   if (found != closures_by_key_.end()) {
@@ -1225,6 +1331,42 @@ ir::FunctionIdx Lowerer::closure_fn_index(
     closures_by_key_.emplace(lookup, std::vector<u32>{idx.idx});
   }
   return idx;
+}
+
+// The function a builtin's `Display` dispatch answers with: the inline
+// expansion for one value, once per type. The signature is the spec
+// method's own, so a call passes the receiver and the view it already
+// holds. The body is emitted where it is asked for, the way a
+// specialization is: the call that wants it runs between body
+// lowerings (ADR-0053, ADR-0079).
+ir::FunctionIdx Lowerer::display_fn_for(ir::TypeIdx type) {
+  const auto found = display_fn_by_type_.find(type.idx);
+  if (found != display_fn_by_type_.end()) {
+    return ir::FunctionIdx(found->second);
+  }
+  const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
+  const ir::TypeIdx usize_ty = usize_type();
+  const ir::TypeIdx self_ty = builder.reference_type(type, false);
+  const ir::TypeIdx view_ty =
+      builder.reference_type(builder.slice_type(u8_ty), true);
+  ir::TypeSeq params;
+  params.push(storage_copy(self_ty));
+  params.push(storage_copy(view_ty));
+  ir::TypeSeq generics;
+  generics.push(storage_copy(type));
+  const std::string name =
+      "display$" + std::to_string(builder.state().functions.size());
+  const ir::FunctionIdx fn =
+      reserve_body_function({.return_type = usize_ty,
+                             .param_types = params.finish(),
+                             .name = intern_copied(name),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Free,
+                             .generics = generics.finish()});
+  display_fn_by_type_.emplace(type.idx, fn.idx);
+  builder.add_synthetic_function(fn);
+  lower_display_fn(fn, type, self_ty, view_ty);
+  return failed ? ir::FunctionIdx::invalid() : fn;
 }
 
 ir::TypeIdx Lowerer::closure_env_type(
@@ -1345,6 +1487,14 @@ std::vector<ir::TypeIdx> Lowerer::nominal_arguments(ir::TypeIdx type) const {
   return args;
 }
 
+std::vector<ir::TypeIdx> Lowerer::receiver_type_args(ir::TypeIdx type) const {
+  const ir::TypeNode& node = builder.state().types[type];
+  if (node.tag == ir::TypeTag::Slice) {
+    return {builder.state().slice_types[node.as_slice()].element};
+  }
+  return nominal_arguments(type);
+}
+
 std::vector<ir::TypeIdx> Lowerer::fn_args_for(ast::ItemIdx item,
                                               u32 inst) const {
   // The key is what separates two instantiations of one function; the
@@ -1419,10 +1569,27 @@ ir::TypeIdx Lowerer::storage_copy(ir::TypeIdx type) {
 }
 
 const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
-    ir::TypeIdx type) {
+    ir::TypeIdx type) const {
   const ir::TypeIdx origin = type_origin(type);
   const auto found = structs_.find(origin.idx);
   return found == structs_.end() ? nullptr : found->second;
+}
+
+void Lowerer::begin_body() {
+  locals.clear();
+  ownership_.clear();
+  end_sites_.clear();
+  record_seq_ = 0;
+  end_exempt_ = base::INVALID_IDX;
+  comp_scope_.clear();
+  fn_blocks_.clear();
+  streams_.clear();
+  stream_last_.clear();
+  block_next_ = static_cast<u32>(builder.state().blocks.size());
+  fn_block_base_ = block_next_;
+  break_targets_.clear();
+  continue_targets_.clear();
+  pending_params_.clear();
 }
 
 void Lowerer::lower_fn(const FnEntry& entry) {
@@ -1433,19 +1600,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   const u32 mod = entry.mod;
   module = mod;
   cur_inst_ = entry.inst;
-  locals.clear();
-  ownership_.clear();
-  end_sites_.clear();
-  record_seq_ = 0;
-  end_exempt_ = base::INVALID_IDX;
-  comp_scope_.clear();
-  fn_blocks_.clear();
-  streams_.clear();
-  stream_last_.clear();
-  fn_block_base_ = block_next_;
-  break_targets_.clear();
-  continue_targets_.clear();
-  pending_params_.clear();
+  begin_body();
 
   const ast::ItemNode& item = ast.items[entry.item];
   const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
@@ -1556,23 +1711,10 @@ void Lowerer::lower_fn(const FnEntry& entry) {
 }
 
 void Lowerer::lower_closure_fn(const FnEntry& entry) {
-  // Same reset as lower_fn: one body owns the whole state.
   const u32 mod = entry.mod;
   module = mod;
   cur_inst_ = entry.inst;
-  locals.clear();
-  ownership_.clear();
-  end_sites_.clear();
-  record_seq_ = 0;
-  end_exempt_ = base::INVALID_IDX;
-  comp_scope_.clear();
-  fn_blocks_.clear();
-  streams_.clear();
-  stream_last_.clear();
-  fn_block_base_ = block_next_;
-  break_targets_.clear();
-  continue_targets_.clear();
-  pending_params_.clear();
+  begin_body();
 
   const analyzer::CheckedModule::ClosureLit* lit = closure_lit(entry.closure);
   const analyzer::CheckedModule::ClosureFn* fn = nullptr;
@@ -1722,6 +1864,173 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   emit_void(ir::Opcode::Ret, {to_operand(dst, sig.ret)});
 }
 
+// The synthesized `Display` body: the inline expansion for one value,
+// reading the receiver through the reference the call passes and
+// writing into the view it passes, exactly as the concrete expansion
+// would have (ADR-0053).
+// Publishes the body a synthesized function emitted: the reserved
+// blocks in reservation order, the entry block carrying the
+// parameters. A specialization clones blocks of its own between
+// bodies, so the reservation counter catches up with the table here.
+void Lowerer::publish_body(ir::FunctionIdx fn) {
+  place_ends();
+  if (failed) {
+    return;
+  }
+  bool first = true;
+  for (usize i = 0; i < fn_blocks_.size(); ++i) {
+    const ir::BlockIdx created =
+        builder.block({.instrs = streams_[i].finish(),
+                       .block_params = first ? pending_block_params_
+                                             : ir::BlockParamIdxRange{}});
+    DCHECK(created.idx == fn_blocks_[i].idx);
+    first = false;
+  }
+  pending_block_params_ = ir::BlockParamIdxRange{};
+  builder.set_function_blocks(
+      fn, ir::BlockIdxRange{fn_blocks_.front(),
+                            static_cast<u32>(fn_blocks_.size())});
+}
+
+// The function that ends a value of the type: the drop pass's own walk,
+// emitted once per type. A specialization's end cannot run that pass in
+// place - a clone's blocks are fixed before its body is translated -
+// and a call keeps one spelling of the walk (ADR-0079).
+ir::FunctionIdx Lowerer::drop_fn_for(ir::TypeIdx type) {
+  const auto found = drop_fn_by_type_.find(type.idx);
+  if (found != drop_fn_by_type_.end()) {
+    return ir::FunctionIdx(found->second);
+  }
+  const ir::TypeIdx void_ty = builder.primitive(ir::TypeTag::Void);
+  ir::TypeSeq params;
+  params.push(storage_copy(type));
+  ir::TypeSeq generics;
+  generics.push(storage_copy(type));
+  const std::string name =
+      "drop$" + std::to_string(builder.state().functions.size());
+  const ir::FunctionIdx fn =
+      reserve_body_function({.return_type = void_ty,
+                             .param_types = params.finish(),
+                             .name = intern_copied(name),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Free,
+                             .generics = generics.finish()});
+  drop_fn_by_type_.emplace(type.idx, fn.idx);
+  builder.add_synthetic_function(fn);
+  lower_drop_fn(fn, type);
+  return failed ? ir::FunctionIdx::invalid() : fn;
+}
+
+void Lowerer::lower_drop_fn(ir::FunctionIdx fn, ir::TypeIdx type) {
+  cur_inst_ = analyzer::NO_INST;
+  begin_body();
+  switch_to(reserve_block());
+  cur_span_ = diag::Span{};
+  const ir::RegisterIdx reg = claim_reg();
+  builder.reg({.type = type, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+  ir::BlockParamSeq param_seq;
+  param_seq.push(builder.block_param({.type = type, .reg = reg}));
+  pending_block_params_ = param_seq.finish();
+  if (failed) {
+    return;
+  }
+  // The value arrives by value and is an owned place the body ends, so
+  // the drop pass walks it the way it walks any local.
+  binding_param_ = true;
+  const std::string_view name = DROP_VALUE_NAME;
+  const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, type, {size_one});
+  emit_void(ir::Opcode::Store, {to_operand(reg, type), to_operand(addr, type)});
+  locals.emplace_back(name, addr, type);
+  record_event(OwnershipEvent::Kind::Bind, static_cast<u32>(locals.size() - 1),
+               {}, cur_span_);
+  addr_names_.push_back({addr, name, /*is_param=*/true, /*is_capture=*/false});
+  binding_param_ = false;
+  if (failed) {
+    return;
+  }
+  record_end(0, cur_span_);
+  emit_void(ir::Opcode::Ret, {});
+  publish_body(fn);
+}
+
+void Lowerer::lower_display_fn(ir::FunctionIdx fn,
+                               ir::TypeIdx type,
+                               ir::TypeIdx self_ty,
+                               ir::TypeIdx view_ty) {
+  cur_inst_ = analyzer::NO_INST;
+  begin_body();
+  switch_to(reserve_block());
+  cur_span_ = diag::Span{};
+  ir::BlockParamSeq param_seq;
+  std::vector<ir::RegisterIdx> pregs;
+  for (const ir::TypeIdx ptype : {self_ty, view_ty}) {
+    const ir::RegisterIdx reg = claim_reg();
+    builder.reg(
+        {.type = ptype, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+    param_seq.push(builder.block_param({.type = ptype, .reg = reg}));
+    pregs.push_back(reg);
+  }
+  pending_block_params_ = param_seq.finish();
+  if (failed) {
+    return;
+  }
+  ir::RegisterIdx total = ir::RegisterIdx::invalid();
+  if (!fmt_lowering_.emit_scalar_display(cur_span_, type, pregs[0], pregs[1],
+                                         view_ty, total)) {
+    return;
+  }
+  emit_void(ir::Opcode::Ret, {to_operand(total, usize_type())});
+  publish_body(fn);
+}
+
+// The inline expansion for one formattable value, emitted as a
+// function's whole body: the value arrives through the receiver's
+// reference and the destination view, and the total an unbounded
+// destination would take is the answer.
+bool Lowerer::Fmt::emit_scalar_display(diag::Span span,
+                                       ir::TypeIdx type,
+                                       ir::RegisterIdx value_ref,
+                                       ir::RegisterIdx view,
+                                       ir::TypeIdx view_ty,
+                                       ir::RegisterIdx& total) {
+  const ir::TypeIdx usize_ty = owner_.usize_type();
+  // The expansion reads its argument from an address; the slot gives
+  // the value behind the receiver's reference one.
+  ir::TypeSeq seq;
+  seq.push(owner_.storage_copy(type));
+  const ir::TypeIdx tuple_ty = owner_.builder.tuple_type(seq.finish());
+  const ir::RegisterIdx slot =
+      owner_.emit(ir::Opcode::Alloca, tuple_ty, {owner_.size_one});
+  const ir::RegisterIdx field =
+      owner_.emit(ir::Opcode::GetElementPtr, type,
+                  {owner_.to_operand(slot, tuple_ty), owner_.zero_i32,
+                   owner_.index_operand(0)});
+  const ir::RegisterIdx value =
+      owner_.emit(ir::Opcode::Load, type, {owner_.to_operand(value_ref, type)});
+  owner_.emit_void(ir::Opcode::Store, {owner_.to_operand(value, type),
+                                       owner_.to_operand(field, type)});
+  ir::OperandIdx bytes = ir::OperandIdx::invalid();
+  ir::OperandIdx len = ir::OperandIdx::invalid();
+  const Val receiver{owner_.to_operand(view, view_ty), view_ty, false, false};
+  if (!owner_.slice_parts(receiver, bytes, len)) {
+    return false;
+  }
+  analyzer::FmtPiece piece;
+  piece.is_arg = true;
+  piece.arg = 0;
+  State state;
+  state.capacity = len;
+  state.tup_op = owner_.to_operand(slot, tuple_ty);
+  state.dst_base = bytes;
+  state.elem_types.push_back(type);
+  if (!emit_pieces(span, {piece}, state)) {
+    return false;
+  }
+  total = owner_.emit(ir::Opcode::Load, usize_ty,
+                      {owner_.to_operand(state.tot_addr, usize_ty)});
+  return !owner_.failed;
+}
+
 void Lowerer::run() {
   block_next_ = static_cast<u32>(builder.state().blocks.size());
   // Seed one-time operands before any function body runs.
@@ -1785,7 +2094,8 @@ void Lowerer::run() {
       // receiver inside a generic body carries one.
       if (method.method_inst == analyzer::PARAM_INST ||
           signature_names_param(builder.state(), method.params, method.ret,
-                                method.self_type)) {
+                                method.self_type) ||
+          parametric_body_items_.contains(method.item.idx)) {
         continue;
       }
       // A method with its own type parameters is reserved at its call
@@ -1975,6 +2285,38 @@ void Lowerer::run() {
   for (const Done& lowered : done) {
     materialize(fns[lowered.fn], lowered.blocks);
   }
+  // Specialization (ADR-0079): resolve the callee records concrete
+  // bodies carry, lower the bodies a dispatch resolution enqueues, and
+  // resolve theirs in turn. Clones are resolved as they are built, so
+  // the sweep only has to pick up newly lowered bodies.
+  usize lowered_upto = worklist_.size();
+  while (!failed) {
+    specialize();
+    if (failed) {
+      return;
+    }
+    if (worklist_.size() == lowered_upto) {
+      break;
+    }
+    std::vector<Done> extra;
+    for (usize w = lowered_upto; w < worklist_.size() && !failed; ++w) {
+      const u32 fn = worklist_[w];
+      const FnEntry entry = fns[fn];
+      std::vector<ir::BlockIdx> blocks;
+      lower_and_publish(entry, blocks);
+      extra.push_back({fn, std::move(blocks)});
+    }
+    if (failed) {
+      return;
+    }
+    if (!resolve_names()) {
+      return;
+    }
+    for (const Done& lowered : extra) {
+      materialize(fns[lowered.fn], lowered.blocks);
+    }
+    lowered_upto = worklist_.size();
+  }
 }
 
 bool Lowerer::resolve_names() {
@@ -1988,6 +2330,7 @@ bool Lowerer::resolve_names() {
     for (const std::vector<ir::SymbolTable::Pending>& shard : producer.shards) {
       for (const ir::SymbolTable::Pending& pending : shard) {
         fns[pending.key].name_id = pending.handle;
+        builder.set_function_name(ir::FunctionIdx(pending.key), pending.handle);
         names_ok = names_ok && pending.handle != str::INVALID_STRING_POOL_ID;
       }
     }
@@ -2008,36 +2351,9 @@ void Lowerer::materialize(const FnEntry& entry,
   if (pkg.tree.modules[entry.mod]->is_staged && !entry.parametric) {
     ++prelude_functions_;
   }
-  const std::vector<u32> comp = comp_positions(entry.item);
-  ir::TypeSeq params;
-  usize comp_at = 0;
-  for (usize i = 0; i < entry.params.size(); ++i) {
-    if (comp_at < comp.size() && comp[comp_at] == i) {
-      ++comp_at;
-      continue;
-    }
-    params.push(storage_copy(entry.params[i]));
-  }
-  ir::BlockIdxRange range{blocks.front(), static_cast<u32>(blocks.size())};
-  ir::TypeSeq generics;
-  for (const ir::TypeIdx arg : entry.generics) {
-    generics.push(storage_copy(arg));
-  }
-  // The handle the gather left in the entry.
-  const str::StringPoolId name = entry.name_id;
-  const str::StringPoolId path = intern_name(pkg.tree.modules[entry.mod]->path);
-  if (name == str::INVALID_STRING_POOL_ID ||
-      path == str::INVALID_STRING_POOL_ID) {
-    return;
-  }
-  builder.function({.meta = {.return_type = entry.ret,
-                             .param_types = params.finish(),
-                             .name = name,
-                             .path = path,
-                             .kind = entry.kind,
-                             .generics = generics.finish(),
-                             .owner = entry.owner},
-                    .blocks = range});
+  builder.set_function_blocks(
+      entry.idx,
+      ir::BlockIdxRange{blocks.front(), static_cast<u32>(blocks.size())});
 }
 
 // A function's streams are handed to the drop pass after its body is lowered,
@@ -2375,6 +2691,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::unordered_map<u32, u32> type_origins = std::move(lowerer.type_origins_);
   std::vector<u8> not_movable = std::move(lowerer.pkg.not_movable);
   const usize prelude_functions = lowerer.prelude_functions_;
+  std::vector<u8> needs_drop = std::move(lowerer.pkg.needs_drop);
   const usize comp_engine_answered = lowerer.comp_engine_answered_;
   // Resolve each recorded comp call to the function lowering reserved
   // for it while the reservation table is still here.
@@ -2422,7 +2739,8 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
                          std::move(summary),
                          std::move(summary_fields),
                          std::move(type_origins),
-                         std::move(not_movable)};
+                         std::move(not_movable),
+                         std::move(needs_drop)};
   // ADR-0054: the IR engine is compared against the AST engine over
   // every comp call lowering made, before it is trusted to answer. A
   // disagreement is a compiler bug; a construct the interpreter does

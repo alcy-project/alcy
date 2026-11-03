@@ -24,6 +24,7 @@
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/instruction.h"
+#include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/seq_builder.h"
@@ -32,6 +33,7 @@
 #include "lowering/diag_code.h"
 #include "lowering/immediate.h"
 #include "lowering/lowerer.h"
+#include "lowering/lowering.h"
 
 namespace lowering {
 
@@ -208,12 +210,18 @@ void Lowerer::emit_collected_drop(ir::OperandIdx tuple_place,
     const ir::TypeIdx type = arg_types[i];
     const ir::TypeTag tag = tag_of(type);
     if (tag == ir::TypeTag::Void || tag == ir::TypeTag::Error ||
-        !runs_destructor(type)) {
+        !may_end(type)) {
       continue;
     }
     const ir::RegisterIdx field =
         emit(ir::Opcode::GetElementPtr, type,
              {tuple_place, zero_i32, index_operand(static_cast<u32>(i))});
+    if (lowering::type_names_param(builder.state(), type)) {
+      emit_void(ir::Opcode::Drop, {to_operand(field, type)});
+      emit_void(ir::Opcode::ParametricDrop, {to_operand(field, type)}, {},
+                type);
+      continue;
+    }
     emit_drop_glue_call(to_operand(field, type), type, span);
   }
 }
@@ -307,7 +315,9 @@ class DropElaborator {
   void pass_emit_void(ir::InstrSeq& seq,
                       ir::Opcode op,
                       const std::vector<ir::OperandIdx>& ops,
-                      diag::Span span);
+                      diag::Span span,
+                      ir::TypeIdx measure = ir::TypeIdx::invalid(),
+                      ir::InstructionFlags flags = {});
   void pass_copy(ir::InstrSeq& seq, ir::InstructionIdx idx);
 
  private:
@@ -431,7 +441,9 @@ ir::RegisterIdx DropElaborator::pass_emit(
 void DropElaborator::pass_emit_void(ir::InstrSeq& seq,
                                     ir::Opcode op,
                                     const std::vector<ir::OperandIdx>& ops,
-                                    diag::Span span) {
+                                    diag::Span span,
+                                    ir::TypeIdx measure,
+                                    ir::InstructionFlags flags) {
   const ir::OperandIdx head =
       ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
   for (ir::OperandIdx op_idx : ops) {
@@ -439,9 +451,9 @@ void DropElaborator::pass_emit_void(ir::InstrSeq& seq,
   }
   const ir::InstructionIdx instr =
       builder.instr({.op = op,
-                     .flags = {},
+                     .flags = flags,
                      .dst = ir::RegisterIdx(base::INVALID_IDX),
-                     .measure = ir::TypeIdx::invalid(),
+                     .measure = measure,
                      .operands = {head, static_cast<u32>(ops.size())}});
   seq.push(instr);
   instr_spans_.push_back(span);
@@ -463,13 +475,20 @@ void DropElaborator::run() {
     return;
   }
 
+  // Whether ending a value of the type runs code at all: a type that
+  // names a parameter may, once the substitution says what it stands
+  // for (ADR-0079).
+  const auto may_end = [&](ir::TypeIdx type) {
+    return runs_destructor(type) ||
+           lowering::type_names_param(builder.state(), type);
+  };
   // Everything this pass emits is a guard, a flag or a call for a value whose
   // type runs a destructor, so a function whose places are all copy types has
   // nothing to place.
   bool has_end = false;
   for (const EndSite& site : end_sites_) {
     for (u32 local : site.locals) {
-      has_end = has_end || runs_destructor(locals[local].type);
+      has_end = has_end || may_end(locals[local].type);
     }
   }
   for (const OwnershipEvent& event : ownership_) {
@@ -477,10 +496,9 @@ void DropElaborator::run() {
       break;
     }
     if (event.kind == OwnershipEvent::Kind::DropInPlace) {
-      has_end = runs_destructor(event.place_type);
+      has_end = may_end(event.place_type);
     } else if (event.kind == OwnershipEvent::Kind::Store) {
-      has_end =
-          runs_destructor(type_at_path(locals[event.local].type, event.path));
+      has_end = may_end(type_at_path(locals[event.local].type, event.path));
     }
   }
   if (!has_end) {
@@ -786,7 +804,7 @@ void DropElaborator::run() {
   };
   for (const EndSite& site : end_sites_) {
     for (u32 local : site.locals) {
-      if (!runs_destructor(locals[local].type)) {
+      if (!may_end(locals[local].type)) {
         continue;
       }
       mark_maybe(local, {}, locals[local].type, at(site.block), site.offset,
@@ -799,7 +817,7 @@ void DropElaborator::run() {
     }
     const Local& local = locals[event.local];
     const ir::TypeIdx type = type_at_path(local.type, event.path);
-    if (!runs_destructor(type)) {
+    if (!may_end(type)) {
       continue;
     }
     mark_maybe(event.local, event.path, type, at(event.block), event.offset - 1,
@@ -851,7 +869,31 @@ void DropElaborator::run() {
                  ir::TypeIdx type, ir::OperandIdx place,
                  const std::function<State(const std::vector<u32>&)>& state_of,
                  diag::Span span) {
-    if (!runs_destructor(type) || end_exempt(local, path.empty())) {
+    if (!may_end(type) || end_exempt(local, path.empty())) {
+      return;
+    }
+    // The end of a type a parameter reaches is the substitution's to
+    // decide: the specialization rewrites it into the concrete walk,
+    // where the destructor and the fields it holds are known. A view
+    // owns nothing under every substitution, so it stays local. The
+    // place may be an address (an explicit end), so the type rides on
+    // the instruction.
+    const ir::TypeTag tag = tag_of(type);
+    const bool compound = tag == ir::TypeTag::Struct ||
+                          tag == ir::TypeTag::Tuple ||
+                          tag == ir::TypeTag::Array || tag == ir::TypeTag::Enum;
+    if (tag == ir::TypeTag::Param ||
+        (compound && type_names_param(builder.state(), type))) {
+      // The take is the parametric body's; the record only waits for
+      // the substitution to say what the end is.
+      pass_emit_void(seq_of(out), ir::Opcode::Drop, {place}, span);
+      ir::InstructionFlags flags;
+      flags.end_moved = local < locals.size();
+      pass_emit_void(seq_of(out), ir::Opcode::ParametricDrop, {place}, span,
+                     type, flags);
+      return;
+    }
+    if (!runs_destructor(type)) {
       return;
     }
     // Take the place before the end reads it: the tag load and the
@@ -923,7 +965,7 @@ void DropElaborator::run() {
         const ir::TypeIdxRange fields = variant_fields(type, v);
         bool any = false;
         for (ir::TypeIdx field : fields) {
-          if (runs_destructor(field)) {
+          if (may_end(field)) {
             any = true;
             break;
           }
@@ -950,7 +992,7 @@ void DropElaborator::run() {
         const ir::TypeIdxRange fields = variant_fields(type, v);
         for (u32 fi = 0; fi < fields.size(); ++fi) {
           const ir::TypeIdx field = fields[fi];
-          if (!runs_destructor(field)) {
+          if (!may_end(field)) {
             continue;
           }
           // The address carries the field's own type; the offsets are
@@ -975,7 +1017,7 @@ void DropElaborator::run() {
     if (node.tag == ir::TypeTag::Array) {
       // Every element is there to end, walked with a counter.
       const ir::ArrayType& shape = builder.array_types()[node.as_array()];
-      if (shape.count == 0) {
+      if (shape.count == 0 || !may_end(shape.element)) {
         return;
       }
       const ir::TypeIdx usize_ty = usize_type();
@@ -1050,7 +1092,7 @@ void DropElaborator::run() {
             : builder.tuple_types()[node.as_tuple()].elements;
     for (u32 i = 0; i < fields.size(); ++i) {
       const ir::TypeIdx field = fields[i];
-      if (!runs_destructor(field)) {
+      if (!may_end(field)) {
         continue;
       }
       std::vector<u32> child = path;
@@ -1195,7 +1237,7 @@ void DropElaborator::run() {
     for (usize k = site.locals.size(); k > 0; --k) {
       const u32 local = site.locals[k - 1];
       const Local& info = locals[local];
-      if (!runs_destructor(info.type)) {
+      if (!may_end(info.type)) {
         continue;
       }
       auto state_of = [&](const std::vector<u32>& path) {
@@ -1227,7 +1269,7 @@ void DropElaborator::run() {
   const auto owned_path = [](const std::vector<u32>&) { return State::Owned; };
   auto run_store_element_end = [&](u32 ei, Output& out) {
     const OwnershipEvent& event = ownership_[ei];
-    if (!runs_destructor(event.place_type)) {
+    if (!may_end(event.place_type)) {
       return;
     }
     if (event.local != base::INVALID_IDX) {
@@ -1258,7 +1300,7 @@ void DropElaborator::run() {
     }
     const Local& info = locals[event.local];
     const ir::TypeIdx type = type_at_path(info.type, event.path);
-    if (!runs_destructor(type)) {
+    if (!may_end(type)) {
       return;
     }
     auto state_of = [&](const std::vector<u32>& path) {
@@ -1489,6 +1531,29 @@ bool runs_destructor(std::span<const u8> needs_drop,
     case ir::TypeTag::Array:
       return runs_destructor(needs_drop, builder, type_origins,
                              builder.array_types()[node.as_array()].element);
+    case ir::TypeTag::Struct: {
+      const ir::StructType& shape = builder.struct_types()[node.as_struct()];
+      for (const ir::TypeIdx field : shape.fields) {
+        if (runs_destructor(needs_drop, builder, type_origins, field)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ir::TypeTag::Enum: {
+      const ir::EnumType& shape = builder.enum_types()[node.as_enum()];
+      for (ir::EnumVariantTypeIdx vidx = shape.variants.head();
+           vidx.idx < shape.variants.head().idx + shape.variants.size();
+           vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
+        const ir::EnumVariantType& variant = builder.enum_variant_types()[vidx];
+        for (const ir::TypeIdx field : variant.fields) {
+          if (runs_destructor(needs_drop, builder, type_origins, field)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
     default: return false;
   }
 }

@@ -23,6 +23,7 @@ class DiagBag;
 
 namespace ir {
 class StorageBuilder;
+struct StorageState;
 }  // namespace ir
 
 namespace lowering {

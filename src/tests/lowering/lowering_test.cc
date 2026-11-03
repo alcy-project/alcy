@@ -943,6 +943,53 @@ TEST_CASE("A generic body lowers once in its parametric form") {
   CHECK(saw_generic_call);
 }
 
+TEST_CASE("A generic item called per argument has one specialization each") {
+  // The pass clones the definition-site body under the type arguments a
+  // call resolved and points the call at the clone, memoized by
+  // (item, arguments) (ADR-0079).
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "fn id<T>(x: T) -> T {\n"
+                   "  ret x\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := id(1u8)\n"
+                   "  _ := id(1u64)\n"
+                   "}\n"}});
+
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *result.lowered->storage;
+  CHECK(ir::verify_storage(storage).is_ok());
+  // The definition-site body stays listed; the clones are the functions
+  // the calls reach.
+  CHECK(storage.parametric_functions().size() == 1);
+  u32 clones = 0;
+  bool saw_u8 = false;
+  bool saw_u64 = false;
+  for (const ir::FunctionIdx idx : storage.functions().idx_range()) {
+    const ir::FunctionMeta& meta = storage.functions()[idx].meta;
+    if (f.strings.get(meta.name) != "id" || meta.param_types.size() != 1) {
+      continue;
+    }
+    const ir::TypeTag tag = storage.types()[meta.param_types[0]].tag;
+    if (tag == ir::TypeTag::Param) {
+      continue;
+    }
+    ++clones;
+    saw_u8 = saw_u8 || tag == ir::TypeTag::U8;
+    saw_u64 = saw_u64 || tag == ir::TypeTag::U64;
+  }
+  CHECK(clones == 2);
+  CHECK(saw_u8);
+  CHECK(saw_u64);
+}
+
 TEST_CASE("A parametric body records the dispatch it waits on") {
   // A method a parameter's bound declares: the body cannot name the
   // implementation, so it records the spec and the method by their

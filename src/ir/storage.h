@@ -70,6 +70,13 @@ struct StorageState {
   // receives them (ADR-0079). Kept beside the table rather than in a
   // range because their indexes are not consecutive.
   std::vector<FunctionIdx> parametric_functions;
+  // The specializations of staged items: clones no source function
+  // stands for, which a build's reported count excludes. Their indexes
+  // are not consecutive either.
+  std::vector<FunctionIdx> prelude_specializations;
+  // The bodies the specialization pass synthesized (`display$`,
+  // `drop$`): compiler-made helpers a reported count excludes too.
+  std::vector<FunctionIdx> synthetic_functions;
   Operands operands;
   Types types;
   StructTypes struct_types;
@@ -626,6 +633,12 @@ class Storage {
   }
   const std::vector<FunctionIdx>& parametric_functions() const {
     return state_.parametric_functions;
+  }
+  const std::vector<FunctionIdx>& prelude_specializations() const {
+    return state_.prelude_specializations;
+  }
+  const std::vector<FunctionIdx>& synthetic_functions() const {
+    return state_.synthetic_functions;
   }
   const StorageState::Operands& operands() const { return state_.operands; }
   const StorageState::Types& types() const { return state_.types; }

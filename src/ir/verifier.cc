@@ -290,6 +290,16 @@ VerificationResult verify_storage(const Storage& storage) {
     }
   }
 
+  // Which bodies the specialization pass clones: only these carry the
+  // records it resolves, an end included (ADR-0079).
+  std::vector<bool> parametric(storage.functions().size(), false);
+  for (const FunctionIdx fidx : storage.parametric_functions()) {
+    if (fidx.idx >= storage.functions().size()) {
+      return err(VerificationErrorKind::ParametricFunctionOutOfRange, fidx.idx);
+    }
+    parametric[fidx.idx] = true;
+  }
+
   for (FunctionIdx fidx(0); fidx.idx < storage.functions().size(); ++fidx) {
     const Function& func = storage.functions()[fidx];
     if (!range_in_bounds(func.blocks.head(), func.blocks.size(),
@@ -299,6 +309,23 @@ VerificationResult verify_storage(const Storage& storage) {
     VerificationResult meta = check_function_meta(storage, func.meta, fidx.idx);
     if (meta.is_err()) {
       return meta;
+    }
+    // A body outside the list has resolved its ends: a parametric end
+    // here has no pass left that would rewrite it (ADR-0079).
+    if (!parametric[fidx.idx]) {
+      for (const BlockIdx block_idx : func.blocks) {
+        const Block& block = storage.blocks()[block_idx];
+        if (!range_in_bounds(block.instrs.head(), block.instrs.size(),
+                             storage.instrs().size())) {
+          break;
+        }
+        for (const InstructionIdx iidx : block.instrs) {
+          if (storage.instrs()[iidx].op == Opcode::ParametricDrop) {
+            return err(VerificationErrorKind::MisplacedParametricDrop,
+                       iidx.idx);
+          }
+        }
+      }
     }
   }
 
@@ -337,12 +364,6 @@ VerificationResult verify_storage(const Storage& storage) {
                  cidx.idx);
     }
   }
-  for (const FunctionIdx fidx : storage.parametric_functions()) {
-    if (fidx.idx >= storage.functions().size()) {
-      return err(VerificationErrorKind::ParametricFunctionOutOfRange, fidx.idx);
-    }
-  }
-
   // Register definitions: bound by block params or defined by instructions.
   // One byte per register, because every definition and every operand that
   // names a register reads or writes this set through a bit proxy otherwise.

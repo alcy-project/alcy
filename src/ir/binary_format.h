@@ -14,7 +14,8 @@ namespace ir::binary {
 // deserialize.h and names the same constants.
 inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
 inline constexpr u16 MAJOR = 5;
-inline constexpr u16 MINOR = 0;
+// Minor 1 adds the specialization and synthetic function lists.
+inline constexpr u16 MINOR = 1;
 // Bit 0: the payload is little-endian. Always set; a reader rejects a
 // file that clears it.
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;
@@ -76,6 +77,12 @@ enum class Section : u8 {
   // Rows: a u32 count, then that many function indexes. Absent means
   // none.
   ParametricFunctions = 27,
+  // The specializations of staged items (ADR-0079). Rows: a u32 count,
+  // then that many function indexes. Absent means none.
+  PreludeSpecializations = 28,
+  // The bodies the specialization pass synthesized (ADR-0079). Rows: a
+  // u32 count, then that many function indexes. Absent means none.
+  SyntheticFunctions = 29,
 };
 
 }  // namespace ir::binary

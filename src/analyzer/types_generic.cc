@@ -407,7 +407,10 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   // are arbitrary existing nodes, so each is copied in.
   ir::TypeSeq args_seq;
   for (ir::TypeIdx arg : args) {
-    args_seq.push(builder.ref_type(arg));
+    // The copy carries the declaration mark and its origin, the way a
+    // field copy does: a reader that follows either must reach the
+    // argument.
+    args_seq.push(storage_copy(arg));
   }
   const usize pushed = type_params.size();
   const usize pushed_values = value_params.size();

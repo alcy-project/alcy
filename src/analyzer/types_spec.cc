@@ -951,13 +951,16 @@ bool Checker::infer_bound_arguments(u32 module,
                                     std::vector<ir::TypeIdx>& bound,
                                     diag::Span span) {
   for (usize j = 0; j < params.size(); ++j) {
-    if (is_value_param(ast, params[j]) || bound[j].is_valid()) {
+    if (is_value_param(ast, params[j])) {
       continue;
     }
     // A bound on a bound already known names this parameter as one of
     // its spec's arguments (`I: Iterator<T>`): the implementation for
-    // `I` answers it, read through the spec method's signature.
-    for (usize i = 0; i < params.size() && !bound[j].is_valid(); ++i) {
+    // `I` answers it, read through the spec method's signature. The
+    // bound is what the argument means, so the answer stands even when
+    // the call spelled one - `count::<VecIter<i32>, i32>` reads the
+    // element type `&i32` its implementation provides (ADR-0079).
+    for (usize i = 0; i < params.size(); ++i) {
       if (i == j || is_value_param(ast, params[i]) || !bound[i].is_valid()) {
         continue;
       }
@@ -1027,7 +1030,9 @@ bool Checker::infer_bound_arguments(u32 module,
         if (!inferred.is_valid() || is_error(inferred)) {
           continue;
         }
-        bound[j] = inferred;
+        if (!bound[j].is_valid() || !types_equal(bound[j], inferred)) {
+          bound[j] = inferred;
+        }
       }
     }
   }
