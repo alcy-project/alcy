@@ -5,7 +5,7 @@
 //
 // The oracle is the fixed point: whatever the bytes are, a second pass
 // over the first pass's output moves nothing. That is the property the
-// corpus gate asks of every source in the tree; here it is asked of
+// corpus check asks of every source in the tree; here it is asked of
 // arbitrary bytes, which reach the layouts the corpus never spells --
 // an unterminated delimiter, a stray closer, bytes the lexer reads as
 // errors, all of which the formatter has to lay out rather than

@@ -33,7 +33,7 @@ CompilerFixture::CompilerFixture(std::string source)
 bool CompilerFixture::failed() {
   // A diagnostic anywhere means the stage that produced it did not
   // finish, so the stages after it have nothing to hand on. A bag that
-  // only warns is still a success: the pipeline gates on errors too.
+  // only warns is still a success: the pipeline stops on errors too.
   if (ctx_.bag.has_errors()) {
     ok_ = false;
   }

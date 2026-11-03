@@ -202,7 +202,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   delegations collapse into one. The method spelling
   `str.parse::<T>()` waits on generic methods over builtin compound
   targets (its own slice). Primitives gain inherent impls (the
-  checker's rule extends to `TypeKind::Primitive`, gated to the
+  checker's rule extends to `TypeKind::Primitive`, limited to the
   staged suite), and `num`'s per-type methods land with their first
   callers. The iterator adapters stay free functions until the spec
   system can express them as methods; that door is named, not

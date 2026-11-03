@@ -10,7 +10,7 @@ Retired instructions. `perf stat -e instructions` prints the work a program
 did: the same number on every run, on a quiet machine and on a busy one, and a
 cache miss adds cycles to a run rather than instructions. Wall clock moves with
 the machine, so it answers the second question and not the first; ADR-0021
-records why a timing is a report rather than a gate
+records why a timing is a report rather than a check
 (`docs/adr/0021-benchmark-measurement.md`).
 
 Two questions, two measurements:

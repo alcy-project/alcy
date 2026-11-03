@@ -7,7 +7,7 @@ directory records the failures that are already understood, so
 `crashes.json` holds the record. There are two kinds of entry, and the
 distinction is the whole point:
 
-- **`targets`** — the target cannot be a gate at all, because a
+- **`targets`** — the target cannot be required at all, because a
   dependency fails on a *class* of inputs. `tools/run_fuzz.py` reports the
   target as `DISABLED`: never counted as passing, never counted as
   failing, and always visible. Use this when enumerating inputs is

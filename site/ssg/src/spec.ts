@@ -4,7 +4,7 @@
 // The language reference: `docs/spec/`, published as pages. The spec is
 // the language a program is written against, and it was already written
 // down before this site existed; the site's job is to put it where a
-// reader can read it, and to hold it to the same gates as the guide --
+// reader can read it, and to hold it to the same checks as the guide --
 // every `alcy` fence compiles, every link resolves.
 //
 // A spec file becomes one page. Its order is the order the spec itself

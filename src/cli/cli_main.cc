@@ -134,8 +134,8 @@ i32 cli_main(i32 argc, char** argv) {
     // Validation has already rejected `--json` on a verb that has no
     // result document to report, so the flag and the renderer agree.
     const bool json = config.json;
-    // Grammar parsing produced the config; semantic validation gates
-    // dispatch so no command ever sees a nonsensical field combination.
+    // Grammar parsing produced the config; semantic validation runs
+    // before dispatch so no command sees a nonsensical field combination.
     base::Result<void, ConfigError> validated = validate_cli_config(config);
     if (validated.is_err()) {
       // A rejected combination is reported as a result rather than a

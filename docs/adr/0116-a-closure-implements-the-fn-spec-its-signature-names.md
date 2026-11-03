@@ -47,7 +47,7 @@ implements it, and the impl is the code the lowering registers.**
   implements it by construction, a function view answers it by the
   signature it carries, and the impl for a closure is the code the
   lowering registers for the literal (ADR-0064's `closure_fn_index`),
-  so no user-written impl exists and the seal has nothing to gate. The
+  so no user-written impl exists and the seal has nothing to restrict. The
   receiver is `&Self` because a call borrows the value - a moved
   capture stays callable through its environment, however often - and
   for a closure nominal that reference is the environment pointer the

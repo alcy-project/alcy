@@ -432,7 +432,7 @@ async function main(): Promise<void> {
   }
 
   const compiler = await loadCompiler(options);
-  // The reference answers to the same gate as the guide: a fence the
+  // The reference answers to the same check as the guide: a fence the
   // compiler refuses is a build failure, whichever tree it came from.
   const fences = validateFences([...sources, ...specSources], compiler);
   const highlighter = await loadHighlighter(options);

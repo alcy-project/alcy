@@ -38,5 +38,5 @@ Diagnostics: spans, the diagnostic bag, and rendering.
   column.
 - `diag::Reported` is the uniform error type for APIs that report
   through the bag: it proves a diagnostic was emitted and carries no
-  payload. Callers gate exit codes on `DiagBag::has_errors()`, never
-  on the error value.
+  payload. Callers key exit codes to `DiagBag::has_errors()`, never
+  to the error value.

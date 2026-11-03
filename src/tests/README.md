@@ -15,4 +15,4 @@ Conventions the suite relies on:
   unterminated token streams, null module trees, unverifiable IR)
   and assert structured `Result` failures, never crashes.
 - Fixtures reserve arena space up front (`arena.reserve(1u << 20)`)
-  and gate each setup step with `CHECK` + early return.
+  and guard each setup step with `CHECK` + early return.

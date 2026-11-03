@@ -92,7 +92,7 @@ session against the built binary and asserts the handshake, a published
 diagnostic, a formatting edit, the outline, both kinds of fold, a
 definition and its references, a completion and a signature, an inlay
 hint, and the layout both hover and `alcy/structLayout` return, which
-is the gate CI asks.
+is the check CI asks.
 
 ## Notes
 

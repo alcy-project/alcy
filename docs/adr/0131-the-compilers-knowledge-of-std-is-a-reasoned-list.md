@@ -51,7 +51,7 @@ kept as a list.**
   - The intrinsic closed set: stays; each name is a language or
     platform primitive, and a new name must say which.
   - The recognitions `is_core_fmt`, `is_io_print`, and
-    `is_expanded_variadic` (package-gated through the staged index,
+    `is_expanded_variadic` (chosen by package through the staged index,
     never by bare name): move under ADR-0130's mechanism, or the
     manifest declares which items expand where the machinery cannot
     see it.

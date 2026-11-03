@@ -1,4 +1,4 @@
-// `mut` gates rebinding: a binding declared without it still has
+// `mut` controls rebinding: a binding declared without it still has
 // storage, so a reference to it mutates that storage, and a reborrow
 // takes its permission from the reference it reads through.
 struct P {

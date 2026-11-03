@@ -2,7 +2,7 @@
   "comment": [
     "Failures that are already understood, so fuzz/run.py can tell a new",
     "defect from the same known one. A `target` entry says the target",
-    "cannot be a gate at all; an `input` entry says one specific input",
+    "cannot be required at all; an `input` entry says one specific input",
     "is expected to fail. See README.md for the policy."
   ],
   "targets": [],

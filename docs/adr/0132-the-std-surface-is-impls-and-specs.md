@@ -38,7 +38,7 @@ method.**
 
 - **Type-specific behavior is an inherent impl on the type.**
   Primitives are included: the checker's inherent-impl rule gains
-  `TypeKind::Primitive`, gated exactly like `str`, slices, and
+  `TypeKind::Primitive`, held to the same rule as `str`, slices, and
   arrays (staged suite only, ADR-0090). This is a small checker
   change, and it unblocks every future method on a scalar.
 - **Polymorphic behavior is a spec plus implementations, named

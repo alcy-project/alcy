@@ -53,10 +53,10 @@
           inherit shellHook;
         };
 
-        # The wasm gates need Emscripten, a closure far larger than the
+        # The wasm checks need Emscripten, a closure far larger than the
         # tools around it; it stays out of the default shell so the nix
         # matrix entries never download it, and `check.sh --nix` runs its
-        # wasm gates from here:
+        # wasm checks from here:
         #   nix develop .#wasm --command ./tools/check.sh --nix
         devShells.wasm = (pkgs.mkShell.override { inherit stdenv; }) {
           inputsFrom = [ self.devShells.${system}.default ];

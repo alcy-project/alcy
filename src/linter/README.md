@@ -22,7 +22,7 @@ library sources and path dependencies are skipped.
 # Run lowering and the borrow check after the rules (default true).
 # borrow-checks = true
 
-# Report a warning as an error, the CI gate (default false).
+# Report a warning as an error, the CI check (default false).
 # deny-warnings = false
 
 # The level a rule not named below uses. One of allow, warn, deny.
@@ -55,7 +55,7 @@ loaded. With `--json` the same table is one JSON document with a
 `rules` array, so a tool reads ids and defaults rather than the
 aligned text.
 
-`--deny-warnings` reports every finding as an error, the gate a CI run
+`--deny-warnings` reports every finding as an error, the check a CI run
 wants: it promotes what fires and does not turn on a rule the config
 silenced, so `allow` still means allow. `deny-warnings = true` in the
 file is the same thing, and the two add. `--no-borrow-checks` is the
@@ -118,7 +118,7 @@ table is built only when an enabled rule reads it, and so is the usage
 table. The tail is most of the cost and the rules do not need it, so
 borrow-checks = false stops after analysis for a faster edit loop. The
 run then does not report a borrow error, and alcy check remains the
-complete gate.
+one that runs them all.
 
 ## Rules
 

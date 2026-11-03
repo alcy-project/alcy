@@ -49,7 +49,7 @@ codegen, and `--release` is what turns it on.**
 
 `--release` with a direct backend now emits an optimized module
 instead of an error (ADR-0049, amended). For the LLVM backend the
-passes overlap O3 and are release-gated, so debug builds pay nothing;
+passes overlap O3 and run only in a release build, so debug builds pay nothing;
 a release build pays one walk over each function. The first passes
 are small on purpose: larger ones — devirtualization, bounds-check
 elision, allocation pairing, drop elaboration — need cross-block or

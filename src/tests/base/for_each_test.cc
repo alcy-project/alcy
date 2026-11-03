@@ -41,7 +41,7 @@ TEST_CASE("for_each runs every index once at any job count") {
 }
 
 // Work reaches more than one thread, which is the whole point of the
-// counter. The unit that arrives first holds the run at a gate until a
+// counter. The unit that arrives first holds the run at a barrier until a
 // second unit arrives, so a loop that put the whole range on one thread
 // cannot finish: it would wait out the bound and fail the case. Which
 // threads those are has no bearing on the claim, only how many.
@@ -68,7 +68,7 @@ TEST_CASE("for_each spreads work over more than one thread") {
              std::chrono::steady_clock::now() < until) {}
       return;
     }
-    // The unit that opens the gate names itself. A serial loop reaches this
+    // The unit that opens the barrier names itself. A serial loop reaches this
     // body again only once the first unit has given up, which is too late
     // and comes from the thread that was already waiting.
     bool expected = false;

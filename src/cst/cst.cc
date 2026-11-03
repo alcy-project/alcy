@@ -167,7 +167,7 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
     return BraceRole::FnBody;
   }
   // A brace the unsafe or comp keyword opens is the expression the
-  // keyword gates, however deeply the line around it is spelled.
+  // keyword owns, however deeply the line around it is spelled.
   if (last == lexer::TokenKind::Unsafe || last == lexer::TokenKind::Comp) {
     return BraceRole::ExprBlock;
   }

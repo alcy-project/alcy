@@ -50,7 +50,7 @@ struct LintConfig {
   bool borrow_checks = true;
   // Whether a finding that would be a warning is an error instead, the
   // shape rustc and clippy spell -D warnings. It promotes what fires; a
-  // rule at allow stays silent and is not turned on. A CI gate every
+  // rule at allow stays silent and is not turned on. A CI check every
   // finding fails.
   bool deny_warnings = false;
 

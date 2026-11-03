@@ -55,7 +55,7 @@ if (!is_fuzz) {
   config("fuzz_config") {
     # `-fsanitize=fuzzer` both links the runtime, which supplies main(),
     # and instruments the target for coverage-guided mutation. It is
-    # clang-only, which is why `is_fuzz` gates the whole file rather than
+    # clang-only, which is why `is_fuzz` guards the whole file rather than
     # conditionally compiling the sources.
     cflags = [ "-fsanitize=fuzzer" ]
     ldflags = [
