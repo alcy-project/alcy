@@ -3,10 +3,12 @@
 
 #include "parser/desugar.h"
 
-#include <ranges>
+#include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -32,7 +34,7 @@ bool is_keyword_name(std::string_view name) {
 // The scope width above which a name is settled on its key: below it a
 // walk reads so few names that a key of the name sought costs more than
 // the names it saves.
-constexpr usize K_SCOPE_KEY_LIMIT = 8;
+constexpr usize K_SCOPE_KEY_LIMIT = 32;
 
 class Desugarer {
  public:
@@ -51,10 +53,26 @@ class Desugarer {
     bool seen = false;
   };
 
+  // The names of a wide scope, settled on their keys. A use inside a long
+  // body then reads the few bindings that can spell it rather than every
+  // binding declared before it.
+  struct ScopeIndex {
+    std::unordered_map<u64, std::vector<u32>> by_key;
+    // How many of the scope's bindings `by_key` covers, and the view of
+    // the scopes it was built over.
+    usize indexed = 0;
+    u64 epoch = 0;
+  };
+
   ast::AstArena& ast;
   diag::DiagBag& bag;
   u32 counter = 0;
   std::vector<std::vector<Binding>> scopes;
+  // The keyed view of each scope, by depth, kept only where the scope is
+  // wide enough to pay for one. `scope_epoch` moves whenever the scopes
+  // stop being append-only extensions of what a view indexed.
+  mutable std::vector<std::unique_ptr<ScopeIndex>> scope_keys;
+  u64 scope_epoch = 0;
   std::vector<ast::Ident> path_scratch;
   // Bounds the tree walk; see base::MAX_NESTING.
   base::NestingGuard nesting_{base::MAX_NESTING};
@@ -75,42 +93,67 @@ class Desugarer {
   // Reports it once, at the first descent that finds the budget exceeded.
   void report_exhausted_nesting(diag::Span span);
 
-  void push_scope() { scopes.emplace_back(); }
+  void push_scope() {
+    scopes.emplace_back();
+    ++scope_epoch;
+  }
 
-  void pop_scope() { scopes.pop_back(); }
+  void pop_scope() {
+    scopes.pop_back();
+    ++scope_epoch;
+  }
 
   std::vector<Binding>& current() { return scopes.back(); }
 
-  Binding* find_innermost(std::string_view name) {
-    std::vector<Binding>& scope = scopes.back();
-    if (scope.size() > K_SCOPE_KEY_LIMIT) {
-      const u64 key = base::hash64(name);
-      for (Binding& binding : scope) {
-        if (binding.key == key && binding.orig == name) {
-          return &binding;
-        }
-      }
-      return nullptr;
+  // The keyed view of scope `depth`, settling the bindings appended since
+  // it was last asked for.
+  const ScopeIndex& keyed(usize depth) const {
+    if (depth >= scope_keys.size()) {
+      scope_keys.resize(depth + 1);
     }
-    for (Binding& binding : scope) {
-      if (binding.orig == name) {
-        return &binding;
+    std::unique_ptr<ScopeIndex>& slot = scope_keys[depth];
+    if (!slot) {
+      slot = std::make_unique<ScopeIndex>();
+    }
+    const std::vector<Binding>& scope = scopes[depth];
+    if (slot->epoch != scope_epoch) {
+      slot->by_key.clear();
+      slot->indexed = 0;
+      slot->epoch = scope_epoch;
+    }
+    for (usize i = slot->indexed; i < scope.size(); ++i) {
+      slot->by_key[scope[i].key].push_back(static_cast<u32>(i));
+    }
+    slot->indexed = scope.size();
+    return *slot;
+  }
+
+  // Where in scope `depth` the binding of `name` sits, if it sits there.
+  // Only the bindings its key names are read.
+  std::optional<u32> find_keyed(usize depth, std::string_view name) const {
+    const ScopeIndex& keys = keyed(depth);
+    const auto found = keys.by_key.find(base::hash64(name));
+    if (found == keys.by_key.end()) {
+      return std::nullopt;
+    }
+    const std::vector<Binding>& scope = scopes[depth];
+    for (const u32 index : found->second) {
+      if (scope[index].orig == name) {
+        return index;
       }
     }
-    return nullptr;
+    return std::nullopt;
   }
 
   std::string_view lookup(std::string_view name) const {
     if (is_keyword_name(name)) {
       return name;
     }
-    for (const std::vector<Binding>& scope : scopes | std::views::reverse) {
+    for (usize depth = scopes.size(); depth-- > 0;) {
+      const std::vector<Binding>& scope = scopes[depth];
       if (scope.size() > K_SCOPE_KEY_LIMIT) {
-        const u64 key = base::hash64(name);
-        for (const Binding& binding : scope) {
-          if (binding.key == key && binding.orig == name) {
-            return binding.fresh;
-          }
+        if (const std::optional<u32> at = find_keyed(depth, name)) {
+          return scope[*at].fresh;
         }
         continue;
       }
@@ -143,10 +186,23 @@ class Desugarer {
     if (is_keyword_name(ident.name)) {
       return ident.name;
     }
-    if (Binding* existing = find_innermost(ident.name)) {
-      if (existing->preseeded) {
-        existing->seen = true;
-        return existing->fresh;
+    std::vector<Binding>& inner = scopes.back();
+    std::optional<u32> existing;
+    if (inner.size() > K_SCOPE_KEY_LIMIT) {
+      existing = find_keyed(scopes.size() - 1, ident.name);
+    } else {
+      for (usize i = 0; i < inner.size(); ++i) {
+        if (inner[i].orig == ident.name) {
+          existing = static_cast<u32>(i);
+          break;
+        }
+      }
+    }
+    if (existing) {
+      Binding& binding = inner[*existing];
+      if (binding.preseeded) {
+        binding.seen = true;
+        return binding.fresh;
       }
       const u32 index = bag.emit<i18n::Key::ParserNameAlreadyBound>(
           DiagCode::AlreadyBound, ident.span, ident.name);
@@ -154,15 +210,17 @@ class Desugarer {
       return ident.name;
     }
     bool shadowed = false;
-    for (usize i = 0; i + 1 < scopes.size(); ++i) {
-      for (const Binding& binding : scopes[i]) {
+    for (usize i = 0; i + 1 < scopes.size() && !shadowed; ++i) {
+      const std::vector<Binding>& scope = scopes[i];
+      if (scope.size() > K_SCOPE_KEY_LIMIT) {
+        shadowed = find_keyed(i, ident.name).has_value();
+        continue;
+      }
+      for (const Binding& binding : scope) {
         if (binding.orig == ident.name) {
           shadowed = true;
           break;
         }
-      }
-      if (shadowed) {
-        break;
       }
     }
     if (!shadowed) {
