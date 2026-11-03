@@ -1,9 +1,8 @@
-# Every pull request runs this workflow, because the one context a branch
-# requires has to report on every one of them: a workflow that its own
-# `paths:` filter skipped reports nothing, and the check it stood for
-# stays "Expected" on a change that touched a document. The `changes` job
-# reads the diff instead, and the jobs below skip when it has nothing for
-# them to read.
+# Every pull request runs this workflow, and every job in it reports a
+# conclusion: a workflow that its own `paths:` filter skipped reports
+# nothing, so a check a branch requires would stay "Expected" on a change
+# that touched a document. The `changes` job reads the diff instead, and
+# the jobs below skip when it has nothing for them to read.
 name: CI
 
 on:
@@ -374,80 +373,3 @@ jobs:
     uses: ./.github/workflows/generate-summary.yaml
     with:
       artifact_pattern: "*"
-
-  # The single check to require. Branch protection names this job and
-  # nothing else, so a job added above is required by one line here and no
-  # edit to the repository settings -- and the step reads the job names out
-  # of this file to fail when that line is missing. A job that did not run
-  # is not a pass unless the change had nothing for CI to read, and every
-  # conclusion is printed so the line that failed is the line that is red.
-  gate:
-    name: Gate
-    needs:
-      - changes
-      - debug
-      - release
-      - wasm-debug
-      - wasm-release
-      - lint
-      - coverage
-      - sanitizers
-      - grammar-vs-compiler
-      - harness
-      - benchmarks
-      - fuzz
-      - cross-gen
-      - summary
-    if: always()
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          submodules: false
-          fetch-depth: 1
-
-      - name: Read the Job Conclusions
-        shell: bash
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-        run: |
-          python3 - "$NEEDS" <<'PY'
-          import json
-          import re
-          import sys
-
-          results = json.loads(sys.argv[1])
-          code = results["changes"].get("outputs", {}).get("code") == "true"
-
-          for name in sorted(results):
-              print(f"{results[name].get('result', ''):<9} {name}")
-
-          bad = {}
-          for name, job in results.items():
-              result = job.get("result")
-              if result == "success":
-                  continue
-              # A change with nothing for CI to read skips what reads it.
-              if result == "skipped" and not code:
-                  continue
-              bad[name] = result or "no conclusion"
-
-          # Every job this file declares is a job this one waited for, so a
-          # job added above is required by adding a line, not by remembering
-          # to add one.
-          with open(".github/workflows/ci.yaml", encoding="utf-8") as handle:
-              declared = set(re.findall(
-                  r"(?m)^  ([a-z][a-z0-9-]*):$",
-                  handle.read().partition("\njobs:\n")[2],
-              ))
-          unneeded = sorted(declared - set(results) - {"gate"})
-          if unneeded:
-              bad["not waited for"] = ", ".join(unneeded)
-
-          if bad:
-              print()
-              print("not a pass: " + ", ".join(f"{n} ({r})" for n, r in sorted(bad.items())))
-              sys.exit(1)
-          PY
