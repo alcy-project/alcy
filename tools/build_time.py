@@ -15,7 +15,7 @@ so the total is CPU time rather than wall time.
     uv run ./tools/build_time.py --top 30
     uv run ./tools/build_time.py --build-subdir build_wasm
 
-Like measure_gates.py this is a report and never a gate: a slow translation
+Like measure_checks.py this is a report and never a check: a slow translation
 unit is a prompt to split it, not a build failure.
 """
 

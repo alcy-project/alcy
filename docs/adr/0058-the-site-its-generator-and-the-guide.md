@@ -59,7 +59,7 @@ The published thing is the *site*, and the playground is one page of it.
 
 The reference is published the same way the guide is: every file in
 `docs/spec/` is a page under `reference/`, in the spec's own reading
-order, held to the same gates (every `alcy` fence compiles, every link
+order, held to the same checks (every `alcy` fence compiles, every link
 resolves). A tree is a descriptor -- a URL segment, a label, and where
 the reading order continues -- so the guide and the reference share one
 renderer, one contents list, one pager, and one set of landmarks. The

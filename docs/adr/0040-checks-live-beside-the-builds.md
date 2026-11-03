@@ -1,4 +1,4 @@
-# ADR-0040: The gates that need a build live beside the builds
+# ADR-0040: The checks that need a build live beside the builds
 
 - Subject: the compiler
 - Status: Accepted
@@ -20,11 +20,11 @@ Three checks were not in CI at all, all three reachable by hand:
   `src/` falls below `build/coverage_baseline.json`.
 - `check_exe.py --sanitize`, which compiles what alcy emits through clang so
   the sanitizers can instrument a program the compiler wrote itself.
-- `check.sh` itself, the gate `CONTRIBUTING.md` tells a contributor to run
+- `check.sh` itself, the check `CONTRIBUTING.md` tells a contributor to run
   before pushing.
 
-The last one is the problem the other two share. A gate the project tells you
-to run locally, and a gate CI runs, are two gates; when they disagree the
+The last one is the problem the other two share. A check the project tells you
+to run locally, and a check CI runs, are two checks; when they disagree the
 disagreement surfaces as a failure on the server that nothing local
 predicted, and the natural conclusion is that the server is flaky. CI
 running `check.sh` is what makes the sentence true.
@@ -61,21 +61,21 @@ number nobody can account for.
 ## Cost
 
 Every one of these fits a CI job, and the fit was measured rather than
-assumed. `tools/measure_gates.py` times each gate and reports it as a
+assumed. `tools/measure_checks.py` times each check and reports it as a
 multiple of lint, which is the largest: lint is a minute of clang-tidy over
 every translation unit, and coverage is about a tenth of it, the sanitized
 run about a twentieth, and the benchmark smoke about two thirds.
 
 Two claims in the tree were wrong by this measurement and stayed wrong for
 as long as nobody ran it. `0017-verification-strategy.md` and
-`CONTRIBUTING.md` both called the coverage ratchet the slowest gate in
+`CONTRIBUTING.md` both called the coverage ratchet the slowest check in
 `check.sh`; it is among the cheapest. The cost was never the reason coverage
 was local-only - nothing had established that it was the reason.
 
-`measure_gates.py` is a report and never a gate.
-`docs/adr/0021-benchmark-measurement.md` refuses to gate on a compiler's
+`measure_checks.py` is a report and never a check.
+`docs/adr/0021-benchmark-measurement.md` refuses to judge a compiler by its
 timing because a shared runner is not a quiet machine, and that
-reasoning applies to how long a gate took at least as much as it applies to
+reasoning applies to how long a check took at least as much as it applies to
 how fast a program is. A machine that could fail a build for slowness would
 be a machine whose opinion changed with its load.
 
@@ -95,16 +95,17 @@ be a machine whose opinion changed with its load.
 
 ## Amendments
 
-**The `local-gate` job is gone.** It ran `check.sh` whole, which built what
-the ten matrix entries had just built and asked every gate a second time on
-one runner, so the job cost more than the rest of the workflow's Linux jobs
-to answer questions its neighbours had already answered. The contract it
-stood for is kept the other way around now: CI asks each gate as its own
-job, and `check.sh` is the union a contributor runs, kept a superset by
-carrying the gates it once lacked -- the direct-backend wasm acceptance,
+**The job that ran `check.sh` whole is gone.** It was the union over the
+tree, which built what the ten matrix entries had just built and asked every
+check a second time on one runner, so the job cost more than the rest of the
+workflow's Linux jobs to answer questions its neighbours had already
+answered. The contract it stood for is kept the other way around now: CI
+asks each check as its own job, and `check.sh` is the union a contributor
+runs, kept a superset by
+carrying the checks it once lacked -- the direct-backend wasm acceptance,
 the release-mode tests, e2e cases, and exe programs, and the benchmark
-smoke. A gate the project tells you to run and a gate CI runs are still
-two gates; what keeps them from drifting is that the local union now
+smoke. A check the project tells you to run and a check CI runs are still
+two checks; what keeps them from drifting is that the local union now
 contains the CI set, not that one job ran the union.
 
 **Lint is sharded and cpplint is gone.** clang-tidy is the whole of the
@@ -178,31 +179,45 @@ it are the same run, and nothing after that downloads it. A failed entry's
 someone is fixing now -- nothing downloads it, and by the following week the
 log has either been read or the fix has landed.
 
-**One job is what a branch requires.** Each check still stands on its own --
-one command, one red, a name that says which verb broke -- but protection
-names one context, `Gate`, whose single step reads the conclusions of the
-jobs it needs and fails unless every one of them succeeded. A required
-context had to be edited whenever a job was added to it, and a list that has
-to be remembered is a list that goes stale; `always()` over `toJSON(needs)`
-is a job that cannot forget a neighbour. It cannot forget a job either: the
-step reads the job names out of `ci.yaml` and fails when the list it waits
-for is missing one, so a job added there is required by a line in this
-repository and by no edit to the settings. What it does not do is remove the
-line. `needs` is a key of the file and not an expression, so the enumeration
-stays, and the gate is what keeps it honest instead of the memory of whoever
-adds a job.
+**Each check reports under its own name.** Protection once named one
+context, the `Gate` job, whose single step read the conclusions of the
+fourteen jobs it needed and failed unless every one of them succeeded: a job
+added above was required by a line in this repository instead of by an edit
+to the settings, and the step read the job names out of `ci.yaml` so a job
+it did not wait for was a red. That answer had no reader. `main` takes
+direct pushes, so nothing consumed it, and the job's only work was to report
+last what the jobs before it had already reported.
+
+The job is gone, and with it the audit that a conclusion matched `changes`.
+A branch that wants CI to block a merge requires the checks it cares about
+by name, or requires the workflow at the organization level, and either way
+the answer comes from the job that ran rather than from a summary of it. The
+cost is the one the job was written for: a job skipped on a change that did
+reach CI is now as green as one that ran, and the only `if:` a job carries
+is the one that reads `changes`, so the list that job publishes is the one
+thing that has to stay right.
 
 **A required context has to report on every pull request.** `style.yaml` has
 no `paths` filter, so its four jobs report on every change and can stay the
 contexts they are. `site.yaml` becomes advisory: it deploys, its filter means
 it cannot report on every change, and the run that builds the site is what
 says a site broke. `ci.yaml` loses its own filter for the same reason the
-others keep theirs -- a workflow a filter skipped reports nothing, and a
-change to prose alone would leave `Gate` "Expected" with nothing left that
-could make it green, so the one context required would block exactly the
-merges it was meant to unblock. The workflow runs on every change instead,
-and a `Changed Paths` job reads the diff: prose and the site skip the jobs
-that read a tree, and every other path runs them. A `skipped` conclusion
-passes only when there was nothing to read -- a job skipped on a change that
-did reach CI is as red as a failure, so a mistake in that list reads as a
-lost run rather than a silent green.
+others keep theirs -- a workflow a filter skipped reports nothing at all, so
+a check a branch requires would stay "Expected" with nothing left that could
+make it green, and it would block exactly the merges it was meant to unblock.
+The workflow runs on every change instead, and a `Changed Paths` job reads
+the diff: prose and the site skip the jobs that read a tree, and every other
+path runs them. A skipped job still reports a conclusion, which is what lets
+it be required by name, and what it cannot report is why it skipped: the
+classification `Changed Paths` prints is what a reader of a green run has to
+trust.
+
+**These are checks, not gates.** Every one of them is named `check` in the
+tree: `check.sh` is the union a contributor runs, `check_fmt.py`,
+`check_exe.py`, `check_coverage.py`, `check_treesitter.py` and
+`check_spec.py` are parts of it, `CONTRIBUTING.md` calls the ones that read
+source "the tree checks", and a status check is what GitHub calls the
+conclusion a job reports. "Gate" was a second name for the same thing, and a
+second name is a word a reader has to translate. `tools/measure_gates.py`
+is `tools/measure_checks.py` now, and the `Gate` job is gone rather than
+renamed.

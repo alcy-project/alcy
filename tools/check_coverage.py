@@ -8,7 +8,7 @@
 A fixed threshold is the wrong shape for this repository: a module that
 is half covered because it is mostly error paths is not a defect, and a
 percentage target would push effort away from the code that matters. So
-the gate is a ratchet. `build/coverage_baseline.json` records the line
+the check is a ratchet. `build/coverage_baseline.json` records the line
 coverage the tree has reached, a run that lands below it fails, and the
 report names the least covered modules so the next test goes where the
 gap is.
@@ -19,9 +19,9 @@ exercised end to end by the exe cases rather than by unit tests, and a
 report that called them untested would send the next test to the wrong
 place.
 
-    ./tools/check_coverage.py            build, run, gate
+    ./tools/check_coverage.py            build, run, check
     ./tools/check_coverage.py --no-build reuse the last build
-    ./tools/check_coverage.py --report   print the report, no gate
+    ./tools/check_coverage.py --report   print the report, no check
     ./tools/check_coverage.py --update   record the current numbers
 
 Only `src/` counts. The vendored dependencies are compiled into the test
@@ -186,7 +186,7 @@ def measure(verbose: bool = False) -> dict:
 
 
 def summarize(export: dict) -> dict:
-    """Reduces the export to the numbers the gate and the report need."""
+    """Reduces the export to the numbers the check and the report need."""
     files = export["data"][0]["files"]
     modules: dict[str, dict[str, int]] = {}
     total_count = 0
@@ -251,7 +251,7 @@ def report(current: dict, limit: int) -> None:
         )
 
 
-def gate(current: dict) -> int:
+def ratchet(current: dict) -> int:
     """Fails when coverage lands below the recorded baseline."""
     if not BASELINE.is_file():
         sys.exit(f"{BASELINE} is missing. Record the current numbers with --update.")
@@ -303,7 +303,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         action="store_true",
-        help="print the report without gating on the baseline",
+        help="print the report without enforcing the baseline",
     )
     parser.add_argument(
         "--update",
@@ -332,7 +332,7 @@ def main() -> int:
     if args.report:
         report(current, args.limit)
         return 0
-    return gate(current)
+    return ratchet(current)
 
 
 if __name__ == "__main__":

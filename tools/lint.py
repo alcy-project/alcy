@@ -129,7 +129,7 @@ def check_ascii_only(files: list[str]) -> bool:
 
 # Headers whose translation unit is generated: the generator already
 # occupies the sibling name, so no source .cc can exist. They stay
-# outside the header gate until the generator is renamed. A stale
+# outside the header check until the generator is renamed. A stale
 # entry fails the run instead of silently passing.
 GENERATED_HEADER_EXCLUSIONS = [
     "src/pipeline/embedded_std.h",
@@ -231,7 +231,7 @@ def lint_files(
         if paths is None:
             return -1
         changed_set = set(paths)
-        # A change to a manifest or a document has nothing this gate
+        # A change to a manifest or a document has nothing this check
         # reads; running gn gen and a whole-tree format for it is the
         # cost the flag exists to avoid.
         if not any(Path(p).suffix in source_extensions for p in changed_set):
@@ -268,7 +268,7 @@ def lint_files(
         target_dirs.append(d)
 
     # The checks that read the whole tree -- the format dry run, gn check,
-    # the ASCII gate, the rules' own cases -- answer once, so a sharded
+    # the ASCII check, the rules' own cases -- answer once, so a sharded
     # run asks them with the first shard and the rest carry only the
     # clang-tidy share.
     whole_tree = shard is None or shard[0] == 1
@@ -312,7 +312,7 @@ def lint_files(
     # the silence starts.
     print(
         f"lint: {len(comp_files) + len(header_files)} file(s) to tidy, "
-        f"{enumerated} in the gate's scope"
+        f"{enumerated} in the check's scope"
     )
 
     if whole_tree:

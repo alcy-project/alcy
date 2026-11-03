@@ -77,7 +77,7 @@ another.**
    toml++ aborts on an incomplete table header, which is a *class* of
    inputs no list of hashes can cover. `run.py` prints the target as
    disabled: never counted as passing, never counted as failing, always
-   visible. A gate that cannot discriminate is worse than no gate, and
+   visible. A check that cannot discriminate is worse than no check, and
    quietly turning it green would hide that.
 
 6. **Nesting is bounded by one limit, and it is a language property.**
@@ -102,7 +102,7 @@ another.**
    pass 33% covered, an artifact of where its tests live, and with the
    exe cases the honest figure is 62%. A report that sends the next test
    to the wrong place is worse than no report.
-   `tools/measure_gates.py` times it against every other gate, and the
+   `tools/measure_checks.py` times it against every other check, and the
    ratchet is not among the slow ones - see the cost bullet below.
 
 8. **A test that has text does not need a file.** `SourceManager::add_virtual`
@@ -125,15 +125,15 @@ another.**
   expensive part. `check_coverage.py` rebuilds the tests and the compiler
   with instrumentation, so it builds a third tree beside the two
   `check.sh` already makes, and takes `--no-coverage` to skip.
-  `lint` needs a compilation database of its own and is the slowest gate
+  `lint` needs a compilation database of its own and is the slowest check
   in the tree by a wide margin - this file used to call the ratchet the
   slowest, which was wrong, and stayed wrong for as long as nobody
-  measured the pair. `tools/measure_gates.py` exists so that a claim
-  about which gate is slow is a number somebody ran rather than a
-  sentence somebody believed; it is a report and never a gate, because
+  measured the pair. `tools/measure_checks.py` exists so that a claim
+  about which check is slow is a number somebody ran rather than a
+  sentence somebody believed; it is a report and never a check, because
   the objection to timing a shared runner in
   `docs/adr/0021-benchmark-measurement.md` applies to the length of a
-  gate at least as much as it applies to the speed of a program.
+  check at least as much as it applies to the speed of a program.
 - `fuzz/` maintains its own entry points into the same code the unit
   tests drive, which is the other overlap. The open-ended run stays out
   of CI -- its value decays as its corpus saturates, so a per-push job

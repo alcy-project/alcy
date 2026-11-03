@@ -130,9 +130,9 @@ def format_files(dry_run: bool) -> int:
     # The rule fixes come before clang-format, so the final pass
     # normalizes whatever they rewrote.
     commands = tool_commands(dry_run) + create_commands(target_dirs, dry_run)
-    # Every command's exit code is the gate; a discarded one lets both
+    # Every command's exit code is the check; a discarded one lets both
     # clang-format drift and a license that would be applied pass. The
-    # output is captured so the gate's answer is its own summary, and a
+    # output is captured so the check's answer is its own summary, and a
     # failure's diagnostics print where they can be read.
     for cmd in commands:
         proc = subprocess.run(cmd, cwd=project_root_dir, capture_output=True, text=True)

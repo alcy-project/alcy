@@ -43,8 +43,8 @@ produces.**
   The same rule governs decoding when it lands; it is stated once,
   here, so the count and the walk cannot disagree.
 - `unicode::utf8::valid(str) -> bool` is the predicate for a program
-  that requires validity. It is a query, not a gate: the counts do not
-  depend on it, and neither does any other core operation.
+  that requires validity. Asking it changes nothing: the counts do not
+  depend on the answer, and neither does any other core operation.
 - `char` is a Unicode scalar value, and a checked decode is the only
   thing that produces one: the bytes decide whether a scalar exists at
   that position, and the API that decodes chooses between the lossy

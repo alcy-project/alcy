@@ -459,8 +459,8 @@ def main():
 
     if args.sanitize and SYSTEM_CLANG is None:
         # A run without the sanitizer would pass while testing none of what
-        # was asked for, so this refuses rather than degrades. A gate that
-        # cannot discriminate is worse than no gate: it is green for a
+        # was asked for, so this refuses rather than degrades. A check that
+        # cannot discriminate is worse than no check: it is green for a
         # reason nobody reading it can see.
         print(
             "error: --sanitize needs clang on PATH, and it is not there",

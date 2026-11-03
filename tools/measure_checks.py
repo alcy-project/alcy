@@ -3,29 +3,29 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Times every gate in the repository and reports each as a multiple of lint.
+"""Times every check in the repository and reports each as a multiple of lint.
 
 A repository that says in prose which check is slow is a repository whose
 prose is wrong within a release. Two claims in this tree were: ADR-0017
-called the coverage ratchet the slowest gate in `check.sh`, and
+called the coverage ratchet the slowest check in `check.sh`, and
 `CONTRIBUTING.md` repeated it. Lint is about 1.7x the ratchet, so both
 were wrong by the largest factor they had a number for, and nothing
 noticed because nothing measured the pair.
 
-This measures the pair. It is a report and never a gate: ADR-0021 refuses
-to gate on a timing because a shared runner is not a quiet machine, and
-that reasoning applies to how long a gate took at least as much as it
-applies to how fast the compiler is. A machine that reported a gate as
+This measures the pair. It is a report and never a check: ADR-0021 refuses
+to judge a timing because a shared runner is not a quiet machine, and
+that reasoning applies to how long a check took at least as much as it
+applies to how fast the compiler is. A machine that reported a check as
 too slow would be a machine whose opinion changes with its load.
 
-    uv run ./tools/measure_gates.py                  time every gate
-    uv run ./tools/measure_gates.py --only lint     time one
-    uv run ./tools/measure_gates.py --json           machine-readable
+    uv run ./tools/measure_checks.py                  time every check
+    uv run ./tools/measure_checks.py --only lint     time one
+    uv run ./tools/measure_checks.py --json           machine-readable
 
 The figures depend on the machine, so the machine is part of the output
 and the numbers are comparable to each other and to nothing else. The
 ratios are the portable part, which is why the report is in multiples of
-lint: lint is the largest gate, so it is the one that sets the scale.
+lint: lint is the largest check, so it is the one that sets the scale.
 """
 
 import argparse
@@ -41,25 +41,25 @@ from utils.paths import project_root_dir
 
 REPO_ROOT = project_root_dir
 
-# The reference gate. Everything is reported against it because it is the
+# The reference check. Everything is reported against it because it is the
 # largest, and a budget expressed as a multiple of the largest thing is
 # the only form that survives being re-measured on another machine.
 BASELINE = "lint"
 
-# A gate is worth a CI job if it is no slower than this multiple of the
-# reference. It was chosen when every gate in the tree measured well under
+# A check is worth a CI job if it is no slower than this multiple of the
+# reference. It was chosen when every check in the tree measured well under
 # one, so nothing is excluded by it today; it is here to be a decision
 # rather than an accident if that ever stops being true.
 BUDGET = 1.2
 
 # (label, argv) in the order `check.sh` runs them, so the report reads as
-# the gate's own ordering rather than as a sorted table. The TOML,
+# the check's own ordering rather than as a sorted table. The TOML,
 # Markdown, rule and Python checks are seconds each and live inside
 # `format` and `lint` here, which is where `check.sh` reaches them too.
 # `fuzz` is not here: it is corpus-dependent development tooling
-# (ADR-0017), asked in CI as a bounded smoke rather than a gate this
+# (ADR-0017), asked in CI as a bounded smoke rather than a check this
 # report ranks.
-GATES = [
+CHECKS = [
     ("typos", ["typos"]),
     (
         "tests",
@@ -166,9 +166,9 @@ def machine() -> dict:
 
 
 # Label to the tool whose absence stops it, and what to say about it.
-# A gate that cannot run is reported rather than timed as zero: `typos` and
+# A check that cannot run is reported rather than timed as zero: `typos` and
 # the fuzzer's clang runtime are the two often missing, and a fast zero
-# would read as a fast gate rather than as no gate.
+# would read as a fast check rather than as no check.
 NEEDS_TOOL = {
     "typos": ("typos", "typos is not on PATH"),
     "coverage": ("llvm-cov", "llvm-cov is not on PATH"),
@@ -200,7 +200,7 @@ NEEDS_TOOL = {
 
 
 def unrunnable(label: str) -> str:
-    """Why a gate cannot run here, or an empty string if it can."""
+    """Why a check cannot run here, or an empty string if it can."""
     if label not in NEEDS_TOOL:
         return ""
 
@@ -213,8 +213,8 @@ def time_one(label: str, argv: list[str]) -> dict:
     proc = subprocess.run(argv, cwd=REPO_ROOT, capture_output=True, text=True)
     seconds = time.monotonic() - start
 
-    # A gate that failed still took the time it took, and that is worth
-    # knowing; but its figure does not describe the gate, so it is kept
+    # A check that failed still took the time it took, and that is worth
+    # knowing; but its figure does not describe the check, so it is kept
     # out of the ratios.
     return {
         "label": label,
@@ -227,7 +227,7 @@ def time_one(label: str, argv: list[str]) -> dict:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--only", help="time one gate by label")
+    parser.add_argument("--only", help="time one check by label")
     parser.add_argument(
         "--json",
         action="store_true",
@@ -245,9 +245,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    gates = [g for g in GATES if args.only is None or g[0] == args.only]
-    if not gates:
-        print(f"error: no gate named {args.only!r}", file=sys.stderr)
+    checks = [c for c in CHECKS if args.only is None or c[0] == args.only]
+    if not checks:
+        print(f"error: no check named {args.only!r}", file=sys.stderr)
         return 1
 
     if args.build:
@@ -265,7 +265,7 @@ def main() -> int:
         )
 
     results = []
-    for label, argv in gates:
+    for label, argv in checks:
         why = unrunnable(label)
         if why:
             results.append({"label": label, "skipped": why})
@@ -291,7 +291,7 @@ def main() -> int:
                     "machine": machine(),
                     "budget": BUDGET,
                     "reference": BASELINE,
-                    "gates": results,
+                    "checks": results,
                 },
                 indent=2,
             )
@@ -304,7 +304,7 @@ def main() -> int:
         f"Figures are this machine's; the ratios are the portable part.\n"
     )
     width = max(len(r["label"]) for r in results)
-    print(f"{'gate'.ljust(width)}  {'seconds':>9}  {'x lint':>7}  verdict")
+    print(f"{'check'.ljust(width)}  {'seconds':>9}  {'x lint':>7}  verdict")
     for r in results:
         label = r["label"].ljust(width)
         if "skipped" in r:
@@ -326,7 +326,7 @@ def main() -> int:
             f"budget is {BUDGET * baseline:.0f}s."
         )
     print(
-        "Nothing here is a gate. A timing that fails is a machine's opinion, "
+        "Nothing here is a check. A timing that fails is a machine's opinion, "
         "and docs/adr/0021-benchmark-measurement.md is why a machine's "
         "opinion is not evidence."
     )

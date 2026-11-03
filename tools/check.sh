@@ -3,7 +3,7 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# The gates live in check.py; this stays as the entry point the
+# The checks live in check.py; this stays as the entry point the
 # documentation names and holds no logic of its own. --help there lists
 # every flag and what it skips.
 

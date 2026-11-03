@@ -47,7 +47,7 @@ parameters are injected while it holds no configuration of its own.**
   command passes `default_format_config()` and nothing else: no flag
   names a width, nothing reads a file or the environment, and a host
   wanting another width passes its own.
-- Idempotence and parse tolerance are properties the gate asks of the
+- Idempotence and parse tolerance are properties the check asks of the
   whole corpus (`tools/check_fmt.py`): every `.al` file in the tree is
   what the formatter would write, formatting formatted output changes
   nothing, and the compiler's verdict about a file survives its

@@ -3,11 +3,11 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""The union of gates a contributor runs before pushing.
+"""The union of checks a contributor runs before pushing.
 
 Every command here is one CI asks in its own job
-(docs/adr/0040-gates-live-beside-the-builds.md); the flags skip a gate
-whose tool a machine lacks, and a skipped gate refuses or says so rather
+(docs/adr/0040-checks-live-beside-the-builds.md); the flags skip a check
+whose tool a machine lacks, and a skipped check refuses or says so rather
 than passing in silence. `./tools/check.sh` execs this, so the entry
 point the documentation names still works.
 """
@@ -32,25 +32,25 @@ def python_runner() -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run every local gate, in the order CI asks them."
+        description="Run every local check, in the order CI asks them."
     )
     parser.add_argument(
         "--nix",
         action="store_true",
-        help="run all checks in a nix develop environment; the wasm gates "
+        help="run all checks in a nix develop environment; the wasm checks "
         "need the .#wasm shell, which carries Emscripten",
     )
     parser.add_argument(
         "--no-wasm",
         action="store_true",
-        help="skip the WebAssembly gates: the emscripten build, the "
+        help="skip the WebAssembly checks: the emscripten build, the "
         "direct-backend acceptance, and the playground smoke (they need "
         "Emscripten and bun)",
     )
     parser.add_argument(
         "--no-release",
         action="store_true",
-        help="skip the gates that run the release build: the tests, the "
+        help="skip the checks that run the release build: the tests, the "
         "e2e cases, and the exe programs",
     )
     parser.add_argument(
@@ -79,13 +79,13 @@ def main() -> int:
     py = python_runner()
 
     def run(*command: str) -> None:
-        """One gate: the first failure is where the run stops."""
-        # The boundary names the gate before its output, so a silent gate
+        """One check: the first failure is where the run stops."""
+        # The boundary names the check before its output, so a silent check
         # and a talkative one read as steps of one run rather than as
         # stray output.
         print(f"==> {' '.join(command)}", flush=True)
         if subprocess.run(list(command)).returncode != 0:
-            sys.exit(f"error: gate failed: {' '.join(command)}")
+            sys.exit(f"error: check failed: {' '.join(command)}")
 
     def tool(script: str, *flags: str) -> None:
         run(*py, f"./tools/{script}", *flags)
@@ -106,8 +106,8 @@ def main() -> int:
             ["nix", "develop", "-c", "uv", "run", "python", script, *sys.argv[1:]],
         )
 
-    # The wasm gates are on by default, so a missing tool is worth saying
-    # now rather than after every other gate has run.
+    # The wasm checks are on by default, so a missing tool is worth saying
+    # now rather than after every other check has run.
     if not args.no_wasm:
         if shutil.which("emcc") is None:
             refuse(
@@ -147,7 +147,7 @@ def main() -> int:
     if not args.no_release:
         # A bug only the release build has -- a DCHECK whose side effect
         # the release build drops, an optimization the debug build never
-        # runs -- is invisible to every gate below that reads the debug
+        # runs -- is invisible to every check below that reads the debug
         # build, so the release binary answers the same three questions
         # here: the unit tests, the e2e cases, and the exe programs.
         tool(
@@ -162,14 +162,14 @@ def main() -> int:
     tool("check_e2e.py", f"--build-subdir={debug_subdir}")
     tool("check_borrow_rules.py", f"--build-subdir={debug_subdir}")
 
-    # The formatter's own gate, over every source rather than a sample:
+    # The formatter's own check, over every source rather than a sample:
     # the tree is what it would write, formatting formatted output
     # changes nothing, and the compiler's verdict about a file survives
     # its formatting.
     tool("check_fmt.py", f"--build-subdir={debug_subdir}")
 
     # The language server is a process an editor talks to over a pipe, so
-    # its gate drives the built binary through one session: the framing,
+    # its check drives the built binary through one session: the framing,
     # the diagnostics, and the formatter edit are one path, not three
     # units the suite already covers separately.
     tool("check_lsp.py", f"--build-subdir={debug_subdir}")
@@ -242,7 +242,7 @@ def main() -> int:
         # generates is compiled by an external toolchain that can
         # instrument it. Slow, and refused rather than skipped where
         # clang is absent: naming the flag is the difference between a
-        # gate somebody can work with and one they have to read the
+        # check somebody can work with and one they have to read the
         # source of to get past.
         if shutil.which("clang") is None:
             refuse("clang", "pass --no-sanitize to skip")
@@ -255,7 +255,7 @@ def main() -> int:
 
     if not args.no_coverage:
         # The coverage ratchet rebuilds instrumented binaries, so it
-        # runs after the format and lint gates and reuses its own output
+        # runs after the format and lint checks and reuses its own output
         # directory. Skip with --no-coverage when llvm-cov is absent.
         if shutil.which("llvm-cov") is None:
             refuse("llvm-cov", "pass --no-coverage to skip")
@@ -276,7 +276,7 @@ def main() -> int:
         # The direct wasm backend's acceptance: the host compiler emits
         # the module and bun runs it under WASI. That is the half of the
         # wasm story the emscripten build above cannot ask, and CI runs
-        # it in every matrix entry, so the local gate asks it too.
+        # it in every matrix entry, so the local check asks it too.
         tool("check_wasm.py", f"--build-subdir={debug_subdir}")
 
         # The playground carries no LLVM and no tests, so it is its own

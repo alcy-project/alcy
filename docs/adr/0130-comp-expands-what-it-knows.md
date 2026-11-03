@@ -79,7 +79,7 @@ by the ordinary rules.**
   `io::print` and its siblings ride the same expansion while the
   hooks keep the write-all loop (ADR-0023). The `panic` guards
   become real bodies.
-- Parity is a gate, not a hope: the existing fmt tests are the
+- Parity is enforced, not hoped for: the existing fmt tests are the
   oracle, joined by code size, compile time, runtime performance,
   wasm parity, and `backlog.md`'s float-digit accuracy item.
 - The pilot fixes two preconditions on the language: compile-time

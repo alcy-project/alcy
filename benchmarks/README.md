@@ -66,7 +66,7 @@ missing warmup, or a batch that swallowed the work.
 
 Neither judgement is CI's to make. A shared runner is not a quiet
 machine — the same case measured twice on one moved by thirty percent,
-against one or two on a quiet machine — so a gate on it would be a coin
+against one or two on a quiet machine — so a check on it would be a coin
 flip that blocks merges and teaches everyone to re-run. CI runs `smoke`
 instead, which judges the shape of the result and not its speed:
 

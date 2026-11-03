@@ -498,11 +498,11 @@ have an answer for every input, so running them on every change is worth its
 cost. The fuzzer's answer depends on where its corpus has got to, so a
 per-push run would mostly re-verify what it already knows.
 
-CI runs `tools/check.sh` as a job, so the gate a contributor runs is the gate
-the server runs; `docs/adr/0040-gates-live-beside-the-builds.md` records which
+CI runs `tools/check.sh` as a job, so the check a contributor runs is the check
+the server runs; `docs/adr/0040-checks-live-beside-the-builds.md` records which
 job each check lives in and why.
-`tools/measure_gates.py` times every gate against lint, the largest, and is a
-report rather than a gate.
+`tools/measure_checks.py` times every check against lint, the largest, and is a
+report rather than a check.
 
 Two properties of this shape matter more than the table:
 

@@ -7,7 +7,7 @@
 - Python via `uv` (`uv sync` sets up the environment; `uv run` prefixes commands).
 - The tree-sitter CLI and Bun, for the language's grammar (see [treesitter/README.md](treesitter/README.md)).
 - Alternatively, Nix provides the whole toolchain: `nix develop`. The wasm
-  gates need Emscripten too, which the default shell leaves out to keep the
+  checks need Emscripten too, which the default shell leaves out to keep the
   build matrix light; they run from the shell that carries it:
   `nix develop .#wasm --command ./tools/check.sh --nix`.
 
@@ -23,7 +23,7 @@ uv run ./tools/build.py --target=all --mode=debug
 uv run ./tools/run.py --target=tests --mode=debug
 uv run ./tools/check_e2e.py
 uv run ./tools/check_exe.py
-# The .al sources are the formatter's own gate: laid out as alcy fmt
+# The .al sources are the formatter's own check: laid out as alcy fmt
 # writes them, idempotent under a second pass, unchanged in verdict.
 uv run ./tools/check_fmt.py
 # lint.py also runs the format dry run and the tree's TOML, Markdown,
@@ -35,8 +35,8 @@ uv run ./tools/verify_static_linkage.py --build-dir=out/build
 # The grammar needs no toolchain but the tree-sitter CLI and Bun:
 uv run ./tools/check_treesitter.py --grammar
 
-# Or run every local gate at once. CI asks each of these as its own job,
-# and check.sh asks the same gates plus the ones below:
+# Or run every local check at once. CI asks each of these as its own job,
+# and check.sh asks the same checks plus the ones below:
 ./tools/check.sh
 
 # Faster iteration (skips gn gen, gn check, and compdb; never for CI):
@@ -46,7 +46,7 @@ uv run ./tools/build.py --target=tests --fast
 # main. CI still runs the full tree:
 uv run ./tools/lint.py --changed
 
-# Where the last build's time went (a report, not a gate):
+# Where the last build's time went (a report, not a check):
 uv run ./tools/build_time.py
 
 # Debug builds carry line tables; --debug-info=full restores -g3 detail:
@@ -68,7 +68,7 @@ not match, runs the corpus, and checks the queries; adding
 `--differential` compares every `.al` file against the compiler's own
 verdict, which is the half of the check that can notice the specification,
 the parser, and the grammar disagreeing. `check.sh` runs both and
-`measure_gates.py` times both. See
+`measure_checks.py` times both. See
 [docs/adr/0041-alcy-treesitter-grammar.md](docs/adr/0041-alcy-treesitter-grammar.md).
 
 Performance work has its own loop: a generated corpus, instruction counts
@@ -100,10 +100,10 @@ is installed, and CI's tree checks enforce it regardless.
 
 Please make sure the CI pass before requesting a review.
 
-`./tools/check.sh` runs every local gate: the same commands as above,
+`./tools/check.sh` runs every local check: the same commands as above,
 against the debug build and again against the release one (the unit
 tests, the e2e cases, and the exe programs -- a bug that only a release
-build has is invisible to the debug gates), plus the benchmark smoke, the
+build has is invisible to the debug checks), plus the benchmark smoke, the
 WebAssembly tests, the direct-backend wasm acceptance, and the playground
 smoke, which need `emcc` and `bun` on `PATH`. `./tools/check.sh --help`
 lists what each flag skips.
@@ -112,10 +112,10 @@ lists what each flag skips.
 # Everything (requires emcc and bun on PATH):
 ./tools/check.sh
 
-# Skip the wasm gates:
+# Skip the wasm checks:
 ./tools/check.sh --no-wasm
 
-# Skip the release gates:
+# Skip the release checks:
 ./tools/check.sh --no-release
 
 # Just the wasm tests:
@@ -283,7 +283,7 @@ so it is not a test.
    coverage ratchet: it runs in CI, and CI is not a substitute for running
    the thing yourself. The fuzzer is the exception - it needs clang's fuzzer
    runtime and its value decays as its corpus saturates, so it is a tool you
-   reach for rather than a gate you clear.
+   reach for rather than a check that has to pass.
 
 Which tool to reach for, in order: a unit test with an explicit expected value, a
 property test, a sanitized hostile-input case, and libFuzzer for coverage-guided

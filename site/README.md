@@ -98,7 +98,7 @@ nowhere earlier.
   route, never in the shell.
 - **Sizes are budgeted.** `site.py budget` holds the pages, the shell,
   the catalogs, and the guide's two modules to byte counts, and `build`
-  runs the same gate. The numbers are raw bytes, so they do not drift
+  runs the same check. The numbers are raw bytes, so they do not drift
   with what a proxy chooses to compress.
 - **One catalog per tree, one copy of the assets.** `i18n.ts` is the
   source; the build writes `i18n.<lang>.js` and stamps each tree's

@@ -131,12 +131,12 @@ def run_fuzzing(
     failures = 0
     for name in names:
         if name in disabled:
-            # Reported, not counted and not passed: a gate that cannot
-            # discriminate is worse than no gate, and quietly turning it
+            # Reported, not counted and not passed: a check that cannot
+            # discriminate is worse than no check, and quietly turning it
             # green would hide that.
             print(f"==> {name} DISABLED: {disabled[name]['summary']}")
             print(
-                f"    {name} cannot be a gate until this is fixed; see "
+                f"    {name} cannot be required to pass until this is fixed; see "
                 "fuzz/known/README.md"
             )
             continue

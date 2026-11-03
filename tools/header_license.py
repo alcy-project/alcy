@@ -75,7 +75,7 @@ def apply_license(
             new_content = (license_text + "\n" + content).lstrip()
 
         if dry_run:
-            # A dry run is the gate: report the file that would change
+            # A dry run is the check: report the file that would change
             # and fail, so the check cannot pass by writing nothing.
             print(f"License header not found: {file_path} (dry run)")
             return False

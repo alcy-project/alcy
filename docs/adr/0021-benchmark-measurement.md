@@ -94,9 +94,9 @@ place twice on one machine, and if it does not, the clock, the warmup,
 or the batching is wrong and every figure the engine ever produced is
 suspect.
 
-This is a local check, not a CI gate. A shared runner is not a quiet
+This is a local measurement, not a check CI runs. A shared runner is not a quiet
 machine: the same parse measured twice on one moved by thirty percent,
-where on a quiet machine it moves by one or two. A gate on a figure
+where on a quiet machine it moves by one or two. A check on a figure
 nobody can measure is a coin flip, and a coin flip that blocks merges
 teaches everyone to re-run rather than to read the output. CI instead
 runs a smoke check that judges nothing about timing — every case
@@ -114,10 +114,10 @@ size of the input, so no tolerance would make the two agree and a check
 built on agreement would be a check that passes by being loose.
 
 `reconcile` therefore prints the two side by side, so the gap between
-them is visible rather than assumed, and gates only on reproducibility.
+them is visible rather than assumed, and holds them only to reproducibility.
 The check runs on a release build: a debug build carries assertions and
 sanitizers, and the same parse measured three times in one moves by
-about a sixth, which is not a figure to gate on.
+about a sixth, which is not a figure to judge by.
 
 ## Consequences
 

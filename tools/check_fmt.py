@@ -5,7 +5,7 @@
 
 """Two questions about the formatter, asked of every source in the tree.
 
-The first is the gate a formatter owes its tree: every .al file is
+The first is the check a formatter owes its tree: every .al file is
 already in its canonical layout, so a diff after alcy fmt is a review
 decision rather than a formatting accident. alcy fmt --check answers
 it, and one run covers many files.
@@ -124,7 +124,7 @@ def main() -> int:
         print("no sources found under " + ", ".join(SOURCE_ROOTS))
         return 1
 
-    # The layout gate: the tree as it stands is what fmt would write.
+    # The layout check: the tree as it stands is what fmt would write.
     needs_formatting = unformatted(alcy, corpus)
 
     # The property sweep: format every file once, then ask --check of

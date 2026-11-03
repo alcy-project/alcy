@@ -127,7 +127,7 @@ finding.
 
 Two run-mode knobs joined it. `deny-warnings` - the key, or
 `--deny-warnings` on the command line - reports every finding as an
-error without turning on a rule the config silenced, the gate a CI
+error without turning on a rule the config silenced, the check a CI
 wants; it is read in `LintContext::report` beside the level, so a rule
 needs no code for it. `--no-borrow-checks` is the command-line spelling
 of `borrow-checks = false`; it is the same tail the config already

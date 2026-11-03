@@ -478,7 +478,7 @@ def run_smoke(build_subdir: str) -> int:
             )
 
         # The checked-in suite, because smoke is the shape check the
-        # gate runs rather than a driver for another suite.
+        # check runs rather than a driver for another suite.
         suite = load_suite(project_root_dir / "benchmarks/suites/cases.toml")
         fixtures = project_root_dir / "benchmarks/fixtures"
         for case in suite:
@@ -521,7 +521,7 @@ def run_smoke(build_subdir: str) -> int:
 def run_reconcile(build_subdir: str, build_mode: str, tolerance: float) -> int:
     """Checks that the engine measures what it claims, and shows the rest.
 
-    Two things are worth knowing and only one of them can be a gate.
+    Two things are worth knowing and only one of them can be a requirement.
 
     The engine's figure is the *steady-state* cost of a phase: the same
     bytes, run again and again, warm. A `--time-trace` run is a single
@@ -532,7 +532,7 @@ def run_reconcile(build_subdir: str, build_mode: str, tolerance: float) -> int:
     measure something less useful. They are printed side by side, so the
     gap is visible rather than assumed.
 
-    What can be gated is the harness itself. Run twice on one machine and
+    What can be required is the harness itself. Run twice on one machine and
     a case's median should land in the same place; if it does not, the
     clock, the warmup, or the batching is wrong, and every number the
     engine ever produced is suspect. That is the check CI runs.

@@ -37,7 +37,7 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] The compiler's stack on a small-stack host: compiling to an
   object needs most of 64 KiB even natively, so the wasm test binary
   runs with a 1 MiB stack while programs it builds keep the default.
-  Any standard library growth showed up as a gate failure rather than
+  Any standard library growth showed up as a check failure rather than
   a number; find the deep path, or budget the stack, before the
   headroom runs out the same way.
 
