@@ -33,14 +33,15 @@ void push_children(std::vector<Cmd>& stack,
 
 // Whether the document still fits in remaining columns before the next
 // hard newline. A hardline never fits a flat rendering, which is what
-// makes a group that holds one break.
-bool fits(const Doc& doc, usize remaining, std::vector<Cmd>& stack) {
+// makes a group that holds one break. The measure reads every node flat,
+// so it carries neither indentation nor a per-step flat flag: the stack
+// it walks by is one pointer per pending node.
+bool fits(const Doc& doc, usize remaining, std::vector<const Doc*>& stack) {
   stack.clear();
-  stack.push_back(Cmd{.doc = &doc, .indent = 0, .flat = true});
+  stack.push_back(&doc);
   while (!stack.empty()) {
-    const Cmd cmd = stack.back();
+    const Doc& node = *stack.back();
     stack.pop_back();
-    const Doc& node = *cmd.doc;
     switch (node.kind) {
       case DocKind::Empty: break;
       case DocKind::Text: {
@@ -61,46 +62,30 @@ bool fits(const Doc& doc, usize remaining, std::vector<Cmd>& stack) {
         break;
       }
       case DocKind::Concat:
-        push_children(stack, node, cmd.indent, cmd.flat);
-        break;
-      case DocKind::Nest:
-        if (!node.kids.empty()) {
-          stack.push_back(Cmd{.doc = &node.kids[0],
-                              .indent = cmd.indent + node.indent,
-                              .flat = cmd.flat});
+        for (usize i = node.kids.size(); i > 0; --i) {
+          stack.push_back(&node.kids[i - 1]);
         }
         break;
+      case DocKind::Nest:
       case DocKind::Group:
         if (!node.kids.empty()) {
-          stack.push_back(
-              Cmd{.doc = &node.kids[0], .indent = cmd.indent, .flat = true});
+          stack.push_back(&node.kids[0]);
         }
         break;
       case DocKind::IfBreak:
-        if (!node.kids.empty()) {
-          const usize which = cmd.flat ? 1 : 0;
-          if (which < node.kids.size()) {
-            stack.push_back(Cmd{.doc = &node.kids[which],
-                                .indent = cmd.indent,
-                                .flat = cmd.flat});
-          }
+        // The measure renders every node flat, so only the flat part
+        // can be reached from here.
+        if (node.kids.size() > 1) {
+          stack.push_back(&node.kids[1]);
         }
         break;
       case DocKind::Line:
-        if (cmd.flat) {
-          if (remaining == 0) {
-            return false;
-          }
-          --remaining;
-        } else {
-          return true;
+        if (remaining == 0) {
+          return false;
         }
+        --remaining;
         break;
-      case DocKind::SoftLine:
-        if (!cmd.flat) {
-          return true;
-        }
-        break;
+      case DocKind::SoftLine: break;
       case DocKind::HardLine: return false;
     }
   }
@@ -198,7 +183,7 @@ std::string render(const Doc& doc, usize width, usize bytes) {
   // The measuring walk of a group reuses one stack across the groups it
   // serves; it never nests, so a second buffer beside the traversal one
   // is enough for the whole render.
-  std::vector<Cmd> measure;
+  std::vector<const Doc*> measure;
   stack.push_back(Cmd{.doc = &doc, .indent = 0, .flat = false});
   while (!stack.empty()) {
     const Cmd cmd = stack.back();
