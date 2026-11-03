@@ -1092,14 +1092,10 @@ bool Lowerer::check_kept_values(
     return false;
   }
   for (const KeptValue& value : values) {
-    // A parameter that is itself a view or a reference is borrowed for
-    // the call, so what it hands over is a pointee rather than a place
-    // of the callee's.
-    if (!value.param.is_valid()) {
-      continue;
-    }
-    const ir::TypeTag param_tag = tag_of(value.param);
-    if (is_ref_tag(param_tag) || param_tag == ir::TypeTag::Str) {
+    // A parameter written as a view or a reference is borrowed for the
+    // call, so what it hands over is a pointee rather than a place of
+    // the callee's.
+    if (value.borrowed_parameter) {
       continue;
     }
     bool is_place = false;
@@ -1193,6 +1189,23 @@ std::vector<u32> Lowerer::comp_positions(ast::ItemIdx item) const {
     }
   }
   return positions;
+}
+
+bool Lowerer::declares_borrow(ast::ItemIdx item,
+                              usize index,
+                              ir::TypeIdx param) const {
+  if (item.is_valid() && ast.items[item].kind == ast::ItemKind::Fn) {
+    const std::span<const ast::ItemFnParam> params =
+        ast.items[item].payload.get<ast::ItemFn>().params;
+    if (index < params.size() && params[index].type.is_valid()) {
+      const ast::TypeKind kind = ast.types[params[index].type].kind;
+      return kind == ast::TypeKind::Ref || kind == ast::TypeKind::Str;
+    }
+  }
+  // A callee the tree does not declare, such as a closure's function
+  // type, names the shape its parameter takes directly.
+  const ir::TypeTag tag = tag_of(param);
+  return is_ref_tag(tag) || tag == ir::TypeTag::Str;
 }
 
 void Lowerer::comp_key_into(std::string& key, const CompValue& value) {

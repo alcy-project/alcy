@@ -256,21 +256,27 @@ replaced. The foundations are in `roadmap.md`.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
 
-- [ ] A `str` view stored in a container escapes the frame that owns
-  the buffer: `fn take() -> Vec<str> { x := String::from("abc"); mut v
-  := Vec::<str>::new(); v.push(x.as_str()); ret v }` compiles and the
-  caller reads the dropped buffer, and `Map::<i32>::insert(x.as_str(),
-  7i32)` keyed by the view of a local reaches the caller the same way.
-  A borrowed argument whose type is a reference reaches the receiver's
-  place as a loan, which is what refuses the `Vec<&i32>` shape
+- [ ] A call that keeps a view it was handed still outlives the
+  frame: `fn take() -> Vec<str> { x := String::from("abc"); mut v :=
+  Vec::<str>::new(); v.push(x.as_str()); ret v }` compiles and the
+  caller prints the dropped buffer, and `Map::insert(x.as_str(),
+  7i32)` writes the view of a local into the map's buffer. Both reach a
+  callee that stores the view, and each spells the parameter the way a
+  copying callee does (`T` for `Vec::push`, `str` for
+  `Map::insert` and for `String::push_str`, which copies the bytes),
+  so the declaration cannot separate them: what separates them is a
+  disposition per parameter - kept or copied - which is the region a
+  loan carries (ADR-0012) read off the reasoned list of the std surface
+  (ADR-0131). A reference argument reaches the receiver's place as a
+  loan, which is what refuses the `Vec<&i32>` shape
   (`err-borrow-element-escape`,
-  `returned/borrowed-element-in-container`); a view cannot take the
-  same road because whether the receiver stores or copies it depends on
-  the receiver's element type - `String::push_str` copies,
-  `Vec<str>::push` does not - and only the region a loan carries
-  distinguishes them (ADR-0012). Both directions are pinned by accepted
-  programs: `ok-mini-pipeline` and `ok-grouping` pass views to a
-  receiver that copies them.
+  `returned/borrowed-element-in-container`). The extent rule refuses
+  the container that outlives a view's buffer inside one frame
+  (`err-kept-view-inner-block`,
+  `kept/str-view-from-inner-block`) while the same view of an earlier
+  buffer is accepted (`kept/str-view-from-outer-block`), and the
+  copying receivers stay accepted: `ok-mini-pipeline` and
+  `ok-grouping` pass views to them.
 
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the

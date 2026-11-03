@@ -497,6 +497,54 @@ fn main() -> i32 {
 }""",
 )
 
+# The element type is a type parameter, so the declaration says nothing
+# about whether the callee keeps the argument: a container declared
+# before the view's buffer cannot hold it, because the element would
+# read a slot whose block has ended.
+case(
+    "kept",
+    "str-view-from-inner-block",
+    "reject",
+    """fn main() -> i32 {
+  mut v := Vec::<str>::new()
+  {
+    s := String::from("abc")
+    v.push(s.as_str())
+  }
+  w := v.at(0).or_panic_with_message("none")
+  ret str_len(*w) as i32 - 2
+}""",
+)
+
+case(
+    "kept",
+    "reference-from-inner-block",
+    "reject",
+    """fn main() -> i32 {
+  mut v := Vec::<&i32>::new()
+  {
+    n := 7i32
+    v.push(&n)
+  }
+  w := v.at(0).or_panic_with_message("none")
+  ret **w - 6
+}""",
+)
+
+# The buffer is declared before the container, so it outlives it.
+case(
+    "kept",
+    "str-view-from-outer-block",
+    "accept",
+    """fn main() -> i32 {
+  s := String::from("abc")
+  mut v := Vec::<str>::new()
+  v.push(s.as_str())
+  w := v.at(0).or_panic_with_message("none")
+  ret str_len(*w) as i32 - 2
+}""",
+)
+
 # --- extent across control flow ---------------------------------------
 case(
     "extent",
@@ -1145,11 +1193,20 @@ case(
 def is_borrow_diagnostic(reason):
     """Whether a rejection came from the borrow checker.
 
-    The borrow checker's own codes carry the `EF` prefix. Anything else
-    means the case is broken rather than the checker, which matters
-    because a type error would otherwise read as agreement.
+    The borrow checker's own codes carry the `EF` prefix. The extent
+    rule reports from lowering, where it compares the blocks a loan and
+    its destination live in, so its two codes count as borrow
+    diagnostics too. Anything else means the case is broken rather than
+    the checker, which matters because a type error would otherwise read
+    as agreement.
     """
-    return reason.startswith("EF") or reason.startswith("E6") or "borrowed" in reason
+    extent = reason.startswith("ED012") or reason.startswith("ED018")
+    return (
+        reason.startswith("EF")
+        or reason.startswith("E6")
+        or "borrowed" in reason
+        or extent
+    )
 
 
 def run_case(alcy, workdir, case):

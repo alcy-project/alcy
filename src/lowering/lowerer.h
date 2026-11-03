@@ -336,15 +336,21 @@ class Lowerer {
   struct KeptValue {
     ast::ExprIdx expr;
     ir::TypeIdx type;
-    ir::TypeIdx param;
     usize sources_from;
+    // The callee borrows this argument for the call instead of taking
+    // ownership of it.
+    bool borrowed_parameter;
   };
   // Lowers one argument a call may keep, in the callee's parameter
   // type: the places it lends to the callee and the loans the value
   // carries are recorded for the kept-value check, which asks that the
-  // value outlive them (ADR-0135).
+  // value outlive them (ADR-0135). `index` is the parameter the
+  // declaration spells at `callee`, which decides whether the callee
+  // borrows the argument for the call.
   Val lower_kept_argument(ast::ExprIdx expr,
                           ir::TypeIdx param,
+                          ast::ItemIdx callee,
+                          usize index,
                           std::vector<ast::ExprIdx>& borrowed_places,
                           std::vector<KeptValue>& kept);
   // Lowers every argument a call site spells into `ops`, in order: the
@@ -352,13 +358,18 @@ class Lowerer {
   // keep are lowered and checked against them (ADR-0135), and `skip`
   // names the compile-time positions that lower no value. `params`
   // pairs with `args`, and `receiver_place` is a receiver expression
-  // the callee may write through, recorded like an argument. False when
-  // the build failed or the lowering terminated.
+  // the callee may write through, recorded like an argument. `callee`
+  // is the item that declares the callee - invalid when the tree does
+  // not declare one - and `first_param` is the declaration index
+  // `args[0]` meets, the receiver's slot for a method. False when the
+  // build failed or the lowering terminated.
   bool lower_call_arguments(std::span<const ast::ExprIdx> args,
                             std::span<const ir::TypeIdx> params,
                             std::span<const u32> skip,
                             std::optional<ast::ExprIdx> receiver_place,
-                            std::vector<ir::OperandIdx>& ops);
+                            std::vector<ir::OperandIdx>& ops,
+                            ast::ItemIdx callee,
+                            usize first_param);
   // Applies the extent rule to the values a call may keep: the callee
   // owns storage and can leave one there, so the value's loans have to
   // outlive the places `borrowed_places` names, which are the places
@@ -399,6 +410,11 @@ class Lowerer {
   const analyzer::CheckedModule::ClosureLit* closure_lit(
       ast::ExprIdx expr) const;
   std::vector<u32> comp_positions(ast::ItemIdx item) const;
+  // True when the declaration at `item` writes the parameter at `index`
+  // as a view or a reference, so the callee borrows the argument for the
+  // call. A type parameter accepts a value into storage the callee owns,
+  // so the type it instantiates to does not decide this.
+  bool declares_borrow(ast::ItemIdx item, usize index, ir::TypeIdx param) const;
   static void comp_key_into(std::string& key, const CompValue& value);
   // The identity of one specialization: the declaration, the type
   // arguments it clones under. It is written into `key` so a caller can

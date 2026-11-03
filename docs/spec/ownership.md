@@ -46,7 +46,10 @@
   place outlives, is refused at the call. A shared loan promises not to
   write, and a parameter that is itself a view or a reference borrows
   for the call only, so `env.get(name.as_str())` and
-  `s.contains(&format("x"))` still read their argument.
+  `s.contains(&format("x"))` still read their argument. A type
+  parameter is neither, whatever type the instantiation hands it, so an
+  element written through `Vec::push` is compared like a value the
+  callee owns.
 - A non-`Copy` value cannot be moved out from under an array's element
   either: an array ends its elements whole, so a move out of one is
   refused until the drop walk can name an element. A value without a

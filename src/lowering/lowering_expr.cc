@@ -1279,6 +1279,8 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
 
 Val Lowerer::lower_kept_argument(ast::ExprIdx expr,
                                  ir::TypeIdx param,
+                                 ast::ItemIdx callee,
+                                 usize index,
                                  std::vector<ast::ExprIdx>& borrowed_places,
                                  std::vector<KeptValue>& kept) {
   if (can_write_through(tag_of(param)) && is_rooted_place(expr)) {
@@ -1289,7 +1291,8 @@ Val Lowerer::lower_kept_argument(ast::ExprIdx expr,
   if (failed || terminated_cur()) {
     return arg;
   }
-  kept.push_back(KeptValue{expr, arg.type, param, sources_from});
+  kept.push_back(KeptValue{expr, arg.type, sources_from,
+                           declares_borrow(callee, index, param)});
   return arg;
 }
 
@@ -1297,7 +1300,9 @@ bool Lowerer::lower_call_arguments(std::span<const ast::ExprIdx> args,
                                    std::span<const ir::TypeIdx> params,
                                    std::span<const u32> skip,
                                    std::optional<ast::ExprIdx> receiver_place,
-                                   std::vector<ir::OperandIdx>& ops) {
+                                   std::vector<ir::OperandIdx>& ops,
+                                   ast::ItemIdx callee,
+                                   usize first_param) {
   std::vector<ast::ExprIdx> borrowed_places;
   if (receiver_place.has_value()) {
     borrowed_places.push_back(*receiver_place);
@@ -1309,7 +1314,8 @@ bool Lowerer::lower_call_arguments(std::span<const ast::ExprIdx> args,
       ++skip_at;
       continue;
     }
-    Val arg = lower_kept_argument(args[i], params[i], borrowed_places, kept);
+    Val arg = lower_kept_argument(args[i], params[i], callee, first_param + i,
+                                  borrowed_places, kept);
     if (failed || terminated_cur()) {
       return false;
     }
@@ -1414,7 +1420,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     // The places this call lends to the callee: a value it keeps can
     // land in any of them, so it has to outlive them (ADR-0135).
     std::vector<ir::OperandIdx> args;
-    if (!lower_call_arguments(call.args, sig.params, {}, std::nullopt, args)) {
+    if (!lower_call_arguments(call.args, sig.params, {}, std::nullopt, args,
+                              sig.item, 0)) {
       return stopped_value();
     }
     const ir::ParametricCalleeIdx callee = generic_callee(
@@ -1448,7 +1455,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       fn, builder.primitive(ir::TypeTag::Function))));
   // The places this call lends to the callee: a value it keeps can land
   // in any of them, so it has to outlive them.
-  if (!lower_call_arguments(call.args, sig.params, comp, std::nullopt, ops)) {
+  if (!lower_call_arguments(call.args, sig.params, comp, std::nullopt, ops,
+                            sig.item, 0)) {
     return stopped_value();
   }
   if (tag_of(sig.ret) == ir::TypeTag::Never) {
@@ -1527,7 +1535,8 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
       return Val{size_one, error_type(), false, false};
     }
     std::vector<ir::OperandIdx> ops;
-    if (!lower_call_arguments(args, info.params, {}, std::nullopt, ops)) {
+    if (!lower_call_arguments(args, info.params, {}, std::nullopt, ops,
+                              info.item, 0)) {
       return stopped_value();
     }
     std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
@@ -1567,7 +1576,8 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
-  if (!lower_call_arguments(args, info.params, comp, std::nullopt, ops)) {
+  if (!lower_call_arguments(args, info.params, comp, std::nullopt, ops,
+                            info.item, 0)) {
     return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {
@@ -1769,9 +1779,9 @@ Val Lowerer::lower_carried_call(ast::ExprIdx expr,
     ops.push_back(arg_for(*receiver, settled[0]));
     at = 1;
   }
-  if (!lower_call_arguments(args,
-                            std::span<const ir::TypeIdx>(settled).subspan(at),
-                            {}, std::nullopt, ops)) {
+  if (!lower_call_arguments(
+          args, std::span<const ir::TypeIdx>(settled).subspan(at), {},
+          std::nullopt, ops, ast::ItemIdx::invalid(), at)) {
     return stopped_value();
   }
   return emit_parametric_call(ops, settled, settled_ret, callee, node.span);
@@ -3402,7 +3412,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
             : std::nullopt;
     if (!lower_call_arguments(
             method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
-            {}, receiver_place, ops)) {
+            {}, receiver_place, ops, info.item, 1)) {
       return stopped_value();
     }
     return emit_parametric_call(ops, info.params, info.ret, callee,
@@ -3437,7 +3447,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
             : std::nullopt;
     if (!lower_call_arguments(
             method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
-            {}, receiver_place, ops)) {
+            {}, receiver_place, ops, info.item, 1)) {
       return stopped_value();
     }
     return emit_parametric_call(ops, info.params, info.ret, callee,
@@ -3494,7 +3504,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   // arguments are the parameters the callee called its own.
   if (!lower_call_arguments(
           method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
-          arg_comp, receiver_place, ops)) {
+          arg_comp, receiver_place, ops, info.item, 1)) {
     return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {

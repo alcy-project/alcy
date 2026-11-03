@@ -46,7 +46,10 @@ the syntax that spelled it.**
   the call, and a temporary's slot is a source like a named local is. A
   shared loan cannot store, and a parameter that is itself a view or a
   reference borrows for the call and keeps nothing, so a value handed
-  over that way passes.
+  over that way passes. The declaration decides that, not the type the
+  instantiation hands the parameter: a type parameter is neither a view
+  nor a reference, so `Vec::push` is compared for the element it
+  writes through whatever `T` becomes.
 
 The check stays in lowering rather than in the borrow pass because the
 borrow pass reads IR, which keeps no scope extents: the passes' blocks
@@ -79,6 +82,15 @@ extent compared there would answer a different question.
   the two apart for one parameter takes a summary of what the callee
   returns that names it, which is the relational part ADR-0076 leaves
   to regions; the structural test cannot.
+- A view reads the declaration the same way: `Vec::push` writes its
+  parameter as `T`, so `v.push(s.as_str())` is refused when `s` is
+  declared inside the container's block and accepted when it is declared
+  before the container (`err-kept-view-inner-block`,
+  `kept/str-view-from-inner-block`,
+  `kept/str-view-from-outer-block`). A parameter written as `str` or
+  as a reference still passes, which leaves a callee that stores the
+  view it was handed to the disposition per parameter `docs/backlog.md`
+  records.
 - The rule is an extent rule, not a lifetime analysis: loans are still
   liveness-checked by the borrow pass, and a reference that never meets a
   store of a shallower binding is unaffected.
