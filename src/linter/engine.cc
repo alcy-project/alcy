@@ -3,6 +3,7 @@
 
 #include "linter/engine.h"
 
+#include <array>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -33,29 +34,30 @@ u32 rule_position(const Rule* rule) {
   return static_cast<u32>(rule - all_rules().data());
 }
 
-// The one walk's dispatches: every enabled rule over a node family sees
-// each node, in registry order, with the context naming it.
+// The one walk's dispatch: every enabled rule over a node reaches each
+// node its kind selects, in registry order, with the context naming it.
 void dispatch_expr(LintContext& ctx, ast::ExprIdx expr) {
-  for (const Rule* rule : ctx.active_expr) {
-    ctx.rule = rule;
-    ctx.rule_index_value = rule_position(rule);
-    rule->check_expr(ctx, expr);
+  const u32 kind = static_cast<u32>(ctx.ast.exprs[expr].kind);
+  for (const ActiveRule& active : ctx.active_expr[kind]) {
+    ctx.rule = active.rule;
+    ctx.rule_index_value = active.index;
+    active.rule->check_expr(ctx, expr);
   }
 }
 
 void dispatch_item(LintContext& ctx, ast::ItemIdx item) {
-  for (const Rule* rule : ctx.active_item) {
-    ctx.rule = rule;
-    ctx.rule_index_value = rule_position(rule);
-    rule->check_item(ctx, item);
+  for (const ActiveRule& active : ctx.active_item) {
+    ctx.rule = active.rule;
+    ctx.rule_index_value = active.index;
+    active.rule->check_item(ctx, item);
   }
 }
 
 void dispatch_block(LintContext& ctx, ast::BlockIdx block) {
-  for (const Rule* rule : ctx.active_block) {
-    ctx.rule = rule;
-    ctx.rule_index_value = rule_position(rule);
-    rule->check_block(ctx, block);
+  for (const ActiveRule& active : ctx.active_block) {
+    ctx.rule = active.rule;
+    ctx.rule_index_value = active.index;
+    active.rule->check_block(ctx, block);
   }
 }
 
@@ -114,9 +116,9 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
   // The rules that read a node are dispatched from one walk; the rest
   // run themselves. The split is built once, because the configuration
   // does not change between modules.
-  std::vector<const Rule*> expr_rules;
-  std::vector<const Rule*> item_rules;
-  std::vector<const Rule*> block_rules;
+  std::array<std::vector<ActiveRule>, ast::EXPR_KIND_COUNT> expr_rules;
+  std::vector<ActiveRule> item_rules;
+  std::vector<ActiveRule> block_rules;
   std::vector<const Rule*> run_rules;
   bool needs_bindings = false;
   bool needs_usage = false;
@@ -132,21 +134,30 @@ LintStats run_lints(pipeline::PipelineContext& ctx,
     needs_field_usage = needs_field_usage || rule.reads_field_usage;
     needs_variant_usage = needs_variant_usage || rule.reads_variant_usage;
     if (rule.check_expr != nullptr) {
-      expr_rules.push_back(&rule);
+      for (u32 kind = 0; kind < ast::EXPR_KIND_COUNT; ++kind) {
+        if ((rule.expr_kinds & (u64{1} << kind)) != 0) {
+          expr_rules[kind].push_back(ActiveRule{&rule, index});
+        }
+      }
     } else if (rule.check_item != nullptr) {
-      item_rules.push_back(&rule);
+      item_rules.push_back(ActiveRule{&rule, index});
     } else if (rule.check_block != nullptr) {
-      block_rules.push_back(&rule);
+      block_rules.push_back(ActiveRule{&rule, index});
     } else {
       run_rules.push_back(&rule);
     }
   }
-  lint.active_expr = std::span<const Rule*>(expr_rules);
-  lint.active_item = std::span<const Rule*>(item_rules);
-  lint.active_block = std::span<const Rule*>(block_rules);
+
+  bool any_expr = false;
+  for (u32 kind = 0; kind < ast::EXPR_KIND_COUNT; ++kind) {
+    any_expr = any_expr || !expr_rules[kind].empty();
+    lint.active_expr[kind] = std::span<const ActiveRule>(expr_rules[kind]);
+  }
+  lint.active_item = std::span<const ActiveRule>(item_rules);
+  lint.active_block = std::span<const ActiveRule>(block_rules);
 
   Visitor visitor;
-  if (!expr_rules.empty()) {
+  if (any_expr) {
     visitor.expr = &dispatch_expr;
   }
   if (!item_rules.empty()) {

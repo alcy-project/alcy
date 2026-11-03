@@ -434,6 +434,9 @@ enum class ExprKind : u8 {
   Closure,
 };
 
+// One past the last kind, for tables indexed by an expression's kind.
+constexpr u32 EXPR_KIND_COUNT = static_cast<u32>(ExprKind::Closure) + 1;
+
 struct Expr {
   ExprKind kind;
   diag::Span span;

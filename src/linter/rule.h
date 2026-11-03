@@ -63,9 +63,15 @@ concept RuleIdentity = requires {
 template <typename R>
 concept ModuleRule = requires(LintContext& ctx) { R::run(ctx); };
 
+// An expression rule states the kinds its check reads, as the mask
+// the engine dispatches by, so the walk reads a node's kind once and
+// visits the rules that named it.
 template <typename R>
-concept ExprRule =
-    requires(LintContext& ctx, ast::ExprIdx expr) { R::check_expr(ctx, expr); };
+concept ExprRule = requires(LintContext& ctx, ast::ExprIdx expr) {
+  R::check_expr(ctx, expr);
+} && requires {
+  { R::EXPR_KINDS } -> std::convertible_to<u64>;
+};
 
 template <typename R>
 concept ItemRule =
@@ -84,6 +90,17 @@ template <typename R>
 concept RuleType = RuleIdentity<R> && (ModuleRule<R> || ExprRule<R> ||
                                        ItemRule<R> || BlockRule<R>);
 
+// One bit per expression kind, and the mask a rule builds from the
+// kinds it names.
+constexpr u64 expr_kind_bit(ast::ExprKind kind) {
+  return u64{1} << static_cast<u32>(kind);
+}
+
+template <ast::ExprKind... KINDS>
+constexpr u64 expr_kinds() {
+  return (expr_kind_bit(KINDS) | ...);
+}
+
 // The row the runtime reads. A rule type compiles to one of these in
 // the registry's table: the engine iterates rows and lint.toml's rule
 // names resolve against them, so the dispatch is one function pointer
@@ -101,6 +118,9 @@ struct Rule {
   void (*check_expr)(LintContext&, ast::ExprIdx);
   void (*check_item)(LintContext&, ast::ItemIdx);
   void (*check_block)(LintContext&, ast::BlockIdx);
+  // The kinds check_expr reads, one bit per kind; zero for a rule over
+  // another node family.
+  u64 expr_kinds = 0;
   // Whether the rule reads the binding table the engine builds once per
   // module, rather than walking the syntax itself.
   bool reads_bindings = false;
@@ -128,7 +148,9 @@ constexpr Rule rule_row() {
     rule.run = &R::run;
   }
   if constexpr (ExprRule<R>) {
+    static_assert(R::EXPR_KINDS != 0, "an expression rule names a kind");
     rule.check_expr = &R::check_expr;
+    rule.expr_kinds = R::EXPR_KINDS;
   }
   if constexpr (ItemRule<R>) {
     rule.check_item = &R::check_item;

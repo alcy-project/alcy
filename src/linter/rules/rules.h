@@ -9,6 +9,7 @@
 #include "linter/context.h"
 #include "linter/diag_code.h"
 #include "linter/level.h"
+#include "linter/rule.h"
 
 // One rule is a type: the identity lint.toml addresses as static
 // members, the check as a static run. The concept in rule.h holds each
@@ -64,6 +65,7 @@ struct WhileTrue {
   static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
   static constexpr LintCode CODE = LintCode::WhileTrue;
   static constexpr std::string_view SUMMARY = "a while over the literal true";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::While>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -72,6 +74,7 @@ struct EmptyLoop {
   static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
   static constexpr LintCode CODE = LintCode::EmptyLoop;
   static constexpr std::string_view SUMMARY = "a loop whose body is empty";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Loop>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -81,6 +84,7 @@ struct DoubleNegation {
   static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
   static constexpr LintCode CODE = LintCode::DoubleNegation;
   static constexpr std::string_view SUMMARY = "an operator applied to itself";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Unary>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -90,6 +94,7 @@ struct SelfComparison {
   static constexpr LintCode CODE = LintCode::SelfComparison;
   static constexpr std::string_view SUMMARY =
       "a comparison whose operands are the same expression";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Binary>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -99,6 +104,7 @@ struct NestedIf {
   static constexpr LintCode CODE = LintCode::NestedIf;
   static constexpr std::string_view SUMMARY =
       "an if whose only statement is another if";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::If>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -110,6 +116,7 @@ struct UselessCast {
   static constexpr LintCode CODE = LintCode::UselessCast;
   static constexpr std::string_view SUMMARY =
       "a cast to the type the value already has";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Cast>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -119,6 +126,7 @@ struct FloatEquality {
   static constexpr LintCode CODE = LintCode::FloatEquality;
   static constexpr std::string_view SUMMARY =
       "an equality test on floating-point values";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Binary>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -128,6 +136,7 @@ struct NeedlessBorrow {
   static constexpr LintCode CODE = LintCode::NeedlessBorrow;
   static constexpr std::string_view SUMMARY =
       "a borrow of a dereference that is the reference itself";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Borrow>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -137,6 +146,7 @@ struct LossyCast {
   static constexpr LintCode CODE = LintCode::LossyCast;
   static constexpr std::string_view SUMMARY =
       "a cast that narrows the value's scalar type";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Cast>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -146,6 +156,7 @@ struct BoolComparison {
   static constexpr LintCode CODE = LintCode::BoolComparison;
   static constexpr std::string_view SUMMARY =
       "a comparison of a bool with a literal";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Binary>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -226,6 +237,7 @@ struct UnreachablePattern {
   static constexpr LintCode CODE = LintCode::UnreachablePattern;
   static constexpr std::string_view SUMMARY =
       "a match arm an earlier arm already covers";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Match>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
@@ -237,6 +249,7 @@ struct NeedlessBool {
   static constexpr LintCode CODE = LintCode::NeedlessBool;
   static constexpr std::string_view SUMMARY =
       "an if whose branches return true and false";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::If>();
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 

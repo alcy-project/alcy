@@ -50,10 +50,13 @@ that grew its own parser has had.
   into the runtime table the engine iterates and lint.toml resolves
   against - the dispatch is one function pointer per rule, generated
   rather than hand-maintained. The engine builds one active list per
-  node family, one binding table per module, and the usage table of
-  path heads: expressions, items, and blocks are dispatched from one
-  walk, which also records the heads `unused-import` reads, and the
-  binding table is built only when an enabled rule reads it. There is
+  node family - expressions one per kind, because a rule states the
+  kinds its check reads, so a node reaches the rules that named its
+  kind and not the ones that would have turned it away - one binding
+  table per module, and the usage table of path heads: expressions,
+  items, and blocks are dispatched from one walk, which also records
+  the heads `unused-import` reads, and the binding table is built
+  only when an enabled rule reads it. There is
   no virtual dispatch, matching the compiler
   no-runtime-polymorphism rule. The type list's order is the index the
   parsed configuration is aligned with, so a rule is appended and never

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <iterator>
 #include <optional>
 #include <span>
@@ -38,6 +39,13 @@ struct VariantUsage;
 [[nodiscard]] bool suppressed(const source::SourceManager& sources,
                               diag::Span span,
                               std::string_view rule);
+
+// One entry of a dispatch list: the rule, and its registry index, which
+// is the row a finding it reports is attributed to.
+struct ActiveRule {
+  const Rule* rule = nullptr;
+  u32 index = NO_RULE;
+};
 
 // What one rule run reads. The context is rebuilt for each module, so a
 // rule addresses the module it is checking through this rather than
@@ -92,11 +100,13 @@ struct LintContext {
   // them; null when no enabled rule reads it.
   VariantUsage* variant_usage = nullptr;
   // The rules the engine's single walk dispatches expressions, items,
-  // and blocks to, in registry order. Engine plumbing; a rule does not
+  // and blocks to, in registry order. Expressions are split by kind,
+  // because a rule states the kinds it reads, so a node reaches only
+  // the rules that named its kind. Engine plumbing; a rule does not
   // read these.
-  std::span<const Rule*> active_expr;
-  std::span<const Rule*> active_item;
-  std::span<const Rule*> active_block;
+  std::array<std::span<const ActiveRule>, ast::EXPR_KIND_COUNT> active_expr;
+  std::span<const ActiveRule> active_item;
+  std::span<const ActiveRule> active_block;
 
   [[nodiscard]] const ast::ItemNode& item_node(ast::ItemIdx id) const {
     return ast.items[id];
