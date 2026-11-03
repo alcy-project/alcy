@@ -680,15 +680,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
     if (generic_record) {
       const ast::ItemImpl& impl =
           ast.items[entry.item].payload.get<ast::ItemImpl>();
-      bool provides = false;
-      for (ast::ItemIdx method_item : impl.methods) {
-        if (ast.items[method_item].payload.get<ast::ItemFn>().name.name ==
-            name) {
-          provides = true;
-          break;
-        }
-      }
-      if (!provides) {
+      if (!declared_method(impl, entry.item, name).is_valid()) {
         continue;
       }
     } else {
