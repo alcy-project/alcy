@@ -1,4 +1,4 @@
-// The gate is a compile-time boundary: an `unsafe` block changes what
+// The opt-in is a compile-time boundary: an `unsafe` block changes what
 // is allowed, not what is computed, and its value is the block's.
 unsafe fn read(p: &MaybeUninit<u8>, i: usize) -> u8 {
   ret unsafe { *uninit_ref(elem_ref(p, i)) }

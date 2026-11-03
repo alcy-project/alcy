@@ -1,4 +1,4 @@
-// A call to a declared C function is an operation the gate covers.
+// A call to a declared C function is an operation the opt-in covers.
 extern "C" {
   fn abs(x: i32) -> i32;
 }

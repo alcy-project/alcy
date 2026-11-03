@@ -50,7 +50,7 @@ relied upon by MVP programs or by the MVP compiler implementation.
   higher-ranked region polymorphism beyond struct projection.
 - `unsafe` methods (receiver or spec methods), unsafe function types
   for callbacks, `union` and volatile access, inline assembly, and an
-  erased `void*` spelling. The gate, its precondition-carrying
+  erased `void*` spelling. The opt-in, its precondition-carrying
   intrinsics, raw pointers, and `extern "C"` declarations are
   Bootstrap; see `ffi.md`.
 - String literal patterns, slice patterns.

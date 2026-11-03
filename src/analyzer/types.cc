@@ -1370,7 +1370,7 @@ bool Checker::is_known_intrinsic(std::string_view name) {
 
 // The intrinsics whose preconditions the compiler cannot check
 // (ADR-0050): the declaration must carry `unsafe` and a call needs
-// the gate. Every other intrinsic is safe whatever its arguments.
+// the opt-in. Every other intrinsic is safe whatever its arguments.
 static bool intrinsic_is_unsafe(std::string_view name) {
   return name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
          name == "elem_ref" || name == "memcopy" || name == "uninit_assume" ||
@@ -1402,7 +1402,7 @@ bool Checker::check_intrinsic_signature(u32 module,
   const std::string_view name = intrinsic.name.name;
   // Unsafety is part of the canonical shape: a precondition the
   // compiler cannot check must be declared, and one it can check must
-  // not be, so the declaration and the gate cannot drift.
+  // not be, so the declaration and the opt-in cannot drift.
   if (intrinsic_is_unsafe(name) != intrinsic.is_unsafe) {
     const u32 index =
         intrinsic.is_unsafe
@@ -1518,7 +1518,7 @@ bool Checker::check_intrinsic_signature(u32 module,
   if (name == "ptr_offset" || name == "ptr_offset_mut") {
     // `ptr_offset<T>(ptr: *T, count: isize) -> *T`, and the exclusive
     // counterpart over `*mut T`. The count is signed so one spelling
-    // moves both ways; offsetting is an operation the gate covers.
+    // moves both ways; offsetting is an operation the opt-in covers.
     const ir::TypeTag want =
         name == "ptr_offset" ? ir::TypeTag::RawPtr : ir::TypeTag::RawMutPtr;
     return or_wrong(
@@ -1528,7 +1528,7 @@ bool Checker::check_intrinsic_signature(u32 module,
   }
   if (name == "drop_in_place") {
     // `drop_in_place<T>(p: &mut T)`: the value behind the reference is
-    // initialized and owned here, which is the gate's precondition.
+    // initialized and owned here, which is the opt-in's precondition.
     return or_wrong(params.size() == 1 &&
                     builder.types()[params[0].idx].tag == ir::TypeTag::MutRef &&
                     builder.types()[ret.idx].tag == ir::TypeTag::Void);
@@ -1547,7 +1547,7 @@ bool Checker::check_intrinsic_signature(u32 module,
   }
   if (name == "slice_at") {
     // `slice_at<T>(s: &[T], i: usize) -> &T`: the caller keeps `i`
-    // within the slice, which is the gate's precondition.
+    // within the slice, which is the opt-in's precondition.
     if (!slice_ref(params[0]) ||
         builder.types()[ret.idx].tag != ir::TypeTag::Ref) {
       return wrong();
@@ -1853,7 +1853,7 @@ void Checker::process_module(u32 module) {
       }
       case ast::ItemKind::Extern: {
         // ADR-0051: a declaration names a symbol the linker resolves,
-        // calling it is an operation the gate covers, and the ABI is
+        // calling it is an operation the opt-in covers, and the ABI is
         // scalars, raw pointers, and `()` so every shape the compiler
         // cannot lower honestly is refused here.
         const ast::ItemExtern& block = node.payload.get<ast::ItemExtern>();

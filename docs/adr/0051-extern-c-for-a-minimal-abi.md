@@ -6,7 +6,7 @@
 
 ## Context
 
-`docs/spec/ffi.md` reserved external functions. The unsafe gate and
+`docs/spec/ffi.md` reserved external functions. The unsafe opt-in and
 raw pointers have landed (ADR-0050), so the declarations can follow.
 The immediate value is libc: a program gains read, write, and
 allocation through functions the compiler did not check, and the
@@ -29,11 +29,11 @@ another one is a diagnostic rather than a silently ignored
 attribute. The block is one item for visibility: `pub extern "C"`
 exports every declaration in it.
 
-**Calling is an operation the gate covers.** Every declared function
+**Calling is an operation the opt-in covers.** Every declared function
 is an unsafe function, so a call names `unsafe { ... }` like any
-other gated act. There is no separate `unsafe extern` spelling to
-write, and an extern function cannot become a value until unsafe
-function types land.
+other act that needs the opt-in. There is no separate `unsafe extern`
+spelling to write, and an extern function cannot become a value until
+unsafe function types land.
 
 **The initial ABI is what systems code passes across the boundary
 first.** Parameters and returns may be scalars, raw pointers, and

@@ -54,7 +54,7 @@ reserved, so the spelling cannot resolve two ways.
 `MaybeUninit::assume_init`: the compiler cannot know whether the slot
 was written, so the call is where the obligation is discharged. It is
 the one place uninitialized storage can become a `T`, which makes it the
-place a future `unsafe` gate belongs.
+place a future `unsafe` opt-in belongs.
 
 ## Consequences
 

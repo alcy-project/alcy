@@ -181,7 +181,7 @@
 - Structs have named fields only and no constructors.
   Construction initializes every field; `..base` move-update is
   allowed. A field without `pub` is private to the module that
-  declares the struct, which gates reads, writes, construction, and
+  declares the struct, which limits reads, writes, construction, and
   destructuring alike (`modules.md`). A type may declare
   `fn drop(self: Self)`; scope exit and
   `return` run it, and a type without one ends its destructible fields.

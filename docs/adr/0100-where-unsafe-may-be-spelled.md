@@ -6,10 +6,10 @@
 
 ## Context
 
-ADR-0050 makes `unsafe` a gate: an operation it covers may appear only
-inside `unsafe fn` or `unsafe { ... }`, the gate is lexical, and
+ADR-0050 makes `unsafe` an opt-in: an operation it covers may appear only
+inside `unsafe fn` or `unsafe { ... }`, the opt-in is lexical, and
 everything inside is checked as it was outside. A call to an unsafe
-function is itself covered, so the gate marks every call site as well
+function is itself covered, so the opt-in marks every call site as well
 as every declaration. What ADR-0050 does not say is where the suite
 may *declare* the raw operations in the first place, and without that
 list "the suite's ordinary code is safe" is a claim nobody can check.
@@ -36,7 +36,7 @@ stated at the call site.**
   future `atomic`, `simd`, or `arch` package and the wrapper around a
   foreign function (`extern "C"`) join the list as the same kind of
   declaration, in the package that names the operation.
-- A package outside the list may call a declared operation — the gate
+- A package outside the list may call a declared operation — the opt-in
   requires the block — but may not perform a raw operation of its own
   and may not declare a new intrinsic. The block states the invariant
   it keeps (the element is initialized, the index is in range, the
@@ -45,8 +45,8 @@ stated at the call site.**
   name the declaration a block calls, or the invariant it keeps,
   refuses it.
 - The list is a review rule, not a compiler rule: the compiler keeps
-  enforcing the gate itself (ADR-0050), and the two work together —
-  the gate makes every raw call visible, and the list says where the
+  enforcing the opt-in itself (ADR-0050), and the two work together —
+  the opt-in makes every raw call visible, and the list says where the
   raw operations may come from.
 
 ## Consequences

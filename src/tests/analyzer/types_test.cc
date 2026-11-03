@@ -2164,7 +2164,7 @@ TEST_CASE("Check accepts an unsafe call inside an unsafe block") {
   CHECK(result.package.has_value());
 }
 
-TEST_CASE("Check requires the gate in an unsafe function body") {
+TEST_CASE("Check requires the opt-in in an unsafe function body") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "unsafe fn danger() {}\n"
@@ -2182,7 +2182,7 @@ TEST_CASE("Check requires the gate in an unsafe function body") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check accepts the gate in an unsafe function body") {
+TEST_CASE("Check accepts the opt-in in an unsafe function body") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "unsafe fn danger() {}\n"
@@ -2199,7 +2199,7 @@ TEST_CASE("Check accepts the gate in an unsafe function body") {
   CHECK(result.package.has_value());
 }
 
-TEST_CASE("Check gates a generic unsafe call") {
+TEST_CASE("Check requires the opt-in for a generic unsafe call") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "unsafe fn pick<T>(x: T) -> T {\n"
@@ -2218,7 +2218,8 @@ TEST_CASE("Check gates a generic unsafe call") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check rejects a gated intrinsic without the gate") {
+TEST_CASE(
+    "Check rejects an intrinsic that needs the opt-in, spelled without it") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "unsafe intrinsic fn memcopy(dst: &mut "
@@ -2271,7 +2272,7 @@ TEST_CASE("Check rejects an unsafe marker on a safe intrinsic") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check accepts raw pointer reads and writes behind the gate") {
+TEST_CASE("Check accepts raw pointer reads and writes behind the opt-in") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() -> i32 {\n"
@@ -2290,7 +2291,7 @@ TEST_CASE("Check accepts raw pointer reads and writes behind the gate") {
   CHECK(result.package.has_value());
 }
 
-TEST_CASE("Check rejects a raw dereference outside the gate") {
+TEST_CASE("Check rejects a raw dereference outside the opt-in") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
@@ -2378,7 +2379,7 @@ TEST_CASE("Check infers a raw offset's element type") {
   CHECK(result.package.has_value());
 }
 
-TEST_CASE("Check gates an extern C call") {
+TEST_CASE("Check requires the opt-in for an extern C call") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "extern \"C\" {\n"
@@ -2397,7 +2398,7 @@ TEST_CASE("Check gates an extern C call") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check accepts an extern C call behind the gate") {
+TEST_CASE("Check accepts an extern C call behind the opt-in") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "extern \"C\" {\n"
@@ -2468,7 +2469,7 @@ TEST_CASE("Check rejects an unsafe function as a value") {
   CHECK(f.bag.has_errors());
 }
 
-TEST_CASE("Check gates unsafe method calls") {
+TEST_CASE("Check requires the opt-in for unsafe method calls") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "struct S { n: i32 }\n"

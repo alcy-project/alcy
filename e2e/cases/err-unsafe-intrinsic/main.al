@@ -1,5 +1,5 @@
 // An intrinsic whose precondition the compiler cannot check is
-// declared unsafe, and its call sites need the gate too.
+// declared unsafe, and its call sites need the opt-in too.
 unsafe intrinsic fn memcopy(dst: &mut u8, src: &u8, n: usize);
 
 fn main() {

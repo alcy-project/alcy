@@ -1,37 +1,37 @@
 # FFI, Unsafe, and Platform Boundaries
 
-The `unsafe` gate, `extern "C"` declarations, and the freestanding
+The `unsafe` opt-in, `extern "C"` declarations, and the freestanding
 link mode are Bootstrap, described here as they work today. The rest
 of the chapter is reserved: it is kept so MVP designs do not
 foreclose the baremetal story.
 
 ## Unsafe (Bootstrap)
 
-- The gate is `unsafe fn` and `unsafe { ... }` blocks, and it is
+- The opt-in is `unsafe fn` and `unsafe { ... }` blocks, and it is
   lexical: an operation it covers may appear only inside such a
   block, and an `unsafe fn` body is not one implicitly, so a reader
   sees which act is unsafe rather than merely that the function is.
-  See `docs/adr/0050-unsafe-is-a-gate-on-operations.md`.
+  See `docs/adr/0050-unsafe-is-an-opt-in-on-operations.md`.
 - `unsafe { ... }` is an expression whose value is the block's, and
-  everything inside is checked as it was outside: the gate changes
+  everything inside is checked as it was outside: the opt-in changes
   what is allowed, never what is inferred, borrowed, or moved.
-- A call to an unsafe function is an operation the gate covers. An
+- A call to an unsafe function is an operation the opt-in covers. An
   unsafe function that becomes a value waits for unsafe function
   types, so using one in value position is refused rather than
-  silently dropping the gate.
-- Dereferencing a raw pointer is an operation the gate covers, for a
+  handing safe code a call with no opt-in on it.
+- Dereferencing a raw pointer is an operation the opt-in covers, for a
   read and for a write. Writing needs a `*mut` pointer and a `mut`
   binding that names it, the same way writing through a reference
   needs a `&mut` and a `mut` binding.
-- Offsetting a raw pointer is an operation the gate covers. It is a
+- Offsetting a raw pointer is an operation the opt-in covers. It is a
   call to `ptr_offset`/`ptr_offset_mut` (`items.md`), not a rule of
-  `*`, so the gate is the call gate.
+  `*`, so the opt-in sits on the call.
 - The precondition-carrying intrinsics are declared `unsafe` —
   `memcopy`, `str_from_parts`, `slice_from_parts`,
   `slice_from_parts_mut`, `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
   `uninit_assume`, `ptr_offset`, and `ptr_offset_mut` — and the
   checker verifies the marker against the canonical set the way it
-  verifies the shape (`items.md`), so the declaration and the gate
+  verifies the shape (`items.md`), so the declaration and the opt-in
   cannot drift. `uninit_write` and `uninit_ref` stay safe: they are
   the safe half of `MaybeUninit`. Byte access, `size_of`, `align_of`,
   `print`, `println`, `panic`, and `sys_write` stay safe too.
@@ -60,9 +60,9 @@ foreclose the baremetal story.
   `&T` never casts to a `*mut T`, and a raw pointer never casts back
   to a reference: a tracked reference has to be built where its loan
   comes from.
-- Dereferencing and offsetting are operations the gate covers. A
+- Dereferencing and offsetting are operations the opt-in covers. A
   `*mut T` names a writable place; a `*T` reads only, and a write
-  through one is rejected before the gate is consulted.
+  through one is rejected before the opt-in is consulted.
 - Two raw pointers of one type compare with `==` and `!=` by
   address; ordering is not defined. An erased `void*` will spell as
   `*u8` and cast until it earns its own spelling.
@@ -75,7 +75,7 @@ foreclose the baremetal story.
   another string is a diagnostic. The block is one item for
   visibility, so `pub extern "C"` exports every declaration in it.
   See `docs/adr/0051-extern-c-for-a-minimal-abi.md`.
-- Calling a declared function is an operation the gate covers, so
+- Calling a declared function is an operation the opt-in covers, so
   the call names `unsafe { ... }` and an extern function is refused
   in value position until unsafe function types land. There is no
   `unsafe extern` spelling.

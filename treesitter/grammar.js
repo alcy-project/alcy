@@ -149,7 +149,7 @@ module.exports = grammar({
     visibility: _ => 'pub',
 
     // `unsafe` marks an operation, so it is read only where a function
-    // declares one (ffi.md, "The gate"), and `comp` marks a free
+    // declares one (ffi.md, "Unsafe (Bootstrap)"), and `comp` marks a free
     // function whose calls happen during compilation (comp.md,
     // "Functions"). The two markers do not combine yet, so at most one
     // is read.
@@ -863,8 +863,8 @@ module.exports = grammar({
 
     comp_block: $ => seq('comp', $.block),
 
-    // `unsafe { ... }` opens the gate for the operations inside and its
-    // value is the block's (ffi.md, "The gate").
+    // `unsafe { ... }` carries the opt-in for the operations inside and its
+    // value is the block's (ffi.md, "Unsafe (Bootstrap)").
     unsafe_block: $ => seq('unsafe', $.block),
 
     // Right-associative so that `ret (a)` reads the parenthesized

@@ -88,11 +88,11 @@ impls whose spec is in scope (declared alongside, imported, or in
 the prelude).
 
 An `unsafe fn` declares that calling it is an operation that needs
-the gate; a `comp fn` declares that calling it happens during
+the opt-in; a `comp fn` declares that calling it happens during
 compilation only (see `comp.md`), and the two markers do not
 combine yet. An unsafe function's body is not an unsafe context
-implicitly, so every operation the gate covers names `unsafe { ... }`
-where it happens, and the gate never suspends region, move, or drop
+implicitly, so every operation the opt-in covers names `unsafe { ... }`
+where it happens, and the opt-in never suspends region, move, or drop
 checking. See `ffi.md`.
 
 An `extern "C" { ... }` block declares bodyless functions whose
@@ -142,7 +142,7 @@ Declaration left-hand sides use this grammar with `:=`
 - Unary `*` dereferences a reference into the place it names, and a
   raw pointer into the place it addresses. Assignment through it
   needs a `&mut` reference or a `*mut` pointer, and a raw
-  dereference is an operation the gate covers (`ffi.md`). `**p`
+  dereference is an operation the opt-in covers (`ffi.md`). `**p`
   lexes as the power token, but a binary `**` needs a left operand,
   so in prefix position the pair is two dereferences.
 - A turbofish supplies explicit type arguments to a generic call or
@@ -159,7 +159,7 @@ Declaration left-hand sides use this grammar with `:=`
   A float is IEEE: `nan == nan` is false, `nan != nan` is true, and
   every ordering that names a NaN is false.
 - Calls to `panic(...)` diverge with type `!`.
-- `unsafe { ... }` opens the gate for the operations inside and
+- `unsafe { ... }` carries the opt-in for the operations inside and
   evaluates to the block's value; everything inside is checked as
   it was outside. The rule is lexical, so an `unsafe fn` body uses
   a block too, and using an unsafe function in value position is

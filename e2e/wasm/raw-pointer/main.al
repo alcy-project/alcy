@@ -1,6 +1,6 @@
 // Raw pointers end to end under the direct-wasm backend: creating one is
 // safe, and read, write, offset, struct projection, and array indexing
-// are the operations the gate covers. The offset builtins lower to an
+// are the operations the opt-in covers. The offset builtins lower to an
 // element offset whose destination is a raw pointer, and a projection
 // through one walks to the field, neither of which this backend used to
 // accept: the first failed an internal check, the second asked for a

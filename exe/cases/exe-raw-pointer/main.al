@@ -1,5 +1,5 @@
 // Raw pointers end to end: creation is safe, and read, write, and
-// offset are the operations the gate covers. The cast drops the
+// offset are the operations the opt-in covers. The cast drops the
 // loan, so the owner may be written while the pointer exists.
 fn main() -> i32 {
   mut x := 1

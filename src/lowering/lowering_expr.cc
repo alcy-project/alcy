@@ -1615,7 +1615,7 @@ Val Lowerer::lower_summary_call(ast::ExprIdx expr,
 }
 
 // An `extern "C"` call: the declaration names the symbol the linker
-// resolves, arguments pass by value, and the gate was checked at the
+// resolves, arguments pass by value, and the opt-in was checked at the
 // call site (ADR-0051).
 Val Lowerer::lower_extern_call(ast::ExprIdx expr,
                                const analyzer::CheckedModule::FnSig& sig) {

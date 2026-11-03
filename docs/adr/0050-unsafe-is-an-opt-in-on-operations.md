@@ -1,4 +1,4 @@
-# ADR-0050: Unsafe is a gate on operations
+# ADR-0050: Unsafe is an opt-in on operations
 
 - Subject: the language
 - Status: Accepted
@@ -9,12 +9,12 @@
 The C FFI story needs two things the language does not have: a
 way to call code the compiler did not check, and raw pointers.
 `docs/spec/ffi.md` reserved both, and `docs/principles.md` fixed
-the shape of the answer: unsafe "arrives as a gate on operations
+the shape of the answer: unsafe "arrives as an opt-in on operations
 that already exist, not as a new class of escape", because MMIO,
 volatile access, and foreign calls cannot be type-checked. The
-`uninit_assume` intrinsic was designed with that gate in mind.
+`uninit_assume` intrinsic was designed with that opt-in in mind.
 
-The gate is also already needed for the standard library's own
+The opt-in is also already needed for the standard library's own
 foundations. `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
 `memcopy`, `uninit_assume`, `str_from_parts`, `slice_from_parts`,
 and `slice_from_parts_mut` are callable from safe code today,
@@ -26,29 +26,29 @@ yet true.
 
 ## Decision
 
-**The gate is `unsafe fn` and `unsafe { ... }`.** A call to an
+**The opt-in is `unsafe fn` and `unsafe { ... }`.** A call to an
 unsafe function, and the pointer operations below, may appear
 only lexically inside an `unsafe` block. A block inside a safe
 function is where that function discharges the obligations; a
 function that passes them on to its callers declares itself
 `unsafe fn`. An unsafe function's body is not implicitly an
-unsafe context: each operation that needs the gate names it, so
+unsafe context: each operation that needs the opt-in spells it, so
 a reader sees which act is unsafe, not merely that the function
 is.
 
 **A block is an expression.** `unsafe { ... }` has the value its
 block has, and everything inside it is checked as it was outside:
-the gate changes what is allowed, never what is inferred,
+the opt-in changes what is allowed, never what is inferred,
 borrowed, or moved. `unsafe` does not suspend the region, move,
-or drop rules; those keep their diagnostics, because the gate
+or drop rules; those keep their diagnostics, because the opt-in
 sits on operations and not on checking.
 
-**What the gate covers.** Calls to unsafe functions — free
+**What the opt-in covers.** Calls to unsafe functions — free
 functions and intrinsic declarations today, `extern "C"`
 declarations with the FFI slice — and dereferencing or offsetting
 a raw pointer. The precondition-carrying intrinsics are declared
 `unsafe` themselves, and the checker verifies each declaration
-against its canonical shape, so the declaration and the gate
+against its canonical shape, so the declaration and the opt-in
 cannot drift: `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
 `memcopy`, `uninit_assume`, `str_from_parts`, `slice_from_parts`,
 and `slice_from_parts_mut`. `uninit_write` and `uninit_ref` stay
@@ -77,7 +77,7 @@ obligations are established.
 
 ## Consequences
 
-The first slices: the gate itself (syntax, checking, and the
+The first slices: the opt-in itself (syntax, checking, and the
 intrinsic migration, with the standard library wrapping its uses
 in `unsafe` blocks), then raw pointer types with casts,
 dereference, and offset, then `extern "C"` declarations and

@@ -159,7 +159,7 @@ TEST_CASE("Doc comments stay attached to the item that follows") {
 }
 
 TEST_CASE("An unsafe block reads like the value it wraps") {
-  // The gate block is an expression, so one statement that fits stays
+  // The opt-in block is an expression, so one statement that fits stays
   // on the line; a body of statements takes the lines.
   CHECK(once("fn f() { ret unsafe { alloc::<u8>(0) } }") ==
         "fn f() {\n  ret unsafe { alloc::<u8>(0) }\n}\n");

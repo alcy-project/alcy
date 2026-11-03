@@ -98,8 +98,8 @@ absence of a garbage collector a feature.
 Where the discipline is insufficient, the language provides a *visible*
 way out. `uninit_assume` is the current example: an ordinary call whose
 name is the programmer stating a precondition, and an `unsafe` call now
-that the gate has landed. It was designed with that in mind - the
-discharge point was chosen so the gate has somewhere to go.
+that the opt-in has landed. It was designed with that in mind - the
+discharge point is a call, so the opt-in has a place to sit.
 
 ## Usable in systems, not only in user space
 
@@ -119,7 +119,7 @@ sets several priorities.
 
 `unsafe` is a consequence of this, not a concession: MMIO, volatile
 access, and inline assembly cannot be type-checked, and a language for
-this domain needs a way to say so at the call site. It is a gate on
+this domain needs a way to say so at the call site. It is an opt-in on
 operations that already exist, not a new class of escape; `ffi.md`
 records what it covers.
 

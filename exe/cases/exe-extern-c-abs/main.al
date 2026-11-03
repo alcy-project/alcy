@@ -1,5 +1,5 @@
 // The first C FFI slice: a declaration names a libc symbol, and every
-// call goes through the gate.
+// call goes through the opt-in.
 extern "C" {
   fn abs(x: i32) -> i32;
 }

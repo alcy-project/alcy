@@ -186,7 +186,7 @@ struct TypeRef {
 
 // A raw pointer `*T` or `*mut T`: thin, Copy, and outside the region
 // system. Creating one is safe; dereferencing and offsetting are
-// operations the unsafe gate covers.
+// operations the unsafe opt-in covers.
 struct TypeRawPtr {
   bool is_mut;
   TypeIdx inner = TypeIdx::invalid();
@@ -569,7 +569,7 @@ struct ExprWhile {
 struct ExprBlock {
   BlockIdx block = BlockIdx::invalid();
   bool is_comp = false;
-  // An `unsafe { ... }` block: operations that need the gate may
+  // An `unsafe { ... }` block: operations that need the opt-in may
   // appear inside it, and its value is the block's.
   bool is_unsafe = false;
 };
@@ -909,7 +909,7 @@ struct ItemFn {
   std::span<const ItemFnParam> params;
   TypeIdx return_type = TypeIdx::invalid();
   BlockIdx body = BlockIdx::invalid();
-  // An `unsafe fn`: calling it is an operation that needs the gate.
+  // An `unsafe fn`: calling it is an operation that needs the opt-in.
   bool is_unsafe = false;
   // A `comp fn`: the call is evaluated during compilation only
   // (ADR-0054).

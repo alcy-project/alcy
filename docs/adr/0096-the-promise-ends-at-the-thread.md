@@ -26,7 +26,7 @@ type system entirely.
 
 **The language's guarantee covers values shared between threads of one
 process. Memory shared across a process boundary is outside it and is
-the gate's business.**
+the opt-in's business.**
 
 - The across-thread markers (`Send`, `Sync`; names reserved) arrive
   with the first package that needs one, using ADR-0085's mechanism: a
@@ -52,7 +52,7 @@ the gate's business.**
   holds a thread-bound part is refused without anyone writing
   `unsafe impl`.
 - Cross-process sharing is honest about needing a contract: the
-  package documents it and the operation is gated, rather than the
+  package documents it and the operation needs the opt-in, rather than the
   type system pretending to see it.
 - The packages can land one at a time; nothing needs a marker on the
   first day, and the first that does brings the derivation with it.

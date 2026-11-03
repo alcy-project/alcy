@@ -1,4 +1,4 @@
-// Offsetting is an operation the gate covers, like every other
+// Offsetting is an operation the opt-in covers, like every other
 // intrinsic declared unsafe.
 unsafe intrinsic fn ptr_offset<T>(ptr: *T, count: isize) -> *T;
 

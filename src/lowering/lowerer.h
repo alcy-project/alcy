@@ -572,7 +572,7 @@ class Lowerer {
                                      const analyzer::CheckedModule::FnSig& sig,
                                      const std::vector<ir::TypeIdx>& type_args);
   // An `extern "C"` call: the declaration names the symbol, arguments
-  // pass by value, and the gate was checked at the call site.
+  // pass by value, and the opt-in was checked at the call site.
   // A call into a package a summary answers for: its code lives in the
   // dependency's own artifact, so the call names the symbol the
   // dependency's build wrote for it (ADR-0078). A method's receiver is

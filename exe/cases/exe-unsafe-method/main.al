@@ -1,5 +1,5 @@
 // An unsafe method is declared like a free unsafe function; a call
-// needs the gate.
+// needs the opt-in.
 struct S {
   n: i32,
 }

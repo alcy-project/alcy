@@ -370,7 +370,7 @@ class Checker {
   bool bind_mut_ref_ = false;
 
   std::vector<std::vector<Local>> scopes;
-  // Nonzero inside an `unsafe { ... }` block: the operations the gate
+  // Nonzero inside an `unsafe { ... }` block: the operations the opt-in
   // covers may appear there (ADR-0050). A closure literal written
   // inside the block inherits it, because the rule is lexical.
   u32 unsafe_depth = 0;
@@ -1323,7 +1323,7 @@ class Checker {
   // A `comp fn` call happens during compilation only; outside comp
   // evaluation it is an error (ADR-0054).
   void check_comp_fn_call(const CheckedModule::FnSig* fn, diag::Span span);
-  // An operation the gate covers must name it: with no enclosing
+  // An operation the opt-in covers must spell it: with no enclosing
   // `unsafe { ... }` block, the diagnostic names the operation
   // (ADR-0050).
   void require_unsafe(diag::Span span, std::string_view what);

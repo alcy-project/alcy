@@ -28,7 +28,7 @@ vis         = "pub" ;
 fn_item     = [ "unsafe" ] , [ "comp" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
               (* An `unsafe fn` hands its callers an operation that
-                 needs the gate; the body is not one implicitly. A
+                 needs the opt-in; the body is not one implicitly. A
                  `comp fn` is called during compilation only. At most
                  one of the two markers may appear, whichever order it
                  is written in; their meaning together is not settled
@@ -44,7 +44,7 @@ extern_fn   = "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , ";" ;
               (* Bodyless declarations whose names are the symbols the
                  linker resolves; only "C" is accepted, and calling
-                 one needs the gate. See docs/spec/ffi.md. *)
+                 one needs the opt-in. See docs/spec/ffi.md. *)
 type_param  = IDENT , [ ":" , integer_type ] ;
 type_params = "<" , type_param , { "," , type_param } , ">" ;
               (* A parameter may carry an annotation naming its type:
@@ -204,9 +204,9 @@ block_like    = block | if_expr | match_expr | loop_expr | while_expr
               | for_expr ;
 comp_block    = "comp" , block ;
 unsafe_block  = "unsafe" , block ;
-              (* Opens the gate for the operations inside; its value
+              (* Carries the opt-in for the operations inside; its value
                  is the block's. The rule is lexical: an operation
-                 the gate covers may appear only inside such a block.
+                 the opt-in covers may appear only inside such a block.
                  See docs/spec/ffi.md. *)
 
 (* Statements and blocks *)

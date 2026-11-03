@@ -943,8 +943,8 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       // generic and associated functions until callable type
       // parameters land.
       const CheckedModule::FnSig* fn = resolved.function;
-      // The value's type drops the gate, so an unsafe function cannot
-      // become one until unsafe function types say what they carry.
+      // The value's type records no opt-in, so an unsafe function
+      // cannot become one until unsafe function types say what they carry.
       if (fn->is_unsafe) {
         const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeFunctionValue>(
             DiagCode::InvalidOperation, span, fn->name);
@@ -1624,7 +1624,7 @@ ir::TypeIdx Checker::check_indirect_call(u32 module,
   return ret;
 }
 
-// Calling an unsafe function is an operation the gate covers: the call
+// Calling an unsafe function is an operation the opt-in covers: the call
 // site must be inside an `unsafe { ... }` block, and an unsafe
 // function's own body is not one implicitly (ADR-0050).
 void Checker::check_unsafe_call(const CheckedModule::FnSig* fn,
@@ -1647,7 +1647,7 @@ void Checker::check_comp_fn_call(const CheckedModule::FnSig* fn,
   (void)index;
 }
 
-// An operation other than a call that the gate covers. The message
+// An operation other than a call that the opt-in covers. The message
 // names the operation, so the diagnostic reads without the site.
 void Checker::require_unsafe(diag::Span span, std::string_view what) {
   if (unsafe_depth > 0) {
@@ -1967,7 +1967,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
         module, nominal, name, method_type_args,
         node.payload.get<ast::ExprMethodCall>().args, span);
   }
-  // A method whose declaration is `unsafe` needs the gate at its call
+  // A method whose declaration is `unsafe` needs the opt-in at its call
   // site, the way a free function does (ADR-0050).
   if (method != nullptr && method->item.is_valid() &&
       fn_is_unsafe(method->item) && unsafe_depth == 0) {
@@ -3968,7 +3968,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       // reference would need a second reference alive, so the
       // mutability of the operand is preserved. A raw pointer names
       // the same kind of place, but dereferencing one is an operation
-      // the gate covers (ADR-0050).
+      // the opt-in covers (ADR-0050).
       const ir::TypeIdx inner =
           check_expr(module, node.payload.get<ast::ExprDeref>().inner, nullptr);
       if (is_error(inner)) {
@@ -4198,7 +4198,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
     }
     case ast::ExprKind::Block: {
       const ast::ExprBlock& block = node.payload.get<ast::ExprBlock>();
-      // An `unsafe { ... }` block opens the gate for its statements;
+      // An `unsafe { ... }` block carries the opt-in for its statements;
       // the block's value and everything else is checked as usual.
       if (block.is_unsafe) {
         ++unsafe_depth;
@@ -4444,7 +4444,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       // A reference a call answers is a place through its deref, the
       // same as one a local holds: `*v.first_mut().unwrap() = 10`. A
       // reference the binding already holds is a place without `mut` on
-      // the binding, which gates reassigning the binding, not the write
+      // the binding, which controls reassigning the binding, not the write
       // through the `&mut` it has.
       const ast::ExprIdx deref_inner = node.payload.get<ast::ExprDeref>().inner;
       const ast::ExprKind deref_kind = ast.exprs[deref_inner].kind;

@@ -24,7 +24,7 @@ a hole, and where it is, is cheaper to decide before the optimizer
 relies on the assumption than after.
 
 Raw pointers already sit outside every promise: they may be null, they
-may alias, and producing or using one is behind the `unsafe` gate
+may alias, and producing or using one is behind the `unsafe` opt-in
 (ADR-0050).
 
 ## Decision
