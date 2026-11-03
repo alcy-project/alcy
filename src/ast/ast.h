@@ -21,9 +21,11 @@
 //   fn          -> ItemFn          closure    -> ExprClosure
 //   func type   -> TypeFunc
 
+#include <cstring>
 #include <memory>
 #include <span>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "ast/node_vec.h"
@@ -77,7 +79,11 @@ std::span<T> copy_to_arena(Arena& arena, std::span<const T> items) {
   if (out == nullptr) [[unlikely]] {
     return {};
   }
-  std::uninitialized_copy(items.begin(), items.end(), out);
+  if constexpr (std::is_trivially_copyable_v<T>) {
+    std::memcpy(out, items.data(), sizeof(T) * items.size());
+  } else {
+    std::uninitialized_copy(items.begin(), items.end(), out);
+  }
   return std::span<T>(out, items.size());
 }
 
