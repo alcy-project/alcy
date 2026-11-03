@@ -87,10 +87,30 @@ extent compared there would answer a different question.
   declared inside the container's block and accepted when it is declared
   before the container (`err-kept-view-inner-block`,
   `kept/str-view-from-inner-block`,
-  `kept/str-view-from-outer-block`). A parameter written as `str` or
-  as a reference still passes, which leaves a callee that stores the
-  view it was handed to the disposition per parameter `docs/backlog.md`
-  records.
+  `kept/str-view-from-outer-block`).
+- Ordering the destination against the store answers the wrong question
+  once the place leaves the block that declared the view's buffer: the
+  container is then declared *before* the view, which the comparison
+  reads as safe, while the place outlives every slot of that block. So
+  the rule has a second lever, on the handing out rather than on the
+  store: a place that kept a view of a local ending with the block is
+  refused as a block's value and as the value of `ret`
+  (`kept/str-view-in-block-value`, `kept/str-view-returned`,
+  `err-borrow-element-escape`). The callee's disposition towards its
+  parameter still decides the extent, so a view of a parameter or of a
+  call that only borrowed its input lives as long as the caller's
+  storage and is refused only by the borrow pass
+  (`kept/str-view-of-parameter-returned`,
+  `returned/borrowed-element-from-parameter`). A parameter written as
+  `str` or as a reference still passes, which leaves a callee that
+  stores the view it was handed to the disposition per parameter
+  `docs/backlog.md` records.
+- What a call writes into a place keeps naming the source it was handed,
+  so the place reaches that source from then on: the same handing-out
+  rule then applies to a container the callee filled, without the
+  caller having to know the callee. A place of a type that cannot hold a
+  view keeps none, and a read through a reference returns the pointee
+  rather than the slot that holds it, so neither refuses anything.
 - The rule is an extent rule, not a lifetime analysis: loans are still
   liveness-checked by the borrow pass, and a reference that never meets a
   store of a shallower binding is unaffected.

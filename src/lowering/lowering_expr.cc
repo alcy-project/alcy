@@ -5773,6 +5773,12 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
         if (failed || terminated_cur()) {
           return stopped_value();
         }
+        // The frame ends with the return, so a view the result kept of
+        // one of its locals would reach a slot that has ended (ADR-0135).
+        if (kept_view_escapes(ret.value, node.span, 0)) {
+          failed = true;
+          return stopped_value();
+        }
         if (tag_of(value.type) != ir::TypeTag::Void) {
           result = use_value(value);
           carries_result = true;
@@ -5895,8 +5901,12 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         failed = true;
         return;
       }
+      // Only a destination that can hold a view keeps one: storing a
+      // plain value leaves nothing for a later read of the place to
+      // reach back to.
       if (ast.exprs[reassign.place].kind == ast::ExprKind::Path) {
-        if (const Local* target = rooted_local(reassign.place)) {
+        if (const Local* target = rooted_local(reassign.place);
+            target != nullptr && carries_borrow(target->type)) {
           locals[target - locals.data()].referents.assign(sources.begin(),
                                                           sources.end());
         }
@@ -6049,6 +6059,13 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
         }
       }
     }
+  }
+  // A place whose storage kept a view of a local this block declares
+  // cannot be the block's value either: handing it out outlives the
+  // slot the view reaches (ADR-0135).
+  if (!failed && reachable && !terminated_cur() && node.value.is_valid() &&
+      kept_view_escapes(node.value, node.span, mark)) {
+    failed = true;
   }
   Val value{size_one, builder.primitive(ir::TypeTag::Void), false, false};
   if (!failed && reachable && !terminated_cur()) {

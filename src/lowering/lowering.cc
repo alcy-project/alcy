@@ -3,6 +3,7 @@
 
 #include "lowering/lowering.h"
 
+#include <algorithm>
 #include <charconv>
 #include <functional>
 #include <initializer_list>
@@ -1081,6 +1082,37 @@ bool Lowerer::escapes_referent(ir::TypeIdx type,
   return false;
 }
 
+// A place handed out of a block reaches the locals the views it kept
+// were taken of, and those slots end with the block that declares them,
+// so the place would outlive a view it still names (ADR-0135).
+bool Lowerer::kept_view_escapes(ast::ExprIdx expr,
+                                diag::Span span,
+                                usize first) const {
+  // A read through a reference returns the pointee, not the frame slot
+  // that holds it, and a place of a plain type cannot keep a view.
+  const Local* target = rooted_local(expr, /*through_deref=*/false);
+  if (target == nullptr || !carries_borrow(target->type)) {
+    return false;
+  }
+  const auto target_index = static_cast<usize>(target - locals.data());
+  for (u32 referent : target->referents) {
+    if (referent == target_index || referent < first ||
+        referent >= locals.size() || locals[referent].is_param) {
+      continue;
+    }
+    const std::string_view name = locals[referent].name;
+    if (name.empty()) {
+      bag.emit<i18n::Key::LowerTemporaryReferenceEscapes>(
+          DiagCode::TemporaryReferenceEscapes, span);
+    } else {
+      bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
+          DiagCode::BlockReferenceEscapes, span, name);
+    }
+    return true;
+  }
+  return false;
+}
+
 // A call may leave an argument in storage it owns - `Vec::push` writes
 // its element into the buffer - so a value that carries a borrow has to
 // outlive the place the call borrows (ADR-0135). `sources_from` is
@@ -1112,7 +1144,35 @@ bool Lowerer::check_kept_values(
       }
     }
   }
+  note_kept_referents(values, borrowed_places);
   return false;
+}
+
+// The storage the call wrote into holds what it was handed, so a view
+// left there names the local it was taken of from now on: the place
+// reaches that local until something overwrites it (ADR-0135).
+void Lowerer::note_kept_referents(
+    const std::vector<KeptValue>& values,
+    const std::vector<ast::ExprIdx>& borrowed_places) {
+  for (const KeptValue& value : values) {
+    if (value.borrowed_parameter || !carries_borrow(value.type)) {
+      continue;
+    }
+    for (ast::ExprIdx place : borrowed_places) {
+      const Local* target = rooted_local(place);
+      if (target == nullptr) {
+        continue;
+      }
+      std::vector<u32>& referents = locals[target - locals.data()].referents;
+      for (usize i = value.sources_from; i < borrow_sources.size(); ++i) {
+        const u32 source = borrow_sources[i];
+        if (std::find(referents.begin(), referents.end(), source) ==
+            referents.end()) {
+          referents.push_back(source);
+        }
+      }
+    }
+  }
 }
 
 bool Lowerer::check_kept_extent(ir::TypeIdx type,
@@ -1915,16 +1975,22 @@ void Lowerer::lower_fn(const FnEntry& entry) {
     }
     const ir::RegisterIdx preg = pending_params_[pending_at++];
     Val param{to_operand(preg, ptype), ptype, false, true};
+    const usize params_at = locals.size();
     // Parameters live in memory like locals so borrows observe them.
     if (tag_of(ptype) == ir::TypeTag::Void) {
       bind_pattern(params[i].pattern, param);
-      continue;
+    } else {
+      const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
+      emit_void(ir::Opcode::Store,
+                {to_operand(preg, ptype), to_operand(addr, ptype)});
+      bind_pattern(params[i].pattern,
+                   Val{to_operand(addr, ptype), ptype, true, true});
     }
-    const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
-    emit_void(ir::Opcode::Store,
-              {to_operand(preg, ptype), to_operand(addr, ptype)});
-    bind_pattern(params[i].pattern,
-                 Val{to_operand(addr, ptype), ptype, true, true});
+    // The caller owns what arrived here, so these slots outlive the
+    // return that ends the frame (ADR-0135).
+    for (usize slot = params_at; slot < locals.size(); ++slot) {
+      locals[slot].is_param = true;
+    }
   }
   pending_params_.clear();
   binding_param_ = false;
@@ -2038,15 +2104,19 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
       const std::string_view name = lit->params[i].name;
       if (tag_of(ptype) == ir::TypeTag::Void) {
         locals.emplace_back(name, ir::RegisterIdx(base::INVALID_IDX), ptype);
-        continue;
+      } else {
+        const ir::RegisterIdx addr =
+            emit(ir::Opcode::Alloca, ptype, {size_one});
+        emit_void(ir::Opcode::Store,
+                  {to_operand(pregs[slot], ptype), to_operand(addr, ptype)});
+        locals.emplace_back(name, addr, ptype);
+        record_event(OwnershipEvent::Kind::Bind,
+                     static_cast<u32>(locals.size() - 1), {}, cur_span_);
+        addr_names_.push_back({addr, name, binding_param_});
       }
-      const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, ptype, {size_one});
-      emit_void(ir::Opcode::Store,
-                {to_operand(pregs[slot], ptype), to_operand(addr, ptype)});
-      locals.emplace_back(name, addr, ptype);
-      record_event(OwnershipEvent::Kind::Bind,
-                   static_cast<u32>(locals.size() - 1), {}, cur_span_);
-      addr_names_.push_back({addr, name, binding_param_});
+      // The caller owns what arrived here, so these slots outlive the
+      // return that ends the frame (ADR-0135).
+      locals.back().is_param = true;
     }
   }
   binding_param_ = false;

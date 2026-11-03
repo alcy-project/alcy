@@ -39,6 +39,9 @@ struct Local {
   std::string_view name;
   ir::RegisterIdx addr;
   ir::TypeIdx type;
+  // A parameter's slot holds the caller's value, so its storage outlives
+  // the return that ends every other slot of the frame (ADR-0135).
+  bool is_param = false;
   // The locals a reference held here may point into: `p := &n` names n,
   // and a binding from an alias copies what the alias named. Empty when
   // the reference came from a parameter or from a call that kept its

@@ -497,6 +497,65 @@ fn main() -> i32 {
 }""",
 )
 
+# The value the binding holds is a view of a slot the block declared,
+# and the container leaves the block: the element would read storage
+# that has ended.
+case(
+    "kept",
+    "str-view-in-block-value",
+    "reject",
+    """fn main() -> i32 {
+  w := {
+    s := String::from("abc")
+    mut v := Vec::<str>::new()
+    v.push(s.as_str())
+    v
+  }
+  x := w.at(0).or_panic_with_message("none")
+  ret str_len(*x) as i32 - 2
+}""",
+)
+
+# The frame ends with the return, so a result that kept a view of one of
+# the function's own slots would reach storage the caller never owned.
+case(
+    "kept",
+    "str-view-returned",
+    "reject",
+    """fn take() -> Vec<str> {
+  s := String::from("abc")
+  mut v := Vec::<str>::new()
+  v.push(s.as_str())
+  ret v
+}
+
+fn main() -> i32 {
+  w := take()
+  x := w.at(0).or_panic_with_message("none")
+  ret str_len(*x) as i32 - 2
+}""",
+)
+
+# The same shape over a parameter borrows the caller's slot, which
+# outlives the return, and the container's own slot ends with the frame
+# that declares it.
+case(
+    "kept",
+    "str-view-of-parameter-returned",
+    "accept",
+    """fn take(s: str) -> Vec<str> {
+  mut v := Vec::<str>::new()
+  v.push(s)
+  ret v
+}
+
+fn main() -> i32 {
+  w := take("abc")
+  x := w.at(0).or_panic_with_message("none")
+  ret str_len(*x) as i32 - 5
+}""",
+)
+
 # The element type is a type parameter, so the declaration says nothing
 # about whether the callee keeps the argument: a container declared
 # before the view's buffer cannot hold it, because the element would

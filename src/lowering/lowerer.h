@@ -376,6 +376,16 @@ class Lowerer {
   // the call may write through. True when it refused.
   bool check_kept_values(const std::vector<KeptValue>& values,
                          const std::vector<ast::ExprIdx>& borrowed_places);
+  // True when the place reaches a local of this frame that ends before
+  // the place does: what the place kept a view of is a slot the block
+  // that declares it ends. `first` is the first local the handing out
+  // ends; parameters outlive every block of the frame (ADR-0135).
+  bool kept_view_escapes(ast::ExprIdx expr, diag::Span span, usize first) const;
+  // Records on the places a call borrowed the locals the views it kept
+  // name, so handing one of those places out of its block sees them
+  // (ADR-0135).
+  void note_kept_referents(const std::vector<KeptValue>& values,
+                           const std::vector<ast::ExprIdx>& borrowed_places);
   // Applies the extent rule to an argument a call may keep: the callee
   // owns storage and can leave the value there, so the value's loans
   // have to outlive the place the call borrows. `sources_from` is the

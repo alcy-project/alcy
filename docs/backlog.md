@@ -256,27 +256,30 @@ replaced. The foundations are in `roadmap.md`.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
 
-- [ ] A call that keeps a view it was handed still outlives the
-  frame: `fn take() -> Vec<str> { x := String::from("abc"); mut v :=
-  Vec::<str>::new(); v.push(x.as_str()); ret v }` compiles and the
-  caller prints the dropped buffer, and `Map::insert(x.as_str(),
-  7i32)` writes the view of a local into the map's buffer. Both reach a
-  callee that stores the view, and each spells the parameter the way a
-  copying callee does (`T` for `Vec::push`, `str` for
-  `Map::insert` and for `String::push_str`, which copies the bytes),
-  so the declaration cannot separate them: what separates them is a
-  disposition per parameter - kept or copied - which is the region a
-  loan carries (ADR-0012) read off the reasoned list of the std surface
-  (ADR-0131). A reference argument reaches the receiver's place as a
-  loan, which is what refuses the `Vec<&i32>` shape
-  (`err-borrow-element-escape`,
-  `returned/borrowed-element-in-container`). The extent rule refuses
-  the container that outlives a view's buffer inside one frame
-  (`err-kept-view-inner-block`,
-  `kept/str-view-from-inner-block`) while the same view of an earlier
-  buffer is accepted (`kept/str-view-from-outer-block`), and the
-  copying receivers stay accepted: `ok-mini-pipeline` and
-  `ok-grouping` pass views to them.
+- [ ] A callee written to take its argument as a `str` can store the
+  view it was handed: `fn store(mut v: &mut Vec<str>, s: str) {
+  v.push(s) }` called as `store(&mut v, x.as_str())` puts a view of
+  the caller's slot into the caller's container, and the program then
+  prints the dropped buffer. The caller cannot see it, because `str` is
+  the spelling a copying callee uses too (`String::push_str`,
+  `Map::insert` and `Set::insert` all copy the bytes), so the
+  declaration separates nothing: what separates them is a disposition
+  per parameter - kept or copied - which is the region a loan carries
+  (ADR-0012) read off the reasoned list of the std surface (ADR-0131).
+  The extent rule covers the rest of the shape: a container declared
+  before the view's buffer is refused inside one frame
+  (`err-kept-view-inner-block`, `kept/str-view-from-inner-block`) and
+  accepted when the buffer is declared first
+  (`kept/str-view-from-outer-block`), a place that kept a view of a
+  slot ending with its block is refused when the block hands it out
+  (`kept/str-view-in-block-value`) and when the frame returns it
+  (`kept/str-view-returned`,
+  `returned/borrowed-element-in-container`), and the same view of a
+  parameter or a call result is accepted
+  (`kept/str-view-of-parameter-returned`,
+  `returned/borrowed-element-from-parameter`). The copying receivers
+  stay accepted: `ok-mini-pipeline` and `ok-grouping` pass views to
+  them.
 
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the
