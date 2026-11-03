@@ -155,9 +155,13 @@ impl String {
     self.len = self.len + n
   }
 
-  // Inserts `b` at `at`, shifting the bytes after it up one. `at`
-  // must not pass the length.
+  // Inserts `b` at `at`, shifting the bytes after it up one. `at` must
+  // not pass the length; a position past it panics before the run is
+  // moved, so the string is untouched when the report lands.
   pub fn insert_byte(mut self: &mut Self, at: usize, b: u8) {
+    if at > self.len {
+      panic("String insert out of bounds")
+    }
     self.push(0)
     mut i := self.len - 1
     while i > at {
