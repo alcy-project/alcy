@@ -254,9 +254,11 @@ TEST_CASE("Check runs a closure that captures") {
 }
 
 TEST_CASE("A file checked alone reports one finding per problem") {
-  // A match reads its scrutinee once per arm and once for the tag, so a
-  // moved enum arrives as one finding per arm. A package collapses the
-  // repeats; a file named on its own used to print every one of them.
+  // A match lowers into several instructions, one reading its scrutinee's
+  // tag and one moving the payload out of it, and every one of them carries
+  // the span of the whole expression. The place being gone is one problem
+  // at that span, so a moved enum reads as one finding, and a file named on
+  // its own reads the way a package does.
   constexpr std::string_view SOURCE =
       "enum E { A(String), B }\n\n"
       "fn take(e: E) -> i32 {\n  ret 1\n}\n\n"
@@ -272,14 +274,39 @@ TEST_CASE("A file checked alone reports one finding per problem") {
 
   PipelineContext ctx{i18n::Language::EnUs};
   CHECK(check_source(ctx, "main.al", SOURCE).is_err());
-  u32 reads = 0;
-  u32 moves = 0;
+  u32 findings = 0;
   ctx.bag.for_each([&](const diag::Diagnostic& diagnostic) {
-    reads += diagnostic.message == "Use of moved 'e' in read" ? 1 : 0;
-    moves += diagnostic.message == "Use of moved 'e' in move" ? 1 : 0;
+    findings += diagnostic.message.starts_with("Use of moved 'e'") ? 1 : 0;
   });
-  CHECK(reads == 1);
-  CHECK(moves == 1);
+  CHECK(findings == 1);
+}
+
+TEST_CASE("Two statements that reach one moved place report twice") {
+  // Collapsing the reads of one expression must not collapse the reads of
+  // two, so the second match reports where it stands.
+  constexpr std::string_view SOURCE =
+      "enum E { A(String), B }\n\n"
+      "fn take(e: E) -> i32 {\n  ret 1\n}\n\n"
+      "fn main() -> i32 {\n"
+      "  e := E::A(String::from(\"w\"))\n"
+      "  _ := take(e)\n"
+      "  a := match e {\n"
+      "    E::A(s) => 1,\n"
+      "    E::B => 2,\n"
+      "  }\n"
+      "  b := match e {\n"
+      "    E::A(s) => 3,\n"
+      "    E::B => 4,\n"
+      "  }\n"
+      "  ret a + b\n}\n";
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_source(ctx, "main.al", SOURCE).is_err());
+  u32 findings = 0;
+  ctx.bag.for_each([&](const diag::Diagnostic& diagnostic) {
+    findings += diagnostic.message.starts_with("Use of moved 'e'") ? 1 : 0;
+  });
+  CHECK(findings == 2);
 }
 
 }  // namespace pipeline

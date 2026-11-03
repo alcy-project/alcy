@@ -293,6 +293,16 @@ class Checker {
   std::vector<Place> move_out_scratch_;
   std::vector<u32> use_count_scratch_;
   std::vector<u8> receiver_call_scratch_;
+  // The use-after-move findings made in this function, keyed by the span that
+  // named the place and the place's root. One expression lowers into several
+  // instructions that share its span - a match reads its scrutinee's tag and
+  // moves the payload out of it - and the place being gone is one problem at
+  // that span, so the first instruction that reaches it reports.
+  struct ReportedUse {
+    diag::Span span;
+    u32 root;
+  };
+  std::vector<ReportedUse> reported_uses;
   // Entry-block allocas holding a block parameter, paired with that
   // parameter's position. Filled by param_allocas per function and read
   // by is_param_root, so both see the same homes.
@@ -1374,12 +1384,27 @@ class Checker {
                        diag::Span span,
                        std::string_view action) {
     for (const Place& gone : moved) {
-      if (overlaps(gone, place, path_steps_)) {
-        const u32 index = bag.emit<i18n::Key::BorrowUseAfterMove>(
-            DiagCode::UseAfterMove, span, addr_name(place.root), action);
-        (void)index;
-        return;
+      if (!overlaps(gone, place, path_steps_)) {
+        continue;
       }
+      // A reading and a move of one place at one span are one problem, so
+      // the span that reported already keeps the second quiet. An
+      // instruction that recorded no span says nothing about which statement
+      // it came from, so it reports on its own.
+      if (span.length != 0) {
+        for (const ReportedUse& prior : reported_uses) {
+          if (prior.root == place.root && prior.span.file == span.file &&
+              prior.span.offset == span.offset &&
+              prior.span.length == span.length) {
+            return;
+          }
+        }
+        reported_uses.push_back(ReportedUse{span, place.root});
+      }
+      const u32 index = bag.emit<i18n::Key::BorrowUseAfterMove>(
+          DiagCode::UseAfterMove, span, addr_name(place.root), action);
+      (void)index;
+      return;
     }
   }
 
@@ -1636,6 +1661,7 @@ class Checker {
 
   void check_function(ir::FunctionIdx fidx) {
     const ir::Function& fn = storage.functions()[fidx];
+    reported_uses.clear();
     collect_reserved(fn);
     forward(fidx);
     block_order_.clear();
