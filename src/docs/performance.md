@@ -96,6 +96,14 @@ modules do not mention each other would not:
 so it grows with the package and its per-item work is indistinguishable from
 package-scale work; a fixed `main` separates the two.
 
+The other axis is one module's body. `--sizes 1 --main-calls 300`, repeated at
+600, 1200, 2400, and 4800 with `--binary` naming the symbols build, grows
+`main` and nothing else, and it is linear there too: an added statement costs
+the same 24.6K instructions at every size, with no drift as the body fills, and
+the peak rises 2.2 KiB per line. A per-line cost that climbed with the body
+would be a scan or a lookup over what the body already holds, which no
+whole-package size can show and a single module can.
+
 ### 2. Localize it
 
 Build a release binary that keeps its symbols. The knob exists, so no edit to
@@ -224,6 +232,14 @@ from the idea.
   places, so the scan it replaces is short, while the sort pays `log n` per key.
   Sizing the same table up front instead removes its growth copies and is worth
   `-0.20%`.
+- **Forcing the expression ladder to inline.** `parse_range` down to
+  `parse_primary` is ten functions calling each other, each calling its child
+  twice, and `[[gnu::always_inline]]` on all ten is worth `-1.9%` on
+  `plain1200`: the calls between the levels are what the attribute removes. The
+  build pays for it: a level that inlines two copies of the level below makes
+  the tower exponential, and the file goes from `5 s` to `228 s` to compile.
+  The overhead is real, and a precedence table is what would remove it without
+  the copies; the attribute is not.
 
 ## Tracing
 
