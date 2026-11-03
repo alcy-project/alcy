@@ -368,58 +368,43 @@ bool Lexer::at_end() const {
   return pos_ >= bytes_.size();
 }
 
-void Lexer::skip_trivia(std::vector<Token>& out) {
-  while (!at_end()) {
-    const char c = peek();
-    if (c == ' ' || c == '\t' || c == '\r') {
+void Lexer::lex_line_comment(std::vector<Token>& out) {
+  if (peek(2) == '/' && peek(3) != '/') {
+    const usize start = pos_;
+    advance(3);
+    while (!at_end() && peek() != '\n') {
       advance();
-    } else if (c == '\n') {
-      const usize newline = pos_;
-      advance();
-      if (inserts_semi(last_significant_) && !suppress_semi(peek_next_kind())) {
-        last_significant_ = TokenKind::Semicolon;
-        out.push_back(
-            Token{.kind = TokenKind::Semicolon, .span = span_at(newline, 1)});
-      }
-    } else if (c == '/' && peek(1) == '/') {
-      if (peek(2) == '/' && peek(3) != '/') {
-        const usize start = pos_;
-        advance(3);
-        while (!at_end() && peek() != '\n') {
-          advance();
-        }
-        // A comment is trivia: it does not become the token a newline
-        // tests for semi insertion, or a `///` would swallow the
-        // statement boundary a `//` leaves.
-        out.push_back(Token{.kind = TokenKind::DocComment,
-                            .span = span_at(start, pos_ - start)});
-      } else {
-        while (!at_end() && peek() != '\n') {
-          advance();
-        }
-      }
-    } else if (c == '/' && peek(1) == '*') {
-      const usize start = pos_;
-      advance(2);
-      u32 depth = 1;
-      while (!at_end() && depth > 0) {
-        if (peek() == '/' && peek(1) == '*') {
-          ++depth;
-          advance(2);
-        } else if (peek() == '*' && peek(1) == '/') {
-          --depth;
-          advance(2);
-        } else {
-          advance();
-        }
-      }
-      if (depth > 0) {
-        emit_error<i18n::Key::LexerUnterminatedBlockComment>(
-            out, start, pos_ - start, DiagCode::UnterminatedBlockComment);
-      }
-    } else {
-      break;
     }
+    // A comment is trivia: it does not become the token a newline
+    // tests for semi insertion, or a `///` would swallow the
+    // statement boundary a `//` leaves.
+    out.push_back(Token{.kind = TokenKind::DocComment,
+                        .span = span_at(start, pos_ - start)});
+  } else {
+    while (!at_end() && peek() != '\n') {
+      advance();
+    }
+  }
+}
+
+void Lexer::lex_block_comment(std::vector<Token>& out) {
+  const usize start = pos_;
+  advance(2);
+  u32 depth = 1;
+  while (!at_end() && depth > 0) {
+    if (peek() == '/' && peek(1) == '*') {
+      ++depth;
+      advance(2);
+    } else if (peek() == '*' && peek(1) == '/') {
+      --depth;
+      advance(2);
+    } else {
+      advance();
+    }
+  }
+  if (depth > 0) {
+    emit_error<i18n::Key::LexerUnterminatedBlockComment>(
+        out, start, pos_ - start, DiagCode::UnterminatedBlockComment);
   }
 }
 
@@ -962,7 +947,27 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
 
 void Lexer::tokenize(std::vector<Token>& out) {
   while (true) {
-    skip_trivia(out);
+    while (!at_end()) {
+      const char trivia = peek();
+      if (trivia == ' ' || trivia == '\t' || trivia == '\r') {
+        advance();
+      } else if (trivia == '\n') {
+        const usize newline = pos_;
+        advance();
+        if (inserts_semi(last_significant_) &&
+            !suppress_semi(peek_next_kind())) {
+          last_significant_ = TokenKind::Semicolon;
+          out.push_back(
+              Token{.kind = TokenKind::Semicolon, .span = span_at(newline, 1)});
+        }
+      } else if (trivia == '/' && peek(1) == '/') {
+        lex_line_comment(out);
+      } else if (trivia == '/' && peek(1) == '*') {
+        lex_block_comment(out);
+      } else {
+        break;
+      }
+    }
     if (at_end()) {
       break;
     }
