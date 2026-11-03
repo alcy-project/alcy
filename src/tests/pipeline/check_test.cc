@@ -253,4 +253,33 @@ TEST_CASE("Check runs a closure that captures") {
   CHECK(!ctx.bag.has_errors());
 }
 
+TEST_CASE("A file checked alone reports one finding per problem") {
+  // A match reads its scrutinee once per arm and once for the tag, so a
+  // moved enum arrives as one finding per arm. A package collapses the
+  // repeats; a file named on its own used to print every one of them.
+  constexpr std::string_view SOURCE =
+      "enum E { A(String), B }\n\n"
+      "fn take(e: E) -> i32 {\n  ret 1\n}\n\n"
+      "fn main() -> i32 {\n"
+      "  e := E::A(String::from(\"w\"))\n"
+      "  _ := take(e)\n"
+      "  m := match e {\n"
+      "    E::A(s) => s,\n"
+      "    E::B => String::from(\"n\"),\n"
+      "  }\n"
+      "  println(\"{}\", m)\n"
+      "  ret 0\n}\n";
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  CHECK(check_source(ctx, "main.al", SOURCE).is_err());
+  u32 reads = 0;
+  u32 moves = 0;
+  ctx.bag.for_each([&](const diag::Diagnostic& diagnostic) {
+    reads += diagnostic.message == "Use of moved 'e' in read" ? 1 : 0;
+    moves += diagnostic.message == "Use of moved 'e' in move" ? 1 : 0;
+  });
+  CHECK(reads == 1);
+  CHECK(moves == 1);
+}
+
 }  // namespace pipeline

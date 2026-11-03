@@ -1018,6 +1018,26 @@ TEST_CASE("Check rejects value-recursive types") {
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
 }
+TEST_CASE("Check rejects a value-recursive type a parameter names") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "struct A { b: B }\n"
+                                      "struct B { a: A }\n"
+                                      "fn take(a: A) {}\n"
+                                      "fn main() {}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  // The parameter asks whether a value of the type may be moved, and the
+  // structural walk that answers follows the fields: it stops at the
+  // cycle the checks refuse instead of following it to the stack end.
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+}
 
 TEST_CASE("Check accepts reference cycles") {
   VirtualDir dir;
@@ -6448,6 +6468,79 @@ TEST_CASE("Check resolves an inherent impl's imported target") {
       check_case(dir, "main.al", {"main.al", "a.al", "b.al"}, f);
   CHECK(result.package.has_value());
   CHECK(!f.bag.has_errors());
+}
+
+namespace {
+
+// Appends an impl of `type` that declares `count` receiver-only methods
+// named `<prefix>0`, `<prefix>1`, ... and then `tail`.
+void add_impl(std::string& out,
+              std::string_view type,
+              std::string_view prefix,
+              u32 count,
+              std::string_view tail = {}) {
+  out += "impl ";
+  out.append(type);
+  out += " {\n";
+  for (u32 at = 0; at < count; ++at) {
+    out += "  fn ";
+    out.append(prefix);
+    out += std::to_string(at);
+    out += "(self: Self) -> i32 {\n    ret 0\n  }\n";
+  }
+  out.append(tail);
+  out += "}\n";
+}
+
+}  // namespace
+
+TEST_CASE("Check reaches a method a type indexed past its threshold") {
+  // A type that holds more than 64 methods answers a lookup through an
+  // index of name to entry. B's methods shift A's entries in the module's
+  // own list, so an index that kept that list's position would answer an
+  // entry A does not hold.
+  std::string source =
+      "struct A {\n  a: i32\n}\n"
+      "struct B {\n  b: i32\n}\n";
+  add_impl(source, "B", "b", 5);
+  add_impl(source, "A", "m", 69,
+           "  fn last(self: Self, x: i32) -> i32 {\n    ret x\n  }\n");
+  source +=
+      "fn main() -> i32 {\n"
+      "  v: A := A { a: 0 }\n"
+      "  ret v.last(3)\n"
+      "}\n";
+  VirtualDir dir;
+  dir.add("main.al", source);
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Check leaves a method out of the names a bare call reaches") {
+  // A module that holds more than 64 functions indexes them by name. A
+  // method's signature shares that table, so the index takes none of them:
+  // a bare call reaches free functions only.
+  std::string source;
+  for (u32 at = 0; at < 66; ++at) {
+    source += "fn g";
+    source += std::to_string(at);
+    source += "() -> i32 {\n  ret 0\n}\n";
+  }
+  source +=
+      "struct A {\n  a: i32\n}\n"
+      "impl A {\n"
+      "  fn hidden(self: Self) -> i32 {\n    ret 1\n  }\n"
+      "}\n"
+      "fn main() -> i32 {\n  ret hidden()\n}\n";
+  VirtualDir dir;
+  dir.add("main.al", source);
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(f.bag, "Unresolved value 'hidden'"));
 }
 
 }  // namespace analyzer

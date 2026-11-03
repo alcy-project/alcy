@@ -49,6 +49,21 @@ bool Checker::is_movable(ir::TypeIdx type) const {
       [this](ir::TypeIdx idx) { return type_origin(idx); });
 }
 
+bool Checker::is_copy(ir::TypeIdx type) {
+  if (!type.is_valid() || is_error(type) ||
+      tag_of(type) == ir::TypeTag::Const) {
+    // An error already stopped the expression that asked, and a value
+    // parameter's type has no copy to ask about.
+    return true;
+  }
+  // The drop walk answers whether a value of the type runs code when it
+  // ends, and a type that does is move-only. A repeat literal asks
+  // before the drop phase runs, so the walk fills in what it needs.
+  std::vector<u32> stack;
+  drop_scan(type, stack);
+  return ir::is_copy_type(builder.state(), type, needs_drop_, not_movable_);
+}
+
 bool Checker::check_type_args_movable(std::span<const ir::TypeIdx> args,
                                       diag::Span span) {
   for (const ir::TypeIdx arg : args) {
@@ -1771,8 +1786,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       return;
     }
     CheckedModule::FnSig& sig =
-        add_function(module, {name, params, ret, method_item});
-    sig.is_method = true;
+        add_function(module, {name, params, ret, method_item}, true);
     add_method(module, {self_type,
                         name,
                         sig.params,

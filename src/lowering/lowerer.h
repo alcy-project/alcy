@@ -3,6 +3,7 @@
 #pragma once
 
 #include <deque>
+#include <functional>
 #include <initializer_list>
 #include <optional>
 #include <span>
@@ -54,6 +55,15 @@ struct Val {
   bool borrowed = false;
 };
 
+// Hashes a specialization key from the bytes alone, so a lookup may pass the
+// view a key was built in without a string to hold it.
+struct FnKeyHash {
+  using is_transparent = void;
+  usize operator()(std::string_view key) const {
+    return std::hash<std::string_view>{}(key);
+  }
+};
+
 class Lowerer {
  public:
   analyzer::CheckedPackage pkg;
@@ -93,9 +103,6 @@ class Lowerer {
 
   struct FnEntry {
     ast::ItemIdx item = ast::ItemIdx::invalid();
-    // Specialization key over comp argument values; empty for
-    // functions without comp parameters.
-    std::string comp_key;
     ir::FunctionIdx idx = ir::FunctionIdx(base::INVALID_IDX);
     u32 mod = 0;
     std::string name;
@@ -157,6 +164,9 @@ class Lowerer {
   // Per-function state.
   u32 module = 0;
   std::vector<Local> locals;
+  // The locals borrowed while a value was lowered, in order: a statement
+  // reads the tail its own lowering added.
+  std::vector<u32> borrow_sources;
   // Bounds the recursive tree walk; see base::MAX_NESTING. The analyzer
   // rejects a tree this deep before lowering sees it, so tripping this
   // means the budget is the only thing between a hostile input and the
@@ -219,19 +229,35 @@ class Lowerer {
   void comp_div_zero(diag::Span span);
   void comp_oob(diag::Span span);
   void comp_budget(diag::Span span);
+  // The evaluator reached an operation it cannot follow, so the value
+  // is not known at compile time; the detail names the operation.
+  void comp_not_evaluable(diag::Span span, std::string_view what);
   ir::TypeIdx error_type();
   bool is_copy(ir::TypeIdx type) const;
   ir::TypeTag tag_of(ir::TypeIdx idx) const;
   bool is_ref_tag(ir::TypeTag tag) const;
+  // Whether a callee handed a place through such a parameter can write
+  // into it, which is what lets it leave a value there.
+  static bool can_write_through(ir::TypeTag tag);
   ir::RegisterIdx claim_reg();
   ir::OperandIdx to_operand(ir::RegisterIdx reg, ir::TypeIdx type);
   ir::OperandIdx to_operand(ir::ImmutableIdx imm, ir::TypeIdx type);
+  // Operands are a view: an instruction carries one to three indices,
+  // so building a vector for the common case allocated on every emit.
+  // A braced list reaches the same implementation without one.
   ir::RegisterIdx emit(ir::Opcode op,
                        ir::TypeIdx type,
-                       const std::vector<ir::OperandIdx>& ops,
+                       std::span<const ir::OperandIdx> ops,
+                       ir::InstructionFlags flags = {});
+  ir::RegisterIdx emit(ir::Opcode op,
+                       ir::TypeIdx type,
+                       std::initializer_list<ir::OperandIdx> ops,
                        ir::InstructionFlags flags = {});
   void emit_void(ir::Opcode op,
-                 const std::vector<ir::OperandIdx>& ops,
+                 std::span<const ir::OperandIdx> ops,
+                 ir::InstructionFlags flags = {});
+  void emit_void(ir::Opcode op,
+                 std::initializer_list<ir::OperandIdx> ops,
                  ir::InstructionFlags flags = {});
   // Emits a type query, which measures a type instead of consuming
   // operands: the measured type rides on the instruction.
@@ -269,6 +295,55 @@ class Lowerer {
   ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
   ir::OperandIdx use_value(Val v);
   const Local* lookup_local(std::string_view name) const;
+  // True when a value of `type` carries a borrow, either itself or in a
+  // field of an aggregate.
+  bool carries_borrow(ir::TypeIdx type) const;
+  // Records what `&place` borrows, and what a read of `local` names, so
+  // a reference reaches the extent rule even when a call, an aggregate,
+  // or an alias stands between them.
+  void record_borrow_of(ast::ExprIdx place);
+  void record_alias(const Local& local);
+  // Records what a place read takes a reference out of: `holder.p` and
+  // `v[i]` name what the local they are rooted at names.
+  void record_place_alias(ast::ExprIdx place);
+  // True when a value of `type` borrows a local that outlives `place`:
+  // storing it would leave the reference reading a slot whose block has
+  // ended. `sources` are the locals the value's lowering borrowed from.
+  bool escapes_referent(ir::TypeIdx type,
+                        diag::Span span,
+                        ast::ExprIdx place,
+                        std::span<const u32> sources) const;
+  // An argument of a call, with where its loans start in `borrow_sources`.
+  struct KeptValue {
+    ast::ExprIdx expr;
+    ir::TypeIdx type;
+    ir::TypeIdx param;
+    usize sources_from;
+  };
+  // Applies the extent rule to the values a call may keep: the callee
+  // owns storage and can leave one there, so the value's loans have to
+  // outlive the places `borrowed_places` names, which are the places
+  // the call may write through. True when it refused.
+  bool check_kept_values(const std::vector<KeptValue>& values,
+                         const std::vector<ast::ExprIdx>& borrowed_places);
+  // Applies the extent rule to an argument a call may keep: the callee
+  // owns storage and can leave the value there, so the value's loans
+  // have to outlive the place the call borrows. `sources_from` is the
+  // `borrow_sources` length before the argument was lowered.
+  bool check_kept_extent(ir::TypeIdx type,
+                         diag::Span span,
+                         ast::ExprIdx place,
+                         usize sources_from);
+  // Gives the locals a binding added from `first` onward the locals its
+  // value borrowed from. `sources_from` is the `borrow_sources` length
+  // before the value was lowered.
+  void note_referents(ir::TypeIdx type, usize first, usize sources_from);
+  // The local a place expression is rooted at, or nullptr when it is not
+  // rooted at one. `through_deref` decides whether a dereference is a
+  // step of the path: the local an assignment names is the one this
+  // function owns, so the storage behind a pointer is somebody else's.
+  const Local* rooted_local(ast::ExprIdx place,
+                            bool through_deref = true) const;
   const analyzer::CheckedModule::StaticInfo* lookup_static(
       u32 mod,
       std::string_view name) const;
@@ -289,13 +364,15 @@ class Lowerer {
   // The identity of one specialization: the declaration, the
   // instantiation, the signature, and the comp argument values. Used
   // where a function is reserved and where the differential pass looks
-  // one up.
-  static std::string fn_key(ast::ItemIdx item,
-                            const std::vector<ir::TypeIdx>& params,
-                            ir::TypeIdx ret,
-                            u32 inst,
-                            std::span<const CompVal> comp_args,
-                            std::span<const ir::TypeIdx> extra_generics = {});
+  // one up. It is written into `key` so that a caller can hand in
+  // storage it reuses: every call site builds one of these.
+  static void fn_key(std::string& key,
+                     ast::ItemIdx item,
+                     const std::vector<ir::TypeIdx>& params,
+                     ir::TypeIdx ret,
+                     u32 inst,
+                     std::span<const CompVal> comp_args,
+                     std::span<const ir::TypeIdx> extra_generics = {});
   // Reserves (or finds) the IR function for one instantiation. `kind`
   // says what the symbol names, because a method and an associated
   // function share an item. `extra_generics` are the method's own type
@@ -628,6 +705,16 @@ class Lowerer {
   // `*` policy (ADR-0068). A negative exponent has no integer answer
   // and panics the way a zero divisor does.
   Val lower_int_power(diag::Span span, Val lhs, Val rhs, ir::TypeTag tag);
+  // The backend form of `lhs op rhs` at `tag`: the four rational
+  // operators on a float, and on an integer the masked shift count, the
+  // divided-by-zero guard, and the power expansion. The binary
+  // expression and the compound assignment differ only in where their
+  // two operands come from.
+  Val lower_scalar_binary(diag::Span span,
+                          ast::BinaryOp op,
+                          Val lhs,
+                          Val rhs,
+                          ir::TypeTag tag);
   Val lower_binary(ast::ExprIdx expr);
   // The element-wise equality of two aggregates the checker admitted to
   // == or !=, walking tuples and arrays and comparing leaves directly.
@@ -805,6 +892,9 @@ class Lowerer {
                         bool fold,
                         ir::RegisterIdx& carry_out,
                         State& state);
+    // Builds ten to the power of `places` from one table entry and a
+    // remainder held exactly. A place past 308 yields an infinity.
+    ir::RegisterIdx emit_decimal_scale(ir::RegisterIdx places);
     // Writes a float in the decimal magnitude form the format string
     // selects, whose placeholders become a mantissa and exponent
     // outside [1e-4, 1e16).
@@ -833,7 +923,11 @@ class Lowerer {
   std::vector<OwnershipEvent> ownership_;
   std::vector<EndSite> end_sites_;
   u32 record_seq_ = 0;
-  // A destructor ends its own receiver; the fallthrough must not.
+  // The receiver of the function being lowered when that function is a
+  // destructor. The destructor's body ends it, so the walk does not
+  // end it again: there is no way to spell a partly ended value, and
+  // the body is where the decision of what is still held lives
+  // (ADR-0137).
   u32 end_exempt_ = base::INVALID_IDX;
   void record_end(u32 mark, diag::Span span);
   void record_event(OwnershipEvent::Kind kind,
@@ -842,6 +936,12 @@ class Lowerer {
                     diag::Span span);
   void record_drop_in_place(ir::OperandIdx place,
                             ir::TypeIdx type,
+                            diag::Span span);
+  // Records a store that replaces the value at an address no path names.
+  // `root` is the local the address came from, or `INVALID_IDX`.
+  void record_store_element(ir::OperandIdx place,
+                            ir::TypeIdx type,
+                            u32 root,
                             diag::Span span);
   // Ends the value at `place` now by calling its glue, the way the
   // drop pass ends a local. The expansion's collected tuple is not a
@@ -861,6 +961,13 @@ class Lowerer {
   // which solves ownership per place and places the ends (ADR-0062).
   // Runs after a body is lowered and before its blocks are published.
   void place_ends();
+  // The drop pass's tables, which it clears and refills one function at
+  // a time.
+  DropWorkingSet drop_working_set_;
+
+  // Drops the instructions no block owns and renumbers every index the
+  // tables keep, so an instruction in the table is one a block runs.
+  void compact_instrs();
 
   bool runs_destructor(ir::TypeIdx type) const;
   bool is_destructor(ast::ItemIdx item) const;
@@ -882,7 +989,11 @@ class Lowerer {
   // Where a specialization key already has an entry. Lowering asks this of
   // every call site, and walking the entries so far to compare keys charged
   // one call site for every function lowered before it.
-  std::unordered_map<std::string, u32> fn_by_key_;
+  std::unordered_map<std::string, u32, FnKeyHash, std::equal_to<>> fn_by_key_;
+  // The key of the call being answered, kept across calls so its capacity is
+  // taken once. A key is written and read before anything else runs, so the
+  // view a caller holds is never invalidated under it.
+  std::string fn_key_scratch_;
   // Where a function instantiation's arguments are, so a lookup does not have
   // to walk the package's instances: by (item, instantiation) for a body that
   // knows the context it was checked under, by (module, signature slot) for a

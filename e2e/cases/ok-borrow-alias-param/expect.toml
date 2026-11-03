@@ -1,0 +1,5 @@
+# An alias of a parameter names storage the caller keeps alive, so a
+# copy of it into an outer binding outlives nothing it reads.
+exit = 0
+contains = []
+not_contains = []

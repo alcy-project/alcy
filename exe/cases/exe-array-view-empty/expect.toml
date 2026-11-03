@@ -1,0 +1,7 @@
+exit = 0
+stdout = """
+non empty 3
+empty slice len 0
+empty mut slice len 0
+iterated 0
+"""

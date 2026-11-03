@@ -34,8 +34,8 @@ void push_children(std::vector<Cmd>& stack,
 // Whether the document still fits in remaining columns before the next
 // hard newline. A hardline never fits a flat rendering, which is what
 // makes a group that holds one break.
-bool fits(const Doc& doc, usize remaining) {
-  std::vector<Cmd> stack;
+bool fits(const Doc& doc, usize remaining, std::vector<Cmd>& stack) {
+  stack.clear();
   stack.push_back(Cmd{.doc = &doc, .indent = 0, .flat = true});
   while (!stack.empty()) {
     const Cmd cmd = stack.back();
@@ -45,7 +45,7 @@ bool fits(const Doc& doc, usize remaining) {
       case DocKind::Empty: break;
       case DocKind::Text: {
         const usize newline = node.text.rfind('\n');
-        if (newline == std::string::npos) {
+        if (newline == std::string_view::npos) {
           if (node.text.size() > remaining) {
             return false;
           }
@@ -137,7 +137,7 @@ Doc doc_text(std::string_view text) {
   Doc doc;
   if (!text.empty()) {
     doc.kind = DocKind::Text;
-    doc.text = std::string(text);
+    doc.text = text;
   }
   return doc;
 }
@@ -190,10 +190,15 @@ Doc doc_if_break(Doc broken, Doc flat) {
   return doc;
 }
 
-std::string render(const Doc& doc, usize width) {
+std::string render(const Doc& doc, usize width, usize bytes) {
   std::string out;
+  out.reserve(bytes);
   usize column = 0;
   std::vector<Cmd> stack;
+  // The measuring walk of a group reuses one stack across the groups it
+  // serves; it never nests, so a second buffer beside the traversal one
+  // is enough for the whole render.
+  std::vector<Cmd> measure;
   stack.push_back(Cmd{.doc = &doc, .indent = 0, .flat = false});
   while (!stack.empty()) {
     const Cmd cmd = stack.back();
@@ -219,7 +224,7 @@ std::string render(const Doc& doc, usize width) {
         bool flat = cmd.flat;
         if (!flat) {
           const usize remaining = width > column ? width - column : 0;
-          flat = fits(node.kids[0], remaining);
+          flat = fits(node.kids[0], remaining, measure);
         }
         stack.push_back(
             Cmd{.doc = &node.kids[0], .indent = cmd.indent, .flat = flat});

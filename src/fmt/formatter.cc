@@ -206,6 +206,7 @@ bool allows_prefix_after(lexer::TokenKind kind) {
     case lexer::TokenKind::Comma:
     case lexer::TokenKind::As:
     case lexer::TokenKind::In:
+    case lexer::TokenKind::Mut:
     case lexer::TokenKind::Ret:
     case lexer::TokenKind::If:
     case lexer::TokenKind::Else:
@@ -263,6 +264,12 @@ bool is_break_after(lexer::TokenKind kind) {
     default: return false;
   }
 }
+
+// The per-node facts a flow records while it spaces its pieces: whether a
+// bracket reads as a generic delimiter, and whether an operator reads as a
+// prefix one. One byte holds both because a node asks for them together.
+constexpr u8 NODE_GENERIC = 1;
+constexpr u8 NODE_UNARY = 2;
 
 // Turns the tree into a layout document. The printer owns no state
 // between calls: every decision comes from the tree and the injected
@@ -347,7 +354,7 @@ class Printer {
                     const cst::Node& cur,
                     bool cur_generic) const;
   void compute_generic(const std::vector<const cst::Node*>& nodes,
-                       std::vector<bool>& generic) const;
+                       std::vector<u8>& flags) const;
   bool looks_like_generic(const std::vector<const cst::Node*>& nodes,
                           usize i) const;
   static const cst::Node* previous_significant(
@@ -482,7 +489,7 @@ bool Printer::space_before(const cst::Node* prev,
 }
 
 void Printer::compute_generic(const std::vector<const cst::Node*>& nodes,
-                              std::vector<bool>& generic) const {
+                              std::vector<u8>& flags) const {
   usize depth = 0;
   for (usize i = 0; i < nodes.size(); ++i) {
     const cst::Node& node = *nodes[i];
@@ -491,20 +498,20 @@ void Printer::compute_generic(const std::vector<const cst::Node*>& nodes,
     }
     if (node.token == lexer::TokenKind::Less) {
       if (looks_like_generic(nodes, i)) {
-        generic[i] = true;
+        flags[i] |= NODE_GENERIC;
         ++depth;
       }
     } else if (node.token == lexer::TokenKind::Greater) {
       if (depth > 0) {
-        generic[i] = true;
+        flags[i] |= NODE_GENERIC;
         --depth;
       }
     } else if (node.token == lexer::TokenKind::GreaterGreater) {
       if (depth >= 2) {
-        generic[i] = true;
+        flags[i] |= NODE_GENERIC;
         depth -= 2;
       } else if (depth == 1) {
-        generic[i] = true;
+        flags[i] |= NODE_GENERIC;
         depth = 0;
       }
     }
@@ -640,6 +647,7 @@ Doc Printer::build_flow(std::vector<Piece> pieces, bool allow_wrap) {
   }
   if (!allow_wrap || first_break == pieces.size()) {
     std::vector<Doc> out;
+    out.reserve(pieces.size() * 2);
     for (Piece& piece : pieces) {
       if (piece.sep == Sep::Space || piece.sep == Sep::Line) {
         out.push_back(doc_text(" "));
@@ -649,6 +657,7 @@ Doc Printer::build_flow(std::vector<Piece> pieces, bool allow_wrap) {
     return doc_concat(std::move(out));
   }
   std::vector<Doc> head;
+  head.reserve(first_break * 2);
   for (usize i = 0; i < first_break; ++i) {
     if (pieces[i].sep == Sep::Space) {
       head.push_back(doc_text(" "));
@@ -656,6 +665,7 @@ Doc Printer::build_flow(std::vector<Piece> pieces, bool allow_wrap) {
     head.push_back(std::move(pieces[i].doc));
   }
   std::vector<Doc> tail;
+  tail.reserve((pieces.size() - first_break) * 2);
   for (usize i = first_break; i < pieces.size(); ++i) {
     switch (pieces[i].sep) {
       case Sep::Space: tail.push_back(doc_text(" ")); break;
@@ -666,6 +676,7 @@ Doc Printer::build_flow(std::vector<Piece> pieces, bool allow_wrap) {
     tail.push_back(std::move(pieces[i].doc));
   }
   std::vector<Doc> out;
+  out.reserve(2);
   out.push_back(doc_concat(std::move(head)));
   out.push_back(doc_nest(config_.indent_width, doc_concat(std::move(tail))));
   return doc_group(doc_concat(std::move(out)));
@@ -673,19 +684,25 @@ Doc Printer::build_flow(std::vector<Piece> pieces, bool allow_wrap) {
 
 Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
                         bool allow_wrap) {
-  std::vector<bool> generic(nodes.size(), false);
-  compute_generic(nodes, generic);
-  std::vector<bool> unary(nodes.size(), false);
+  std::vector<u8> flags(nodes.size(), 0);
+  compute_generic(nodes, flags);
   for (usize i = 0; i < nodes.size(); ++i) {
     const cst::Node& node = *nodes[i];
     if (node.kind == cst::NodeKind::Token && is_prefix_operator(node.token)) {
       const cst::Node* prev = previous_significant(nodes, i);
-      unary[i] = prev == nullptr || (prev->kind == cst::NodeKind::Token &&
-                                     allows_prefix_after(prev->token));
+      if (prev == nullptr || (prev->kind == cst::NodeKind::Token &&
+                              allows_prefix_after(prev->token))) {
+        flags[i] |= NODE_UNARY;
+      }
     }
   }
+  const auto is_generic = [&](usize i) {
+    return (flags[i] & NODE_GENERIC) != 0;
+  };
+  const auto is_unary = [&](usize i) { return (flags[i] & NODE_UNARY) != 0; };
 
   std::vector<Piece> pieces;
+  pieces.reserve(nodes.size() + 2);
   const cst::Node* prev = nullptr;
   // The node immediately before this one, whatever it is: the gap the
   // source put between two nodes is what an error token's neighbours
@@ -695,6 +712,35 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
   bool prev_unary = false;
   bool pending_break = false;
   bool suppress = false;
+
+  // Pins gap bytes so a second pass sees the same stream. A break in the
+  // gap is a break in the layout too: written as bytes inside one text a
+  // group would read the stop as its own line ending and lay the rest of
+  // the flow out flat around it, which the next pass, reading real breaks,
+  // would not. The blanks a break ends in are the one part of the gap the
+  // pin does not keep: the hardline writes the indent where it lands, and
+  // the bytes would be counted twice.
+  const auto pin_gap_bytes = [&](std::string_view gap) {
+    usize run_start = 0;
+    for (usize i = 0; i < gap.size(); ++i) {
+      if (gap[i] != '\n') {
+        continue;
+      }
+      if (i > run_start) {
+        pieces.push_back(
+            Piece{doc_text(gap.substr(run_start, i - run_start)), Sep::None});
+      }
+      pieces.push_back(Piece{doc_hardline(), Sep::None});
+      while (i + 1 < gap.size() && (gap[i + 1] == ' ' || gap[i + 1] == '\t')) {
+        ++i;
+      }
+      run_start = i + 1;
+    }
+    if (run_start < gap.size()) {
+      pieces.push_back(Piece{
+          doc_text(gap.substr(run_start, gap.size() - run_start)), Sep::None});
+    }
+  };
 
   const auto is_error_token = [](const cst::Node* node) {
     return node != nullptr && node->kind == cst::NodeKind::Token &&
@@ -723,9 +769,7 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
       return;
     }
     if (to.offset > gap_start) {
-      pieces.push_back(
-          Piece{doc_text(source_.substr(gap_start, to.offset - gap_start)),
-                Sep::None});
+      pin_gap_bytes(source_.substr(gap_start, to.offset - gap_start));
     }
   };
 
@@ -807,7 +851,8 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
       // re-pairs the dots into range tokens on the next pass, and the
       // layout moves with the pairing.
       sep = allow_wrap ? Sep::SoftLine : Sep::None;
-    } else if (space_before(prev, prev_generic, prev_unary, node, generic[i])) {
+    } else if (space_before(prev, prev_generic, prev_unary, node,
+                            is_generic(i))) {
       sep = Sep::Space;
     }
     // Nothing between two tokens can read back as one token, whatever
@@ -825,12 +870,12 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
         Piece{semi_after_break ? doc_empty() : node_doc(node), sep});
     // A generic bracket reads as a delimiter here, not as a comparison:
     // a break inside an argument list would space it flat.
-    pending_break = node.kind == cst::NodeKind::Token && !unary[i] &&
-                    !generic[i] && is_break_after(node.token);
+    pending_break = node.kind == cst::NodeKind::Token && !is_unary(i) &&
+                    !is_generic(i) && is_break_after(node.token);
     prev = &node;
     prev_node = &node;
-    prev_generic = generic[i];
-    prev_unary = unary[i];
+    prev_generic = is_generic(i);
+    prev_unary = is_unary(i);
   }
   return build_flow(std::move(pieces), allow_wrap);
 }
@@ -863,9 +908,10 @@ Doc Printer::print_group(const cst::Node& group) {
 }
 
 Doc Printer::print_brace_body(const cst::Node& group) {
-  const std::string close = group.has_closer ? "}" : "";
+  const std::string_view close = group.has_closer ? "}" : "";
   if (group.kids.empty()) {
     std::vector<Doc> parts;
+    parts.reserve(2);
     parts.push_back(doc_text("{"));
     parts.push_back(doc_text(close));
     return doc_concat(std::move(parts));
@@ -881,6 +927,7 @@ Doc Printer::print_brace_body(const cst::Node& group) {
     // A member body still opens its lines: an impl that owns nothing
     // reads as the pair of braces the grammar gives it.
     std::vector<Doc> parts;
+    parts.reserve(3);
     parts.push_back(doc_text("{"));
     if (member_body) {
       parts.push_back(doc_hardline());
@@ -901,10 +948,12 @@ Doc Printer::print_brace_body(const cst::Node& group) {
         chunks[0].nodes.begin(),
         chunks[0].nodes.begin() + static_cast<std::ptrdiff_t>(end));
     std::vector<Doc> inner_parts;
+    inner_parts.reserve(2);
     inner_parts.push_back(doc_line());
     inner_parts.push_back(chunk_line(
         chunks[0], chunk_terminator(chunks[0], code, role, true, false)));
     std::vector<Doc> parts;
+    parts.reserve(4);
     parts.push_back(doc_text("{"));
     parts.push_back(
         doc_nest(config_.indent_width, doc_concat(std::move(inner_parts))));
@@ -914,8 +963,10 @@ Doc Printer::print_brace_body(const cst::Node& group) {
   }
   Doc body = print_body_lines(chunks, role, false);
   std::vector<Doc> parts;
+  parts.reserve(4);
   parts.push_back(doc_text("{"));
   std::vector<Doc> inner_parts;
+  inner_parts.reserve(2);
   inner_parts.push_back(doc_hardline());
   inner_parts.push_back(std::move(body));
   parts.push_back(
@@ -929,6 +980,7 @@ std::vector<Printer::Item> Printer::split_on_commas(const cst::Node& seq,
                                                     bool& had_comma,
                                                     bool& trailing) const {
   std::vector<Item> items;
+  items.reserve(seq.kids.size() / 2 + 1);
   Item current;
   had_comma = false;
   trailing = false;
@@ -955,6 +1007,7 @@ Doc Printer::print_list(const cst::Node& group,
                         std::string_view close) {
   if (group.kids.empty()) {
     std::vector<Doc> parts;
+    parts.reserve(2);
     parts.push_back(doc_text(open));
     parts.push_back(doc_text(close));
     return doc_concat(std::move(parts));
@@ -970,12 +1023,14 @@ Doc Printer::print_list(const cst::Node& group,
       nodes.push_back(&node);
     }
     std::vector<Doc> parts;
+    parts.reserve(2);
     parts.push_back(doc_text(open));
     parts.push_back(print_flow(nodes, true));
     return doc_concat(std::move(parts));
   }
   if (items.empty() || (items.size() == 1 && items[0].nodes.empty())) {
     std::vector<Doc> parts;
+    parts.reserve(3);
     parts.push_back(doc_text(open));
     if (had_comma) {
       parts.push_back(doc_text(","));
@@ -990,6 +1045,7 @@ Doc Printer::print_list(const cst::Node& group,
     item_docs.push_back(print_flow(item.nodes, true));
   }
   std::vector<Doc> body;
+  body.reserve(item_docs.size() * 2 + 1);
   for (usize k = 0; k < item_docs.size(); ++k) {
     if (k > 0) {
       body.push_back(doc_text(","));
@@ -1006,9 +1062,11 @@ Doc Printer::print_list(const cst::Node& group,
         doc_if_break(doc_text(","), trailing ? doc_text(",") : doc_empty()));
   }
   std::vector<Doc> inner_parts;
+  inner_parts.reserve(2);
   inner_parts.push_back(doc_softline());
   inner_parts.push_back(doc_concat(std::move(body)));
   std::vector<Doc> out;
+  out.reserve(4);
   out.push_back(doc_text(open));
   out.push_back(
       doc_nest(config_.indent_width, doc_concat(std::move(inner_parts))));
@@ -1025,12 +1083,13 @@ Doc Printer::print_literal(const cst::Node& group) {
   bool had_comma = false;
   bool trailing = false;
   std::vector<Item> items = split_on_commas(inner, had_comma, trailing);
-  const std::string close = group.has_closer ? "}" : "";
+  const std::string_view close = group.has_closer ? "}" : "";
   if (items.empty() || (items.size() == 1 && items[0].nodes.empty())) {
     // A closer the source never wrote is not invented here either:
     // the next pass would read it as the end of a group this one left
     // open.
     std::vector<Doc> parts;
+    parts.reserve(3);
     parts.push_back(doc_text("{"));
     if (had_comma) {
       parts.push_back(doc_text(","));
@@ -1040,9 +1099,11 @@ Doc Printer::print_literal(const cst::Node& group) {
   }
   if (!had_comma) {
     std::vector<Doc> inner_parts;
+    inner_parts.reserve(2);
     inner_parts.push_back(doc_line());
     inner_parts.push_back(print_flow(items[0].nodes, true));
     std::vector<Doc> out;
+    out.reserve(4);
     out.push_back(doc_text("{"));
     out.push_back(
         doc_nest(config_.indent_width, doc_concat(std::move(inner_parts))));
@@ -1057,6 +1118,7 @@ Doc Printer::print_literal(const cst::Node& group) {
     item_docs.push_back(print_flow(item.nodes, true));
   }
   std::vector<Doc> body;
+  body.reserve(item_docs.size() * 2 + 1);
   for (usize k = 0; k < item_docs.size(); ++k) {
     if (k > 0) {
       body.push_back(doc_text(","));
@@ -1072,6 +1134,7 @@ Doc Printer::print_literal(const cst::Node& group) {
         doc_if_break(doc_text(","), trailing ? doc_text(",") : doc_empty()));
   }
   std::vector<Doc> inner_parts;
+  inner_parts.reserve(2);
   inner_parts.push_back(doc_line());
   inner_parts.push_back(doc_concat(std::move(body)));
   std::vector<Doc> out;
@@ -1089,12 +1152,16 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
                            role == cst::BraceRole::EnumBody ||
                            role == cst::BraceRole::MatchBody;
   std::vector<Chunk> chunks;
+  chunks.reserve(seq.kids.size() / 2 + 1);
   Chunk current;
   // The previous lexeme ended a chunk: a comment on the same line as
   // the separator rides the line that separator finished rather than
   // starting one of its own, or the layout would move it on the pass
   // over this layout's own output.
   bool after_separator = false;
+  // The separator just consumed was a semicolon, so a semicolon spelled
+  // right after it terminates the statement that separator ended.
+  bool after_semicolon = false;
   const auto flush = [&]() {
     if (!current.nodes.empty()) {
       chunks.push_back(std::move(current));
@@ -1107,12 +1174,22 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
         node.token == lexer::TokenKind::Semicolon) {
       // A semicolon with no chunk in front of it ends nothing: the
       // grammar skips a stray one, and its flag must not leak into the
-      // chunk that follows.
+      // chunk that follows. The one exception is the pair the source
+      // spells on the line after a break the lexer already ended the
+      // statement at: both terminate the same statement, and the chunk
+      // has to learn that the source wrote one, because the layout keeps
+      // a spelled semicolon wherever the line break it would leave
+      // reads differently. The chunk it lands on holds code: a comment
+      // chunk terminates nothing, so the flag stays off one.
       if (!current.nodes.empty()) {
         current.explicit_semi = !node.synthetic_semi;
+      } else if (!node.synthetic_semi && after_semicolon && !chunks.empty() &&
+                 !chunks.back().is_comment) {
+        chunks.back().explicit_semi = true;
       }
       flush();
       after_separator = true;
+      after_semicolon = true;
       separator_end = node.offset + node.length;
       continue;
     }
@@ -1120,6 +1197,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
         node.token == lexer::TokenKind::Comma) {
       flush();
       after_separator = true;
+      after_semicolon = false;
       separator_end = node.offset + node.length;
       continue;
     }
@@ -1146,6 +1224,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
         comment.newlines_before = node.newlines_before;
         chunks.push_back(std::move(comment));
       }
+      after_semicolon = false;
       continue;
     }
     if (current.nodes.empty()) {
@@ -1153,6 +1232,7 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
     }
     current.nodes.push_back(&node);
     after_separator = false;
+    after_semicolon = false;
   }
   flush();
   return chunks;
@@ -1358,6 +1438,7 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
       chunk.nodes.begin(),
       chunk.nodes.begin() + static_cast<std::ptrdiff_t>(end));
   std::vector<Doc> parts;
+  parts.reserve(chunk.nodes.size() - end + 4);
   parts.push_back(print_line(code));
   if (terminator.kind != DocKind::Empty) {
     parts.push_back(std::move(terminator));
@@ -1405,6 +1486,7 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
                       role == cst::BraceRole::SpecBody ||
                       role == cst::BraceRole::ExternBody;
   std::vector<Doc> parts;
+  parts.reserve(chunks.size() * 2);
   for (usize k = 0; k < chunks.size(); ++k) {
     if (k > 0) {
       const bool prev_comment = chunks[k - 1].is_comment;
@@ -1520,7 +1602,11 @@ std::string format(std::string_view source, const FormatConfig& config) {
   const cst::Node root = cst::build_cst(lexemes);
   Printer printer(source, config);
   const Doc document = printer.run(root);
-  std::string out = render(document, config.line_length);
+  // The output carries the source's bytes in their tokens plus the
+  // indentation the layout adds, so the renderer starts a little above
+  // the source's size rather than growing into it.
+  std::string out =
+      render(document, config.line_length, source.size() + source.size() / 8);
   while (!out.empty() &&
          (out.back() == '\n' || out.back() == ' ' || out.back() == '\t')) {
     out.pop_back();

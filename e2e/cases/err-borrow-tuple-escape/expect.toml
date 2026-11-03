@@ -1,0 +1,5 @@
+# A tuple carries the borrow of its element the same way a struct
+# carries the borrow of its field.
+exit = 4
+contains = ["escapes the block that declares it"]
+not_contains = []

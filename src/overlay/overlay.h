@@ -9,6 +9,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
+#include "ir/opcode.h"
 #include "ir/storage.h"
 
 namespace overlay {
@@ -53,5 +54,32 @@ struct Overlay {
 Overlay build(const ir::Storage& storage,
               bool overflow_checks,
               std::span<const str::StringPoolId> sites);
+
+// What a checked build's aborts take from the IR, parallel to the
+// storage's instructions. Neither range depends on the profile, so the
+// same release passes run in every build (ADR-0067).
+struct Checks {
+  // The check a checked build adds at the instruction, for the IR as
+  // written: `Check::None` where the abort is ruled out. Folding the
+  // operation deletes the abort, so a pass may only do it where its own
+  // arithmetic settles that the check stays silent.
+  std::vector<Check> kinds;
+  // Instructions whose written form a check reads: the mask a shift
+  // count is measured through, the select that keeps a signed division
+  // off `MIN / -1`. Folding or pruning one leaves the check reading a
+  // value the program never computed.
+  std::vector<bool> raw;
+
+  // Whether the passes must leave the instruction in place.
+  bool keeps(usize at) const { return kinds[at] != Check::None || raw[at]; }
+};
+
+// Computes both ranges over the storage's instructions.
+Checks checked_instructions(const ir::Storage& storage);
+
+// Whether an overflow check fires on these operand values. A pass folds a
+// checked `+`, `-` or `*` only where this answers no, and answers no for
+// every other operation.
+bool overflows(ir::Opcode op, ir::TypeTag tag, u64 left, u64 right);
 
 }  // namespace overlay

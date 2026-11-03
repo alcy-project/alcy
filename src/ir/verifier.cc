@@ -111,6 +111,44 @@ constexpr OperandArity operand_arity(const Opcode op) {
   return {};
 }
 
+// The opcodes whose instruction shape the loop below checks beyond the
+// generic arity and operand rules. One comparison picks the check, so a
+// function's instruction stream costs a jump table lookup rather than a
+// chain of opcode tests per instruction.
+enum class InstrShape : u8 {
+  Other,
+  Call,
+  Br,
+  CondBr,
+  Switch,
+  GetElementPtr,
+  ElemOffset,
+  TypeQuery,
+  Borrow,
+  Memcopy,
+  ExtractValue,
+  InsertValue,
+};
+
+constexpr InstrShape shape_of(const Opcode op) {
+  using O = Opcode;
+  switch (op) {
+    case O::Call: return InstrShape::Call;
+    case O::Br: return InstrShape::Br;
+    case O::CondBr: return InstrShape::CondBr;
+    case O::Switch: return InstrShape::Switch;
+    case O::GetElementPtr: return InstrShape::GetElementPtr;
+    case O::ElemOffset: return InstrShape::ElemOffset;
+    case O::TypeSizeOf:
+    case O::TypeAlignOf: return InstrShape::TypeQuery;
+    case O::Borrow: return InstrShape::Borrow;
+    case O::Memcopy: return InstrShape::Memcopy;
+    case O::ExtractValue: return InstrShape::ExtractValue;
+    case O::InsertValue: return InstrShape::InsertValue;
+    default: return InstrShape::Other;
+  }
+}
+
 constexpr bool is_valid_symbol_kind(const SymbolKind kind) {
   using K = SymbolKind;
   return kind == K::Foreign || kind == K::Free || kind == K::Assoc ||
@@ -278,9 +316,13 @@ VerificationResult verify_storage(const Storage& storage) {
   }
 
   // Register definitions: bound by block params or defined by instructions.
-  std::vector<bool> defined(storage.registers().size(), false);
+  // One byte per register, because every definition and every operand that
+  // names a register reads or writes this set through a bit proxy otherwise.
+  std::vector<u8> defined(storage.registers().size(), u8{0});
   for (BlockIdx bidx(0); bidx.idx < storage.blocks().size(); ++bidx) {
     const Block& block = storage.blocks()[bidx];
+    const InstructionIdx instr_end(block.instrs.head().idx +
+                                   block.instrs.size());
     if (!range_in_bounds(block.instrs.head(), block.instrs.size(),
                          storage.instrs().size())) {
       return err(VerificationErrorKind::BlockInstrsOutOfRange, bidx.idx);
@@ -319,13 +361,14 @@ VerificationResult verify_storage(const Storage& storage) {
 
   for (BlockIdx bidx(0); bidx.idx < storage.blocks().size(); ++bidx) {
     const Block& block = storage.blocks()[bidx];
+    const InstructionIdx instr_end(block.instrs.head().idx +
+                                   block.instrs.size());
     if (block.instrs.empty()) {
       return err(VerificationErrorKind::UnterminatedBlock, bidx.idx);
     }
     for (const InstructionIdx iidx : block.instrs) {
       const Instruction& instr = storage.instrs()[iidx];
-      const bool last =
-          (iidx.idx + 1 == block.instrs.head().idx + block.instrs.size());
+      const bool last = (iidx.idx + 1 == instr_end.idx);
       if (last ? !is_terminator(instr.op) : is_terminator(instr.op)) {
         if (last) {
           return err(VerificationErrorKind::UnterminatedBlock, bidx.idx);
@@ -336,15 +379,19 @@ VerificationResult verify_storage(const Storage& storage) {
                            storage.operands().size())) {
         return err(VerificationErrorKind::InstrOperandsOutOfRange, iidx.idx);
       }
-      for (const OperandIdx oidx : instr.operands) {
-        const Operand& operand = storage.operands()[oidx];
+      const u32 first_operand = instr.operands.head().idx;
+      const u32 operand_count = instr.operands.size();
+      for (u32 offset = 0; offset < operand_count; ++offset) {
+        const Operand& operand = storage.operands()[first_operand + offset];
         if (operand.type.idx >= storage.types().size()) {
-          return err(VerificationErrorKind::TypeIdxOutOfRange, oidx.idx);
+          return err(VerificationErrorKind::TypeIdxOutOfRange,
+                     first_operand + offset);
         }
         switch (operand.tag()) {
           case Operand::TAG_OF<RegisterIdx>:
             if (operand.as_register().idx >= storage.registers().size()) {
-              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange,
+                         first_operand + offset);
             }
             if (!defined[operand.as_register().idx]) {
               return err(VerificationErrorKind::UndefinedRegister,
@@ -353,211 +400,235 @@ VerificationResult verify_storage(const Storage& storage) {
             break;
           case Operand::TAG_OF<FunctionIdx>:
             if (operand.as_function().idx >= storage.functions().size()) {
-              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange,
+                         first_operand + offset);
             }
             break;
           case Operand::TAG_OF<BlockIdx>:
             if (operand.as_block().idx >= storage.blocks().size()) {
-              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange,
+                         first_operand + offset);
             }
             break;
           case Operand::TAG_OF<ImmutableIdx>:
             if (operand.as_immutable().idx >= storage.immutables().size()) {
-              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange,
+                         first_operand + offset);
             }
             break;
           case Operand::TAG_OF<ExternalFunctionIdx>:
             if (operand.as_external_function().idx >=
                 storage.external_functions().size()) {
-              return err(VerificationErrorKind::OperandIdxOutOfRange, oidx.idx);
+              return err(VerificationErrorKind::OperandIdxOutOfRange,
+                         first_operand + offset);
             }
             break;
           case Operand::TAG_OF<void>:
-            return err(VerificationErrorKind::UnknownOperandTag, oidx.idx);
+            return err(VerificationErrorKind::UnknownOperandTag,
+                       first_operand + offset);
         }
       }
-      if (instr.op == Opcode::Call) {
-        if (instr.operands.empty()) {
-          return err(VerificationErrorKind::InvalidCallee, iidx.idx);
-        }
-        const Operand& head = storage.operands()[instr.operands.head()];
-        if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
-          // A call through a function value carries the value: the
-          // callee is a register of function type, and the operands
-          // after it are the arguments.
-          if (!head.is<RegisterIdx>()) {
+      switch (shape_of(instr.op)) {
+        case InstrShape::Call: {
+          if (instr.operands.empty()) {
             return err(VerificationErrorKind::InvalidCallee, iidx.idx);
           }
-          const TypeNode& callee_type =
-              storage.types()[storage.registers()[head.as_register()].type.idx];
-          if (callee_type.tag != TypeTag::Func) {
-            return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+          const Operand& head = storage.operands()[instr.operands.head()];
+          if (!head.is<FunctionIdx>() && !head.is<ExternalFunctionIdx>()) {
+            // A call through a function value carries the value: the
+            // callee is a register of function type, and the operands
+            // after it are the arguments.
+            if (!head.is<RegisterIdx>()) {
+              return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+            }
+            const TypeNode& callee_type =
+                storage
+                    .types()[storage.registers()[head.as_register()].type.idx];
+            if (callee_type.tag != TypeTag::Func) {
+              return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+            }
+            const FuncType& sig = storage.func_types()[callee_type.as_func()];
+            if (instr.operands.size() - 1 != sig.params.size()) {
+              return err(VerificationErrorKind::InvalidCallee, iidx.idx);
+            }
+            break;
           }
-          const FuncType& sig = storage.func_types()[callee_type.as_func()];
-          if (instr.operands.size() - 1 != sig.params.size()) {
+          const FunctionMeta& meta =
+              head.is<FunctionIdx>()
+                  ? storage.functions()[head.as_function()].meta
+                  : storage.external_functions()[head.as_external_function()]
+                        .meta;
+          if (instr.operands.size() - 1 != meta.param_types.size()) {
             return err(VerificationErrorKind::InvalidCallee, iidx.idx);
           }
           break;
         }
-        const FunctionMeta& meta =
-            head.is<FunctionIdx>()
-                ? storage.functions()[head.as_function()].meta
-                : storage.external_functions()[head.as_external_function()]
-                      .meta;
-        if (instr.operands.size() - 1 != meta.param_types.size()) {
-          return err(VerificationErrorKind::InvalidCallee, iidx.idx);
-        }
-      }
-      if (instr.op == Opcode::Br) {
-        if (instr.operands.empty()) {
-          return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
-        }
-        const Operand& target = storage.operands()[instr.operands.head()];
-        if (!target.is<BlockIdx>()) {
-          return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
-        }
-        // operands[1..] are the target's parameters, positionally.
-        if (instr.operands.size() !=
-            1 + storage.blocks()[target.as_block()].block_params.size()) {
-          return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
-        }
-      }
-      if (instr.op == Opcode::CondBr) {
-        // operands = [cond(i1), true_block, false_block]; targets take no
-        // block parameters in MVP.
-        if (instr.operands.size() != 3) {
-          return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
-        }
-        const Operand& cond = storage.operands()[instr.operands.head()];
-        if (storage.types()[cond.type.idx].tag != TypeTag::I1) {
-          return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
-        }
-        for (u32 offset = 1; offset <= 2; ++offset) {
-          const Operand& target =
-              storage.operands()[instr.operands.head() + offset];
+        case InstrShape::Br: {
+          if (instr.operands.empty()) {
+            return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
+          }
+          const Operand& target = storage.operands()[instr.operands.head()];
           if (!target.is<BlockIdx>()) {
+            return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
+          }
+          // operands[1..] are the target's parameters, positionally.
+          if (instr.operands.size() !=
+              1 + storage.blocks()[target.as_block()].block_params.size()) {
+            return err(VerificationErrorKind::InvalidBranchTarget, iidx.idx);
+          }
+          break;
+        }
+        case InstrShape::CondBr: {
+          // operands = [cond(i1), true_block, false_block]; targets take no
+          // block parameters in MVP.
+          if (instr.operands.size() != 3) {
             return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
           }
-          if (!storage.blocks()[target.as_block()].block_params.empty()) {
+          const Operand& cond = storage.operands()[instr.operands.head()];
+          if (storage.types()[cond.type.idx].tag != TypeTag::I1) {
             return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
           }
+          for (u32 offset = 1; offset <= 2; ++offset) {
+            const Operand& target =
+                storage.operands()[instr.operands.head() + offset];
+            if (!target.is<BlockIdx>()) {
+              return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
+            }
+            if (!storage.blocks()[target.as_block()].block_params.empty()) {
+              return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
+            }
+          }
+          break;
         }
-      }
-      if (instr.op == Opcode::Switch) {
-        // operands = [value, default_block, (case_imm, case_block)...];
-        // targets take no block parameters in MVP.
-        if (instr.operands.size() < 2 || (instr.operands.size() % 2) != 0) {
-          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
-        }
-        const Operand& value = storage.operands()[instr.operands.head()];
-        if (!is_integer_type(storage.types()[value.type.idx].tag)) {
-          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
-        }
-        const Operand& default_target =
-            storage.operands()[instr.operands.head() + 1];
-        if (!default_target.is<BlockIdx>()) {
-          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
-        }
-        if (!storage.blocks()[default_target.as_block()].block_params.empty()) {
-          return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
-        }
-        for (u32 offset = 2; offset < instr.operands.size(); offset += 2) {
-          const Operand& case_value =
-              storage.operands()[instr.operands.head() + offset];
-          const Operand& case_target =
-              storage.operands()[instr.operands.head() + offset + 1];
-          if (!case_value.is<ImmutableIdx>() || !case_target.is<BlockIdx>()) {
+        case InstrShape::Switch: {
+          // operands = [value, default_block, (case_imm, case_block)...];
+          // targets take no block parameters in MVP.
+          if (instr.operands.size() < 2 || (instr.operands.size() % 2) != 0) {
             return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
           }
-          if (!storage.blocks()[case_target.as_block()].block_params.empty()) {
+          const Operand& value = storage.operands()[instr.operands.head()];
+          if (!is_integer_type(storage.types()[value.type.idx].tag)) {
             return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
           }
+          const Operand& default_target =
+              storage.operands()[instr.operands.head() + 1];
+          if (!default_target.is<BlockIdx>()) {
+            return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
+          }
+          if (!storage.blocks()[default_target.as_block()]
+                   .block_params.empty()) {
+            return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
+          }
+          for (u32 offset = 2; offset < instr.operands.size(); offset += 2) {
+            const Operand& case_value =
+                storage.operands()[instr.operands.head() + offset];
+            const Operand& case_target =
+                storage.operands()[instr.operands.head() + offset + 1];
+            if (!case_value.is<ImmutableIdx>() || !case_target.is<BlockIdx>()) {
+              return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
+            }
+            if (!storage.blocks()[case_target.as_block()]
+                     .block_params.empty()) {
+              return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
+            }
+          }
+          break;
         }
-      }
-      if (instr.op == Opcode::GetElementPtr) {
-        // operands = [base_ptr(register), index(integer)...].
-        if (instr.operands.size() < 2) {
-          return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
-        }
-        if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
-          return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
-        }
-        for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
-          const Operand& index =
-              storage.operands()[instr.operands.head() + offset];
-          if (!is_integer_type(storage.types()[index.type.idx].tag)) {
+        case InstrShape::GetElementPtr: {
+          // operands = [base_ptr(register), index(integer)...].
+          if (instr.operands.size() < 2) {
             return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
           }
+          if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
+            return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
+          }
+          for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
+            const Operand& index =
+                storage.operands()[instr.operands.head() + offset];
+            if (!is_integer_type(storage.types()[index.type.idx].tag)) {
+              return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
+            }
+          }
+          break;
         }
-      }
-      if (instr.op == Opcode::ElemOffset) {
-        const ir::OperandIdx base = instr.operands.head();
-        if (instr.operands.size() != 2 ||
-            !storage.operands()[base].is<RegisterIdx>() ||
-            !is_integer_type(
-                storage
-                    .types()[storage.operands()[ir::OperandIdx(base.idx + 1)]
-                                 .type.idx]
-                    .tag) ||
-            !instr.dst.is_valid()) {
-          return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
+        case InstrShape::ElemOffset: {
+          const ir::OperandIdx base = instr.operands.head();
+          if (instr.operands.size() != 2 ||
+              !storage.operands()[base].is<RegisterIdx>() ||
+              !is_integer_type(
+                  storage
+                      .types()[storage.operands()[ir::OperandIdx(base.idx + 1)]
+                                   .type.idx]
+                      .tag) ||
+              !instr.dst.is_valid()) {
+            return err(VerificationErrorKind::InvalidGetElementPtr, iidx.idx);
+          }
+          break;
         }
-      }
-      if (instr.op == Opcode::TypeSizeOf || instr.op == Opcode::TypeAlignOf) {
-        if (!instr.operands.empty() || !instr.measure.is_valid() ||
-            !instr.dst.is_valid() ||
-            instr.measure.idx >= storage.types().size()) {
-          return err(VerificationErrorKind::InvalidTypeQuery, iidx.idx);
+        case InstrShape::TypeQuery: {
+          if (!instr.operands.empty() || !instr.measure.is_valid() ||
+              !instr.dst.is_valid() ||
+              instr.measure.idx >= storage.types().size()) {
+            return err(VerificationErrorKind::InvalidTypeQuery, iidx.idx);
+          }
+          break;
         }
-      }
-      if (instr.op == Opcode::Borrow) {
-        if (instr.operands.size() != 1) {
-          return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
+        case InstrShape::Borrow: {
+          if (instr.operands.size() != 1) {
+            return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
+          }
+          if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
+            return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
+          }
+          if (!instr.dst.is_valid()) {
+            return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
+          }
+          break;
         }
-        if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
-          return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
-        }
-        if (!instr.dst.is_valid()) {
-          return err(VerificationErrorKind::InvalidBorrow, iidx.idx);
-        }
-      }
-      if (instr.op == Opcode::Memcopy) {
-        if (instr.operands.size() != 3 || instr.dst.is_valid()) {
-          return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
-        }
-        for (u32 offset = 0; offset < 2; ++offset) {
-          const Operand& ptr =
-              storage.operands()[instr.operands.head() + offset];
-          const TypeTag tag = storage.types()[ptr.type.idx].tag;
-          if (tag != TypeTag::Ref && tag != TypeTag::MutRef &&
-              tag != TypeTag::Ptr) {
+        case InstrShape::Memcopy: {
+          if (instr.operands.size() != 3 || instr.dst.is_valid()) {
             return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
           }
+          for (u32 offset = 0; offset < 2; ++offset) {
+            const Operand& ptr =
+                storage.operands()[instr.operands.head() + offset];
+            const TypeTag tag = storage.types()[ptr.type.idx].tag;
+            if (tag != TypeTag::Ref && tag != TypeTag::MutRef &&
+                tag != TypeTag::Ptr) {
+              return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
+            }
+          }
+          const Operand& len = storage.operands()[instr.operands.head() + 2];
+          if (!is_integer_type(storage.types()[len.type.idx].tag)) {
+            return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
+          }
+          break;
         }
-        const Operand& len = storage.operands()[instr.operands.head() + 2];
-        if (!is_integer_type(storage.types()[len.type.idx].tag)) {
-          return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
-        }
-      }
-      if (instr.op == Opcode::ExtractValue || instr.op == Opcode::InsertValue) {
-        // Extract: [aggregate, index(imm)...]; Insert: [aggregate, value,
-        // index(imm)...]. Indexes must be integer immediates.
-        const u32 first_index = (instr.op == Opcode::ExtractValue) ? 1 : 2;
-        if (instr.operands.size() < first_index + 1) {
-          return err(VerificationErrorKind::InvalidExtractInsert, iidx.idx);
-        }
-        for (u32 offset = first_index; offset < instr.operands.size();
-             ++offset) {
-          const Operand& index =
-              storage.operands()[instr.operands.head() + offset];
-          if (!index.is<ImmutableIdx>() ||
-              !is_integer_type(storage.types()[index.type.idx].tag)) {
+        case InstrShape::ExtractValue:
+        case InstrShape::InsertValue: {
+          // Extract: [aggregate, index(imm)...]; Insert: [aggregate, value,
+          // index(imm)...]. Indexes must be integer immediates.
+          const u32 first_index = (instr.op == Opcode::ExtractValue) ? 1 : 2;
+          if (instr.operands.size() < first_index + 1) {
             return err(VerificationErrorKind::InvalidExtractInsert, iidx.idx);
           }
+          for (u32 offset = first_index; offset < instr.operands.size();
+               ++offset) {
+            const Operand& index =
+                storage.operands()[instr.operands.head() + offset];
+            if (!index.is<ImmutableIdx>() ||
+                !is_integer_type(storage.types()[index.type.idx].tag)) {
+              return err(VerificationErrorKind::InvalidExtractInsert, iidx.idx);
+            }
+          }
+          break;
         }
+        case InstrShape::Other: break;
       }
+
       // The generic arity check runs last so an opcode's own shape check
       // above reports the narrower error where there is one.
+
       const OperandArity arity = operand_arity(instr.op);
       if (!arity.known) {
         return err(VerificationErrorKind::UnknownOpcode, iidx.idx);

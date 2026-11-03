@@ -30,7 +30,7 @@ class StorageBuilder {
  public:
   StorageBuilder() { intern_primitives(); }
   explicit StorageBuilder(StorageState&& state) : state_(std::move(state)) {
-    index_references();
+    index_interned();
   }
 
   ~StorageBuilder() = default;
@@ -77,11 +77,7 @@ class StorageBuilder {
   StorageBuilder& parameter_types(StorageState::Types&& parameter_types) {
     state_.types = std::move(parameter_types);
     // The interning tables describe the table that was just replaced.
-    ref_by_pointee_.clear();
-    mut_ref_by_pointee_.clear();
-    raw_ptr_by_pointee_.clear();
-    raw_mut_ptr_by_pointee_.clear();
-    index_references();
+    index_interned();
     return *this;
   }
 
@@ -144,6 +140,12 @@ class StorageBuilder {
   }
   // Raw state for passes that query (never mutate) pre-build tables.
   const StorageState& state() const { return state_; }
+  // Sizes the tables a caller knows the population of before it fills
+  // them. A table grown by doubling halves its own headroom: every
+  // block discarded on the way is as large as the one that replaced it.
+  void reserve_operands(usize count) { state_.operands.reserve(count); }
+  void reserve_instrs(usize count) { state_.instrs.reserve(count); }
+  void reserve_registers(usize count) { state_.registers.reserve(count); }
   ExternalFunctionIdx external_function(ExternalFunction external_function) {
     return state_.external_functions.emplace_back(external_function);
   }
@@ -176,17 +178,16 @@ class StorageBuilder {
   // to. Parameters intern like any other type: one parameter is one
   // node, so a body that names it twice names the same type.
   TypeIdx param_type(u32 index) {
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag == TypeTag::Param && node.as_param().value == index) {
-        return idx;
-      }
+    const auto found = param_by_index_.find(index);
+    if (found != param_by_index_.end()) {
+      return found->second;
     }
     TypeNode node{};
     node.tag = TypeTag::Param;
     node.data.set(ParamIndex{index});
-    return state_.types.emplace_back(node);
+    const TypeIdx idx = state_.types.emplace_back(node);
+    param_by_index_.emplace(index, idx);
+    return idx;
   }
 
   // Reserves an empty nominal node that re-entrant references resolve
@@ -430,6 +431,10 @@ class StorageBuilder {
     return state_.types.emplace_back(state_.types[idx]);
   }
 
+  // Hands the tables to a pass that renumbers them wholesale; the
+  // builder is empty afterwards and has to be rebuilt from the result.
+  StorageState take_state() && { return std::move(state_); }
+
   // Verifies the built storage and returns it as proof-carrying
   // VerifiedStorage. Invalid builder output becomes a structured
   // error instead of corrupt IR downstream.
@@ -490,10 +495,19 @@ class StorageBuilder {
   // Fills the interning tables from a type table this builder did not fill
   // itself. The scan is the shape lookup used to make, so the first node of a
   // shape is the one a later pointer interns to.
-  void index_references() {
+  void index_interned() {
+    ref_by_pointee_.clear();
+    mut_ref_by_pointee_.clear();
+    raw_ptr_by_pointee_.clear();
+    raw_mut_ptr_by_pointee_.clear();
+    param_by_index_.clear();
     for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
+      if (node.tag == TypeTag::Param) {
+        param_by_index_.emplace(node.as_param().value, idx);
+        continue;
+      }
       std::unordered_map<u32, TypeIdx>* interned = pointer_table(node.tag);
       if (interned == nullptr) {
         continue;
@@ -526,6 +540,10 @@ class StorageBuilder {
   // value asks for its signature's shape once per call site.
   std::unordered_map<u64, std::vector<TypeIdx>> tuple_by_key_;
   std::unordered_map<u64, TypeIdx> const_by_value_;
+  // Parameter shapes by the index their node carries. A parameter type is
+  // asked for once per type argument of an item, and it used to be found by
+  // scanning every type in the package.
+  std::unordered_map<u32, TypeIdx> param_by_index_;
 };
 
 }  // namespace ir

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <unordered_map>
@@ -36,6 +37,11 @@ struct Local {
   std::string_view name;
   ir::RegisterIdx addr;
   ir::TypeIdx type;
+  // The locals a reference held here may point into: `p := &n` names n,
+  // and a binding from an alias copies what the alias named. Empty when
+  // the reference came from a parameter or from a call that kept its
+  // input to itself.
+  std::vector<u32> referents;
 };
 
 // One ownership event the drop pass reads (ADR-0062), in lowering
@@ -43,7 +49,7 @@ struct Local {
 // the event was recorded: a Bind is after the binding's store, a Move
 // after the marker, a Store after the store.
 struct OwnershipEvent {
-  enum class Kind : u8 { Bind, Move, Store, DropInPlace };
+  enum class Kind : u8 { Bind, Move, Store, StoreElement, DropInPlace };
   Kind kind = Kind::Bind;
   u32 local = base::INVALID_IDX;
   std::vector<u32> path;
@@ -51,8 +57,9 @@ struct OwnershipEvent {
   u32 offset = 0;
   u32 seq = 0;
   diag::Span span;
-  // DropInPlace only: the value at this pointer is ended where it
-  // stands, whatever place (if any) it names.
+  // DropInPlace and StoreElement: the value at this pointer is ended
+  // where it stands. A store's place is the address it wrote over, which
+  // no path names: the element an index reached, or a slot of it.
   ir::OperandIdx place = ir::OperandIdx::invalid();
   ir::TypeIdx place_type = ir::TypeIdx(base::INVALID_IDX);
 };
@@ -82,6 +89,12 @@ struct DropElaborationInputs {
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
   std::span<const Local> locals;
+  // The receiver of a destructor. Its end belongs to the destructor's
+  // own body, so the walk leaves it alone: there is no way to spell a
+  // value that has been partly ended, and the body is where a value
+  // that has been is written (ADR-0137). No local when the function is
+  // not a destructor.
+  u32 end_exempt = base::INVALID_IDX;
   std::span<const OwnershipEvent> ownership;
   std::span<const EndSite> end_sites;
   // One span per instruction of the function being lowered; the pass
@@ -109,10 +122,35 @@ struct DropElaborationInputs {
   std::function<ir::BlockIdx()> reserve_block;
 };
 
+// The tables the pass builds for one function: its places, blocks,
+// points, states, and actions. Every one of them is refilled from empty,
+// so the set outlives a single function and is cleared instead of
+// rebuilt, which carries each table's capacity across the functions that
+// come after it.
+class DropWorkingSet {
+ public:
+  // The rows themselves. Callers hold the set and never read it.
+  struct Tables;
+
+  DropWorkingSet();
+  ~DropWorkingSet();
+  DropWorkingSet(const DropWorkingSet&) = delete;
+  DropWorkingSet& operator=(const DropWorkingSet&) = delete;
+  DropWorkingSet(DropWorkingSet&&) = delete;
+  DropWorkingSet& operator=(DropWorkingSet&&) = delete;
+
+  [[nodiscard]] Tables& tables() { return *tables_; }
+
+ private:
+  std::unique_ptr<Tables> tables_;
+};
+
 // Solves ownership per place over the function's CFG and places each
 // end where the paths still own the value (ADR-0062). It rewrites the
 // streams the caller handed over, before their blocks are published,
 // and reports what it cannot place through the caller's diagnostics.
+void elaborate_drops(const DropElaborationInputs& inputs,
+                     DropWorkingSet& working);
 void elaborate_drops(const DropElaborationInputs& inputs);
 
 // The type a place path names, following the field and element slots

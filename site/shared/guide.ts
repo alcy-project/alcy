@@ -8,7 +8,7 @@
 // Edit: until then the published text and its Copy, Run, and Open answer
 // for themselves.
 
-import { findBlocks, type CodeBlock } from "./guide-copy.js";
+import { findBlocks, wireCopy, type CodeBlock } from "./guide-copy.js";
 import { wireRun } from "./guide-run.js";
 
 // One promise per page: two Edits in the same tick share the fetch, and
@@ -45,7 +45,10 @@ function onEditPress(block: CodeBlock): void {
   void loadEditor();
 }
 
+// Copy is every block's, so the row is revealed before the `alcy`-only
+// wiring below narrows to the blocks that have Run and Edit.
 for (const block of findBlocks()) {
+  wireCopy(block);
   if (!block.alcy) {
     continue;
   }

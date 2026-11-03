@@ -12,7 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/resolve.h"
 #include "cli/cli_config.h"
 #include "cli/output.h"
 #include "cli/result_code.h"
@@ -25,6 +24,7 @@
 #include "i18n/messages.h"
 #include "path/path.h"
 #include "pipeline/artifact.h"
+#include "pipeline/pipeline.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
 #include "source/source.h"
@@ -77,13 +77,81 @@ std::vector<std::string> split_lines(const std::string& text) {
   return out;
 }
 
+// The lines a diff compares: a final newline ends the last line rather
+// than starting an empty one, so the hunk a change at the end of the
+// file falls in does not claim a line that is not there.
+std::vector<std::string> diff_lines(const std::string& text) {
+  std::vector<std::string> lines = split_lines(text);
+  if (!text.empty() && text.back() == '\n') {
+    lines.pop_back();
+  }
+  return lines;
+}
+
+// One step of the edit script: a line both layouts share, one only the
+// original has, or one only the formatted layout has. line indexes the
+// original for Keep and Delete and the formatted layout for Insert.
+struct Edit {
+  enum class Kind : u8 { Keep, Delete, Insert };
+  Kind kind = Kind::Keep;
+  usize line = 0;
+};
+
+// The lines of either side a hunk carries around its changes. Two
+// changes closer than twice this share one hunk, or the hunks would
+// print the same lines twice.
+constexpr usize DIFF_CONTEXT = 3;
+
 void print_diff(const std::string& path,
                 const std::string& original,
                 const std::string& formatted) {
-  const std::vector<std::string> old_lines = split_lines(original);
-  const std::vector<std::string> new_lines = split_lines(formatted);
+  const std::string diff = render_diff(path, original, formatted);
+  if (!diff.empty()) {
+    io::write(io::STDOUT_FD, diff.data(), diff.size());
+  }
+}
+
+// Every source under the package root, not only the ones the entry
+// reaches and the ones spelling already parses: a formatter works on
+// the files a reader has, whatever state they are in. A nested
+// package is its own tree, so the walk stops at one. The walk lists
+// names and reads none of them: a source kept mapped by the source
+// manager cannot be truncated, which Windows refuses outright.
+base::Result<std::vector<std::string>, diag::Reported> collect_package_files(
+    pipeline::PipelineContext& ctx,
+    std::string_view root,
+    const std::vector<std::string_view>& excludes) {
+  base::Result<pipeline::DiscoveredSourcePaths, diag::Reported> discovered =
+      pipeline::discover_source_paths(root, ctx.bag);
+  if (discovered.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  std::vector<std::string> out;
+  for (std::string& path : std::move(discovered).unwrap().files) {
+    if (excluded(path, excludes)) {
+      continue;
+    }
+    out.push_back(std::move(path));
+  }
+  return base::make_ok(std::move(out));
+}
+
+}  // namespace
+
+// A unified diff of the two layouts, or nothing when they agree. Each
+// hunk is a run of changes widened by the context it is read in, so a
+// rewrite that touches two regions apart reports both instead of one
+// block claiming every line between them changed.
+std::string render_diff(std::string_view path,
+                        std::string_view original,
+                        std::string_view formatted) {
+  const std::vector<std::string> old_lines = diff_lines(std::string(original));
+  const std::vector<std::string> new_lines = diff_lines(std::string(formatted));
   const usize n = old_lines.size();
   const usize m = new_lines.size();
+  // dp[i][j] is the length of the longest run of lines the two layouts
+  // share from old_lines[i] and new_lines[j] on: the edit script is
+  // whatever walks it downhill.
   std::vector<std::vector<usize>> dp(n + 1, std::vector<usize>(m + 1, 0));
   for (usize i = n; i-- > 0;) {
     for (usize j = m; j-- > 0;) {
@@ -94,88 +162,92 @@ void print_diff(const std::string& path,
       }
     }
   }
-  // Find first differing index.
-  usize first = 0;
-  while (first < n && first < m && old_lines[first] == new_lines[first]) {
-    ++first;
+  std::vector<Edit> script;
+  script.reserve(n + m);
+  usize i = 0;
+  usize j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && old_lines[i] == new_lines[j]) {
+      script.push_back(Edit{Edit::Kind::Keep, i});
+      ++i;
+      ++j;
+    } else if (j < m && (i == n || dp[i][j + 1] > dp[i + 1][j])) {
+      script.push_back(Edit{Edit::Kind::Insert, j});
+      ++j;
+    } else {
+      script.push_back(Edit{Edit::Kind::Delete, i});
+      ++i;
+    }
   }
-  usize last_old = n, last_new = m;
-  while (last_old > first && last_new > first &&
-         old_lines[last_old - 1] == new_lines[last_new - 1]) {
-    --last_old;
-    --last_new;
+  std::vector<usize> changes;
+  for (usize k = 0; k < script.size(); ++k) {
+    if (script[k].kind != Edit::Kind::Keep) {
+      changes.push_back(k);
+    }
   }
-  const usize ctx = 3;
-  const usize begin_old = first > ctx ? first - ctx : 0;
-  const usize begin_new = first > ctx ? first - ctx : 0;
-  const usize end_old = std::min(n, last_old + ctx);
-  const usize end_new = std::min(m, last_new + ctx);
   std::string out;
-  out += "--- " + path + "\n";
-  out += "+++ " + path + "\n";
-  out += "@@ -" + std::to_string(begin_old + 1) + "," +
-         std::to_string(end_old - begin_old) + " +" +
-         std::to_string(begin_new + 1) + "," +
-         std::to_string(end_new - begin_new) + " @@\n";
-  for (usize i = begin_old; i < end_old; ++i) {
-    if (i < first || i >= last_old) {
-      if (i < n) {
-        out += " " + old_lines[i] + "\n";
+  if (changes.empty()) {
+    return out;
+  }
+  out += "--- " + std::string(path) + "\n";
+  out += "+++ " + std::string(path) + "\n";
+  usize read = 0;
+  while (read < changes.size()) {
+    usize last = read;
+    while (last + 1 < changes.size() &&
+           changes[last + 1] - changes[last] <= 2 * DIFF_CONTEXT) {
+      ++last;
+    }
+    const usize begin =
+        changes[read] > DIFF_CONTEXT ? changes[read] - DIFF_CONTEXT : 0;
+    const usize end = std::min(script.size(), changes[last] + 1 + DIFF_CONTEXT);
+    usize old_before = 0;
+    usize new_before = 0;
+    usize old_count = 0;
+    usize new_count = 0;
+    for (usize k = 0; k < end; ++k) {
+      const Edit::Kind kind = script[k].kind;
+      if (k < begin) {
+        if (kind != Edit::Kind::Insert) {
+          ++old_before;
+        }
+        if (kind != Edit::Kind::Delete) {
+          ++new_before;
+        }
+        continue;
       }
-    } else {
-      out += "-" + old_lines[i] + "\n";
+      if (kind != Edit::Kind::Insert) {
+        ++old_count;
+      }
+      if (kind != Edit::Kind::Delete) {
+        ++new_count;
+      }
     }
-  }
-  for (usize i = begin_new; i < end_new; ++i) {
-    if (i < first || i >= last_new) {
-    } else {
-      out += "+" + new_lines[i] + "\n";
+    out += "@@ -" + std::to_string(old_before + 1) + "," +
+           std::to_string(old_count) + " +" + std::to_string(new_before + 1) +
+           "," + std::to_string(new_count) + " @@\n";
+    for (usize k = begin; k < end; ++k) {
+      const Edit& edit = script[k];
+      switch (edit.kind) {
+        case Edit::Kind::Keep: out += " " + old_lines[edit.line] + "\n"; break;
+        case Edit::Kind::Delete:
+          out += "-" + old_lines[edit.line] + "\n";
+          break;
+        case Edit::Kind::Insert:
+          out += "+" + new_lines[edit.line] + "\n";
+          break;
+      }
     }
+    read = last + 1;
   }
-  io::write(io::STDOUT_FD, out.data(), out.size());
+  return out;
 }
 
-base::Result<std::vector<std::string>, diag::Reported> collect_package_files(
-    pipeline::PipelineContext& ctx,
-    const path::Path& root,
-    source::FileId manifest_file,
-    std::string_view manifest_name,
-    const std::vector<std::string_view>& excludes) {
-  base::Result<std::vector<pipeline::Artifact>, diag::Reported> targets =
-      pipeline::resolve_artifacts(ctx, root, manifest_file, manifest_name,
-                                  pipeline::ArtifactScope::All);
-  if (targets.is_err() || ctx.bag.has_errors()) {
-    return base::make_err(diag::Reported{});
-  }
-  std::vector<pipeline::Artifact> resolved = std::move(targets).unwrap();
-  std::set<std::string> seen;
-  std::vector<std::string> out;
-  for (pipeline::Artifact& target : resolved) {
-    for (analyzer::ModuleNode* module : target.tree.modules) {
-      if (module->is_staged || module->is_prelude) {
-        continue;
-      }
-      if (module->file == source::UNKNOWN_FILE) {
-        continue;
-      }
-      std::optional<std::string_view> name = ctx.sources.name(module->file);
-      if (!name.has_value()) {
-        continue;
-      }
-      std::string path(*name);
-      if (excluded(path, excludes)) {
-        continue;
-      }
-      if (seen.insert(path).second) {
-        out.push_back(std::move(path));
-      }
-    }
-  }
-  std::sort(out.begin(), out.end());
-  return base::make_ok(std::move(out));
+bool reads_stdin(const CliConfig& config) {
+  // Standard input is a source only when `--stdin` names it;
+  // naming no file means the package in the current directory.
+  return config.fmt_stdin;
 }
-
-}  // namespace
 
 ResultCode run_fmt(const CliConfig& config,
                    pipeline::PipelineContext& ctx,
@@ -185,8 +257,7 @@ ResultCode run_fmt(const CliConfig& config,
   const alcy_fmt::FormatConfig layout = alcy_fmt::default_format_config();
   const bool check_only = config.fmt_check;
 
-  // stdin mode
-  if (config.fmt_stdin) {
+  if (reads_stdin(config)) {
     base::Result<std::string, std::string_view> text = read_stdin();
     if (text.is_err()) {
       ctx.bag.emit_message(diag::Severity::Error,
@@ -212,11 +283,7 @@ ResultCode run_fmt(const CliConfig& config,
       envelope.outcome = Outcome::Checked;
       return ResultCode::Success;
     }
-    if (config.fmt_stdout) {
-      io::write(io::STDOUT_FD, formatted.data(), formatted.size());
-    } else {
-      io::write(io::STDOUT_FD, formatted.data(), formatted.size());
-    }
+    io::write(io::STDOUT_FD, formatted.data(), formatted.size());
     envelope.status = Status::Ok;
     envelope.outcome = Outcome::Piped;
     return ResultCode::Success;
@@ -275,8 +342,8 @@ ResultCode run_fmt(const CliConfig& config,
         }
         pipeline::ManifestProbe member = std::move(member_probe).unwrap();
         base::Result<std::vector<std::string>, diag::Reported> collected =
-            collect_package_files(ctx, member.root, member.manifest,
-                                  member.manifest_name, config.fmt_exclude);
+            collect_package_files(ctx, member.root.as_view(),
+                                  config.fmt_exclude);
         if (collected.is_err()) {
           return ResultCode::FmtFailed;
         }
@@ -286,8 +353,7 @@ ResultCode run_fmt(const CliConfig& config,
       }
     } else {
       base::Result<std::vector<std::string>, diag::Reported> collected =
-          collect_package_files(ctx, found.root, found.manifest,
-                                found.manifest_name, config.fmt_exclude);
+          collect_package_files(ctx, found.root.as_view(), config.fmt_exclude);
       if (collected.is_err()) {
         return ResultCode::FmtFailed;
       }
@@ -314,7 +380,18 @@ ResultCode run_fmt(const CliConfig& config,
     return ResultCode::Success;
   }
 
+  // A stream carries one file's layout, so a target that names or
+  // discovers more than one is refused rather than written in place:
+  // --stdout asked for the result on standard output.
+  if (config.fmt_stdout && files.size() != 1) {
+    ctx.bag.emit_message(
+        diag::Severity::Error,
+        i18n::format<i18n::Key::CliFmtStdoutTakesOneFile>(config.language));
+    return ResultCode::ArgParseError;
+  }
+
   bool failed = false;
+  bool piped = false;
   usize unclean = 0;
   for (const std::string& named : files) {
     if (!io::is_file(named)) {
@@ -326,10 +403,10 @@ ResultCode run_fmt(const CliConfig& config,
     }
     const std::string source = io::read_file(named);
     const std::string formatted = alcy_fmt::format(source, layout);
-    if (formatted == source) {
-      continue;
-    }
     if (check_only || config.fmt_diff) {
+      if (formatted == source) {
+        continue;
+      }
       if (config.fmt_diff) {
         print_diff(named, source, formatted);
       } else {
@@ -340,11 +417,15 @@ ResultCode run_fmt(const CliConfig& config,
       ++unclean;
       continue;
     }
+    // A layout that matches its source still leaves through the stream:
+    // a reader of the pipe asked for the file's text, not for a change.
     if (config.fmt_stdout) {
-      if (files.size() == 1) {
-        io::write(io::STDOUT_FD, formatted.data(), formatted.size());
-        continue;
-      }
+      io::write(io::STDOUT_FD, formatted.data(), formatted.size());
+      piped = true;
+      continue;
+    }
+    if (formatted == source) {
+      continue;
     }
     const std::span<const u8> bytes{
         reinterpret_cast<const u8*>(formatted.data()), formatted.size()};
@@ -363,8 +444,12 @@ ResultCode run_fmt(const CliConfig& config,
     return ResultCode::FmtNotClean;
   }
   envelope.status = Status::Ok;
-  envelope.outcome =
-      check_only || config.fmt_diff ? Outcome::Checked : Outcome::Formatted;
+  if (piped) {
+    envelope.outcome = Outcome::Piped;
+  } else {
+    envelope.outcome =
+        check_only || config.fmt_diff ? Outcome::Checked : Outcome::Formatted;
+  }
   return ResultCode::Success;
 }
 

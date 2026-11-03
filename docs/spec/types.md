@@ -21,6 +21,9 @@
   and never follows the profile: an overflow in `+`, `-`, and `*` and
   a zero divisor are errors there, while an overshift and a signed
   `MIN / -1` keep the defined results above (ADR-0065).
+- `a ** b` is integer-only, repeated squaring under `*`'s checks: a
+  negative exponent panics, `x ** 0` is one (`0 ** 0` included), and a
+  float `**` is undefined - the operator is declared for integers only.
 - Casts: a cast between a float and an integer truncates toward zero,
   and a value the destination cannot hold saturates - its minimum below
   the destination's range and its maximum above it, with NaN becoming
@@ -36,7 +39,10 @@
 
 - Array types `[T; N]` are fixed-size and homogeneous; `N` is a
   decimal length. Literals are lists (`[a, b]`) or repeats (`[e; N]`,
-  evaluated once); empty literals are rejected.
+  evaluated once); empty literals are rejected. A repeat fills every
+  slot with the one value it evaluated, so the element must be `Copy`:
+  a move-only element would reach the array as several owners of one
+  value, and each slot would end it.
 - Indexing reads and writes through places with panic-on-out-of-bounds
   semantics. Arrays are `Copy` if and only if their element is. The
   length is a decimal literal, a value parameter in scope (`[T; N]`
@@ -59,6 +65,10 @@
 - Sizedness is an invariant, not a bound. No declaration spells it,
   nothing relaxes it, and there is no negative form; the compiler
   derives a type's size from its shape the way it derives `Copy`.
+- A size fits `isize`: an array is its element's size times its
+  length, and an aggregate is its fields laid out in order. A shape
+  whose size does not fit is refused (ADR-0136), so every size the
+  compiler reports is one a pointer can be offset by.
 - A type argument is sized: a slice or a trait object is never a type
   argument, and generic code that wants one spells a borrow (`&[T]`).
 - There is no owned unsized value: `Box<[T]>`, `Box<str>`, and a

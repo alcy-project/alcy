@@ -185,8 +185,10 @@ it is dead, and each is reported with a note pointing at the arm that
 covers it. A guarded arm covers nothing, because the guard tests after
 the pattern binds. The parser is what makes the set exact: an uppercase
 or qualified name is a unit variant rather than a binding, so `E::A`
-and `E::B` do not cover one another. The checker rejects a repeated
-literal (`EC019`) but not this shape, which is the gap the rule fills.
+and `E::B` do not cover one another. An arm whose literal an earlier
+unguarded arm already names is dead too, and is reported with a note at
+that first arm; the two spellings are compared as source text, so `1`
+and `0x1` stay apart.
 
 `unused-variant` reads the variant names the package's value paths
 construct - the last segment of every multi-segment path, `Color::Red`

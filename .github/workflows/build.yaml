@@ -21,7 +21,9 @@ jobs:
   build:
     name: Build & Test (${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ inputs.role }}${{ matrix.nix && '-nix' || '' }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # The slowest entry finishes inside fifteen minutes, and a cold cache
+    # roughly doubles that; an hour still returns a stuck job's slot.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -102,50 +104,50 @@ jobs:
             *.${{ matrix.archive }}
             *.sha256
           if-no-files-found: error
+          # Ten archives per run: two weeks keeps a merged commit's build
+          # reachable without paying for ninety days of them.
+          retention-days: 14
+
+      # The checks that read the compiler without compiling anything take
+      # this instead of building the same tree in the same run.
+      - name: Upload the Driver
+        if: matrix.plat == 'linux' && !matrix.nix && inputs.build_type == 'debug'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: alcy-driver-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}
+          path: out/build/alcy
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Run Tests
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
 
-      # The language server is a process an editor talks to over a pipe;
-      # this drives the built binary through one session so the framing,
-      # the diagnostics, and the formatter edit are exercised as a whole.
+      # A corpus whose cases link a program or run one is a question the
+      # platform answers: what the linker names the objects, what the frame
+      # walk finds, what the runtime prints. Both corpora are asked in every
+      # entry, then. The checks that read source without producing a host
+      # binary - the formatter, the borrow rules, the wasm output - run
+      # once each in the CI workflow's `harness` job.
+      - name: Run E2E Cases
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
+
+      - name: Run Exe Cases
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
+
+      # The language server is a process an editor talks to over a pipe,
+      # and a pipe is what a platform answers for: Windows and a Unix
+      # disagree about how a handle is opened and read. It drives the built
+      # binary through one session, so the framing, the diagnostics, and
+      # the formatter edit are exercised as a whole.
       - name: Run LSP Smoke
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_lsp.py --build-subdir=build
 
-      - name: Run e2e Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
-
-      # The wasm cases run under bun, at the series config.toml pins.
-      - name: Read the pinned bun
-        id: versions
-        shell: bash
-        run: |
-          py=$(command -v python3 || command -v python)
-          echo "bun=$("$py" tools/config_values.py --get bun_version)" >> "$GITHUB_OUTPUT"
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: ${{ steps.versions.outputs.bun }}
-
-      - name: Run Wasm Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_wasm.py --build-subdir=build
-
-      - name: Check Borrow Rules
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_borrow_rules.py --build-subdir=build
-
-      - name: Run exe Acceptance
-        shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
-
-      # The samples run through the same harness as the test cases, so a
-      # program kept as an example is also a program that still compiles
-      # and still prints what it says it prints.
+      # A sample kept as an example still compiles, links, and prints, so
+      # what it shows is the platform's answer to those three.
       - name: Run Samples
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build --cases-root=samples
@@ -171,3 +173,38 @@ jobs:
 
           help_out=$(${{ matrix.nix && 'nix develop .#default --command ' || '' }}"$bin" --help)
           echo "$help_out"
+
+      # A failed run's log holds what each step printed. Which edges the
+      # build ran, in what order, and under which configuration is not in
+      # it, and those three files answer a question that rebuilding the same
+      # tree elsewhere cannot.
+      - name: Upload the Build Record
+        if: failure() && inputs.build_type == 'debug'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: build-record-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}${{ matrix.nix && '-nix' || '' }}
+          path: |
+            out/build/.ninja_log
+            out/build/args.gn
+            out/build/toolchain.ninja
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # The cache is kept for the next run's build, and a build wants the
+      # objects: `all` already made the tests and the benchmarks, and their
+      # objects are what the next run reuses. What a link produces is the
+      # rest of the tree's size and a second to remake, so it goes before
+      # the entry is written.
+      - name: Drop the Linked Outputs
+        if: always()
+        shell: bash
+        run: |
+          # A release tree strips its binaries and keeps the copies with symbols in
+          # `exe.unstripped`, a directory; `rm -f` refuses one, and it is a link's
+          # output whatever it holds.
+          for name in alcy alcy.exe tests tests.exe benchmarks benchmarks.exe exe.unstripped; do
+            rm -rf "out/build/$name" "out/build/$name.pdb"
+          done
+          rm -rf out/build/*.a out/build/*.so out/build/*.o out/build/*.d
+

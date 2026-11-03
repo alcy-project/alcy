@@ -105,6 +105,14 @@ enum class DiagCode : u8 {
   GenericItemUnavailable = 46,
   ImplOutsideItsHome = 47,
   UnmovableType = 48,
+  // A repeat literal stores its element once per slot, so the element
+  // has to be Copy: a move-only element would reach the array as many
+  // owners of one value, and its destructor would end that value once
+  // per slot.
+  RepeatElementNotCopy = 49,
+  // A size is an offset a pointer can carry: a shape whose size does
+  // not fit has no layout to allocate, index, or step past.
+  TypeTooLarge = 50,
 };
 
 }  // namespace analyzer

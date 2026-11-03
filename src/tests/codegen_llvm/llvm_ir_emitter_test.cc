@@ -277,6 +277,8 @@ TEST_CASE("Inbounds addresses and copy alignment reach the module") {
   const str::StringPoolId name = interner.intern("flagged");
   const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
   const ir::TypeIdx u64_ty = builder.primitive(ir::TypeTag::U64);
+  const ir::TypeIdx u64_ref = builder.reference_type(u64_ty, false);
+  const ir::TypeIdx u64_mut = builder.reference_type(u64_ty, true);
   const ir::TypeIdx ptr_ty = builder.primitive(ir::TypeTag::Ptr);
   ir::TypeSeq fields;
   fields.push(builder.ref_type(i32_ty));
@@ -319,14 +321,23 @@ TEST_CASE("Inbounds addresses and copy alignment reach the module") {
   instrs.push(gep);
   builder.reg({.type = i32_ty, .def_idx = gep});
   ir::OperandSeq copy_args;
-  copy_args.push(reg_op(ir::RegisterIdx(1), ptr_ty));
-  copy_args.push(reg_op(ir::RegisterIdx(1), ptr_ty));
+  copy_args.push(reg_op(ir::RegisterIdx(1), u64_mut));
+  copy_args.push(reg_op(ir::RegisterIdx(1), u64_ref));
   copy_args.push(imm_op(four, u64_ty));
   instrs.push(builder.instr({.op = ir::Opcode::Memcopy,
-                             .flags = {.mem_align_log2 = 3},
+                             .flags = {},
                              .dst = ir::RegisterIdx(base::INVALID_IDX),
                              .measure = ir::TypeIdx::invalid(),
                              .operands = copy_args.finish()}));
+  ir::OperandSeq bare_copy_args;
+  bare_copy_args.push(reg_op(ir::RegisterIdx(1), ptr_ty));
+  bare_copy_args.push(reg_op(ir::RegisterIdx(1), ptr_ty));
+  bare_copy_args.push(imm_op(four, u64_ty));
+  instrs.push(builder.instr({.op = ir::Opcode::Memcopy,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
+                             .measure = ir::TypeIdx::invalid(),
+                             .operands = bare_copy_args.finish()}));
   ir::OperandSeq ret_args;
   ret_args.push(imm_op(zero, i32_ty));
   instrs.push(builder.instr({.op = ir::Opcode::Ret,
@@ -355,8 +366,23 @@ TEST_CASE("Inbounds addresses and copy alignment reach the module") {
   llvm::raw_string_ostream out(text);
   module->print(out, nullptr);
   CHECK(text.find("getelementptr inbounds") != std::string::npos);
-  CHECK(text.find("llvm.memcpy") != std::string::npos);
-  CHECK(text.find("align 8") != std::string::npos);
+  // Each copy's alignment is the one its own operand promises: the
+  // reference's is the pointee's, the bare pointer's byte alignment.
+  const auto ref_copy = text.find("call void @llvm.memcpy");
+  const auto bare_copy =
+      ref_copy == std::string::npos
+          ? std::string::npos
+          : text.find("call void @llvm.memcpy", ref_copy + 1);
+  CHECK(ref_copy != std::string::npos);
+  CHECK(bare_copy != std::string::npos);
+  if (ref_copy == std::string::npos || bare_copy == std::string::npos) {
+    return;
+  }
+  CHECK(text.find("call void @llvm.memcpy", bare_copy + 1) ==
+        std::string::npos);
+  CHECK(text.substr(ref_copy, bare_copy - ref_copy).find("align 8") !=
+        std::string::npos);
+  CHECK(text.substr(bare_copy).find("align 1") != std::string::npos);
 }
 
 TEST_CASE("Emit struct and array calls") {

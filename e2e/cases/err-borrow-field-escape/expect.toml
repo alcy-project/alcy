@@ -1,0 +1,6 @@
+# The aggregate is what hides the borrow: reading a reference out of a
+# struct names the locals its own binding named, so the store reaches the
+# local the block declares.
+exit = 4
+contains = ["escapes the block that declares it"]
+not_contains = []

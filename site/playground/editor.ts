@@ -79,11 +79,14 @@ export function syncMetrics(): void {
   }
   lastScrollbarWidth = scrollbarWidth;
   lastScrollbarHeight = scrollbarHeight;
-  elements.highlight.style.setProperty(
+  // Published on the pane, not on the mirror: the gutter sits beside the
+  // mirror rather than inside it, so a value set on the mirror would never
+  // reach the gutter's padding.
+  elements.pane.style.setProperty(
     "--editor-scrollbar-width",
     `${Math.max(0, scrollbarWidth)}px`,
   );
-  elements.highlight.style.setProperty(
+  elements.pane.style.setProperty(
     "--editor-scrollbar-height",
     `${Math.max(0, scrollbarHeight)}px`,
   );
@@ -101,9 +104,20 @@ function insertAtCursor(text: string): void {
 // under the caret are never stale; the colors arrive when the parse that
 // produces them is done. A parse that cannot run (or fails) leaves the
 // plain text in place.
+
+// A textarea lays out the empty last line that a trailing newline opens;
+// a block of text does not, because CSS drops the segment break that ends
+// it. That line is also the last of the textarea's scroll range, so the
+// newline added here is what lets the mirror reach the same maximum: one
+// line short, it clamps first, and the glyphs stop while the numbers and
+// the caret travel on.
+function withFinalLine(text: string): string {
+  return `${text}\n`;
+}
+
 function updateMirrorPlain(): void {
   state.highlightedText = null;
-  elements.highlightCode.textContent = elements.source.value;
+  elements.highlightCode.textContent = withFinalLine(elements.source.value);
   syncScroll();
 }
 
@@ -127,7 +141,7 @@ function renderHighlight(): void {
     return;
   }
   try {
-    elements.highlightCode.innerHTML = state.highlighter.highlight(text);
+    elements.highlightCode.innerHTML = withFinalLine(state.highlighter.highlight(text));
     state.highlightedText = text;
     syncScroll();
   } catch (error) {

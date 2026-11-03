@@ -1,0 +1,2 @@
+exit = 4
+contains = ["An array repeat copies its element once per slot, so the element must be Copy"]

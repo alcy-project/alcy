@@ -1,0 +1,14 @@
+[package]
+name = "freestanding-refuse"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "freestanding-refuse"
+path = "main.al"

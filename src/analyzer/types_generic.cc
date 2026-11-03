@@ -198,21 +198,6 @@ u32 Checker::inst_index(ir::TypeIdx type) const {
   return found == inst_by_type_.end() ? NO_INST : found->second;
 }
 
-// Storage copies chain: a copy's origin can itself be a copy, so the
-// chain is followed to the type the first copy was made from.
-
-ir::TypeIdx Checker::type_origin(ir::TypeIdx type) const {
-  ir::TypeIdx current = type;
-  for (u32 depth = 0; depth <= type_origins_.size(); ++depth) {
-    const auto found = type_origins_by_index_.find(current.idx);
-    if (found == type_origins_by_index_.end()) {
-      return current;
-    }
-    current = ir::TypeIdx(found->second);
-  }
-  return current;
-}
-
 std::span<const ast::GenericParam> Checker::nominal_params(
     const NominalEntry& entry) {
   const ast::ItemNode& node = ast.items[entry.item];
@@ -476,6 +461,9 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     }
     builder.fill_enum(reserved, variants.finish(), args_seq.finish());
   }
+  if (!check_type_size(reserved, node.span)) {
+    return error_type();
+  }
   while (type_params.size() > pushed) {
     type_params.pop_back();
   }
@@ -703,7 +691,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
     } else {
       const auto own = methods_by_self_.find(self.idx);
       if (own != methods_by_self_.end()) {
-        for (const auto& [owner, position] : own->second) {
+        for (const auto& [owner, position] : own->second.entries) {
           const CheckedModule::MethodInfo& method =
               modules[owner].methods[position];
           // An entry keyed by spelled arguments is one call's
@@ -1023,6 +1011,21 @@ bool Checker::bind_fn_slots(u32 module,
   return true;
 }
 
+void Checker::push_fn_instance(ast::ItemIdx item,
+                               u32 module,
+                               const std::vector<ir::TypeIdx>& args,
+                               u32 sig_index,
+                               u32 inst) {
+  const u64 head_key =
+      (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
+  const auto head = fn_instance_head_.find(head_key);
+  const u32 prev =
+      head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
+  fn_instance_head_[head_key] = static_cast<u32>(fn_instances.size());
+  FnInstance witness{item, module, prev, args, sig_index, inst};
+  fn_instances.push_back(std::move(witness));
+}
+
 // Instantiates a generic function or intrinsic against `args` and
 // checks its body. Returns null when the signature does not match the
 // intrinsic's canonical shape.
@@ -1031,9 +1034,14 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     u32 module,
     ast::ItemIdx item,
     const std::vector<ir::TypeIdx>& args) {
-  for (const FnInstance& instance : fn_instances) {
-    if (instance.module != module || instance.item != item ||
-        instance.args.size() != args.size()) {
+  const u64 head_key =
+      (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
+  const auto head = fn_instance_head_.find(head_key);
+  u32 at = head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
+  while (at != base::INVALID_IDX) {
+    const FnInstance& instance = fn_instances[at];
+    at = instance.prev_same_item;
+    if (instance.args.size() != args.size()) {
       continue;
     }
     bool same = true;
@@ -1091,28 +1099,29 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     value_params = kept_outer_values;
     return nullptr;
   }
-  add_function(module, {.name = fn_name(item),
-                        .params = sig_params,
-                        .ret = ret,
-                        .item = item,
-                        .inst = NO_INST,
-                        .is_unsafe = fn_is_unsafe(item),
-                        .is_comp = fn_is_comp(item)});
+  add_function(module,
+               {.name = fn_name(item),
+                .params = sig_params,
+                .ret = ret,
+                .item = item,
+                .inst = NO_INST,
+                .is_unsafe = fn_is_unsafe(item),
+                .is_comp = fn_is_comp(item)},
+               false);
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // The definition-site check records under its own key: no numbering
   // slot is claimed and no body is checked here - each generic item's
   // own pass checks its body once, in its own context (ADR-0079).
   if (parametric_mode()) {
     modules[module].functions[sig_index].inst = PARAM_INST;
-    fn_instances.push_back(
-        FnInstance{item, module, args, sig_index, PARAM_INST});
+    push_fn_instance(item, module, args, sig_index, PARAM_INST);
     type_params = kept_outer;
     value_params = kept_outer_values;
     return &modules[module].functions[sig_index];
   }
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.
-  fn_instances.push_back(FnInstance{item, module, args, sig_index, NO_INST});
+  push_fn_instance(item, module, args, sig_index, NO_INST);
   const u32 inst = static_cast<u32>(inst_numbering.size());
   inst_numbering.emplace_back(base::INVALID_IDX);
   inst_by_type_.emplace(base::INVALID_IDX, inst);
@@ -1466,9 +1475,10 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     if (!params.empty()) {
       receiver = classify_receiver(params[0], self_type);
     }
-    add_function(impl_module, {method_node.payload.get<ast::ItemFn>().name.name,
-                               params, ret, method_item})
-        .is_method = true;
+    add_function(impl_module,
+                 {method_node.payload.get<ast::ItemFn>().name.name, params, ret,
+                  method_item},
+                 true);
     const u32 method_sig_index =
         static_cast<u32>(modules[impl_module].functions.size()) - 1;
     // A method of a spec impl keeps its spec on the entry, the way a
@@ -1619,7 +1629,11 @@ void Checker::check_generic_body(u32 module,
   std::vector<ValueParam> saved_values = std::move(value_params);
   type_params.clear();
   value_params.clear();
-  const usize saved_scope = param_scope_.size();
+  // check_fn resets the per-body state and leaves it reset, and this
+  // pass checks the body in the middle of its own item walk, so every
+  // field it writes is saved and restored.
+  FnStateScope scope;
+  scope.save(*this);
   u32 slot = 0;
   for (const ast::GenericParam& param : impl_params) {
     param_scope_.push_back(&param);
@@ -1633,35 +1647,11 @@ void Checker::check_generic_body(u32 module,
   if (has_target) {
     self = resolve_type(module, target, nullptr, true);
   }
-  // Every per-body field a nested check could see is saved, the way
-  // the const pre-pass does; only `cur_inst` differs, keying the
-  // records where no other reader looks.
-  const ir::TypeIdx saved_ret = fn_ret;
-  const u32 saved_loop = loop_depth;
-  const bool saved_in_fn = in_fn;
-  const bool saved_bind = bind_comp_known;
-  const bool saved_too_deep = reported_too_deep_;
-  const u32 saved_inst = cur_inst;
-  const u32 saved_comp = comp_depth;
-  const usize saved_specs = spec_scope.size();
+  // The records of this pass key off the parameter instantiation, where
+  // no other reader looks.
   cur_inst = PARAM_INST;
-  // The comp rules of the enclosing phase do not apply: this is an
-  // ordinary body check.
-  comp_depth = 0;
   check_fn(module, item, has_target ? &self : nullptr);
-  while (spec_scope.size() > saved_specs) {
-    spec_scope.pop_back();
-  }
-  comp_depth = saved_comp;
-  cur_inst = saved_inst;
-  reported_too_deep_ = saved_too_deep;
-  bind_comp_known = saved_bind;
-  in_fn = saved_in_fn;
-  loop_depth = saved_loop;
-  fn_ret = saved_ret;
-  while (param_scope_.size() > saved_scope) {
-    param_scope_.pop_back();
-  }
+  scope.restore(*this);
   type_params = std::move(saved_types);
   value_params = std::move(saved_values);
 }

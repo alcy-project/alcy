@@ -23,6 +23,8 @@ enum class Opcode : u8 {
   InsertValue,
   // Copies `len` bytes from `src` to `dst`:
   // operands = [dst_ptr, src_ptr, len(integer)], discarded value.
+  // A reference operand promises its pointee's alignment; a bare
+  // pointer promises byte alignment only.
   Memcopy,
 
   IntAdd,

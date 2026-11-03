@@ -114,3 +114,19 @@ attaches a comdat named for the entry point when the target's object
 format is COFF — the format's own statement that two definitions are
 the same one — while Mach-O, which rejects comdats, keeps the plain
 linkage and ELF keeps deduplicating it by symbol.
+
+**A failed allocation aborts rather than answering null.** The decision
+above had `alcy_alloc` answer null for a rejected alignment and for a
+request the host allocator could not meet. ADR-0101 makes a panic
+abort, and every caller writes through the pointer it asked for, so no
+caller can act on a null: the allocator panics with the site-less
+message instead, and the declaration keeps its pointer type because the
+point of the answer is that it is never null. A size or alignment past
+the largest object the address space can hold — half the pointer's
+range, the bound an object of that size would have to satisfy — is
+refused with the same message before the host allocator sees it. That
+keeps the freestanding path's mapping length, which adds the alignment
+and the two-word header to the size, from wrapping into a block smaller
+than the caller asked for, and it keeps a request an ordinary build
+cannot meet from reaching the sanitizer's own abort inside
+`posix_memalign` first.

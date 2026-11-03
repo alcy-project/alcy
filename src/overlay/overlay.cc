@@ -5,7 +5,9 @@
 
 #include <optional>
 #include <span>
+#include <vector>
 
+#include "comp/comp_value.h"
 #include "debug/dcheck.h"
 #include "ir/common.h"
 #include "ir/immutable.h"
@@ -113,7 +115,121 @@ ir::OperandIdx raw_divisor(const ir::Storage& storage,
   return safe.operands.head() + 2;
 }
 
+// The check an instruction carries, without its site: the kind, and the
+// operand a condition reads when the instruction's own operands are not
+// the values the source wrote.
+Entry checked_entry(const ir::Storage& storage, const ir::Instruction& instr) {
+  Entry entry;
+  switch (instr.op) {
+    case Opcode::IntAdd:
+    case Opcode::IntSub:
+    case Opcode::IntMul: entry.kind = Check::Overflow; break;
+    case Opcode::ShiftLeft:
+    case Opcode::ArithmeticShiftRight:
+    case Opcode::LogicalShiftRight:
+      entry.kind = Check::ShiftRange;
+      entry.operand = raw_shift_count(storage, instr);
+      break;
+    case Opcode::IntDiv:
+      if (ir::is_signed_integer_type(first_operand_tag(storage, instr))) {
+        entry.kind = Check::MinOverOne;
+        entry.operand = raw_divisor(storage, instr);
+      }
+      break;
+    default: break;
+  }
+  return entry;
+}
+
+// The signed minimum of a width, in the bit pattern an immediate carries.
+u64 signed_minimum(ir::TypeTag tag) {
+  return static_cast<u64>(1) << (comp::int_bytes(tag) * 8 - 1);
+}
+
+// Whether a checked build can abort on this operation. A check whose
+// values the IR knows can be ruled out here; a value it does not know
+// keeps the abort possible, because the profile is the build's and not
+// the passes' to read (ADR-0067).
+bool aborts(const ir::Storage& storage,
+            const ir::Instruction& instr,
+            const Entry& entry) {
+  const ir::TypeTag tag = entry.kind == Check::None
+                              ? ir::TypeTag::I1
+                              : first_operand_tag(storage, instr);
+  switch (entry.kind) {
+    case Check::None: return false;
+    case Check::Overflow: {
+      const std::optional<u64> left =
+          integer_constant(storage, instr.operands.head());
+      const std::optional<u64> right =
+          integer_constant(storage, instr.operands.head() + 1);
+      if (!left.has_value() || !right.has_value()) {
+        return true;
+      }
+      return overflows(instr.op, tag, *left, *right);
+    }
+    case Check::ShiftRange: {
+      const std::optional<u64> count = integer_constant(storage, entry.operand);
+      return !count.has_value() || *count >= integer_bits(tag);
+    }
+    case Check::MinOverOne: {
+      const std::optional<u64> divisor =
+          integer_constant(storage, entry.operand);
+      const std::optional<u64> dividend =
+          integer_constant(storage, instr.operands.head());
+      if (!divisor.has_value() || !dividend.has_value()) {
+        return true;
+      }
+      return comp::sign_extend(*divisor, tag) == -1 &&
+             comp::sign_extend(*dividend, tag) ==
+                 comp::sign_extend(signed_minimum(tag), tag);
+    }
+  }
+  return false;
+}
+
 }  // namespace
+
+bool overflows(ir::Opcode op, ir::TypeTag tag, u64 left, u64 right) {
+  switch (op) {
+    case Opcode::IntAdd: return comp::add_overflows(left, right, tag);
+    case Opcode::IntSub: return comp::sub_overflows(left, right, tag);
+    case Opcode::IntMul: return comp::mul_overflows(left, right, tag);
+    default: return false;
+  }
+}
+
+Checks checked_instructions(const ir::Storage& storage) {
+  const auto& instrs = storage.instrs();
+  Checks checks{.kinds = std::vector<Check>(instrs.size(), Check::None),
+                .raw = std::vector<bool>(instrs.size(), false)};
+  for (usize at = 0; at < instrs.size(); ++at) {
+    const ir::Instruction& instr =
+        instrs[ir::InstructionIdx{static_cast<u32>(at)}];
+    const Entry entry = checked_entry(storage, instr);
+    if (!aborts(storage, instr, entry)) {
+      continue;
+    }
+    checks.kinds[at] = entry.kind;
+    // The check reads the instruction's own second operand unless the
+    // entry names another: the definition lowering left behind is what
+    // makes the check about the value the source wrote.
+    if (entry.kind == Check::Overflow ||
+        entry.operand == instr.operands.head() + 1) {
+      continue;
+    }
+    const ir::Operand& shaped = storage.operands()[instr.operands.head() + 1];
+    if (!shaped.is<ir::RegisterIdx>()) {
+      continue;
+    }
+    const ir::InstructionIdx def =
+        storage.registers()[shaped.as_register()].def_idx;
+    if (def.is_valid()) {
+      checks.raw[def.idx] = true;
+    }
+  }
+  return checks;
+}
 
 Overlay build(const ir::Storage& storage,
               bool overflow_checks,
@@ -127,25 +243,7 @@ Overlay build(const ir::Storage& storage,
   for (usize at = 0; at < instrs.size(); ++at) {
     const ir::Instruction& instr =
         instrs[ir::InstructionIdx{static_cast<u32>(at)}];
-    Entry entry;
-    switch (instr.op) {
-      case Opcode::IntAdd:
-      case Opcode::IntSub:
-      case Opcode::IntMul: entry.kind = Check::Overflow; break;
-      case Opcode::ShiftLeft:
-      case Opcode::ArithmeticShiftRight:
-      case Opcode::LogicalShiftRight:
-        entry.kind = Check::ShiftRange;
-        entry.operand = raw_shift_count(storage, instr);
-        break;
-      case Opcode::IntDiv:
-        if (ir::is_signed_integer_type(first_operand_tag(storage, instr))) {
-          entry.kind = Check::MinOverOne;
-          entry.operand = raw_divisor(storage, instr);
-        }
-        break;
-      default: break;
-    }
+    Entry entry = checked_entry(storage, instr);
     if (entry.kind == Check::None) {
       continue;
     }

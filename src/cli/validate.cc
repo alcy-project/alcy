@@ -32,6 +32,10 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
       path::has_source_extension(config.input)) {
     return base::make_err(ConfigError::RunSingleFile);
   }
+  if (config.subcommand == Subcommand::Fmt && config.fmt_stdin &&
+      !config.fmt_files.empty()) {
+    return base::make_err(ConfigError::FmtStdinWithFiles);
+  }
   if (config.subcommand == Subcommand::Compile) {
     if (config.stdin_source && !config.input.empty()) {
       return base::make_err(ConfigError::CompileInputWithStdin);
@@ -86,6 +90,8 @@ std::string describe_config_error(ConfigError error, i18n::Language language) {
       return i18n::format<Key::CliJsonOnlyForResultVerbs>(language);
     case ConfigError::ReleaseWithProfile:
       return i18n::format<Key::CliReleaseWithProfile>(language);
+    case ConfigError::FmtStdinWithFiles:
+      return i18n::format<Key::CliFmtStdinTakesNoFiles>(language);
   }
   return i18n::format<Key::CliInvalidConfiguration>(language);
 }

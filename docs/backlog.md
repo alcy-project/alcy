@@ -3,21 +3,6 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
-- [ ] The return-escape rule exempts a loan by its root's type tag: a
-  `str`-typed root is a view, so a loan rooted at one is taken to ride
-  the buffer the view reads. The tag cannot tell that loan from one a
-  `&u` spelling creates on the view's own slot, so `fn leak() -> &str {
-  u := "abc"; ret &u }` compiles and hands the frame's two words back -
-  main refuses it with EF003, and the exemption landed with the
-  str-view loans (`ddeb3e40`) because the std's own bodies rebuild a
-  local `str` from a parameter and hand it back. The provenance the
-  rule needs - whether the loan names the buffer the view reads or the
-  view's own slot - is what the store/load chain through the local's
-  alloca does not carry; the two shapes a fix takes are a loan born at
-  a borrow of the slot refused at the return, or the view's buffer
-  provenance carried through the copy. `ret &GREETING` for a `str`
-  const is the same hole through the const temporary.
-
 - [ ] A suite's manifest is read once per suite edge, not once per
   closure: the staged-dependency table keys directories that loaded as
   packages, and the suite root - which loads no package - is not in
@@ -33,22 +18,6 @@ replaced. The foundations are in `roadmap.md`.
   in another, asserting the JSON `cache` field, would name the
   failure.
 
-- [ ] A reference stored into a longer-lived place outlives its
-  referent: `mut r: &i32 := &0; { n := 5; r = &n; } *r` compiles, and
-  so does the same store through a struct field or an `if` arm, which
-  leaves `*r` reading storage the scope already ended.
-  `docs/spec/deferred.md` leaves the outlives constraints between
-  regions to the region-annotated captures work, so the check wants that
-  relation rather than a rule about one instruction; the case is here so
-  that work starts from a reproducer.
-
-- [ ] An unreachable match arm is not reported: two arms with the same
-  literal pattern keep the first and the later one can never run, while
-  the compiler does warn about a statement after `ret` (WD003). The
-  complete check is pattern overlap - ranges, or-patterns, enum shapes -
-  and wants a decision on whether the duplicate is a warning or an
-  error; a guarded arm must not count as covering a later unguarded one.
-
 - [ ] Float `**` is refused while the integer one is repeated
   squaring: a fractional exponent needs `pow`, and the direct-wasm
   target imports no libm and has no instruction for it, so admitting
@@ -57,30 +26,13 @@ replaced. The foundations are in `roadmap.md`.
   exp/ln pair the std owns or a wasm import the freestanding target
   agrees to carry.
 
-- [ ] The exponent form's mantissa is reached by multiplying the
-  magnitude by ten or a tenth per step, so its low places are the
-  accumulated rounding, not the value's: `{:.17f}` of `f64::MAX` prints
-  `1.79769313486234683e308` where the value rounds to
-  `1.79769313486231571e308`, about thirteen good places out of the
-  seventeen asked for. A single scaled multiplication per step would
-  bound the error to one rounding, and the exact answer wants a power of
-  ten table or the scaled long division the fraction digits use.
-
 - [ ] Moving an element out of an owned array, which the refusal above
   stands in for: the drop walk's paths name fields and tuple slots, so
   the pass needs an element step that ends the elements the move left
   behind. A value moved out of a temporary array (`f().a[0]`) is the
-  same shape one level out.
-
-- [ ] Negative comp-arg cases for the loosened predicates: a runtime
-  value inside a match arm or a block (`double(match runtime_val …)`,
-  `double({ y := runtime; y })`) must still be refused, the guard
-  check a match now performs wants its own pin, and a generic caller's
-  other-instantiation variant record wants one case proving the
-  predicate's miss stays a compile error. The spelling and the
-  evaluation rules are in `docs/spec/comp.md`; the predicate lives in
-  `src/analyzer/comp_evaluator.cc` with the interface in
-  `comp_evaluator.h`.
+  same shape one level out. The refusal reports on its own: it ends
+  lowering for the refused expression, so a projection through the
+  binding taken from it stays silent (`err-move-out-of-element`).
 
 - [ ] The compiler's stack on a small-stack host: compiling to an
   object needs most of 64 KiB even natively, so the wasm test binary
@@ -102,13 +54,15 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] The IR resolves its semantic operations in place, step by step
   (the multi-level direction, MLIR-like without rebuilds): a construct
   whose meaning needs more than its types waits for the pass that
-  knows them - enum projections and `memcpy` alignment for the
-  backend, dispatch and drops for the specialization pass - and later
-  passes patch what they resolve instead of rebuilding the IR.
-  ADR-0079's landing started the boundary informally; generalize it,
-  and decide whether the borrow pass moves to the semantic side and
-  whether fine-grained in-place patching needs more than
-  `take_state` + `StorageBuilder`, when the profile asks.
+  knows them - dispatch and drops for the specialization pass - and
+  later passes patch what they resolve instead of rebuilding the IR.
+  Enum projections and a copy's alignment already resolve at emission;
+  that is the boundary's first shape. The decision
+  (`docs/adr/0079-a-generic-item-crosses-as-its-checked-body.md`)
+  started the boundary informally. Generalize it, and decide whether
+  the borrow pass moves to the semantic side and whether fine-grained
+  in-place patching needs more than `take_state` + `StorageBuilder`,
+  when the profile asks.
 
 - [ ] The generic boundary in a summary: a `needs_body` row is
   omitted, so a dependent that names a generic item reads "Unresolved
@@ -164,16 +118,14 @@ replaced. The foundations are in `roadmap.md`.
   the checks an earlier one dominates, and the `Switch` opcode stays
   unemitted for match chains.
 
-- [ ] Index the side tables the proportionality work left behind. Most
-  landed (ADR-0046); the tail is `expr_types` in both readers, the
-  per-module closure, closure-fn, and indirect-call tables,
-  `instantiate_fn`'s instance scan, `fn_args_for` and `closure_fn_index`,
-  and the module statics. `Lowerer::expr_type` scans backward ("last
-  entry wins") while `CompEvaluator::expr_type_in` scans forward ("first
-  wins"), so the readers can disagree on a duplicate key, and
-  `MAX_FN_ENTRIES = 8192` reports `ED013` at the call that spends the
-  last slot now, rather than failing at an unspecified internal span;
-  raising the budget itself waits for the indexing.
+- [ ] Raise the lowering's function budget. `MAX_FN_ENTRIES` caps the
+  functions one package may lower at 8192, and a package that needs more
+  is refused with `ED013` where the last slot is spent. Nothing
+  measures what a larger number would cost: the summary walks every
+  entry once, and the per-function and per-instantiation caches are
+  package-sized, so the cap moves on a measurement rather than a guess.
+  The side tables that made the scan-based readers expensive are indexed
+  now, which is the part the proportionality work (ADR-0046) closed.
 
 - [ ] Borrow-pass scratch sized by the program, not the function: the
   arrays are allocated at package size and each function clears only the
@@ -188,14 +140,17 @@ replaced. The foundations are in `roadmap.md`.
   through it is the borrow checker's question rather than the move
   walk's.
 
-- [ ] The formatter's fixed-point digits are exact only to about
-  sixteen places: `{:.Nf}` takes each digit by multiplying the fraction
-  by ten in `f64`, so the error compounds and the seventeenth place is
-  wrong (`{:.17f}` of `0.1` prints `0.10000000000000000` where half-up
-  rounding of the exact value is `0.10000000000000001`; `1/3` prints
-  `0.33333333333333330` against `0.33333333333333331`). An exact
-  conversion over the mantissa, a scaled long division, is the fix; the
-  spec's cap of 17 places stands.
+- [ ] The exponent form's mantissa is exact to fifteen significant
+  digits: the fixed form takes every digit from an exact conversion,
+  while the exponent form scales the magnitude by a power of ten the
+  table holds and each product of that scale rounds, so the sixteenth
+  digit carries to within a unit and the seventeenth to within a few
+  ulp (`{:.16f}` of `1.4e-323` is exact, `{:.16f}` of
+  `5.1806537865363085e-318` prints `5.180653786536308e-318` against
+  `...309`, and `{:.17f}` of `5e-324` prints `4.94065645841246504e-324`
+  against `...544`). An exact mantissa wants an error-free product
+  carried beside the rounded one, a scaled long division; the spec's
+  floor of about sixteen significant digits stands meanwhile.
 
 - [ ] The direct-wasm stack budget: a frame past the reserve (the
   shadow stack's base) panics with "stack overflow", which is a
@@ -304,27 +259,12 @@ replaced. The foundations are in `roadmap.md`.
   the member's package, with that module as the root of the analysis
   rather than a root package of its own.
 
-- [ ] `f64::parse` converts the integer part exactly and still divides a
-  fraction below one in f64, so a numerator past 2^53 rounds twice:
-  `"0.9876543210987654321".parse_f64()` answers 0.98765432109876550
-  where the literal `0.9876543210987654321` answers
-  0.98765432109876539, one step apart, and `"0.3333333333333333333"`
-  and `"0.6666666666666666667"` are the same shape. An integral value
-  is exact now (`"9007199254740993.0"` answers 2^53), so the hole is
-  the fraction whose numerator passes 2^53 with no factor of ten to
-  cancel; closing it wants a rounding decision over more than the u64
-  numerator, and the language has no wider word.
-
-- [ ] A request the allocator cannot meet is a panic in an ordinary
-  build and a sanitizer report in an instrumented one:
-  `Vec::<u8>::with_capacity(18446744073709551615u64)` prints `panic:
-  allocation failed` and exits 134, while the same program under the
-  address sanitizer stops inside `posix_memalign` with `requested
-  allocation size ... exceeds maximum supported size` before `alcy_alloc`
-  answers, so the instrumented gate cannot carry a case for it.
-  `doubled_capacity` refuses the doubling that would not fit a `usize`;
-  a guard over the byte count before the host allocator is what would
-  let the two builds say the same thing.
+- [ ] `f64::parse` rounds correctly only while the digits fit one
+  `u64` numerator, so `"18446744073709551616.0"` and
+  `"0.00000000000000000001"` are refused rather than read. Reading
+  them wants the conversion to run over two words or more, and the
+  language has no arithmetic wider than `u64` yet (`u128` is
+  deferred).
 
 - [ ] A value that carries a container's buffer loan cannot leave the
   function that owns the container: `fn take() -> Option<String> { mut v
@@ -340,17 +280,6 @@ replaced. The foundations are in `roadmap.md`.
   ADR-0012 records as the work that replaces this.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
-
-- [ ] A reference to a container's element carries no loan: `r := &v[0]`
-  held across a `v.push` is accepted, the growth frees the buffer the
-  reference reads through, and the address sanitizer reports the
-  use-after-free the checker missed. `index_mut` is a spec method and a
-  summary carries no spec implementation, so the callee's return-region
-  never reaches the caller and the receiver's loan dies at the call;
-  the borrow on the returned reference names no place either, the
-  element sitting behind the container's raw buffer pointer. The
-  runtime half is covered now - the instrumented gate reports the read
-  - and the checker's half waits on the summary work above.
 
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the
@@ -368,3 +297,10 @@ replaced. The foundations are in `roadmap.md`.
   (de)serialization (ADR-0129, ADR-0130). Its record lands with the
   design, after expansion; the floor is read-only and comp-only, with
   no runtime type information and no generative types.
+
+- [ ] `fmt` with no file argument formats the package in the current
+  directory, and only its predicate says so: `check_e2e.py` appends a
+  positional to every case, and a unit test would have to move the test
+  process into the package, which formats the repository when the run
+  happens under a manifest. A runner option that sets a case's working
+  directory pins it the way the other package verbs are pinned.

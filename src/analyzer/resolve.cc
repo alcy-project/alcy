@@ -440,14 +440,13 @@ class Resolver {
   // every non-prelude module. Locals and explicit uses win silently;
   // the imports never re-export (is_pub false).
   void inject_prelude() {
-    // Every module's own declarations by name, and how many imports each
-    // wrote itself. The injection below asks both questions of every module
-    // for every name the prelude offers, and answering them by scanning items
+    // Every name a module already answers to: its own declarations, and the
+    // imports it wrote itself. The injection below asks that of every module
+    // for every name the prelude offers, and answering it by scanning items
     // and a list that grows with the injection is what made the prelude cost
     // the square of its own surface.
     std::vector<std::unordered_set<NameKey, NameKeyHash>> own_names(
         modules.size());
-    std::vector<u32> explicit_imports(modules.size(), 0);
     for (u32 m = 0; m < static_cast<u32>(modules.size()); ++m) {
       for (const NameEntry& entry : local_types[m]) {
         own_names[m].insert(NameKey{entry.name, Namespace::Type});
@@ -458,7 +457,9 @@ class Resolver {
       for (const NameEntry& entry : local_modules[m]) {
         own_names[m].insert(NameKey{entry.name, Namespace::Module});
       }
-      explicit_imports[m] = static_cast<u32>(module_imports[m].size());
+      for (const Import& import : module_imports[m]) {
+        own_names[m].insert(NameKey{import.name, import.ns});
+      }
     }
     std::unordered_set<NameKey, NameKeyHash> injected;
     for (u32 prelude : prelude_modules) {
@@ -487,8 +488,7 @@ class Resolver {
           if (!declared) {
             continue;
           }
-          inject_name(name, ns, prelude, name, prelude, own_names,
-                      explicit_imports, injected);
+          inject_name(name, ns, prelude, name, prelude, own_names, injected);
         }
       }
       // A facade re-exports what its siblings declare, so the resolved
@@ -499,8 +499,7 @@ class Resolver {
           continue;
         }
         inject_name(reexport.name, reexport.ns, reexport.target_module,
-                    reexport.member, prelude, own_names, explicit_imports,
-                    injected);
+                    reexport.member, prelude, own_names, injected);
       }
     }
   }
@@ -515,7 +514,6 @@ class Resolver {
       std::string_view member,
       u32 skip,
       const std::vector<std::unordered_set<NameKey, NameKeyHash>>& own_names,
-      const std::vector<u32>& explicit_imports,
       std::unordered_set<NameKey, NameKeyHash>& injected) {
     // A name is injected once: the first facade to offer it wins, which is
     // what every module finding the import already there decided too.
@@ -527,20 +525,8 @@ class Resolver {
       if (m == skip || own_names[m].contains(key)) {
         continue;
       }
-      // Only the imports the module wrote itself can be in the way; the ones
-      // after that prefix are this injection's own, and the name is new here.
-      bool imported = false;
-      for (u32 i = 0; i < explicit_imports[m]; ++i) {
-        const Import& prior = module_imports[m][i];
-        if (prior.ns == ns && prior.name == name) {
-          imported = true;
-          break;
-        }
-      }
-      if (!imported) {
-        module_imports[m].push_back(
-            Import{name, ns, target, member, false, /*injected=*/true});
-      }
+      module_imports[m].push_back(
+          Import{name, ns, target, member, false, /*injected=*/true});
     }
   }
 

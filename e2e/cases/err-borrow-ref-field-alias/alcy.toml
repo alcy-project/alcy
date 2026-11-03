@@ -1,0 +1,11 @@
+[package]
+name = "reffalias"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main", "helper"]
+
+[[bin]]
+name = "reffalias"
+path = "main.al"

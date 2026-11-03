@@ -4,6 +4,7 @@
 #include "borrow/borrow.h"
 
 #include <algorithm>
+#include <span>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -51,10 +52,13 @@ constexpr u32 ELEMENT_STEP = 0xFFFFFFFEu;
 
 // A place: a root register (alloca or block parameter) plus a path.
 // Moves, borrows, and revives name overlapping places: one path prefixes
-// the other (or they are equal).
+// the other (or they are equal). The path is a window on the checker's
+// arena, which outlives every place a function builds: naming one copies
+// three words, and the steps are appended to the arena once.
 struct Place {
   u32 root = NO_ROOT;
-  std::vector<u32> path;
+  u32 head = 0;
+  u32 len = 0;
 };
 
 // Whether a value of the type can carry a loan: references and
@@ -121,14 +125,13 @@ bool steps_match(u32 a, u32 b) {
   return a == b;
 }
 
-bool overlaps(const Place& a, const Place& b) {
+bool overlaps(const Place& a, const Place& b, std::span<const u32> steps) {
   if (a.root != b.root) {
     return false;
   }
-  const usize common =
-      a.path.size() < b.path.size() ? a.path.size() : b.path.size();
-  for (usize i = 0; i < common; ++i) {
-    if (!steps_match(a.path[i], b.path[i])) {
+  const u32 common = a.len < b.len ? a.len : b.len;
+  for (u32 i = 0; i < common; ++i) {
+    if (!steps_match(steps[a.head + i], steps[b.head + i])) {
       return false;
     }
   }
@@ -146,6 +149,16 @@ struct Loan {
   // index so return-reachability becomes a summary. Never conflicts;
   // reification propagates the caller's own loans instead.
   u32 param = NO_ROOT;
+  // The loan this one is a reborrow of. A copy of a reference stands
+  // behind the loan it was read out of, which is what keeps the copy
+  // from conflicting with that loan. A loan only names a parent born
+  // before it, so the chain reaches NO_ROOT in bounded steps.
+  u32 parent = NO_ROOT;
+  // The loan stands for a region reached through a parameter, so its
+  // place records what the caller passed rather than a place this
+  // function may claim. Everything inside that place is still the
+  // receiver's to use.
+  bool param_derived = false;
 };
 
 // One way a returned reference reaches a parameter: which parameter,
@@ -157,6 +170,54 @@ struct SummaryEntry {
   u32 param = NO_ROOT;
   std::vector<u32> path;
   bool exclusive = false;
+};
+
+// A register's loan set: a window on the checker's arena. Naming a row copies
+// another row's window instead of its loans, and appending to a shared window
+// first moves it to the arena's end, so a function's flow costs an append
+// rather than a heap block per register it names.
+struct FlowRow {
+  std::vector<u32>* arena = nullptr;
+  u32 head = 0;
+  u32 len = 0;
+
+  // A window moves as the arena grows, so the iterator reads through the row
+  // rather than caching the arena's data.
+  class Iter {
+   public:
+    Iter(const FlowRow& row, u32 pos) : row_(row), pos_(pos) {}
+    u32 operator*() const { return (*row_.arena)[row_.head + pos_]; }
+    Iter& operator++() {
+      ++pos_;
+      return *this;
+    }
+    bool operator!=(const Iter& other) const { return pos_ != other.pos_; }
+
+   private:
+    const FlowRow& row_;
+    u32 pos_;
+  };
+
+  Iter begin() const { return Iter(*this, 0); }
+  Iter end() const { return Iter(*this, len); }
+  void clear() { len = 0; }
+
+  void push_back(u32 loan) {
+    std::vector<u32>& steps = *arena;
+    if (head + len == steps.size()) {
+      steps.push_back(loan);
+      ++len;
+      return;
+    }
+    const u32 moved = static_cast<u32>(steps.size());
+    steps.resize(moved + len + 1);
+    for (u32 i = 0; i < len; ++i) {
+      steps[moved + i] = steps[head + i];
+    }
+    steps[moved + len] = loan;
+    head = moved;
+    ++len;
+  }
 };
 
 class Checker {
@@ -183,8 +244,15 @@ class Checker {
 
   // Per-function scratch, indexed by global register.
   std::vector<u32> home;
-  std::vector<std::vector<u32>> path;
-  std::vector<std::vector<u32>> flow;
+  // A place path is a handful of steps, and forward names one per
+  // instruction that carries a place, so a row is a window on a shared arena
+  // rather than a vector of its own: naming a path appends its steps and the
+  // row holds where they start, which keeps the copy off the heap.
+  std::vector<u32> path_steps_;
+  std::vector<u32> path_head;
+  std::vector<u32> path_len;
+  std::vector<u32> flow_steps;
+  std::vector<FlowRow> flow;
   std::vector<Loan> loans;
   // Two-phase borrows: an exclusive receiver whose only use is the call
   // it serves. The borrow is a reservation until the call activates it,
@@ -207,9 +275,22 @@ class Checker {
   // used, so the capacity one sweep needed is the capacity the next reuses.
   std::vector<u32> live_in_scratch_;
   std::vector<u32> live_out_scratch_;
+  // The loans one block's live-out set holds, marked by stamp. Asking
+  // whether a loan is live on exit by scanning that set made the sweep's
+  // inner loop as long as the set, once per loan of the function.
+  std::vector<u32> live_mark;
+  u32 live_stamp = 0;
   std::vector<ir::BlockIdx> succs_scratch_;
   std::vector<ir::BlockIdx> stack_scratch_;
   std::vector<ir::BlockIdx> post_scratch_;
+  // The block order the check pass walks, and the state it reads a block
+  // with. Both are rebuilt for every function, and both keep the capacity
+  // the widest function needed rather than returning it to the heap.
+  std::vector<ir::BlockIdx> block_order_;
+  std::vector<Place> state_scratch_;
+  // The two states the may-move fixpoint exchanges with its rows.
+  std::vector<Place> move_in_scratch_;
+  std::vector<Place> move_out_scratch_;
   std::vector<u32> use_count_scratch_;
   std::vector<u8> receiver_call_scratch_;
   // Entry-block allocas holding a block parameter, paired with that
@@ -232,17 +313,130 @@ class Checker {
   // a range, so a loan live on one branch is not live on its siblings.
   std::vector<std::vector<u32>> live_in;
   std::vector<std::vector<u32>> live_out;
-  std::vector<std::vector<u32>> loan_last_use;
+  // The last-use rows are a few words per block, so a vector per block would
+  // spend an allocation on every block to hold them. They are held flat
+  // instead: block b's row is loan_stride words at b * loan_stride.
+  std::vector<u32> loan_last_use;
+  u32 loan_stride = 0;
   // CFG shape for the two fixpoints, and the first and last instruction of
   // each block. Indexed by global block like the rows above, and filled by
   // build_preds and compute_liveness for one function at a time.
   std::vector<std::vector<ir::BlockIdx>> preds;
+  // Successors of every block of the function being fixed, held flat: block
+  // b's row is succ_len[b] entries at succ_head[b]. A terminator does not
+  // change while its function is checked, so each sweep of the backward
+  // fixpoint reads the rows instead of re-deriving the targets.
+  std::vector<ir::BlockIdx> succ_flat;
+  std::vector<u32> succ_head;
+  std::vector<u32> succ_len;
   std::vector<u32> block_first;
   std::vector<u32> block_last;
   // Visit marks for the block walk, stamped per call so the table is sized
   // once and never cleared.
   std::vector<u32> walk_mark;
   u32 walk_stamp = 0;
+  // The range of registers each function names, so that clearing one walks
+  // its registers rather than its instructions.
+  std::vector<u32> fn_reg_lo;
+  std::vector<u32> fn_reg_hi;
+  // Whether a type carries a reference is a property of the type, and the
+  // module's types do not change while it is checked, so the walk over the
+  // shape of a type runs once and every load or indirect result that asks
+  // reads the answer. 0 is unanswered, 1 says no, 2 says yes.
+  std::vector<u8> carry_memo_;
+
+  std::span<const u32> steps_of(u32 reg) const {
+    return std::span<const u32>(path_steps_.data() + path_head[reg],
+                                path_len[reg]);
+  }
+
+  std::span<const u32> steps_of(const Place& place) const {
+    return std::span<const u32>(path_steps_.data() + place.head, place.len);
+  }
+
+  // Names a window the checker already holds for a register, without copying
+  // its steps: both rows read the same steps from then on.
+  void set_row(u32 reg, const Place& place) {
+    path_head[reg] = place.head;
+    path_len[reg] = place.len;
+  }
+
+  // A place whose window is another place's extended by the steps a summary
+  // recorded.
+  Place extend_place(const Place& base, std::span<const u32> steps) {
+    const u32 head = static_cast<u32>(path_steps_.size());
+    path_steps_.resize(head + base.len);
+    for (u32 i = 0; i < base.len; ++i) {
+      path_steps_[head + i] = path_steps_[base.head + i];
+    }
+    path_steps_.insert(path_steps_.end(), steps.begin(), steps.end());
+    Place place;
+    place.root = base.root;
+    place.head = head;
+    place.len = base.len + static_cast<u32>(steps.size());
+    return place;
+  }
+
+  void clear_path(u32 reg) { path_len[reg] = 0; }
+
+  void set_step(u32 reg, u32 step) {
+    path_head[reg] = static_cast<u32>(path_steps_.size());
+    path_len[reg] = 1;
+    path_steps_.push_back(step);
+  }
+
+  // Naming a path the arena already holds: the steps are copied by index, so
+  // growing the arena cannot move the source out from under the copy.
+  void copy_path(u32 dst, u32 src) {
+    if (dst == src) {
+      return;
+    }
+    const u32 head = path_head[src];
+    const u32 len = path_len[src];
+    const u32 new_head = static_cast<u32>(path_steps_.size());
+    path_steps_.resize(new_head + len);
+    for (u32 i = 0; i < len; ++i) {
+      path_steps_[new_head + i] = path_steps_[head + i];
+    }
+    path_head[dst] = new_head;
+    path_len[dst] = len;
+  }
+
+  // Naming a path held outside the arena: a loan's place, or one a summary
+  // projection wrote.
+  void set_path(u32 dst, std::span<const u32> steps) {
+    path_head[dst] = static_cast<u32>(path_steps_.size());
+    path_len[dst] = static_cast<u32>(steps.size());
+    path_steps_.insert(path_steps_.end(), steps.begin(), steps.end());
+  }
+
+  void push_path_step(u32 reg, u32 step) {
+    const u32 head = path_head[reg];
+    const u32 len = path_len[reg];
+    // A row still at the arena's end grows in place; any other has its steps
+    // written again behind the new one.
+    if (static_cast<usize>(head) + len == path_steps_.size()) {
+      path_steps_.push_back(step);
+      path_len[reg] = len + 1;
+      return;
+    }
+    const u32 new_head = static_cast<u32>(path_steps_.size());
+    path_steps_.resize(new_head + len + 1);
+    for (u32 i = 0; i < len; ++i) {
+      path_steps_[new_head + i] = path_steps_[head + i];
+    }
+    path_steps_[new_head + len] = step;
+    path_head[reg] = new_head;
+    path_len[reg] = len + 1;
+  }
+
+  bool carries_reference(ir::TypeIdx type) {
+    u8& memo = carry_memo_[type.idx];
+    if (memo == 0) {
+      memo = value_may_carry(storage, type) ? 2 : 1;
+    }
+    return memo == 2;
+  }
 
   const ir::Instruction& instr_at(ir::InstructionIdx idx) const {
     return storage.instrs()[idx];
@@ -293,7 +487,8 @@ class Checker {
       return false;
     }
     place.root = home[reg];
-    place.path = path[reg];
+    place.head = path_head[reg];
+    place.len = path_len[reg];
     return true;
   }
 
@@ -313,25 +508,39 @@ class Checker {
     }
   }
 
-  // Names each borrowed capture's place as the referent behind its
-  // pointer: the environment holds a reference, so the name stands
-  // for what the reference points at, with the dereference in the
-  // path. That is what lets a move through the capture be told from
-  // a move of an owned value. A moved Copy capture is owned storage
-  // and needs none of this.
-  // The captured addresses, gathered once when the scratch is sized. Seeding
-  // them meant walking every name the package gave an address, once per
-  // function of every sweep.
-  void seed_capture_places() {
+  // Names a borrowed capture's place as the referent behind its pointer:
+  // the environment holds a reference, so the name stands for what the
+  // reference points at, with the dereference in the path. That is what lets
+  // a move through the capture be told from a move of an owned value. A moved
+  // Copy capture is owned storage and needs none of this.
+  void seed_capture(u32 addr) {
+    home[addr] = addr;
+    set_step(addr, DEREF_STEP);
+  }
+
+  // Seeds every capture once, when the scratch is sized; the seeding below
+  // covers the ones reset_function clears.
+  void seed_all_captures() {
     for (u32 addr : captures_) {
-      home[addr] = addr;
-      path[addr] = {DEREF_STEP};
+      seed_capture(addr);
     }
   }
 
-  void forward(const ir::Function& fn) {
+  // Re-seeds the captures inside a function's register range, which
+  // reset_function cleared with the rest of it. Seeding every capture of the
+  // package in every function made the sweep quadratic in the package's
+  // closure count.
+  void seed_capture_places(u32 reg_lo, u32 reg_hi) {
+    auto it = std::lower_bound(captures_.begin(), captures_.end(), reg_lo);
+    for (; it != captures_.end() && *it < reg_hi; ++it) {
+      seed_capture(*it);
+    }
+  }
+
+  void forward(ir::FunctionIdx fidx) {
+    const ir::Function& fn = storage.functions()[fidx];
     seed_param_loans(fn);
-    seed_capture_places();
+    seed_capture_places(fn_reg_lo[fidx.idx], fn_reg_hi[fidx.idx]);
     // Every alloca names its own storage, whichever block holds it.
     // A block is not visited in execution order, so a use in an early
     // block would otherwise miss an alloca defined in a later one.
@@ -402,8 +611,8 @@ class Checker {
         // `d := v.pop()` on a `Vec<Point>` must not read as a borrow
         // of `v` that refuses the next `v.push`. The predicate is the
         // one an indirect call's result already tracks through.
-        const bool carries_reference = value_may_carry(storage, loaded_ty);
-        if (carries_reference) {
+        const bool loaded_carries = carries_reference(loaded_ty);
+        if (loaded_carries) {
           flow[instr.dst.idx] = flow[addr];
         } else {
           flow[instr.dst.idx].clear();
@@ -423,25 +632,73 @@ class Checker {
           // so the first loan it carried is the referent; the rule
           // matrix cannot observe the difference, and a summary that
           // could say would remove the choice.
-          u32 referent = NO_ROOT;
-          std::vector<u32> referent_path;
+          Place referent;
           for (u32 loan : flow[instr.dst.idx]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
-              referent = loans[loan].place.root;
-              referent_path = loans[loan].place.path;
+              referent = loans[loan].place;
               break;
             }
           }
-          if (referent != NO_ROOT) {
-            home[instr.dst.idx] = referent;
-            path[instr.dst.idx] = std::move(referent_path);
+          // The field a read goes through is part of the place it names:
+          // without it every field of one struct is the same place, so
+          // two reads of different fields report as aliasing.
+          const bool projected =
+              addr < path_len.size() && path_len[addr] > referent.len;
+          if (projected) {
+            referent.head = path_head[addr];
+            referent.len = path_len[addr];
+          }
+          // Only a unique reference can be written through, so only its
+          // copy needs a loan of its own: a shared copy cannot change
+          // what any other loan reads.
+          const bool own_loan = projected && loaded == ir::TypeTag::MutRef;
+          if (referent.root != NO_ROOT) {
+            home[instr.dst.idx] = referent.root;
+            set_row(instr.dst.idx, referent);
           } else if (home[addr] != NO_ROOT) {
             home[instr.dst.idx] = home[addr];
-            path[instr.dst.idx] = path[addr];
+            copy_path(instr.dst.idx, addr);
           } else {
             break;
           }
-          path[instr.dst.idx].push_back(DEREF_STEP);
+          if (own_loan) {
+            // The copy is charged a loan of its own on the referent
+            // rather than inheriting the one it was read out of.
+            // Inheriting leaves a write through the field and a read
+            // through the copy naming one loan, so the write is
+            // authorised by it and a shared borrow of the buffer breaks
+            // with nothing to report.
+            u32 inherited = NO_ROOT;
+            for (u32 loan : flow[addr]) {
+              if (loan < loans.size() && loans[loan].place.root != NO_ROOT &&
+                  loans[loan].birth < pos) {
+                inherited = loan;
+                break;
+              }
+            }
+
+            Place into;
+            into.root = home[instr.dst.idx];
+            into.head = path_head[instr.dst.idx];
+            into.len = path_len[instr.dst.idx];
+            Loan fresh;
+            fresh.param_derived = root_is_param(into.root);
+            fresh.reg = instr.dst.idx;
+            fresh.place = into;
+            // The loan names the place the copy reads, which is what
+            // another write must be checked against. It is not
+            // authority to write: the reference's own type is, and a
+            // copy that is unique still reaches the caller as a loan
+            // of the place rather than as a borrow of the parameter.
+            fresh.exclusive = false;
+            fresh.birth = pos;
+            fresh.parent = inherited;
+            flow[instr.dst.idx].clear();
+            flow[instr.dst.idx].push_back(static_cast<u32>(loans.size()));
+            loans.push_back(fresh);
+          }
+
+          push_path_step(instr.dst.idx, DEREF_STEP);
         }
         break;
       }
@@ -498,12 +755,12 @@ class Checker {
         }
         if (home[src] != NO_ROOT) {
           home[instr.dst.idx] = home[src];
-          path[instr.dst.idx] = path[src];
+          copy_path(instr.dst.idx, src);
         } else {
           for (u32 loan : flow[src]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
               home[instr.dst.idx] = loans[loan].place.root;
-              path[instr.dst.idx] = loans[loan].place.path;
+              set_row(instr.dst.idx, loans[loan].place);
               break;
             }
           }
@@ -520,7 +777,7 @@ class Checker {
           break;
         }
         home[instr.dst.idx] = home[base];
-        path[instr.dst.idx] = path[base];
+        copy_path(instr.dst.idx, base);
         for (u32 offset = 2; offset < instr.operands.size(); ++offset) {
           const ir::Operand& index =
               storage.operands()[instr.operands.head() + offset];
@@ -528,7 +785,8 @@ class Checker {
             continue;
           }
           const ir::Immutable& imm = storage.immutables()[index.as_immutable()];
-          path[instr.dst.idx].push_back(
+          push_path_step(
+              instr.dst.idx,
               static_cast<u32>(imm.as_u64_integer(tag_of(imm.type))));
         }
         flow[instr.dst.idx] = flow[base];
@@ -548,7 +806,7 @@ class Checker {
           break;
         }
         home[instr.dst.idx] = home[base];
-        path[instr.dst.idx] = path[base];
+        copy_path(instr.dst.idx, base);
         for (u32 offset = 1; offset < instr.operands.size(); ++offset) {
           const ir::Operand& index =
               storage.operands()[instr.operands.head() + offset];
@@ -556,7 +814,8 @@ class Checker {
             continue;
           }
           const ir::Immutable& imm = storage.immutables()[index.as_immutable()];
-          path[instr.dst.idx].push_back(
+          push_path_step(
+              instr.dst.idx,
               static_cast<u32>(imm.as_u64_integer(tag_of(imm.type))));
         }
         flow[instr.dst.idx] = flow[base];
@@ -584,12 +843,12 @@ class Checker {
           break;
         }
         home[instr.dst.idx] = home[src];
-        path[instr.dst.idx] = path[src];
+        copy_path(instr.dst.idx, src);
         if (instr.op == ir::Opcode::ElemOffset) {
           // The index is a runtime value, so it is a step that names no
           // field: any element of the buffer, which is what lets a store
           // to the buffer itself conflict with a loan into one element.
-          path[instr.dst.idx].push_back(ELEMENT_STEP);
+          push_path_step(instr.dst.idx, ELEMENT_STEP);
         }
         flow[instr.dst.idx] = flow[src];
         break;
@@ -625,14 +884,40 @@ class Checker {
           // the overlapping loans they are. The slot stands for the
           // view, not for the two words a copy of it owns, which is why
           // copying the view out is still a plain copy.
-          if (place.path.empty() && place.root < storage.registers().size() &&
+          // The loan this one is taken through: the closest enclosing
+          // exclusive loan on the address, or the first one there is.
+          // Recording it is what lets a reborrow be told apart from a
+          // second, competing borrow of the same place.
+          u32 parent = NO_ROOT;
+          for (u32 held : flow[place_reg]) {
+            if (held >= loans.size()) {
+              continue;
+            }
+            if (parent == NO_ROOT || loans[held].exclusive) {
+              parent = held;
+            }
+            if (loans[held].exclusive) {
+              break;
+            }
+          }
+          const auto mint = [&](Place named) {
+            Loan fresh;
+            fresh.param_derived = root_is_param(named.root);
+            fresh.reg = instr.dst.idx;
+            fresh.place = named;
+            fresh.exclusive = exclusive;
+            fresh.birth = pos;
+            fresh.parent = parent;
+            loans.push_back(fresh);
+          };
+          if (place.len == 0 && place.root < storage.registers().size() &&
               tag_of(storage.registers()[place.root].type) ==
                   ir::TypeTag::Str) {
             Place slot;
             slot.root = place.root;
-            loans.push_back({instr.dst.idx, slot, exclusive, pos});
+            mint(slot);
           }
-          loans.push_back({instr.dst.idx, place, exclusive, pos});
+          mint(place);
         }
         break;
       }
@@ -686,7 +971,7 @@ class Checker {
           if (callee.is<ir::RegisterIdx>()) {
             const ir::TypeIdx dst_type =
                 storage.registers()[instr.dst.idx].type;
-            if (value_may_carry(storage, dst_type)) {
+            if (carries_reference(dst_type)) {
               const bool result_exclusive =
                   storage.types()[dst_type.idx].tag == ir::TypeTag::MutRef;
               bool placed = false;
@@ -707,7 +992,7 @@ class Checker {
                       static_cast<u32>(loans.size() - 1));
                   if (!placed) {
                     home[instr.dst.idx] = loans[loan].place.root;
-                    path[instr.dst.idx] = loans[loan].place.path;
+                    set_row(instr.dst.idx, loans[loan].place);
                     placed = true;
                   }
                 }
@@ -748,12 +1033,16 @@ class Checker {
         // Project each entry onto its argument: the result carries a
         // loan on the argument's referent extended by the recorded
         // path, so a loan into one field does not cover the whole
-        // argument. An entry with an empty path keeps the argument's
-        // own loans below. A projected place is exclusive when the
-        // entry is or when the result itself is an exclusive
-        // reference: returning an exclusive reference derived from a
-        // shared one is already rejected where it is taken, so a
-        // well-formed callee never records it.
+        // argument. The projected loan stands behind the loan the
+        // argument carries, since the callee reached its place through
+        // that one, which is what keeps a caller's write through the
+        // result from being reported against the loan it reborrowed. An
+        // entry with an empty path keeps the argument's own loans below.
+        // A projected place is exclusive when the entry is or when the
+        // result itself is an exclusive reference: returning an
+        // exclusive reference derived from a shared one is already
+        // rejected where it is taken, so a well-formed callee never
+        // records it.
         struct Projected {
           u32 param = NO_ROOT;
           Place place;
@@ -772,24 +1061,22 @@ class Checker {
               arg.as_register().idx >= flow.size()) {
             continue;
           }
-          u32 referent = NO_ROOT;
-          std::vector<u32> referent_path;
+          Place referent;
+          u32 source = NO_ROOT;
           for (u32 loan : flow[arg.as_register().idx]) {
             if (loan < loans.size() && loans[loan].place.root != NO_ROOT) {
-              referent = loans[loan].place.root;
-              referent_path = loans[loan].place.path;
+              referent = loans[loan].place;
+              source = loan;
               break;
             }
           }
-          if (referent == NO_ROOT) {
+          if (referent.root == NO_ROOT) {
             continue;
           }
-          Place place{referent, referent_path};
-          for (u32 step : entry.path) {
-            place.path.push_back(step);
-          }
-          loans.push_back(
-              {instr.dst.idx, place, entry.exclusive || result_exclusive, pos});
+          const Place place = extend_place(referent, entry.path);
+          loans.push_back({instr.dst.idx, place,
+                           entry.exclusive || result_exclusive, pos, NO_ROOT,
+                           source});
           union_flow(instr.dst.idx, static_cast<u32>(loans.size() - 1));
           projected.push_back({entry.param, place});
         }
@@ -819,12 +1106,13 @@ class Checker {
                     proj.place.root != loans[loan].place.root) {
                   continue;
                 }
-                const std::vector<u32>& wide = loans[loan].place.path;
-                const std::vector<u32>& narrow = proj.place.path;
-                if (wide.size() < narrow.size()) {
+                const Place& wide = loans[loan].place;
+                const Place& narrow = proj.place;
+                if (wide.len < narrow.len) {
                   bool prefix = true;
-                  for (usize i = 0; i < wide.size(); ++i) {
-                    if (!steps_match(wide[i], narrow[i])) {
+                  for (u32 i = 0; i < wide.len; ++i) {
+                    if (!steps_match(path_steps_[wide.head + i],
+                                     path_steps_[narrow.head + i])) {
                       prefix = false;
                       break;
                     }
@@ -844,7 +1132,7 @@ class Checker {
         }
         if (!projected.empty() && instr.dst.idx < home.size()) {
           home[instr.dst.idx] = projected.front().place.root;
-          path[instr.dst.idx] = projected.front().place.path;
+          set_row(instr.dst.idx, projected.front().place);
         }
         break;
       }
@@ -866,6 +1154,8 @@ class Checker {
     // register carrying it, in the block that instruction is in.
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
+      u32* const row =
+          loan_last_use.data() + static_cast<usize>(bidx.idx) * loan_stride;
       for (ir::InstructionIdx iidx : block.instrs) {
         const ir::Instruction& instr = instr_at(iidx);
         for (u32 offset = 0; offset < instr.operands.size(); ++offset) {
@@ -879,26 +1169,17 @@ class Checker {
             continue;
           }
           for (u32 loan : flow[reg]) {
-            if (loan < loan_last_use[bidx.idx].size() &&
-                iidx.idx > loan_last_use[bidx.idx][loan]) {
-              loan_last_use[bidx.idx][loan] = iidx.idx;
+            if (loan < loans.size() && iidx.idx > row[loan]) {
+              row[loan] = iidx.idx;
             }
           }
         }
       }
     }
-    build_preds(fn, order);
-    auto add_loan = [](std::vector<u32>& set, u32 loan) {
-      for (u32 prior : set) {
-        if (prior == loan) {
-          return;
-        }
-      }
-      set.push_back(loan);
-    };
     // Backward to a fixed point: a block is live out wherever any
     // successor is live in, and live in wherever it is read on a path
-    // that reaches one of them.
+    // that reaches one of them. The CFG rows this reads are the ones
+    // build_preds filled before the may-move fixpoint, which runs first.
     for (ir::BlockIdx bidx : fn.blocks) {
       const ir::Block& block = storage.blocks()[bidx];
       if (block.instrs.empty()) {
@@ -915,11 +1196,21 @@ class Checker {
       bool changed = false;
       for (ir::BlockIdx bidx : order) {
         live_out_scratch_.clear();
-        succs_scratch_.clear();
-        successors(bidx, succs_scratch_);
-        for (ir::BlockIdx succ : succs_scratch_) {
+        if (++live_stamp == 0) {
+          std::fill(live_mark.begin(), live_mark.end(), 0);
+          live_stamp = 1;
+        }
+        const u32 stamp = live_stamp;
+        const u32 succ_begin = succ_head[bidx.idx];
+        const u32 succ_end = succ_begin + succ_len[bidx.idx];
+        for (u32 si = succ_begin; si < succ_end; ++si) {
+          const ir::BlockIdx succ = succ_flat[si];
           for (u32 loan : live_in[succ.idx]) {
-            add_loan(live_out_scratch_, loan);
+            if (live_mark[loan] == stamp) {
+              continue;
+            }
+            live_mark[loan] = stamp;
+            live_out_scratch_.push_back(loan);
           }
         }
         if (live_out_scratch_ != live_out[bidx.idx]) {
@@ -932,22 +1223,22 @@ class Checker {
         // exclusion is what stops a loan made in a loop body from
         // wrapping around the back edge and being live on the next
         // entry, where it would outlive the iteration that made it.
+        // The marks hold this block's live-out set, and index order keeps
+        // the set free of repeats.
         live_in_scratch_.clear();
+        const u32 first = block_first[bidx.idx];
+        const u32 last = block_last[bidx.idx];
+        const u32* const last_use =
+            loan_last_use.data() + static_cast<usize>(bidx.idx) * loan_stride;
         for (u32 loan = 0; loan < loans.size(); ++loan) {
           const u32 birth = loans[loan].birth;
-          if (birth >= block_first[bidx.idx] && birth <= block_last[bidx.idx]) {
+          if (birth >= first && birth <= last) {
             continue;
           }
-          bool live_here = loan_last_use[bidx.idx][loan] != 0;
-          for (u32 prior : live_out[bidx.idx]) {
-            if (prior == loan) {
-              live_here = true;
-              break;
-            }
+          if (last_use[loan] == 0 && live_mark[loan] != stamp) {
+            continue;
           }
-          if (live_here) {
-            add_loan(live_in_scratch_, loan);
-          }
+          live_in_scratch_.push_back(loan);
         }
         if (live_in_scratch_ != live_in[bidx.idx]) {
           live_in[bidx.idx] = live_in_scratch_;
@@ -961,6 +1252,109 @@ class Checker {
     DCHECK(false);
   }
 
+  // True when `inner` names a place strictly inside `outer`: the same
+  // root and a longer path that `outer` opens. A loan that is exclusive
+  // over `outer` holds every place inside it, so its holder is the one
+  // that decides what happens there.
+  bool nests_inside(const Place& outer, const Place& inner) const {
+    if (outer.root == NO_ROOT || outer.root != inner.root) {
+      return false;
+    }
+    if (outer.len >= inner.len) {
+      return false;
+    }
+    const std::span<const u32> prefix = steps_of(outer);
+    return std::equal(prefix.begin(), prefix.end(), steps_of(inner).begin());
+  }
+
+  // True when `root` is where a parameter's referent lives. The caller
+  // chose that place, so a loan naming it records what was passed
+  // rather than a place this function may claim.
+  bool root_is_param(u32 root) const {
+    for (const Loan& loan : loans) {
+      if (loan.param != NO_ROOT && loan.place.root == root) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // True when `inner` lies strictly inside a place a parameter names.
+  // A function cannot know what its caller passed, so reading inside
+  // that region is the receiver being used; whether the region is
+  // aliased is decided by the loans the caller holds.
+  bool inside_param_region(const Place& inner) const {
+    for (const Loan& loan : loans) {
+      if (loan.param != NO_ROOT && nests_inside(loan.place, inner)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // A loan stands behind the loan it was reborrowed from: the two are
+  // valid together by construction, so neither can be the conflict the
+  // other is reported against. Two reborrows of one loan name the same
+  // authority, which is what a read and a write of one field in a
+  // single expression are.
+  bool related_loans(u32 a, u32 b) const {
+    if (a < loans.size() && b < loans.size() && loans[a].parent != NO_ROOT &&
+        loans[a].parent == loans[b].parent) {
+      return true;
+    }
+    for (u32 cur = a, steps = 0; cur < loans.size() && steps < loans.size();
+         cur = loans[cur].parent, ++steps) {
+      if (cur == b) {
+        return true;
+      }
+      if (loans[cur].parent == NO_ROOT) {
+        break;
+      }
+    }
+    for (u32 cur = b, steps = 0; cur < loans.size() && steps < loans.size();
+         cur = loans[cur].parent, ++steps) {
+      if (cur == a) {
+        return true;
+      }
+      if (loans[cur].parent == NO_ROOT) {
+        break;
+      }
+    }
+    return false;
+  }
+
+  // Whether one loan stands behind another: a reborrow names the
+  // authority it was taken through, and every loan above that one in
+  // turn. The relation is directed, since a reborrow being live is what
+  // freezes its source, not the other way round.
+  bool stands_behind(u32 loan, u32 authority) const {
+    for (u32 cur = loan, steps = 0; cur < loans.size() && steps < loans.size();
+         cur = loans[cur].parent, ++steps) {
+      if (cur == authority) {
+        return true;
+      }
+      if (loans[cur].parent == NO_ROOT) {
+        break;
+      }
+    }
+    return false;
+  }
+
+  // The loan a reborrow of this address derives from: the first loan
+  // the address carries that was born before the read.
+  u32 reborrow_parent(u32 addr, u32 pos) const {
+    if (addr >= flow.size()) {
+      return NO_ROOT;
+    }
+    for (u32 loan : flow[addr]) {
+      if (loan < loans.size() && loans[loan].place.root != NO_ROOT &&
+          loans[loan].birth < pos) {
+        return loan;
+      }
+    }
+    return NO_ROOT;
+  }
+
   bool live_at(u32 loan, ir::BlockIdx bidx, u32 pos) const {
     if (loan >= loans.size() || loans[loan].birth > pos) {
       return false;
@@ -970,8 +1364,9 @@ class Checker {
         return true;
       }
     }
-    return loan < loan_last_use[bidx.idx].size() &&
-           loan_last_use[bidx.idx][loan] >= pos;
+    return loan < loans.size() &&
+           loan_last_use[static_cast<usize>(bidx.idx) * loan_stride + loan] >=
+               pos;
   }
 
   void check_place_use(const std::vector<Place>& moved,
@@ -979,7 +1374,7 @@ class Checker {
                        diag::Span span,
                        std::string_view action) {
     for (const Place& gone : moved) {
-      if (overlaps(gone, place)) {
+      if (overlaps(gone, place, path_steps_)) {
         const u32 index = bag.emit<i18n::Key::BorrowUseAfterMove>(
             DiagCode::UseAfterMove, span, addr_name(place.root), action);
         (void)index;
@@ -988,12 +1383,16 @@ class Checker {
     }
   }
 
-  static bool same_place(const Place& a, const Place& b) {
-    return a.root == b.root && a.path == b.path;
+  bool same_place(const Place& a, const Place& b) const {
+    if (a.root != b.root || a.len != b.len) {
+      return false;
+    }
+    const std::span<const u32> steps = steps_of(a);
+    return std::equal(steps.begin(), steps.end(), steps_of(b).begin());
   }
 
-  static bool same_state(const std::vector<Place>& a,
-                         const std::vector<Place>& b) {
+  bool same_state(const std::vector<Place>& a,
+                  const std::vector<Place>& b) const {
     if (a.size() != b.size()) {
       return false;
     }
@@ -1012,7 +1411,7 @@ class Checker {
     return true;
   }
 
-  static void add_moved(std::vector<Place>& state, const Place& place) {
+  void add_moved(std::vector<Place>& state, const Place& place) const {
     for (const Place& prior : state) {
       if (same_place(prior, place)) {
         return;
@@ -1021,9 +1420,9 @@ class Checker {
     state.push_back(place);
   }
 
-  static void kill_moved(std::vector<Place>& state, const Place& place) {
+  void kill_moved(std::vector<Place>& state, const Place& place) const {
     for (usize i = 0; i < state.size();) {
-      if (overlaps(state[i], place)) {
+      if (overlaps(state[i], place, path_steps_)) {
         state[i] = state.back();
         state.pop_back();
       } else {
@@ -1144,28 +1543,25 @@ class Checker {
 
   // May-move fixpoint: back-edges carry loop moves to the next
   // iteration (bounded; the place universe is finite).
-  void compute_moved(const ir::Function& fn,
-                     const std::vector<ir::BlockIdx>& order) {
-    build_preds(fn, order);
-    std::vector<ir::BlockIdx> succs;
-    std::vector<Place> in;
-    std::vector<Place> out;
+  void compute_moved(const std::vector<ir::BlockIdx>& order) {
     const usize cap = order.size() * 10 + 10;
     for (usize iter = 0; iter < cap; ++iter) {
       bool changed = false;
       for (ir::BlockIdx bidx : order) {
-        in.clear();
+        move_in_scratch_.clear();
         for (ir::BlockIdx pred : preds[bidx.idx]) {
           for (const Place& place : moved_out[pred.idx]) {
-            add_moved(in, place);
+            add_moved(move_in_scratch_, place);
           }
         }
-        transfer(bidx, in, out);
+        transfer(bidx, move_in_scratch_, move_out_scratch_);
         // IN is refreshed every visit for the check pass to read;
         // successors are fed from OUT, which alone drives convergence.
-        moved_in[bidx.idx] = in;
-        if (!same_state(out, moved_out[bidx.idx])) {
-          moved_out[bidx.idx] = out;
+        // The rows take the scratch by swap: a state is copied per place of
+        // it, and a copy names the same windows either way.
+        moved_in[bidx.idx].swap(move_in_scratch_);
+        if (!same_state(move_out_scratch_, moved_out[bidx.idx])) {
+          moved_out[bidx.idx].swap(move_out_scratch_);
           changed = true;
         }
       }
@@ -1227,20 +1623,27 @@ class Checker {
     }
   }
 
-  void check_function(const ir::Function& fn) {
+  void check_function(ir::FunctionIdx fidx) {
+    const ir::Function& fn = storage.functions()[fidx];
     collect_reserved(fn);
-    forward(fn);
-    std::vector<ir::BlockIdx> order;
-    reverse_post_order(fn, order);
-    reset_blocks(order);
-    compute_moved(fn, order);
-    compute_liveness(fn, order);
-    std::vector<Place> state;
-    for (ir::BlockIdx bidx : order) {
-      state = moved_in[bidx.idx];
+    forward(fidx);
+    block_order_.clear();
+    reverse_post_order(fn, block_order_);
+    reset_blocks(block_order_);
+    // Both fixpoints walk the same CFG of the same function, so its rows are
+    // built once here.
+    build_preds(fn, block_order_);
+    compute_moved(block_order_);
+    compute_liveness(fn, block_order_);
+    for (ir::BlockIdx bidx : block_order_) {
+      // The entry state is copied rather than moved out of its row: the row
+      // keeps its buffer, and the copy lands in the scratch the previous
+      // block left, so the pass allocates nothing per block. A state is a
+      // handful of places, each of them a window on the shared step arena.
+      state_scratch_ = moved_in[bidx.idx];
       const ir::Block& block = storage.blocks()[bidx];
       for (ir::InstructionIdx iidx : block.instrs) {
-        check_instr(fn, bidx, iidx, state);
+        check_instr(fn, bidx, iidx, state_scratch_);
       }
     }
   }
@@ -1280,8 +1683,15 @@ class Checker {
         return false;
       }
       for (u32 held : flow[reg]) {
-        if (held == id) {
-          return true;
+        for (u32 cur = held, steps = 0;
+             cur < loans.size() && steps < loans.size();
+             cur = loans[cur].parent, ++steps) {
+          if (cur == id) {
+            return true;
+          }
+          if (loans[cur].parent == NO_ROOT) {
+            break;
+          }
         }
       }
       return false;
@@ -1308,7 +1718,18 @@ class Checker {
             if (carries_loan(addr_reg, id)) {
               continue;
             }
-            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+            if (!live_at(id, bidx, pos) ||
+                !overlaps(loan.place, place, path_steps_)) {
+              continue;
+            }
+            // The read that mints a reborrow loan is the reborrow
+            // itself: it stands behind this loan, so it is not the
+            // conflict the loan is reported against.
+            if (instr.dst.is_valid() &&
+                stands_behind(reborrow_parent(addr_reg, pos), id)) {
+              continue;
+            }
+            if (inside_param_region(place)) {
               continue;
             }
             // A reserved receiver's window admits a read of data: the
@@ -1342,7 +1763,7 @@ class Checker {
         // whoever owns the place it reads. A borrowed capture names
         // exactly such a place, through its environment.
         bool borrowed = false;
-        for (u32 step : place.path) {
+        for (u32 step : steps_of(place)) {
           if (step == DEREF_STEP) {
             borrowed = true;
             break;
@@ -1377,7 +1798,8 @@ class Checker {
           if (loan.param != NO_ROOT) {
             continue;
           }
-          if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+          if (!live_at(id, bidx, pos) ||
+              !overlaps(loan.place, place, path_steps_)) {
             continue;
           }
           const u32 index = bag.emit<i18n::Key::BorrowMoveInvalidatesBorrow>(
@@ -1413,10 +1835,36 @@ class Checker {
         // enclosing borrow. It may not be *more* exclusive than what it
         // derives from, so an exclusive reborrow of a shared loan is
         // still a conflict.
+        u32 borrow_source = NO_ROOT;
+        (void)operand_reg(0, borrow_source);
         auto derived_from = [&](u32 id) {
+          // The address a borrow names carries the loans it was taken
+          // through, which is the authority the new loan stands behind.
+          if (borrow_source != NO_ROOT && borrow_source < flow.size() &&
+              flow[borrow_source].len != 0) {
+            for (u32 cur = id, steps = 0;
+                 cur < loans.size() && steps < loans.size();
+                 cur = loans[cur].parent, ++steps) {
+              for (u32 held : flow[borrow_source]) {
+                if (held == cur) {
+                  return true;
+                }
+              }
+              if (cur >= loans.size() || loans[cur].parent == NO_ROOT) {
+                break;
+              }
+            }
+          }
           for (u32 held : flow[instr.dst.idx]) {
-            if (held == id) {
-              return true;
+            for (u32 cur = held, steps = 0;
+                 cur < loans.size() && steps < loans.size();
+                 cur = loans[cur].parent, ++steps) {
+              if (cur == id) {
+                return true;
+              }
+              if (loans[cur].parent == NO_ROOT) {
+                break;
+              }
             }
           }
           return false;
@@ -1429,7 +1877,18 @@ class Checker {
           if (derived_from(id) && !(exclusive && !loan.exclusive)) {
             continue;
           }
-          if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+          // The read that mints a reborrow stands behind the loan it
+          // reborrows from, so that loan - and anything it is itself a
+          // reborrow of - is not the conflict this read is reported
+          // against.
+          u32 source = NO_ROOT;
+          if (operand_reg(0, source) &&
+              stands_behind(reborrow_parent(source, pos), id) &&
+              !(exclusive && !loan.exclusive)) {
+            continue;
+          }
+          if (!live_at(id, bidx, pos) ||
+              !overlaps(loan.place, place, path_steps_)) {
             continue;
           }
           // A shared borrow during a reserved receiver's window is the
@@ -1462,11 +1921,13 @@ class Checker {
           // move of the slot does not take.
           u32 handed = NO_ROOT;
           Place handed_place;
-          if (operand_reg(0, handed) && handed < path.size() &&
-              std::find(path[handed].begin(), path[handed].end(), DEREF_STEP) ==
-                  path[handed].end() &&
-              operand_place(0, handed_place)) {
-            check_place_use(moved, handed_place, span, "read");
+          if (operand_reg(0, handed) && handed < path_len.size()) {
+            const std::span<const u32> steps = steps_of(handed);
+            if (std::find(steps.begin(), steps.end(), DEREF_STEP) ==
+                    steps.end() &&
+                operand_place(0, handed_place)) {
+              check_place_use(moved, handed_place, span, "read");
+            }
           }
           kill_moved(moved, place);
           // Writing through a loan is what the loan is for, so a store
@@ -1482,7 +1943,22 @@ class Checker {
             if (carries_loan(target, id)) {
               continue;
             }
-            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+            // The place comes to hold the stored value, so a loan that
+            // value carries is still honoured after the write: dropping
+            // a view back into the field it was read from is not the
+            // write that ends it.
+            if (carries_loan(handed, id)) {
+              continue;
+            }
+            // The receiver of a method names its region only by
+            // convention: the loan taken for it covers everything the
+            // caller passed, so every field and element of it lies
+            // inside. A write there is that region being used.
+            if (loan.param_derived && nests_inside(loan.place, place)) {
+              continue;
+            }
+            if (!live_at(id, bidx, pos) ||
+                !overlaps(loan.place, place, path_steps_)) {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
@@ -1509,7 +1985,8 @@ class Checker {
             if (carries_loan(target, id)) {
               continue;
             }
-            if (!live_at(id, bidx, pos) || !overlaps(loan.place, place)) {
+            if (!live_at(id, bidx, pos) ||
+                !overlaps(loan.place, place, path_steps_)) {
               continue;
             }
             const u32 index = bag.emit<i18n::Key::BorrowAssignWhileBorrowed>(
@@ -1537,9 +2014,14 @@ class Checker {
           // A `str` local is a view, not storage: its two words point at
           // a buffer someone else owns, so handing the view back does
           // not hand back the local. A `String` owns, so a loan rooted
-          // there still escapes.
+          // there still escapes. The exemption covers the view's value,
+          // which reaches the return through a copy: the loan sits on
+          // the register the copy read, not on the returned one. A loan
+          // whose own register is the returned one is the address the
+          // borrow took of the slot, and that address is the frame's.
           if (root < storage.registers().size() &&
-              tag_of(storage.registers()[root].type) == ir::TypeTag::Str) {
+              tag_of(storage.registers()[root].type) == ir::TypeTag::Str &&
+              loans[loan].reg != value.as_register().idx) {
             continue;
           }
           if (!is_param_root(root, fn)) {
@@ -1582,12 +2064,20 @@ class Checker {
               continue;
             }
             if (!live_at(other, bidx, pos) ||
-                !overlaps(loan.place, reserved.place)) {
+                !overlaps(loan.place, reserved.place, path_steps_)) {
               continue;
             }
             // A reborrow taken through the receiver stands behind it,
             // the way the borrow rule lets one taken through a loan.
             if (carries_loan(loan.reg, id)) {
+              continue;
+            }
+            // The reservation itself may be the reborrow: a call
+            // through a field borrows that field's place out of the
+            // loan the receiver already carries, so the loan it names
+            // is the one it stands behind, not one competing with it.
+            if (reserved.parent != NO_ROOT &&
+                related_loans(other, reserved.parent)) {
               continue;
             }
             // The call's own projection reifies the return's borrow of
@@ -1694,7 +2184,8 @@ class Checker {
           if (param == NO_ROOT) {
             continue;
           }
-          relpath = entry.place.path;
+          const std::span<const u32> steps = steps_of(entry.place);
+          relpath.assign(steps.begin(), steps.end());
           if (param < param_types.size()) {
             const ir::TypeTag ptag = tag_of(param_types[param]);
             if ((ptag == ir::TypeTag::Ref || ptag == ir::TypeTag::MutRef) &&
@@ -1779,22 +2270,76 @@ class Checker {
   void size_scratch() {
     const usize registers = storage.registers().size();
     home.assign(registers, NO_ROOT);
-    path.assign(registers, {});
-    flow.assign(registers, {});
+    // One step stands at the arena's head so every empty path reads as a
+    // window on it rather than on nothing.
+    path_steps_.assign(1, 0);
+    path_head.assign(registers, 0);
+    path_len.assign(registers, 0);
+    flow_steps.clear();
+    flow.assign(registers, FlowRow{});
+    for (FlowRow& row : flow) {
+      row.arena = &flow_steps;
+    }
     reserved_receiver.assign(registers, 0);
     use_count_scratch_.assign(registers, 0);
     receiver_call_scratch_.assign(registers, 0);
+    // Sized for the whole program: a type's shape does not change, so its
+    // answer holds across functions.
+    carry_memo_.assign(storage.types().size(), 0);
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
-    loan_last_use.assign(blocks, {});
     moved_in.assign(blocks, {});
     moved_out.assign(blocks, {});
     preds.assign(blocks, {});
+    succ_head.assign(blocks, 0);
+    succ_len.assign(blocks, 0);
     block_first.assign(blocks, 0);
     block_last.assign(blocks, 0);
     walk_mark.assign(blocks, 0);
+    // The flat successor arena and the walk's stacks are cleared per
+    // function; sizing them for the whole program here keeps the clear
+    // from re-growing a buffer for every function it holds.
+    succ_flat.reserve(3 * blocks);
+    succs_scratch_.reserve(3);
+    stack_scratch_.reserve(blocks);
+    post_scratch_.reserve(blocks);
+    index_register_bounds(registers);
     index_addrs();
+    seed_all_captures();
+  }
+
+  // The lowest and highest register a function names, as a destination or as
+  // a register operand, clamped to the register table. A register past the
+  // table cannot be reached through a place, so the range ends at it.
+  void index_register_bounds(usize registers) {
+    const usize functions = storage.functions().size();
+    fn_reg_lo.assign(functions, 0);
+    fn_reg_hi.assign(functions, 0);
+    for (usize fidx = 0; fidx < functions; ++fidx) {
+      u32 lo = static_cast<u32>(registers);
+      u32 hi = 0;
+      for (ir::BlockIdx bidx : storage.functions()[fidx].blocks) {
+        for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
+          const ir::Instruction& instr = instr_at(iidx);
+          if (instr.dst.is_valid()) {
+            lo = std::min(lo, instr.dst.idx);
+            hi = std::max(hi, instr.dst.idx + 1);
+          }
+          for (ir::OperandIdx oidx : instr.operands) {
+            const ir::Operand& operand = storage.operands()[oidx];
+            if (!operand.is<ir::RegisterIdx>()) {
+              continue;
+            }
+            const u32 reg = operand.as_register().idx;
+            lo = std::min(lo, reg);
+            hi = std::max(hi, reg + 1);
+          }
+        }
+      }
+      fn_reg_hi[fidx] = std::min(hi, static_cast<u32>(registers));
+      fn_reg_lo[fidx] = std::min(lo, fn_reg_hi[fidx]);
+    }
   }
 
   // What the package named, by the address it named. A diagnostic asks for one
@@ -1812,6 +2357,11 @@ class Checker {
         captures_.push_back(entry.addr.idx);
       }
     }
+    // Sorted and deduplicated: a function re-seeds the captures its register
+    // range covers, which is a lookup rather than a walk of the package.
+    std::sort(captures_.begin(), captures_.end());
+    captures_.erase(std::unique(captures_.begin(), captures_.end()),
+                    captures_.end());
   }
 
   // Clears the rows indexed by block that a function reaches, the
@@ -1820,6 +2370,13 @@ class Checker {
   // that is what the fixpoints walk. The last-use row is sized to the loans
   // the function has, which is why this waits until forward has run.
   void reset_blocks(const std::vector<ir::BlockIdx>& blocks) {
+    // A row is as wide as the widest function's loan list, and a block
+    // belongs to one function, so a block's row is written by that function
+    // alone and zeroing it here leaves no stale entry behind.
+    if (loans.size() > loan_stride) {
+      loan_stride = static_cast<u32>(loans.size());
+      loan_last_use.assign(storage.blocks().size() * loan_stride, 0);
+    }
     for (ir::BlockIdx bidx : blocks) {
       live_in[bidx.idx].clear();
       live_out[bidx.idx].clear();
@@ -1828,25 +2385,32 @@ class Checker {
       preds[bidx.idx].clear();
       block_first[bidx.idx] = 0;
       block_last[bidx.idx] = 0;
-      loan_last_use[bidx.idx].assign(loans.size(), 0);
+      const auto row =
+          loan_last_use.begin() + static_cast<usize>(bidx.idx) * loan_stride;
+      std::fill_n(row, loans.size(), 0);
     }
+    live_mark.assign(loans.size(), 0);
   }
 
-  // Predecessors of the blocks the fixpoints read. The walk covers the
-  // function's own blocks as before, and the clearing covers every block the
-  // fixpoints reach, which leaves no row another function filled where one
-  // is read.
+  // Predecessors and successors of the blocks the fixpoints read. The walk
+  // covers the function's own blocks as before, and the clearing covers every
+  // block the fixpoints reach, which leaves no row another function filled
+  // where one is read.
   void build_preds(const ir::Function& fn,
                    const std::vector<ir::BlockIdx>& order) {
     for (ir::BlockIdx bidx : order) {
       preds[bidx.idx].clear();
+      succ_len[bidx.idx] = 0;
     }
-    std::vector<ir::BlockIdx>& succs = succs_scratch_;
+    succ_flat.clear();
     for (ir::BlockIdx bidx : fn.blocks) {
-      // successors appends, so the list belongs to one block.
-      succs.clear();
-      successors(bidx, succs);
-      for (ir::BlockIdx succ : succs) {
+      // successors appends, so the range belongs to one block.
+      const u32 head = static_cast<u32>(succ_flat.size());
+      successors(bidx, succ_flat);
+      succ_head[bidx.idx] = head;
+      succ_len[bidx.idx] = static_cast<u32>(succ_flat.size()) - head;
+      for (usize i = head; i < succ_flat.size(); ++i) {
+        const ir::BlockIdx succ = succ_flat[i];
         if (succ.idx < preds.size()) {
           preds[succ.idx].push_back(bidx);
         }
@@ -1854,39 +2418,20 @@ class Checker {
     }
   }
 
-  void clear_register(u32 reg) {
-    // A register an instruction names can sit past the table, which is why
-    // every read bounds-checks it first.
-    if (reg >= flow.size()) {
-      return;
-    }
-    home[reg] = NO_ROOT;
-    path[reg].clear();
-    flow[reg].clear();
-    use_count_scratch_[reg] = 0;
-    receiver_call_scratch_[reg] = 0;
-  }
-
-  // Clears the scratch for one function. Every register a function reads or
-  // writes is named by one of its instructions, as a destination or as a
-  // register operand, and the places a register stands for are reached
-  // through those, so what it does not name cannot be observed through it.
-  // Clearing the whole program instead charged every function for every
-  // register, which made a package quadratic in its own size.
-  void reset_function(const ir::Function& fn) {
-    for (ir::BlockIdx bidx : fn.blocks) {
-      for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
-        const ir::Instruction& instr = instr_at(iidx);
-        if (instr.dst.is_valid()) {
-          clear_register(instr.dst.idx);
-        }
-        for (ir::OperandIdx oidx : instr.operands) {
-          const ir::Operand& operand = storage.operands()[oidx];
-          if (operand.is<ir::RegisterIdx>()) {
-            clear_register(operand.as_register().idx);
-          }
-        }
-      }
+  // Clears the scratch for one function. Every register it reads or writes is
+  // named by one of its instructions, as a destination or as a register
+  // operand, and the places a register stands for are reached through those,
+  // so what it does not name cannot be observed through it. Clearing the whole
+  // program instead charged every function for every register, which made a
+  // package quadratic in its own size.
+  void reset_function(ir::FunctionIdx fidx) {
+    const u32 hi = fn_reg_hi[fidx.idx];
+    for (u32 reg = fn_reg_lo[fidx.idx]; reg < hi; ++reg) {
+      home[reg] = NO_ROOT;
+      clear_path(reg);
+      flow[reg].clear();
+      use_count_scratch_[reg] = 0;
+      receiver_call_scratch_[reg] = 0;
     }
     loans.clear();
     param_homes.clear();
@@ -1905,11 +2450,11 @@ class Checker {
       for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
            ++fidx) {
         const ir::Function& fn = storage.functions()[fidx];
-        reset_function(fn);
+        reset_function(fidx);
         {
           PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                    "borrow-fn");
-          forward(fn);
+          forward(fidx);
         }
         if (update_summary(fidx)) {
           stable = false;
@@ -1922,11 +2467,11 @@ class Checker {
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
       const ir::Function& fn = storage.functions()[fidx];
-      reset_function(fn);
+      reset_function(fidx);
       {
         PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, fn_name(fn),
                                                  "borrow-fn");
-        check_function(fn);
+        check_function(fidx);
       }
     }
   }

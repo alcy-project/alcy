@@ -1,0 +1,6 @@
+exit = 0
+stdout = """
+after
+DROP Holder held
+DROP Payload 5
+"""

@@ -3,7 +3,7 @@
 
 #include "lowering/lowering.h"
 
-#include <cstdlib>
+#include <charconv>
 #include <initializer_list>
 #include <optional>
 #include <ranges>
@@ -229,7 +229,7 @@ ir::OperandIdx Lowerer::to_operand(ir::ImmutableIdx imm, ir::TypeIdx type) {
 
 ir::RegisterIdx Lowerer::emit(ir::Opcode op,
                               ir::TypeIdx type,
-                              const std::vector<ir::OperandIdx>& ops,
+                              std::span<const ir::OperandIdx> ops,
                               ir::InstructionFlags flags) {
   const ir::RegisterIdx dst = claim_reg();
   // Operand ranges must be consecutive in storage, but inputs are
@@ -252,6 +252,14 @@ ir::RegisterIdx Lowerer::emit(ir::Opcode op,
   stream_last_[at(cur_)] = instr;
   instr_spans_.push_back(cur_span_);
   return dst;
+}
+
+ir::RegisterIdx Lowerer::emit(ir::Opcode op,
+                              ir::TypeIdx type,
+                              std::initializer_list<ir::OperandIdx> ops,
+                              ir::InstructionFlags flags) {
+  return emit(op, type,
+              std::span<const ir::OperandIdx>(ops.begin(), ops.size()), flags);
 }
 
 ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
@@ -286,7 +294,7 @@ const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
 }
 
 void Lowerer::emit_void(ir::Opcode op,
-                        const std::vector<ir::OperandIdx>& ops,
+                        std::span<const ir::OperandIdx> ops,
                         ir::InstructionFlags flags) {
   // A store through a pointer to the unit type writes nothing. The
   // value a `()` expression carries is a placeholder with a width of
@@ -311,6 +319,13 @@ void Lowerer::emit_void(ir::Opcode op,
   streams_[at(cur_)].push(void_instr);
   stream_last_[at(cur_)] = void_instr;
   instr_spans_.push_back(cur_span_);
+}
+
+void Lowerer::emit_void(ir::Opcode op,
+                        std::initializer_list<ir::OperandIdx> ops,
+                        ir::InstructionFlags flags) {
+  emit_void(op, std::span<const ir::OperandIdx>(ops.begin(), ops.size()),
+            flags);
 }
 
 Val Lowerer::materialize(Val v) {
@@ -512,6 +527,189 @@ const Local* Lowerer::lookup_local(std::string_view name) const {
   return nullptr;
 }
 
+const Local* Lowerer::rooted_local(ast::ExprIdx place,
+                                   bool through_deref) const {
+  while (place.is_valid()) {
+    const ast::ExprNode& node = ast.exprs[place];
+    if (node.kind == ast::ExprKind::Field) {
+      place = node.payload.get<ast::ExprField>().receiver;
+    } else if (node.kind == ast::ExprKind::Index) {
+      place = node.payload.get<ast::ExprIndex>().receiver;
+    } else if (node.kind == ast::ExprKind::Deref && through_deref) {
+      place = node.payload.get<ast::ExprDeref>().inner;
+    } else {
+      break;
+    }
+  }
+  if (!place.is_valid() || ast.exprs[place].kind != ast::ExprKind::Path) {
+    return nullptr;
+  }
+  const ast::Path& path =
+      ast.paths[ast.exprs[place].payload.get<ast::ExprPath>().idx];
+  if (path.segments.size() != 1) {
+    return nullptr;
+  }
+  return lookup_local(path.segments[0].name);
+}
+
+bool Lowerer::carries_borrow(ir::TypeIdx type) const {
+  const auto found = type_origins_.find(type.idx);
+  if (found != type_origins_.end()) {
+    return carries_borrow(ir::TypeIdx(found->second));
+  }
+  const ir::TypeNode& node = builder.types()[type];
+  switch (node.tag) {
+    case ir::TypeTag::Ref:
+    case ir::TypeTag::MutRef:
+    case ir::TypeTag::Str:
+    case ir::TypeTag::Slice: return true;
+    case ir::TypeTag::Array:
+      return carries_borrow(builder.array_types()[node.as_array()].element);
+    case ir::TypeTag::Tuple:
+      for (ir::TypeIdx element :
+           builder.tuple_types()[node.as_tuple()].elements) {
+        if (carries_borrow(element)) {
+          return true;
+        }
+      }
+      return false;
+    case ir::TypeTag::Struct:
+      for (ir::TypeIdx field :
+           builder.struct_types()[node.as_struct()].fields) {
+        if (carries_borrow(field)) {
+          return true;
+        }
+      }
+      return false;
+    case ir::TypeTag::Enum: {
+      for (ir::EnumVariantTypeIdx variant :
+           builder.enum_types()[node.as_enum()].variants) {
+        for (ir::TypeIdx field : builder.enum_variant_types()[variant].fields) {
+          if (carries_borrow(field)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    default: return false;
+  }
+}
+
+void Lowerer::record_borrow_of(ast::ExprIdx place) {
+  const Local* local = rooted_local(place);
+  if (local == nullptr) {
+    return;
+  }
+  borrow_sources.push_back(static_cast<u32>(local - locals.data()));
+}
+
+void Lowerer::record_alias(const Local& local) {
+  borrow_sources.insert(borrow_sources.end(), local.referents.begin(),
+                        local.referents.end());
+}
+
+void Lowerer::record_place_alias(ast::ExprIdx place) {
+  const Local* local = rooted_local(place);
+  if (local != nullptr) {
+    record_alias(*local);
+  }
+}
+
+bool Lowerer::escapes_referent(ir::TypeIdx type,
+                               diag::Span span,
+                               ast::ExprIdx place,
+                               std::span<const u32> sources) const {
+  if (!carries_borrow(type)) {
+    return false;
+  }
+  const Local* target = rooted_local(place);
+  if (target == nullptr) {
+    return false;
+  }
+  // Blocks are a stack: a local declared after the destination's is in
+  // the destination's block or deeper, so its slot cannot outlive the
+  // store it would receive.
+  const auto target_index = static_cast<usize>(target - locals.data());
+  for (u32 source : sources) {
+    if (source >= locals.size() || source <= target_index) {
+      continue;
+    }
+    const std::string_view name = locals[source].name;
+    const u32 index = name.empty()
+                          ? bag.emit<i18n::Key::LowerTemporaryReferenceEscapes>(
+                                DiagCode::TemporaryReferenceEscapes, span)
+                          : bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
+                                DiagCode::BlockReferenceEscapes, span, name);
+    (void)index;
+    return true;
+  }
+  return false;
+}
+
+// A call may leave an argument in storage it owns - `Vec::push` writes
+// its element into the buffer - so a value that carries a borrow has to
+// outlive the place the call borrows (ADR-0135). `sources_from` is
+// where the argument's loans start in `borrow_sources`.
+bool Lowerer::check_kept_values(
+    const std::vector<KeptValue>& values,
+    const std::vector<ast::ExprIdx>& borrowed_places) {
+  if (borrowed_places.empty()) {
+    return false;
+  }
+  for (const KeptValue& value : values) {
+    // A parameter that is itself a view or a reference is borrowed for
+    // the call, so what it hands over is a pointee rather than a place
+    // of the callee's.
+    if (!value.param.is_valid()) {
+      continue;
+    }
+    const ir::TypeTag param_tag = tag_of(value.param);
+    if (is_ref_tag(param_tag) || param_tag == ir::TypeTag::Str) {
+      continue;
+    }
+    bool is_place = false;
+    for (ast::ExprIdx place : borrowed_places) {
+      is_place = is_place || place == value.expr;
+    }
+    if (is_place) {
+      continue;
+    }
+    for (ast::ExprIdx place : borrowed_places) {
+      if (check_kept_extent(value.type, ast.exprs[value.expr].span, place,
+                            value.sources_from)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool Lowerer::check_kept_extent(ir::TypeIdx type,
+                                diag::Span span,
+                                ast::ExprIdx place,
+                                usize sources_from) {
+  if (sources_from >= borrow_sources.size()) {
+    return false;
+  }
+  const std::span<const u32> sources(borrow_sources.data() + sources_from,
+                                     borrow_sources.size() - sources_from);
+  return escapes_referent(type, span, place, sources);
+}
+
+void Lowerer::note_referents(ir::TypeIdx type,
+                             usize first,
+                             usize sources_from) {
+  if (!carries_borrow(type)) {
+    return;
+  }
+  const std::span<const u32> sources(borrow_sources.data() + sources_from,
+                                     borrow_sources.size() - sources_from);
+  for (usize i = first; i < locals.size(); ++i) {
+    locals[i].referents.assign(sources.begin(), sources.end());
+  }
+}
+
 const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(
     u32 mod,
     std::string_view name) const {
@@ -606,29 +804,48 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
   }
 }
 
+namespace {
+
+// Appends `value` in decimal and then `separator`, the form a key records an
+// index in. A key is built at every call site, so the digits go to a buffer
+// that is handed over once: growing the string a character at a time paid the
+// bookkeeping of an append for each one.
+void append_index(std::string& out, u32 value, char separator) {
+  // A u32 in decimal takes at most ten digits, and the separator one more.
+  char digits[11];
+  char* const last = std::to_chars(digits, digits + 10, value).ptr;
+  *last = separator;
+  out.append(digits, static_cast<usize>(last + 1 - digits));
+}
+
+}  // namespace
+
 // The signature does not identify an instantiation: two of them can
 // share parameters and result while differing only inside the body,
 // as `size_of::<T>()` reads it. The instance index is part of the key.
-std::string Lowerer::fn_key(ast::ItemIdx item,
-                            const std::vector<ir::TypeIdx>& params,
-                            ir::TypeIdx ret,
-                            u32 inst,
-                            std::span<const CompVal> comp_args,
-                            std::span<const ir::TypeIdx> extra_generics) {
-  std::string key = std::to_string(item.idx) + "|" + std::to_string(inst) + "|";
+void Lowerer::fn_key(std::string& key,
+                     ast::ItemIdx item,
+                     const std::vector<ir::TypeIdx>& params,
+                     ir::TypeIdx ret,
+                     u32 inst,
+                     std::span<const CompVal> comp_args,
+                     std::span<const ir::TypeIdx> extra_generics) {
+  key.clear();
+  append_index(key, item.idx, '|');
+  append_index(key, inst, '|');
   for (ir::TypeIdx param : params) {
-    key += std::to_string(param.idx) + ",";
+    append_index(key, param.idx, ',');
   }
-  key += "|" + std::to_string(ret.idx) + "|";
+  append_index(key, ret.idx, '|');
   for (const CompVal& arg : comp_args) {
     comp_key_into(key, arg.value);
   }
   // A method's own type arguments may appear nowhere in its signature
   // (`size_of::<U>()` in the body), so they are part of the key.
   for (ir::TypeIdx arg : extra_generics) {
-    key += "g" + std::to_string(arg.idx) + ";";
+    key.push_back('g');
+    append_index(key, arg.idx, ';');
   }
-  return key;
 }
 
 void Lowerer::record_comp_call(void* context,
@@ -662,8 +879,8 @@ bool Lowerer::try_run_comp_ir(u32 def_module,
                               u32& depth,
                               CompVal& out) {
   (void)def_module;
-  const std::string key = fn_key(item, params, ret, inst, comp_args);
-  const auto found = fn_by_key_.find(key);
+  fn_key(fn_key_scratch_, item, params, ret, inst, comp_args);
+  const auto found = fn_by_key_.find(std::string_view(fn_key_scratch_));
   if (found == fn_by_key_.end()) {
     return false;
   }
@@ -794,7 +1011,8 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     internal(diag::Span{}, "a parametric signature reached lowering");
     return ir::FunctionIdx(base::INVALID_IDX);
   }
-  std::string key = fn_key(item, params, ret, inst, comp_args, extra_generics);
+  fn_key(fn_key_scratch_, item, params, ret, inst, comp_args, extra_generics);
+  const std::string_view key = fn_key_scratch_;
   const auto found = fn_by_key_.find(key);
   if (found != fn_by_key_.end()) {
     return ir::FunctionIdx(found->second);
@@ -803,10 +1021,9 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
-  fn_by_key_.emplace(key, idx.idx);
+  fn_by_key_.emplace(std::string(key), idx.idx);
   FnEntry entry;
   entry.item = item;
-  entry.comp_key = std::move(key);
   entry.idx = idx;
   entry.mod = mod;
   entry.name = std::string(name);
@@ -1204,8 +1421,9 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   pending_params_.clear();
   binding_param_ = false;
   if (is_destructor(entry.item) && !locals.empty()) {
-    // A destructor ends the value it is given; ending it again on the
-    // way out would call the destructor on its own receiver forever.
+    // The receiver ends from this body: the walk would run the
+    // destructor this body is, and a value it has partly ended has no
+    // spelling (ADR-0137).
     end_exempt_ = 0;
   }
   if (failed) {
@@ -1496,14 +1714,11 @@ void Lowerer::run() {
           sig.is_extern) {
         continue;
       }
-      bool is_method_copy = false;
-      for (const auto& method : checked.methods) {
-        if (method.item == sig.item) {
-          is_method_copy = true;
-          break;
-        }
-      }
-      if (is_method_copy) {
+      // A method's row among the functions is the signature the call table
+      // needs; the loop above seeded the body. Walking the module's methods
+      // to tell the two apart charged a module for its methods once per
+      // function it held.
+      if (sig.is_method) {
         continue;
       }
       // Generic free functions reserve per instantiation on first
@@ -1522,10 +1737,33 @@ void Lowerer::run() {
       }
     }
   }
+  // Every signature is seeded, so the body phase's operand, instruction
+  // and register counts are known to within a small constant per
+  // function. Sizing the storage once here keeps the tables from
+  // doubling a dozen times over the run: a discarded doubling costs as
+  // much as the block that replaces it.
+  {
+    // Per function, measured on the corpora tools/perf.py generates: a
+    // plain body lowers to about this many operands, instructions and
+    // registers, and to one span per instruction once the drop pass has
+    // added its glue.
+    constexpr usize OPERANDS_PER_FUNCTION = 90;
+    constexpr usize INSTRUCTIONS_PER_FUNCTION = 61;
+    constexpr usize REGISTERS_PER_FUNCTION = 23;
+    const usize fn_count = fns.size();
+    builder.reserve_operands(fn_count * OPERANDS_PER_FUNCTION);
+    builder.reserve_instrs(fn_count * INSTRUCTIONS_PER_FUNCTION);
+    builder.reserve_registers(fn_count * REGISTERS_PER_FUNCTION);
+    instr_spans_.reserve(fn_count * INSTRUCTIONS_PER_FUNCTION);
+  }
   // Lower bodies, then publish functions in reservation order so
   // the pre-assigned indexes line up with storage positions.
+  // The publish step reads the entry the work list named, so a done item is the
+  // index of that entry rather than a copy of it: lowering a body can add
+  // entries, which is why the body works on a copy of its own, but the entry it
+  // lowered is the one that gets published.
   struct Done {
-    FnEntry entry;
+    u32 fn;
     std::vector<ir::BlockIdx> blocks;
   };
   const auto lower_and_publish = [&](const FnEntry& entry,
@@ -1565,11 +1803,13 @@ void Lowerer::run() {
   // The comp prefix is lowered and materialized before the rest; its
   // names are interned first so the function records can take them.
   std::vector<Done> prefix_done;
+  prefix_done.reserve(comp_prefix);
   for (usize w = 0; w < comp_prefix && !failed; ++w) {
-    const FnEntry entry = fns[worklist_[w]];
+    const u32 fn = worklist_[w];
+    const FnEntry entry = fns[fn];
     std::vector<ir::BlockIdx> blocks;
     lower_and_publish(entry, blocks);
-    prefix_done.push_back({entry, std::move(blocks)});
+    prefix_done.push_back({fn, std::move(blocks)});
   }
   if (failed) {
     return;
@@ -1577,15 +1817,18 @@ void Lowerer::run() {
   if (!resolve_names()) {
     return;
   }
-  for (const Done& entry : prefix_done) {
-    materialize(entry.entry, entry.blocks);
+  for (const Done& lowered : prefix_done) {
+    materialize(fns[lowered.fn], lowered.blocks);
   }
   std::vector<Done> done;
+  DCHECK(worklist_.size() >= comp_prefix);
+  done.reserve(worklist_.size() - comp_prefix);
   for (usize w = comp_prefix; w < worklist_.size() && !failed; ++w) {
-    const FnEntry entry = fns[worklist_[w]];
+    const u32 fn = worklist_[w];
+    const FnEntry entry = fns[fn];
     std::vector<ir::BlockIdx> blocks;
     lower_and_publish(entry, blocks);
-    done.push_back({entry, std::move(blocks)});
+    done.push_back({fn, std::move(blocks)});
   }
   if (failed) {
     return;
@@ -1593,8 +1836,8 @@ void Lowerer::run() {
   if (!resolve_names()) {
     return;
   }
-  for (const Done& entry : done) {
-    materialize(entry.entry, entry.blocks);
+  for (const Done& lowered : done) {
+    materialize(fns[lowered.fn], lowered.blocks);
   }
 }
 
@@ -1642,9 +1885,8 @@ void Lowerer::materialize(const FnEntry& entry,
   for (const ir::TypeIdx arg : entry.generics) {
     generics.push(storage_copy(arg));
   }
-  // The handle the gather left in the entry, which this copy of it
-  // predates.
-  const str::StringPoolId name = fns[entry.idx.idx].name_id;
+  // The handle the gather left in the entry.
+  const str::StringPoolId name = entry.name_id;
   const str::StringPoolId path = intern_name(pkg.tree.modules[entry.mod]->path);
   if (name == str::INVALID_STRING_POOL_ID ||
       path == str::INVALID_STRING_POOL_ID) {
@@ -1658,6 +1900,69 @@ void Lowerer::materialize(const FnEntry& entry,
                              .generics = generics.finish(),
                              .owner = entry.owner},
                     .blocks = range});
+}
+
+// A function's streams are handed to the drop pass after its body is lowered,
+// and the pass rewrites them by copying the instructions it read into a fresh
+// range (ADR-0062). The instructions it read stay in the table with no block
+// referring to them: they carry spans, they define the registers the copies
+// define, and a register's definition still points at one of them. Dropping
+// them leaves one instruction per index a block owns, so a definition, a span,
+// and a pass reading the table all name the same instruction.
+void Lowerer::compact_instrs() {
+  ir::StorageState state = std::move(builder).take_state();
+  const usize count = state.instrs.size();
+  std::vector<bool> owned(count, false);
+  for (usize b = 0; b < state.blocks.size(); ++b) {
+    for (ir::InstructionIdx idx : state.blocks[ir::BlockIdx(b)].instrs) {
+      owned[idx.idx] = true;
+    }
+  }
+  usize kept = 0;
+  for (bool live : owned) {
+    kept += live ? 1 : 0;
+  }
+  if (kept == count) {
+    builder = ir::StorageBuilder(std::move(state));
+    return;
+  }
+  DCHECK_EQ(instr_spans_.size(), count);
+  std::vector<ir::InstructionIdx> moved(count, ir::InstructionIdx::invalid());
+  std::vector<ir::InstructionIdx> defines(state.registers.size(),
+                                          ir::InstructionIdx::invalid());
+  ir::StorageState::Instructions instrs;
+  instrs.reserve(kept);
+  std::vector<diag::Span> spans;
+  spans.reserve(kept);
+  for (usize i = 0; i < count; ++i) {
+    if (!owned[i]) {
+      continue;
+    }
+    const ir::Instruction& instr = state.instrs[ir::InstructionIdx(i)];
+    moved[i] = instrs.emplace_back(instr);
+    spans.push_back(instr_spans_[i]);
+    if (instr.dst.is_valid()) {
+      defines[instr.dst.idx] = moved[i];
+    }
+  }
+  for (usize b = 0; b < state.blocks.size(); ++b) {
+    ir::InstructionIdxRange& range = state.blocks[ir::BlockIdx(b)].instrs;
+    if (range.empty()) {
+      continue;
+    }
+    range = ir::InstructionIdxRange(moved[range.head().idx], range.size());
+  }
+  for (usize r = 0; r < state.registers.size(); ++r) {
+    ir::Register& reg = state.registers[ir::RegisterIdx(r)];
+    if (defines[r].is_valid()) {
+      reg.def_idx = defines[r];
+    } else if (reg.def_idx.is_valid()) {
+      reg.def_idx = moved[reg.def_idx.idx];
+    }
+  }
+  instr_spans_ = std::move(spans);
+  state.instrs = std::move(instrs);
+  builder = ir::StorageBuilder(std::move(state));
 }
 
 base::Result<ir::VerifiedStorage, ir::VerificationError> Lowerer::finish() && {
@@ -1921,7 +2226,9 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<std::vector<ir::SummaryField>> summary_fields;
   std::vector<ir::SummaryEntry> summary =
       collect_summary(lowerer.pkg, ast, lowerer.fns, strings, summary_fields);
-  // Side tables move out before the builder, which finish() consumes.
+  // Side tables move out before the builder, which finish() consumes. The
+  // spans are one per instruction, so they are renumbered with the table.
+  lowerer.compact_instrs();
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   // The borrow pass reads both tables through the lowered package, so
@@ -1942,9 +2249,10 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<CompRun> comp_runs;
   comp_runs.reserve(lowerer.comp_calls_.size());
   for (const analyzer::CompCallRecord& record : lowerer.comp_calls_) {
-    const std::string key = Lowerer::fn_key(
-        record.item, record.params, record.ret, record.inst, record.comp_args);
-    const auto found = lowerer.fn_by_key_.find(key);
+    Lowerer::fn_key(lowerer.fn_key_scratch_, record.item, record.params,
+                    record.ret, record.inst, record.comp_args);
+    const auto found =
+        lowerer.fn_by_key_.find(std::string_view(lowerer.fn_key_scratch_));
     if (found == lowerer.fn_by_key_.end()) {
       continue;
     }

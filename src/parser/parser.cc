@@ -26,18 +26,6 @@ namespace parser {
 
 namespace {
 
-bool is_reserved(lexer::TokenKind kind) {
-  switch (kind) {
-    case lexer::TokenKind::Async:
-    case lexer::TokenKind::Await:
-    case lexer::TokenKind::Union:
-    case lexer::TokenKind::Register:
-    case lexer::TokenKind::Where:
-    case lexer::TokenKind::Dyn: return true;
-    default: return false;
-  }
-}
-
 // The primitive type tokens, for the declaration a neighboring
 // language spells with the type first.
 bool is_primitive_type_token(lexer::TokenKind kind) {
@@ -142,14 +130,6 @@ Parser::Parser(std::span<const lexer::Token> tokens,
   skip_insignificant();
 }
 
-bool Parser::at_end() const {
-  return pos_ >= tokens_.size() || tokens_[pos_].kind == lexer::TokenKind::Eof;
-}
-
-lexer::TokenKind Parser::peek_kind() const {
-  return peek().kind;
-}
-
 lexer::TokenKind Parser::peek_kind(usize ahead) const {
   usize i = pos_;
   while (i < tokens_.size()) {
@@ -164,14 +144,6 @@ lexer::TokenKind Parser::peek_kind(usize ahead) const {
     ++i;
   }
   return lexer::TokenKind::Eof;
-}
-
-lexer::Token Parser::peek() const {
-  return tokens_[pos_];
-}
-
-lexer::Token Parser::previous() const {
-  return tokens_[pos_ - 1];
 }
 
 void Parser::skip_insignificant() {
@@ -201,40 +173,26 @@ void Parser::skip_insignificant() {
   }
 }
 
-void Parser::advance() {
-  previous_span_ = tokens_[pos_].span;
-  ++pos_;
-  skip_insignificant();
-}
-
-bool Parser::check(lexer::TokenKind kind) const {
-  return !at_end() && peek_kind() == kind;
-}
-
-bool Parser::match(lexer::TokenKind kind) {
-  if (!check(kind)) {
-    return false;
-  }
-  advance();
-  return true;
-}
-
 bool Parser::expect(lexer::TokenKind kind, std::string_view what) {
   if (match(kind)) {
     return true;
   }
+  report_unexpected(what);
+  return false;
+}
+
+void Parser::report_unexpected(std::string_view what) {
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedFoundEndOfFile>(
         DiagCode::UnexpectedToken, span_from(pos_), what);
     (void)index;
-    return false;
+    return;
   }
   const diag::Span span = peek().span;
   const u32 index = bag_.emit<i18n::Key::ParserExpectedFound>(
       DiagCode::UnexpectedToken, span, what,
       bytes_.substr(span.offset, span.length));
   (void)index;
-  return false;
 }
 
 diag::Span Parser::span_from(usize mark) const {
@@ -446,6 +404,7 @@ base::Result<void, diag::Reported> verify_trees(ast::AstArena& ast,
     (void)index;
     return base::make_err(diag::Reported{});
   }
+  ast.mark_verified();
   return base::make_ok();
 }
 
@@ -592,24 +551,42 @@ base::Result<ast::Ident, diag::Reported> Parser::parse_ident(
 ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
                                 u32* type_args_segment) {
   const usize mark = pos_;
-  std::vector<ast::Ident> segments;
+  // Nine paths in ten hold one segment and the tenth holds two. The
+  // segments live on the frame because a turbofish argument list may
+  // parse another path before this one is copied, so the storage cannot
+  // be the parser's; a path that outgrows the frame spills once.
+  constexpr usize INLINE_PATH_SEGMENTS = 4;
+  ast::Ident inline_segments[INLINE_PATH_SEGMENTS];
+  std::vector<ast::Ident> spilled_segments;
+  usize segment_count = 0;
+  const auto push_segment = [&](const ast::Ident segment) {
+    if (segment_count >= INLINE_PATH_SEGMENTS && spilled_segments.empty()) {
+      spilled_segments.assign(inline_segments,
+                              inline_segments + INLINE_PATH_SEGMENTS);
+    }
+    if (spilled_segments.empty()) {
+      inline_segments[segment_count] = segment;
+    } else {
+      spilled_segments.push_back(segment);
+    }
+    ++segment_count;
+  };
   while (true) {
     // A scalar may open a path only as a member's prefix: `i64::parse`
     // parses, a bare `i64` expression stays the spelling error it was.
     const bool scalar_head =
-        segments.empty() && is_primitive_path_head(peek_kind()) &&
+        segment_count == 0 && is_primitive_path_head(peek_kind()) &&
         pos_ + 1 < tokens_.size() &&
         tokens_[pos_ + 1].kind == lexer::TokenKind::ColonColon;
     if (!is_path_segment(peek_kind()) && !scalar_head) {
-      if (segments.empty()) {
+      if (segment_count == 0) {
         expect(lexer::TokenKind::Ident, "path");
         return ast::PathIdx::invalid();
       }
       break;
     }
     const diag::Span span = peek().span;
-    segments.push_back(
-        ast::Ident{bytes_.substr(span.offset, span.length), span});
+    push_segment(ast::Ident{bytes_.substr(span.offset, span.length), span});
     advance();
     if (peek_kind() != lexer::TokenKind::ColonColon) {
       break;
@@ -631,7 +608,7 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
     }
     advance();
     if (type_args_segment != nullptr) {
-      *type_args_segment = static_cast<u32>(segments.size() - 1);
+      *type_args_segment = static_cast<u32>(segment_count - 1);
     }
     if (!match(lexer::TokenKind::Less)) {
       expect(lexer::TokenKind::Less, "`<`");
@@ -650,6 +627,10 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
       return ast::PathIdx::invalid();
     }
   }
+  const std::span<const ast::Ident> segments =
+      spilled_segments.empty()
+          ? std::span<const ast::Ident>(inline_segments, segment_count)
+          : std::span<const ast::Ident>(spilled_segments);
   ast::Path path;
   path.segments = ast::copy_to_arena(ast_.spans, segments);
   path.span = span_from(mark);
@@ -1429,17 +1410,17 @@ bool Parser::parse_decimal_u64(u64* out) {
   return true;
 }
 
-bool Parser::nesting_exhausted(diag::Span span) {
-  if (!nesting_.exhausted()) {
-    return false;
-  }
+void emit_nesting_too_deep(diag::DiagBag& bag, diag::Span span, u32 limit) {
+  const u32 index =
+      bag.emit<i18n::Key::ParserNestingTooDeep>(DiagCode::TooDeep, span, limit);
+  (void)index;
+}
+
+void Parser::report_exhausted_nesting(diag::Span span) {
   if (!reported_too_deep_) {
     reported_too_deep_ = true;
-    const u32 index = bag_.emit<i18n::Key::ParserNestingTooDeep>(
-        DiagCode::TooDeep, span, nesting_.limit());
-    (void)index;
+    emit_nesting_too_deep(bag_, span, nesting_.limit());
   }
-  return true;
 }
 
 ast::BlockIdx Parser::parse_header_block() {
@@ -1568,6 +1549,41 @@ ast::BlockIdx Parser::parse_block() {
   return ast_.blocks.push_back(block);
 }
 
+std::optional<bool> Parser::spelled_equals(usize first,
+                                           bool require_ascription) const {
+  using K = lexer::TokenKind;
+  bool ascription = false;
+  i32 depth = 0;
+  for (usize ahead = first;; ++ahead) {
+    const K kind = peek_kind(ahead);
+    if (kind == K::Eof) {
+      break;
+    }
+    if (depth == 0) {
+      if (kind == K::Semicolon || kind == K::RBrace || kind == K::ColonEq) {
+        break;
+      }
+      if (kind == K::Eq) {
+        if (require_ascription && !ascription) {
+          break;
+        }
+        return ascription;
+      }
+      if (kind == K::Colon) {
+        ascription = true;
+      }
+    }
+    if (kind == K::LParen || kind == K::LBracket || kind == K::LBrace) {
+      ++depth;
+    } else if ((kind == K::RParen || kind == K::RBracket ||
+                kind == K::RBrace) &&
+               depth > 0) {
+      --depth;
+    }
+  }
+  return std::nullopt;
+}
+
 std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
   using K = lexer::TokenKind;
   const lexer::Token start = peek();
@@ -1593,12 +1609,23 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
       keyword = true;
       matched = true;
     }
-  } else if (start.kind == K::Mut && peek_kind(1) == K::Ident &&
-             peek_kind(2) == K::Eq) {
-    const u32 index = bag_.emit<i18n::Key::ParserMutDeclarationSpelling>(
-        DiagCode::Spelling, start.span);
-    (void)index;
-    matched = true;
+  } else if (start.kind == K::Mut && peek_kind(1) == K::Ident) {
+    // `mut a = ...` and `mut a: T = ...`: the mutable spelling wrote
+    // `=` for `:=`, with or without an ascription of its own. The
+    // ascription decides which form of the declaration to name.
+    const std::optional<bool> ascription = spelled_equals(2, false);
+    if (ascription.has_value()) {
+      if (*ascription) {
+        const u32 index = bag_.emit<i18n::Key::ParserTypedDeclarationSpelling>(
+            DiagCode::Spelling, start.span);
+        (void)index;
+      } else {
+        const u32 index = bag_.emit<i18n::Key::ParserMutDeclarationSpelling>(
+            DiagCode::Spelling, start.span);
+        (void)index;
+      }
+      matched = true;
+    }
   } else if (is_primitive_type_token(start.kind) && peek_kind(1) == K::Ident &&
              (peek_kind(2) == K::Eq || peek_kind(2) == K::ColonEq)) {
     const u32 index = bag_.emit<i18n::Key::ParserTypeFirstDeclarationSpelling>(
@@ -1610,40 +1637,11 @@ std::optional<ast::StmtIdx> Parser::parse_spelled_declaration(usize mark) {
     // `a: T = ...`: a typed declaration that wrote `=` for `:=`. A
     // plain `a = ...` has no ascription and stays an ordinary
     // reassignment for the analyzer to judge.
-    bool ascription = false;
-    i32 depth = 0;
-    for (usize ahead = 1;; ++ahead) {
-      const K kind = peek_kind(ahead);
-      if (kind == K::Eof) {
-        break;
-      }
-      if (depth == 0) {
-        if (kind == K::Semicolon || kind == K::RBrace) {
-          break;
-        }
-        if (kind == K::ColonEq) {
-          break;
-        }
-        if (kind == K::Eq) {
-          matched = ascription;
-          break;
-        }
-        if (kind == K::Colon) {
-          ascription = true;
-        }
-      }
-      if (kind == K::LParen || kind == K::LBracket || kind == K::LBrace) {
-        ++depth;
-      } else if ((kind == K::RParen || kind == K::RBracket ||
-                  kind == K::RBrace) &&
-                 depth > 0) {
-        --depth;
-      }
-    }
-    if (matched) {
+    if (spelled_equals(1, true).has_value()) {
       const u32 index = bag_.emit<i18n::Key::ParserTypedDeclarationSpelling>(
           DiagCode::Spelling, start.span);
       (void)index;
+      matched = true;
     }
   }
   if (!matched) {

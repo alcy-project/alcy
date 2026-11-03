@@ -130,6 +130,21 @@ struct GenericInstance {
   bool complete = false;
 };
 
+// Past this many entries a table that a lookup would otherwise walk
+// answers through an index: below it building one costs more than the
+// walk it saves.
+constexpr u32 INDEX_MIN = 64;
+
+// The methods of one self type: the entries in the order they
+// registered, and, once the type registers more than INDEX_MIN of them,
+// the first entry each name answers. A name answers an entry that is
+// neither a spec's registration nor one call's instantiation. A type
+// below the threshold holds no index, so a lookup reads the entries.
+struct MethodTable {
+  std::vector<std::pair<u32, u32>> entries;
+  std::unordered_map<std::string_view, u32> by_name;
+};
+
 class Checker {
  public:
   Checker(const ModuleTree& tree,
@@ -152,13 +167,11 @@ class Checker {
   ir::StorageBuilder builder;
   // A generic call resolves to one signature per call expression and
   // instantiation. Resolving it again is what makes a nest of calls
-  // double in cost, so the answer is kept.
-  struct CallResolution {
-    u32 expr = 0;
-    u32 inst = 0;
-    const CheckedModule::FnSig* sig = nullptr;
-  };
-  std::vector<CallResolution> call_resolutions_;
+  // double in cost, so the answer is kept, keyed by both.
+  static u64 call_resolution_key(u32 expr, u32 inst) {
+    return (static_cast<u64>(expr) << 32) | inst;
+  }
+  std::unordered_map<u64, const CheckedModule::FnSig*> call_resolutions_;
   // The compilation's one interner; a second one here would mint storage ids
   // that lowering and codegen could not resolve.
   ir::SymbolTable& interner;
@@ -189,6 +202,9 @@ class Checker {
   std::unordered_map<u32, u32> instance_by_type_;
   std::vector<std::vector<u32>> instances_by_nominal_;
   std::vector<FnInstance> fn_instances;
+  // The last instance minted for each (module, item), so a request walks
+  // only the instances of the function it asks about.
+  std::unordered_map<u64, u32> fn_instance_head_;
   // Shared instantiation numbering that keys lowering side tables.
   // Holds each generic enum/struct instance type in creation order and
   // an invalid placeholder per generic function body, so both kinds
@@ -207,7 +223,7 @@ class Checker {
   // list charged the checker its types times its copies. This answers the
   // same question: a later entry for a copy wins, as walking from the back
   // did.
-  std::unordered_map<u32, u32> type_origins_by_index_;
+  std::vector<u32> type_origins_by_index_;
   // Const pre-pass state, keyed by the initializer being resolved.
   // `in_progress` catches a const that reaches itself, `checked` keeps
   // one initializer from being checked twice, and `failed` lets a later
@@ -225,6 +241,27 @@ class Checker {
   // instead of recursing, and so a later sweep does not register the
   // same declaration twice.
   std::unordered_set<u32> registered_items_;
+  // A module's own statics by the name they declare, each mapped to the
+  // position it holds in the module's list. A value path that named a
+  // static read that whole list, so one name cost the module.
+  std::vector<std::unordered_map<std::string_view, u32>> static_by_name_;
+  // The statics index, as the free `find_static` reads it.
+  StaticsByModule statics_index() const { return {static_by_name_}; }
+  // Free functions by the name they declare once a module declares more
+  // than INDEX_MIN of them, each mapped to the position it holds in the
+  // module's list. Below that a bare call reads the whole list, which is
+  // shorter than building the index; above it one name would cost the
+  // module's size. A module below the threshold holds no map.
+  std::vector<std::unordered_map<std::string_view, u32>> fn_by_name_;
+  // The scan ensure_function_named and ensure_static_named make for a
+  // name no table answers, by module and name: it looked at every item
+  // the module declares, so a name it did not find is one the module
+  // cannot declare, and asking again would walk the same items.
+  std::vector<std::unordered_set<std::string_view>> scanned_fns_;
+  // Set once process_module has visited every item of every module, which
+  // registers each declaration a scan could reach: from then on a name the
+  // tables do not answer is one the package does not declare.
+  bool signatures_swept_ = false;
   // Nonzero while a body is being checked by the const pre-pass.
   // A call reached there types its callee's body too, so the evaluator
   // finds the whole call graph typed.
@@ -234,6 +271,9 @@ class Checker {
   // Destructor resolution, aligned with the type table by index.
   std::vector<CheckedModule::DropGlue> drop_glue_;
   std::vector<u8> needs_drop_;
+  // The types validate_cycles already found to contain no value cycle.
+  // The types the cycle walk already found to contain no value cycle.
+  std::vector<u8> cycle_clean_;
   // Marked where the anchor interns; the walk that reads it is
   // structural, so only the anchor itself needs an entry.
   std::vector<u8> not_movable_;
@@ -364,8 +404,12 @@ class Checker {
   };
   ClosureTables closureTables_;
   u32 loop_depth = 0;
-  // Nonzero while checking comp evaluation contexts (comp block
-  // contents and comp declaration initializers).
+  // Nonzero while checking code that runs during compilation: the
+  // contents of a `comp` block, a comp declaration initializer, and
+  // the body of a `comp fn`.
+  u32 comp_eval_depth = 0;
+  // Nonzero while checking the contents of a `comp` block, whose
+  // boundary a `ret` may not cross.
   u32 comp_depth = 0;
   // Verifies comp-known-ness while block scopes are still alive
   // (comp blocks and their nested bodies).
@@ -391,6 +435,11 @@ class Checker {
   // Whether a value of the type may be moved (ADR-0085): the walk
   // normalizes storage copies through the checker's origin links.
   bool is_movable(ir::TypeIdx type) const;
+  // Whether a value of the type may be copied. Copy is structural
+  // (`docs/spec/values.md`), and a declared destructor or an anchor
+  // makes the type move-only, so the walk answers with the destructor
+  // walk the drop phase would run.
+  bool is_copy(ir::TypeIdx type);
   // ADR-0085: a type argument is Movable. A nominal checks its argument
   // list where it instantiates; a function's or a method's arguments
   // bind on paths of their own, so each instantiation asks this before
@@ -398,6 +447,24 @@ class Checker {
   // type argument.
   bool check_type_args_movable(std::span<const ir::TypeIdx> args,
                                diag::Span span);
+  // Whether the type has a size the target can address: an array is
+  // its element times its length, an aggregate is its fields in order,
+  // and a shape whose size does not fit `isize` is refused rather than
+  // given a wrapped number. Answers what the shape's size is, or
+  // nothing when it has none.
+  bool has_unbound(ir::TypeIdx type, std::vector<u32>& stack) const;
+  // What one shape's size walk answers: the size, and whether the walk
+  // turned back on a shape it was already inside. A shape that holds
+  // itself has no size the layout could report - the checks that refuse
+  // the cycle say why (EC007) - and the flag is how the walk says so
+  // without asking the layout for a number that is not there.
+  struct SizeWalk {
+    u64 size = 0;
+    bool cyclic = false;
+  };
+  std::optional<SizeWalk> checked_size(ir::TypeIdx type,
+                                       std::vector<u32>& stack) const;
+  bool check_type_size(ir::TypeIdx type, diag::Span span);
   // The spec policy of `package`, or nullptr when the tree carries
   // none, which reads as every spec being open.
   const PackagePolicy* policy_of(std::string_view package) const;
@@ -726,8 +793,23 @@ class Checker {
   std::span<const ast::GenericParam> nominal_params(const NominalEntry& entry);
   // Appends a storage copy of `type` and records its origin.
   ir::TypeIdx storage_copy(ir::TypeIdx type);
-  // Follows storage copies back to the type they were made from.
-  ir::TypeIdx type_origin(ir::TypeIdx type) const;
+  // Follows storage copies back to the type they were made from, which is
+  // the type the first copy was made from. The chain is walked here because
+  // the type checker asks at the head of every structural comparison, and
+  // most types are not copies at all.
+  ir::TypeIdx type_origin(ir::TypeIdx type) const {
+    ir::TypeIdx current = type;
+    for (u32 depth = 0; depth <= type_origins_.size(); ++depth) {
+      const u32 found = current.idx < type_origins_by_index_.size()
+                            ? type_origins_by_index_[current.idx]
+                            : base::INVALID_IDX;
+      if (found == base::INVALID_IDX) {
+        return current;
+      }
+      current = ir::TypeIdx(found);
+    }
+    return current;
+  }
   // Interns a nominal's type. Generic declarations defer: their type
   // is fixed later against the expectation or the scrutinee, so the
   // error type marks "resolve from context".
@@ -1013,10 +1095,10 @@ class Checker {
   // Glue keyed by the nominal shape a type node names, so a second
   // node over the same declaration answers with the same destructor.
   std::unordered_map<u64, CheckedModule::DropGlue> drop_glue_by_shape_;
-  // Methods by the type they are declared on, as (module, position). A call
-  // is resolved by walking the methods of the type it names, not every
-  // method in the package.
-  std::unordered_map<u32, std::vector<std::pair<u32, u32>>> methods_by_self_;
+  // Methods by the type they are declared on. A call is resolved by
+  // looking up the methods of the type it names, not every method in the
+  // package.
+  std::unordered_map<u32, MethodTable> methods_by_self_;
   // The nominal that declares a type, by the type it built. A field access
   // needs the declaration that names a field, a match on an enumeration needs
   // the one that names its variants, a method call needs the one its receiver
@@ -1066,8 +1148,12 @@ class Checker {
   std::unordered_map<const void*, std::pair<u32, u32>, AddressHash>
       position_by_address_;
   // Registers a function and answers the slot it went into, which is what a
-  // call site holds and what the positions above are keyed by.
-  CheckedModule::FnSig& add_function(u32 module, CheckedModule::FnSig sig);
+  // call site holds and what the positions above are keyed by. `is_method`
+  // marks a method's signature as it goes in, before the index a bare call
+  // reads can see it.
+  CheckedModule::FnSig& add_function(u32 module,
+                                     CheckedModule::FnSig sig,
+                                     bool is_method);
   // Registers a method and returns it. Where two modules declare a
   // destructor for one type, the earlier module's is kept, which is what a
   // walk in module order would have found.
@@ -1387,6 +1473,30 @@ class Checker {
   ir::TypeIdx check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
   void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
+  // Appends one function instance and links it into the chain its item
+  // and module share.
+  void push_fn_instance(ast::ItemIdx item,
+                        u32 module,
+                        const std::vector<ir::TypeIdx>& args,
+                        u32 sig_index,
+                        u32 inst);
+  // The per-function state a nested body check writes: every field
+  // `check_fn` mutates on its way through a body, plus the two scopes a
+  // nested check appends to.
+  struct FnStateScope {
+    ir::TypeIdx ret = ir::TypeIdx::invalid();
+    u32 loop = 0;
+    bool in_fn = false;
+    bool bind_comp_known = false;
+    bool reported_too_deep = false;
+    u32 cur_inst = 0;
+    u32 comp_depth = 0;
+    usize specs = 0;
+    usize param_scope = 0;
+
+    void save(Checker& checker);
+    void restore(Checker& checker);
+  };
   void check_main(u32 module, ast::ItemIdx fn);
   void check_bodies();
   // Checks every generic body once, against its parameters (ADR-0079):

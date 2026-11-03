@@ -1223,6 +1223,28 @@ class RuntimeBuilder {
     builder_.CreateRet(builder_.CreateSExtOrTrunc(count, i64, "count"));
   }
 
+  // The handler the C runtime calls instead of ending the process, so a
+  // call it cannot serve lands back in the runtime as -1 and an errno.
+  llvm::Function* quiet_argument() {
+    const char* name = "alcy_quiet_argument";
+    if (llvm::Function* existing = module_.getFunction(name)) {
+      return existing;
+    }
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getVoidTy(),
+        {builder_.getPtrTy(), builder_.getPtrTy(), builder_.getPtrTy(),
+         builder_.getInt32Ty(), usize_},
+        false);
+    llvm::Function* function = runtime(name, type);
+    llvm::BasicBlock* caller = builder_.GetInsertBlock();
+    llvm::BasicBlock* body =
+        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    builder_.SetInsertPoint(body);
+    builder_.CreateRetVoid();
+    builder_.SetInsertPoint(caller);
+    return function;
+  }
+
   // One libc call, with the raw signed result the caller compares; the
   // Windows entry points take and return the narrower count.
   llvm::Value* io_call(bool is_write,
@@ -1230,6 +1252,22 @@ class RuntimeBuilder {
                        llvm::Value* data,
                        llvm::Value* len) {
     if (windows_) {
+      llvm::Type* narrow = builder_.getInt32Ty();
+      // The C runtime reports an argument it cannot serve by ending the
+      // process through its invalid parameter handler, and a descriptor
+      // the program does not hold is such an argument. A handler that
+      // returns leaves the two calls below to answer -1 with EBADF,
+      // which is what a raw descriptor call gives the same caller.
+      // The thread-local slot holds it for this call alone and the
+      // previous handler goes back when it returns, so the report of any
+      // other call on this thread still ends the process as the C
+      // runtime intends.
+      llvm::Function* install =
+          libc("_set_thread_local_invalid_parameter_handler",
+               llvm::FunctionType::get(builder_.getPtrTy(),
+                                       {builder_.getPtrTy()}, false));
+      llvm::Value* previous =
+          builder_.CreateCall(install, {quiet_argument()}, "previous");
       // The C runtime opens descriptors in text mode by default, which
       // translates a newline on read and write; that would make the
       // faithful descriptor call answer a byte count the caller never
@@ -1237,24 +1275,21 @@ class RuntimeBuilder {
       // pass through exactly as a raw descriptor call would give them.
       // The mode sticks with the descriptor, so later calls see the
       // same answer.
-      llvm::Function* set_mode =
-          libc("_setmode",
+      llvm::Function* set_mode = libc(
+          "_setmode", llvm::FunctionType::get(narrow, {narrow, narrow}, false));
+      builder_.CreateCall(set_mode,
+                          {fd_value, llvm::ConstantInt::get(narrow, 0x8000)});
+      llvm::Function* function =
+          libc(is_write ? "_write" : "_read",
                llvm::FunctionType::get(
-                   builder_.getInt32Ty(),
-                   {builder_.getInt32Ty(), builder_.getInt32Ty()}, false));
-      builder_.CreateCall(
-          set_mode,
-          {fd_value, llvm::ConstantInt::get(builder_.getInt32Ty(), 0x8000)});
-      llvm::Function* function = libc(
-          is_write ? "_write" : "_read",
-          llvm::FunctionType::get(builder_.getInt32Ty(),
-                                  {builder_.getInt32Ty(), builder_.getPtrTy(),
-                                   builder_.getInt32Ty()},
-                                  false));
-      return builder_.CreateCall(
-          function,
-          {fd_value, data, builder_.CreateTrunc(len, builder_.getInt32Ty())},
+                   narrow, {narrow, builder_.getPtrTy(), narrow}, false));
+      llvm::Value* count = builder_.CreateCall(
+          function, {fd_value, data, builder_.CreateTrunc(len, narrow)},
           "count");
+      builder_.CreateCall(install, {previous});
+      // Setting and restoring the handler is what this path pays for the
+      // answer, and no benchmark sees it: tools/perf.py builds for Linux.
+      return count;
     }
     llvm::Function* function =
         libc(is_write ? "write" : "read",
@@ -1287,6 +1322,23 @@ class RuntimeBuilder {
         {text_constant(MESSAGE), llvm::ConstantInt::get(usize_, MESSAGE.size()),
          empty_text_, llvm::ConstantInt::get(usize_, 0)});
     builder_.CreateUnreachable();
+  }
+
+  // The largest object the address space can hold. A request past it is
+  // refused here rather than handed to the host allocator, which cannot
+  // answer for it: `posix_memalign` aborts inside a sanitizer instead of
+  // reporting failure, and the freestanding path's mapping length adds
+  // the alignment and the header to the size, a sum that would wrap into
+  // a block smaller than the caller asked for.
+  llvm::Value* unrepresentable_request(llvm::Value* size, llvm::Value* align) {
+    llvm::Constant* max_object = llvm::ConstantInt::get(
+        usize_, llvm::APInt::getSignedMaxValue(usize_->getBitWidth()));
+    llvm::Value* size_too_large =
+        builder_.CreateICmpUGT(size, max_object, "size_too_large");
+    llvm::Value* align_too_large =
+        builder_.CreateICmpUGT(align, max_object, "align_too_large");
+    return builder_.CreateOr(size_too_large, align_too_large,
+                             "unrepresentable");
   }
 
   // The requested alignment must be a power of two. POSIX allocators
@@ -1336,8 +1388,9 @@ class RuntimeBuilder {
     llvm::Value* masked = builder_.CreateAnd(align, lower, "masked");
     llvm::Value* not_power_of_two =
         builder_.CreateICmpNE(masked, zero, "not_power_of_two");
-    llvm::Value* invalid =
-        builder_.CreateOr(no_align, not_power_of_two, "invalid");
+    llvm::Value* invalid = builder_.CreateOr(
+        builder_.CreateOr(no_align, not_power_of_two, "bad_alignment"),
+        unrepresentable_request(size, align), "invalid");
     builder_.CreateCondBr(invalid, reject, prepare);
 
     builder_.SetInsertPoint(reject);
@@ -1463,8 +1516,9 @@ class RuntimeBuilder {
     llvm::Value* masked = builder_.CreateAnd(align, lower, "masked");
     llvm::Value* not_power_of_two =
         builder_.CreateICmpNE(masked, constant(0), "not_power_of_two");
-    llvm::Value* invalid =
-        builder_.CreateOr(no_align, not_power_of_two, "invalid");
+    llvm::Value* invalid = builder_.CreateOr(
+        builder_.CreateOr(no_align, not_power_of_two, "bad_alignment"),
+        unrepresentable_request(size, align), "invalid");
     builder_.CreateCondBr(invalid, reject, mapped);
 
     builder_.SetInsertPoint(reject);

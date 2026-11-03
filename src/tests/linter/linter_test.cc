@@ -636,6 +636,32 @@ TEST_CASE("unreachable-pattern leaves a guarded anything-pattern alone") {
   CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 0);
 }
 
+TEST_CASE("unreachable-pattern reports a repeated literal") {
+  Run run;
+  run("fn f(x: i32) -> i32 {\n  ret match x {\n    1 => 1,\n    1 => 2,\n"
+      "    _ => 3,\n  }\n}\n\nfn main() -> i32 {\n  ret f(0)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 1);
+}
+
+TEST_CASE("unreachable-pattern leaves a guarded repeat alone") {
+  Run run;
+  // The guard tests after the pattern binds, so the arm below still runs.
+  run("fn f(x: i32) -> i32 {\n  ret match x {\n    1 if x > 5 => 1,\n    1 => "
+      "2,"
+      "\n    _ => 3,\n  }\n}\n\nfn main() -> i32 {\n  ret f(0)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 0);
+}
+
+TEST_CASE("unreachable-pattern keeps literals of opposite sign apart") {
+  Run run;
+  run("fn f(x: i32) -> i32 {\n  ret match x {\n    -1 => 1,\n    1 => 2,\n"
+      "    _ => 3,\n  }\n}\n\nfn main() -> i32 {\n  ret f(0)\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unreachable-pattern") == 0);
+}
+
 TEST_CASE("unreachable-pattern leaves enum variants alone") {
   Run run;
   // An uppercase or qualified name is a unit variant, not a binding, so

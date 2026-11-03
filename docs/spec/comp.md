@@ -60,14 +60,17 @@ arrays composed of comp-known values.
   compilation: called from a `comp` block or another comp-evaluated
   context, with comp-known arguments, its result splices as a
   comp-known value.
+- A `comp fn`'s body is comp evaluation itself: the restrictions the
+  section below lists hold inside it, and it may call other
+  `comp fn`s.
 - Calling one outside comp evaluation, in a call or a value position,
   is a compile-time error. There is no `const fn`; `comp` is the one
   word for code evaluated during compilation.
 - A receiver method with the marker is deferred; `comp fn` is a free
   function for now, and the marker does not combine with `unsafe` yet.
-- Only a tail `ret` is supported by the AST evaluator; an early `ret`
-  reached through a branch is a compile-time error until the IR
-  interpreter lands (see Deferred).
+- A `ret` ends the evaluation with its value, whether it is the
+  body's tail or reached through a branch: a taken arm hands the return
+  to the body that owns it.
 
 ## Blocks
 
@@ -90,8 +93,10 @@ The following are compile-time errors inside comp evaluation:
 - I/O (`print`, `println`) and `panic` (`panic` aborts nothing at
   compile time; it diagnoses instead).
 - Reading `static` items (storage exists only at runtime).
-- Loops whose conditions are not comp-known; comp-known loops are
-  unrolled.
+- Loops whose conditions are not comp-known; comp-known `while` loops
+  are unrolled. A `for` loop is refused: iteration goes through a
+  cursor that holds a raw pointer into the iterable, and a
+  compile-time value has no pointer form.
 - References in the spliced result, except `str` (references may appear
   during evaluation; the compiler materializes them as constant data).
 - Exhausting the evaluation quota. Every function call and every loop

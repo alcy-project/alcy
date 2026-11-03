@@ -39,6 +39,14 @@ table.**
   count, a signed division's raw divisor — which is the walk's whole
   reason to exist. The panic site is the instruction's own span,
   rendered the way call sites already are.
+- The release passes (ADR-0067) leave an instruction where it stands when
+  a check reads it: folding the mask under a shift count or the select
+  over a signed division would leave the abort comparing values the
+  program never computed, and folding a checked `+`, `-` or `*` would
+  delete the abort itself. Folding an overflow check is sound where the
+  folded operands settle that it stays silent, so the passes may do that
+  one and nothing more. What they hold back follows from the IR alone,
+  which is what keeps them profile-independent.
 - A backend never reads `overflow-checks`; it reads entries. The LLVM
   emitter realizes an overflow entry with the `with.overflow`
   intrinsic and the check helper, and the direct wasm backend

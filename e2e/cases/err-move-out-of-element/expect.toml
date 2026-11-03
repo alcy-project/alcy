@@ -1,0 +1,4 @@
+exit = 4
+args = ["--color=always"]
+contains = ["Moving a non-`Copy` value out from under an array's element", "\u001b[31m"]
+not_contains = ["Internal lowering error", "field without declaration"]

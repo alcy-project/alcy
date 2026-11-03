@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cli/result_code.h"
 #include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
@@ -1436,6 +1437,166 @@ TEST_CASE("Startup gives the debug logger a sink") {
   SilencedOutput silenced;
   CHECK(run_check_on(dir, "missing.al") != 0);
   CHECK(debug::debug_logger.has_sink());
+}
+
+namespace {
+
+// The formatting command's argv, for the cases that name files rather
+// than a directory to walk.
+i32 run_fmt_args(std::span<const std::string_view> arguments) {
+  std::vector<std::string> storage{"alcy", "fmt"};
+  for (const std::string_view argument : arguments) {
+    storage.emplace_back(argument);
+  }
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& argument : storage) {
+    argv.push_back(argument.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+// The same, over the package in the scratch directory that the command
+// is handed as its one positional.
+i32 run_fmt_with(io::TempDir& dir,
+                 std::string_view rel,
+                 std::span<const std::string_view> extra) {
+  const std::string target = dir.join(rel);
+  std::vector<std::string> storage{"alcy", "fmt"};
+  for (const std::string_view argument : extra) {
+    storage.emplace_back(argument);
+  }
+  storage.push_back(target);
+  std::vector<char*> argv;
+  argv.reserve(storage.size());
+  for (std::string& argument : storage) {
+    argv.push_back(argument.data());
+  }
+  return cli_main(static_cast<i32>(argv.size()), argv.data());
+}
+
+// A package whose manifest lists the given modules, so a command that
+// reads the manifest has a list rather than a default.
+bool write_listing_package(io::TempDir& dir,
+                           std::string_view rel,
+                           std::string_view modules,
+                           std::string_view program) {
+  return write_all(dir, std::string(rel) + "/alcy.toml",
+                   std::string("[package]\nname = \"app\"\nversion = "
+                               "\"0.1.0\"\nlicense = \"\"\n\n[modules]\n"
+                               "include = [") +
+                       std::string(modules) +
+                       "]\n\n[[bin]]\nname = \"app\"\npath = "
+                       "\"main.al\"\n") &&
+         write_all(dir, std::string(rel) + "/main.al", program);
+}
+
+// A source whose only fault is its layout, and the layout fmt writes.
+constexpr std::string_view UNALIGNED_PROGRAM =
+    "fn main() -> i32 {\n"
+    "      ret 0\n"
+    "}\n";
+constexpr std::string_view ALIGNED_PROGRAM =
+    "fn main() -> i32 {\n"
+    "  ret 0\n"
+    "}\n";
+
+}  // namespace
+
+TEST_CASE("fmt --stdout carries the formatted text and nothing else") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_fmt_stdout_");
+  const bool setup = write_all(dir, "one.al", UNALIGNED_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  CapturedStdout captured(dir.join("captured.txt"));
+  CHECK(captured.ok());
+  if (!captured.ok()) {
+    return;
+  }
+  const std::string file = dir.join("one.al");
+  const std::vector<std::string_view> args{"--stdout", "--file", file};
+  CHECK(run_fmt_args(std::span<const std::string_view>(args)) == 0);
+  CHECK(captured.text() == ALIGNED_PROGRAM);
+  // --stdout answers a stream, so the file keeps its layout.
+  CHECK(io::read_file(dir.join("one.al")) == UNALIGNED_PROGRAM);
+}
+
+TEST_CASE("fmt --stdout refuses a target that names more than one file") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_fmt_stdout_many_");
+  const bool setup = write_all(dir, "one.al", UNALIGNED_PROGRAM) &&
+                     write_all(dir, "two.al", UNALIGNED_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    const std::string one = dir.join("one.al");
+    const std::string two = dir.join("two.al");
+    const std::vector<std::string_view> args{"--stdout", "--file", one,
+                                             "--file", two};
+    CHECK(run_fmt_args(std::span<const std::string_view>(args)) ==
+          static_cast<i32>(ResultCode::ArgParseError));
+  }
+  // Neither file is rewritten in place on the way to the refusal.
+  CHECK(io::read_file(dir.join("one.al")) == UNALIGNED_PROGRAM);
+  CHECK(io::read_file(dir.join("two.al")) == UNALIGNED_PROGRAM);
+}
+
+TEST_CASE("fmt formats a package whose other module does not parse") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_fmt_broken_");
+  const bool setup =
+      write_listing_package(dir, "proj", "\"main\", \"util\"",
+                            UNALIGNED_PROGRAM) &&
+      write_all(dir, "proj/util.al", "pub fn broken() -> i32 {\n  ret (\n}\n");
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    const std::span<const std::string_view> none;
+    CHECK(run_fmt_with(dir, "proj", none) == 0);
+  }
+  CHECK(io::read_file(dir.join("proj/main.al")) == ALIGNED_PROGRAM);
+}
+
+TEST_CASE("fmt formats a source the manifest does not list") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_fmt_unlisted_");
+  const bool setup =
+      write_listing_package(dir, "proj", "\"main\"", ALIGNED_PROGRAM) &&
+      write_all(dir, "proj/util.al", UNALIGNED_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    const std::span<const std::string_view> none;
+    CHECK(run_fmt_with(dir, "proj", none) == 0);
+  }
+  CHECK(io::read_file(dir.join("proj/util.al")) == ALIGNED_PROGRAM);
+}
+
+TEST_CASE("fmt --check reports a source the manifest does not list") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_cli_fmt_check_unlisted_");
+  const bool setup =
+      write_listing_package(dir, "proj", "\"main\"", ALIGNED_PROGRAM) &&
+      write_all(dir, "proj/util.al", UNALIGNED_PROGRAM);
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  {
+    SilencedOutput silenced;
+    const std::vector<std::string_view> args{"--check"};
+    CHECK(run_fmt_with(dir, "proj", std::span<const std::string_view>(args)) ==
+          static_cast<i32>(ResultCode::FmtNotClean));
+  }
+  // A check names the file and leaves its layout alone.
+  CHECK(io::read_file(dir.join("proj/util.al")) == UNALIGNED_PROGRAM);
 }
 
 }  // namespace cli

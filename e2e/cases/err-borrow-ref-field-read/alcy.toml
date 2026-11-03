@@ -1,0 +1,11 @@
+[package]
+name = "reffread"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "reffread"
+path = "main.al"

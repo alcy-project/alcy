@@ -104,7 +104,9 @@
   F(AnalyzerArrayLiteralWithoutCount, Error, Analyzer, "Array literal needs elements or a repeat count") \
   F(AnalyzerArrayRepeatArity, Error, Analyzer, "Array expects {} elements, found repeat of {}") \
   F(AnalyzerArrayRepeatTooLarge, Error, Analyzer, "Array repeat count {} exceeds the limit of {}") \
+  F(AnalyzerArrayRepeatNotCopy, Error, Analyzer, "An array repeat copies its element once per slot, so the element must be Copy") \
   F(AnalyzerArrayRunNeedsBorrow, Error, Analyzer, "A run of a fixed array must be borrowed (`&a[..]`)") \
+  F(AnalyzerTypeTooLarge, Error, Analyzer, "The size of this type does not fit in `isize`, so it has no layout") \
   F(AnalyzerAssignThroughShared, Error, Analyzer, "Cannot assign through a shared reference") \
   F(AnalyzerAssignToImmutable, Error, Analyzer, "Cannot assign to an immutable binding") \
   F(AnalyzerMutMethodNeedsMut, Error, Analyzer, "Cannot call '{}' on an immutable binding; declare it `mut`") \
@@ -142,6 +144,7 @@
   F(AnalyzerCompCondition, Error, Analyzer, "Comp condition is not comp-known") \
   F(AnalyzerCompConditionInitializer, Error, Analyzer, "Comp condition initializer is not comp-known") \
   F(AnalyzerConditionAlwaysMatches, Error, Analyzer, "This pattern always matches; write a plain condition or a refutable pattern") \
+  F(AnalyzerCompForIterable, Error, Analyzer, "Comp `for` iterable is not comp-known") \
   F(AnalyzerCompFunctionOutsideComp, Error, Analyzer, "Function '{}' is a `comp fn`; it can only be used during compilation") \
   F(AnalyzerCompMatchScrutinee, Error, Analyzer, "Comp match scrutinee is not comp-known") \
   F(AnalyzerCompParameterArgument, Error, Analyzer, "Argument for `comp` parameter must be comp-known") \
@@ -315,11 +318,13 @@
   F(LowerDestructorNotRun, Warning, Lowering, "Destructor for '{}' is not run: it is reached through a variant or an array, so declare 'fn drop(self: Self)' to end it") \
   F(LowerInternalError, Error, Lowering, "Internal lowering error: {}") \
   F(LowerBlockReferenceEscapes, Error, Lowering, "Reference to local '{}' escapes the block that declares it") \
+  F(LowerTemporaryReferenceEscapes, Error, Lowering, "A reference taken of a temporary outlives it") \
   F(LowerCompEngineMismatch, Error, Lowering, "Internal error: the comp engines disagree on '{}'") \
   F(LowerCompOverflow, Error, Lowering, "Integer overflow in constant evaluation") \
   F(LowerCompDivisionByZero, Error, Lowering, "Division by zero in constant evaluation") \
   F(LowerCompOutOfBounds, Error, Lowering, "Index out of bounds in constant evaluation") \
   F(LowerCompBudget, Error, Lowering, "Constant evaluation exhausted its budget") \
+  F(LowerCompNotEvaluable, Error, Lowering, "Constant evaluation cannot continue: {}") \
   F(LowerFunctionBudgetExhausted, Error, Lowering, "The compiler's function budget cannot hold the specialized functions this package needs") \
   F(LowerGuardMovesBinding, Error, Lowering, "A guard cannot bind '{}' by value: a false guard falls through to the next arm after the value is taken") \
   F(LowerIrVerificationFailed, Error, Lowering, "Lowered IR failed verification") \
@@ -491,6 +496,7 @@
   F(CliFmtNotFormatted, Note, Pipeline, "'{}' needs formatting") \
   F(CliFmtReadFailed, Note, Pipeline, "Cannot read '{}'") \
   F(CliFmtWriteFailed, Note, Pipeline, "Cannot write '{}'") \
+  F(CliFmtStdoutTakesOneFile, Note, Pipeline, "The `--stdout` flag takes one file") \
   F(CliFunctionPlural, Note, Pipeline, "functions") \
   F(CliFunctionSingular, Note, Pipeline, "function") \
   F(CliInitAbout, Note, Pipeline, "Create a package in an existing directory") \
@@ -522,6 +528,7 @@
   F(CliStdinHelp, Note, Pipeline, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
   F(CliStdinNeedsOutput, Note, Pipeline, "Compiling from standard input needs `-o` to name the output") \
   F(CliStdinTakesNoInput, Note, Pipeline, "The `--stdin` flag takes no input") \
+  F(CliFmtStdinTakesNoFiles, Note, Pipeline, "The `--stdin` flag takes no files") \
   F(CliSuiteHelp, Note, Pipeline, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
   F(CliTargetHelp, Note, Pipeline, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
   F(CliTimeTraceHelp, Note, Pipeline, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
@@ -567,6 +574,8 @@
   F(LintNeedlessBool, Warning, Lint, "this if can return its condition instead") \
   F(LintUnreachablePattern, Warning, Lint, "this pattern is unreachable; an earlier arm matches anything") \
   F(LintUnreachablePatternNote, Note, Lint, "the arm that matches anything is here") \
+  F(LintRepeatedPattern, Warning, Lint, "this pattern is unreachable; an earlier arm already names it") \
+  F(LintRepeatedPatternNote, Note, Lint, "the arm that names it first is here") \
   F(LintUnusedVariant, Warning, Lint, "variant {} of {} is never constructed") \
   F(LintDeadCode, Warning, Lint, "function {} is never called") \
   F(LintDeadCodeNote, Note, Lint, "if this is meant as a public surface, declare it pub") \

@@ -18,6 +18,7 @@
 #include "fpag/base/result.h"
 #include "i18n/messages.h"
 #include "parser/diag_code.h"
+#include "parser/parser.h"
 
 namespace parser {
 
@@ -55,14 +56,12 @@ class Desugarer {
     if (!nesting_.exhausted()) {
       return false;
     }
-    if (!reported_too_deep_) {
-      reported_too_deep_ = true;
-      const u32 index = bag.emit<i18n::Key::ParserNestingTooDeep>(
-          DiagCode::TooDeep, span, nesting_.limit());
-      (void)index;
-    }
+    report_exhausted_nesting(span);
     return true;
   }
+
+  // Reports it once, at the first descent that finds the budget exceeded.
+  void report_exhausted_nesting(diag::Span span);
 
   void push_scope() { scopes.emplace_back(); }
 
@@ -265,27 +264,12 @@ class Desugarer {
         break;
       }
       case ast::StmtKind::Reassign: {
+        // `x op= y` reads the place once and stores the operation's
+        // result, so its place is visited once.
         const ast::StmtReassign& reassign =
             node.payload.get<ast::StmtReassign>();
-        if (reassign.compound) {
-          ast::ExprNode binary;
-          binary.kind = ast::ExprKind::Binary;
-          binary.span = ast.stmts[stmt].span;
-          binary.payload.set(ast::ExprBinary{
-              .op = reassign.op,
-              .lhs = reassign.place,
-              .rhs = reassign.value,
-          });
-          ast::StmtNode& target = ast.stmts[stmt];
-          target.payload.set(ast::StmtReassign{
-              .place = target.payload.get<ast::StmtReassign>().place,
-              .compound = false,
-              .op = target.payload.get<ast::StmtReassign>().op,
-              .value = ast.exprs.push_back(binary),
-          });
-        }
         visit_expr(reassign.place);
-        visit_expr(ast.stmts[stmt].payload.get<ast::StmtReassign>().value);
+        visit_expr(reassign.value);
         break;
       }
       case ast::StmtKind::Expr: {
@@ -728,6 +712,13 @@ class Desugarer {
     }
   }
 };
+
+void Desugarer::report_exhausted_nesting(diag::Span span) {
+  if (!reported_too_deep_) {
+    reported_too_deep_ = true;
+    emit_nesting_too_deep(bag, span, nesting_.limit());
+  }
+}
 
 }  // namespace
 

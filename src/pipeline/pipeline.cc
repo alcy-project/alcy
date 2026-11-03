@@ -120,9 +120,8 @@ bool walk_sources(const path::Path& dir, std::vector<path::Path>& paths) {
 
 }  // namespace
 
-base::Result<DiscoveredSources, diag::Reported> discover_sources(
+base::Result<DiscoveredSourcePaths, diag::Reported> discover_source_paths(
     std::string_view dir,
-    source::SourceManager& sources,
     diag::DiagBag& bag) {
   base::Result<path::Path, path::PathError> root = path::Path::from_native(dir);
   if (root.is_err()) {
@@ -147,14 +146,34 @@ base::Result<DiscoveredSources, diag::Reported> discover_sources(
   }
   std::sort(paths.begin(), paths.end());
 
-  DiscoveredSources discovered;
-  discovered.root = std::string(root_path.as_view());
+  DiscoveredSourcePaths listed;
+  listed.root = std::string(root_path.as_view());
+  listed.files.reserve(paths.size());
   for (const path::Path& path : paths) {
+    listed.files.emplace_back(path.as_view());
+  }
+  return base::make_ok(std::move(listed));
+}
+
+base::Result<DiscoveredSources, diag::Reported> discover_sources(
+    std::string_view dir,
+    source::SourceManager& sources,
+    diag::DiagBag& bag) {
+  base::Result<DiscoveredSourcePaths, diag::Reported> listed =
+      discover_source_paths(dir, bag);
+  if (listed.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  DiscoveredSourcePaths paths = std::move(listed).unwrap();
+  DiscoveredSources discovered;
+  discovered.root = std::move(paths.root);
+  discovered.files.reserve(paths.files.size());
+  for (std::string_view path : paths.files) {
     base::Result<source::FileId, source::SourceError> loaded =
-        sources.load(path.as_view());
+        sources.load(path);
     if (loaded.is_err()) {
       const u32 index = bag.emit<i18n::Key::PipelineCannotReadSource>(
-          DiagCode::IoError, path.as_view());
+          DiagCode::IoError, path);
       (void)index;
       return base::make_err(diag::Reported{});
     }

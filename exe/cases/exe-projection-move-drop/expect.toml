@@ -1,0 +1,7 @@
+exit = 0
+stdout = """
+a kept
+take 2
+DROP 2
+DROP 1
+"""

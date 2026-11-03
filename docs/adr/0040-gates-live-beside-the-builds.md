@@ -46,8 +46,8 @@ answering one question ten times over.
 | `sanitizers` | `tools/check_exe.py --sanitize` | Needs a build, then clang on the output |
 | `benchmarks` | `tools/run_benchmarks.py smoke` | One entry's worth of work, asked once |
 
-`style.yaml` keeps `spelling`, `format`, and a new `specification` job, and
-loses `lint`. The spec check moves out of the lint job because it reads
+`style.yaml` keeps `spelling` and a new `specification` job, and loses
+`lint`. The spec check moves out of the lint job because it reads
 documents: it needs the repository, `uv`, and nothing else - no toolchain, no
 submodules - and giving it a job that pays for all three is how a fast check
 ends up looking like a slow one.
@@ -123,3 +123,86 @@ them, and a release workflow that was never handed an LLVM version built
 with none. Each job now reads the pin it uses from config.toml itself, so
 a workflow cannot forget to ask for a value it uses, and the reusable
 build workflows take no version inputs at all.
+
+**The matrix asks what a platform answers, and a job asks what a verb
+does.** `build.yaml` ran the e2e corpus, the exe acceptance, the borrow
+rules, the wasm acceptance, and the benchmark smoke in each of its ten
+entries, so one question about one corpus had ten answers at ten times the
+cost. The borrow rules and the wasm acceptance now run once, in `ci.yaml`'s
+`harness` matrix, where each entry is one command and the job is named
+after the verb: `Borrow Rules (alcy check)`, `Wasm Acceptance (alcy build
+--target=wasm)`. Both read source and ask the driver about it, and the wasm
+module comes out of the driver's own backend to be run by the same bun on
+every platform: the host answers for none of them.
+
+The e2e corpus and the exe acceptance stay in all ten entries. A case in
+either one links a program or runs one, and what the linker names the
+objects, what the frame walk finds, and what the runtime prints are
+answers a Unix and Windows give differently. `samples` is not a subset of
+them -- six example programs, none of them an exe case -- so pointing one
+entry's step at it left the other nine unasked about three hundred and
+eighty cases, and the failures that arrive on one platform and not the
+others arrive there.
+
+**A check that compiles nothing takes the binary instead of making one.**
+The format check rebuilt the tree to run a compiler that builds nothing,
+which was 543 s of a run for a second copy of a binary the Linux debug
+entry had just made. It takes that binary from the entry's artifacts, and
+`setup-build` grew the switch that installs the Python venv without the
+toolchain. That switch is the only setting the harness passes: nothing it
+runs builds a tree, so it has no cache and no build step of its own.
+
+**The first lint shard is the format job.** `tools/lint.py` runs the whole
+tree's format dry run from its first shard, so `style.yaml`'s `format` job
+paid a toolchain download and a gn generation to ask what the lint job asks
+with both already in place: 319 s of setup, 168 s of build, and 161 s of
+check. Style now runs no toolchain at all.
+
+**The cache holds the objects, not the binaries.** A debug tree built the
+way CI builds it is 1.8 GB, and 894 MB of that is the three binaries a link
+produces -- `alcy`, `tests`, and `benchmarks` -- which are also the part a
+second run remakes in one step from objects it already has. A 10 GB budget
+holds five entries of that size and the matrix keeps ten, and an entry is
+written by the run that reads it next, so a run evicted what the next run of
+that platform wanted and compiled the tree from nothing. A build directory
+now drops the linked outputs before it is saved and keeps every object: the
+same tree is 0.94 GB, the budget holds ten of those where it held five, and
+what is left is mostly the LLVM install, which changes when the pin does.
+
+**What a run keeps, and for how long.** A build artifact is kept 14 days,
+which is the span in which a `main` commit is still read to find out what
+broke. A wasm artifact is kept as long for the same reason. The driver the
+harness takes is kept one day: the run that made it and the run that reads
+it are the same run, and nothing after that downloads it. A failed entry's
+`build-record` is kept 7 days, because it answers a question about a commit
+someone is fixing now -- nothing downloads it, and by the following week the
+log has either been read or the fix has landed.
+
+**One job is what a branch requires.** Each check still stands on its own --
+one command, one red, a name that says which verb broke -- but protection
+names one context, `Gate`, whose single step reads the conclusions of the
+jobs it needs and fails unless every one of them succeeded. A required
+context had to be edited whenever a job was added to it, and a list that has
+to be remembered is a list that goes stale; `always()` over `toJSON(needs)`
+is a job that cannot forget a neighbour. It cannot forget a job either: the
+step reads the job names out of `ci.yaml` and fails when the list it waits
+for is missing one, so a job added there is required by a line in this
+repository and by no edit to the settings. What it does not do is remove the
+line. `needs` is a key of the file and not an expression, so the enumeration
+stays, and the gate is what keeps it honest instead of the memory of whoever
+adds a job.
+
+**A required context has to report on every pull request.** `style.yaml` has
+no `paths` filter, so its four jobs report on every change and can stay the
+contexts they are. `site.yaml` becomes advisory: it deploys, its filter means
+it cannot report on every change, and the run that builds the site is what
+says a site broke. `ci.yaml` loses its own filter for the same reason the
+others keep theirs -- a workflow a filter skipped reports nothing, and a
+change to prose alone would leave `Gate` "Expected" with nothing left that
+could make it green, so the one context required would block exactly the
+merges it was meant to unblock. The workflow runs on every change instead,
+and a `Changed Paths` job reads the diff: prose and the site skip the jobs
+that read a tree, and every other path runs them. A `skipped` conclusion
+passes only when there was nothing to read -- a job skipped on a change that
+did reach CI is as red as a failure, so a mistake in that list reads as a
+lost run rather than a silent green.

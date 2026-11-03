@@ -114,7 +114,7 @@ bool Checker::bind_pattern(u32 module,
                            ast::PatternIdx pattern,
                            ir::TypeIdx type,
                            bool by_ref) {
-  const bool comp = bind_comp_known || comp_depth > 0;
+  const bool comp = bind_comp_known || comp_eval_depth > 0;
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
     case ast::PatternKind::Wildcard: return false;
@@ -518,8 +518,8 @@ bool Checker::expr_comp_known(u32 module,
       // a comp-known value can have: a `const K: f64` names no value it
       // can read, and refusing it here is what keeps the evaluator's own
       // `literal is not comp-evaluable` off a user's path.
-      const CheckedModule::StaticInfo* info =
-          analyzer::find_static(modules, tree, module, segments[0].name);
+      const CheckedModule::StaticInfo* info = analyzer::find_static(
+          statics_index(), modules, tree, module, segments[0].name);
       return info != nullptr && type_comp_known(info->type);
     }
     case ast::ExprKind::Unary:
@@ -808,7 +808,7 @@ void Checker::check_call_args(u32 module,
     const ir::TypeIdx actual = check_expr(module, args[i], &param);
     unify(param, actual, ast.exprs[args[i]].span, "argument");
     const bool comp_required =
-        comp_depth > 0 ||
+        comp_eval_depth > 0 ||
         (fixed + i < comp_params.size() && comp_params[fixed + i]);
     // The argument's type must admit a comp-known value as well as its
     // expression shape: `&K` borrows a const, which the expression rule
@@ -816,7 +816,7 @@ void Checker::check_call_args(u32 module,
     // would refuse it later, off the argument's own span.
     if (comp_required && !comp_checked_in_scope(args[i]) &&
         !comp_known_value(module, args[i], actual)) {
-      if (comp_depth > 0) {
+      if (comp_eval_depth > 0) {
         const u32 index = bag.emit<i18n::Key::AnalyzerCompArgument>(
             DiagCode::NotCompKnown, ast.exprs[args[i]].span);
         (void)index;
@@ -879,8 +879,8 @@ bool Checker::is_const_item(u32 module, ast::PathIdx path) const {
   if (segments.size() != 1) {
     return false;
   }
-  const CheckedModule::StaticInfo* info =
-      analyzer::find_static(modules, tree, module, segments[0].name);
+  const CheckedModule::StaticInfo* info = analyzer::find_static(
+      statics_index(), modules, tree, module, segments[0].name);
   return info != nullptr && info->is_const && info->init.is_valid();
 }
 
@@ -899,7 +899,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
     case PathValue::Kind::ValueParam:
     case PathValue::Kind::Static:
     case PathValue::Kind::UnitVariant: {
-      if (resolved.kind == PathValue::Kind::Static && comp_depth > 0 &&
+      if (resolved.kind == PathValue::Kind::Static && comp_eval_depth > 0 &&
           !is_const_item(module, path)) {
         const u32 index =
             bag.emit<i18n::Key::AnalyzerStaticReadInCompEvaluation>(
@@ -953,7 +953,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
       }
       // A `comp fn` value outside comp evaluation is a deferred call
       // that compilation cannot produce (ADR-0054).
-      if (fn->is_comp && comp_depth == 0) {
+      if (fn->is_comp && comp_eval_depth == 0) {
         check_comp_fn_call(fn, span);
         return error_type();
       }
@@ -1102,7 +1102,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
   const std::span<const ast::ExprIdx> args =
       node.payload.get<ast::ExprCall>().args;
   const diag::Span span = node.span;
-  if (comp_depth > 0) {
+  if (comp_eval_depth > 0) {
     const u32 index = bag.emit<i18n::Key::AnalyzerWriteInCompEvaluation>(
         DiagCode::InvalidComp, span);
     (void)index;
@@ -1181,7 +1181,7 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
   const std::span<const ast::ExprIdx> args =
       node.payload.get<ast::ExprCall>().args;
   const diag::Span span = node.span;
-  if (comp_depth > 0) {
+  if (comp_eval_depth > 0) {
     const u32 index = bag.emit<i18n::Key::AnalyzerFormatInCompEvaluation>(
         DiagCode::InvalidComp, span);
     (void)index;
@@ -1243,7 +1243,7 @@ ir::TypeIdx Checker::check_io_print(u32 module,
   const std::span<const ast::ExprIdx> args =
       node.payload.get<ast::ExprCall>().args;
   const diag::Span span = node.span;
-  if (comp_depth > 0) {
+  if (comp_eval_depth > 0) {
     const u32 index = bag.emit<i18n::Key::AnalyzerPrintInCompEvaluation>(
         DiagCode::InvalidComp, span, fn->name);
     (void)index;
@@ -1639,7 +1639,7 @@ void Checker::check_unsafe_call(const CheckedModule::FnSig* fn,
 
 void Checker::check_comp_fn_call(const CheckedModule::FnSig* fn,
                                  diag::Span span) {
-  if (fn == nullptr || !fn->is_comp || comp_depth > 0) {
+  if (fn == nullptr || !fn->is_comp || comp_eval_depth > 0) {
     return;
   }
   const u32 index = bag.emit<i18n::Key::AnalyzerCompFunctionOutsideComp>(
@@ -1721,19 +1721,17 @@ ir::TypeIdx Checker::check_call(u32 module,
   }
   if (resolved.kind == PathValue::Kind::GenericFn) {
     const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+    const u64 key = call_resolution_key(expr.idx, cur_inst);
     const CheckedModule::FnSig* fn = nullptr;
-    for (usize i = call_resolutions_.size(); i > 0; --i) {
-      const CallResolution& entry = call_resolutions_[i - 1];
-      if (entry.expr == expr.idx && entry.inst == cur_inst) {
-        fn = entry.sig;
-        break;
-      }
+    const auto found = call_resolutions_.find(key);
+    if (found != call_resolutions_.end()) {
+      fn = found->second;
     }
     if (fn == nullptr) {
       fn = resolve_generic_fn(module, resolved.generic_item, call.args,
                               call.type_args, span);
       if (fn != nullptr) {
-        call_resolutions_.push_back(CallResolution{expr.idx, cur_inst, fn});
+        call_resolutions_.insert_or_assign(key, fn);
       }
     }
     if (fn == nullptr) {
@@ -1783,7 +1781,7 @@ ir::TypeIdx Checker::check_call(u32 module,
     record_call(module, callee, method);
     // An associated function reached from comp evaluation needs its
     // body typed the same way a method's is.
-    if (comp_depth > 0 || prechecking_fn_ > 0) {
+    if (comp_eval_depth > 0 || prechecking_fn_ > 0) {
       precheck_called_method(*method);
     }
     // Associated functions take no receiver; params map 1:1.
@@ -1847,7 +1845,7 @@ ir::TypeIdx Checker::check_call(u32 module,
     for (usize i = 0; i < args.size(); ++i) {
       const ir::TypeIdx actual = check_expr(module, args[i], &payloads[i]);
       unify(payloads[i], actual, ast.exprs[args[i]].span, "variant argument");
-      if (comp_depth > 0 && !comp_checked_in_scope(args[i]) &&
+      if (comp_eval_depth > 0 && !comp_checked_in_scope(args[i]) &&
           !expr_comp_known(module, args[i])) {
         const u32 index = bag.emit<i18n::Key::AnalyzerCompArgument>(
             DiagCode::NotCompKnown, ast.exprs[args[i]].span);
@@ -2017,7 +2015,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   // A const initializer's method call is interpreted by the comp
   // evaluator, which reads the callee's typed expressions; type the
   // body now, where the bodies sweep would otherwise come too late.
-  if (comp_depth > 0 || prechecking_fn_ > 0) {
+  if (comp_eval_depth > 0 || prechecking_fn_ > 0) {
     precheck_called_method(*method);
   }
   // The receiver coerces to a declared borrow; coercion itself is
@@ -2904,10 +2902,7 @@ ir::TypeIdx Checker::check_borrow_of_index(u32 module,
   // The operands were checked here rather than through `check_expr` on
   // the index, so record its own type for lowering.
   CheckedModule& checked = modules[module];
-  checked.expr_types.push_back({borrow.inner, pointee, cur_inst});
-  checked
-      .expr_type_by_key[CheckedModule::expr_type_key(borrow.inner, cur_inst)] =
-      static_cast<u32>(checked.expr_types.size() - 1);
+  checked.record_expr_type(borrow.inner, pointee, cur_inst);
   const ir::TypeIdx type = builder.reference_type(pointee, borrow.is_mut);
   if (expected != nullptr) {
     return unify(*expected, type, node.span, "borrow");
@@ -3688,9 +3683,7 @@ ir::TypeIdx Checker::check_expr(u32 module,
               return check_expr_inner(module, expr, expected);
             }();
   CheckedModule& checked = modules[module];
-  checked.expr_types.push_back({expr, type, cur_inst});
-  checked.expr_type_by_key[CheckedModule::expr_type_key(expr, cur_inst)] =
-      static_cast<u32>(checked.expr_types.size() - 1);
+  checked.record_expr_type(expr, type, cur_inst);
   return type;
 }
 
@@ -3728,6 +3721,15 @@ ir::TypeIdx Checker::check_array(u32 module,
     }
     const ir::TypeIdx element =
         check_expr(module, array.repeat, element_expected);
+    if (!is_copy(element)) {
+      // The repeat stores the one value it evaluated in every slot, so
+      // an element that is not Copy would reach the array as many
+      // owners of one value.
+      const u32 index = bag.emit<i18n::Key::AnalyzerArrayRepeatNotCopy>(
+          DiagCode::RepeatElementNotCopy, node.span);
+      (void)index;
+      return error_type();
+    }
     if (has_expected_count && expected_count != count) {
       const u32 index = bag.emit<i18n::Key::AnalyzerArrayRepeatArity>(
           DiagCode::ArityError, node.span, expected_count, count);
@@ -3735,6 +3737,9 @@ ir::TypeIdx Checker::check_array(u32 module,
       return error_type();
     }
     const ir::TypeIdx type = builder.array_type(element, count);
+    if (!check_type_size(type, node.span)) {
+      return error_type();
+    }
     if (expected != nullptr) {
       return unify(*expected, type, node.span, "array");
     }
@@ -3758,6 +3763,9 @@ ir::TypeIdx Checker::check_array(u32 module,
     unify(element, next, ast.exprs[array.elements[i]].span, "array element");
   }
   const ir::TypeIdx type = builder.array_type(element, array.elements.size());
+  if (!check_type_size(type, node.span)) {
+    return error_type();
+  }
   if (expected != nullptr) {
     return unify(*expected, type, node.span, "array");
   }
@@ -3817,6 +3825,9 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         seq.push(storage_copy(element));
       }
       const ir::TypeIdx type = builder.tuple_type(seq.finish());
+      if (!check_type_size(type, node.span)) {
+        return error_type();
+      }
       if (expected != nullptr) {
         return unify(*expected, type, node.span, "tuple");
       }
@@ -3927,8 +3938,8 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
               ast.paths[root.idx].segments;
           if (segments.size() == 1 &&
               lookup_local(segments[0].name) == nullptr) {
-            const CheckedModule::StaticInfo* info =
-                find_static(modules, tree, module, segments[0].name);
+            const CheckedModule::StaticInfo* info = find_static(
+                statics_index(), modules, tree, module, segments[0].name);
             if (info != nullptr && info->is_const) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerNotAnAssignablePlace>(
@@ -4197,11 +4208,13 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         type = check_block(module, block.block, expected);
       } else {
         ++comp_depth;
+        ++comp_eval_depth;
         const bool was_verifying = verify_comp_known;
         verify_comp_known = true;
         type = check_block(module, block.block, expected);
         verify_comp_known = was_verifying;
         --comp_depth;
+        --comp_eval_depth;
       }
       if (block.is_unsafe) {
         --unsafe_depth;
@@ -4494,6 +4507,7 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       bool entered_comp = false;
       if (decl.is_const) {
         ++comp_depth;
+        ++comp_eval_depth;
         entered_comp = true;
       }
       const ir::TypeIdx init = check_expr(module, decl.init, expected);
@@ -4503,9 +4517,13 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       if ((decl.is_const || verify_comp_known) &&
           !comp_checked_in_scope(decl.init) &&
           !comp_known_value(module, decl.init, init)) {
+        const diag::Span span = ast.exprs[decl.init].span;
         const u32 index =
-            bag.emit<i18n::Key::AnalyzerConstDeclarationInitializer>(
-                DiagCode::NotCompKnown, ast.exprs[decl.init].span);
+            decl.for_cursor
+                ? bag.emit<i18n::Key::AnalyzerCompForIterable>(
+                      DiagCode::NotCompKnown, span)
+                : bag.emit<i18n::Key::AnalyzerConstDeclarationInitializer>(
+                      DiagCode::NotCompKnown, span);
         (void)index;
       }
       bind_comp_known = decl.is_const;
@@ -4513,6 +4531,7 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       bind_comp_known = false;
       if (entered_comp) {
         --comp_depth;
+        --comp_eval_depth;
       }
       if (refutable) {
         const u32 index =
@@ -4524,7 +4543,7 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
     }
     case ast::StmtKind::Reassign: {
       const ast::StmtReassign& reassign = node.payload.get<ast::StmtReassign>();
-      if (comp_depth == 0 &&
+      if (comp_eval_depth == 0 &&
           ast.exprs[reassign.place].kind == ast::ExprKind::Path) {
         const ast::PathIdx path =
             ast.exprs[reassign.place].payload.get<ast::ExprPath>().idx;
@@ -4578,7 +4597,23 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       if (node.payload.get<ast::StmtReassign>().compound) {
         const ir::TypeTag tag = tag_of(place);
         const ast::BinaryOp op = node.payload.get<ast::StmtReassign>().op;
-        if (!is_integer_tag(tag) && !is_float_tag(tag)) {
+        if (is_float_tag(tag)) {
+          // A float answers the four rational operators and nothing
+          // else, the same admission the binary form makes.
+          if (op == ast::BinaryOp::Pow) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerPowerTypeUnsupported>(
+                DiagCode::InvalidOperation, node.span);
+            (void)index;
+            return builder.primitive(ir::TypeTag::Void);
+          }
+          if (op != ast::BinaryOp::Add && op != ast::BinaryOp::Sub &&
+              op != ast::BinaryOp::Mul && op != ast::BinaryOp::Div) {
+            const u32 index = bag.emit<i18n::Key::AnalyzerInvalidBinaryOperand>(
+                DiagCode::InvalidOperation, node.span, pretty_tag(tag));
+            (void)index;
+            return builder.primitive(ir::TypeTag::Void);
+          }
+        } else if (!is_integer_tag(tag)) {
           // A nominal place reaches the operator spec the way the
           // binary form does; the call is recorded on the place for
           // lowering to find.

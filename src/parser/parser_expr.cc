@@ -1323,6 +1323,7 @@ ast::ExprIdx Parser::parse_for() {
       .type = ast::TypeIdx::invalid(),
       .init = iterator,
       .is_const = false,
+      .for_cursor = true,
   });
   const ast::StmtIdx iterator_decl = ast_.stmts.push_back(decl);
 

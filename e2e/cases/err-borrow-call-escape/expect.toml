@@ -1,0 +1,7 @@
+# The call is what hides the borrow: a result of reference type names
+# whatever the argument borrowed, so storing it into a binding declared
+# outside the block leaves the reference reading a slot that ends with
+# the block.
+exit = 4
+contains = ["Reference to local 'm' escapes the block that declares it"]
+not_contains = []

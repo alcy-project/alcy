@@ -48,6 +48,40 @@ proportional to the package, and 1.05 per doubling is about 10% removable at
 1200 modules. The fit line splits the run into the part every module pays for
 and the part that grows with the package; the second is the target.
 
+A slope at or below zero is the usual result and is not a measurement error:
+startup, artifact resolution, and the summary sweeps are fixed work, so they
+amortize as modules multiply and the fit tilts down. A slope far below zero
+means the line no longer describes the range at all - a fit of -235 x modules
+reports a negative share of the run - so read the constant, not the slope.
+Run every shape before concluding a run is linear: the constant ranges from
+545K to 884K per module across them, so a change that moves one shape's
+constant proves nothing about another's.
+
+Memory reads the same way. `perf.py rss --shape plain --sizes 300 600 1200`
+prints the peak per module at each size; across the shapes the peak is 65-71
+MiB at 300 modules and 86-114 MiB at 1200, so the per-module figure falls from
+221-243K to 73-97K and the fit's slope is at or below zero. Read the marginal
+and not the total: the base is the runtime and the heap the first modules
+touched, and it is what makes a small corpus look expensive per module. What
+the modules add is 24 to 50 KiB each, depending on the shape.
+
+The formatter and the linter scale the same way. `--subcommand` names the run
+to measure, as words:
+
+```bash
+uv run ./tools/perf.py scale --subcommand 'fmt --check' --sizes 300 600 1200
+uv run ./tools/perf.py scale --subcommand lint --sizes 300 600 1200
+```
+
+Both are linear, and neither is cheap: `fmt --check` runs 719.5K per module at
+300 modules and 710.5K at 1200, `lint` 642.0K and 631.4K, against 578.6K and
+568.0K for `check`. The formatter pays the most per module of the three
+because a package-wide run resolves the artifacts first - which parses every
+file it will later format - and then lexes each one again into the concrete
+syntax tree it prints. Only `check` has its corpus validated first: a
+formatter rewrites files and exits non-zero on a package it would change, and a
+linter reports findings, so both are measured as they run.
+
 The shapes exist to put weight where a cost can hide, and a corpus whose
 modules do not mention each other would not:
 
@@ -90,6 +124,20 @@ perf record -F 999 -g --call-graph dwarf -o /tmp/p.data \
   out/opt/exe.unstripped/alcy check -j 1 out/perf/plain1200
 perf report -i /tmp/p.data --stdio --no-children --percent-limit 1
 ```
+
+A sample says which symbol to read; it does not say how many instructions the
+symbol costs, and inlining can leave the top of the table without a name. For
+that there is callgrind, which counts instead of sampling:
+
+```bash
+uv run ./tools/perf.py costs out/perf/plain1200 --limit 25
+uv run ./tools/perf.py costs out/perf/plain1200 --callees 'DropElaborator::run'
+```
+
+The count is exact and does not need symbols, at the cost of a run an order of
+magnitude slower, so it comes after `scale` has said there is something to
+remove. The dump is written under `out/perf/` and stays usable
+with `--dump`, which compares two rounds at the speed of a parse.
 
 Two traps:
 
@@ -170,6 +218,12 @@ from the idea.
   (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`). Those phases
   need per-module storage merged in module order, which is a design of its own
   rather than a loop to mark parallel.
+- **Sorting the drop-elaboration place table.** Building that table by
+  appending every key and deduplicating once with a sort, instead of scanning
+  it per event, costs `+0.14%` on `plain1200`: the table holds a few hundred
+  places, so the scan it replaces is short, while the sort pays `log n` per key.
+  Sizing the same table up front instead removes its growth copies and is worth
+  `-0.20%`.
 
 ## Tracing
 
@@ -213,6 +267,9 @@ half of the walk to read next.
 | `perf.py scale --shape plain --sizes 300 600 1200` | instructions per module, and the growth between sizes |
 | `perf.py profile A B --binary BIN` | per-module self cost at two sizes, from `perf report` |
 | `perf.py ab CORPUS BEFORE AFTER` | interleaved wall clock, minimum of N, with per-phase totals |
+| `perf.py costs CORPUS` | per-function self instructions from callgrind, and the call edges around a symbol |
+| `perf.py rss --shape plain --sizes 300 1200` | peak RSS per module at several sizes |
+| `perf.py callers CORPUS --symbol NAME` | who reaches a symbol, and what runs under it |
 | `perf.py determinism CORPUS` | one emitted-IR hash across job counts and repeats |
 
 All of them take `--binary`, defaulting to `out/build_release/alcy`. Generated

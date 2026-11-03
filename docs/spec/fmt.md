@@ -60,14 +60,17 @@ remaining arguments, one per placeholder.
   only, never to digits.
 - A float prints up to six fractional digits of its exact fraction,
   rounded half-up, with trailing zeros trimmed and the point dropped
-  when nothing survives (`3.0` prints as `3`). A magnitude below 1e-4
-  or at least 1e16 prints its mantissa in [1, 10) followed by `e` and
-  the decimal exponent (`1.5e-5`, `1e20`), so every finite value is
-  printable. `NaN` and the infinities print as `NaN`, `inf`, and
-  `-inf`.
-- Float conversion is exact to the binary value's precision, about
-  sixteen significant digits; digits past that are zero rather than
-  rounded.
+  when nothing survives (`3.0` prints as `3`). A negative value prints
+  its sign, and a zero keeps the sign it carries (`-0.0` prints as
+  `-0`). A magnitude below 1e-4 or at least 1e16 prints its mantissa
+  in [1, 10) followed by `e` and the decimal exponent (`1.5e-5`,
+  `1e20`), so every finite value is printable. `NaN` and the
+  infinities print as `NaN`, `inf`, and `-inf`.
+- Float conversion follows the binary value: inside the fixed range
+  every digit is the value's own, rounded half-up. The exponent form's
+  mantissa is accurate to about sixteen significant digits, because a
+  double's significand cannot be rescaled by a power of ten without a
+  rounding; digits past that are not guaranteed.
 
 ## Expansion
 

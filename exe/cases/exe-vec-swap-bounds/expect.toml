@@ -1,0 +1,8 @@
+# The in-bounds exchanges happen first; the out-of-range call then
+# panics, which is what the case asserts.
+exit = "non-zero"
+stdout = """
+2 1
+2 1
+"""
+stderr_contains = ["Vec swap index out of bounds"]

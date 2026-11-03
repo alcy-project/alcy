@@ -28,7 +28,6 @@
 #include "ir/external_function.h"
 #include "ir/function.h"
 #include "ir/immutable.h"
-#include "ir/instruction_flags.h"
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/seq_builder.h"
@@ -56,6 +55,12 @@ u32 integer_bits(ir::TypeTag tag) {
     case ir::TypeTag::U32: return 32;
     default: return 64;
   }
+}
+
+// The tags whose operator answer is one backend instruction: an integer
+// reaches every operator, a float the four rational ones.
+bool is_scalar_operator_tag(ir::TypeTag tag) {
+  return ir::is_integer_type(tag) || ir::is_float_type(tag);
 }
 
 }  // namespace
@@ -104,6 +109,13 @@ void Lowerer::comp_budget(diag::Span span) {
   failed = true;
 }
 
+void Lowerer::comp_not_evaluable(diag::Span span, std::string_view what) {
+  const u32 index = bag.emit<i18n::Key::LowerCompNotEvaluable>(
+      DiagCode::CompNotEvaluable, span, what);
+  (void)index;
+  failed = true;
+}
+
 ir::TypeIdx Lowerer::error_type() {
   return builder.error_type();
 }
@@ -127,6 +139,10 @@ ir::TypeTag Lowerer::tag_of(ir::TypeIdx idx) const {
 bool Lowerer::is_ref_tag(ir::TypeTag tag) const {
   return tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef ||
          tag == ir::TypeTag::Ptr;
+}
+
+bool Lowerer::can_write_through(ir::TypeTag tag) {
+  return tag == ir::TypeTag::MutRef || tag == ir::TypeTag::Ptr;
 }
 
 ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
@@ -362,6 +378,9 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
                                 type);
             record_event(OwnershipEvent::Kind::Bind,
                          static_cast<u32>(locals.size() - 1), {}, node.span);
+            // A reference taken of the temporary names its slot, so a
+            // value the slot is stored into has to outlive it.
+            borrow_sources.push_back(static_cast<u32>(locals.size() - 1));
           }
         }
         return Val{place.op, type, true, true, false};
@@ -737,6 +756,11 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     if (const Local* local = lookup_local(name)) {
       if (tag_of(local->type) == ir::TypeTag::Void) {
         return Val{size_one, local->type, false, false};
+      }
+      // A read of a reference is a read of whatever it names, so the
+      // binding it reaches keeps the referent, not the alias.
+      if (carries_borrow(local->type)) {
+        record_alias(*local);
       }
       return Val{to_operand(local->addr, local->type), local->type, true, true};
     }
@@ -1327,17 +1351,34 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
+  // The places this call lends to the callee: a value it keeps can land
+  // in any of them, so it has to outlive them.
+  std::vector<ast::ExprIdx> borrowed_places;
+  for (usize i = 0; i < call.args.size(); ++i) {
+    if (can_write_through(tag_of(sig.params[i])) &&
+        is_rooted_place(call.args[i])) {
+      borrowed_places.push_back(call.args[i]);
+    }
+  }
+  std::vector<KeptValue> kept;
   usize comp_at = 0;
   for (usize i = 0; i < call.args.size(); ++i) {
     if (comp_at < comp.size() && comp[comp_at] == i) {
       ++comp_at;
       continue;
     }
+    const usize sources_from = borrow_sources.size();
     Val arg = lower_moved(call.args[i], &sig.params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
+    kept.push_back(
+        KeptValue{call.args[i], arg.type, sig.params[i], sources_from});
     ops.push_back(arg_for(arg, sig.params[i]));
+  }
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return stopped_value();
   }
   if (tag_of(sig.ret) == ir::TypeTag::Never) {
     emit_void(ir::Opcode::Call, ops);
@@ -1399,17 +1440,30 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
+  std::vector<ast::ExprIdx> borrowed_places;
+  for (usize i = 0; i < args.size(); ++i) {
+    if (can_write_through(tag_of(info.params[i])) && is_rooted_place(args[i])) {
+      borrowed_places.push_back(args[i]);
+    }
+  }
+  std::vector<KeptValue> kept;
   usize comp_at = 0;
   for (usize i = 0; i < args.size(); ++i) {
     if (comp_at < comp.size() && comp[comp_at] == i) {
       ++comp_at;
       continue;
     }
+    const usize sources_from = borrow_sources.size();
     Val arg = lower_moved(args[i], &info.params[i]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
+    kept.push_back(KeptValue{args[i], arg.type, info.params[i], sources_from});
     ops.push_back(arg_for(arg, info.params[i]));
+  }
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {
     emit_void(ir::Opcode::Call, ops);
@@ -1799,25 +1853,8 @@ Val Lowerer::lower_memcopy_intrinsic(
   if (failed || terminated_cur()) {
     return stopped_value();
   }
-  // Both pointers are the same storage type, so the element's
-  // alignment is the copy's: the backend may use it, and does not
-  // have to.
-  ir::InstructionFlags flags;
-  if (tag_of(dst.type) == ir::TypeTag::MutRef) {
-    const ir::TypeIdx pointee =
-        builder.ref_types()[builder.types()[dst.type.idx].as_ref()].pointee;
-    const u64 align =
-        ir::type_layout(builder.state(), type_origin(pointee), width).align;
-    u32 log2 = 0;
-    while (log2 < 15 && (static_cast<u64>(1) << log2) < align) {
-      ++log2;
-    }
-    if ((static_cast<u64>(1) << log2) == align) {
-      flags.mem_align_log2 = static_cast<u8>(log2);
-    }
-  }
   emit_void(ir::Opcode::Memcopy,
-            {use_value(dst), use_value(src), use_value(len)}, flags);
+            {use_value(dst), use_value(src), use_value(len)});
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 
@@ -3158,9 +3195,13 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       ast.exprs[receiver_expr].kind == ast::ExprKind::Index &&
       is_range_type(expr_type(
           ast.exprs[receiver_expr].payload.get<ast::ExprIndex>().index));
-  Val receiver = is_ref_tag(tag_of(info.params[0])) && !receiver_is_run
-                     ? place_addr(receiver_expr)
-                     : lower_expr(receiver_expr, nullptr);
+  const bool receiver_borrows =
+      is_ref_tag(tag_of(info.params[0])) && !receiver_is_run;
+  if (receiver_borrows) {
+    record_borrow_of(receiver_expr);
+  }
+  Val receiver = receiver_borrows ? place_addr(receiver_expr)
+                                  : lower_expr(receiver_expr, nullptr);
   // A by-value receiver that names a field moves it out of its owner,
   // so the owner's drop skips it; a local already carries the marker.
   if (!is_ref_tag(tag_of(info.params[0]))) {
@@ -3200,17 +3241,42 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
   ops.push_back(arg_for(receiver, info.params[0]));
+  // The places this call lends to the callee. A value the callee keeps
+  // can land in any of them, so it has to outlive them.
+  std::vector<ast::ExprIdx> borrowed_places;
+  if (can_write_through(tag_of(info.params[0])) &&
+      is_rooted_place(receiver_expr)) {
+    borrowed_places.push_back(receiver_expr);
+  }
+  for (usize i = 0; i < method_args.size(); ++i) {
+    if (can_write_through(tag_of(info.params[i + 1])) &&
+        is_rooted_place(method_args[i])) {
+      borrowed_places.push_back(method_args[i]);
+    }
+  }
+  std::vector<KeptValue> kept;
   usize comp_at = 0;
   for (usize i = 0; i < method_args.size(); ++i) {
     if (comp_at < comp.size() && comp[comp_at] == i + 1) {
       ++comp_at;
       continue;
     }
+    const usize sources_from = borrow_sources.size();
     Val arg = lower_moved(method_args[i], &info.params[i + 1]);
     if (failed || terminated_cur()) {
       return stopped_value();
     }
+    kept.push_back(
+        KeptValue{method_args[i], arg.type, info.params[i + 1], sources_from});
     ops.push_back(arg_for(arg, info.params[i + 1]));
+  }
+  // A type parameter accepts the value into storage the callee owns, so
+  // its signature does not say whether the value is kept: `Vec::push`
+  // writes its element into the buffer (ADR-0135). The instance's type
+  // arguments are the parameters the callee called its own.
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {
     emit_void(ir::Opcode::Call, ops);
@@ -3902,6 +3968,52 @@ Val Lowerer::emit_element_eq(Val lhs, Val rhs, diag::Span span) {
   return Val{result, boolean, false, false};
 }
 
+Val Lowerer::lower_scalar_binary(diag::Span span,
+                                 ast::BinaryOp op,
+                                 Val lhs,
+                                 Val rhs,
+                                 ir::TypeTag tag) {
+  if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
+    ir::Opcode float_op = ir::Opcode::FDiv;
+    switch (op) {
+      case ast::BinaryOp::Add: float_op = ir::Opcode::FAdd; break;
+      case ast::BinaryOp::Sub: float_op = ir::Opcode::FSub; break;
+      case ast::BinaryOp::Mul: float_op = ir::Opcode::FMul; break;
+      case ast::BinaryOp::Div: float_op = ir::Opcode::FDiv; break;
+      default:
+        // Checking admits only these four on a float; anything else
+        // reaching here would silently become a division.
+        unsupported(span, "float operator");
+        return Val{size_one, error_type(), false, false};
+    }
+    const ir::RegisterIdx dst =
+        emit(float_op, lhs.type, {use_value(lhs), use_value(rhs)});
+    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  // Checking admits `**` on integers only; a float reaching here would
+  // have taken the float block's refusal above.
+  if (op == ast::BinaryOp::Pow) {
+    return lower_int_power(span, lhs, rhs, tag);
+  }
+  // A shift count rides modulo the type's width, so an overshift has
+  // one result instead of a backend-defined one.
+  if (op == ast::BinaryOp::Shl || op == ast::BinaryOp::Shr) {
+    const ir::RegisterIdx amount =
+        emit(ir::Opcode::And, lhs.type,
+             {use_value(rhs), int_operand(integer_bits(tag) - 1, lhs.type)});
+    const ir::RegisterIdx dst =
+        emit(int_binop(op, tag), lhs.type,
+             {use_value(lhs), to_operand(amount, lhs.type)});
+    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  }
+  if (op == ast::BinaryOp::Div || op == ast::BinaryOp::Mod) {
+    return lower_int_division(span, op, lhs, rhs, tag);
+  }
+  const ir::RegisterIdx dst =
+      emit(int_binop(op, tag), lhs.type, {use_value(lhs), use_value(rhs)});
+  return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+}
+
 Val Lowerer::lower_binary(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
@@ -4019,46 +4131,7 @@ Val Lowerer::lower_binary(ast::ExprIdx expr) {
         emit(op, boolean, {use_value(lhs), use_value(rhs)});
     return Val{to_operand(dst, boolean), boolean, false, false};
   }
-  if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-    ir::Opcode op = ir::Opcode::FDiv;
-    switch (bin.op) {
-      case ast::BinaryOp::Add: op = ir::Opcode::FAdd; break;
-      case ast::BinaryOp::Sub: op = ir::Opcode::FSub; break;
-      case ast::BinaryOp::Mul: op = ir::Opcode::FMul; break;
-      case ast::BinaryOp::Div: op = ir::Opcode::FDiv; break;
-      default:
-        // Checking admits only these four on a float; anything else
-        // reaching here would silently become a division.
-        unsupported(node.span, "float operator");
-        return Val{size_one, error_type(), false, false};
-    }
-    const ir::RegisterIdx dst =
-        emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
-    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
-  }
-  // Checking admits `**` on integers only; a float reaching here would
-  // have taken the float block's refusal above.
-  if (bin.op == ast::BinaryOp::Pow) {
-    return lower_int_power(node.span, lhs, rhs, tag);
-  }
-  // A shift count rides modulo the type's width, so an overshift has
-  // one result instead of a backend-defined one.
-  if (bin.op == ast::BinaryOp::Shl || bin.op == ast::BinaryOp::Shr) {
-    const ir::RegisterIdx amount =
-        emit(ir::Opcode::And, lhs.type,
-             {use_value(rhs), int_operand(integer_bits(tag) - 1, lhs.type)});
-    const ir::RegisterIdx dst =
-        emit(int_binop(bin.op, tag), lhs.type,
-             {use_value(lhs), to_operand(amount, lhs.type)});
-    return Val{to_operand(dst, lhs.type), lhs.type, false, false};
-  }
-  if (bin.op == ast::BinaryOp::Div || bin.op == ast::BinaryOp::Mod) {
-    return lower_int_division(node.span, bin.op, lhs, rhs, tag);
-  }
-  const ir::Opcode op = int_binop(bin.op, tag);
-  const ir::RegisterIdx dst =
-      emit(op, lhs.type, {use_value(lhs), use_value(rhs)});
-  return Val{to_operand(dst, lhs.type), lhs.type, false, false};
+  return lower_scalar_binary(node.span, bin.op, lhs, rhs, tag);
 }
 
 // Stores an arm value into a result slot (callers skip Void).
@@ -5085,6 +5158,10 @@ Val Lowerer::lower_moved(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     const u32 index = bag.emit<i18n::Key::LowerMoveOutOfElement>(
         DiagCode::MoveOutOfElement, ast.exprs[expr].span);
     (void)index;
+    // The refused move hands back an error type, which no projection can
+    // index into; without the flag the binding lowered from it reports a
+    // missing field on top of the refusal.
+    failed = true;
     return Val{size_one, error_type(), false, false};
   }
   // Only a rooted projection names storage: the field of a call's
@@ -5194,6 +5271,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Borrow: {
       const ast::ExprBorrow& borrow = node.payload.get<ast::ExprBorrow>();
+      record_borrow_of(borrow.inner);
       if (ast.exprs[borrow.inner].kind == ast::ExprKind::Index) {
         const ast::ExprIndex& index =
             ast.exprs[borrow.inner].payload.get<ast::ExprIndex>();
@@ -5246,13 +5324,49 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       // A rooted receiver is projected where it lives: reading a field
       // out of a copy would copy the whole value, and a field of a
       // borrowed place would look like a move out of the borrow.
-      Val base = is_rooted_place(field.receiver)
-                     ? place_addr(field.receiver)
-                     : lower_expr(field.receiver, nullptr);
+      const bool rooted = is_rooted_place(field.receiver);
+      Val base = rooted ? place_addr(field.receiver)
+                        : lower_expr(field.receiver, nullptr);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
-      return materialize(field_addr(base, field.name.name, node.span));
+      // A field read out of a value that stands in no place reads out of
+      // the aggregate the temporary holds. The temporary takes a slot of
+      // this frame and ends at the enclosing block, so the fields the
+      // read leaves behind are ended there and the one it hands on is a
+      // move from the aggregate.
+      bool temporary = false;
+      if (!rooted && runs_destructor(base.type)) {
+        if (!base.address) {
+          base = address_of(base);
+          if (failed) {
+            return stopped_value();
+          }
+        }
+        const ir::Operand& operand = builder.state().operands[base.op.idx];
+        u32 tracked = 0;
+        std::vector<u32> tracked_path;
+        if (operand.is<ir::RegisterIdx>() &&
+            !place_of_register(operand.as_register().idx, tracked,
+                               tracked_path)) {
+          locals.emplace_back(std::string_view(), operand.as_register(),
+                              base.type);
+          record_event(OwnershipEvent::Kind::Bind,
+                       static_cast<u32>(locals.size() - 1), {}, node.span);
+          temporary = true;
+        }
+      }
+      Val projected = field_addr(base, field.name.name, node.span);
+      if (temporary) {
+        // The read hands the field on, so it leaves the aggregate: the
+        // address is what places the move, and the value the expression
+        // returns is a load that names no storage of its own. The walk
+        // records the move where the field sits, the way a bind out of
+        // a local records it, and emits no marker for a place.
+        projected.place = true;
+        record_move_event(projected);
+      }
+      return materialize(projected);
     }
     case ast::ExprKind::Deref: {
       return materialize(place_addr(expr));
@@ -5425,6 +5539,7 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       }
       // Moving into the binding consumes a field rather than loading a
       // copy: the owner's drop walk has to see the partial move.
+      const usize sources_before = borrow_sources.size();
       Val init = lower_moved(decl.init, nullptr);
       if (failed || terminated_cur()) {
         return;
@@ -5444,8 +5559,11 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
         return;
       }
       // Moving into the binding consumes a non-Copy place.
+      record_place_alias(decl.init);
+      const usize bound_from = locals.size();
       const ir::OperandIdx moved = use_value(init);
       bind_pattern(decl.pattern, Val{moved, init.type, false, false});
+      note_referents(init.type, bound_from, sources_before);
       return;
     }
     case ast::StmtKind::Reassign: {
@@ -5453,9 +5571,32 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       // The value is read before the place is taken: `v[i] = v[j] + 1`
       // reads through a shared borrow before the place asks for the
       // exclusive one, so the two do not overlap.
+      const usize sources_before = borrow_sources.size();
       Val value = lower_moved(reassign.value, nullptr);
       if (failed || terminated_cur()) {
         return;
+      }
+      record_place_alias(reassign.value);
+      const std::span<const u32> sources(
+          borrow_sources.data() + sources_before,
+          borrow_sources.size() - sources_before);
+      // A borrow of a local declared inside the block, stored into a
+      // binding declared outside it, would outlive its referent: the
+      // slot ends with the block while the destination keeps reading it.
+      // The binding order is the extent here, because a later local
+      // cannot outlive an earlier one in the same function. The store
+      // reaches the reference the same way a read does: through a call,
+      // an aggregate, or an alias.
+      if (escapes_referent(value.type, ast.exprs[reassign.value].span,
+                           reassign.place, sources)) {
+        failed = true;
+        return;
+      }
+      if (ast.exprs[reassign.place].kind == ast::ExprKind::Path) {
+        if (const Local* target = rooted_local(reassign.place)) {
+          locals[target - locals.data()].referents.assign(sources.begin(),
+                                                          sources.end());
+        }
       }
       Val place = place_addr(reassign.place);
       if (failed || terminated_cur()) {
@@ -5469,18 +5610,13 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           return;
         }
         const ir::TypeTag tag = tag_of(loaded.type);
-        ir::Opcode op = ir::Opcode::Noop;
-        if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-          switch (reassign.op) {
-            case ast::BinaryOp::Add: op = ir::Opcode::FAdd; break;
-            case ast::BinaryOp::Sub: op = ir::Opcode::FSub; break;
-            case ast::BinaryOp::Mul: op = ir::Opcode::FMul; break;
-            default: op = ir::Opcode::FDiv; break;
+        if (is_scalar_operator_tag(tag)) {
+          value =
+              lower_scalar_binary(node.span, reassign.op, loaded, value, tag);
+          if (failed) {
+            return;
           }
         } else {
-          op = int_binop(reassign.op, tag);
-        }
-        if (op == ir::Opcode::Noop) {
           // A nominal place has no backend operator: the checker
           // recorded the operator method on the place.
           const analyzer::CheckedModule::CallTarget* target =
@@ -5494,11 +5630,6 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           if (failed) {
             return;
           }
-        } else {
-          const ir::RegisterIdx result =
-              emit(op, loaded.type, {use_value(loaded), use_value(value)});
-          value =
-              Val{to_operand(result, loaded.type), loaded.type, false, false};
         }
       }
       ir::OperandIdx stored = use_value(value);
@@ -5512,6 +5643,19 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
           place_of_register(target.as_register().idx, local_index, path)) {
         record_event(OwnershipEvent::Kind::Store, local_index, std::move(path),
                      node.span);
+      } else if (runs_destructor(place.type)) {
+        // An index or a projection is addressed through a computed
+        // offset, so the path walk cannot name what the store replaced.
+        // The address and the type it carries say enough to end it, and
+        // only a place that a local of this frame owns says a value is
+        // there: a store through a raw pointer claims nothing, which is
+        // what lets a buffer be filled by writing one slot at a time.
+        if (const Local* owned = rooted_local(reassign.place,
+                                              /*through_deref=*/false)) {
+          record_store_element(place.op, place.type,
+                               static_cast<u32>(owned - locals.data()),
+                               node.span);
+        }
       }
       return;
     }

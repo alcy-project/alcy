@@ -9,6 +9,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -539,6 +540,9 @@ base::Result<Artifact, diag::Reported> resolve_target(
 
   bool root_selected = false;
   std::vector<analyzer::ModuleInput> inputs;
+  // The name each file has claimed. A name is compared against the one
+  // already claimed rather than against every input so far.
+  std::unordered_map<std::string_view, source::FileId> claimed;
   // Module paths resolve relative to the target root's directory.
   std::string_view input;
   {
@@ -561,15 +565,14 @@ base::Result<Artifact, diag::Reported> resolve_target(
     // Stripping the target's directory can map two distinct files onto
     // one module name; the resolver would report that as a duplicate,
     // which is true but hides which file collided. Name the pair here.
-    for (const analyzer::ModuleInput& prior : inputs) {
-      if (prior.id != entry.id && prior.name == name) {
-        const u32 index =
-            ctx.bag.emit<i18n::Key::PipelineModuleSharedByTwoFiles>(
-                DiagCode::NoTargets, diag::Span{}, name, input);
-        (void)index;
-        return base::make_err(diag::Reported{});
-      }
+    const auto prior = claimed.find(name);
+    if (prior != claimed.end() && prior->second != entry.id) {
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineModuleSharedByTwoFiles>(
+          DiagCode::NoTargets, diag::Span{}, name, input);
+      (void)index;
+      return base::make_err(diag::Reported{});
     }
+    claimed.emplace(name, entry.id);
     inputs.push_back({name, entry.id});
   }
   if (!root_selected) {

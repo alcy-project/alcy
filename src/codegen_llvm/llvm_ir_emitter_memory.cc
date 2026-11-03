@@ -14,6 +14,7 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 #include "ir/type_util.h"
 
 #if BUILD_FLAG(IS_DEBUG)
@@ -40,6 +41,19 @@ llvm::AtomicRMWInst::BinOp rmw_op(ir::AtomicRmwOp op) {
     case Op::Exchange: return BinOp::Xchg;
     default: return BinOp::BAD_BINOP;
   }
+}
+
+// The alignment a pointer operand promises: its pointee's, or byte
+// alignment for a bare pointer, which names no pointee.
+llvm::Align promised_alignment(const ir::Storage& storage,
+                               ir::PointerWidth width,
+                               const ir::Operand& operand) {
+  const ir::TypeNode& type = storage.types()[operand.type.idx];
+  if (type.tag != ir::TypeTag::Ref && type.tag != ir::TypeTag::MutRef) {
+    return llvm::Align(1);
+  }
+  const ir::TypeIdx pointee = storage.ref_types()[type.as_ref()].pointee;
+  return llvm::Align(storage.layout_of(pointee, width).align);
 }
 
 }  // namespace
@@ -127,13 +141,13 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     case Op::Memcopy: {
       DCHECK(ops.size() == 3);
       DCHECK(!i.dst.is_valid());
-      // The IR's alignment is the element's; zero means byte alignment.
-      const llvm::Align align(static_cast<u64>(1) << i.flags.mem_align_log2);
+      const ir::Operand& dst = storage_->operands()[ops.head()];
+      const ir::Operand& src = storage_->operands()[ops.head() + 1];
       builder_->CreateMemCpy(
-          resolve_operand_value(storage_->operands()[ops.head()]),
-          llvm::MaybeAlign(align),
-          resolve_operand_value(storage_->operands()[ops.head() + 1]),
-          llvm::MaybeAlign(align),
+          resolve_operand_value(dst),
+          llvm::MaybeAlign(promised_alignment(*storage_, width_, dst)),
+          resolve_operand_value(src),
+          llvm::MaybeAlign(promised_alignment(*storage_, width_, src)),
           resolve_operand_value(storage_->operands()[ops.head() + 2]));
       break;
     }

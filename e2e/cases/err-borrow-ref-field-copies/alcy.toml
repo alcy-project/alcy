@@ -1,0 +1,11 @@
+[package]
+name = "reffcopies"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[[bin]]
+name = "reffcopies"
+path = "main.al"

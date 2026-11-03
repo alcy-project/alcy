@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
@@ -350,22 +352,62 @@ inline TypeLayout type_layout(const StorageState& state,
   UNREACHABLE();
 }
 
+// A walk's record of the shapes it is inside. A structural walk follows
+// the fields of a shape, so a shape that holds itself would follow
+// itself to the end of the stack. The cycle checks refuse such a shape
+// (EC007) once the modules are processed, and they throw this answer
+// away; reaching a walk first must not end the compiler.
+class InsideScope {
+ public:
+  InsideScope(std::vector<u32>& inside, u32 idx) : inside_(inside) {
+    inside_.push_back(idx);
+  }
+  ~InsideScope() { inside_.pop_back(); }
+  InsideScope(const InsideScope&) = delete;
+  InsideScope& operator=(const InsideScope&) = delete;
+
+ private:
+  std::vector<u32>& inside_;
+};
+
 // Structural movability over raw state (ADR-0085): a value is movable
 // unless it holds an anchor. `not_movable` marks the types a
 // declaration makes unmovable - the anchor itself - and the walk is
 // structural, so a struct, enum, tuple, or array holding one is
 // unmovable too. `origin` resolves a storage copy to the declaration
-// it came from, because a field slot holds a copy. Cycle-free input
-// required, like is_copy_type.
+// it came from, because a field slot holds a copy. `inside` names the
+// shapes the walk is already inside; one that holds itself answers as
+// movable, because the cycle checks are what speak on it.
+template <class Origin>
+inline bool is_movable_type(const StorageState& state,
+                            TypeIdx idx,
+                            std::span<const u8> not_movable,
+                            const Origin& origin,
+                            std::vector<u32>& inside);
+
 template <class Origin>
 inline bool is_movable_type(const StorageState& state,
                             TypeIdx idx,
                             std::span<const u8> not_movable,
                             const Origin& origin) {
+  std::vector<u32> inside;
+  return is_movable_type(state, idx, not_movable, origin, inside);
+}
+
+template <class Origin>
+inline bool is_movable_type(const StorageState& state,
+                            TypeIdx idx,
+                            std::span<const u8> not_movable,
+                            const Origin& origin,
+                            std::vector<u32>& inside) {
   idx = origin(idx);
   if (idx.idx < not_movable.size() && not_movable[idx.idx] != 0) {
     return false;
   }
+  if (std::find(inside.begin(), inside.end(), idx.idx) != inside.end()) {
+    return true;
+  }
+  const InsideScope record(inside, idx.idx);
   const TypeNode& node = state.types[idx];
   switch (node.tag) {
     case TypeTag::Error: return true;
@@ -376,7 +418,7 @@ inline bool is_movable_type(const StorageState& state,
     case TypeTag::Struct: {
       const StructType& struct_type = state.struct_types[node.as_struct()];
       for (TypeIdx field : struct_type.fields) {
-        if (!is_movable_type(state, field, not_movable, origin)) {
+        if (!is_movable_type(state, field, not_movable, origin, inside)) {
           return false;
         }
       }
@@ -384,10 +426,10 @@ inline bool is_movable_type(const StorageState& state,
     }
     case TypeTag::Array:
       return is_movable_type(state, state.array_types[node.as_array()].element,
-                             not_movable, origin);
+                             not_movable, origin, inside);
     case TypeTag::Slice:
       return is_movable_type(state, state.slice_types[node.as_slice()].element,
-                             not_movable, origin);
+                             not_movable, origin, inside);
     case TypeTag::Enum: {
       const EnumType& enum_type = state.enum_types[node.as_enum()];
       for (EnumVariantTypeIdx vidx = enum_type.variants.head();
@@ -395,7 +437,7 @@ inline bool is_movable_type(const StorageState& state,
            vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
         const EnumVariantType& variant = state.enum_variant_types[vidx];
         for (TypeIdx field : variant.fields) {
-          if (!is_movable_type(state, field, not_movable, origin)) {
+          if (!is_movable_type(state, field, not_movable, origin, inside)) {
             return false;
           }
         }
@@ -405,7 +447,7 @@ inline bool is_movable_type(const StorageState& state,
     case TypeTag::Tuple: {
       const TupleType& tuple = state.tuple_types[node.as_tuple()];
       for (TypeIdx element : tuple.elements) {
-        if (!is_movable_type(state, element, not_movable, origin)) {
+        if (!is_movable_type(state, element, not_movable, origin, inside)) {
           return false;
         }
       }
@@ -419,11 +461,28 @@ inline bool is_movable_type(const StorageState& state,
 // that read through a builder before build() (see lowering). Cycle-free
 // input required (see Storage::is_copy_type). `has_drop` marks the
 // types a declaration gives a destructor: such a type is move-only,
-// whatever its fields are.
+// whatever its fields are. `inside` names the shapes the walk is
+// already inside; one that holds itself answers as Copy, because the
+// cycle checks are what speak on it.
+inline bool is_copy_type(const StorageState& state,
+                         TypeIdx idx,
+                         std::span<const u8> has_drop,
+                         std::span<const u8> not_movable,
+                         std::vector<u32>& inside);
+
 inline bool is_copy_type(const StorageState& state,
                          TypeIdx idx,
                          std::span<const u8> has_drop,
                          std::span<const u8> not_movable = {}) {
+  std::vector<u32> inside;
+  return is_copy_type(state, idx, has_drop, not_movable, inside);
+}
+
+inline bool is_copy_type(const StorageState& state,
+                         TypeIdx idx,
+                         std::span<const u8> has_drop,
+                         std::span<const u8> not_movable,
+                         std::vector<u32>& inside) {
   if (idx.idx < has_drop.size() && has_drop[idx.idx] != 0) {
     return false;
   }
@@ -433,6 +492,10 @@ inline bool is_copy_type(const StorageState& state,
   if (idx.idx < not_movable.size() && not_movable[idx.idx] != 0) {
     return false;
   }
+  if (std::find(inside.begin(), inside.end(), idx.idx) != inside.end()) {
+    return true;
+  }
+  const InsideScope record(inside, idx.idx);
   const TypeNode& node = state.types[idx];
   switch (node.tag) {
     case TypeTag::MutRef: return false;
@@ -466,7 +529,7 @@ inline bool is_copy_type(const StorageState& state,
     case TypeTag::Struct: {
       const StructType& struct_type = state.struct_types[node.as_struct()];
       for (TypeIdx field : struct_type.fields) {
-        if (!is_copy_type(state, field, has_drop, not_movable)) {
+        if (!is_copy_type(state, field, has_drop, not_movable, inside)) {
           return false;
         }
       }
@@ -474,10 +537,10 @@ inline bool is_copy_type(const StorageState& state,
     }
     case TypeTag::Array:
       return is_copy_type(state, state.array_types[node.as_array()].element,
-                          has_drop, not_movable);
+                          has_drop, not_movable, inside);
     case TypeTag::Slice:
       return is_copy_type(state, state.slice_types[node.as_slice()].element,
-                          has_drop, not_movable);
+                          has_drop, not_movable, inside);
     case TypeTag::Enum: {
       const EnumType& enum_type = state.enum_types[node.as_enum()];
       for (EnumVariantTypeIdx vidx = enum_type.variants.head();
@@ -485,7 +548,7 @@ inline bool is_copy_type(const StorageState& state,
            vidx = EnumVariantTypeIdx(vidx.idx + 1)) {
         const EnumVariantType& variant = state.enum_variant_types[vidx];
         for (TypeIdx field : variant.fields) {
-          if (!is_copy_type(state, field, has_drop, not_movable)) {
+          if (!is_copy_type(state, field, has_drop, not_movable, inside)) {
             return false;
           }
         }
@@ -495,7 +558,7 @@ inline bool is_copy_type(const StorageState& state,
     case TypeTag::Tuple: {
       const TupleType& tuple = state.tuple_types[node.as_tuple()];
       for (TypeIdx element : tuple.elements) {
-        if (!is_copy_type(state, element, has_drop, not_movable)) {
+        if (!is_copy_type(state, element, has_drop, not_movable, inside)) {
           return false;
         }
       }
@@ -577,10 +640,11 @@ class Storage {
     return state_.const_types;
   }
 
-  // Copy-ability of a fully interned type. Must only run on cycle-free
-  // storage; check_package validates uninhabited value cycles before
-  // anyone queries. User-defined destructors force move-only once drop
-  // syntax lands.
+  // Copy-ability of a fully interned type. check_package validates
+  // uninhabited value cycles, so a storage that passed the checks has
+  // none; the walk answers rather than following one, because a
+  // declaration those checks refuse is queried before they run.
+  // User-defined destructors force move-only once drop syntax lands.
   bool is_copy_type(TypeIdx idx) const { return ir::is_copy_type(state_, idx); }
 
   TypeLayout layout_of(TypeIdx idx, PointerWidth width) const {

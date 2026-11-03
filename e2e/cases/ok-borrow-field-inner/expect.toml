@@ -1,0 +1,5 @@
+# Reading a reference out of an aggregate is the shape the extent rule
+# follows, not a refusal: the binding it names outlives nothing here.
+exit = 0
+contains = []
+not_contains = ["escapes the block that declares it"]

@@ -253,6 +253,34 @@ bool build_scenario(VirtualDir& dir,
   return true;
 }
 
+// The AST engine's value for the `index`-th const item and the IR
+// engine's for the same call carry one value.
+bool check_engines_agree(const Scenario& scenario,
+                         std::string_view name,
+                         std::initializer_list<u64> args,
+                         u32 index) {
+  const ir::Storage& storage = *scenario.storage;
+  const ir::FunctionIdx fn =
+      find_function(storage, scenario.fixture.strings, name);
+  CHECK(fn.is_valid());
+  if (!fn.is_valid() || index >= scenario.asts.size()) {
+    return false;
+  }
+  const std::vector<comp::CompVal> call_args = int_args(storage, fn, args);
+  CHECK(call_args.size() == args.size());
+  if (call_args.size() != args.size()) {
+    return false;
+  }
+  const RunResult run = run_function(scenario.fixture, storage, fn, call_args,
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (!run.ok) {
+    return false;
+  }
+  check_same_value(storage, scenario.asts[index], run.value);
+  return true;
+}
+
 }  // namespace
 
 TEST_CASE("IR interpreter agrees on branches and arithmetic") {
@@ -441,6 +469,62 @@ TEST_CASE("IR interpreter agrees on casts and signed shifts") {
     return;
   }
   check_same_value(storage, scenario.asts[0], run.value);
+}
+
+TEST_CASE("Both engines widen a negative value by its sign") {
+  VirtualDir dir;
+  Scenario scenario;
+  // The engines are one implementation of the arithmetic in two places,
+  // so a value both of them agree on proves nothing; these assert what
+  // the widened value is.
+  const bool built = build_scenario(dir,
+                                    "comp fn widen(x: i32) -> i64 {\n"
+                                    "  ret x as i64\n"
+                                    "}\n"
+                                    "const R: i64 = widen(0 - 81)\n"
+                                    "const N: i32 = ((0 - 84) as i8) as i32\n"
+                                    "const M: u32 = ((0 - 1) as u16) as u32\n"
+                                    "fn main() {\n"
+                                    "}\n",
+                                    {"R", "N", "M"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  CHECK(scenario.asts.size() == 3);
+  if (scenario.asts.size() != 3) {
+    return;
+  }
+  check_int_value(storage, scenario.asts[0], static_cast<u64>(-81));
+  check_int_value(storage, scenario.asts[1], static_cast<u64>(-84));
+  // `0 - 1` written as u16 is 65535, so widening it keeps 65535 while
+  // the same bits written as i16 widen to the whole mask.
+  check_int_value(storage, scenario.asts[2], 0xFFFFu);
+
+  const ir::FunctionIdx fn =
+      find_function(storage, scenario.fixture.strings, "widen");
+  CHECK(fn.is_valid());
+  if (!fn.is_valid()) {
+    return;
+  }
+  const std::vector<comp::CompVal> args =
+      int_args(storage, fn, {static_cast<u64>(-81)});
+  CHECK(args.size() == 1);
+  if (args.size() != 1) {
+    return;
+  }
+  const RunResult run = run_function(scenario.fixture, storage, fn, args,
+                                     comp::COMP_BRANCH_QUOTA, 0);
+  CHECK(run.ok);
+  if (!run.ok) {
+    return;
+  }
+  check_int_value(storage, run.value, static_cast<u64>(-81));
 }
 
 TEST_CASE("IR interpreter agrees on unsigned bitwise operations") {
@@ -1024,6 +1108,173 @@ TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
   check_same_value(storage, scenario.asts[0], set.value);
   check_same_value(storage, scenario.asts[1], unset.value);
   check_same_value(storage, scenario.asts[2], empty.value);
+}
+
+// A method row recorded at the definition site names no instantiation:
+// its body was checked against declared parameters, so a reader that
+// reaches one falls back to the receiver's key instead of trusting the
+// row (ADR-0079).
+TEST_CASE("The AST engine falls back from a definition-site method row") {
+  VirtualDir dir;
+  Fixture fixture;
+  write_all(dir, {{"main.al",
+                   "struct Counter {\n"
+                   "  n: i32,\n"
+                   "}\n"
+                   "impl Counter {\n"
+                   "  fn bump(self: Counter) -> i32 {\n"
+                   "    ret self.n + 1\n"
+                   "  }\n"
+                   "}\n"
+                   "const V: bool = comp {\n"
+                   "  c := Counter { n: 41 }\n"
+                   "  c.bump() == 42\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := V\n"
+                   "}\n"}});
+  CheckCase checked = check_case(dir, "main.al", {"main.al"}, fixture);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+  analyzer::CheckedPackage& package = *checked.checked;
+  const std::optional<comp::CompVal> concrete =
+      ast_value(fixture, package, "V");
+  CHECK(concrete.has_value());
+  if (!concrete.has_value()) {
+    return;
+  }
+  CHECK(concrete->value.tag == comp::CompValue::Tag::Bool);
+  CHECK(concrete->value.bool_value);
+  bool poked = false;
+  for (analyzer::CheckedModule& module : package.modules) {
+    for (analyzer::CheckedModule::MethodInfo& method : module.methods) {
+      if (method.name != "bump") {
+        continue;
+      }
+      method.method_inst = analyzer::PARAM_INST;
+      poked = true;
+    }
+  }
+  CHECK(poked);
+  const std::optional<comp::CompVal> fallback =
+      ast_value(fixture, package, "V");
+  CHECK(fallback.has_value());
+  if (!fallback.has_value()) {
+    return;
+  }
+  CHECK(fallback->value.tag == comp::CompValue::Tag::Bool);
+  CHECK(fallback->value.bool_value);
+}
+
+// An early `ret` reached inside a branch hands the return to the body
+// that owns it, so both engines end the call with the same value.
+TEST_CASE("IR interpreter agrees on an early return") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "comp fn clamp_high(n: i32) -> i32 {\n"
+                                    "  if n > 10 {\n"
+                                    "    ret 10\n"
+                                    "  }\n"
+                                    "  ret n\n"
+                                    "}\n"
+                                    "comp fn pick(kind: i32) -> i32 {\n"
+                                    "  match kind {\n"
+                                    "    0 => ret 7,\n"
+                                    "    _ => {}\n"
+                                    "  }\n"
+                                    "  ret kind\n"
+                                    "}\n"
+                                    "comp fn inner(n: i32) -> i32 {\n"
+                                    "  {\n"
+                                    "    if n > 0 {\n"
+                                    "      ret 5\n"
+                                    "    }\n"
+                                    "  }\n"
+                                    "  ret n\n"
+                                    "}\n"
+                                    "const A: i32 = clamp_high(42)\n"
+                                    "const B: i32 = pick(0)\n"
+                                    "const C: i32 = inner(2)\n"
+                                    "fn main() {\n"
+                                    "}\n",
+                                    {"A", "B", "C"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  CHECK(scenario.asts.size() == 3);
+  if (scenario.asts.size() != 3) {
+    return;
+  }
+  check_int_value(storage, scenario.asts[0], 10);
+  check_int_value(storage, scenario.asts[1], 7);
+  check_int_value(storage, scenario.asts[2], 5);
+  CHECK(check_engines_agree(scenario, "clamp_high", {42}, 0));
+  CHECK(check_engines_agree(scenario, "pick", {0}, 1));
+  CHECK(check_engines_agree(scenario, "inner", {2}, 2));
+}
+
+TEST_CASE("IR interpreter agrees on a jump in a match arm") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "comp fn stop_at() -> i32 {\n"
+                                    "  mut i := 0\n"
+                                    "  mut out := 0\n"
+                                    "  while i < 4 {\n"
+                                    "    match i {\n"
+                                    "      2 => break,\n"
+                                    "      _ => {}\n"
+                                    "    }\n"
+                                    "    out = out + i\n"
+                                    "    i = i + 1\n"
+                                    "  }\n"
+                                    "  ret out\n"
+                                    "}\n"
+                                    "comp fn skip_three() -> i32 {\n"
+                                    "  mut i := 0\n"
+                                    "  mut out := 0\n"
+                                    "  while i < 4 {\n"
+                                    "    i = i + 1\n"
+                                    "    match i {\n"
+                                    "      3 => continue,\n"
+                                    "      _ => {}\n"
+                                    "    }\n"
+                                    "    out = out + i\n"
+                                    "  }\n"
+                                    "  ret out\n"
+                                    "}\n"
+                                    "const A: i32 = stop_at()\n"
+                                    "const B: i32 = skip_three()\n"
+                                    "fn main() {\n"
+                                    "}\n",
+                                    {"A", "B"}, scenario);
+  CHECK(built);
+  if (!built) {
+    return;
+  }
+  CHECK(scenario.storage != nullptr);
+  if (scenario.storage == nullptr) {
+    return;
+  }
+  const ir::Storage& storage = *scenario.storage;
+  CHECK(scenario.asts.size() == 2);
+  if (scenario.asts.size() != 2) {
+    return;
+  }
+  check_int_value(storage, scenario.asts[0], 1);
+  check_int_value(storage, scenario.asts[1], 7);
+  CHECK(check_engines_agree(scenario, "stop_at", {}, 0));
+  CHECK(check_engines_agree(scenario, "skip_three", {}, 1));
 }
 
 }  // namespace lowering

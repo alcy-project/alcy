@@ -1,0 +1,5 @@
+# The reference a call hands back is used where its referent lives, so
+# the binding ends with the block that declares the referent.
+exit = 0
+contains = []
+not_contains = []

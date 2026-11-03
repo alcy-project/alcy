@@ -16,6 +16,7 @@ commands are steps in.
     uv run ./tools/perf.py corpus --shape plain --modules 300
     uv run ./tools/perf.py scale --shape plain --sizes 300 600 1200
     uv run ./tools/perf.py ab out/perf/plain1200 old-alcy new-alcy
+    uv run ./tools/perf.py costs out/perf/plain1200 --limit 25
 
 The corpora are packages of generated modules with the shape of a real one.
 They are written under `out/`, which is not tracked, and the tool reports the
@@ -24,7 +25,8 @@ directory it wrote so a command can point at it.
 `corpus` is a generator, not a benchmark suite: its shapes exist to put
 weight where a cost can hide. `plain` is the same module repeated, `generic`
 gives every module a generic type and two instantiations of it, and `drop`
-gives every module a destructor. A package with one module per file and a
+gives every module a destructor, and `closure` gives every module a closure
+that borrows a local. A package with one module per file and a
 `main` that names every one of them is what makes a cost proportional to the
 package visible: a shape whose modules do not mention each other would not.
 
@@ -40,6 +42,15 @@ The shares are samples of cycles, so a rise can also be locality rather than
 work; `scale` is what says which. It needs a build with symbols, which
 `src/docs/performance.md` shows how to make without committing the
 change.
+
+`costs` is the other half of that: callgrind counts instructions per function
+without sampling, so it says how many a symbol costs of itself, and it does not
+need symbols or a perf-capable machine. It is slower by an order of magnitude,
+which is why the loop starts with `scale`. `--callees` and `--callers` read
+one pattern each and report the call edges around it, which is how a cost that
+is spread over callers is attributed to the interface that causes it. A dump
+written on one build stays usable with `--dump`, so two rounds can be compared
+without a second run.
 """
 
 import argparse
@@ -67,12 +78,16 @@ WORK_DIR = "out/perf"
 # compare a phase with itself across two runs, not with its neighbour.
 PHASES = ("parse", "targets", "analyze", "lower", "borrow")
 
-SHAPES = ["plain", "generic", "drop", "adapt", "print", "comp"]
+SHAPES = ["plain", "generic", "drop", "adapt", "closure", "print", "comp"]
 
 # How many compile-time calls one module of the comp shape makes.
 COMP_CALLS = 8
 
 INSTRUCTIONS = re.compile(r"^(\d+),,.*instructions")
+
+# The subcommand a measurement runs; the others are reachable through
+# --subcommand, so the formatter and the linter scale the same way as check.
+DEFAULT_COMMAND = "check"
 
 # One line of `perf report --no-children`, which is a share, a few columns, the
 # object kind, and the symbol.
@@ -81,6 +96,14 @@ PROFILE_LINE = re.compile(r"^\s*([0-9]+\.[0-9]+)%\s+.*?\[([.k])\]\s+(.*)$")
 # One line of `perf report -g folded`: a share and a call chain, leaf first,
 # joined by semicolons. The plain self-time lines carry no semicolon.
 FOLDED_LINE = re.compile(r"^\s*([0-9]+\.[0-9]+)%\s+(\S.*)$")
+
+# One line of a callgrind dump that carries a cost: a position, either absolute
+# or compressed against the previous one, and the instruction count there.
+COST_LINE = re.compile(r"^[0-9+\-*]")
+
+# A function name in a callgrind dump is written once, under an id: the first
+# mention spells it, and later ones are the bare id.
+COMPRESSED_NAME = re.compile(r"^\((\d+)\)(?: (.*))?$")
 
 
 def module_source(shape: str, index: int) -> str:
@@ -208,6 +231,15 @@ pub fn run{i}(x: i32) -> i32 {{
   ret apply{i}(g, x) + apply{i}(inc{i}, x)
 }}
 """
+    if shape == "closure":
+        return f"""// Closures that borrow an enclosing local: every module carries
+// capture addresses, which the checker seeds before a function runs.
+pub fn run{i}(x: i32) -> i32 {{
+  base := x + 1
+  g := [&base] (v: i32) -> v + base
+  ret g(2)
+}}
+"""
     if shape == "print":
         return f"""// The call is a staged io one, so every call site asks the tree
 // whether the callee is the toolchain's.
@@ -244,6 +276,7 @@ def main_source(shape: str, modules: int, main_calls: int) -> str:
         "generic": "  total = total + m{i}::use{i}({k})",
         "comp": "  total = total + m{i}::use{i}({k})",
         "adapt": "  total = total + m{i}::run{i}({k})",
+        "closure": "  total = total + m{i}::run{i}({k})",
         "print": "  total = total + m{i}::say{i}({k})",
     }[shape]
     calls = "\n".join(call.format(i=i % modules, k=i % 7) for i in range(main_calls))
@@ -266,6 +299,8 @@ def manifest_source(shape: str, modules: int) -> str:
 "alcy/std/alloc" = {}
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}
 "alcy/std/io" = {}
 """
     elif shape != "plain":
@@ -305,17 +340,22 @@ def binary_for(binary: str) -> Path:
     return path
 
 
-MEASURED: set[tuple[Path, Path]] = set()
+MEASURED: set[tuple[Path, Path, str]] = set()
 
 
-def validate(binary: Path, corpus: Path) -> None:
+def validate(binary: Path, corpus: Path, command: str = DEFAULT_COMMAND) -> None:
     """Refuses to measure a corpus the compiler reports on.
 
     A corpus that does not check cleanly measures the diagnostic path: the
     renderer and its formatting take over the run, and the growth a
-    measurement reads is the errors' rather than the compiler's.
+    measurement reads is the errors' rather than the compiler's. Only check
+    reports that way: the other subcommands are measured as they run, because
+    a formatter that rewrites files and a linter that reports findings both
+    leave the parse path untouched.
     """
-    key = (binary, corpus)
+    if command.split()[0] != "check":
+        return
+    key = (binary, corpus, command)
     if key in MEASURED:
         return
     done = subprocess.run(
@@ -336,11 +376,13 @@ def validate(binary: Path, corpus: Path) -> None:
     MEASURED.add(key)
 
 
-def instructions(binary: Path, corpus: Path, jobs: int) -> int:
-    """Retired instructions for one check, which is the same number every run."""
+def instructions(
+    binary: Path, corpus: Path, jobs: int, command: str = DEFAULT_COMMAND
+) -> int:
+    """Retired instructions for one run, which is the same number every time."""
     if shutil.which("perf") is None:
         raise SystemExit("perf is not on PATH; instruction counts need it")
-    validate(binary, corpus)
+    validate(binary, corpus, command)
     argv = [
         "perf",
         "stat",
@@ -348,7 +390,7 @@ def instructions(binary: Path, corpus: Path, jobs: int) -> int:
         "-e",
         "instructions",
         str(binary),
-        "check",
+        *command.split(),
         "-j",
         str(jobs),
         ".",
@@ -504,16 +546,120 @@ def profile_self_time(binary: Path, corpus: Path, jobs: int, runs: int) -> dict:
             text=True,
             timeout=3600,
         )
-    totals = {}
+    entries = []
     for line in report.stdout.splitlines():
         found = PROFILE_LINE.match(line)
         if not found or found.group(2) == "k":
             continue
-        symbol = found.group(3).strip()
-        if symbol.startswith("0x"):
-            continue
-        totals[symbol] = totals.get(symbol, 0.0) + float(found.group(1))
+        entries.append((float(found.group(1)), found.group(3).strip()))
+    # A perf built without the symbol-resolving frontend reports every
+    # sample as a bare address, which leaves nothing to group by. The
+    # addresses still name what ran, so they are resolved through the
+    # binary's own debug info instead.
+    bare = [e for e in entries if e[1].startswith("0x")]
+    if entries and len(bare) == len(entries):
+        resolved = resolve_addresses(binary, [e[1] for e in entries])
+        entries = [(share, resolved[addr]) for share, addr in entries]
+    totals = {}
+    for share, symbol in entries:
+        totals[symbol] = totals.get(symbol, 0.0) + share
     return totals
+
+
+def symbolized_binary(binary: Path) -> Path:
+    """The binary's debug info, which a stripped install keeps beside it."""
+    unstripped = binary.parent / "exe.unstripped" / binary.name
+    return unstripped if unstripped.is_file() else binary
+
+
+def resolve_addresses(binary: Path, addresses: list[str]) -> dict[str, str]:
+    """Map sampled addresses to the symbol and line they fall in."""
+    unique = list(dict.fromkeys(addresses))
+    resolved: dict[str, str] = {}
+    run = subprocess.run(
+        ["addr2line", "-C", "-f", "-e", str(symbolized_binary(binary))],
+        input="\n".join(unique) + "\n",
+        capture_output=True,
+        text=True,
+        timeout=3600,
+    )
+    lines = run.stdout.splitlines()
+    for i, address in enumerate(unique):
+        name = lines[2 * i].strip() if 2 * i < len(lines) else ""
+        where = lines[2 * i + 1].strip() if 2 * i + 1 < len(lines) else ""
+        if name and name != "??":
+            resolved[address] = f"{name} {where}" if where != "??:0" else name
+        else:
+            resolved[address] = address
+    return resolved
+
+
+def peak_rss_kib(
+    binary: Path, corpus: Path, jobs: int, command: str = DEFAULT_COMMAND
+) -> int:
+    """Peak resident set size for one run, in KiB."""
+    validate(binary, corpus, command)
+    argv = [
+        "/usr/bin/time",
+        "-v",
+        str(binary),
+        *command.split(),
+        "-j",
+        str(jobs),
+        ".",
+    ]
+    done = subprocess.run(
+        argv, cwd=corpus, capture_output=True, text=True, timeout=3600
+    )
+    for line in done.stderr.splitlines():
+        if "Maximum resident set size" in line:
+            return int(line.split(":")[1].strip())
+    raise SystemExit(f"time reported no peak RSS for {corpus}")
+
+
+def cmd_rss(args: argparse.Namespace) -> int:
+    binary = binary_for(args.binary)
+    rows = []
+    for modules in args.sizes:
+        corpus = write_corpus(
+            args.shape,
+            modules,
+            args.main_calls if args.main_calls else modules,
+            Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
+        )
+        kib = min(
+            peak_rss_kib(binary, corpus, args.jobs, args.subcommand)
+            for _ in range(args.runs)
+        )
+        rows.append((modules, kib))
+    calls = "fixed at " + str(args.main_calls) if args.main_calls else "one per module"
+    run = "" if args.subcommand == DEFAULT_COMMAND else f"  run={args.subcommand}"
+    print(
+        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}{run}"
+        f"  main calls={calls}"
+    )
+    print(f"{'modules':>9} {'peak RSS':>11} {'per module':>12} {'growth':>8}")
+    growth = float("nan")
+    for i, (modules, kib) in enumerate(rows):
+        if i:
+            before = rows[i - 1][1] / rows[i - 1][0]
+            growth = kib / modules / before
+        shown = f"{growth:.3f}" if i else "-"
+        print(f"{modules:>9} {kib:>10}K {kib / modules:>11.1f}K {shown:>8}")
+    if len(rows) >= 2:
+        first, last = rows[0], rows[-1]
+        per_module = [kib / modules for modules, kib in (first, last)]
+        slope = (per_module[1] - per_module[0]) / (last[0] - first[0])
+        intercept = per_module[0] - slope * first[0]
+        print(f"per module = {intercept:.1f}K + {slope:.1f}K x modules")
+        if slope <= 0:
+            print("the peak is a fixed base; per-module cost does not grow")
+        else:
+            share = slope * last[0] / per_module[1] if per_module[1] else 0.0
+            print(
+                f"at {last[0]} modules {share:.1%} of the peak grows with the package"
+            )
+    return 0
 
 
 def cmd_scale(args: argparse.Namespace) -> int:
@@ -526,11 +672,12 @@ def cmd_scale(args: argparse.Namespace) -> int:
             args.main_calls if args.main_calls else modules,
             Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
         )
-        count = instructions(binary, corpus, args.jobs)
+        count = instructions(binary, corpus, args.jobs, args.subcommand)
         rows.append((modules, count))
     calls = "fixed at " + str(args.main_calls) if args.main_calls else "one per module"
+    run = "" if args.subcommand == DEFAULT_COMMAND else f"  run={args.subcommand}"
     print(
-        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}"
+        f"shape={args.shape}  binary={args.binary}  jobs={args.jobs}{run}"
         f"  main calls={calls}"
     )
     print(f"{'modules':>9} {'instructions':>13} {'per module':>11} {'growth':>8}")
@@ -701,6 +848,138 @@ def cmd_determinism(args: argparse.Namespace) -> int:
     return 1
 
 
+def callgrind_dump(binary: Path, corpus: Path, jobs: int, out: Path) -> Path:
+    """Writes one callgrind dump of a check, and returns where it went."""
+    if shutil.which("valgrind") is None:
+        raise SystemExit("valgrind is not on PATH; per-function costs need it")
+    validate(binary, corpus)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "valgrind",
+            "--tool=callgrind",
+            f"--callgrind-out-file={out}",
+            str(binary),
+            "check",
+            "-j",
+            str(jobs),
+            ".",
+        ],
+        cwd=corpus,
+        capture_output=True,
+        text=True,
+        timeout=3600,
+    )
+    if not out.exists():
+        raise SystemExit(f"valgrind wrote no dump for {corpus}")
+    return out
+
+
+def callgrind_costs(
+    dump: Path,
+) -> tuple[dict[str, int], dict[tuple[str, str], int]]:
+    """Self instructions per function, and how often each call edge was taken.
+
+    A dump is a stream of functions and, under each, the cost of the lines it
+    ran and the edges it took. The cost under a `calls=` line is the callee's
+    inclusive cost, so it is skipped: what a function costs of itself is what
+    its own position lines add up to, which is what removing work changes.
+    """
+    names: dict[str, str] = {}
+    self_cost: dict[str, int] = {}
+    edges: dict[tuple[str, str], int] = {}
+    caller = ""
+    callee = ""
+    under_edge = False
+    for line in dump.read_text(errors="replace").splitlines():
+        if line.startswith("fn=") or line.startswith("cfn="):
+            is_caller = line.startswith("fn=")
+            body = line.split("=", 1)[1]
+            found = COMPRESSED_NAME.match(body)
+            name = found.group(1) if found else body
+            if found and found.group(2):
+                names[name] = found.group(2)
+            if is_caller:
+                caller = name
+                callee = ""
+            else:
+                callee = name
+            under_edge = False
+            continue
+        if line.startswith("calls="):
+            if callee:
+                count = int(line.split()[0].removeprefix("calls="))
+                edges[(caller, callee)] = edges.get((caller, callee), 0) + count
+            under_edge = True
+            continue
+        if not line or not COST_LINE.match(line):
+            continue
+        if under_edge:
+            under_edge = False
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        self_cost[caller] = self_cost.get(caller, 0) + int(parts[1])
+    by_name: dict[str, int] = {}
+    for fid, cost in self_cost.items():
+        name = names.get(fid, fid)
+        by_name[name] = by_name.get(name, 0) + cost
+    resolved: dict[tuple[str, str], int] = {}
+    for (from_id, to_id), count in edges.items():
+        key = (names.get(from_id, from_id), names.get(to_id, to_id))
+        resolved[key] = resolved.get(key, 0) + count
+    return by_name, resolved
+
+
+def cmd_costs(args: argparse.Namespace) -> int:
+    """Exact self instructions per function, from a callgrind run."""
+    corpus = corpus_dir(args.corpus)
+    if args.callees and args.callers:
+        raise SystemExit("--callees and --callers read one pattern each")
+    if args.dump:
+        dump = Path(args.dump)
+        if not dump.exists():
+            raise SystemExit(f"no callgrind dump at {dump}")
+    else:
+        binary = binary_for(args.binary)
+        out = Path(args.out) if args.out else Path(WORK_DIR) / f"{corpus.name}.cg"
+        if not out.is_absolute():
+            out = REPO_ROOT / out
+        dump = callgrind_dump(binary, corpus, args.jobs, out)
+    self_cost, edges = callgrind_costs(dump)
+    total = sum(self_cost.values())
+    if args.callees or args.callers:
+        forward = bool(args.callees)
+        pattern = args.callees or args.callers
+        table: dict[str, int] = {}
+        matched = 0
+        for (from_name, to_name), count in edges.items():
+            here, other = (from_name, to_name) if forward else (to_name, from_name)
+            if pattern not in here:
+                continue
+            matched += count
+            table[other] = table.get(other, 0) + count
+        side = "callee" if forward else "caller"
+        print(
+            f"{corpus.name}: {matched:,} calls {side}s of {pattern!r}, -j {args.jobs}"
+        )
+        print(f"{'calls':>12}  {side}")
+        for other, count in sorted(table.items(), key=lambda kv: -kv[1])[: args.limit]:
+            print(f"{count:>12,}  {other[:110]}")
+        return 0
+    calls_in: dict[str, int] = {}
+    for (_, to_name), count in edges.items():
+        calls_in[to_name] = calls_in.get(to_name, 0) + count
+    rows = sorted(((cost, name) for name, cost in self_cost.items()), reverse=True)
+    print(f"{corpus.name}: {total:,} instructions, -j {args.jobs}  ({dump})")
+    print(f"{'self':>12} {'share':>7} {'calls':>12}  function")
+    for cost, name in rows[: args.limit]:
+        share = cost / total if total else 0.0
+        print(f"{cost:>12,} {share:>6.2%} {calls_in.get(name, 0):>12,}  {name[:100]}")
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     # The compiler travels with every subcommand, before or after it: the
@@ -747,8 +1026,26 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="fix main's size, to separate per-item work from package scale",
     )
+    subcommand_help = "subcommand to measure, as words: 'check', 'fmt --check', 'lint'"
     scale.add_argument("--jobs", type=int, default=1)
+    scale.add_argument("--subcommand", default=DEFAULT_COMMAND, help=subcommand_help)
     scale.set_defaults(func=cmd_scale)
+
+    rss = subparsers.add_parser(
+        "rss", parents=[common], help="peak RSS per module at several sizes"
+    )
+    rss.add_argument("--shape", default="plain", choices=SHAPES)
+    rss.add_argument("--sizes", type=int, nargs="+", default=[300, 600, 1200])
+    rss.add_argument(
+        "--main-calls",
+        type=int,
+        default=0,
+        help="fix main's size, to separate per-item work from package scale",
+    )
+    rss.add_argument("--jobs", type=int, default=1)
+    rss.add_argument("--subcommand", default=DEFAULT_COMMAND, help=subcommand_help)
+    rss.add_argument("--runs", type=int, default=3, help="repeats, keeping the low")
+    rss.set_defaults(func=cmd_rss)
 
     profile = subparsers.add_parser(
         "profile",
@@ -786,6 +1083,28 @@ def parse_args() -> argparse.Namespace:
     callers.add_argument("--runs", type=int, default=3)
     callers.add_argument("--limit", type=int, default=8)
     callers.set_defaults(func=cmd_callers)
+
+    costs = subparsers.add_parser(
+        "costs",
+        parents=[common],
+        help="exact self instructions per function, from callgrind",
+    )
+    costs.add_argument("corpus", help="corpus directory or name under out/perf")
+    costs.add_argument("--jobs", type=int, default=1)
+    costs.add_argument("--limit", type=int, default=20, help="rows to show")
+    costs.add_argument("--dump", help="read this callgrind dump instead of running one")
+    costs.add_argument(
+        "--out",
+        default="",
+        help=f"where the dump goes (default: {WORK_DIR}/<corpus>.cg)",
+    )
+    costs.add_argument(
+        "--callees", default="", help="how often functions matching this call them"
+    )
+    costs.add_argument(
+        "--callers", default="", help="who calls functions matching this, and how often"
+    )
+    costs.set_defaults(func=cmd_costs)
 
     determinism = subparsers.add_parser(
         "determinism",

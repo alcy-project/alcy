@@ -25,10 +25,6 @@ struct InstructionFlags {
   // proved to stay within the object it indexes, which is what lets a
   // backend's alias analysis and folding treat it as such.
   bool inbounds : 1 = false;
-  // Meaningful only for Memcopy: log2 of the alignment both pointers
-  // promise, zero meaning the copy's byte alignment is all a backend
-  // may assume.
-  u8 mem_align_log2 : 4 = 0;
 };
 
 }  // namespace ir

@@ -58,3 +58,15 @@ export function copy(block: CodeBlock, button: HTMLButtonElement): void {
   });
 }
 
+// Every block carries Copy, and the generator leaves the row hidden so a
+// reader without JavaScript sees only the code; revealing the row and
+// wiring the button are one job. Run and Edit belong to the `alcy`
+// blocks alone, in `guide.js`.
+export function wireCopy(block: CodeBlock): void {
+  block.actions.hidden = false;
+  const button = block.actions.querySelector<HTMLButtonElement>('[data-action="copy"]');
+  if (button !== null) {
+    button.addEventListener("click", () => copy(block, button));
+  }
+}
+
