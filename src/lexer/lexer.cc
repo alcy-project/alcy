@@ -54,6 +54,41 @@ bool is_digit(char c) {
   return c >= '0' && c <= '9';
 }
 
+// The first byte of a token settles which lexer it belongs to, so the dispatch
+// that follows trivia is one table load and a jump rather than a chain of
+// tests.
+enum class TokenOpen : u8 {
+  Trivia,
+  Control,
+  Ident,
+  Digit,
+  DoubleQuote,
+  SingleQuote,
+  Symbol
+};
+
+constexpr std::array<TokenOpen, 256> TOKEN_OPEN = [] {
+  std::array<TokenOpen, 256> table{};
+  table.fill(TokenOpen::Symbol);
+  table[0] = TokenOpen::Control;
+  for (const u32 c : {' ', '\t', '\r', '\n'}) {
+    table[c] = TokenOpen::Trivia;
+  }
+  for (u32 c = '0'; c <= '9'; ++c) {
+    table[c] = TokenOpen::Digit;
+  }
+  for (u32 c = 'a'; c <= 'z'; ++c) {
+    table[c] = TokenOpen::Ident;
+  }
+  for (u32 c = 'A'; c <= 'Z'; ++c) {
+    table[c] = TokenOpen::Ident;
+  }
+  table[static_cast<u32>('_')] = TokenOpen::Ident;
+  table[static_cast<u32>('"')] = TokenOpen::DoubleQuote;
+  table[static_cast<u32>('\'')] = TokenOpen::SingleQuote;
+  return table;
+}();
+
 // A newline ends the statement started by these tokens, so the lexer
 // materializes the terminating `;` (Go-style insertion), unless the
 // next token continues the construct (see suppress_semi below).
@@ -759,9 +794,12 @@ void Lexer::lex_char(std::vector<Token>& out) {
 
 void Lexer::lex_symbol(std::vector<Token>& out) {
   const usize start = pos_;
-  const char c = peek();
-  const char n = peek(1);
-  const char m = peek(2);
+  // A multi-byte spelling reads the bytes after the first, and a symbol that
+  // sits that far inside the file holds them already.
+  const bool room = start + 3 <= bytes_.size();
+  const char c = bytes_[start];
+  const char n = room ? bytes_[start + 1] : peek(1);
+  const char m = room ? bytes_[start + 2] : peek(2);
   TokenKind kind = TokenKind::Error;
   usize width = 1;
   switch (c) {
@@ -947,11 +985,13 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
 
 void Lexer::tokenize(std::vector<Token>& out) {
   while (true) {
+    // The byte that ends trivia is the byte that opens the next token, so the
+    // loop keeps it rather than reading it a second time once it stops.
+    char c = peek();
     while (!at_end()) {
-      const char trivia = peek();
-      if (trivia == ' ' || trivia == '\t' || trivia == '\r') {
+      if (c == ' ' || c == '\t' || c == '\r') {
         advance();
-      } else if (trivia == '\n') {
+      } else if (c == '\n') {
         const usize newline = pos_;
         advance();
         if (inserts_semi(last_significant_) &&
@@ -960,32 +1000,30 @@ void Lexer::tokenize(std::vector<Token>& out) {
           out.push_back(
               Token{.kind = TokenKind::Semicolon, .span = span_at(newline, 1)});
         }
-      } else if (trivia == '/' && peek(1) == '/') {
+      } else if (c == '/' && peek(1) == '/') {
         lex_line_comment(out);
-      } else if (trivia == '/' && peek(1) == '*') {
+      } else if (c == '/' && peek(1) == '*') {
         lex_block_comment(out);
       } else {
         break;
       }
+      c = peek();
     }
     if (at_end()) {
       break;
     }
-    const char c = peek();
-    if (c == '\0') {
-      emit_error<i18n::Key::LexerInvalidCharacter>(out, pos_, 1,
-                                                   DiagCode::InvalidChar);
-      advance();
-    } else if (is_alpha(c) || c == '_') {
-      lex_identifier(out);
-    } else if (is_digit(c)) {
-      lex_number(out);
-    } else if (c == '"') {
-      lex_string(out);
-    } else if (c == '\'') {
-      lex_char(out);
-    } else {
-      lex_symbol(out);
+    switch (TOKEN_OPEN[static_cast<u8>(c)]) {
+      case TokenOpen::Control:
+        emit_error<i18n::Key::LexerInvalidCharacter>(out, pos_, 1,
+                                                     DiagCode::InvalidChar);
+        advance();
+        break;
+      case TokenOpen::Ident: lex_identifier(out); break;
+      case TokenOpen::Digit: lex_number(out); break;
+      case TokenOpen::DoubleQuote: lex_string(out); break;
+      case TokenOpen::SingleQuote: lex_char(out); break;
+      case TokenOpen::Symbol: lex_symbol(out); break;
+      case TokenOpen::Trivia: break;
     }
   }
   last_significant_ = TokenKind::Eof;
