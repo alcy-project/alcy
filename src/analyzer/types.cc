@@ -3393,10 +3393,30 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
                              own_fn_slot(method_fn.generic[slot].name.name),
                              span, witness_key(method_args, slot)});
     }
-    return instantiate_method(entry.module, self, scope, value_scope, impl,
-                              name, method_args);
+    return instantiate_method(entry.module, self, scope, value_scope,
+                              entry.impl_item, name, method_args);
   }
   return nullptr;
+}
+
+ast::ItemIdx Checker::indexed_method(ast::ItemIdx impl_item,
+                                     std::string_view name) {
+  auto found = impl_methods_by_name_.find(impl_item.idx);
+  if (found == impl_methods_by_name_.end()) {
+    const ast::ItemImpl& impl =
+        ast.items[impl_item].payload.get<ast::ItemImpl>();
+    std::unordered_map<std::string_view, ast::ItemIdx> by_name;
+    by_name.reserve(impl.methods.size());
+    for (ast::ItemIdx method_item : impl.methods) {
+      by_name.emplace(
+          ast.items[method_item].payload.get<ast::ItemFn>().name.name,
+          method_item);
+    }
+    found =
+        impl_methods_by_name_.emplace(impl_item.idx, std::move(by_name)).first;
+  }
+  const auto entry = found->second.find(name);
+  return entry == found->second.end() ? ast::ItemIdx::invalid() : entry->second;
 }
 
 const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
@@ -3505,15 +3525,7 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
       // unrelated block's bounds are not this call's to fail: checking
       // them first refused `Vec<f64>::iter` for `T: Ord`, which the
       // sorting block asks of a method it does not hold.
-      bool provides = false;
-      for (ast::ItemIdx method_item : impl.methods) {
-        if (ast.items[method_item].payload.get<ast::ItemFn>().name.name ==
-            name) {
-          provides = true;
-          break;
-        }
-      }
-      if (!provides) {
+      if (!declared_method(impl, item, name).is_valid()) {
         continue;
       }
       // The impl's bounds have to hold for this instantiation before
@@ -3523,7 +3535,7 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
         continue;
       }
       const CheckedModule::MethodInfo* method =
-          instantiate_method(m, self, scope, value_scope, impl, name);
+          instantiate_method(m, self, scope, value_scope, item, name);
       if (method != nullptr) {
         const bool is_pub =
             !method->item.is_valid() || ast.items[method->item].is_pub;
@@ -3537,14 +3549,17 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
   for (const CompoundImplEntry& entry : compound_impls_) {
     const ast::ItemImpl& impl =
         ast.items[entry.item].payload.get<ast::ItemImpl>();
+    if (!declared_method(impl, entry.item, name).is_valid()) {
+      continue;
+    }
     std::vector<std::pair<std::string_view, ir::TypeIdx>> scope;
     std::vector<ValueParam> value_scope;
     if (!match_compound_target(entry.module, impl.type, impl.params, self,
                                scope, value_scope)) {
       continue;
     }
-    const CheckedModule::MethodInfo* method =
-        instantiate_method(entry.module, self, scope, value_scope, impl, name);
+    const CheckedModule::MethodInfo* method = instantiate_method(
+        entry.module, self, scope, value_scope, entry.item, name);
     if (method != nullptr) {
       const bool is_pub =
           !method->item.is_valid() || ast.items[method->item].is_pub;

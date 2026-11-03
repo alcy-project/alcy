@@ -1434,14 +1434,13 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     ir::TypeIdx self_type,
     const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
     std::span<const ValueParam> value_scope,
-    const ast::ItemImpl& impl,
+    ast::ItemIdx impl_item,
     std::string_view name,
     std::span<const ir::TypeIdx> method_args) {
-  for (ast::ItemIdx method_item : impl.methods) {
+  const ast::ItemImpl& impl = ast.items[impl_item].payload.get<ast::ItemImpl>();
+  const ast::ItemIdx method_item = declared_method(impl, impl_item, name);
+  if (method_item.is_valid()) {
     const ast::ItemNode& method_node = ast.items[method_item];
-    if (method_node.payload.get<ast::ItemFn>().name.name != name) {
-      continue;
-    }
     for (const CheckedModule::MethodInfo& existing :
          modules[impl_module].methods) {
       if (existing.item == method_item &&

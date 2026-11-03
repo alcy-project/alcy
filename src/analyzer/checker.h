@@ -1079,8 +1079,25 @@ class Checker {
     }
     return false;
   }
+  // The method an impl block declares under `name`, or no item. The
+  // first declaration of a name answers, which is the one a walk over
+  // the block's methods finds.
+  ast::ItemIdx declared_method(const ast::ItemImpl& impl,
+                               ast::ItemIdx impl_item,
+                               std::string_view name) {
+    if (impl.methods.size() > INDEX_MIN) {
+      return indexed_method(impl_item, name);
+    }
+    for (ast::ItemIdx method_item : impl.methods) {
+      if (ast.items[method_item].payload.get<ast::ItemFn>().name.name == name) {
+        return method_item;
+      }
+    }
+    return ast::ItemIdx::invalid();
+  }
   // The lookup of a declaration long enough to answer through an index,
   // built on the first name it is asked for.
+  ast::ItemIdx indexed_method(ast::ItemIdx impl_item, std::string_view name);
   bool indexed_field(NominalEntry& entry,
                      std::span<const ast::ItemStructField> fields,
                      std::string_view name,
@@ -1260,7 +1277,7 @@ class Checker {
       ir::TypeIdx self_type,
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
       std::span<const ValueParam> value_scope,
-      const ast::ItemImpl& impl,
+      ast::ItemIdx impl_item,
       std::string_view name,
       std::span<const ir::TypeIdx> method_args = {});
   // Finds an inherent method that declares its own type parameters for
@@ -1309,6 +1326,11 @@ class Checker {
   // looking up the methods of the type it names, not every method in the
   // package.
   std::unordered_map<u32, MethodTable> methods_by_self_;
+  // The name each impl block declares, and where, for a block that lists
+  // more than INDEX_MIN methods: a call settles on the declaration it
+  // names instead of walking every method the block holds.
+  std::unordered_map<u32, std::unordered_map<std::string_view, ast::ItemIdx>>
+      impl_methods_by_name_;
   // The nominal that declares a type, by the type it built. A field access
   // needs the declaration that names a field, a match on an enumeration needs
   // the one that names its variants, a method call needs the one its receiver
