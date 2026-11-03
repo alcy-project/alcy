@@ -208,8 +208,9 @@ body.resizing {
      scrollbar, since that bar comes off its border box too. `app.js` adds
      the height back on one side of the numbers and takes it off the other,
      so the column tallies no more than the scrolling area does and travels
-     with the mirror to the same bottom. */
-  padding: 0 4px var(--editor-scrollbar-height, 0px) 0;
+     with the mirror to the same bottom. The top padding is the
+     textarea's, so the first number sits on the first line. */
+  padding: var(--editor-pad-y) 4px var(--editor-scrollbar-height, 0px) 0;
   overflow: visible;
   min-width: 3ch;
   text-align: right;
