@@ -102,6 +102,48 @@ constexpr std::array<u8, 256> token_flags() {
 
 constexpr std::array<u8, 256> TOKEN_FLAGS = token_flags();
 
+// The statement-lead scan's per-token step, folded from the flags above: every
+// kind of a class takes the same action there, so one comparison replaces the
+// four tests the answer set would otherwise need. The first four classes are
+// the ones that answer the scan at depth zero; a kind that both ends a
+// statement and closes a bracket has a class of its own, because which of the
+// two it is depends on the depth the scan has reached.
+enum LeadClass : u8 {
+  kLeadInsignificant,
+  kLeadDecl,
+  kLeadReassign,
+  kLeadStmtEnd,
+  kLeadOpens,
+  kLeadCloses,
+  kLeadRBrace,
+  kLeadOther,
+};
+
+constexpr std::array<u8, 256> token_lead_classes() {
+  std::array<u8, 256> classes{};
+  for (usize i = 0; i < classes.size(); ++i) {
+    const u8 flags = TOKEN_FLAGS[i];
+    u8 step = kLeadOther;
+    if ((flags & kTokenInsignificant) != 0) {
+      step = kLeadInsignificant;
+    } else if ((flags & kTokenDeclLead) != 0) {
+      step = kLeadDecl;
+    } else if ((flags & kTokenReassignLead) != 0) {
+      step = kLeadReassign;
+    } else if ((flags & kTokenStmtEnd) != 0) {
+      step = (flags & kTokenCloses) != 0 ? kLeadRBrace : kLeadStmtEnd;
+    } else if ((flags & kTokenOpens) != 0) {
+      step = kLeadOpens;
+    } else if ((flags & kTokenCloses) != 0) {
+      step = kLeadCloses;
+    }
+    classes[i] = step;
+  }
+  return classes;
+}
+
+constexpr std::array<u8, 256> TOKEN_LEAD = token_lead_classes();
+
 constexpr bool is_reserved(lexer::TokenKind kind) {
   return (TOKEN_FLAGS[static_cast<u8>(kind)] & kTokenReserved) != 0;
 }

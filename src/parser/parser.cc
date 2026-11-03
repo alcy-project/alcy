@@ -243,31 +243,37 @@ Parser::StmtLead Parser::scan_lead() const {
   i32 depth = 0;
   const usize count = tokens_.size();
   for (usize i = pos_; i < count;) {
-    const u8 flags = TOKEN_FLAGS[static_cast<u8>(tokens_[i].kind)];
-    if ((flags & kTokenInsignificant) != 0) {
-      ++i;
+    const u8 step = TOKEN_LEAD[static_cast<u8>(tokens_[i].kind)];
+    ++i;
+    if (step == kLeadOther) {
       continue;
     }
-    if (depth == 0) {
-      if ((flags & kTokenDeclLead) != 0) {
-        return StmtLead::Decl;
+    if (step <= kLeadStmtEnd) {
+      if (step == kLeadInsignificant) {
+        continue;
       }
-      if ((flags & kTokenReassignLead) != 0) {
-        return StmtLead::Reassign;
+      if (depth == 0) {
+        return step == kLeadDecl       ? StmtLead::Decl
+               : step == kLeadReassign ? StmtLead::Reassign
+                                       : StmtLead::None;
       }
-      // A `{` is not a boundary by itself: a struct pattern in a
-      // declaration or a condition carries one before the `:=`, so
-      // braces count as nesting here like parens and brackets.
-      if ((flags & kTokenStmtEnd) != 0) {
+      continue;
+    }
+    // A `{` is not a boundary by itself: a struct pattern in a
+    // declaration or a condition carries one before the `:=`, so
+    // braces count as nesting here like parens and brackets.
+    if (step == kLeadRBrace) {
+      if (depth == 0) {
         return StmtLead::None;
       }
+      --depth;
+      continue;
     }
-    if ((flags & kTokenOpens) != 0) {
+    if (step == kLeadOpens) {
       ++depth;
-    } else if ((flags & kTokenCloses) != 0 && depth > 0) {
+    } else if (depth > 0) {
       --depth;
     }
-    ++i;
   }
   return StmtLead::None;
 }
@@ -1896,15 +1902,16 @@ ast::StmtIdx Parser::parse_stmt() {
     return *spelled;
   }
   // Control-flow heads own their `:=` (if-let/while-let conditions);
-  // scanning for a declaration lead would misread them as patterns.
-  StmtLead lead = scan_lead();
+  // scanning for a declaration lead would misread them as patterns, and
+  // the scan would walk the construct only for the answer to be dropped.
+  StmtLead lead = StmtLead::None;
   switch (peek_kind()) {
     case lexer::TokenKind::If:
     case lexer::TokenKind::While:
     case lexer::TokenKind::Loop:
     case lexer::TokenKind::Match:
-    case lexer::TokenKind::For: lead = StmtLead::None; break;
-    default: break;
+    case lexer::TokenKind::For: break;
+    default: lead = scan_lead(); break;
   }
   if (lead == StmtLead::Decl) {
     // `comp` never declares a value (ADR-0054). Parse the line as the
