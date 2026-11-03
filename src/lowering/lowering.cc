@@ -7,6 +7,7 @@
 #include <charconv>
 #include <functional>
 #include <initializer_list>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -610,12 +611,26 @@ Val Lowerer::address_of(Val v) {
   return Val{to_operand(addr, v.type), v.type, true, v.place};
 }
 
+// The local count above which a lookup settles entries on a key of the
+// name: below it a walk reads so few names that a key costs more than
+// the names it saves.
+constexpr usize K_LOCAL_KEY_LIMIT = 8;
+
 bool Lowerer::place_of_register(u32 reg,
                                 u32& local_out,
                                 std::vector<u32>& path) const {
-  for (u32 i = 0; i < static_cast<u32>(locals.size()); ++i) {
-    if (locals[i].addr.idx == reg) {
-      local_out = i;
+  if (locals.size() <= K_LOCAL_KEY_LIMIT) {
+    for (u32 i = 0; i < static_cast<u32>(locals.size()); ++i) {
+      if (locals[i].addr.idx == reg) {
+        local_out = i;
+        return true;
+      }
+    }
+  } else {
+    const LocalIndex& index = local_index();
+    const auto found = index.by_reg.find(reg);
+    if (found != index.by_reg.end()) {
+      local_out = found->second;
       return true;
     }
   }
@@ -1057,10 +1072,19 @@ str::StringPoolId Lowerer::intern_copied(std::string_view name) {
   return intern_result(strings.intern_copied(name));
 }
 
-// The local count above which a lookup settles entries on a key of the
-// name: below it a walk reads so few names that a key costs more than
-// the names it saves.
-constexpr usize K_LOCAL_KEY_LIMIT = 8;
+const Lowerer::LocalIndex& Lowerer::local_index() const {
+  if (!local_index_) {
+    local_index_ = std::make_unique<LocalIndex>();
+  }
+  LocalIndex& index = *local_index_;
+  for (usize i = index.indexed; i < locals.size(); ++i) {
+    const Local& local = locals[i];
+    index.by_reg.emplace(local.addr.idx, static_cast<u32>(i));
+    index.by_key[local.name_key].push_back(static_cast<u32>(i));
+  }
+  index.indexed = locals.size();
+  return index;
+}
 
 const Local* Lowerer::lookup_local(std::string_view name) const {
   if (locals.size() <= K_LOCAL_KEY_LIMIT) {
@@ -1071,9 +1095,14 @@ const Local* Lowerer::lookup_local(std::string_view name) const {
     }
     return nullptr;
   }
-  const u64 key = base::hash64(name);
-  for (const auto& local : locals | std::views::reverse) {
-    if (local.name_key == key && local.name == name) {
+  const LocalIndex& index = local_index();
+  const auto found = index.by_key.find(base::hash64(name));
+  if (found == index.by_key.end()) {
+    return nullptr;
+  }
+  for (const u32 index_at : found->second | std::views::reverse) {
+    const Local& local = locals[index_at];
+    if (local.name == name) {
       return &local;
     }
   }
@@ -2232,6 +2261,7 @@ const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
 
 void Lowerer::begin_body() {
   locals.clear();
+  local_index_.reset();
   ownership_.clear();
   end_sites_.clear();
   record_seq_ = 0;

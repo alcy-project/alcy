@@ -5,6 +5,7 @@
 #include <deque>
 #include <functional>
 #include <initializer_list>
+#include <memory>
 #include <optional>
 #include <set>
 #include <span>
@@ -179,6 +180,16 @@ class Lowerer {
   // Per-function state.
   u32 module = 0;
   std::vector<Local> locals;
+  // The views of a table of locals long enough to pay for them: the first
+  // local that holds each register, and the locals that bind each name
+  // key in lowering order.
+  struct LocalIndex {
+    std::unordered_map<u32, u32> by_reg;
+    std::unordered_map<u64, std::vector<u32>> by_key;
+    // How many of the table's locals the views cover.
+    usize indexed = 0;
+  };
+  mutable std::unique_ptr<LocalIndex> local_index_;
   // The locals borrowed while a value was lowered, in order: a statement
   // reads the tail its own lowering added.
   std::vector<u32> borrow_sources;
@@ -332,6 +343,9 @@ class Lowerer {
   ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
   ir::OperandIdx use_value(Val v);
   const Local* lookup_local(std::string_view name) const;
+  // The views of `locals`, settling the locals appended since they were
+  // last asked for.
+  const LocalIndex& local_index() const;
   // True when a value of `type` carries a borrow, either itself or in a
   // field of an aggregate.
   bool carries_borrow(ir::TypeIdx type) const;
