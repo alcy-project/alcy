@@ -71,6 +71,14 @@ extent compared there would answer a different question.
   `err-kept-reference-temporary`) while the same view of a buffer the
   container is declared after is accepted (`ok-view-outlives-container`),
   which is the order the drop walk ends them in.
+- A container that owns its buffer carries a borrow all the same: the
+  field `String` and `Vec` allocate into is a `&mut MaybeUninit`, so an
+  element built from a view of a later binding is refused as if it kept
+  it, although the element copies (`err-kept-owned-element-order`). A
+  callee can hand the parameter's loan back in that field, so telling
+  the two apart for one parameter takes a summary of what the callee
+  returns that names it, which is the relational part ADR-0076 leaves
+  to regions; the structural test cannot.
 - The rule is an extent rule, not a lifetime analysis: loans are still
   liveness-checked by the borrow pass, and a reference that never meets a
   store of a shallower binding is unaffected.
