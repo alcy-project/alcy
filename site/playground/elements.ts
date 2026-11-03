@@ -28,6 +28,9 @@ export const elements = {
   highlight: mustGet<HTMLPreElement>("highlight"),
   highlightCode: mustGet<HTMLElement>("highlight-code"),
   gutter: mustGet<HTMLElement>("gutter"),
+  // The pane holds both the gutter and the editor, and it is where the
+  // scrollbar metrics are published so that both can inherit them.
+  pane: mustGet<HTMLElement>("editor-pane"),
   layout: mustQuery<HTMLElement>(".layout"),
   splitter: mustGet<HTMLElement>("splitter"),
   samples: mustGet<HTMLSelectElement>("samples"),

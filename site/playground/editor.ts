@@ -79,11 +79,14 @@ export function syncMetrics(): void {
   }
   lastScrollbarWidth = scrollbarWidth;
   lastScrollbarHeight = scrollbarHeight;
-  elements.highlight.style.setProperty(
+  // Published on the pane, not on the mirror: the gutter sits beside the
+  // mirror rather than inside it, so a value set on the mirror would never
+  // reach the gutter's padding.
+  elements.pane.style.setProperty(
     "--editor-scrollbar-width",
     `${Math.max(0, scrollbarWidth)}px`,
   );
-  elements.highlight.style.setProperty(
+  elements.pane.style.setProperty(
     "--editor-scrollbar-height",
     `${Math.max(0, scrollbarHeight)}px`,
   );
