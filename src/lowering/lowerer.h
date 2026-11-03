@@ -287,6 +287,35 @@ class Lowerer {
   // Operands are a view: an instruction carries one to three indices,
   // so building a vector for the common case allocated on every emit.
   // A braced list reaches the same implementation without one.
+  // An instruction names its operands as a consecutive range of the table. A
+  // lone operand is a range by itself, and lowering builds the operands of an
+  // instruction right before emitting it, so a wider range reuses the tail it
+  // sits at; the operands of an input built earlier are re-appended instead,
+  // which leaves them fresh and contiguous.
+  [[gnu::always_inline]] ir::OperandIdxRange operand_range(
+      std::span<const ir::OperandIdx> ops) {
+    const usize count = builder.state().operands.size();
+    const u32 width = static_cast<u32>(ops.size());
+    if (width == 1) {
+      return {ops[0], width};
+    }
+    if (width > 1 && width <= count && ops[0].idx == count - width) {
+      bool consecutive = true;
+      for (u32 offset = 1; offset < width; ++offset) {
+        if (ops[offset].idx != ops[0].idx + offset) {
+          consecutive = false;
+          break;
+        }
+      }
+      if (consecutive) {
+        return {ops[0], width};
+      }
+    }
+    for (ir::OperandIdx op_idx : ops) {
+      builder.operand(ir::Operand(builder.state().operands[op_idx]));
+    }
+    return {ir::OperandIdx(static_cast<u32>(count)), width};
+  }
   ir::RegisterIdx emit(ir::Opcode op,
                        ir::TypeIdx type,
                        std::span<const ir::OperandIdx> ops,

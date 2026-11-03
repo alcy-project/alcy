@@ -409,20 +409,17 @@ ir::OperandIdx Lowerer::to_operand(ir::ImmutableIdx imm, ir::TypeIdx type) {
   return builder.operand(ir::Operand::from_immutable(imm, type));
 }
 
+// An instruction names its operands as a consecutive range of the table. A
+// lone operand is a range by itself, and lowering builds the operands of an
+// instruction right before emitting it, so a wider range reuses the tail it
+// sits at; the operands of an input built earlier are re-appended instead,
+// which leaves them fresh and contiguous.
 ir::RegisterIdx Lowerer::emit(ir::Opcode op,
                               ir::TypeIdx type,
                               std::span<const ir::OperandIdx> ops,
                               ir::InstructionFlags flags) {
   const ir::RegisterIdx dst = claim_reg();
-  // Operand ranges must be consecutive in storage, but inputs are
-  // built bottom-up at arbitrary positions; re-append copies so the
-  // range is always fresh and contiguous.
-  const ir::OperandIdx head =
-      ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
-  for (ir::OperandIdx op_idx : ops) {
-    builder.operand(ir::Operand(builder.state().operands[op_idx]));
-  }
-  const ir::OperandIdxRange range = {head, static_cast<u32>(ops.size())};
+  const ir::OperandIdxRange range = operand_range(ops);
   const ir::InstructionIdx instr =
       builder.instr({.op = op,
                      .flags = flags,
@@ -557,12 +554,7 @@ void Lowerer::emit_void(ir::Opcode op,
       tag_of(builder.state().operands[ops[1]].type) == ir::TypeTag::Void) {
     return;
   }
-  const ir::OperandIdx head =
-      ir::OperandIdx(static_cast<u32>(builder.state().operands.size()));
-  for (ir::OperandIdx op_idx : ops) {
-    builder.operand(ir::Operand(builder.state().operands[op_idx]));
-  }
-  const ir::OperandIdxRange range = {head, static_cast<u32>(ops.size())};
+  const ir::OperandIdxRange range = operand_range(ops);
   const ir::InstructionIdx void_instr =
       builder.instr({.op = op,
                      .flags = flags,
