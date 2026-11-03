@@ -227,6 +227,11 @@ class Lowerer {
   // path is empty between them: a walk pushes as it descends and pops as it
   // returns.
   std::vector<u32> copy_inside_;
+  // What the copy walk answered for each type, 0 while unasked, 1 for Copy
+  // and 2 otherwise. A type's copy-ness is fixed once the package's drop
+  // tables are built, and the bodies ask about the same few types many
+  // times, so the walk runs once per type instead of once per question.
+  std::vector<u8> copy_memo_;
   static bool is_block_terminator(ir::Opcode op);
   usize at(ir::BlockIdx block) const;
   ir::BlockIdx reserve_block();

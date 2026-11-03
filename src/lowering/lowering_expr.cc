@@ -140,8 +140,25 @@ Val Lowerer::stopped_value() {
 }
 
 bool Lowerer::is_copy(ir::TypeIdx type) {
-  return ir::is_copy_type(builder.state(), type, pkg.needs_drop,
-                          pkg.not_movable, copy_inside_);
+  constexpr u8 kCopy = 1;
+  constexpr u8 kNotCopy = 2;
+  const usize index = type.idx;
+  if (index < copy_memo_.size()) {
+    const u8 memo = copy_memo_[index];
+    if (memo != 0) {
+      return memo == kCopy;
+    }
+  }
+  const bool copy = ir::is_copy_type(builder.state(), type, pkg.needs_drop,
+                                     pkg.not_movable, copy_inside_);
+  const usize types = builder.state().types.size();
+  if (index < types) {
+    if (copy_memo_.size() < types) {
+      copy_memo_.resize(types, 0);
+    }
+    copy_memo_[index] = copy ? kCopy : kNotCopy;
+  }
+  return copy;
 }
 
 ir::TypeTag Lowerer::tag_of(ir::TypeIdx idx) const {
