@@ -200,8 +200,11 @@ jobs:
         if: always()
         shell: bash
         run: |
+          # A release tree strips its binaries and keeps the copies with symbols in
+          # `exe.unstripped`, a directory; `rm -f` refuses one, and it is a link's
+          # output whatever it holds.
           for name in alcy alcy.exe tests tests.exe benchmarks benchmarks.exe exe.unstripped; do
-            rm -f "out/build/$name" "out/build/$name.pdb"
+            rm -rf "out/build/$name" "out/build/$name.pdb"
           done
-          rm -f out/build/*.a out/build/*.so out/build/*.o out/build/*.d
+          rm -rf out/build/*.a out/build/*.so out/build/*.o out/build/*.d
 
