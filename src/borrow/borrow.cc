@@ -408,6 +408,12 @@ class Checker {
   // reference. The summary sweep skips the functions that cannot, and gives up
   // entirely on a package where no function returns a reference.
   std::vector<u8> may_return_loan_;
+  // Whether a function holds an instruction that can be diagnosed: a loan is
+  // taken by a borrow and a moved place is made by a move, so a function with
+  // neither has no conflict, no use after a move and no escape to report, and
+  // its body is not walked. A function that hands a loan back keeps its walk,
+  // because the escape check reads the loans of the returned register.
+  std::vector<u8> needs_body_check_;
 
   std::span<const u32> steps_of(u32 reg) const {
     return std::span<const u32>(path_steps_.data() + path_head[reg],
@@ -2557,9 +2563,6 @@ class Checker {
     reserved_receiver.assign(registers, 0);
     use_count_scratch_.assign(registers, 0);
     receiver_call_scratch_.assign(registers, 0);
-    // Sized for the whole program: a type's shape does not change, so its
-    // answer holds across functions.
-    carry_memo_.assign(storage.types().size(), 0);
     const usize blocks = storage.blocks().size();
     live_in.assign(blocks, {});
     live_out.assign(blocks, {});
@@ -2578,7 +2581,6 @@ class Checker {
     succs_scratch_.reserve(3);
     stack_scratch_.reserve(blocks);
     post_scratch_.reserve(blocks);
-    index_register_bounds(registers);
     index_addrs();
     seed_all_captures();
   }
@@ -2591,15 +2593,22 @@ class Checker {
     fn_reg_lo.assign(functions, 0);
     fn_reg_hi.assign(functions, 0);
     may_return_loan_.assign(functions, 0);
+    needs_body_check_.assign(functions, 0);
     for (usize fidx = 0; fidx < functions; ++fidx) {
       const ir::Function& fn = storage.functions()[fidx];
       u32 lo = static_cast<u32>(registers);
       u32 hi = 0;
       u8 returns_loan = carries_reference(fn.meta.return_type) ? 1 : 0;
+      u8 needs_check = 0;
       for (ir::BlockIdx bidx : fn.blocks) {
         for (ir::InstructionIdx iidx : storage.blocks()[bidx].instrs) {
           const ir::Instruction& instr = instr_at(iidx);
-          if (returns_loan == 0 && instr.op == ir::Opcode::Ret &&
+          const ir::Opcode op = instr.op;
+          if (needs_check == 0 &&
+              (op == ir::Opcode::Move || op == ir::Opcode::Borrow)) {
+            needs_check = 1;
+          }
+          if (returns_loan == 0 && op == ir::Opcode::Ret &&
               !instr.operands.empty()) {
             const ir::Operand& value =
                 storage.operands()[instr.operands.head()];
@@ -2628,6 +2637,7 @@ class Checker {
       fn_reg_hi[fidx] = std::min(hi, static_cast<u32>(registers));
       fn_reg_lo[fidx] = std::min(lo, fn_reg_hi[fidx]);
       may_return_loan_[fidx] = returns_loan;
+      needs_body_check_[fidx] = needs_check;
     }
   }
 
@@ -2742,6 +2752,22 @@ class Checker {
   }
 
   void run() {
+    // The scan that ranges each function's registers also answers whether the
+    // function has a borrow or a move in it, and a package where that is true
+    // of none needs no table: every answer a walk would reach is the answer
+    // for a function with nothing to walk.
+    // Sized for the whole program: a type's shape does not change, so its
+    // answer holds across functions.
+    carry_memo_.assign(storage.types().size(), 0);
+    index_register_bounds(storage.registers().size());
+    bool check_any = false;
+    for (usize fidx = 0; fidx < needs_body_check_.size() && !check_any;
+         ++fidx) {
+      check_any = needs_body_check_[fidx] != 0 || may_return_loan_[fidx] != 0;
+    }
+    if (!check_any) {
+      return;
+    }
     size_scratch();
     summaries.assign(storage.functions().size(), {});
     // A parametric function is borrowed once per specialization, after
@@ -2783,7 +2809,9 @@ class Checker {
     }
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
-      if (parametric[fidx.idx]) {
+      if (parametric[fidx.idx] ||
+          (needs_body_check_[fidx.idx] == 0 &&
+           may_return_loan_[fidx.idx] == 0)) {
         continue;
       }
       const ir::Function& fn = storage.functions()[fidx];
