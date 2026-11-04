@@ -104,6 +104,25 @@ the peak rises 2.2 KiB per line. A per-line cost that climbed with the body
 would be a scan or a lookup over what the body already holds, which no
 whole-package size can show and a single module can.
 
+Depth is the third axis, and it is the one that stops: nesting deeper than 256
+is rejected, and `error[EB005]` names that limit at about 84 nested `if`
+statements, so no input carries a scope chain long enough for a walk over it to
+add up. Under the cap a level costs the same at either end - 50 levels of `if`
+with a binding each measure 5.74M instructions and 100 measure 5.82M, 1.6K a
+level - so a lookup that climbed every scope trades against a constant and not
+against the input.
+
+Every figure above sits on a floor the process pays before it reads a byte, and
+that floor is worth knowing because the growth slopes are fitted over it.
+`alcy check` on a one-module package runs 4.49M instructions: 1.09M of that is
+`_dl_relocate_object_no_relro` alone, and most of the rest is LLVM's
+`_GLOBAL__sub_I_*` registration blocks and the command line tables they fill at
+startup, none of which `check`, `fmt`, or `lint` ever read. At 1200 modules
+the floor is under a percent of the run, but a small-package pair that moves by
+a few hundred thousand instructions is reading the floor and not the change. It
+is a property of the build - one binary that carries the backend for
+subcommands that never reach it - not something an edit under `src/` removes.
+
 ### 2. Localize it
 
 Build a release binary that keeps its symbols. The knob exists, so no edit to
