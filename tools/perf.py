@@ -84,7 +84,17 @@ WORK_DIR = "out/perf"
 # compare a phase with itself across two runs, not with its neighbour.
 PHASES = ("parse", "targets", "analyze", "lower", "borrow")
 
-SHAPES = ["plain", "generic", "drop", "adapt", "closure", "print", "comp", "wide"]
+SHAPES = [
+    "plain",
+    "generic",
+    "drop",
+    "adapt",
+    "closure",
+    "print",
+    "comp",
+    "wide",
+    "arms",
+]
 
 # How many compile-time calls one module of the comp shape makes.
 COMP_CALLS = 8
@@ -93,6 +103,11 @@ COMP_CALLS = 8
 # settled on its key rather than scanned for, so the shape covers the path a
 # narrow body never reaches.
 WIDE_WIDTH = 64
+
+# How many variants the arms shape's enum declares, one match arm each. Past
+# 64, coverage is settled on an index over the arms rather than on a scan of
+# them, and the shape covers the path a narrow enum never reaches.
+ARMS_WIDTH = 128
 
 INSTRUCTIONS = re.compile(r"^(\d+),,.*instructions")
 
@@ -132,7 +147,14 @@ UNSCOPED_OWN = (
 )
 
 
-def module_source(shape: str, index: int, width: int = WIDE_WIDTH) -> str:
+def shape_width(shape: str, width: int | None) -> int:
+    """The width a shape is built at: the count asked for, or its own."""
+    if width is not None:
+        return width
+    return ARMS_WIDTH if shape == "arms" else WIDE_WIDTH
+
+
+def module_source(shape: str, index: int, width: int) -> str:
     """One module of a corpus, whose shape is the corpus's shape."""
     i = index
     if shape == "plain":
@@ -291,6 +313,31 @@ pub fn use{i}(k: i32) -> i32 {{
   ret total
 }}
 """
+    if shape == "arms":
+        variants = ",\n".join(f"  v{j}(i32)" for j in range(ARMS_WIDTH))
+        arms = "\n".join(
+            f"    E{i}::v{j}(x) => {{ ret x + {j} }}" for j in range(ARMS_WIDTH)
+        )
+        return f"""// One variant per match arm and an arm per variant, all of them
+// exhaustive: the coverage question reads a row for every arm.
+enum E{i} {{
+{variants},
+}}
+
+fn pick{i}(e: E{i}) -> i32 {{
+  match e {{
+{arms}
+  }}
+}}
+
+fn make{i}(k: i32) -> E{i} {{
+  ret E{i}::v0(k)
+}}
+
+pub fn run{i}(k: i32) -> i32 {{
+  ret pick{i}(make{i}(k))
+}}
+"""
     if shape == "wide":
         names = "".join(f"  mut a{j} := {j}\n" for j in range(width))
         guards = "".join(
@@ -319,6 +366,7 @@ def main_source(shape: str, modules: int, main_calls: int) -> str:
         "closure": "  total = total + m{i}::run{i}({k})",
         "print": "  total = total + m{i}::say{i}({k})",
         "wide": "  total = total + m{i}::wide{i}()",
+        "arms": "  total = total + m{i}::run{i}({k})",
     }[shape]
     calls = "\n".join(call.format(i=i % modules, k=i % 7) for i in range(main_calls))
     return f"""fn main() -> i32 {{
@@ -344,7 +392,7 @@ def manifest_source(shape: str, modules: int) -> str:
 "alcy/std/unicode" = {}
 "alcy/std/io" = {}
 """
-    elif shape not in ("plain", "wide"):
+    elif shape not in ("plain", "wide", "arms"):
         dependencies = """
 [dependencies]
 "alcy/std/core" = {}
@@ -365,9 +413,10 @@ path = "main.al"
 
 
 def write_corpus(
-    shape: str, modules: int, main_calls: int, out: Path, width: int = WIDE_WIDTH
+    shape: str, modules: int, main_calls: int, out: Path, width: int | None = None
 ) -> Path:
     """Writes one corpus and returns its directory."""
+    width = shape_width(shape, width)
     out.mkdir(parents=True, exist_ok=True)
     for i in range(modules):
         (out / f"m{i}.al").write_text(module_source(shape, i, width))
@@ -499,13 +548,13 @@ def corpus_dir(text: str) -> Path:
 
 
 def corpus_name(
-    shape: str, modules: int, main_calls: int, width: int = WIDE_WIDTH
+    shape: str, modules: int, main_calls: int, width: int | None = None
 ) -> str:
     """A directory name that tells the two main sizes apart."""
     name = f"{shape}{modules}"
     if main_calls:
         name += f"-main{main_calls}"
-    if width != WIDE_WIDTH:
+    if width is not None and width != shape_width(shape, None):
         name += f"-w{width}"
     return name
 
@@ -1159,8 +1208,9 @@ def parse_args() -> argparse.Namespace:
     )
     width = dict(
         type=int,
-        default=WIDE_WIDTH,
-        help="names the wide shape declares (other shapes ignore it)",
+        default=None,
+        help="names or variants a shape declares, as it has them (default:"
+        " the shape's own count; other shapes ignore it)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

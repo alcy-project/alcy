@@ -115,6 +115,8 @@ modules do not mention each other would not:
   destructor.
 - `wide` - one function declares 64 names, guards each in a block of its own,
   and reads them all back; `--width` moves the count.
+- `arms` - every module declares an enum with 128 variants and a match that
+  names each one, so coverage reads a row for every arm.
 
 `--main-calls` fixes the size of `main`. By default `main` names every module,
 so it grows with the package and its per-item work is indistinguishable from
