@@ -5260,6 +5260,8 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   checker.modules.resize(tree.modules.size());
   checker.static_by_name_.resize(tree.modules.size());
   checker.fn_by_name_.resize(tree.modules.size());
+  checker.generic_fn_by_name_.resize(tree.modules.size());
+  checker.generic_fn_indexed_.assign(tree.modules.size(), 0);
   checker.scanned_fns_.resize(tree.modules.size());
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
     checker.modules[m] = checker.empty_module(m);

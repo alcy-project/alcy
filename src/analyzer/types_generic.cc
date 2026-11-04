@@ -484,20 +484,43 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
 // Resolves all path segments but the last to a module. Shared by type
 // and value paths; `what` names the namespace for diagnostics.
 
-ast::ItemIdx Checker::lookup_generic_fn(u32 module, std::string_view name) {
-  for (ast::ItemIdx item : tree.modules[module]->items) {
+ast::ItemIdx Checker::find_generic_fn(u32 module, std::string_view name) {
+  const std::span<const ast::ItemIdx> items = tree.modules[module]->items;
+  if (items.size() > INDEX_MIN) {
+    std::unordered_map<std::string_view, ast::ItemIdx>& index =
+        generic_fn_by_name_[module];
+    if (generic_fn_indexed_[module] == 0) {
+      generic_fn_indexed_[module] = 1;
+      for (ast::ItemIdx item : items) {
+        if (fn_generic_params(item).empty()) {
+          continue;
+        }
+        index.emplace(fn_name(item), item);
+      }
+    }
+    const auto found = index.find(name);
+    return found == index.end() ? ast::ItemIdx::invalid() : found->second;
+  }
+  for (ast::ItemIdx item : items) {
     if (fn_name(item) == name && !fn_generic_params(item).empty()) {
       return item;
     }
+  }
+  return ast::ItemIdx::invalid();
+}
+
+ast::ItemIdx Checker::lookup_generic_fn(u32 module, std::string_view name) {
+  if (const ast::ItemIdx own = find_generic_fn(module, name); own.is_valid()) {
+    return own;
   }
   for (const Import& import : tree.modules[module]->imports) {
     if (import.ns != Namespace::Value || import.name != name) {
       continue;
     }
-    for (ast::ItemIdx item : tree.modules[import.target_module]->items) {
-      if (fn_name(item) == import.member && !fn_generic_params(item).empty()) {
-        return item;
-      }
+    if (const ast::ItemIdx found =
+            find_generic_fn(import.target_module, import.member);
+        found.is_valid()) {
+      return found;
     }
   }
   return ast::ItemIdx::invalid();

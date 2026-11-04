@@ -297,6 +297,14 @@ class Checker {
   // shorter than building the index; above it one name would cost the
   // module's size. A module below the threshold holds no map.
   std::vector<std::unordered_map<std::string_view, u32>> fn_by_name_;
+  // Generic free functions by the name they declare, for modules past
+  // INDEX_MIN items, each mapped to the item that declares it. A generic
+  // name resolved by reading the module's whole item list, so every
+  // instantiation cost the module.
+  std::vector<std::unordered_map<std::string_view, ast::ItemIdx>>
+      generic_fn_by_name_;
+  // Which of those modules have had their map built.
+  std::vector<u8> generic_fn_indexed_;
   // The scan ensure_function_named and ensure_static_named make for a
   // name no table answers, by module and name: it looked at every item
   // the module declares, so a name it did not find is one the module
@@ -1184,6 +1192,10 @@ class Checker {
                                               std::string_view name);
   // Generic free function item in scope, by name; invalid if absent.
   ast::ItemIdx lookup_generic_fn(u32 module, std::string_view name);
+  // The item a module itself declares under `name` as a generic
+  // function, or invalid. Scans unless the module is past INDEX_MIN
+  // items, where one scan builds the index the next name answers from.
+  ast::ItemIdx find_generic_fn(u32 module, std::string_view name);
 
   struct VariantMatch {
     NominalEntry* enom = nullptr;
