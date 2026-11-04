@@ -1,4 +1,4 @@
-# Function Summaries and Lifetime Synthesis (MVP subset)
+# Function Summaries and Lifetime Synthesis
 
 Lifetime synthesis is the thesis: the compiler derives interprocedural
 region relations automatically, so callers never write annotations.
@@ -19,7 +19,7 @@ R ::= ri                    # identity
 - Exclusive (`&mut`) returns are flow-checked like any other return:
   the summary records whichever inputs may flow out, and call-site
   instantiation keeps those inputs alive. No synthesis restriction
-  beyond the borrow rules exists in MVP.
+  beyond the borrow rules exists.
 - Reborrowing freezes the source place for the derived reference's
   lifetime; freezing is enforced by the exclusivity rule (loan
   invalidation), not by extra summary machinery.
@@ -31,13 +31,13 @@ R ::= ri                    # identity
   search and no backtracking: instantiation is decidable and fast.
 - Struct arguments expand invisible region parameters automatically.
 
-## Staging
+## Scope
 
-- **MVP**: summaries over the constructors above; bounded fixed-point
+- Summaries cover the constructors above, with bounded fixed-point
   iteration for (mutual) recursion; indirect calls through closures
-  carry their arguments' and callee's loans rather than a summary;
-  no spec objects, no higher-ranked region polymorphism beyond
-  struct projection.
-- **Post-MVP**: demand-driven summary computation on the parallel
-  engine, full-precision mutual recursion, two-phase borrows, and any
-  precision refinements the MVP subset cannot express.
+  carry their arguments' and callee's loans rather than a summary; no
+  spec objects, and no higher-ranked region polymorphism beyond struct
+  projection.
+- Remaining work, tracked in `deferred.md`: demand-driven summary
+  computation on the parallel engine, full-precision mutual recursion,
+  two-phase borrows, and any further precision refinements.

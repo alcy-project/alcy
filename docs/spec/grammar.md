@@ -1,10 +1,10 @@
-# MVP Grammar
+# Grammar
 
 The normative grammar lives in [`grammar.ebnf`](grammar.ebnf). This
 document keeps what EBNF cannot say: lexical rules, precedence notes,
 and the disambiguations. Changing the grammar means changing both
-files in the same commit. This grammar covers MVP only; reserved forms
-are rejected with guidance diagnostics.
+files in the same commit. This grammar covers the language as it
+stands; reserved forms are rejected with guidance diagnostics.
 
 ## Lexical notes
 
@@ -104,7 +104,7 @@ initial ABI is scalars, raw pointers, and `()` as a return; see
 ## Types
 
 `()` is the unit type. `!` is the never type and coerces to any type.
-Tuple types are structural and concrete (no polymorphism in MVP).
+Tuple types are structural and concrete (no polymorphism).
 A path takes type arguments for generic enums and structs only, and a
 closing `>>` splits into two `>` (dangling halves error). A function
 type is structural: `(A, B) -> R`, with `()` and `(A)` as its no- and

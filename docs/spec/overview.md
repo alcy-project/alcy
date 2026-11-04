@@ -9,13 +9,14 @@ in `src/docs/`, and the reasoning behind either is recorded in
 `docs/adr/`.
 
 Normative keywords (MUST, SHOULD, MAY) follow RFC 2119 throughout
-`docs/spec/`. Every section carries a staging label:
+`docs/spec/`. This specification states the language as it is meant to
+be, and everything it states is implemented before 1.0; what is not
+implemented yet is listed in `deferred.md`.
 
-- **MVP**: required for the first self-contained compiler milestone.
-- **Bootstrap**: post-MVP compiler work toward self-hosting (see
-  `comp.md`).
-- **Post-MVP**: explicitly out of MVP scope; described only to reserve
-  decision space, never as a promise of a particular design.
+A section marked Bootstrap (`comp.md`, `fmt.md`, `ffi.md`) describes the
+path to self-hosting, and one marked staged (`types.md`) is covered in
+part. The marker says what a document covers, not what is promised: no
+part of this specification becomes a promise before 1.0.
 
 Performance figures do not belong in this specification. Design goals
 involving speed live outside `docs/spec/` and MUST NOT be stated as
@@ -34,7 +35,7 @@ checkable contracts here.
   redesign what does not (annotations, shadowing discipline, declaration
   syntax, block values).
 
-## Non-goals for MVP
+## Non-goals
 
 - Spec objects, async, compile-time evaluation beyond
   constant items.
@@ -44,15 +45,15 @@ checkable contracts here.
   elements only through a container that owns the bounds check.
 - Incremental or parallel compilation (see `deferred.md`).
 
-## Core hypotheses (post-MVP research tracks)
+## Core hypotheses (research tracks)
 
 - Lifetime synthesis over a region system (no user annotations),
-  beyond the MVP summary subset.
+  beyond the summary subset described here.
 - Refinement types over a decidable predicate fragment.
 - Whole-program analysis with per-package emission.
 
 These tracks shape reserved decision space in this specification but
-impose no MVP implementation burden.
+impose no implementation burden.
 
 `../principles.md` states where the language is going and the properties
 that get it there. Where two designs are both defensible, the one that

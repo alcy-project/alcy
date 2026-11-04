@@ -1,4 +1,4 @@
-# Ownership and Regions (MVP)
+# Ownership and Regions
 
 ## Borrow rules
 
@@ -99,7 +99,7 @@
   graph (dense bitsets, post-order fixed-point iteration). Loans are
   invalidated by moves, exclusive borrows, and assignments.
 - Interprocedural reasoning is expressed exclusively through function
-  summaries (see `summaries.md`). MVP computes summaries in bounded
+  summaries (see `summaries.md`). Summaries are computed in bounded
   sweeps over the call graph; exceeding the bound is an internal
   compiler error, never a silent precision loss.
 - No lifetime annotations exist in the language. If annotations ever

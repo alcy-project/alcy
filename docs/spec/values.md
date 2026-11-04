@@ -1,4 +1,4 @@
-# Values, Affinity, and Destruction (MVP)
+# Values, Affinity, and Destruction
 
 ## Value model
 

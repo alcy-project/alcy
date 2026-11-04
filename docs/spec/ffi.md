@@ -2,7 +2,7 @@
 
 The `unsafe` opt-in, `extern "C"` declarations, and the freestanding
 link mode are Bootstrap, described here as they work today. The rest
-of the chapter is reserved: it is kept so MVP designs do not
+of the chapter is reserved: it is kept so the design does not
 foreclose the baremetal story.
 
 ## Unsafe (Bootstrap)
@@ -108,8 +108,8 @@ foreclose the baremetal story.
   whole arrives later. C fixed-width integer types are intended to be
   bit-compatible with alcy integer types.
 - `static` items MUST NOT contain `&mut`. Shared references to static
-  storage are permitted. Mutable statics do not exist in MVP and
-  remain under careful review thereafter.
+  storage are permitted. Mutable statics do not exist, and adding
+  them needs careful review.
 
 ## Mangling
 

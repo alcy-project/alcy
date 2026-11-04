@@ -1,4 +1,4 @@
-# Modules, Packages, and Name Resolution (MVP)
+# Modules, Packages, and Name Resolution
 
 ## File and module mapping
 
@@ -27,7 +27,8 @@
   `_`. There is no parent-relative spelling: every upward reference
   names the root
   (`docs/adr/0060-the-path-vocabulary-is-three-forms.md`).
-- `use a::b;`, `use a::b as c;`, and `pub use` re-exports are MVP.
+- `use a::b;`, `use a::b as c;`, and `pub use` re-exports are part
+  of the language.
   Glob imports (`::*`) are deferred.
 - Default visibility is private: a declaration is reachable only from
   the module that declares it. `pub` opens it to every module of the
@@ -123,7 +124,7 @@ member list and the dependency graph.
   `-` normalized to `_`; a `use` or a qualified path that crosses
   the boundary reaches only the dependency's `[modules] export`
   list, and anything else across it is unresolved.
-- MVP keeps emission per package: each build emits its root package
+- Emission stays per package: each build emits its root package
   only, with dependency code compiled in the way staged standard
   library sources already are. Summary-carrying artifacts and
   cross-package compilation follow the whole-program-analysis,

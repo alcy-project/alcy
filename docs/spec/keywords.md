@@ -1,10 +1,11 @@
-# MVP Keywords and Tokens
+# Keywords and Tokens
 
-Frozen set: the first list is usable in MVP, the second is reserved
-(see `deferred.md`). Additions to either list require a specification
-update.
+Frozen set: the lists below are the keyword set. The `Reserved`
+section names the forms read past with a diagnostic, and `deferred.md`
+lists what is not implemented yet. An addition to any list requires a
+specification update.
 
-## MVP
+## In use
 
 Declarations: `fn`, `struct`, `enum`, `impl`, `spec`, `static`, `pub`,
 `const`, `mut`, `use`
@@ -51,8 +52,8 @@ ordinary parse error, not a reserved-name diagnostic.
 ## Literals, operators, delimiters, comments
 
 Literals: decimal, `0b`/`0o`/`0x` with type suffixes; `"..."`
-strings; `'...'` characters (unresolved in MVP; `Char` lives
-post-MVP, see `types.md`); `true`, `false`
+strings; `'...'` characters (unresolved; `Char` lives outside this
+document for now, see `types.md`); `true`, `false`
 
 Operators and delimiters: `+ - * / % **` `& | ^ ~ << >>` and
 assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`
@@ -62,4 +63,4 @@ assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`
 `_` (wildcard), `#` (reserved for future attributes). `;` separates
 multiple statements on one line only.
 
-Comments: `//`, `/* */`, `///` (only one doc-comment style is MVP).
+Comments: `//`, `/* */`, `///` (only one doc-comment style exists).

@@ -1,7 +1,8 @@
-# Deferred Features (post-MVP, unordered)
+# Deferred Features (unordered)
 
-Tracked here so MVP decisions stay compatible. None of these may be
-relied upon by MVP programs or by the MVP compiler implementation.
+Tracked here so decisions stay compatible with one another. None of
+these are part of the language yet, and nothing here is in force until
+it is implemented.
 
 ## Language
 
@@ -11,12 +12,12 @@ relied upon by MVP programs or by the MVP compiler implementation.
   `Vec::grow` moves elements rather than ending them. See
   `docs/adr/0013-destructors-consume-their-value.md`.
 - Generic structs, generic enums, generic free functions, and generic
-  intrinsics are MVP: they intern per instantiation, and `impl<T>
-  Name<T>` methods specialize per instantiation. A generic call takes
-  its type arguments from a turbofish or from the argument types;
-  inference binds only a parameter a declared parameter type pins on
-  its own, so a call whose parameters cannot be recovered that way
-  needs the turbofish.
+  intrinsics are not deferred: they intern per instantiation,
+  and `impl<T> Name<T>` methods specialize per instantiation. A generic
+  call takes its type arguments from a turbofish or from the argument
+  types; inference binds only a parameter a declared parameter type
+  pins on its own, so a call whose parameters cannot be recovered that
+  way needs the turbofish.
 - A loan's extent is a region computed by backward liveness over the
   CFG: a loan is live where a value carrying it is read and wherever a
   successor is live, so sibling branches differ. The place a reborrow
@@ -88,5 +89,5 @@ relied upon by MVP programs or by the MVP compiler implementation.
 ## Keywords reserved for the above
 
 `async`, `await`, `union`, `register`,
-`where`, `dyn`. The MVP keyword set is
-frozen in `keywords.md`; additions require a specification update.
+`where`, `dyn`. The keyword set is frozen in `keywords.md`;
+additions require a specification update.

@@ -1,4 +1,4 @@
-# Items (MVP)
+# Items
 
 ## Bindings
 
@@ -21,9 +21,9 @@
   whose branches all diverge); the body's tail value is not the
   return value (`control.md`). A `comp fn` keeps its tail-`ret` form
   (`comp.md`).
-- Inherent `impl` blocks are MVP. A parameter list (`impl<T> ...`)
-  makes the block generic; its methods are checked and specialized per
-  receiver instantiation.
+- Inherent `impl` blocks are part of the language. A parameter list
+  (`impl<T> ...`) makes the block generic; its methods are checked and
+  specialized per receiver instantiation.
 - A `spec` declares a capability as method signatures, and
   `impl S for T` opts one type in. Specs live in the type namespace:
   `use` imports them and a prelude facade re-exports core's, which is

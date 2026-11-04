@@ -1,4 +1,4 @@
-# Errors, Panic, and Divergence (MVP)
+# Errors, Panic, and Divergence
 
 ## Error types in the standard library
 
@@ -44,7 +44,7 @@
   be just `main`; a target whose frame pointer is not that chain -
   Windows x64's is an RSP-relative point in the fixed frame by design -
   and the wasm backend everywhere, write the message and its site only.
-- The `!` (never) type exists from MVP: `panic` has type `!`, and `!`
+- The `!` (never) type exists: `panic` has type `!`, and `!`
   coerces to any type. Looping constructs that cannot fall through
   also produce `!`.
 
@@ -55,7 +55,7 @@
   intended form.
 - A nonzero discriminant from the entry enum aborts with a fixed
   message and a nonzero exit status; the error payload is never
-  printed (no `Debug` bound exists in MVP).
+  printed (no `Debug` bound exists).
 
 ## Unused values
 

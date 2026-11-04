@@ -1,4 +1,4 @@
-# Types (MVP)
+# Types
 
 ## Numeric tower
 
@@ -31,8 +31,8 @@
 
 ## Tuples
 
-- Tuple types `(T, U)` are structural and concrete (no polymorphism
-  in MVP): construction, `.0` access, and destructuring. The unit
+- Tuple types `(T, U)` are structural and concrete (no polymorphism):
+  construction, `.0` access, and destructuring. The unit
   type `()` is the empty tuple.
 
 ## Fixed arrays
@@ -208,8 +208,8 @@
   Validating literals is a strictness decision of its own and is
   reserved.
 - `char` (a Unicode scalar value), grapheme segmentation, and width
-  live post-MVP; the names are reserved. Baremetal targets without
-  core use `u8`/`u32` directly.
+  live outside this document for now; the names are reserved. Baremetal
+  targets without core use `u8`/`u32` directly.
 
 ## Ranges (staged)
 
