@@ -287,6 +287,18 @@ from the idea.
   run-to-run spread (`+0.0003%` over three interleaved pairs): the view settles
   its bounds once per loop and the iterator reads the same word the index does,
   so the loop that remains has nothing left to remove.
+- **Recording the borrow check's predecessors as one flat pair.** `preds` is
+  sized for the whole package and written once per function, so a `head`/`len`
+  pair over a single array, which zeroes eight bytes per block instead of a
+  vector's twenty-four, looks like a free third of that table. Over three
+  interleaved pairs on `plain1200` the two binaries land within the spread
+  (`+0.001%`): `preds.assign(blocks, {})` costs five instructions per row, and
+  building the pair costs a count pass, a prefix sum, a fill pass and a pass
+  that puts each row back in order over the same rows, which is the same five
+  spent differently. The table is `0.11%`, and the five row tables beside it
+  are `0.55%` together. The lever is their size, not their shape: a function
+  names a few dozen blocks and the package a hundred thousand, so the sizing
+  writes an entry for every block no function in it reads.
 
 ## Tracing
 
