@@ -44,8 +44,8 @@ namespace {
 // one more segment. A list of types ends where a type tag or the end of
 // the string appears. Tuples and nominals carry explicit counts instead.
 constexpr std::string_view PREFIX = "_A";
-// Pre-MVP with no users, so the version stays 1 across this change: the
-// only symbols that exist are the ones this build writes.
+// No symbols are in circulation yet, so the version stays 1: the only
+// symbols that exist are the ones this build writes.
 constexpr std::string_view VERSION = "1";
 // Ends a list of length-prefixed segments.
 constexpr char LIST_END = '.';

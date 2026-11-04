@@ -10,7 +10,7 @@
 
 namespace pkg {
 
-// A strict X.Y.Z version, without prerelease or build metadata (MVP).
+// A strict X.Y.Z version, without prerelease or build metadata.
 struct Version {
   u32 major = 0;
   u32 minor = 0;
@@ -27,7 +27,7 @@ enum class VersionError : u8 {
   BadFormat,
 };
 
-// Parses strict X.Y.Z numerics (no prerelease/build metadata in MVP).
+// Parses strict X.Y.Z numerics (no prerelease or build metadata).
 base::Result<Version, VersionError> parse_version(std::string_view text);
 
 }  // namespace pkg

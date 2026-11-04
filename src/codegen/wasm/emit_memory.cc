@@ -485,7 +485,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
   }
 }
 
-// base + index * sizeof(elem), the one projection the MVP encodes.
+// base + index * sizeof(elem), the one projection the backend encodes.
 Emitter::EmitResult Emitter::emit_elem_offset(const ir::Operand& base,
                                               const ir::Operand& index,
                                               ir::TypeIdx elem,

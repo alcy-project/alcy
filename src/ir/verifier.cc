@@ -479,8 +479,8 @@ VerificationResult verify_storage(const Storage& storage) {
           break;
         }
         case InstrShape::CondBr: {
-          // operands = [cond(i1), true_block, false_block]; targets take no
-          // block parameters in MVP.
+          // operands = [cond(i1), true_block, false_block]; targets take
+          // no block parameters.
           if (instr.operands.size() != 3) {
             return err(VerificationErrorKind::InvalidCondBr, iidx.idx);
           }
@@ -502,7 +502,7 @@ VerificationResult verify_storage(const Storage& storage) {
         }
         case InstrShape::Switch: {
           // operands = [value, default_block, (case_imm, case_block)...];
-          // targets take no block parameters in MVP.
+          // Targets take no block parameters.
           if (instr.operands.size() < 2 || (instr.operands.size() % 2) != 0) {
             return err(VerificationErrorKind::InvalidSwitch, iidx.idx);
           }

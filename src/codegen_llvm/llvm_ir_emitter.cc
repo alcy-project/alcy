@@ -740,7 +740,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
     }
     case Op::CondBr: {
       // operands = [cond, true_block, false_block]. Targets must not take
-      // block parameters in MVP.
+      // block parameters.
       DCHECK(ops.size() == 3);
       llvm::Value* cond =
           resolve_operand_value(storage_->operands()[ops.head()]);
@@ -753,7 +753,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
     }
     case Op::Switch: {
       // operands = [value, default_block, (case_imm, case_block)...].
-      // Targets must not take block parameters in MVP.
+      // Targets must not take block parameters.
       DCHECK(ops.size() >= 2);
       llvm::Value* value =
           resolve_operand_value(storage_->operands()[ops.head()]);

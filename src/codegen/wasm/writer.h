@@ -11,8 +11,8 @@
 
 namespace codegen::wasm {
 
-// The scalar value types the binary format spells. The direct backend's
-// MVP emits these and nothing else; a reference and a pointer are I32 on
+// The scalar value types the binary format spells. The direct backend
+// emits these and nothing else; a reference and a pointer are I32 on
 // the wasm32 target it builds for.
 enum class ValType : u8 {
   I32 = 0x7F,

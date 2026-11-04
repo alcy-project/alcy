@@ -925,8 +925,8 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
   }
   if (kind == TokenKind::Error) {
     // Invalid character (including '@', '$', backtick, stray UTF-8
-    // bytes, and control characters): identifiers stay ASCII-only in
-    // MVP, and every other stray scalar is diagnosed here. A UTF-8
+    // bytes, and control characters): identifiers stay ASCII-only, and
+    // every other stray scalar is diagnosed here. A UTF-8
     // lead takes the continuation bytes that follow it and stops at
     // the first byte that is neither one nor part of the promise: a
     // span that ran over whitespace would read back longer than the

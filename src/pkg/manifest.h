@@ -116,7 +116,7 @@ struct PackageManifest {
   // Arena-owned array, possibly empty.
   const Dependency* dependencies = nullptr;
   u32 dependency_count = 0;
-  // Declared build targets ([[bin]] tables). MVP builds a single binary;
+  // Declared build targets ([[bin]] tables). A build emits a single binary;
   // additional entries are parsed for forward compatibility and rejected
   // by the pipeline with guidance.
   const BinTarget* bins = nullptr;

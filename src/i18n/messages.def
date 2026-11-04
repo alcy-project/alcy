@@ -230,7 +230,7 @@
   F(AnalyzerPrivateItem, Error, Analyzer, "Item '{}' is private; the module that declares it can open it with `pub`") \
   F(AnalyzerRangeEndpointNotInteger, Error, Analyzer, "A range index must have an integer endpoint type") \
   F(AnalyzerRangeEndpointTypeMismatch, Error, Analyzer, "Type mismatch in range endpoints: '{}' vs '{}'") \
-  F(AnalyzerRangeExpressionsDeferred, Error, Analyzer, "range expressions arrive post-MVP") \
+  F(AnalyzerRangeExpressionsDeferred, Error, Analyzer, "range expressions are not implemented yet") \
   F(AnalyzerRangeNeedsStdCore, Error, Analyzer, "Range expressions need the `core` standard library package") \
   F(AnalyzerRawPointerNeedsSized, Error, Analyzer, "A raw pointer is thin, so its pointee must be sized") \
   F(AnalyzerReceiverTypeMismatch, Error, Analyzer, "Type mismatch in receiver") \
@@ -279,7 +279,7 @@
   F(AnalyzerTypeInStandardLibrary, Error, Analyzer, "Type '{}' is not found; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
   F(AnalyzerTypeMismatch, Error, Analyzer, "Type mismatch in {}: '{}' vs '{}'") \
   F(AnalyzerTypeMismatchExpectedFound, Error, Analyzer, "Type mismatch in {}: expected '{}', found '{}'") \
-  F(AnalyzerTypeNotSupported, Error, Analyzer, "Type is not supported in MVP") \
+  F(AnalyzerTypeNotSupported, Error, Analyzer, "Type is not supported yet") \
   F(AnalyzerTypeParameterAsValue, Error, Analyzer, "Type parameter '{}' cannot be used as a value") \
   F(AnalyzerUnexpectedTypeArguments, Error, Analyzer, "Type '{}' takes no type arguments") \
   F(AnalyzerUninitializedValueUsed, Error, Analyzer, "Uninitialized value used as '{}'; release it with 'uninit_assume' once written") \
