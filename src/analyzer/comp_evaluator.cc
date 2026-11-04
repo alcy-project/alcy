@@ -1408,7 +1408,27 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
       return comp_eval_expr(mod, node.payload.get<ast::ExprBorrow>().inner,
                             scope, out);
     }
-    case ast::ExprKind::Deref: return false;
+    case ast::ExprKind::Deref: {
+      // A borrow is transparent, so a reference stands for the value
+      // that flowed through it and reading through the reference reads
+      // that value.
+      const ast::ExprDeref& deref = node.payload.get<ast::ExprDeref>();
+      CompVal inner;
+      if (!comp_eval_expr(mod, deref.inner, scope, inner)) {
+        return false;
+      }
+      const ir::TypeTag operand = tag_of(expr_type_in(mod, deref.inner));
+      if (operand == ir::TypeTag::Error) {
+        return fail(node.span, "comp operand without type");
+      }
+      if (operand != ir::TypeTag::Ref && operand != ir::TypeTag::MutRef &&
+          operand != ir::TypeTag::Ptr) {
+        return fail(node.span, "dereference of a non-reference operand");
+      }
+      out.type = expr_type_in(mod, expr);
+      out.value = inner.value;
+      return true;
+    }
     case ast::ExprKind::Binary: return comp_eval_binary(mod, expr, scope, out);
     case ast::ExprKind::Cast: {
       const ast::ExprCast& cast = node.payload.get<ast::ExprCast>();
@@ -1824,6 +1844,22 @@ bool CompEvaluator::comp_eval_binary(u32 mod,
     }
     out.value.tag = CompValue::Tag::Bool;
     out.value.bool_value = bin.op == ast::BinaryOp::Eq ? equal : !equal;
+    return true;
+  }
+  if (lhs.value.tag == CompValue::Tag::Str &&
+      rhs.value.tag == CompValue::Tag::Str &&
+      (bin.op == ast::BinaryOp::Gt || bin.op == ast::BinaryOp::Lt ||
+       bin.op == ast::BinaryOp::GtEq || bin.op == ast::BinaryOp::LtEq)) {
+    // The byte order is the string order and a proper prefix sorts
+    // before the longer string, the order the core suite declares.
+    const i32 order = lhs.value.str_value.compare(rhs.value.str_value);
+    switch (bin.op) {
+      case ast::BinaryOp::Gt: out.value.bool_value = order > 0; break;
+      case ast::BinaryOp::Lt: out.value.bool_value = order < 0; break;
+      case ast::BinaryOp::GtEq: out.value.bool_value = order >= 0; break;
+      default: out.value.bool_value = order <= 0; break;
+    }
+    out.value.tag = CompValue::Tag::Bool;
     return true;
   }
   if (lhs.value.tag != CompValue::Tag::Int ||

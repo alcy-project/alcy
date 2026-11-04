@@ -1,0 +1,5 @@
+# Both readings hold at compile time and in the running program.
+exit = 0
+subcommand = "run"
+contains = ["comp str ok"]
+not_contains = ["error"]
