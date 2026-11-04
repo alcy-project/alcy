@@ -245,6 +245,13 @@ from the idea.
   operators into the loop, and is worth `-0.85%`: a level costs more for its
   prologue and its own switch than a step of the loop that reads the table,
   while the comparison that cannot chain stays a flag on its row.
+- **Walking the trivia of `Lexer::tokenize` by hand.** Reading `pos_` and
+  `bytes_` into locals and keeping the byte in a local index, with a run of
+  spaces skipped by its own loop, costs `+0.52%` on `plain1200`: the member
+  calls it replaces are already inlined into the same loop, so the inner run
+  test is paid for on every token and saved on none. Scanning a line comment
+  with `find` instead is worth `-0.21%`, because there the loop it replaces
+  does real per-byte work.
 
 ## Tracing
 

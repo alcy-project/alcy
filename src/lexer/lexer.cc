@@ -404,21 +404,19 @@ bool Lexer::at_end() const {
 }
 
 void Lexer::lex_line_comment(std::vector<Token>& out) {
-  if (peek(2) == '/' && peek(3) != '/') {
-    const usize start = pos_;
+  const bool doc = peek(2) == '/' && peek(3) != '/';
+  const usize start = pos_;
+  if (doc) {
     advance(3);
-    while (!at_end() && peek() != '\n') {
-      advance();
-    }
+  }
+  const usize stop = bytes_.find('\n', pos_);
+  pos_ = stop == std::string_view::npos ? bytes_.size() : stop;
+  if (doc) {
     // A comment is trivia: it does not become the token a newline
     // tests for semi insertion, or a `///` would swallow the
     // statement boundary a `//` leaves.
     out.push_back(Token{.kind = TokenKind::DocComment,
                         .span = span_at(start, pos_ - start)});
-  } else {
-    while (!at_end() && peek() != '\n') {
-      advance();
-    }
   }
 }
 
