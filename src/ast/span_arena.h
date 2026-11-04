@@ -61,12 +61,12 @@ class SpanArena {
     const usize slots = static_cast<usize>(slots_) + 1;
     if (slack > arena_.capacity() / slots ||
         arena_.size() + slack * slots > arena_.capacity()) {
-      exhausted_.store(true, std::memory_order_relaxed);
+      mark_exhausted();
       return nullptr;
     }
     void* const mem = arena_.alloc(size, align);
     if (mem == nullptr) [[unlikely]] {
-      exhausted_.store(true, std::memory_order_relaxed);
+      mark_exhausted();
     }
     return mem;
   }
@@ -86,14 +86,29 @@ class SpanArena {
     return exhausted_.load(std::memory_order_relaxed);
   }
 
+  // Raises the arena-wide flag as well when a request is refused, so an arena
+  // of several tables answers for all of them with one load.
+  void share_exhaustion_with(std::atomic<bool>* sink) {
+    shared_exhausted_ = sink;
+  }
+
   [[nodiscard]] const char* base_ptr() const { return arena_.base_ptr(); }
   [[nodiscard]] usize capacity() const { return arena_.capacity(); }
   [[nodiscard]] usize size() const { return arena_.size(); }
 
  private:
+  void mark_exhausted() noexcept {
+    exhausted_.store(true, std::memory_order_relaxed);
+    if (shared_exhausted_ != nullptr) {
+      shared_exhausted_->store(true, std::memory_order_relaxed);
+    }
+  }
+
   mem::ConcurrentArena arena_;
   u32 slots_ = 0;
   std::atomic<bool> exhausted_{false};
+  // Set by the arena this belongs to, and null for one read alone.
+  std::atomic<bool>* shared_exhausted_ = nullptr;
 };
 
 }  // namespace ast

@@ -21,6 +21,7 @@
 //   fn          -> ItemFn          closure    -> ExprClosure
 //   func type   -> TypeFunc
 
+#include <atomic>
 #include <cstring>
 #include <memory>
 #include <span>
@@ -1197,10 +1198,27 @@ struct AstArena {
     return static_cast<usize>((static_cast<u64>(capacity) * parts) / 1000u);
   }
 
+  // The tables point at `exhausted_any_`, so an arena that moved would leave
+  // them raising a flag nobody reads.
+  AstArena(const AstArena&) = delete;
+  AstArena& operator=(const AstArena&) = delete;
+  AstArena(AstArena&&) = delete;
+  AstArena& operator=(AstArena&&) = delete;
+
   // The capacity is a parameter so a caller - a case that has to spend it
   // - can say how much it wants rather than working around the default.
   explicit AstArena(usize span_capacity = DEFAULT_SPAN_CAPACITY) {
     spans.reserve(span_capacity);
+    spans.share_exhaustion_with(&exhausted_any_);
+    literals.share_exhaustion_with(&exhausted_any_);
+    paths.share_exhaustion_with(&exhausted_any_);
+    conds.share_exhaustion_with(&exhausted_any_);
+    blocks.share_exhaustion_with(&exhausted_any_);
+    types.share_exhaustion_with(&exhausted_any_);
+    patterns.share_exhaustion_with(&exhausted_any_);
+    exprs.share_exhaustion_with(&exhausted_any_);
+    stmts.share_exhaustion_with(&exhausted_any_);
+    items.share_exhaustion_with(&exhausted_any_);
   }
 
   // Whether the reservation is close enough to spent that the next file
@@ -1216,12 +1234,10 @@ struct AstArena {
 
   // True once any append found its reservation short. What is in the arena
   // is not a tree that passes after it, so a caller refuses the file rather
-  // than reading further.
+  // than reading further. Every table raises the one flag, because a pass
+  // asks this once per node it reads and ten answers are ten loads.
   [[nodiscard]] bool exhausted() const {
-    return spans.exhausted() || literals.exhausted() || paths.exhausted() ||
-           conds.exhausted() || blocks.exhausted() || types.exhausted() ||
-           patterns.exhausted() || exprs.exhausted() || stmts.exhausted() ||
-           items.exhausted();
+    return exhausted_any_.load(std::memory_order_relaxed);
   }
 
   // Whether a whole-arena verification passed on what this holds. Parsing is
@@ -1272,6 +1288,9 @@ struct AstArena {
   NodeVec<ItemNode, ItemIdx> items{node_share(DEFAULT_NODE_CAPACITY, 67)};
 
   bool verified_ = false;
+  // Raised by any table that refused an append; each keeps its own flag
+  // saying the same, and `exhausted` reads this one.
+  std::atomic<bool> exhausted_any_{false};
 };
 
 }  // namespace ast

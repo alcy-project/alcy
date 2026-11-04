@@ -157,13 +157,13 @@ class NodeVec {
       // append's size plus whatever the concurrent appends still need.
       const usize used = arena_.size();
       if (used + sizeof(T) + reserved_ > arena_.capacity()) {
-        exhausted_.store(true, std::memory_order_relaxed);
+        mark_exhausted();
         return Idx::invalid();
       }
       mem = arena_.alloc_exact(sizeof(T), alignof(T));
     }
     if (mem == nullptr) [[unlikely]] {
-      exhausted_.store(true, std::memory_order_relaxed);
+      mark_exhausted();
       return Idx::invalid();
     }
     new (mem) T(std::forward<Args>(args)...);
@@ -244,6 +244,12 @@ class NodeVec {
     return exhausted_.load(std::memory_order_relaxed);
   }
 
+  // Raises `sink` as well when an append finds the reservation short, so an
+  // arena of ten tables answers for all of them with one load.
+  void share_exhaustion_with(std::atomic<bool>* sink) {
+    shared_exhausted_ = sink;
+  }
+
  private:
   [[nodiscard]] char* base() const noexcept {
     // The arena's base is fixed for its lifetime and fpag exposes it as
@@ -269,12 +275,21 @@ class NodeVec {
     return lanes_ == 0 ? size() : arena_.capacity() / sizeof(T);
   }
 
+  void mark_exhausted() noexcept {
+    exhausted_.store(true, std::memory_order_relaxed);
+    if (shared_exhausted_ != nullptr) {
+      shared_exhausted_->store(true, std::memory_order_relaxed);
+    }
+  }
+
   mem::ConcurrentArena arena_;
   // Bytes held back for appends that are in flight while this one is
   // checked; zero when one parser appends at a time.
   usize reserved_ = 0;
   u32 lanes_ = 0;
   std::atomic<bool> exhausted_{false};
+  // Set by the arena this table belongs to, and null for a table read alone.
+  std::atomic<bool>* shared_exhausted_ = nullptr;
 };
 
 }  // namespace ast
