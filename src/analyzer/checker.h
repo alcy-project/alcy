@@ -1557,6 +1557,10 @@ class Checker {
   // not bound the tree it produces and this pass has to.
   base::NestingGuard nesting_{base::MAX_NESTING};
   bool reported_too_deep_ = false;
+  // The index of a variant by the name it spells, for an enumeration whose
+  // declaration is past INDEX_MIN variants, by the item that declares it.
+  std::unordered_map<u32, std::unordered_map<std::string_view, u32>>
+      variant_names_by_item_;
   void report_too_deep(diag::Span span);
   ir::TypeIdx check_path_expr(u32 module,
                               ast::ExprIdx expr,
@@ -1716,6 +1720,28 @@ class Checker {
   // the walk to cost the arm count times the variant count answers from an
   // index instead.
   bool spells_fieldless_variant(ir::TypeIdx type, std::string_view name);
+  // The index of the variant `name` spells among `variants`, which `item`
+  // declares, or INVALID_IDX when none does. A declaration long enough for
+  // the walk to cost the arm count times the variant count answers from an
+  // index instead.
+  [[nodiscard, gnu::always_inline]] u32 variant_index_of(
+      ast::ItemIdx item,
+      std::span<const ast::ItemEnumVariant> variants,
+      std::string_view name) {
+    if (variants.size() > INDEX_MIN) {
+      return variant_index_of_indexed(item, variants, name);
+    }
+    for (u32 i = 0; i < static_cast<u32>(variants.size()); ++i) {
+      if (variants[i].name.name == name) {
+        return i;
+      }
+    }
+    return base::INVALID_IDX;
+  }
+  [[nodiscard]] u32 variant_index_of_indexed(
+      ast::ItemIdx item,
+      std::span<const ast::ItemEnumVariant> variants,
+      std::string_view name);
   // The fields of a struct type, when the type names one.
   std::span<const ast::ItemStructField> struct_fields(ir::TypeIdx type);
   // Whether the pattern rows cover every value of their columns:
@@ -1725,9 +1751,11 @@ class Checker {
                       std::vector<std::vector<ast::PatternIdx>> rows);
   void collect_bool_literals(ast::PatternIdx pattern,
                              std::vector<bool>& covered) const;
-  void mark_variant_covered(ast::PatternIdx pattern,
-                            std::span<const ast::ItemEnumVariant> variants,
-                            std::vector<bool>& covered);
+  [[gnu::always_inline]] void mark_variant_covered(
+      ast::PatternIdx pattern,
+      ast::ItemIdx item,
+      std::span<const ast::ItemEnumVariant> variants,
+      std::vector<bool>& covered);
   ir::TypeIdx check_match(u32 module,
                           ast::ExprIdx expr,
                           const ir::TypeIdx* expected);

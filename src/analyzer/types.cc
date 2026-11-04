@@ -4665,18 +4665,15 @@ bool Checker::resolve_variant_path(u32 module,
     if (NominalEntry* nominal = find_nominal_in_scope(module, head)) {
       const ast::ItemNode& nominal_node = ast.items[nominal->item];
       if (nominal_node.kind == ast::ItemKind::Enum) {
-        for (u32 i = 0;
-             i < static_cast<u32>(
-                     nominal_node.payload.get<ast::ItemEnum>().variants.size());
-             ++i) {
-          if (nominal_node.payload.get<ast::ItemEnum>().variants[i].name.name ==
-              member) {
-            out.kind = PathValue::Kind::TupleVariant;
-            out.enom = nominal;
-            out.variant = i;
-            out.type = nominal_owner_type(nominal);
-            return true;
-          }
+        const std::span<const ast::ItemEnumVariant> variants =
+            nominal_node.payload.get<ast::ItemEnum>().variants;
+        const u32 variant = variant_index_of(nominal->item, variants, member);
+        if (variant != base::INVALID_IDX) {
+          out.kind = PathValue::Kind::TupleVariant;
+          out.enom = nominal;
+          out.variant = variant;
+          out.type = nominal_owner_type(nominal);
+          return true;
         }
       }
     }

@@ -3026,12 +3026,14 @@ void Checker::check_exhaustive(u32 module,
         builder.enum_types()[builder.types()[scrutinee].as_enum()];
     // Find the declaring nominal for variant names.
     const ast::ItemNode* decl = nullptr;
+    ast::ItemIdx enum_item = ast::ItemIdx::invalid();
     const auto declaring = nominal_by_type_.find(scrutinee.idx);
     if (declaring != nominal_by_type_.end()) {
       const ast::ItemNode& candidate =
           ast.items[nominals[declaring->second].item];
       if (candidate.kind == ast::ItemKind::Enum) {
         decl = &candidate;
+        enum_item = nominals[declaring->second].item;
       }
     }
     if (decl == nullptr) {
@@ -3043,6 +3045,7 @@ void Checker::check_exhaustive(u32 module,
             ast.items[nominals[instance->nominal].item];
         if (candidate.kind == ast::ItemKind::Enum) {
           decl = &candidate;
+          enum_item = nominals[instance->nominal].item;
         }
       }
       if (decl == nullptr) {
@@ -3057,7 +3060,7 @@ void Checker::check_exhaustive(u32 module,
       if (arm.guard.is_valid()) {
         continue;
       }
-      mark_variant_covered(arm.pattern, variants, covered);
+      mark_variant_covered(arm.pattern, enum_item, variants, covered);
     }
     for (usize i = 0; i < covered.size(); ++i) {
       if (!covered[i]) {
@@ -3571,8 +3574,24 @@ void Checker::collect_bool_literals(ast::PatternIdx pattern,
   }
 }
 
+u32 Checker::variant_index_of_indexed(
+    ast::ItemIdx item,
+    std::span<const ast::ItemEnumVariant> variants,
+    std::string_view name) {
+  const auto [entry, inserted] = variant_names_by_item_.try_emplace(item.idx);
+  if (inserted) {
+    entry->second.reserve(variants.size());
+    for (u32 i = 0; i < static_cast<u32>(variants.size()); ++i) {
+      entry->second.emplace(variants[i].name.name, i);
+    }
+  }
+  const auto found = entry->second.find(name);
+  return found == entry->second.end() ? base::INVALID_IDX : found->second;
+}
+
 void Checker::mark_variant_covered(
     ast::PatternIdx pattern,
+    ast::ItemIdx item,
     std::span<const ast::ItemEnumVariant> variants,
     std::vector<bool>& covered) {
   const ast::PatternNode& node = ast.patterns[pattern];
@@ -3594,17 +3613,15 @@ void Checker::mark_variant_covered(
       }
       const std::string_view name =
           ast.paths[node.payload.tuple.path].segments.back().name;
-      for (usize i = 0; i < covered.size(); ++i) {
-        if (variants[i].name.name == name) {
-          covered[i] = true;
-          return;
-        }
+      const u32 index = variant_index_of(item, variants, name);
+      if (index != base::INVALID_IDX) {
+        covered[index] = true;
       }
       return;
     }
     case ast::PatternKind::Or: {
       for (ast::PatternIdx alt : node.payload.or_pat.alternatives) {
-        mark_variant_covered(alt, variants, covered);
+        mark_variant_covered(alt, item, variants, covered);
       }
       return;
     }
