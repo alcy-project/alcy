@@ -91,6 +91,8 @@ modules do not mention each other would not:
   instantiations of it, and drops them.
 - `drop` - every module declares a type that owns storage and has a
   destructor.
+- `wide` - one function declares 64 names, guards each in a block of its own,
+  and reads them all back; `--width` moves the count.
 
 `--main-calls` fixes the size of `main`. By default `main` names every module,
 so it grows with the package and its per-item work is indistinguishable from
@@ -111,6 +113,15 @@ add up. Under the cap a level costs the same at either end - 50 levels of `if`
 with a binding each measure 5.74M instructions and 100 measure 5.82M, 1.6K a
 level - so a lookup that climbed every scope trades against a constant and not
 against the input.
+
+Width is the fourth axis, and it is separate from depth: a walk climbs the names
+in scope, not the scopes. One function declares `--width` names, guards each in
+a block of its own, and reads them all back at the end, so the blocks open and
+close around the whole name set. At 64, 128, 256, and 512 names `check` on that
+module measures 6.68M, 9.18M, 14.2M, and 24.2M instructions: 39K a name over a
+4.2M floor, the same per name at every count. A walk that resettled its view of
+the name set once per block would pay for every name once per statement, and the
+per-name cost would climb with the count instead.
 
 Every figure above sits on a floor the process pays before it reads a byte, and
 that floor is worth knowing because the growth slopes are fitted over it.
