@@ -252,6 +252,11 @@ from the idea.
   test is paid for on every token and saved on none. Scanning a line comment
   with `find` instead is worth `-0.21%`, because there the loop it replaces
   does real per-byte work.
+- **Reopening a checker scope on the buffer the last one closed.** Handing a
+  closed scope's binding buffer to the next scope that opens costs `+0.11%` on
+  `plain1200`: it saves the allocation a block's scope would make, but every
+  scope then pays a move out of the buffer on close and a move back in on open,
+  which costs more than growing a buffer of a few bindings from empty.
 
 ## Tracing
 
