@@ -436,6 +436,9 @@ struct FnInstance {
   // package has minted.
   u32 prev_same_item = base::INVALID_IDX;
   std::vector<ir::TypeIdx> args;
+  // Digest of `args` under `Checker::args_digest`: a chain walk skips an
+  // instance whose digest differs instead of comparing its arguments.
+  u64 args_digest = 0;
   u32 sig_index = 0;
   // Key into the shared instantiation numbering that keys lowering
   // side tables. Claimed for every function before its body is

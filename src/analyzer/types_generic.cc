@@ -1029,6 +1029,7 @@ bool Checker::bind_fn_slots(u32 module,
 void Checker::push_fn_instance(ast::ItemIdx item,
                                u32 module,
                                const std::vector<ir::TypeIdx>& args,
+                               u64 digest,
                                u32 sig_index,
                                u32 inst) {
   const u64 head_key =
@@ -1037,7 +1038,7 @@ void Checker::push_fn_instance(ast::ItemIdx item,
   const u32 prev =
       head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
   fn_instance_head_[head_key] = static_cast<u32>(fn_instances.size());
-  FnInstance witness{item, module, prev, args, sig_index, inst};
+  FnInstance witness{item, module, prev, args, digest, sig_index, inst};
   fn_instances.push_back(std::move(witness));
 }
 
@@ -1053,10 +1054,13 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
       (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
   const auto head = fn_instance_head_.find(head_key);
   u32 at = head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
+  // Most of a long chain was minted for other arguments: the digest rules
+  // an instance out without comparing any of them.
+  const u64 digest = args_digest(args);
   while (at != base::INVALID_IDX) {
     const FnInstance& instance = fn_instances[at];
     at = instance.prev_same_item;
-    if (instance.args.size() != args.size()) {
+    if (instance.args_digest != digest || instance.args.size() != args.size()) {
       continue;
     }
     bool same = true;
@@ -1129,14 +1133,14 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   // own pass checks its body once, in its own context (ADR-0079).
   if (parametric_mode()) {
     modules[module].functions[sig_index].inst = PARAM_INST;
-    push_fn_instance(item, module, args, sig_index, PARAM_INST);
+    push_fn_instance(item, module, args, digest, sig_index, PARAM_INST);
     type_params = kept_outer;
     value_params = kept_outer_values;
     return &modules[module].functions[sig_index];
   }
   // Claim a slot in the shared instantiation numbering before checking
   // the body, so recursive calls key the same context.
-  push_fn_instance(item, module, args, sig_index, NO_INST);
+  push_fn_instance(item, module, args, digest, sig_index, NO_INST);
   const u32 inst = static_cast<u32>(inst_numbering.size());
   inst_numbering.emplace_back(base::INVALID_IDX);
   inst_by_type_.emplace(base::INVALID_IDX, inst);
@@ -1177,6 +1181,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
         if (instance.sig_index == sig_index &&
             pending.slot < instance.args.size()) {
           instance.args[pending.slot] = witness;
+          instance.args_digest = args_digest(instance.args);
         }
       }
     } else {

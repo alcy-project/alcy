@@ -305,6 +305,94 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
   }
 }
 
+namespace {
+
+constexpr u64 DIGEST_SEED = 0xcbf29ce484222325ULL;
+constexpr u64 DIGEST_PRIME = 0x100000001b3ULL;
+// Deep enough for any type a declaration writes, and low enough that a
+// cycle the seen-pair guard would break cannot run the stack away.
+constexpr u32 DIGEST_DEPTH = 32;
+
+u64 digest_mix(u64 digest, u64 value) {
+  return (digest ^ value) * DIGEST_PRIME;
+}
+
+}  // namespace
+
+u64 Checker::type_shape_digest(ir::TypeIdx type) {
+  return type_shape_digest_inner(type, 0);
+}
+
+u64 Checker::type_shape_digest_inner(ir::TypeIdx type, u32 depth) {
+  type = type_origin(type);
+  const ir::TypeTag tag = tag_of(type);
+  u64 digest = digest_mix(DIGEST_SEED, static_cast<u64>(tag));
+  if (depth >= DIGEST_DEPTH) {
+    return digest;
+  }
+  switch (tag) {
+    case ir::TypeTag::Ref:
+    case ir::TypeTag::MutRef:
+    case ir::TypeTag::RawPtr:
+    case ir::TypeTag::RawMutPtr: {
+      const ir::TypeIdx pointee =
+          builder.ref_types()[builder.types()[type].as_ref()].pointee;
+      return digest_mix(digest, type_shape_digest_inner(pointee, depth + 1));
+    }
+    case ir::TypeTag::Array: {
+      const ir::ArrayType array =
+          builder.array_types()[builder.types()[type].as_array()];
+      digest = digest_mix(digest, array.count);
+      return digest_mix(digest,
+                        type_shape_digest_inner(array.element, depth + 1));
+    }
+    case ir::TypeTag::Slice: {
+      const ir::SliceType slice =
+          builder.slice_types()[builder.types()[type].as_slice()];
+      return digest_mix(digest,
+                        type_shape_digest_inner(slice.element, depth + 1));
+    }
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType tuple =
+          builder.tuple_types()[builder.types()[type].as_tuple()];
+      digest = digest_mix(digest, tuple.elements.size());
+      for (const ir::TypeIdx element : tuple.elements) {
+        digest =
+            digest_mix(digest, type_shape_digest_inner(element, depth + 1));
+      }
+      return digest;
+    }
+    case ir::TypeTag::Func: {
+      const ir::FuncType func =
+          builder.func_types()[builder.types()[type].as_func()];
+      digest = digest_mix(digest, func.params.size());
+      for (const ir::TypeIdx param : func.params) {
+        digest = digest_mix(digest, type_shape_digest_inner(param, depth + 1));
+      }
+      return digest_mix(digest, type_shape_digest_inner(func.ret, depth + 1));
+    }
+    case ir::TypeTag::Const:
+      return digest_mix(
+          digest,
+          builder.const_types()[builder.types()[type].as_const()].value);
+    case ir::TypeTag::Param:
+      return digest_mix(digest, builder.types()[type].as_param().value);
+    // A nominal compares by index, which is its identity.
+    case ir::TypeTag::Struct:
+    case ir::TypeTag::Enum:
+      return digest_mix(digest, static_cast<u64>(type.idx));
+    default: return digest;
+  }
+}
+
+u64 Checker::args_digest(const std::vector<ir::TypeIdx>& args) {
+  u64 digest = digest_mix(DIGEST_SEED, args.size());
+  for (const ir::TypeIdx arg : args) {
+    digest = digest_mix(digest, type_shape_digest(arg));
+  }
+  return digest;
+}
+
 // `&mut T` coerces to `&T`, and `*mut T` to `*T`: one is the other
 // with the unique half dropped, which is a shared reborrow of the
 // same referent or the same address without the write permission.

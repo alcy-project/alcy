@@ -1059,6 +1059,13 @@ class Checker {
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
   bool types_equal_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);
+  // A digest that agrees with `types_equal` on its normal form: types the
+  // comparison reports equal get the same digest, so a digest that differs
+  // rules the pair out without comparing them. Equal digests still have to
+  // be compared.
+  u64 type_shape_digest(ir::TypeIdx type);
+  u64 type_shape_digest_inner(ir::TypeIdx type, u32 depth);
+  u64 args_digest(const std::vector<ir::TypeIdx>& args);
   // The pairs the comparison in flight has already visited, kept across
   // calls so an equality test does not allocate.
   std::vector<u64> type_pair_seen_;
@@ -1781,11 +1788,12 @@ class Checker {
   // may stand in for (ADR-0079): false for a nested or concrete
   // check, and for a body that keeps its per-instantiation check.
   bool check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
-  // Appends one function instance and links it into the chain its item
-  // and module share.
+  // Appends one function instance with the digest of its arguments and
+  // links it into the chain its item and module share.
   void push_fn_instance(ast::ItemIdx item,
                         u32 module,
                         const std::vector<ir::TypeIdx>& args,
+                        u64 digest,
                         u32 sig_index,
                         u32 inst);
   // The per-function state a nested body check writes: every field
