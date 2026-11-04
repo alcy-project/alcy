@@ -3107,7 +3107,7 @@ void Lowerer::materialize(const FnEntry& entry, ir::BlockIdxRange blocks) {
 void Lowerer::compact_instrs() {
   ir::StorageState state = std::move(builder).take_state();
   const usize count = state.instrs.size();
-  std::vector<bool> owned(count, false);
+  std::vector<u8> owned(count, 0);
   usize kept = 0;
   for (usize b = 0; b < state.blocks.size(); ++b) {
     for (ir::InstructionIdx idx : state.blocks[ir::BlockIdx(b)].instrs) {
