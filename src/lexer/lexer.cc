@@ -1002,13 +1002,17 @@ void Lexer::lex_symbol(std::vector<Token>& out) {
 }
 
 void Lexer::tokenize(std::vector<Token>& out) {
+  const usize size = bytes_.size();
   while (true) {
     // The byte that ends trivia is the byte that opens the next token, so the
-    // loop keeps it rather than reading it a second time once it stops.
-    char c = peek();
-    while (!at_end()) {
+    // loop keeps it rather than reading it a second time once it stops, and
+    // holds the length in a copy so that reading it does not cost a reload of
+    // the source for every byte it skips.
+    char c = '\0';
+    while (pos_ < size) {
+      c = bytes_[pos_];
       if (c == ' ' || c == '\t' || c == '\r') {
-        advance();
+        ++pos_;
       } else if (c == '\n') {
         const usize newline = pos_;
         advance();
@@ -1019,7 +1023,7 @@ void Lexer::tokenize(std::vector<Token>& out) {
         const usize next = skip_blanks(pos_);
         if (inserts_semi(last_significant_)) {
           const bool comment_starts =
-              next + 1 < bytes_.size() && bytes_[next] == '/' &&
+              next + 1 < size && bytes_[next] == '/' &&
               (bytes_[next + 1] == '/' || bytes_[next + 1] == '*');
           const TokenKind ahead =
               comment_starts ? peek_next_kind() : kind_at(next);
@@ -1030,16 +1034,15 @@ void Lexer::tokenize(std::vector<Token>& out) {
           }
         }
         pos_ = next;
-      } else if (c == '/' && peek(1) == '/') {
+      } else if (c == '/' && pos_ + 1 < size && bytes_[pos_ + 1] == '/') {
         lex_line_comment(out);
-      } else if (c == '/' && peek(1) == '*') {
+      } else if (c == '/' && pos_ + 1 < size && bytes_[pos_ + 1] == '*') {
         lex_block_comment(out);
       } else {
         break;
       }
-      c = peek();
     }
-    if (at_end()) {
+    if (pos_ >= size) {
       break;
     }
     switch (TOKEN_OPEN[static_cast<u8>(c)]) {
