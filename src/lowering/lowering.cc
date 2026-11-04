@@ -574,11 +574,6 @@ Val Lowerer::address_of(Val v) {
   return Val{to_operand(addr, v.type), v.type, true, v.place};
 }
 
-// The local count above which a lookup settles entries on a key of the
-// name: below it a walk reads so few names that a key costs more than
-// the names it saves.
-constexpr usize K_LOCAL_KEY_LIMIT = 8;
-
 bool Lowerer::place_of_register(u32 reg,
                                 u32& local_out,
                                 std::vector<u32>& path) const {
@@ -1033,15 +1028,7 @@ const Lowerer::LocalIndex& Lowerer::local_index() const {
   return index;
 }
 
-const Local* Lowerer::lookup_local(std::string_view name) const {
-  if (locals.size() <= K_LOCAL_KEY_LIMIT) {
-    for (const auto& local : locals | std::views::reverse) {
-      if (local.name == name) {
-        return &local;
-      }
-    }
-    return nullptr;
-  }
+const Local* Lowerer::lookup_local_indexed(std::string_view name) const {
   const LocalIndex& index = local_index();
   const auto found = index.by_key.find(base::hash64(name));
   if (found == index.by_key.end()) {

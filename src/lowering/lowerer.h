@@ -73,6 +73,10 @@ struct FnKeyHash {
 // The name a synthesized drop body binds its parameter to: the address
 // table keeps the view, so it must outlive the pass.
 inline constexpr std::string_view DROP_VALUE_NAME = "value";
+// The local count above which a lookup settles entries on a key of the
+// name: below it a walk reads so few names that a key costs more than the
+// names it saves.
+inline constexpr usize K_LOCAL_KEY_LIMIT = 8;
 
 class Lowerer {
  public:
@@ -449,7 +453,22 @@ class Lowerer {
     mark_move(v);
     return value;
   }
-  const Local* lookup_local(std::string_view name) const;
+  // The walk over the short table is a handful of compares and runs at
+  // nearly every place name a body reads, so it stays in the caller's
+  // frame; the keyed walk over the long table is out of line.
+  [[gnu::always_inline]] const Local* lookup_local(
+      std::string_view name) const {
+    if (locals.size() > K_LOCAL_KEY_LIMIT) {
+      return lookup_local_indexed(name);
+    }
+    for (usize i = locals.size(); i > 0; --i) {
+      if (locals[i - 1].name == name) {
+        return &locals[i - 1];
+      }
+    }
+    return nullptr;
+  }
+  const Local* lookup_local_indexed(std::string_view name) const;
   // The views of `locals`, settling the locals appended since they were
   // last asked for.
   const LocalIndex& local_index() const;
