@@ -194,6 +194,11 @@ const char* Checker::pretty_tag(ir::TypeTag tag) {
 // seen-pair set guards regardless.
 
 bool Checker::types_equal(ir::TypeIdx a, ir::TypeIdx b) {
+  // The normalization is for copies of a type, and equal indexes are the
+  // same type whichever node they name.
+  if (a.idx == b.idx) {
+    return true;
+  }
   std::vector<u64> seen;
   return types_equal_inner(type_origin(a), type_origin(b), seen);
 }
