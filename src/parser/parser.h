@@ -214,7 +214,14 @@ class Parser {
   // Reports that the cursor is not on `what`, out of line for the sake of the
   // check above, which inlines at every step of the grammar.
   void report_unexpected(std::string_view what);
-  diag::Span span_from(usize mark) const;
+  [[gnu::always_inline]] diag::Span span_from(usize mark) const {
+    const u32 start = tokens_[mark].span.offset;
+    const u32 end = previous_span_.offset + previous_span_.length;
+    if (end < start) {
+      return diag::Span{file_, start, 0};
+    }
+    return diag::Span{file_, start, end - start};
+  }
 
   // Error recovery: skips to a boundary token, tracking nesting so
   // inner closers never terminate the skip. Always consumes at least

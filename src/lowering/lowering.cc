@@ -90,19 +90,6 @@ ir::OperandIdx imm_from_u64(ir::StorageBuilder& builder,
       ir::Operand::from_immutable(builder.immutable(imm), type));
 }
 
-bool Lowerer::is_block_terminator(ir::Opcode op) {
-  return op == ir::Opcode::Br || op == ir::Opcode::CondBr ||
-         op == ir::Opcode::Switch || op == ir::Opcode::Ret ||
-         op == ir::Opcode::Unreachable;
-}
-
-ir::BlockIdx Lowerer::reserve_block() {
-  streams_.emplace_back();
-  stream_last_.emplace_back(base::INVALID_IDX);
-  fn_blocks_.emplace_back(block_next_++);
-  return fn_blocks_.back();
-}
-
 void Lowerer::switch_to(ir::BlockIdx block) {
   cur_ = block;
 }
@@ -559,10 +546,7 @@ void Lowerer::emit_void(ir::Opcode op,
             measure);
 }
 
-Val Lowerer::materialize(Val v) {
-  if (!v.address || tag_of(v.type) == ir::TypeTag::Never) {
-    return v;
-  }
+Val Lowerer::materialize_slow(Val v) {
   // A borrowed place holds what its reference's owner still ends:
   // reading a non-`Copy` value out of it would leave that value owned
   // twice. A raw pointer names no owner, so its place reads as a move,
@@ -748,10 +732,7 @@ void Lowerer::mark_move(Val v) {
   record_move_event(v);
 }
 
-void Lowerer::emit_move_marker(Val v, bool subsumes_parts) {
-  if (!v.place || !v.address || is_copy(v.type)) {
-    return;
-  }
+void Lowerer::emit_move_marker_slow(Val v, bool subsumes_parts) {
   // A closure that owns nothing is not moved: its captures are borrows,
   // so the value holds handles to storage that stays where it is and a
   // second binding shares the one loan (ADR-0064). A shared-borrow
@@ -772,14 +753,14 @@ void Lowerer::emit_move_marker(Val v, bool subsumes_parts) {
   (void)marker;
 }
 
-void Lowerer::record_move_event(Val v) {
-  record_move_event(v, cur_span_);
-}
-
 void Lowerer::record_move_event(Val v, diag::Span span) {
   if (!v.place || !v.address || is_copy(v.type)) {
     return;
   }
+  record_move_event_slow(v, span);
+}
+
+void Lowerer::record_move_event_slow(Val v, diag::Span span) {
   if (closure_entry(v.type) != nullptr && !runs_destructor(v.type)) {
     return;
   }
@@ -815,10 +796,6 @@ void Lowerer::record_move_event(Val v, diag::Span span) {
 
 bool Lowerer::is_destructor(ast::ItemIdx item) const {
   return item.idx < drop_items_.size() && drop_items_[item.idx];
-}
-
-bool Lowerer::runs_destructor(ir::TypeIdx type) const {
-  return drops_.runs(type);
 }
 
 bool Lowerer::may_end(ir::TypeIdx type) const {
@@ -1112,16 +1089,10 @@ const Local* Lowerer::rooted_local(ast::ExprIdx place,
   return lookup_local(path.segments[0].name);
 }
 
-bool Lowerer::carries_borrow(ir::TypeIdx type) const {
+bool Lowerer::carries_borrow_slow(ir::TypeIdx type) const {
   constexpr u8 kBorrows = 1;
   constexpr u8 kNoBorrow = 2;
   const usize index = type.idx;
-  if (index < borrow_memo_.size()) {
-    const u8 memo = borrow_memo_[index];
-    if (memo != 0) {
-      return memo == kBorrows;
-    }
-  }
   const bool borrows = carries_borrow_walk(type);
   const usize types = builder.types().size();
   if (index < types) {
@@ -1393,12 +1364,6 @@ const analyzer::CheckedModule::StaticInfo* Lowerer::lookup_static(
     u32 mod,
     std::string_view name) const {
   return analyzer::find_static(pkg.modules, pkg.tree, mod, name);
-}
-
-ir::TypeIdx Lowerer::expr_type(ast::ExprIdx expr) {
-  const analyzer::CheckedModule::ExprType* entry =
-      pkg.modules[module].expr_type_of(expr, cur_inst_);
-  return entry != nullptr ? entry->type : error_type();
 }
 
 const analyzer::CheckedModule::CallTarget* Lowerer::call_target(

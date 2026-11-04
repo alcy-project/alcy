@@ -236,9 +236,18 @@ class Lowerer {
   // type carries a borrow and 2 otherwise. Types are asked about far more
   // often than they are interned, so the walk runs once per type.
   mutable std::vector<u8> borrow_memo_;
-  static bool is_block_terminator(ir::Opcode op);
+  [[gnu::always_inline]] static bool is_block_terminator(ir::Opcode op) {
+    return op == ir::Opcode::Br || op == ir::Opcode::CondBr ||
+           op == ir::Opcode::Switch || op == ir::Opcode::Ret ||
+           op == ir::Opcode::Unreachable;
+  }
   usize at(ir::BlockIdx block) const { return block.idx - fn_block_base_; }
-  ir::BlockIdx reserve_block();
+  [[gnu::always_inline]] ir::BlockIdx reserve_block() {
+    streams_.emplace_back();
+    stream_last_.emplace_back(base::INVALID_IDX);
+    fn_blocks_.emplace_back(block_next_++);
+    return fn_blocks_.back();
+  }
   void switch_to(ir::BlockIdx block);
   bool terminated(ir::BlockIdx block);
   bool terminated_cur() {
@@ -376,18 +385,40 @@ class Lowerer {
         : lowerer(lowerer), previous(previous) {}
     ~SpanGuard() { lowerer->cur_span_ = previous; }
   };
-  Val materialize(Val v);
+  // A place is read out only where the IR needs the value itself, and a
+  // value is most of what the callers pass, so the test that settles that
+  // case sits at the call and only the load behind it stays out of line.
+  [[gnu::always_inline]] Val materialize(Val v) {
+    if (!v.address || tag_of(v.type) == ir::TypeTag::Never) {
+      return v;
+    }
+    return materialize_slow(v);
+  }
+  Val materialize_slow(Val v);
   Val address_of(Val v);
   // Emits the borrow pass's marker for a consumed place. The drop
   // walk's event is separate because a point may record the move
   // before the read that consumes it: a match's arms read the
   // payload, so its move has to land after them for the borrow pass
   // and before them for the drop walk.
-  void emit_move_marker(Val v, bool subsumes_parts = false);
-  void record_move_event(Val v);
+  [[gnu::always_inline]] void emit_move_marker(Val v,
+                                                bool subsumes_parts = false) {
+    if (!v.place || !v.address || is_copy(v.type)) {
+      return;
+    }
+    emit_move_marker_slow(v, subsumes_parts);
+  }
+  [[gnu::always_inline]] void record_move_event(Val v) {
+    if (!v.place || !v.address || is_copy(v.type)) {
+      return;
+    }
+    record_move_event_slow(v, cur_span_);
+  }
   // The same event, reported at the span of the construct that moved the
   // place rather than at the read that lowered last.
   void record_move_event(Val v, diag::Span span);
+  void emit_move_marker_slow(Val v, bool subsumes_parts);
+  void record_move_event_slow(Val v, diag::Span span);
   void mark_move(Val v);
   // A projection that takes a non-Copy value out of a field consumes the
   // field's place, so the enclosing owner's drop skips it.
@@ -405,14 +436,34 @@ class Lowerer {
                            ir::OperandIdx op,
                            diag::Span span);
   ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
-  ir::OperandIdx use_value(Val v);
+  // Reading the value out is the read the move authorizes, so it has to
+  // be emitted before the marker that moves the place.
+  [[gnu::always_inline]] ir::OperandIdx use_value(Val v) {
+    const ir::OperandIdx value = materialize(v).op;
+    mark_move(v);
+    return value;
+  }
   const Local* lookup_local(std::string_view name) const;
   // The views of `locals`, settling the locals appended since they were
   // last asked for.
   const LocalIndex& local_index() const;
   // True when a value of `type` carries a borrow, either itself or in a
   // field of an aggregate.
-  bool carries_borrow(ir::TypeIdx type) const;
+  // The answer for a type never changes, and the questions a body asks
+  // repeat, so the memo hit stays at the call and only the walk is out of
+  // line.
+  [[gnu::always_inline]] bool carries_borrow(ir::TypeIdx type) const {
+    constexpr u8 kBorrows = 1;
+    const usize index = type.idx;
+    if (index < borrow_memo_.size()) {
+      const u8 memo = borrow_memo_[index];
+      if (memo != 0) {
+        return memo == kBorrows;
+      }
+    }
+    return carries_borrow_slow(type);
+  }
+  bool carries_borrow_slow(ir::TypeIdx type) const;
   bool carries_borrow_walk(ir::TypeIdx type) const;
   // Records what `&place` borrows, and what a read of `local` names, so
   // a reference reaches the extent rule even when a call, an aggregate,
@@ -566,7 +617,11 @@ class Lowerer {
   // failure, and both reservation paths share the one number. `span` is
   // the declaration whose slot the budget could not hold.
   bool fn_budget_available(diag::Span span);
-  ir::TypeIdx expr_type(ast::ExprIdx expr);
+  [[gnu::always_inline]] ir::TypeIdx expr_type(ast::ExprIdx expr) {
+    const analyzer::CheckedModule::ExprType* entry =
+        pkg.modules[module].expr_type_of(expr, cur_inst_);
+    return entry != nullptr ? entry->type : error_type();
+  }
   const analyzer::CheckedModule::CallTarget* call_target(
       ast::ExprIdx callee) const;
   const analyzer::CheckedModule::CallTarget* display_target(
@@ -1476,7 +1531,9 @@ class Lowerer {
   // tables keep, so an instruction in the table is one a block runs.
   void compact_instrs();
 
-  bool runs_destructor(ir::TypeIdx type) const;
+  [[gnu::always_inline]] bool runs_destructor(ir::TypeIdx type) const {
+    return drops_.runs(type);
+  }
   // Whether ending a value of the type can run code. A type that names
   // a parameter may once the substitution says what it stands for, so
   // a parametric body records the end and the specialization decides

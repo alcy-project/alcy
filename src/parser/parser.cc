@@ -195,15 +195,6 @@ void Parser::report_unexpected(std::string_view what) {
   (void)index;
 }
 
-diag::Span Parser::span_from(usize mark) const {
-  const u32 start = tokens_[mark].span.offset;
-  const u32 end = previous_span_.offset + previous_span_.length;
-  if (end < start) {
-    return diag::Span{file_, start, 0};
-  }
-  return diag::Span{file_, start, end - start};
-}
-
 void Parser::synchronize() {
   const usize start = pos_;
   i32 depth = 0;
