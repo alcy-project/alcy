@@ -263,6 +263,33 @@ Decision 4 makes the call at the boundary the guarantee, so a release build
 that skips it changes what the compiler promises; that is an amendment to
 ADR-0015, not a commit that deletes three lines.
 
+## What the formatter costs
+
+`fmt` costs more than `check` on the same corpus (`473.97M` against
+`440.45M` on `plain1200`, both `perf stat -e cpu_core/instructions/u`,
+one job). Neither axis it has is super-linear, so no input makes it blow
+up:
+
+| corpus | instructions | per module |
+| --- | --- | --- |
+| `plain100` | 43.13M | 0.43M |
+| `plain300` | 121.53M | 0.41M |
+| `plain600` | 239.18M | 0.40M |
+| `plain1200` | 473.97M | 0.39M |
+
+Doubling the nesting depth costs `+1.03M` from `nest50` to `nest100`
+and `+2.06M` from `nest100` to `nest200`: on the depth axis the run is
+linear over a constant, so the constant is where the work is.
+
+On `plain100` it splits into the printer that turns the syntax tree into
+a layout document (19%), the renderer that gives that document a width
+(14%), building the tree (`cst::lex` and `Builder::build_sequence`,
+11%), lexing (7%), and memory work (`operator new`/`delete`,
+`memcpy`, 6%) spread across all three. A document is a tree of
+`std::vector<Doc>` with 56-byte nodes, so a concatenation allocates and
+a node move copies 56 bytes; that is the shape a constant-factor change
+here has to act on.
+
 ## What did not pay
 
 Measured and rejected, so the next attempt starts from a number rather than
