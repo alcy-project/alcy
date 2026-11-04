@@ -241,6 +241,10 @@ class Lowerer {
   // type carries a borrow and 2 otherwise. Types are asked about far more
   // often than they are interned, so the walk runs once per type.
   mutable std::vector<u8> borrow_memo_;
+  // What the signature walk answered for each type, 0 while unasked, 1 when
+  // the type names a parameter and 2 otherwise. A type node is appended and
+  // never rewritten, so an answer stays true for the index it holds.
+  std::vector<u8> param_memo_;
   [[gnu::always_inline]] static bool is_block_terminator(ir::Opcode op) {
     return op == ir::Opcode::Br || op == ir::Opcode::CondBr ||
            op == ir::Opcode::Switch || op == ir::Opcode::Ret ||

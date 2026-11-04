@@ -1766,15 +1766,116 @@ bool Lowerer::fn_budget_available(diag::Span span) {
   return false;
 }
 
+// Whether a type names an `ir::TypeTag::Param` where a signature can
+// see one: the arguments of a nominal instance, a reference's
+// pointee, a sequence's element, a tuple's parts. Fields are not
+// walked: a signature names its types, and a parameter reaches one
+// through an argument the source wrote.
+static bool mentions_param_slow(const ir::StorageState& state,
+                                ir::TypeIdx type,
+                                std::vector<u8>& memo);
+
+// The same few signature types are asked about at every call site, so the
+// memo hit sits here and the walk behind the first question stays out of
+// line.
+[[gnu::always_inline]] static bool mentions_param(const ir::StorageState& state,
+                                                  ir::TypeIdx type,
+                                                  std::vector<u8>& memo) {
+  constexpr u8 kMentions = 1;
+  const usize index = type.idx;
+  if (index < memo.size()) {
+    const u8 held = memo[index];
+    if (held != 0) {
+      return held == kMentions;
+    }
+  }
+  return mentions_param_slow(state, type, memo);
+}
+
+static bool mentions_param_slow(const ir::StorageState& state,
+                                ir::TypeIdx type,
+                                std::vector<u8>& memo) {
+  constexpr u8 kMentions = 1;
+  constexpr u8 kClear = 2;
+  if (!type.is_valid() || type.idx >= state.types.size()) {
+    return false;
+  }
+  const ir::TypeNode& node = state.types[type];
+  using T = ir::TypeTag;
+  bool answer = false;
+  switch (node.tag) {
+    case T::Param: answer = true; break;
+    case T::Ref:
+    case T::MutRef:
+    case T::RawPtr:
+    case T::RawMutPtr:
+      answer =
+          mentions_param(state, state.ref_types[node.as_ref()].pointee, memo);
+      break;
+    case T::Array:
+      answer = mentions_param(state, state.array_types[node.as_array()].element,
+                              memo);
+      break;
+    case T::Slice:
+      answer = mentions_param(state, state.slice_types[node.as_slice()].element,
+                              memo);
+      break;
+    case T::Tuple:
+      for (ir::TypeIdx element : state.tuple_types[node.as_tuple()].elements) {
+        if (mentions_param(state, element, memo)) {
+          answer = true;
+          break;
+        }
+      }
+      break;
+    case T::Func: {
+      const ir::FuncType& shape = state.func_types[node.as_func()];
+      for (ir::TypeIdx param : shape.params) {
+        if (mentions_param(state, param, memo)) {
+          answer = true;
+          break;
+        }
+      }
+      if (!answer) {
+        answer = mentions_param(state, shape.ret, memo);
+      }
+      break;
+    }
+    case T::Struct:
+      for (ir::TypeIdx arg : state.struct_types[node.as_struct()].params) {
+        if (mentions_param(state, arg, memo)) {
+          answer = true;
+          break;
+        }
+      }
+      break;
+    case T::Enum:
+      for (ir::TypeIdx arg : state.enum_types[node.as_enum()].params) {
+        if (mentions_param(state, arg, memo)) {
+          answer = true;
+          break;
+        }
+      }
+      break;
+    default: break;
+  }
+  if (type.idx >= memo.size()) {
+    memo.resize(type.idx + 1, 0);
+  }
+  memo[type.idx] = answer ? kMentions : kClear;
+  return answer;
+}
+
 static bool signature_names_param(const ir::StorageState& state,
-                                  const std::vector<ir::TypeIdx>& params,
-                                  ir::TypeIdx ret,
-                                  ir::TypeIdx owner) {
-  if (ir::type_names_param(state, ret) || ir::type_names_param(state, owner)) {
+                                     const std::vector<ir::TypeIdx>& params,
+                                     ir::TypeIdx ret,
+                                     ir::TypeIdx owner,
+                                     std::vector<u8>& memo) {
+  if (mentions_param(state, ret, memo) || mentions_param(state, owner, memo)) {
     return true;
   }
   for (const ir::TypeIdx param : params) {
-    if (ir::type_names_param(state, param)) {
+    if (mentions_param(state, param, memo)) {
       return true;
     }
   }
@@ -1784,7 +1885,8 @@ static bool signature_names_param(const ir::StorageState& state,
 bool Lowerer::signature_mentions_param(const std::vector<ir::TypeIdx>& params,
                                        ir::TypeIdx ret,
                                        ir::TypeIdx owner) const {
-  return lowering::signature_names_param(builder.state(), params, ret, owner);
+  std::vector<u8> memo;
+  return signature_names_param(builder.state(), params, ret, owner, memo);
 }
 
 // Enqueues lowering work on first encounter, so a recursive call sees
@@ -1806,7 +1908,8 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   // means the isolation broke: the failure is loud rather than a Param
   // type at a backend.
   if (!parametric &&
-      signature_names_param(builder.state(), params, ret, owner)) {
+      signature_names_param(builder.state(), params, ret, owner,
+                            param_memo_)) {
     internal(diag::Span{}, "a parametric signature reached lowering");
     return ir::FunctionIdx(base::INVALID_IDX);
   }
@@ -2801,7 +2904,7 @@ void Lowerer::run() {
       // receiver inside a generic body carries one.
       if (method.method_inst == analyzer::PARAM_INST ||
           signature_names_param(builder.state(), method.params, method.ret,
-                                method.self_type) ||
+                                method.self_type, param_memo_) ||
           parametric_body_items_.contains(method.item.idx)) {
         continue;
       }
