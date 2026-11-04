@@ -18,8 +18,17 @@ namespace {
 // Input is already separator-folded here.
 std::string normalize_canonical(std::string_view path) {
   const bool absolute = !path.empty() && path.front() == DEFAULT_PATH_SEPARATOR;
+  // The result never outgrows the input plus its leading separator, and a
+  // segment takes at least two bytes: reserving both up front leaves the
+  // walk below with no reallocation to make.
   std::string out;
+  out.reserve(path.size() + 1);
+  if (absolute) {
+    out.push_back(DEFAULT_PATH_SEPARATOR);
+  }
+  const usize prefix = out.size();
   std::vector<usize> starts;
+  starts.reserve(path.size() / 2 + 1);
   usize i = absolute ? 1 : 0;
   while (i <= path.size()) {
     usize end = i;
@@ -39,7 +48,7 @@ std::string normalize_canonical(std::string_view path) {
       }
     } else if (!part.empty() && part != ".") {
       starts.push_back(static_cast<usize>(out.size()));
-      if (!out.empty()) {
+      if (out.size() > prefix) {
         out.push_back(DEFAULT_PATH_SEPARATOR);
       }
       out.append(part);
@@ -47,7 +56,7 @@ std::string normalize_canonical(std::string_view path) {
     i = end + 1;
   }
   if (absolute) {
-    return std::string(1, DEFAULT_PATH_SEPARATOR) + out;
+    return out;
   }
   return out.empty() ? "." : out;
 }
