@@ -419,7 +419,13 @@ class Lowerer {
   void record_move_event(Val v, diag::Span span);
   void emit_move_marker_slow(Val v, bool subsumes_parts);
   void record_move_event_slow(Val v, diag::Span span);
-  void mark_move(Val v);
+  // Uses a value, emitting a Move marker when a non-Copy place is
+  // consumed. The marker's source is the place address so later
+  // ownership analysis observes origins, not temporaries.
+  [[gnu::always_inline]] void mark_move(Val v) {
+    emit_move_marker(v);
+    record_move_event(v);
+  }
   // A projection that takes a non-Copy value out of a field consumes the
   // field's place, so the enclosing owner's drop skips it.
   void mark_field_move(ast::ExprIdx expr);
@@ -847,6 +853,11 @@ class Lowerer {
   u32 generic_inst_index(ir::TypeIdx type) const;
   const analyzer::CheckedModule::StructInfo* struct_info(
       ir::TypeIdx type) const;
+  // Follows a field storage copy back to the type it was copied from.
+  [[gnu::always_inline]] ir::TypeIdx type_origin(ir::TypeIdx type) const {
+    const auto found = type_origins_.find(type.idx);
+    return found == type_origins_.end() ? type : ir::TypeIdx(found->second);
+  }
   ir::TypeIdx storage_copy(ir::TypeIdx type);
   ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected);
   // Interns a name whose bytes outlive the call, or one whose bytes may not

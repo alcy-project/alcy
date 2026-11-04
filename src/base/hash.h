@@ -48,11 +48,12 @@ struct Digest128 {
 
 // The project's one hash (ADR-0073). `xxh3.h` is included only here,
 // so no other module names a third-party header to hash.
-[[nodiscard]] inline u64 hash64(std::span<const u8> data) {
+[[nodiscard]] [[gnu::always_inline]] inline u64 hash64(
+    std::span<const u8> data) {
   return XXH3_64bits(data.data(), data.size());
 }
 
-[[nodiscard]] inline u64 hash64(std::string_view text) {
+[[nodiscard]] [[gnu::always_inline]] inline u64 hash64(std::string_view text) {
   return hash64(std::span<const u8>(reinterpret_cast<const u8*>(text.data()),
                                     text.size()));
 }

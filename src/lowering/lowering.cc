@@ -724,14 +724,6 @@ ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
   return lowering::type_at_path(builder, type_origins_, type, path);
 }
 
-// Uses a value, emitting a Move marker when a non-Copy place is
-// consumed. The marker's source is the place address so later
-// ownership analysis observes origins, not temporaries.
-void Lowerer::mark_move(Val v) {
-  emit_move_marker(v);
-  record_move_event(v);
-}
-
 void Lowerer::emit_move_marker_slow(Val v, bool subsumes_parts) {
   // A closure that owns nothing is not moved: its captures are borrows,
   // so the value holds handles to storage that stays where it is and a
