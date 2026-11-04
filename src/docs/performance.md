@@ -257,6 +257,12 @@ from the idea.
   `plain1200`: it saves the allocation a block's scope would make, but every
   scope then pays a move out of the buffer on close and a move back in on open,
   which costs more than growing a buffer of a few bindings from empty.
+- **Walking a scope with `std::views::reverse`.** Reading the scope stack in
+  `Lowerer::lookup_local` with an index loop instead of the reverse view, and
+  dropping the header that view pulled in, moves `plain1200` by less than the
+  run-to-run spread (`+0.0003%` over three interleaved pairs): the view settles
+  its bounds once per loop and the iterator reads the same word the index does,
+  so the loop that remains has nothing left to remove.
 
 ## Tracing
 
