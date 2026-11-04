@@ -1747,7 +1747,7 @@ class Checker {
   // Whether the pattern rows cover every value of their columns:
   // Maranget's specialization, one column at a time, so a nested
   // payload no arm reaches is a hole the way a missing variant is.
-  bool patterns_cover(std::vector<ir::TypeIdx> types,
+  bool patterns_cover(std::span<const ir::TypeIdx> types,
                       std::vector<std::vector<ast::PatternIdx>> rows);
   void collect_bool_literals(ast::PatternIdx pattern,
                              std::vector<bool>& covered) const;

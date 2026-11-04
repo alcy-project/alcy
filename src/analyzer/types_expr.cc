@@ -14,6 +14,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/name.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
@@ -2995,6 +2996,8 @@ void Checker::check_exhaustive(u32 module,
     }
     return rows;
   };
+  // The scrutinee is the only column the rows are checked against.
+  const std::span<const ir::TypeIdx> column(&scrutinee, 1);
   bool wildcard = false;
   std::vector<bool> covered_bool{false, false};
   // A guarded arm may not match, so it covers nothing: the match
@@ -3072,7 +3075,7 @@ void Checker::check_exhaustive(u32 module,
     }
     // Every variant has an arm, but a payload of one may not:
     // `Some(Some(v))` and `None` leave `Some(None)` with no arm.
-    if (!patterns_cover({scrutinee}, unguarded_rows())) {
+    if (!patterns_cover(column, unguarded_rows())) {
       const u32 index = bag.emit<i18n::Key::AnalyzerMatchNotExhaustive>(
           DiagCode::NonExhaustiveMatch, span);
       (void)index;
@@ -3099,7 +3102,7 @@ void Checker::check_exhaustive(u32 module,
     }
     // A tuple pattern names the shape; its elements still have to cover
     // every value, which the row check decides.
-    if (has_tuple && patterns_cover({scrutinee}, unguarded_rows())) {
+    if (has_tuple && patterns_cover(column, unguarded_rows())) {
       return;
     }
     const u32 index = bag.emit<i18n::Key::AnalyzerMatchNotExhaustiveTuple>(
@@ -3118,7 +3121,7 @@ void Checker::check_exhaustive(u32 module,
         break;
       }
     }
-    if (has_struct && patterns_cover({scrutinee}, unguarded_rows())) {
+    if (has_struct && patterns_cover(column, unguarded_rows())) {
       return;
     }
     const u32 index = bag.emit<i18n::Key::AnalyzerMatchNotExhaustiveStruct>(
@@ -3253,7 +3256,7 @@ std::span<const ast::ItemStructField> Checker::struct_fields(ir::TypeIdx type) {
   return decl->payload.get<ast::ItemStruct>().fields;
 }
 
-bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
+bool Checker::patterns_cover(std::span<const ir::TypeIdx> types,
                              std::vector<std::vector<ast::PatternIdx>> rows) {
   if (types.empty()) {
     return !rows.empty();
@@ -3354,7 +3357,7 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
   for (const std::vector<ast::PatternIdx>& row : rows) {
     row_wild.push_back(static_cast<u8>(pattern_is_wildcard(head, row[0])));
   }
-  const std::vector<ir::TypeIdx> rest(types.begin() + 1, types.end());
+  const std::span<const ir::TypeIdx> rest = types.subspan(1);
   const ir::TypeTag tag = tag_of(head);
   switch (tag) {
     case ir::TypeTag::Never:
@@ -3417,21 +3420,24 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
         }
         std::vector<std::vector<ast::PatternIdx>> next;
         next.reserve(rows.size());
+        const std::string_view variant_name = variants[index].name.name;
         for (usize r = 0; r < rows.size(); ++r) {
           const std::vector<ast::PatternIdx>& row = rows[r];
-          std::vector<ast::PatternIdx> tail = tails(row);
           if (row_wild[r] != 0) {
-            next.push_back(with(wild_args(arity), std::move(tail)));
+            next.push_back(with(wild_args(arity), tails(row)));
             continue;
           }
           const std::string_view name = row_ctor[r];
           if (name.empty()) {
-            next.push_back(with(wild_args(arity), std::move(tail)));
+            next.push_back(with(wild_args(arity), tails(row)));
             continue;
           }
-          if (name != variants[index].name.name) {
-            continue;  // Another variant: this row cannot match here.
+          // Most rows name another variant and are dropped here, before
+          // the tail they would contribute is built.
+          if (!base::same_name(name, variant_name)) {
+            continue;
           }
+          std::vector<ast::PatternIdx> tail = tails(row);
           std::vector<ast::PatternIdx> args;
           const ast::PatternNode& node = ast.patterns[row[0]];
           if (node.kind == ast::PatternKind::Tuple) {
