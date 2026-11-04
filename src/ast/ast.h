@@ -70,7 +70,8 @@ using ItemIdx = details::Idx<ItemNode>;
 // span and marks itself, which is what the parser stops on: the empty
 // span is not read as a list of no items.
 template <typename T, typename Arena>
-std::span<T> copy_to_arena(Arena& arena, std::span<const T> items) {
+[[gnu::always_inline]] std::span<T> copy_to_arena(Arena& arena,
+                                                  std::span<const T> items) {
   if (items.empty()) {
     return {};
   }
@@ -88,7 +89,8 @@ std::span<T> copy_to_arena(Arena& arena, std::span<const T> items) {
 }
 
 template <typename T, typename Arena>
-std::span<T> copy_to_arena(Arena& arena, const std::vector<T>& items) {
+[[gnu::always_inline]] std::span<T> copy_to_arena(Arena& arena,
+                                                  const std::vector<T>& items) {
   return copy_to_arena<T>(arena,
                           std::span<const T>(items.data(), items.size()));
 }

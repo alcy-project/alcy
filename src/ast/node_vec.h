@@ -143,7 +143,7 @@ class NodeVec {
   // written in that case, so the count still says how many nodes the table
   // holds.
   template <typename... Args>
-  Idx emplace_back(Args&&... args) {
+  [[gnu::always_inline]] Idx emplace_back(Args&&... args) {
     void* mem = nullptr;
     if (lanes_ > 0) {
       const u32 lane = ast::current_lane();
@@ -174,8 +174,12 @@ class NodeVec {
         (static_cast<char*>(mem) - arena_.base_ptr()) / sizeof(T)));
   }
 
-  Idx push_back(const T& node) { return emplace_back(node); }
-  Idx push_back(T&& node) { return emplace_back(std::move(node)); }
+  [[gnu::always_inline]] Idx push_back(const T& node) {
+    return emplace_back(node);
+  }
+  [[gnu::always_inline]] Idx push_back(T&& node) {
+    return emplace_back(std::move(node));
+  }
 
   [[nodiscard]] const T& operator[](const Idx idx) const {
     FPAG_DCHECK_LT(static_cast<usize>(idx.idx), reach_bound());
