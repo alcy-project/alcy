@@ -271,8 +271,9 @@ TEST_CASE("The ir mode answers a release build the same artifact") {
 
 TEST_CASE("An ir-binary build carries the summary only for a library") {
   // A dependent reads a library's summary and never a bin's: the build
-  // names the library's public surface, marks the declaration a
-  // dependent cannot instantiate, and skips what is private (ADR-0078).
+  // names the library's public surface, carries a generic body a
+  // dependent instantiates, and skips what is private (ADR-0078,
+  // ADR-0079).
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_summary_test_");
   const bool setup =
       dir.write_file(
@@ -360,7 +361,15 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
     }
     if (name == "identity") {
       CHECK(entry.kind == ir::SummaryKind::Free);
-      generic = entry.needs_body && !entry.function.is_valid();
+      generic = !entry.needs_body && entry.function.is_valid();
+      // The row names the parametric body a dependent clones.
+      const std::vector<ir::FunctionIdx>& bodies =
+          package.storage->parametric_functions();
+      bool listed = false;
+      for (const ir::FunctionIdx fn : bodies) {
+        listed = listed || fn.idx == entry.function.idx;
+      }
+      CHECK(listed);
     }
     if (name == "Point") {
       CHECK(entry.kind == ir::SummaryKind::Struct);

@@ -16,6 +16,7 @@
 
 #include "analyzer/comp_evaluator.h"
 #include "analyzer/fmt.h"
+#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/nesting.h"
@@ -385,7 +386,7 @@ class Lowerer {
   // The identity of one specialization: the declaration, the type
   // arguments it clones under. It is written into `key` so a caller can
   // hand in storage it reuses, the way `fn_key` is.
-  void specialization_key(ast::ItemIdx item,
+  void specialization_key(ir::FunctionIdx source,
                           const std::vector<ir::TypeIdx>& args,
                           std::string& key);
   // The identity of one specialization: the declaration, the
@@ -508,6 +509,13 @@ class Lowerer {
                                  CloneState& state);
   // The function a generic item's body specializes to for `args`,
   // cloned on first need.
+  // The clone of one parametric body under the type arguments a use
+  // settled, memoized by (body, arguments) (ADR-0079).
+  ir::FunctionIdx specialize_body(ir::FunctionIdx source,
+                                  const std::vector<ir::TypeIdx>& args);
+  // The function a summary module's carried body names after its
+  // storage merged into this build (ADR-0079).
+  ir::FunctionIdx merge_summary_function(u32 module, ir::FunctionIdx function);
   ir::FunctionIdx specialize_generic(ast::ItemIdx item,
                                      const std::vector<ir::TypeIdx>& args,
                                      diag::Span span);
@@ -754,6 +762,11 @@ class Lowerer {
                                      const std::vector<ir::TypeIdx>& type_args);
   // An `extern "C"` call: the declaration names the symbol, arguments
   // pass by value, and the opt-in was checked at the call site.
+  // The summary module that declares the item, or `U32_MAX` when none:
+  // a generic instantiation records its signature in the calling
+  // module, so the item's own module is what says a summary carries its
+  // body (ADR-0079).
+  u32 summary_module_of(ast::ItemIdx item) const;
   // A call into a package a summary answers for: its code lives in the
   // dependency's own artifact, so the call names the symbol the
   // dependency's build wrote for it (ADR-0078). A method's receiver is
@@ -765,9 +778,25 @@ class Lowerer {
                          ast::ItemIdx item,
                          u32 module,
                          std::span<const ast::ExprIdx> args,
-                         std::optional<Val> receiver);
+                         std::optional<Val> receiver,
+                         const std::vector<ir::TypeIdx>& type_args);
+  // A call to a generic body a summary carries: the callee is the
+  // definition-site body merged into this build, and the call records
+  // it for the specialization pass (ADR-0079).
+  Val lower_carried_call(ast::ExprIdx expr,
+                         std::span<const ir::TypeIdx> params,
+                         ir::TypeIdx ret,
+                         u32 module,
+                         std::span<const ast::ExprIdx> args,
+                         std::optional<Val> receiver,
+                         const std::vector<ir::TypeIdx>& type_args,
+                         const analyzer::SummarySymbol& entry);
   Val lower_extern_call(ast::ExprIdx expr,
                         const analyzer::CheckedModule::FnSig& sig);
+  // Merges a summary dependency's storage into this build, once per
+  // module and before any body is lowered, so every index the build
+  // hands out follows the merged tables (ADR-0079).
+  void merge_summary_module(u32 module);
   ir::TypeIdx usize_type();
   bool str_parts(Val str, ir::OperandIdx& bytes_out, ir::OperandIdx& len_out);
   bool slice_parts(Val slice,
@@ -1200,10 +1229,13 @@ class Lowerer {
   // call the parametric form records resolves through it (ADR-0079).
   std::unordered_map<u32, ir::FunctionIdx> parametric_fn_by_item_;
   // The reverse, for a record that names the emitted body.
-  std::unordered_map<u32, u32> parametric_item_by_fn_;
+  std::unordered_set<u32> parametric_functions_;
   // Specializations every call site reaches, keyed by (item, args).
   std::unordered_map<std::string, u32, FnKeyHash, std::equal_to<>>
       specialization_by_key_;
+  // Merged summary storages, by module: the appending ran once, and its
+  // bases name every body the module carried (ADR-0079).
+  std::unordered_map<u32, ir::StorageBases> merged_modules_;
   // Whether the pass built its item and instance indexes.
   bool specialize_indexes_ready_ = false;
   // Minted nominal instances by declaring item, so a substitution finds

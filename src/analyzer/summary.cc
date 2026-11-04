@@ -40,6 +40,11 @@ struct NominalSite {
 struct SpellContext {
   const ir::Storage& storage;
   ast::AstArena& ast;
+  // The dependency's identity: a spelled path opens its package by the
+  // name a `use` writes, so a signature resolves in the module that
+  // holds the item and in a dependent that reads the declaration
+  // (ADR-0079).
+  std::string_view identity;
   // The artifact's interner, which every row's ids resolve in.
   const ir::SymbolTable& artifact_strings;
   // The run's interner; every spelled name is copied into it, so
@@ -286,6 +291,62 @@ bool shapes_match(const ir::Storage& storage,
   }
 }
 
+// A row the surface cannot spell keeps its name: a dependent that
+// reaches it is told what it is rather than reading that it does not
+// exist.
+void remember_name(
+    std::unordered_map<std::string, std::vector<std::string_view>>& names,
+    std::string_view path,
+    std::string_view name,
+    ir::SymbolTable& strings) {
+  const std::optional<str::StringPoolId> id = strings.intern_copied(name);
+  if (id.has_value()) {
+    names[std::string(path)].push_back(strings.get(*id));
+  }
+}
+
+// Whether a row names a body the summary carries rather than code a
+// symbol links: the writer lists the parametric bodies (ADR-0079).
+bool is_carried_body(const ir::Storage& storage, ir::FunctionIdx function) {
+  if (!function.is_valid()) {
+    return false;
+  }
+  for (const ir::FunctionIdx candidate : storage.parametric_functions()) {
+    if (candidate.idx == function.idx) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::optional<ast::Ident> spell_segment(const SpellContext& ctx,
+                                        std::string_view name);
+ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type);
+
+// The names a declaration's parameters carry, by the index the node
+// records: the spelling a signature uses to name one (ADR-0079).
+bool spell_declared_params(const SpellContext& ctx,
+                           ir::TypeIdxRange params,
+                           std::vector<ast::GenericParam>& out) {
+  for (u32 i = 0; i < params.size(); ++i) {
+    const ir::TypeIdx param(params.head().idx + i);
+    if (param.idx >= ctx.storage.types().size()) {
+      return false;
+    }
+    const ir::TypeNode& node = ctx.storage.types()[param];
+    const u32 value =
+        node.tag == ir::TypeTag::Param ? node.as_param().value : i;
+    const std::optional<ast::Ident> spelled =
+        spell_segment(ctx, "T" + std::to_string(value));
+    if (!spelled.has_value()) {
+      return false;
+    }
+    out.push_back(ast::GenericParam{
+        .name = *spelled, .type = ast::TypeIdx::invalid(), .bounds = {}});
+  }
+  return true;
+}
+
 // The ident one path segment is spelled as.
 std::optional<ast::Ident> spell_segment(const SpellContext& ctx,
                                         std::string_view name) {
@@ -297,14 +358,15 @@ std::optional<ast::Ident> spell_segment(const SpellContext& ctx,
   return ast::Ident{ctx.strings.get(*copied), diag::Span{}};
 }
 
-// The type path a nominal's declaration is reachable by: `package::`
-// opens this package's root from any module in it, and the segments the
-// row recorded walk down to the declaration.
+// The type path a nominal's declaration is reachable by: the package's
+// identity opens its root wherever the path is read, and the segments
+// the row recorded walk down to the declaration.
 std::optional<ast::TypeIdx> spell_nominal_path(const SpellContext& ctx,
-                                               const NominalSite& site) {
+                                               const NominalSite& site,
+                                               ir::TypeIdx args_type) {
   ast::AstArena& ast = ctx.ast;
   std::vector<ast::Ident> segments;
-  const std::optional<ast::Ident> head = spell_segment(ctx, "package");
+  const std::optional<ast::Ident> head = spell_segment(ctx, ctx.identity);
   if (!head.has_value()) {
     return std::nullopt;
   }
@@ -326,11 +388,32 @@ std::optional<ast::TypeIdx> spell_nominal_path(const SpellContext& ctx,
     return std::nullopt;
   }
   segments.push_back(*last);
+  // A nominal's own arguments ride with the path: a generic declaration
+  // reference names what its parameters stand for (ADR-0079).
+  std::vector<ast::TypeIdx> args;
+  if (args_type.is_valid() && args_type.idx < ctx.storage.types().size()) {
+    const ir::TypeNode& node = ctx.storage.types()[args_type];
+    ir::TypeIdxRange params{};
+    if (node.tag == ir::TypeTag::Struct) {
+      params = ctx.storage.struct_types()[node.as_struct()].params;
+    } else if (node.tag == ir::TypeTag::Enum) {
+      params = ctx.storage.enum_types()[node.as_enum()].params;
+    }
+    for (u32 i = 0; i < params.size(); ++i) {
+      const ast::TypeIdx spelled =
+          spell_type(ctx, ir::TypeIdx(params.head().idx + i));
+      if (!spelled.is_valid()) {
+        return std::nullopt;
+      }
+      args.push_back(spelled);
+    }
+  }
   ast::TypeNode made;
   made.kind = ast::TypeKind::Path;
   const ast::PathIdx path = ast.paths.push_back(
       ast::Path{ast::copy_to_arena(ast.spans, segments), diag::Span{}});
-  made.payload.set(ast::TypePath{.path = path, .args = {}});
+  made.payload.set(
+      ast::TypePath{.path = path, .args = ast::copy_to_arena(ast.spans, args)});
   return ast.types.push_back(made);
 }
 
@@ -442,11 +525,26 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
           .params = ast::copy_to_arena(ast.spans, params), .ret = ret});
       return ast.types.push_back(made);
     }
+    case ir::TypeTag::Param: {
+      // The item's own parameter, under the name the function spelling
+      // declares it: a dependent binds the type argument there.
+      const std::string name = "T" + std::to_string(node.as_param().value);
+      const std::optional<ast::Ident> segment = spell_segment(ctx, name);
+      if (!segment.has_value()) {
+        return ast::TypeIdx::invalid();
+      }
+      const std::vector<ast::Ident> segments{*segment};
+      made.kind = ast::TypeKind::Path;
+      const ast::PathIdx path = ast.paths.push_back(
+          ast::Path{ast::copy_to_arena(ast.spans, segments), diag::Span{}});
+      made.payload.set(ast::TypePath{.path = path, .args = {}});
+      return ast.types.push_back(made);
+    }
     case ir::TypeTag::Struct:
     case ir::TypeTag::Enum: {
       const auto site = ctx.nominals.find(type.idx);
       if (site != ctx.nominals.end()) {
-        return spell_nominal_path(ctx, site->second)
+        return spell_nominal_path(ctx, site->second, type)
             .value_or(ast::TypeIdx::invalid());
       }
       // A reference may name a copy of a declaration rather than the
@@ -481,7 +579,7 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
       if (matched == nullptr) {
         return ast::TypeIdx::invalid();
       }
-      return spell_nominal_path(ctx, *matched)
+      return spell_nominal_path(ctx, *matched, type)
           .value_or(ast::TypeIdx::invalid());
     }
     default: return ast::TypeIdx::invalid();
@@ -503,7 +601,26 @@ bool spell_function(const SpellContext& ctx,
     return false;
   }
   const ir::FunctionMeta& meta = storage.functions()[function_index].meta;
-  if (!meta.generics.empty()) {
+  // A method's parameters start with its impl's, which the impl
+  // declares; only the rest belong to the method (ADR-0079).
+  u32 impl_params = 0;
+  if (meta.owner.is_valid() && meta.owner.idx < storage.types().size()) {
+    const ir::TypeNode& owner = storage.types()[meta.owner];
+    if (owner.tag == ir::TypeTag::Struct) {
+      impl_params = storage.struct_types()[owner.as_struct()].params.size();
+    } else if (owner.tag == ir::TypeTag::Enum) {
+      impl_params = storage.enum_types()[owner.as_enum()].params.size();
+    }
+  }
+  if (meta.generics.size() < impl_params) {
+    return false;
+  }
+  std::vector<ast::GenericParam> declared;
+  if (!spell_declared_params(
+          ctx,
+          ir::TypeIdxRange(ir::TypeIdx(meta.generics.head().idx + impl_params),
+                           meta.generics.size() - impl_params),
+          declared)) {
     return false;
   }
   const bool is_method = meta.kind == ir::SymbolKind::Method;
@@ -542,6 +659,7 @@ bool spell_function(const SpellContext& ctx,
   }
   ast::ItemFn fn;
   fn.name = ast::Ident{name, diag::Span{}};
+  fn.generic = ast::copy_to_arena(ast.spans, declared);
   fn.params = ast::copy_to_arena(ast.spans, params);
   fn.return_type = ret;
   ast::ItemNode node;
@@ -593,12 +711,16 @@ bool spell_declaration(const SpellContext& ctx,
                                             .type = spelled,
                                             .is_pub = row.fields[i].is_pub});
     }
+    std::vector<ast::GenericParam> declared;
+    if (!spell_declared_params(ctx, shape.params, declared)) {
+      return false;
+    }
     ast::ItemNode node;
     node.kind = ast::ItemKind::Struct;
     node.is_pub = true;
     node.payload.set(
         ast::ItemStruct{.name = ast::Ident{name, diag::Span{}},
-                        .params = {},
+                        .params = ast::copy_to_arena(ast.spans, declared),
                         .fields = ast::copy_to_arena(ast.spans, fields)});
     item_out = ast.items.push_back(node);
     return item_out.is_valid();
@@ -634,12 +756,16 @@ bool spell_declaration(const SpellContext& ctx,
         ast::ItemEnumVariant{.name = *variant_name,
                              .fields = ast::copy_to_arena(ast.spans, payload)});
   }
+  std::vector<ast::GenericParam> declared;
+  if (!spell_declared_params(ctx, shape.params, declared)) {
+    return false;
+  }
   ast::ItemNode node;
   node.kind = ast::ItemKind::Enum;
   node.is_pub = true;
   node.payload.set(
       ast::ItemEnum{.name = ast::Ident{name, diag::Span{}},
-                    .params = {},
+                    .params = ast::copy_to_arena(ast.spans, declared),
                     .variants = ast::copy_to_arena(ast.spans, variants)});
   item_out = ast.items.push_back(node);
   return item_out.is_valid();
@@ -699,8 +825,9 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
       nominals_by_name[*name].push_back(row.type.idx);
     }
   }
-  const SpellContext context{storage, ast,      *summary.strings,
-                             strings, nominals, nominals_by_name};
+  const SpellContext context{storage,          ast,     identity,
+                             *summary.strings, strings, nominals,
+                             nominals_by_name};
   std::unordered_map<std::string, std::vector<ast::ItemIdx>> items_by_module;
   std::unordered_map<std::string, std::vector<SummarySymbol>> symbols_by_module;
   std::unordered_map<std::string, std::vector<std::string_view>>
@@ -738,16 +865,24 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     const std::string_view name = named(row.name, "");
     const std::string_view path = named(row.path, "");
     // A row without a symbol is one the writer could not name; the
-    // source name is the closest a surface can spell.
+    // source name is the closest a surface can spell. A carried body
+    // keeps none: the dependent clones it from the storage beside the
+    // row, so a name would only be a link that resolves nothing.
     const std::string_view symbol = named(row.symbol, name);
+    const str::StringPoolId symbol_id =
+        is_carried_body(context.storage, row.function)
+            ? str::INVALID_STRING_POOL_ID
+            : strings.intern(symbol);
     ast::ItemIdx item = ast::ItemIdx::invalid();
     if (row.kind == ir::SummaryKind::Free) {
       if (!spell_function(context, name, row.function, item)) {
+        remember_name(generic_names_by_module, path, name, strings);
         continue;
       }
     } else if (row.kind == ir::SummaryKind::Struct ||
                row.kind == ir::SummaryKind::Enum) {
       if (!spell_declaration(context, row, name, item)) {
+        remember_name(generic_names_by_module, path, name, strings);
         continue;
       }
     } else {
@@ -756,6 +891,7 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
       const auto owner = context.nominals.find(row.owner.idx);
       if (owner == context.nominals.end() ||
           !spell_function(context, name, row.function, item)) {
+        remember_name(generic_names_by_module, path, name, strings);
         continue;
       }
       ImplGroup& group = impls[row.owner.idx];
@@ -765,7 +901,7 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
       }
       group.methods.push_back(item);
       group.symbols.push_back(
-          SummarySymbol{strings.intern(name), strings.intern(symbol), item});
+          SummarySymbol{strings.intern(name), symbol_id, item, row.function});
       if (ast.exhausted()) {
         return surface;
       }
@@ -777,7 +913,7 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
     }
     items.push_back(item);
     symbols_by_module[std::string(path)].push_back(
-        SummarySymbol{strings.intern(name), strings.intern(symbol), item});
+        SummarySymbol{strings.intern(name), symbol_id, item, row.function});
     if (ast.exhausted()) {
       return surface;
     }
@@ -789,11 +925,21 @@ SummarySurface spell_summary_surface(const ir::LoadedIr& summary,
       continue;
     }
     const std::optional<ast::TypeIdx> target =
-        spell_nominal_path(context, site->second);
+        spell_nominal_path(context, site->second, ir::TypeIdx(owner));
     if (!target.has_value()) {
       continue;
     }
+    std::vector<ast::GenericParam> declared;
+    const ir::TypeNode& owner_node = summary.storage->types()[owner];
+    const ir::TypeIdxRange owner_params =
+        owner_node.tag == ir::TypeTag::Struct
+            ? summary.storage->struct_types()[owner_node.as_struct()].params
+            : summary.storage->enum_types()[owner_node.as_enum()].params;
+    if (!spell_declared_params(context, owner_params, declared)) {
+      continue;
+    }
     ast::ItemImpl impl;
+    impl.params = ast::copy_to_arena(ast.spans, declared);
     impl.type = *target;
     impl.methods = ast::copy_to_arena(ast.spans, group.methods);
     ast::ItemNode node;

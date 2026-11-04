@@ -86,7 +86,7 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
       configure(*module);
       codegen_llvm::LlvmIrEmitter emitter(module.get(), fixture->take_storage(),
                                           &fixture->strings(), host_target(),
-                                          true);
+                                          /*emit_entry=*/true, {});
       std::move(emitter).emit();
       static_cast<void>(codegen_llvm::emit_ir(*module));
     }));
@@ -109,7 +109,7 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
       configure(*warm);
       codegen_llvm::LlvmIrEmitter emitter(warm.get(), fixture->take_storage(),
                                           &fixture->strings(), host_target(),
-                                          true);
+                                          /*emit_entry=*/true, {});
       std::move(emitter).emit();
       static_cast<void>(codegen_llvm::emit_object(*warm, host_target()));
     }
@@ -119,7 +119,7 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
            configure(*module);
            codegen_llvm::LlvmIrEmitter emitter(
                module.get(), fixture->take_storage(), &fixture->strings(),
-               host_target(), true);
+               host_target(), /*emit_entry=*/true, {});
            std::move(emitter).emit();
            static_cast<void>(codegen_llvm::emit_object(*module, host_target()));
          }));

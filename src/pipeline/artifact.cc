@@ -31,6 +31,7 @@
 #include "fpag/io/file_handle.h"
 #include "fpag/io/io_util.h"
 #include "i18n/messages.h"
+#include "ir/deserialize.h"
 #include "path/path.h"
 #include "pipeline/dependencies.h"
 #include "pipeline/diag_code.h"
@@ -454,6 +455,14 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       analyzer::ModuleInput spelled = input;
       spelled.summary_symbols = symbols;
       spelled.summary_generic_names = generic_names;
+      if (dependency.artifact.has_value()) {
+        // The artifact lives in the run's dependency table, so the
+        // tree may borrow its storage and interner (ADR-0079).
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+        const ir::LoadedIr& artifact = *dependency.artifact;
+        spelled.summary_storage = &*artifact.storage;
+        spelled.summary_strings = artifact.strings.get();
+      }
       sources.dependency_modules.push_back(analyzer::ParsedModule{
           spelled, path::Path::from_native(std::string_view{}).unwrap(),
           items});

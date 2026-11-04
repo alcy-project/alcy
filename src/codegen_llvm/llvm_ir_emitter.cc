@@ -48,17 +48,19 @@
 
 namespace codegen_llvm {
 
-LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
-                             ir::VerifiedStorage storage,
-                             ir::SymbolTable* interner,
-                             const Target& target,
-                             bool emit_entry,
-                             bool freestanding,
-                             const overlay::Overlay* overlay,
-                             debug::Profiler* profiler,
-                             bool backtrace,
-                             std::span<const diag::Span> instr_spans,
-                             std::span<const str::StringPoolId> site_names)
+LlvmIrEmitter::LlvmIrEmitter(
+    llvm::Module* module,
+    ir::VerifiedStorage storage,
+    ir::SymbolTable* interner,
+    const Target& target,
+    bool emit_entry,
+    std::span<const ir::FunctionIdx> exported_functions,
+    bool freestanding,
+    const overlay::Overlay* overlay,
+    debug::Profiler* profiler,
+    bool backtrace,
+    std::span<const diag::Span> instr_spans,
+    std::span<const str::StringPoolId> site_names)
     : module_(module),
       storage_(std::move(storage)),
       builder_(std::make_unique<IRBuilder>(module_->getContext())),
@@ -67,6 +69,7 @@ LlvmIrEmitter::LlvmIrEmitter(llvm::Module* module,
       triple_(target.triple),
       profiler_(profiler),
       emit_entry_(emit_entry),
+      exported_functions_(exported_functions),
       freestanding_(freestanding),
       overlay_(overlay),
       backtrace_(backtrace),
@@ -323,6 +326,14 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   for (const ir::FunctionIdx function_idx : storage_->parametric_functions()) {
     parametric[function_idx.idx] = true;
   }
+  // Which functions a library's surface names: the only definitions a
+  // dependent can reach by symbol. A binary internalizes everything.
+  std::vector<bool> exported(storage_->functions().size(), false);
+  for (const ir::FunctionIdx function_idx : exported_functions_) {
+    if (function_idx.is_valid() && function_idx.idx < exported.size()) {
+      exported[function_idx.idx] = true;
+    }
+  }
 
   // Declare every function before defining any body so forward
   // calls resolve regardless of declaration order.
@@ -358,6 +369,13 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
     // symbols, so the middle end may drop the instantiations no caller
     // reached. A library keeps its surface external.
     if (emit_entry_) {
+      llvm_function->setLinkage(llvm::GlobalValue::InternalLinkage);
+    } else if (!exported_functions_.empty() && !exported[function_idx.idx]) {
+      // A library's object carries code no dependent reaches by name:
+      // only the surface stays external, so a symbol a split part
+      // promotes cannot meet another object's copy of it (ADR-0078). A
+      // request that names no surface - a relocatable module, a test -
+      // keeps every symbol as it is.
       llvm_function->setLinkage(llvm::GlobalValue::InternalLinkage);
     }
     if (backtrace_) {

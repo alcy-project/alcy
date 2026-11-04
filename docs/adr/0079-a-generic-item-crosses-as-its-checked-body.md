@@ -118,10 +118,10 @@ carries into ADR-0079's second slice.
 
 ## Staged landing
 
-**The node, the once-check, and the pass landed; the rest follows.** A
-dependent still cannot name a generic item, and the per-instantiation
-checks stay: deleting the AST-level walk is what removes them, and the
-pass consumes the same bodies until then.
+**The node, the once-check, the pass, and the body landed; the walk
+follows.** A dependent reads a generic body from a summary and
+instantiates it, and the per-instantiation checks stay until the
+AST-level walk is deleted.
 
 1. Landed. A type parameter in the IR: a type node that names a
    parameter of the item it belongs to (`1ed02420`).
@@ -164,6 +164,25 @@ pass consumes the same bodies until then.
    runs before the borrow pass, so the borrow pass sees the clones and
    no parametric body. What remains is the summary that carries the
    body.
-4. The summary carries a generic body, and the `needs_body` flag
-   goes.
+4. Landed. The summary carries a generic body, and the flag goes. A
+   generic item's row names the definition-site body it lowered to, and
+   the dependent spells the row's declaration: a `Param` node names its
+   parameter by index, a generic nominal's declaration is spelled from
+   the instance the parametric bodies were built with, an impl declares
+   its owner's parameters and each method only its own, and a path
+   opens its package by the identity a `use` writes, so a signature
+   resolves in the module that holds the item and in a dependent that
+   reads the declaration. A carrying package appends its tables to the
+   dependent's by a per-table base - every index the appended half
+   holds keeps its meaning, and every name moves into the dependent's
+   interner - and the specialization pass clones a carried body beside
+   the dependent's own code. A function the summary names by symbol
+   keeps no body: a reference to it is a call by that symbol, so the
+   library's object stays the code that runs, and a library object now
+   internalizes everything its surface does not name, which keeps a
+   promoted symbol of a split build from meeting another object's copy.
+   The carried tables are appended whole rather than followed to what a
+   reachable body names; a build therefore holds the library's storage
+   beside its own, and its reported count includes what the library
+   lowered.
 5. The AST-level instantiation walk is deleted.

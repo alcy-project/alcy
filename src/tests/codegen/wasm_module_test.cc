@@ -175,6 +175,7 @@ base::Result<std::vector<u8>, codegen::EmitError> emit_test_module(
       .target =
           codegen::Target{"wasm32-unknown-emscripten", ir::PointerWidth::W32},
       .emit_entry = false,
+      .exported_functions = {},
       .kind = codegen::OutputKind::Module,
       .options = codegen::EmitOptions{},
   };

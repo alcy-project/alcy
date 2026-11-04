@@ -1005,6 +1005,268 @@ TEST_CASE("A generic item a summary cannot spell is named for what it is") {
   }
 }
 
+TEST_CASE("A summary carries a generic body the dependent instantiates") {
+  // The summary names a generic item's definition-site body, and a
+  // dependent's call clones it beside its own code (ADR-0079).
+  io::TempDir dir =
+      io::TempDir::create_unique("alcy_summary_generic_body_test_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "pub fn identity<T>(x: T) -> T {\n  ret x\n}\n\n"
+        "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  // Build the library once, so the summary is written.
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join("dep/out/dep.summary")));
+  }
+#if !BUILD_FLAG(IS_OS_ASMJS)
+  // The object a dependent links comes from the same build.
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::Object);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join("dep/out/dep.o")));
+  }
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
+  // The library's sources are gone, so the summary answers for it.
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::identity\n\nfn main() -> i32 {\n"
+        "  ret identity(21i32) - 21\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  // The dependent's build merges the carried body and the
+  // specialization clones it; an ir build reaches both.
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+#if !BUILD_FLAG(IS_OS_ASMJS)
+  // The linked program runs the carried body's clone.
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::Executable);
+    CHECK(built.is_ok());
+    CHECK(!ctx.bag.has_errors());
+    const std::string exe =
+        dir.join("proj/out/app" + std::string(exe_suffix()));
+    CHECK(io::is_file(exe));
+    base::Result<i32, SpawnError> ran = run_command({exe});
+    CHECK(ran.is_ok());
+    if (ran.is_ok()) {
+      CHECK(std::move(ran).unwrap() == 0);
+    }
+  }
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
+}
+
+TEST_CASE("A summary's generic declaration and impl cross whole") {
+  // A generic struct's declaration, a generic impl's methods, and a
+  // free generic that names them all cross in one summary, and a
+  // dependent instantiates each beside its own code (ADR-0079).
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_generic_full_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "pub struct Box<T> {\n  pub value: T,\n}\n\n"
+        "impl<T> Box<T> {\n"
+        "  pub fn wrap(value: T) -> Box<T> {\n"
+        "    ret Box { value: value }\n"
+        "  }\n\n"
+        "  pub fn get(self: &Box<T>) -> &T {\n"
+        "    ret &self.value\n"
+        "  }\n"
+        "}\n\n"
+        "pub fn unwrap<T>(b: Box<T>) -> T {\n  ret b.value\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join("dep/out/dep.summary")));
+  }
+#if !BUILD_FLAG(IS_OS_ASMJS)
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::Object);
+    CHECK(built.is_ok());
+    CHECK(io::is_file(dir.join("dep/out/dep.o")));
+  }
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::Box\nuse dep::unwrap\n\nfn main() -> i32 {\n"
+        "  b := Box::<i32>::wrap(21)\n"
+        "  if *b.get() != 21 {\n"
+        "    ret 1\n"
+        "  }\n"
+        "  ret unwrap(b) - 21\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+#if !BUILD_FLAG(IS_OS_ASMJS)
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::Executable);
+    CHECK(built.is_ok());
+    CHECK(!ctx.bag.has_errors());
+    const std::string exe =
+        dir.join("proj/out/app" + std::string(exe_suffix()));
+    CHECK(io::is_file(exe));
+    base::Result<i32, SpawnError> ran = run_command({exe});
+    CHECK(ran.is_ok());
+    if (ran.is_ok()) {
+      CHECK(std::move(ran).unwrap() == 0);
+    }
+  }
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
+}
+
 TEST_CASE("A dependency a summary answers for is not read") {
   // A library's build leaves its surface beside the artifact; a
   // dependent checks against it, and the library's own sources can be

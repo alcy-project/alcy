@@ -64,17 +64,14 @@ replaced. The foundations are in `roadmap.md`.
   in-place patching needs more than `take_state` + `StorageBuilder`,
   when the profile asks.
 
-- [ ] The generic boundary in a summary: a `needs_body` row is
-  omitted, so a dependent that names a generic item reads "Unresolved
-  import" without learning why. The IR has no parameterized types (its
-  tags are concrete), so a declaration's shape cannot be spelled; it
-  exists only per instantiation. The decision is ADR-0079: a generic
-  item crosses as its declaration and its checked body, and the
-  dependent instantiates it. The IR's type parameter, the body checked
-  once, and its once-emission with recorded callees and ends landed
-  (ADR-0079 slices one and two and the parametric form); what remains
-  is the specialization pass, the body in the summary, and the
-  AST-level instantiation walk deleted.
+- [ ] The generic boundary in a summary: a generic item crosses as its
+  declaration and its checked body, and a dependent instantiates it
+  (ADR-0079). The IR's type parameter, the body checked once, its
+  once-emission with recorded callees and ends, the specialization
+  pass, and the body in the summary landed; what remains is the
+  AST-level instantiation walk deleted, and a finer import than the
+  whole carried storage - the pass clones what a body reaches, but a
+  dependent's tables hold the library's storage with it.
 
 - [ ] `core::string`'s `trim_start_matches` once reported `Returns
   reference to local 's'` for the `None` arm's `ret s` - the loop

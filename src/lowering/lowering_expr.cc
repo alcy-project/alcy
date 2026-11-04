@@ -1348,10 +1348,11 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_intrinsic_call(
         expr, sig, fn_instance_args(target->module, target->index));
   }
-  if (target->module < pkg.tree.modules.size() &&
-      pkg.tree.modules[target->module]->is_summary) {
+  const u32 summary = summary_module_of(sig.item);
+  if (summary != U32_MAX) {
     return lower_summary_call(expr, sig.name, sig.params, sig.ret, sig.item,
-                              target->module, call.args, std::nullopt);
+                              summary, call.args, std::nullopt,
+                              fn_instance_args(target->module, target->index));
   }
   if (sig.is_extern) {
     return lower_extern_call(expr, sig);
@@ -1479,10 +1480,14 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   }
   const std::span<const ast::ExprIdx> args =
       call.payload.get<ast::ExprCall>().args;
-  if (target->module < pkg.tree.modules.size() &&
-      pkg.tree.modules[target->module]->is_summary) {
+  const u32 summary = summary_module_of(info.item);
+  if (summary != U32_MAX) {
+    std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
+    for (const ir::TypeIdx arg : info.method_args) {
+      type_args.push_back(arg);
+    }
     return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
-                              target->module, args, std::nullopt);
+                              summary, args, std::nullopt, type_args);
   }
   if (!info.item.is_valid()) {
     // An associated function a bound names: the parametric form knows
@@ -1677,33 +1682,40 @@ Val Lowerer::lower_summary_call(ast::ExprIdx expr,
                                 ast::ItemIdx item,
                                 u32 module,
                                 std::span<const ast::ExprIdx> args,
-                                std::optional<Val> receiver) {
+                                std::optional<Val> receiver,
+                                const std::vector<ir::TypeIdx>& type_args) {
   const ast::ExprNode& node = ast.exprs[expr];
   const usize count = args.size() + (receiver.has_value() ? 1 : 0);
   if (count != params.size()) {
     internal(node.span, "summary call arity");
     return Val{size_one, error_type(), false, false};
   }
-  // The symbol the dependency's build wrote for this item, which the
+  // The row the dependency's build wrote for this item, which the
   // summary carried with it. The callee's own item is exact, which a
   // name cannot be where two impls carry one; a name is the fallback.
-  std::string_view symbol;
+  const analyzer::SummarySymbol* match = nullptr;
   if (module < pkg.tree.modules.size()) {
-    std::string_view by_name;
     for (const analyzer::SummarySymbol& entry :
          pkg.tree.modules[module]->summary_symbols) {
       if (item.is_valid() && entry.item == item) {
-        symbol = strings.get(entry.symbol);
+        match = &entry;
         break;
       }
-      if (by_name.empty() && strings.get(entry.name) == name) {
-        by_name = strings.get(entry.symbol);
+      if (match == nullptr && strings.get(entry.name) == name) {
+        match = &entry;
       }
     }
-    if (symbol.empty()) {
-      symbol = by_name;
-    }
   }
+  // A body the summary carries: the call clones the definition-site
+  // body the pass merges from the dependency's storage (ADR-0079). A
+  // row with a symbol is concrete code the linker resolves instead.
+  if (match != nullptr && match->function.is_valid() &&
+      match->symbol == str::INVALID_STRING_POOL_ID) {
+    return lower_carried_call(expr, params, ret, module, args, receiver,
+                              type_args, *match);
+  }
+  const std::string_view symbol =
+      match == nullptr ? std::string_view{} : strings.get(match->symbol);
   if (symbol.empty()) {
     internal(node.span, "summary call without a symbol");
     return Val{size_one, error_type(), false, false};
@@ -1744,6 +1756,66 @@ Val Lowerer::lower_summary_call(ast::ExprIdx expr,
     return Val{size_one, error_type(), false, false};
   }
   return Val{to_operand(result, ret), ret, false, false};
+}
+
+// A call to a generic body a summary carries: the body is the
+// definition-site form the pass merges from the dependency's storage,
+// and the call records the body with the arguments the use settled, so
+// the specialization clones it beside this package's own code
+// (ADR-0079).
+Val Lowerer::lower_carried_call(ast::ExprIdx expr,
+                                std::span<const ir::TypeIdx> params,
+                                ir::TypeIdx ret,
+                                u32 module,
+                                std::span<const ast::ExprIdx> args,
+                                std::optional<Val> receiver,
+                                const std::vector<ir::TypeIdx>& type_args,
+                                const analyzer::SummarySymbol& entry) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ir::FunctionIdx source = merge_summary_function(module, entry.function);
+  if (!source.is_valid() || failed) {
+    internal(node.span, "a carried generic body did not merge");
+    return stopped_value();
+  }
+  // The declaration's types with the arguments settled: the arguments
+  // lower into the parameter types the clone takes, and the result is
+  // what the use returns.
+  std::vector<ir::TypeIdx> settled;
+  settled.reserve(params.size());
+  for (const ir::TypeIdx param : params) {
+    settled.push_back(substitute_type(param, type_args));
+  }
+  const ir::TypeIdx settled_ret = substitute_type(ret, type_args);
+  const ir::ParametricCalleeIdx callee = parametric_callee_record(
+      ir::ParametricCalleeKind::Generic, source, str::INVALID_STRING_POOL_ID,
+      str::INVALID_STRING_POOL_ID, type_args);
+  if (failed || !callee.is_valid()) {
+    return stopped_value();
+  }
+  // The places this call lends to the callee: a value it keeps can land
+  // in any of them, so it has to outlive them (ADR-0135).
+  std::vector<ast::ExprIdx> borrowed_places;
+  std::vector<KeptValue> kept;
+  std::vector<ir::OperandIdx> ops;
+  ops.reserve(settled.size());
+  usize at = 0;
+  if (receiver.has_value()) {
+    ops.push_back(arg_for(*receiver, settled[0]));
+    at = 1;
+  }
+  for (usize i = 0; i < args.size(); ++i) {
+    Val arg =
+        lower_kept_argument(args[i], settled[at + i], borrowed_places, kept);
+    if (failed || terminated_cur()) {
+      return stopped_value();
+    }
+    ops.push_back(arg_for(arg, settled[at + i]));
+  }
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return stopped_value();
+  }
+  return emit_parametric_call(ops, settled, settled_ret, callee, node.span);
 }
 
 // An `extern "C"` call: the declaration names the symbol the linker
@@ -3440,10 +3512,14 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
     return emit_parametric_call(ops, info.params, info.ret, callee,
                                 method.span);
   }
-  if (target->module < pkg.tree.modules.size() &&
-      pkg.tree.modules[target->module]->is_summary) {
+  const u32 summary = summary_module_of(info.item);
+  if (summary != U32_MAX) {
+    std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
+    for (const ir::TypeIdx arg : info.method_args) {
+      type_args.push_back(arg);
+    }
     return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
-                              target->module, method_args, receiver);
+                              summary, method_args, receiver, type_args);
   }
   const std::vector<u32> comp = comp_positions(info.item);
   if (!comp.empty() && comp[0] == 0) {

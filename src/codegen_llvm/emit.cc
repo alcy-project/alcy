@@ -22,7 +22,6 @@
 #include "debug/fatal.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
-#include "ir/storage.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
@@ -63,6 +62,7 @@ struct EmittedModule {
     // carries its items unwrapped, even one named `main`.
     LlvmIrEmitter emitter(module.get(), std::move(request.storage),
                           request.strings, request.target, request.emit_entry,
+                          request.exported_functions,
                           request.options.freestanding, request.overlay,
                           request.options.profiler, request.options.backtrace,
                           request.instr_spans, request.instr_site_names);

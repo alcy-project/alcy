@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <functional>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -25,6 +27,37 @@
 #include "ir/verifier.h"
 
 namespace ir {
+
+// What appending a storage's tables moved every reference by: a
+// function read from the appended half names its table's base plus the
+// index it had there. The two halves share one index space then, and a
+// name the other half holds was copied into this build's interner
+// (ADR-0079).
+struct StorageBases {
+  u32 types = 0;
+  u32 struct_types = 0;
+  u32 array_types = 0;
+  u32 slice_types = 0;
+  u32 enum_types = 0;
+  u32 enum_variant_types = 0;
+  u32 ref_types = 0;
+  u32 tuple_types = 0;
+  u32 func_types = 0;
+  u32 const_types = 0;
+  u32 registers = 0;
+  u32 immutables = 0;
+  u32 operands = 0;
+  u32 instructions = 0;
+  u32 blocks = 0;
+  u32 block_params = 0;
+  u32 functions = 0;
+  u32 external_functions = 0;
+  u32 parametric_callees = 0;
+  // Where each function of the appended half landed. A function a
+  // symbol answers for is `U32_MAX` here: its code is the package's own
+  // object's, and a reference to it names that symbol (ADR-0078).
+  std::vector<u32> function_map;
+};
 
 class StorageBuilder {
  public:
@@ -89,6 +122,22 @@ class StorageBuilder {
   FunctionIdx function(Function function) {
     return state_.functions.emplace_back(function);
   }
+  // Resolves a function the appended half holds: a symbol means the
+  // code lives in the package's own object and crosses as a call by
+  // that name; no symbol means the body is imported (ADR-0078,
+  // ADR-0079).
+  using SurfaceResolver =
+      std::function<std::optional<str::StringPoolId>(FunctionIdx)>;
+  // Copies every table of `other` after this build's, rewriting each
+  // reference by the base of the table it names. `map_string` copies a
+  // name into this build's interner; a name the other storage's table
+  // holds is remapped through it. A function `surface_of` names by
+  // symbol keeps no body: its row stays a declaration and a call to it
+  // names the symbol.
+  StorageBases append_storage(
+      const Storage& other,
+      const std::function<str::StringPoolId(str::StringPoolId)>& map_string,
+      const SurfaceResolver& surface_of);
   // Backpatches a function's block range: a caller that must see its own
   // index while its body is still being built reserves the row first
   // (the specialization pass does).

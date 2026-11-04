@@ -578,6 +578,118 @@ bool Lowerer::may_end(ir::TypeIdx type) const {
          lowering::type_names_param(builder.state(), type);
 }
 
+u32 Lowerer::summary_module_of(ast::ItemIdx item) const {
+  if (!item.is_valid()) {
+    return U32_MAX;
+  }
+  for (u32 m = 0; m < static_cast<u32>(pkg.tree.modules.size()); ++m) {
+    const analyzer::ModuleNode& module = *pkg.tree.modules[m];
+    if (!module.is_summary) {
+      continue;
+    }
+    for (const ast::ItemIdx candidate : module.items) {
+      if (candidate == item) {
+        return m;
+      }
+      // A method is declared inside the impl the surface spelled, not
+      // in the module's own item list.
+      if (ast.items[candidate].kind != ast::ItemKind::Impl) {
+        continue;
+      }
+      for (const ast::ItemIdx method :
+           ast.items[candidate].payload.get<ast::ItemImpl>().methods) {
+        if (method == item) {
+          return m;
+        }
+      }
+    }
+  }
+  return U32_MAX;
+}
+
+void Lowerer::merge_summary_module(u32 module) {
+  if (failed || merged_modules_.contains(module)) {
+    return;
+  }
+  if (module >= pkg.tree.modules.size() ||
+      pkg.tree.modules[module]->summary_storage == nullptr ||
+      pkg.tree.modules[module]->summary_strings == nullptr) {
+    internal(diag::Span{}, "a summary body has no storage to merge");
+    return;
+  }
+  const analyzer::ModuleNode& node = *pkg.tree.modules[module];
+  const ir::SymbolTable& source_strings = *node.summary_strings;
+  // The functions the summary names by symbol: their code is the
+  // package's own object, so a merged call names the symbol instead of
+  // carrying a copy (ADR-0078).
+  std::unordered_map<u32, str::StringPoolId> surface;
+  for (const analyzer::SummarySymbol& symbol : node.summary_symbols) {
+    if (symbol.function.is_valid() &&
+        symbol.symbol != str::INVALID_STRING_POOL_ID) {
+      surface.emplace(symbol.function.idx, symbol.symbol);
+    }
+  }
+  const u32 functions_before = static_cast<u32>(fns.size());
+  const u32 externals_before =
+      static_cast<u32>(builder.state().external_functions.size());
+  const ir::StorageBases bases = builder.append_storage(
+      *node.summary_storage,
+      [&](str::StringPoolId id) {
+        const std::optional<str::StringPoolId> copied =
+            strings.intern_copied(source_strings.get(id));
+        return copied.value_or(str::INVALID_STRING_POOL_ID);
+      },
+      [&](ir::FunctionIdx function) -> std::optional<str::StringPoolId> {
+        const auto found = surface.find(function.idx);
+        if (found == surface.end()) {
+          return std::nullopt;
+        }
+        return found->second;
+      });
+  // The declarations the merge made are this build's too: a later call
+  // to the same symbol reuses the entry `declare_external` names.
+  for (u32 i = externals_before;
+       i < static_cast<u32>(builder.state().external_functions.size()); ++i) {
+    exts.push_back(
+        {strings.get(builder.state().external_functions[i].meta.name),
+         ir::ExternalFunctionIdx(i)});
+  }
+  // The merged bodies take function indexes like any other. Their
+  // entries carry no source, so nothing lowers them, and `fns` stays
+  // in step with the table every reservation reads.
+  const u32 appended =
+      static_cast<u32>(builder.state().functions.size()) - functions_before;
+  fns.reserve(fns.size() + appended);
+  for (u32 i = 0; i < appended; ++i) {
+    FnEntry merged;
+    merged.idx = ir::FunctionIdx(functions_before + i);
+    fns.push_back(std::move(merged));
+  }
+  // The bodies arrive without spans: a diagnostic names the call the
+  // dependent wrote, and the library's files are not here.
+  instr_spans_.resize(builder.state().instrs.size(), diag::Span{});
+  merged_modules_.emplace(module, bases);
+}
+
+ir::FunctionIdx Lowerer::merge_summary_function(u32 module,
+                                                ir::FunctionIdx function) {
+  if (!function.is_valid() || failed) {
+    return ir::FunctionIdx::invalid();
+  }
+  merge_summary_module(module);
+  if (failed || !merged_modules_.contains(module)) {
+    return ir::FunctionIdx::invalid();
+  }
+  const std::vector<u32>& map = merged_modules_[module].function_map;
+  if (function.idx >= map.size() || map[function.idx] == U32_MAX) {
+    // A function the summary names by symbol is another object's code;
+    // nothing carries it, so nothing here can clone it.
+    internal(diag::Span{}, "a carried body is another object's code");
+    return ir::FunctionIdx::invalid();
+  }
+  return ir::FunctionIdx(map[function.idx]);
+}
+
 ir::OperandIdx Lowerer::use_value(Val v) {
   // Reading the value out is the read the move authorizes, so it has
   // to be emitted before the marker that moves the place.
@@ -2072,7 +2184,10 @@ void Lowerer::run() {
       }
     }
   }
-  const usize comp_prefix = fns.size();
+  // The work list's comp prefix, counted by what is on it: a merged
+  // summary's bodies hold entries in `fns` and never lower here
+  // (ADR-0079).
+  const usize comp_prefix = worklist_.size();
   // Seed every checked non-comp signature so bodies without call
   // sites still reach codegen. A generic impl contributes one
   // signature per instantiation, keyed by its self type.
@@ -2502,20 +2617,30 @@ ir::SummaryKind summary_kind_of(ir::SymbolKind kind) {
 }
 
 // The nominal an associated function or method belongs to, found by the
-// item the checked method tables recorded for it.
+// item the checked method tables recorded for it. A generic impl's
+// declaration-shaped owner is the one whose type names a parameter; a
+// concrete instantiation is the fallback (ADR-0079).
 ir::TypeIdx method_owner_of(const analyzer::CheckedPackage& pkg,
                             u32 mod,
-                            ast::ItemIdx item) {
+                            ast::ItemIdx item,
+                            const ir::StorageState& state) {
   if (mod >= pkg.modules.size()) {
     return ir::TypeIdx(base::INVALID_IDX);
   }
+  ir::TypeIdx found = ir::TypeIdx(base::INVALID_IDX);
   for (const analyzer::CheckedModule::MethodInfo& info :
        pkg.modules[mod].methods) {
-    if (info.item == item) {
+    if (info.item != item || !info.self_type.is_valid()) {
+      continue;
+    }
+    if (type_names_param(state, info.self_type)) {
       return info.self_type;
     }
+    if (!found.is_valid()) {
+      found = info.self_type;
+    }
   }
-  return ir::TypeIdx(base::INVALID_IDX);
+  return found;
 }
 
 // The nominal a declaration interned, found by the item the checked
@@ -2545,13 +2670,116 @@ ir::TypeIdx nominal_type_of(const analyzer::CheckedPackage& pkg,
   return ir::TypeIdx(base::INVALID_IDX);
 }
 
+// The declaration-shaped type a generic nominal's row names: the
+// instance the parametric bodies were built with, whose arguments are
+// the item's own parameters, in order (ADR-0079).
+ir::TypeIdx generic_declaration_type(const ir::StorageState& state,
+                                     bool is_struct,
+                                     str::StringPoolId name) {
+  const auto declared = [&](ir::TypeIdxRange params) {
+    if (params.size() == 0) {
+      return false;
+    }
+    for (u32 i = 0; i < params.size(); ++i) {
+      const ir::TypeIdx param(params.head().idx + i);
+      if (state.types[param].tag != ir::TypeTag::Param ||
+          state.types[param].as_param().value != i) {
+        return false;
+      }
+    }
+    return true;
+  };
+  for (u32 i = 0; i < static_cast<u32>(state.types.size()); ++i) {
+    const ir::TypeNode& node = state.types[ir::TypeIdx(i)];
+    if (is_struct) {
+      if (node.tag != ir::TypeTag::Struct) {
+        continue;
+      }
+      const ir::StructType& shape = state.struct_types[node.as_struct()];
+      if (shape.name == name && declared(shape.params)) {
+        return ir::TypeIdx(i);
+      }
+      continue;
+    }
+    if (node.tag != ir::TypeTag::Enum) {
+      continue;
+    }
+    const ir::EnumType& shape = state.enum_types[node.as_enum()];
+    if (shape.name == name && declared(shape.params)) {
+      return ir::TypeIdx(i);
+    }
+  }
+  return ir::TypeIdx(base::INVALID_IDX);
+}
+
+// The owner an impl's method rows name, read from the impl's target:
+// the declaration-shaped instance for a generic impl, the interned one
+// for a concrete impl (ADR-0079).
+ir::TypeIdx impl_owner_of(const analyzer::CheckedPackage& pkg,
+                          const ast::AstArena& ast,
+                          const ir::StorageState& state,
+                          ir::SymbolTable& strings,
+                          u32 mod,
+                          ast::ItemIdx impl_item) {
+  if (mod >= pkg.modules.size() || !impl_item.is_valid()) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  const ast::ItemImpl& impl = ast.items[impl_item].payload.get<ast::ItemImpl>();
+  if (!impl.type.is_valid() ||
+      ast.types[impl.type].kind != ast::TypeKind::Path) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  const ast::TypePath& path = ast.types[impl.type].payload.get<ast::TypePath>();
+  const std::span<const ast::Ident> segments = ast.paths[path.path].segments;
+  if (segments.empty()) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  const std::string_view name = segments.back().name;
+  const str::StringPoolId type_name = strings.intern(name);
+  // A generic impl's declaration-shaped instance first.
+  ir::TypeIdx generic = generic_declaration_type(state, true, type_name);
+  if (!generic.is_valid()) {
+    generic = generic_declaration_type(state, false, type_name);
+  }
+  if (generic.is_valid()) {
+    return generic;
+  }
+  // A concrete impl: the nominal item the module declares, by name.
+  for (ast::ItemIdx item : pkg.tree.modules[mod]->items) {
+    const ast::ItemNode& node = ast.items[item];
+    const bool is_struct = node.kind == ast::ItemKind::Struct;
+    if (!is_struct && node.kind != ast::ItemKind::Enum) {
+      continue;
+    }
+    const std::string_view declared =
+        is_struct ? node.payload.get<ast::ItemStruct>().name.name
+                  : node.payload.get<ast::ItemEnum>().name.name;
+    if (declared == name) {
+      return nominal_type_of(pkg, mod, item, is_struct);
+    }
+  }
+  return ir::TypeIdx(base::INVALID_IDX);
+}
+
 std::vector<ir::SummaryEntry> collect_summary(
     const analyzer::CheckedPackage& pkg,
     const ast::AstArena& ast,
     const std::vector<Lowerer::FnEntry>& fns,
+    const ir::StorageState& state,
     ir::SymbolTable& strings,
     std::vector<std::vector<ir::SummaryField>>& summary_fields) {
   std::vector<ir::SummaryEntry> summary;
+  // The parametric body a generic row carries: the definition-site body
+  // a dependent's specialization clones (ADR-0079). An item whose body
+  // stays per-instantiation (`Fn`-bounded, ADR-0116) has none.
+  const auto parametric_body = [&fns](ast::ItemIdx item) -> ir::FunctionIdx {
+    for (const Lowerer::FnEntry& entry : fns) {
+      if (entry.parametric && entry.item == item) {
+        return entry.idx;
+      }
+    }
+    return ir::FunctionIdx(base::INVALID_IDX);
+  };
   for (const Lowerer::FnEntry& entry : fns) {
     if (entry.closure.is_valid() || !entry.item.is_valid() ||
         entry.inst != analyzer::NO_INST) {
@@ -2572,7 +2800,7 @@ std::vector<ir::SummaryEntry> collect_summary(
         .path = strings.intern(pkg.tree.modules[entry.mod]->path),
         .owner = entry.kind == ir::SymbolKind::Free
                      ? ir::TypeIdx(base::INVALID_IDX)
-                     : method_owner_of(pkg, entry.mod, entry.item),
+                     : method_owner_of(pkg, entry.mod, entry.item, state),
         .kind = summary_kind_of(entry.kind)});
   }
   for (u32 mod = 0; mod < pkg.tree.modules.size(); ++mod) {
@@ -2582,7 +2810,10 @@ std::vector<ir::SummaryEntry> collect_summary(
     const str::StringPoolId path = strings.intern(pkg.tree.modules[mod]->path);
     for (ast::ItemIdx item : pkg.tree.modules[mod]->items) {
       const ast::ItemNode& node = ast.items[item];
-      if (!node.is_pub) {
+      // An impl carries no visibility of its own: its methods say what
+      // crosses, and a generic impl's methods have no lowered entry to
+      // take a row from (ADR-0079).
+      if (!node.is_pub && node.kind != ast::ItemKind::Impl) {
         continue;
       }
       if (node.kind == ast::ItemKind::Struct ||
@@ -2594,8 +2825,12 @@ std::vector<ir::SummaryEntry> collect_summary(
         const std::string_view name =
             is_struct ? node.payload.get<ast::ItemStruct>().name.name
                       : node.payload.get<ast::ItemEnum>().name.name;
+        // A generic declaration's shape exists only per instantiation;
+        // the instance the parametric bodies were built with is the
+        // declaration-shaped one (ADR-0079).
+        const str::StringPoolId type_name = strings.intern(name);
         const ir::TypeIdx type =
-            generic ? ir::TypeIdx(base::INVALID_IDX)
+            generic ? generic_declaration_type(state, is_struct, type_name)
                     : nominal_type_of(pkg, mod, item, is_struct);
         // A struct's field names ride with the row: without them a
         // dependent cannot spell the declaration's fields.
@@ -2618,7 +2853,7 @@ std::vector<ir::SummaryEntry> collect_summary(
             .path = path,
             .fields = field_names,
             .kind = is_struct ? ir::SummaryKind::Struct : ir::SummaryKind::Enum,
-            .needs_body = generic || !type.is_valid()});
+            .needs_body = !type.is_valid()});
         continue;
       }
       if (node.kind == ast::ItemKind::Fn) {
@@ -2626,12 +2861,12 @@ std::vector<ir::SummaryEntry> collect_summary(
         if (fn.generic.empty() || !fn.body.is_valid() || fn.is_comp) {
           continue;
         }
-        summary.push_back(
-            ir::SummaryEntry{.function = ir::FunctionIdx(base::INVALID_IDX),
-                             .name = strings.intern(fn.name.name),
-                             .path = path,
-                             .kind = ir::SummaryKind::Free,
-                             .needs_body = true});
+        const ir::FunctionIdx body = parametric_body(item);
+        summary.push_back(ir::SummaryEntry{.function = body,
+                                           .name = strings.intern(fn.name.name),
+                                           .path = path,
+                                           .kind = ir::SummaryKind::Free,
+                                           .needs_body = !body.is_valid()});
         continue;
       }
       if (node.kind != ast::ItemKind::Impl) {
@@ -2647,14 +2882,15 @@ std::vector<ir::SummaryEntry> collect_summary(
         if (fn.is_comp || (impl.params.empty() && fn.generic.empty())) {
           continue;
         }
+        const ir::FunctionIdx body = parametric_body(method);
         summary.push_back(ir::SummaryEntry{
-            .function = ir::FunctionIdx(base::INVALID_IDX),
+            .function = body,
             .name = strings.intern(fn.name.name),
             .path = path,
-            .owner = method_owner_of(pkg, mod, method),
+            .owner = impl_owner_of(pkg, ast, state, strings, mod, item),
             .kind = takes_receiver(ast, fn) ? ir::SummaryKind::Method
                                             : ir::SummaryKind::Assoc,
-            .needs_body = true});
+            .needs_body = !body.is_valid()});
       }
     }
   }
@@ -2673,13 +2909,27 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     const source::SourceManager* sources) {
   Lowerer lowerer(std::move(package), width, ast, strings, bag, profiler);
   lowerer.sources = sources;
+  // A dependency with no sources carries its generic bodies in the
+  // summary: merging them before any body is lowered keeps every index
+  // this build hands out after the merged tables, so the pass can clone
+  // a carried body beside the dependent's own code (ADR-0079).
+  for (u32 m = 0; m < static_cast<u32>(lowerer.pkg.tree.modules.size()); ++m) {
+    if (lowerer.pkg.tree.modules[m]->is_summary &&
+        lowerer.pkg.tree.modules[m]->summary_storage != nullptr) {
+      lowerer.merge_summary_module(m);
+    }
+  }
+  if (lowerer.failed) {
+    return base::make_err(diag::Reported{});
+  }
   lowerer.run();
   if (lowerer.failed) {
     return base::make_err(diag::Reported{});
   }
   std::vector<std::vector<ir::SummaryField>> summary_fields;
   std::vector<ir::SummaryEntry> summary =
-      collect_summary(lowerer.pkg, ast, lowerer.fns, strings, summary_fields);
+      collect_summary(lowerer.pkg, ast, lowerer.fns, lowerer.builder.state(),
+                      strings, summary_fields);
   // Side tables move out before the builder, which finish() consumes. The
   // spans are one per instruction, so they are renumbered with the table.
   lowerer.compact_instrs();

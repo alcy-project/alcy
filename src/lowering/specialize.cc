@@ -117,11 +117,11 @@ bool comparison_opcode(ir::Opcode op) {
 
 }  // namespace
 
-void Lowerer::specialization_key(ast::ItemIdx item,
+void Lowerer::specialization_key(ir::FunctionIdx source,
                                  const std::vector<ir::TypeIdx>& args,
                                  std::string& key) {
   key.clear();
-  append_index(key, item.idx, '|');
+  append_index(key, source.idx, '|');
   for (const ir::TypeIdx arg : args) {
     // Two call sites may hand the same type as different storage
     // copies; the identity that memoizes the clone is the type, not
@@ -547,18 +547,23 @@ ir::FunctionIdx Lowerer::specialize_generic(
     ast::ItemIdx item,
     const std::vector<ir::TypeIdx>& args,
     diag::Span span) {
-  specialization_key(item, args, specialization_key_scratch_);
-  const auto found = specialization_by_key_.find(
-      std::string_view(specialization_key_scratch_));
-  if (found != specialization_by_key_.end()) {
-    return ir::FunctionIdx(found->second);
-  }
   const auto parametric = parametric_fn_by_item_.find(item.idx);
   if (parametric == parametric_fn_by_item_.end()) {
     internal(span, "a generic call has no parametric body");
     return ir::FunctionIdx::invalid();
   }
-  const ir::Function source = builder.state().functions[parametric->second];
+  return specialize_body(ir::FunctionIdx(parametric->second), args);
+}
+
+ir::FunctionIdx Lowerer::specialize_body(ir::FunctionIdx source_idx,
+                                         const std::vector<ir::TypeIdx>& args) {
+  specialization_key(source_idx, args, specialization_key_scratch_);
+  const auto found = specialization_by_key_.find(
+      std::string_view(specialization_key_scratch_));
+  if (found != specialization_by_key_.end()) {
+    return ir::FunctionIdx(found->second);
+  }
+  const ir::Function source = builder.state().functions[source_idx];
   // The substitutions run first: one may intern new types, and the
   // copies the range holds must stay consecutive.
   std::vector<ir::TypeIdx> substituted_params;
@@ -589,13 +594,18 @@ ir::FunctionIdx Lowerer::specialize_generic(
   // Memoize before cloning: a recursive instantiation reaches its own
   // clone by key while the body is still being built.
   specialization_by_key_.emplace(specialization_key_scratch_, clone.idx);
-  const u32 module = fns[parametric->second.idx].mod;
-  if (module < pkg.tree.modules.size() && pkg.tree.modules[module]->is_staged) {
-    // A clone of a staged item stands for no source function either,
-    // and a reported count excludes it (ADR-0079).
-    builder.add_prelude_specialization(clone);
+  // A clone of a staged item is no source function either, and a
+  // reported count excludes it (ADR-0079). A body carried from a
+  // summary has no entry here; its clone counts with the dependent's
+  // own functions.
+  if (source_idx.idx < fns.size()) {
+    const u32 module = fns[source_idx.idx].mod;
+    if (module < pkg.tree.modules.size() &&
+        pkg.tree.modules[module]->is_staged) {
+      builder.add_prelude_specialization(clone);
+    }
   }
-  clone_body(parametric->second, clone, args);
+  clone_body(source_idx, clone, args);
   return clone;
 }
 
@@ -993,12 +1003,11 @@ ir::FunctionIdx Lowerer::resolve_callee(ir::ParametricCalleeIdx callee,
     args.push_back(subst != nullptr ? substitute_type(arg, *subst) : arg);
   }
   if (row.kind == ir::ParametricCalleeKind::Generic) {
-    const auto item = parametric_item_by_fn_.find(row.function.idx);
-    if (item == parametric_item_by_fn_.end()) {
-      internal(span, "a generic callee names no item");
+    if (!row.function.is_valid()) {
+      internal(span, "a generic callee names no body");
       return ir::FunctionIdx::invalid();
     }
-    return specialize_generic(ast::ItemIdx(item->second), args, span);
+    return specialize_body(row.function, args);
   }
   if (args.size() != 1) {
     internal(span, "a dispatch names one receiver");
@@ -1037,9 +1046,9 @@ void Lowerer::specialize() {
     return;
   }
   if (!specialize_indexes_ready_) {
-    for (const auto& [item, function] : parametric_fn_by_item_) {
-      (void)item;
-      parametric_item_by_fn_.emplace(function.idx, fns[function.idx].item.idx);
+    for (const ir::FunctionIdx function :
+         builder.state().parametric_functions) {
+      parametric_functions_.insert(function.idx);
     }
     for (const auto& [type, info] : structs_) {
       struct_instances_[info->item.idx].emplace_back(type);
@@ -1054,7 +1063,7 @@ void Lowerer::specialize() {
   // copied while the resolve may append to the tables it came from.
   const usize function_count = builder.state().functions.size();
   for (usize f = 0; f < function_count && !failed; ++f) {
-    if (parametric_item_by_fn_.count(static_cast<u32>(f)) != 0) {
+    if (parametric_functions_.count(static_cast<u32>(f)) != 0) {
       continue;
     }
     const ir::Function function = builder.state().functions[ir::FunctionIdx(f)];

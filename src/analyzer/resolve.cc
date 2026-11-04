@@ -304,6 +304,8 @@ class Resolver {
       modules[root]->is_summary = input.input.id == source::UNKNOWN_FILE;
       modules[root]->summary_symbols = input.input.summary_symbols;
       modules[root]->summary_generic_names = input.input.summary_generic_names;
+      modules[root]->summary_storage = input.input.summary_storage;
+      modules[root]->summary_strings = input.input.summary_strings;
       return;
     }
     u32 parent = root_module;
@@ -329,6 +331,8 @@ class Resolver {
           modules[child]->summary_symbols = input.input.summary_symbols;
           modules[child]->summary_generic_names =
               input.input.summary_generic_names;
+          modules[child]->summary_storage = input.input.summary_storage;
+          modules[child]->summary_strings = input.input.summary_strings;
         }
         if (out_of_arena) {
           return;

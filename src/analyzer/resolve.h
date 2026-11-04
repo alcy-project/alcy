@@ -16,6 +16,9 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "i18n/messages.h"
+#include "ir/common.h"
+#include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "path/path.h"
 #include "source/source.h"
 
@@ -91,6 +94,10 @@ struct SummarySymbol {
   str::StringPoolId name = str::INVALID_STRING_POOL_ID;
   str::StringPoolId symbol = str::INVALID_STRING_POOL_ID;
   ast::ItemIdx item = ast::ItemIdx::invalid();
+  // The parametric body the row named, in the summary's own storage: a
+  // dependent clones it for an instantiation (ADR-0079). Invalid for a
+  // signature with no body or one a symbol links.
+  ir::FunctionIdx function = ir::FunctionIdx(base::INVALID_IDX);
 };
 
 struct ModuleNode {
@@ -119,6 +126,10 @@ struct ModuleNode {
   // dependent that reaches one is told what it is, rather than reading
   // that the item does not exist.
   std::span<const std::string_view> summary_generic_names;
+  // The storage a summary answered for and the interner its ids
+  // resolve in (ADR-0079); null for a module whose sources resolved.
+  const ir::Storage* summary_storage = nullptr;
+  const ir::SymbolTable* summary_strings = nullptr;
 };
 
 // What a trace row for a module reads: the path the tree gave it, or the
@@ -247,6 +258,12 @@ struct ModuleInput {
   // module.
   // NOLINTNEXTLINE(readability-redundant-member-init)
   std::span<const std::string_view> summary_generic_names = {};
+  // The storage a summary answered for: a generic body it carries is
+  // merged from there, so a dependent instantiates it (ADR-0079).
+  // Null for a module whose own sources resolved.
+  const ir::Storage* summary_storage = nullptr;
+  // The interner the summary's ids resolve in.
+  const ir::SymbolTable* summary_strings = nullptr;
 };
 
 // One module input and the syntax the parser made of its file. Lexing,

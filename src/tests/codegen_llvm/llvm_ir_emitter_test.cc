@@ -1156,6 +1156,7 @@ TEST_CASE("Emit with backtrace names the entry for the walk") {
   ir::VerifiedStorage storage = std::move(builder).build().unwrap();
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/true,
+                        /*exported_functions=*/{},
                         /*freestanding=*/false, /*overlay=*/nullptr,
                         /*profiler=*/nullptr, /*backtrace=*/true);
 
@@ -1277,6 +1278,7 @@ TEST_CASE("Emit with backtrace records call sites") {
 
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/false,
+                        /*exported_functions=*/{},
                         /*freestanding=*/false, /*overlay=*/nullptr,
                         /*profiler=*/nullptr, /*backtrace=*/true, spans, sites);
 
@@ -1321,6 +1323,7 @@ TEST_CASE("Emit without backtrace records no call sites") {
 
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
                         host_target(), /*emit_entry=*/false,
+                        /*exported_functions=*/{},
                         /*freestanding=*/false, /*overlay=*/nullptr,
                         /*profiler=*/nullptr, /*backtrace=*/false, spans,
                         sites);
@@ -1345,8 +1348,8 @@ TEST_CASE("A checked build emits the overflow check") {
   ir::VerifiedStorage storage = add_one_ir(&interner);
   overlay::Overlay checks = overlay::build(*storage, true, {});
   LlvmIrEmitter emitter(module.get(), std::move(storage), &interner,
-                        host_target(), true, /*freestanding=*/false,
-                        /*overlay=*/&checks);
+                        host_target(), true, /*exported_functions=*/{},
+                        /*freestanding=*/false, /*overlay=*/&checks);
   std::move(emitter).emit();
 
   CHECK(!llvm::verifyModule(*module));

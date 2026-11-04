@@ -26,6 +26,7 @@
 #include "fpag/io/temp_dir.h"
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
+#include "ir/common.h"
 #include "ir/function.h"
 #include "ir/serialize.h"
 #include "ir/storage.h"
@@ -310,6 +311,8 @@ base::Result<void, diag::Reported> check_emission(PipelineContext& ctx,
 struct Emission {
   std::vector<str::StringPoolId> site_names;
   overlay::Overlay checks;
+  // A library's surface functions, by index: what a dependent links by.
+  std::vector<ir::FunctionIdx> exported_functions;
   std::optional<codegen::EmitRequest> request;
 
   Emission(PipelineContext& ctx,
@@ -331,6 +334,24 @@ struct Emission {
     if (profile.overflow_checks) {
       checks = overlay::build(*package.storage, true, site_names);
     }
+    // A summary row with code is what a dependent links by name
+    // (ADR-0078); a parametric body is cloned from the summary instead
+    // (ADR-0079). Everything else in a library object stays this
+    // object's own code.
+    const std::vector<ir::FunctionIdx>& parametric =
+        package.storage->parametric_functions();
+    for (const ir::SummaryEntry& row : package.summary) {
+      if (!row.function.is_valid()) {
+        continue;
+      }
+      bool carried = false;
+      for (const ir::FunctionIdx fn : parametric) {
+        carried = carried || fn.idx == row.function.idx;
+      }
+      if (!carried) {
+        exported_functions.push_back(row.function);
+      }
+    }
     request = codegen::EmitRequest{
         .storage = std::move(package.storage),
         .instr_spans = package.instr_spans,
@@ -341,6 +362,7 @@ struct Emission {
         .bag = &ctx.bag,
         .target = ctx.target,
         .emit_entry = !is_lib,
+        .exported_functions = exported_functions,
         .overlay = profile.overflow_checks ? &checks : nullptr,
         .kind = kind,
         .options =
@@ -545,8 +567,19 @@ std::vector<u8> serialize_package_ir(PipelineContext& ctx,
              : std::span<const ir::SummaryEntry>();
   // Each row with code names the symbol a dependent links against.
   std::vector<ir::SummaryEntry> rows(summary.begin(), summary.end());
+  const std::vector<ir::FunctionIdx>& parametric =
+      package.storage->parametric_functions();
   for (ir::SummaryEntry& row : rows) {
     if (!row.function.is_valid()) {
+      continue;
+    }
+    // A parametric body has no ABI to link by; a dependent clones it
+    // from the carried storage instead (ADR-0079).
+    bool parametric_body = false;
+    for (const ir::FunctionIdx fn : parametric) {
+      parametric_body = parametric_body || fn.idx == row.function.idx;
+    }
+    if (parametric_body) {
       continue;
     }
     const std::string symbol = linkable_symbol(ctx, package, row);
