@@ -11,6 +11,7 @@
 
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/name.h"
 #include "comp/comp_value.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -75,7 +76,7 @@ bool CompEvaluator::struct_field_index(ir::TypeIdx type,
   }
   const auto& fields = info->fields;
   for (u32 i = 0; i < static_cast<u32>(fields.size()); ++i) {
-    if (fields[i] == name) {
+    if (base::same_name(fields[i], name)) {
       index_out = i;
       return true;
     }
@@ -92,7 +93,7 @@ bool CompEvaluator::variant_index(ir::TypeIdx enum_type,
   }
   const CheckedModule::EnumInfo* info = found->second;
   for (u32 i = 0; i < static_cast<u32>(info->variants.size()); ++i) {
-    if (info->variants[i] == name) {
+    if (base::same_name(info->variants[i], name)) {
       index_out = i;
       return true;
     }

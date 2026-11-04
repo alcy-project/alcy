@@ -16,6 +16,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/name.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/idx.h"
@@ -36,7 +37,7 @@ SpecEntry* Checker::find_spec(u32 module, std::string_view name) {
   }
   for (u32 pos : specs_of_module[module]) {
     SpecEntry& entry = specs[pos];
-    if (entry.name == name) {
+    if (base::same_name(entry.name, name)) {
       return &entry;
     }
   }

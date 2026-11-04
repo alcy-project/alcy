@@ -673,7 +673,7 @@ bool Lowerer::struct_field_index(ir::TypeIdx type,
     return name_index_of(origin.idx, fields, name, index_out);
   }
   for (u32 i = 0; i < static_cast<u32>(fields.size()); ++i) {
-    if (fields[i] == name) {
+    if (base::same_name(fields[i], name)) {
       index_out = i;
       return true;
     }
@@ -874,7 +874,7 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     // Comp bindings never take runtime addresses; splice the value.
     for (usize i = comp_scope_.size(); i-- > 0;) {
-      if (comp_scope_[i].first == name) {
+      if (base::same_name(comp_scope_[i].first, name)) {
         return comp_lowering_.materialize(comp_scope_[i].second, node.span);
       }
     }
@@ -1024,7 +1024,7 @@ bool Lowerer::variant_index(ir::TypeIdx enum_type,
     return name_index_of(type_origin(enum_type).idx, names, name, index_out);
   }
   for (u32 i = 0; i < static_cast<u32>(names.size()); ++i) {
-    if (names[i] == name) {
+    if (base::same_name(names[i], name)) {
       index_out = i;
       return true;
     }

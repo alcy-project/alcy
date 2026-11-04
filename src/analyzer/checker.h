@@ -1077,7 +1077,7 @@ class Checker {
     }
     u32 walk = 0;
     for (const ast::ItemStructField& field : fields) {
-      if (field.name.name == name) {
+      if (base::same_name(field.name.name, name)) {
         index = walk;
         is_pub = field.is_pub;
         span = field.name.span;
@@ -1097,7 +1097,9 @@ class Checker {
       return indexed_method(impl_item, name);
     }
     for (ast::ItemIdx method_item : impl.methods) {
-      if (ast.items[method_item].payload.get<ast::ItemFn>().name.name == name) {
+      if (base::same_name(
+              ast.items[method_item].payload.get<ast::ItemFn>().name.name,
+              name)) {
         return method_item;
       }
     }
