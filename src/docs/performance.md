@@ -285,6 +285,36 @@ Decision 4 makes the call at the boundary the guarantee, so a release build
 that skips it changes what the compiler promises; that is an amendment to
 ADR-0015, not a commit that deletes three lines.
 
+## What the loader costs
+
+Every function pointer and vtable a statically linked library contributes to a
+position-independent executable becomes a relocation the loader resolves before
+`main` runs. The binary carries 132,703 of them, 3.2 MB of `.rela.dyn`, and
+resolving them costs 1.6M instructions in every run:
+
+| run | position independent | linked `-no-pie` | |
+| --- | --- | --- | --- |
+| `check`, 1 module | 4.50M | 2.91M | -35.3% |
+| `check`, 101 modules | 40.41M | 38.82M | -3.9% |
+| `lint`, 101 modules | 43.76M | 42.17M | -3.6% |
+| `fmt --check`, 101 modules | 43.10M | 41.52M | -3.7% |
+| `check`, 301 modules | 113.04M | 111.46M | -1.4% |
+| `check`, 1201 modules | 440.21M | 438.61M | -0.4% |
+
+The saving is the same 1.59M in every row; only its share changes. Peak RSS
+falls with it by 3.6 MiB at any size, because the relocation table and the
+pages the loader writes are gone, and the binary loses 3.0 MiB.
+
+`-Wl,--pack-dyn-relocs=relr` keeps the relocations and stores them as 21 KB of
+bitmaps the loader walks instead. It is refused at start-up - `DT_RELR without
+GLIBC_ABI_DT_RELR dependency` - unless lld found that version on the libc it
+linked against, and this host's `libc.so.6` does not export it.
+
+Both are link flags. `-no-pie` trades the address-space randomization of the
+executable image for the 1.59M, which belongs to the distribution rather than
+to a change made in passing; the table is here so that it can be decided on
+numbers.
+
 ## What the formatter costs
 
 `fmt` costs more than `check` on the same corpus (`473.97M` against
