@@ -293,9 +293,6 @@ class Parser {
   ast::PatternIdx parse_primary_pattern();
   ast::ExprIdx parse_expr();
   ast::ExprIdx parse_range();
-  ast::ExprIdx parse_or();
-  ast::ExprIdx parse_and();
-  ast::ExprIdx parse_cmp();
   ast::ExprIdx parse_binary(u8 min_prec);
   ast::ExprIdx parse_cast();
   ast::ExprIdx parse_unary();

@@ -48,44 +48,72 @@ bool starts_range_end(lexer::TokenKind kind) {
   }
 }
 
-// The binary operators below comparison, indexed by the token that spells them:
-// the binding power sits in the low nibble, one step per level of the grammar
-// from `|` to `**`, a zero power is a token no binary operator spells, and the
-// high byte is the operator the node carries. `**` alone groups to the right.
+// The binary operators, indexed by the token that spells them: the binding
+// power sits in the low nibble, one step per level of the grammar from `||` to
+// `**`, a zero power is a token no binary operator spells, and the high byte is
+// the operator the node carries. `**` alone groups to the right; a comparison
+// cannot group at all, so `a < b < c` stays a syntax error.
 constexpr u16 BINARY_PREC_MASK = 0x0F;
 constexpr u16 BINARY_RIGHT_ASSOC = 0x10;
-constexpr u8 BINARY_PREC_BIT_OR = 4;
+constexpr u16 BINARY_NONASSOC = 0x20;
+// The lowest binding power: an operator of higher power is one no binary
+// expression leaves for its caller.
+constexpr u8 BINARY_PREC_LOWEST = 1;
 
-constexpr u16 binary_entry(ast::BinaryOp op, u8 prec, bool right_assoc) {
+enum class Assoc : u8 { Left, Right, None };
+
+constexpr u16 assoc_flag(Assoc assoc) {
+  return assoc == Assoc::Right  ? BINARY_RIGHT_ASSOC
+         : assoc == Assoc::None ? BINARY_NONASSOC
+                                : 0;
+}
+
+constexpr u16 binary_entry(ast::BinaryOp op, u8 prec, Assoc assoc) {
   return static_cast<u16>(static_cast<u16>(op) << 8) |
-         static_cast<u16>(
-             static_cast<u16>(right_assoc ? BINARY_RIGHT_ASSOC : 0) | prec);
+         static_cast<u16>(assoc_flag(assoc) | prec);
 }
 
 constexpr std::array<u16, 256> binary_op_table() {
   std::array<u16, 256> table{};
-  table[static_cast<u8>(lexer::TokenKind::Pipe)] =
-      binary_entry(ast::BinaryOp::BitOr, 4, false);
-  table[static_cast<u8>(lexer::TokenKind::Caret)] =
-      binary_entry(ast::BinaryOp::BitXor, 5, false);
-  table[static_cast<u8>(lexer::TokenKind::Amp)] =
-      binary_entry(ast::BinaryOp::BitAnd, 6, false);
-  table[static_cast<u8>(lexer::TokenKind::LessLess)] =
-      binary_entry(ast::BinaryOp::Shl, 7, false);
-  table[static_cast<u8>(lexer::TokenKind::GreaterGreater)] =
-      binary_entry(ast::BinaryOp::Shr, 7, false);
-  table[static_cast<u8>(lexer::TokenKind::Plus)] =
-      binary_entry(ast::BinaryOp::Add, 8, false);
-  table[static_cast<u8>(lexer::TokenKind::Minus)] =
-      binary_entry(ast::BinaryOp::Sub, 8, false);
-  table[static_cast<u8>(lexer::TokenKind::Star)] =
-      binary_entry(ast::BinaryOp::Mul, 9, false);
-  table[static_cast<u8>(lexer::TokenKind::Slash)] =
-      binary_entry(ast::BinaryOp::Div, 9, false);
-  table[static_cast<u8>(lexer::TokenKind::Percent)] =
-      binary_entry(ast::BinaryOp::Mod, 9, false);
-  table[static_cast<u8>(lexer::TokenKind::StarStar)] =
-      binary_entry(ast::BinaryOp::Pow, 10, true);
+  using lexer::TokenKind;
+  table[static_cast<u8>(TokenKind::PipePipe)] =
+      binary_entry(ast::BinaryOp::Or, 2, Assoc::Left);
+  table[static_cast<u8>(TokenKind::AmpAmp)] =
+      binary_entry(ast::BinaryOp::And, 3, Assoc::Left);
+  table[static_cast<u8>(TokenKind::EqEq)] =
+      binary_entry(ast::BinaryOp::Eq, 4, Assoc::None);
+  table[static_cast<u8>(TokenKind::BangEq)] =
+      binary_entry(ast::BinaryOp::NotEq, 4, Assoc::None);
+  table[static_cast<u8>(TokenKind::Less)] =
+      binary_entry(ast::BinaryOp::Lt, 4, Assoc::None);
+  table[static_cast<u8>(TokenKind::LessEq)] =
+      binary_entry(ast::BinaryOp::LtEq, 4, Assoc::None);
+  table[static_cast<u8>(TokenKind::Greater)] =
+      binary_entry(ast::BinaryOp::Gt, 4, Assoc::None);
+  table[static_cast<u8>(TokenKind::GreaterEq)] =
+      binary_entry(ast::BinaryOp::GtEq, 4, Assoc::None);
+  table[static_cast<u8>(TokenKind::Pipe)] =
+      binary_entry(ast::BinaryOp::BitOr, 5, Assoc::Left);
+  table[static_cast<u8>(TokenKind::Caret)] =
+      binary_entry(ast::BinaryOp::BitXor, 6, Assoc::Left);
+  table[static_cast<u8>(TokenKind::Amp)] =
+      binary_entry(ast::BinaryOp::BitAnd, 7, Assoc::Left);
+  table[static_cast<u8>(TokenKind::LessLess)] =
+      binary_entry(ast::BinaryOp::Shl, 8, Assoc::Left);
+  table[static_cast<u8>(TokenKind::GreaterGreater)] =
+      binary_entry(ast::BinaryOp::Shr, 8, Assoc::Left);
+  table[static_cast<u8>(TokenKind::Plus)] =
+      binary_entry(ast::BinaryOp::Add, 9, Assoc::Left);
+  table[static_cast<u8>(TokenKind::Minus)] =
+      binary_entry(ast::BinaryOp::Sub, 9, Assoc::Left);
+  table[static_cast<u8>(TokenKind::Star)] =
+      binary_entry(ast::BinaryOp::Mul, 10, Assoc::Left);
+  table[static_cast<u8>(TokenKind::Slash)] =
+      binary_entry(ast::BinaryOp::Div, 10, Assoc::Left);
+  table[static_cast<u8>(TokenKind::Percent)] =
+      binary_entry(ast::BinaryOp::Mod, 10, Assoc::Left);
+  table[static_cast<u8>(TokenKind::StarStar)] =
+      binary_entry(ast::BinaryOp::Pow, 11, Assoc::Right);
   return table;
 }
 
@@ -105,7 +133,7 @@ ast::ExprIdx Parser::parse_range() {
   const usize mark = pos_;
   ast::ExprIdx start = ast::ExprIdx::invalid();
   if (!is_range_op(peek_kind())) {
-    start = parse_or();
+    start = parse_binary(BINARY_PREC_LOWEST);
     if (!start.is_valid()) {
       return ast::ExprIdx::invalid();
     }
@@ -121,7 +149,7 @@ ast::ExprIdx Parser::parse_range() {
       starts_range_end(peek_kind()) &&
       (allow_brace_range_end_ || peek_kind() != lexer::TokenKind::LBrace);
   if (opens_end) {
-    end = parse_or();
+    end = parse_binary(BINARY_PREC_LOWEST);
     if (!end.is_valid()) {
       return ast::ExprIdx::invalid();
     }
@@ -150,97 +178,27 @@ ast::ExprIdx Parser::parse_range() {
   return ast_.exprs.push_back(node);
 }
 
-ast::ExprIdx Parser::parse_or() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_and();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (match(lexer::TokenKind::PipePipe)) {
-    ast::ExprIdx rhs = parse_and();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = ast::BinaryOp::Or,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-  return lhs;
-}
-
-ast::ExprIdx Parser::parse_and() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_cmp();
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  while (match(lexer::TokenKind::AmpAmp)) {
-    ast::ExprIdx rhs = parse_cmp();
-    if (!rhs.is_valid()) {
-      return ast::ExprIdx::invalid();
-    }
-    ast::ExprNode node;
-    node.kind = ast::ExprKind::Binary;
-    node.span = span_from(mark);
-    node.payload.set(ast::ExprBinary{
-        .op = ast::BinaryOp::And,
-        .lhs = lhs,
-        .rhs = rhs,
-    });
-    lhs = ast_.exprs.push_back(node);
-  }
-  return lhs;
-}
-
-ast::ExprIdx Parser::parse_cmp() {
-  const usize mark = pos_;
-  ast::ExprIdx lhs = parse_binary(BINARY_PREC_BIT_OR);
-  if (!lhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  ast::BinaryOp op = ast::BinaryOp::Add;
-  switch (peek_kind()) {
-    case lexer::TokenKind::EqEq: op = ast::BinaryOp::Eq; break;
-    case lexer::TokenKind::BangEq: op = ast::BinaryOp::NotEq; break;
-    case lexer::TokenKind::Greater: op = ast::BinaryOp::Gt; break;
-    case lexer::TokenKind::Less: op = ast::BinaryOp::Lt; break;
-    case lexer::TokenKind::GreaterEq: op = ast::BinaryOp::GtEq; break;
-    case lexer::TokenKind::LessEq: op = ast::BinaryOp::LtEq; break;
-    default: return lhs;
-  }
-  advance();
-  ast::ExprIdx rhs = parse_binary(BINARY_PREC_BIT_OR);
-  if (!rhs.is_valid()) {
-    return ast::ExprIdx::invalid();
-  }
-  ast::ExprNode node;
-  node.kind = ast::ExprKind::Binary;
-  node.span = span_from(mark);
-  node.payload.set(ast::ExprBinary{
-      .op = op,
-      .lhs = lhs,
-      .rhs = rhs,
-  });
-  return ast_.exprs.push_back(node);
-}
-
 ast::ExprIdx Parser::parse_binary(u8 min_prec) {
   const usize mark = pos_;
   ast::ExprIdx lhs = parse_cast();
   if (!lhs.is_valid()) {
     return ast::ExprIdx::invalid();
   }
+  bool compared = false;
   while (true) {
     const u16 entry = BINARY_OP_TABLE[static_cast<u8>(peek_kind())];
     const u8 prec = static_cast<u8>(entry & BINARY_PREC_MASK);
     if (prec == 0 || prec < min_prec) {
       return lhs;
+    }
+    // A comparison may stand once in front of the operand it compares: a
+    // second one closes the expression it belongs to, leaving the token for
+    // whoever holds the operand.
+    if ((entry & BINARY_NONASSOC) != 0) {
+      if (compared) {
+        return lhs;
+      }
+      compared = true;
     }
     const u8 next_prec =
         (entry & BINARY_RIGHT_ASSOC) != 0 ? prec : static_cast<u8>(prec + 1);

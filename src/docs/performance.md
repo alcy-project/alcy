@@ -240,7 +240,11 @@ from the idea.
   the tower exponential, and the file goes from `5 s` to `228 s` to compile.
   The overhead is real, and `parse_binary`'s precedence table is what removes
   it without the copies: `-1.9%`, for a file that then compiles in `2.7 s`
-  instead of `5 s`. The attribute is not.
+  instead of `5 s`. The attribute is not. Carrying `||`, `&&` and the
+  comparisons in the same table folds the three levels that stood above the bit
+  operators into the loop, and is worth `-0.85%`: a level costs more for its
+  prologue and its own switch than a step of the loop that reads the table,
+  while the comparison that cannot chain stays a flag on its row.
 
 ## Tracing
 
