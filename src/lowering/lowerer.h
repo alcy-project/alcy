@@ -21,6 +21,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/name.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "diag/bag.h"
@@ -462,7 +463,7 @@ class Lowerer {
       return lookup_local_indexed(name);
     }
     for (usize i = locals.size(); i > 0; --i) {
-      if (locals[i - 1].name == name) {
+      if (base::same_name(locals[i - 1].name, name)) {
         return &locals[i - 1];
       }
     }

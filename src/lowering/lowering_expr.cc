@@ -14,6 +14,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "base/name.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "debug/dcheck.h"
@@ -948,7 +949,7 @@ ir::ExternalFunctionIdx Lowerer::declare_external(
     ir::TypeIdx ret,
     const std::vector<ir::TypeIdx>& params) {
   for (const ExtEntry& entry : exts) {
-    if (entry.name == name) {
+    if (base::same_name(entry.name, name)) {
       return entry.idx;
     }
   }

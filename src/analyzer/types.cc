@@ -22,6 +22,7 @@
 #include "ast/ast.h"
 #include "ast/verify.h"
 #include "base/hash.h"
+#include "base/name.h"
 #include "base/nesting.h"
 #include "comp/comp_value.h"
 #include "debug/dcheck.h"
@@ -154,7 +155,7 @@ NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
   if (declared.size() <= INDEX_MIN) {
     for (u32 pos : declared) {
       NominalEntry& entry = nominals[pos];
-      if (entry.name == name) {
+      if (base::same_name(entry.name, name)) {
         return &entry;
       }
     }
@@ -396,7 +397,7 @@ std::string Checker::type_display_at(ir::TypeIdx type, usize depth) const {
 
 NominalEntry* Checker::builtin_nominal(std::string_view name) {
   for (NominalEntry& entry : nominals) {
-    if (entry.name == name) {
+    if (base::same_name(entry.name, name)) {
       return &entry;
     }
   }
@@ -2229,7 +2230,7 @@ const Checker::Local* Checker::LocalScope::find_keyed(
   }
   for (const u32 index : found->second) {
     const Local& local = entries_[index];
-    if (local.name == name) {
+    if (base::same_name(local.name, name)) {
       return &local;
     }
   }

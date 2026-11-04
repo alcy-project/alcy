@@ -14,6 +14,7 @@
 
 #include "ast/ast.h"
 #include "base/hash.h"
+#include "base/name.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
@@ -138,7 +139,7 @@ class Desugarer {
     }
     const std::vector<Binding>& scope = scopes[depth];
     for (const u32 index : found->second) {
-      if (scope[index].orig == name) {
+      if (base::same_name(scope[index].orig, name)) {
         return index;
       }
     }
@@ -158,7 +159,7 @@ class Desugarer {
         continue;
       }
       for (const Binding& binding : scope) {
-        if (binding.orig == name) {
+        if (base::same_name(binding.orig, name)) {
           return binding.fresh;
         }
       }

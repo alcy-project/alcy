@@ -7,6 +7,7 @@ source_set("base") {
     "flat_hash_map.h",
     "for_each.h",
     "hash.h",
+    "name.h",
     "nesting.cc",
     "nesting.h",
     "process_memory.cc",

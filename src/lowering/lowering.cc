@@ -25,6 +25,7 @@
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/hash.h"
+#include "base/name.h"
 #include "comp/comp_value.h"
 #include "comp/ir_interpreter.h"
 #include "debug/dcheck.h"
@@ -1036,7 +1037,7 @@ const Local* Lowerer::lookup_local_indexed(std::string_view name) const {
   }
   for (const u32 index_at : found->second | std::views::reverse) {
     const Local& local = locals[index_at];
-    if (local.name == name) {
+    if (base::same_name(local.name, name)) {
       return &local;
     }
   }

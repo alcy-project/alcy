@@ -18,6 +18,7 @@
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/hash.h"
+#include "base/name.h"
 #include "base/nesting.h"
 #include "diag/bag.h"
 #include "diag/span.h"
@@ -459,7 +460,7 @@ class Checker {
     const Local* find(std::string_view name) const {
       if (!index_) {
         for (const Local& local : entries_) {
-          if (local.name == name) {
+          if (base::same_name(local.name, name)) {
             return &local;
           }
         }

@@ -15,6 +15,7 @@
 
 #include "analyzer/diag_code.h"
 #include "ast/ast.h"
+#include "base/name.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -170,7 +171,7 @@ class Resolver {
   bool has_name(const std::vector<NameEntry>& entries,
                 std::string_view name) const {
     for (const NameEntry& entry : entries) {
-      if (entry.name == name) {
+      if (base::same_name(entry.name, name)) {
         return true;
       }
     }
