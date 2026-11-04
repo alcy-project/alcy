@@ -268,6 +268,17 @@ ADR-0015, not a commit that deletes three lines.
 Measured and rejected, so the next attempt starts from a number rather than
 from the idea.
 
+- **A digest in the type instantiation search.** A request for a generic type
+  compares its arguments against every instance the nominal has minted, once by
+  index and once structurally, which is the shape the function instantiation
+  chain had. Storing `args_digest` per instance and skipping both comparisons
+  on a mismatch moves `+0.001%` on `plain1200`, `+0.024%` on the `generic`
+  shape, and `+0.002%` and `+0.001%` on probes that spell 64 and 128 distinct
+  instantiations of one nominal with a twelve-element tuple argument. The list
+  behind a nominal stays short, and `types_equal` rejects a candidate after a
+  few index comparisons, which is what the digest pays to compute. It paid on
+  the function chain because an argument vector there is compared against a
+  long list of candidates, not because arguments are expensive to compare.
 - **Spreading the borrow check.** Both passes walk the functions in order, and
   the second one only reads what the first wrote, which makes the bodies look
   like free work to hand to threads. On `plain1200` at `-j 4`:
