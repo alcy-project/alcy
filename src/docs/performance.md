@@ -200,6 +200,30 @@ change (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`).
   attributable.
 - The unit suite, the wasm suite, and `./tools/check.sh --no-coverage`.
 
+## What verification costs
+
+Three boundary checks run on every package, in the release binary as well as
+the debug one (`docs/adr/0015-boundary-validation.md`, decision 4): the token
+stream, the syntax tree, and the IR storage. Their share of `plain1200`:
+
+| call | instructions | share | runs |
+| --- | --- | --- | --- |
+| `ir::verify_storage` | 20.56M | 4.29% | once per package |
+| `ast::verify_file` | 11.53M | 2.40% | once per file |
+| `lexer::verify_token_stream` | 3.94M | 0.82% | once per file |
+
+A binary whose three calls return early runs the corpus in `442.80M` against
+`479.63M`, `-7.68%`, and emits byte-identical IR for all seven shapes: a
+verifier reads the artifact and writes nothing, so the checks are the whole
+of that delta. `perf.py costs out/perf/plain1200` puts `ir::verify_storage` at
+the top of the self-cost table, and `perf.py callers <corpus> --symbol NAME`
+names the entry that calls each.
+
+This is the largest cost left in the run and the one the loop cannot take.
+Decision 4 makes the call at the boundary the guarantee, so a release build
+that skips it changes what the compiler promises; that is an amendment to
+ADR-0015, not a commit that deletes three lines.
+
 ## What did not pay
 
 Measured and rejected, so the next attempt starts from a number rather than
