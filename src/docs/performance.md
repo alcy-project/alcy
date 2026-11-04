@@ -183,6 +183,15 @@ cost found this way so far was one of these:
   vectors per block per iteration. Keep them as members, clear them where they
   are used, and assign into a row rather than moving out of a temporary: the
   capacity stays and the sweep stops allocating.
+- **A call frame around a handful of instructions.** A function whose body is
+  one comparison, one reservation check, and one call still pays a frame on
+  every entry when it is left out of line, which is a quarter of its own cost
+  at a hundred calls per file. A definition in the class body does not decide
+  this: the optimizer outlines what it likes. Mark the cheap case
+  `[[gnu::always_inline]]` at the call site and leave the rest behind a
+  `<name>_slow` or `<name>_indexed` function. Forcing this on the cursor
+  tests, the arena appends, and the forwarders of the hot paths took 1.0% off
+  the corpus in four steps, each one byte-identical in the emitted IR.
 
 The tables are asked and never walked, so the order a run reports does not
 change (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`).
