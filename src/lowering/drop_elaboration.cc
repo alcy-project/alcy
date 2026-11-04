@@ -154,6 +154,16 @@ constexpr u32 INITIAL_OUT_BLOCKS = 4;
 
 struct DropWorkingSet::Tables {
   std::vector<Place> places;
+  // A place index by local: the head of each local's places, chained
+  // through the next column, so a lookup walks one local's places.
+  std::vector<u32> place_head;
+  std::vector<u32> place_next;
+  // The points that can change a place's state, one run per place in
+  // (block, offset, seq) order, and the block each point sits in.
+  std::vector<u32> place_point_head;
+  std::vector<u32> place_point;
+  std::vector<u32> place_point_cursor;
+  std::vector<u32> point_block;
   std::vector<Point> points;
   std::vector<Window> block_points;
   std::vector<u32> pred_blocks;
@@ -375,6 +385,11 @@ class DropElaborator {
         reserve_block_(inputs.reserve_block) {}
 
   void run();
+  // Fills the place-to-point index: for every place, the points that can
+  // change its state, in (block, offset, seq) order.
+  void build_place_points(std::span<const u32> place_head,
+                          std::span<const u32> place_next,
+                          u32 place_count);
   ir::RegisterIdx pass_emit(ir::InstrSeq& seq,
                             ir::Opcode op,
                             ir::TypeIdx type,
@@ -620,6 +635,54 @@ void DropElaborator::mark_maybe(const StateAt& state_at,
   }
 }
 
+void DropElaborator::build_place_points(std::span<const u32> place_head,
+                                        std::span<const u32> place_next,
+                                        u32 place_count) {
+  const std::vector<Place>& places = tables_.places;
+  const std::vector<Point>& points = tables_.points;
+  const std::span<const OwnershipEvent> events = ownership_;
+  const std::span<const EndSite> sites = end_sites_;
+  std::vector<u32>& head = tables_.place_point_head;
+  std::vector<u32>& flat = tables_.place_point;
+  std::vector<u32>& cursor = tables_.place_point_cursor;
+
+  const auto for_each_place = [&](u32 local, auto&& visit) {
+    for (u32 i = place_head[local]; i != base::INVALID_IDX; i = place_next[i]) {
+      visit(i);
+    }
+  };
+  const auto point_places = [&](const Point& point, auto&& visit) {
+    if (point.kind == Point::Kind::Event) {
+      const OwnershipEvent& event = events[point.index];
+      if (event.local == base::INVALID_IDX) {
+        return;
+      }
+      for_each_place(event.local, [&](u32 pi) {
+        if (is_prefix(event.path, places[pi].path)) {
+          visit(pi);
+        }
+      });
+      return;
+    }
+    for (u32 local : sites[point.index].locals) {
+      for_each_place(local, visit);
+    }
+  };
+
+  head.assign(static_cast<usize>(place_count) + 1, 0);
+  for (const Point& point : points) {
+    point_places(point, [&](u32 pi) { ++head[pi + 1]; });
+  }
+  for (u32 pi = 0; pi < place_count; ++pi) {
+    head[pi + 1] += head[pi];
+  }
+  flat.resize(head[place_count]);
+  cursor.assign(head.begin(), head.end() - 1);
+  for (u32 i = 0; i < points.size(); ++i) {
+    point_places(points[i], [&](u32 pi) { flat[cursor[pi]++] = i; });
+  }
+}
+
 void DropElaborator::run() {
   if (ownership_.empty() && end_sites_.empty()) {
     return;
@@ -661,13 +724,20 @@ void DropElaborator::run() {
   std::vector<Place>& places = tables_.places;
   places.clear();
   places.reserve(ownership_.size() + site_locals);
+  std::vector<u32>& place_head = tables_.place_head;
+  place_head.assign(locals.size(), base::INVALID_IDX);
+  std::vector<u32>& place_next = tables_.place_next;
+  place_next.clear();
+  place_next.reserve(places.capacity());
   auto place_of = [&](u32 local, const std::vector<u32>& path) -> u32 {
-    for (u32 i = 0; i < places.size(); ++i) {
-      if (places[i].local == local && places[i].path == path) {
+    for (u32 i = place_head[local]; i != base::INVALID_IDX; i = place_next[i]) {
+      if (places[i].path == path) {
         return i;
       }
     }
     places.push_back(Place{local, path});
+    place_next.push_back(place_head[local]);
+    place_head[local] = static_cast<u32>(places.size() - 1);
     return static_cast<u32>(places.size() - 1);
   };
   for (const OwnershipEvent& event : ownership_) {
@@ -701,6 +771,7 @@ void DropElaborator::run() {
   };
   std::vector<Point>& points = tables_.points;
   points.clear();
+  std::vector<u32>& point_block = tables_.point_block;
   std::vector<Window>& block_points = tables_.block_points;
   block_points.assign(block_count, Window{});
   {
@@ -725,9 +796,11 @@ void DropElaborator::run() {
     for (u32 b = 0; b < block_count; ++b) {
       cursor[b] = block_points[b].head;
     }
+    point_block.resize(head);
     for (u32 i = 0; i < ownership_.size(); ++i) {
       const OwnershipEvent& event = ownership_[i];
       const u32 b = at(event.block);
+      point_block[cursor[b]] = b;
       points[cursor[b]++] =
           Point{event.offset, event.seq, Point::Kind::Event, i};
     }
@@ -737,6 +810,7 @@ void DropElaborator::run() {
     for (u32 i = 0; i < end_sites_.size(); ++i) {
       const EndSite& site = end_sites_[i];
       const u32 b = at(site.block);
+      point_block[cursor[b]] = b;
       points[cursor[b]++] = Point{site.offset, site.seq, Point::Kind::Site, i};
     }
   }
@@ -804,6 +878,10 @@ void DropElaborator::run() {
     }
   }
 
+  build_place_points(place_head, place_next, place_count);
+  const std::vector<u32>& place_point_head = tables_.place_point_head;
+  const std::vector<u32>& place_point = tables_.place_point;
+
   auto applies = [&](const Place& place, const OwnershipEvent& event) {
     return event.local == place.local && is_prefix(event.path, place.path);
   };
@@ -856,12 +934,18 @@ void DropElaborator::run() {
   };
   for (u32 pi = 0; pi < place_count; ++pi) {
     const Place& place = places[pi];
+    const u32 own_head = place_point_head[pi];
+    const u32 own_end = place_point_head[pi + 1];
     bool changed = true;
     u32 rounds = 0;
     while (changed && rounds <= block_count + 1) {
       changed = false;
       ++rounds;
+      u32 own = own_head;
       for (u32 b = 0; b < block_count; ++b) {
+        while (own < own_end && point_block[place_point[own]] < b) {
+          ++own;
+        }
         State state = State::Moved;
         const Window pred_window = preds[b];
         if (pred_window.len != 0) {
@@ -877,9 +961,9 @@ void DropElaborator::run() {
           changed = true;
         }
         State after = state;
-        const Window point_window = block_points[b];
-        for (u32 k = 0; k < point_window.len; ++k) {
-          after = step_point(after, points[point_window.head + k], place);
+        for (u32 k = own; k < own_end && point_block[place_point[k]] == b;
+             ++k) {
+          after = step_point(after, points[place_point[k]], place);
         }
         if (after != out[row(pi, b)]) {
           out[row(pi, b)] = after;
@@ -889,6 +973,14 @@ void DropElaborator::run() {
     }
   }
 
+  auto place_index = [&](u32 local, const std::vector<u32>& path) -> u32 {
+    for (u32 i = place_head[local]; i != base::INVALID_IDX; i = place_next[i]) {
+      if (places[i].path == path) {
+        return i;
+      }
+    }
+    return base::INVALID_IDX;
+  };
   auto state_at = [&](u32 local, const std::vector<u32>& path, u32 block,
                       u32 offset, u32 seq) -> State {
     const u32 pi = place_index(local, path);
@@ -896,9 +988,18 @@ void DropElaborator::run() {
       return State::Owned;
     }
     State state = in[row(pi, block)];
-    const Window point_window = block_points[block];
-    for (u32 k = 0; k < point_window.len; ++k) {
-      const Point& point = points[point_window.head + k];
+    const u32 own_head = place_point_head[pi];
+    const u32 own_end = place_point_head[pi + 1];
+    u32 own = own_head;
+    while (own < own_end && point_block[place_point[own]] < block) {
+      ++own;
+    }
+    for (; own < own_end; ++own) {
+      const u32 point_at = place_point[own];
+      if (point_block[point_at] != block) {
+        break;
+      }
+      const Point& point = points[point_at];
       if (point.offset > offset ||
           (point.offset == offset && point.seq >= seq)) {
         break;
