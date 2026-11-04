@@ -1051,6 +1051,9 @@ class Checker {
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
   bool types_equal_inner(ir::TypeIdx a, ir::TypeIdx b, std::vector<u64>& seen);
+  // The pairs the comparison in flight has already visited, kept across
+  // calls so an equality test does not allocate.
+  std::vector<u64> type_pair_seen_;
   bool coerces_to_shared(ir::TypeIdx expected, ir::TypeIdx actual);
   bool coerces_array_to_slice(ir::TypeIdx expected, ir::TypeIdx actual);
   ir::TypeIdx unify(ir::TypeIdx expected,

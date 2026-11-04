@@ -199,8 +199,8 @@ bool Checker::types_equal(ir::TypeIdx a, ir::TypeIdx b) {
   if (a.idx == b.idx) {
     return true;
   }
-  std::vector<u64> seen;
-  return types_equal_inner(type_origin(a), type_origin(b), seen);
+  type_pair_seen_.clear();
+  return types_equal_inner(type_origin(a), type_origin(b), type_pair_seen_);
 }
 
 bool Checker::types_equal_inner(ir::TypeIdx a,
