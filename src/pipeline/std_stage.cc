@@ -3,6 +3,7 @@
 
 #include "pipeline/std_stage.h"
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -30,6 +31,9 @@ bool package_is_selected(const std::vector<std::string_view>& members,
   }
   return false;
 }
+
+// A source with this name is its package's facade.
+constexpr std::string_view FACADE_SUFFIX = "/prelude.al";
 
 bool ends_with(std::string_view text, std::string_view suffix) {
   return text.size() >= suffix.size() &&
@@ -68,11 +72,30 @@ std::span<const analyzer::ModuleInput> std_prelude(
     // surface is in scope without a `use`. The name is read from the
     // embedded path, so a `prelude` module in a user package stays
     // ordinary.
-    const bool facade = ends_with(source.path, "/prelude.al");
+    const bool facade = ends_with(source.path, FACADE_SUFFIX);
     ctx.std_inputs.push_back({std::string_view(source.path), id, facade});
   }
   ctx.std_staged = true;
   return std::span<const analyzer::ModuleInput>(ctx.std_inputs);
+}
+
+std::optional<StagedMember> staged_member(std::string_view path,
+                                          const StdSelection& selection) {
+  for (usize i = 0; i < STAGED_SOURCE_COUNT; ++i) {
+    const std::string_view staged(STAGED_SOURCES[i].path);
+    if (!package_is_selected(selection.members, staged)) {
+      continue;
+    }
+    const bool same = path == staged;
+    const bool suffix =
+        path.size() > staged.size() + 1 &&
+        path[path.size() - staged.size() - 1] == '/' &&
+        path.compare(path.size() - staged.size(), staged.size(), staged) == 0;
+    if (same || suffix) {
+      return StagedMember{staged, ends_with(staged, FACADE_SUFFIX)};
+    }
+  }
+  return std::nullopt;
 }
 
 std::vector<analyzer::PackagePolicy> std_package_policies(

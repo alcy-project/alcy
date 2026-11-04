@@ -3,7 +3,9 @@
 
 #include "pipeline/frontend.h"
 
+#include <optional>
 #include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -101,11 +103,37 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PipelineContext& ctx,
     source::FileId root,
     const StdSelection& selection) {
-  const analyzer::ModuleInput single_input{"", root, false, {}};
-  const std::span<const analyzer::ModuleInput> prelude = [&] {
+  // A file that is one of the suite's own sources is checked as the member
+  // it is: its path within the package names the modules above it, so the
+  // tree hangs off the package the source belongs to instead of holding a
+  // second copy of it beside a fileless root. Every other file names
+  // nothing and is a root of its own.
+  const std::optional<StagedMember> member = [&] {
+    const std::optional<std::string_view> name = ctx.sources.name(root);
+    if (!name.has_value()) {
+      return std::optional<StagedMember>{};
+    }
+    return staged_member(*name, selection);
+  }();
+  const std::string_view member_path =
+      member.has_value() ? member->path : std::string_view{};
+  const analyzer::ModuleInput single_input{
+      member_path, root, member.has_value() && member->is_facade, {}};
+  std::vector<analyzer::ModuleInput> prelude = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "std-stage",
                                              "frontend");
-    return std_prelude(ctx, selection);
+    const std::span<const analyzer::ModuleInput> staged =
+        std_prelude(ctx, selection);
+    std::vector<analyzer::ModuleInput> excluding;
+    excluding.reserve(staged.size());
+    for (const analyzer::ModuleInput& input : staged) {
+      // The member is the root of this tree; staging its copy as well
+      // would put one source in two modules.
+      if (input.name != member_path) {
+        excluding.push_back(input);
+      }
+    }
+    return excluding;
   }();
   // The staged members' seals are policy rows the same way a package
   // build's are; a single file has no manifest, so they come from the

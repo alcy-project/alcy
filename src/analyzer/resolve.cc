@@ -88,6 +88,9 @@ class Resolver {
   debug::Profiler* profiler = nullptr;
   std::string_view package_name;
   source::FileId root = source::UNKNOWN_FILE;
+  // The module the root stands for: the fileless root a package's entry
+  // file opens, which names nothing, or the module a named root is.
+  u32 root_module_ = NO_MODULE;
   std::vector<FileData> file_data;
   // Prelude sources: attached as their own tree, never into the package
   // tree. A facade is the root of one prelude package; the rest of that
@@ -215,12 +218,30 @@ class Resolver {
       root_in_staging = true;
       return;
     }
-    const u32 root_module =
-        add_module("", root, file_data[root_file].items, NO_MODULE);
-    if (out_of_arena) {
-      return;
+    // A root named after the module it is hangs under nothing and is that
+    // module; a package's entry file names nothing and is the fileless
+    // root its other modules sit under.
+    if (!file_data[root_file].name.empty()) {
+      root_module_ = attach_named_root(root_file);
+      if (out_of_arena) {
+        return;
+      }
     }
-    file_data[root_file].module = root_module;
+    if (root_module_ == NO_MODULE) {
+      root_module_ =
+          add_module("", root, file_data[root_file].items, NO_MODULE);
+      if (out_of_arena) {
+        return;
+      }
+      file_data[root_file].module = root_module_;
+    }
+    const u32 root_module = root_module_;
+    // A facade checked as the root is a facade still: its public surface
+    // is in scope without a `use`, the way the staged copy's is.
+    if (file_data[root_file].is_facade) {
+      modules[root_module]->is_prelude = true;
+      prelude_modules.push_back(root_module);
+    }
 
     for (u32 i = 0; i < static_cast<u32>(file_data.size()); ++i) {
       if (i == root_file) {
@@ -268,6 +289,17 @@ class Resolver {
   // intermediate nodes for slash-separated names (`utils/io`
   // becomes root -> `utils` -> `utils::io`).
   void attach_module(u32 root_module, std::string_view slash_name, u32 file) {
+    file_data[file].module = attach_chain(root_module, slash_name, file, false);
+  }
+
+  // The chain behind one listed file: the leaf module and the fileless
+  // nodes above it. `NO_MODULE` as the parent makes the chain the top of
+  // the tree, which a named root is. A staged chain is toolchain sources
+  // wherever it sits, the way the prelude's is.
+  u32 attach_chain(u32 root_module,
+                   std::string_view slash_name,
+                   u32 file,
+                   bool staged) {
     u32 parent = root_module;
     std::string prefix;
     usize start = 0;
@@ -281,28 +313,75 @@ class Resolver {
                                          ? std::string(segment)
                                          : prefix + "::" + std::string(segment);
       const bool leaf = slash == slash_name.size();
-      u32 child = find_child_module(parent, segment);
+      u32 child =
+          parent == NO_MODULE ? NO_MODULE : find_child_module(parent, segment);
       if (child == NO_MODULE) {
         child = add_module(
             child_path, leaf ? file_data[file].id : source::UNKNOWN_FILE,
             leaf ? file_data[file].items : std::span<const ast::ItemIdx>{},
             parent);
         if (out_of_arena) {
-          return;
+          return NO_MODULE;
         }
-        module_children[parent].push_back(child);
-        children_by_name_[parent].emplace(module_name(child), child);
+        if (parent != NO_MODULE) {
+          module_children[parent].push_back(child);
+          children_by_name_[parent].emplace(module_name(child), child);
+        }
+        if (staged) {
+          modules[child]->is_staged = true;
+        }
       } else if (leaf) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateModule>(
             DiagCode::DuplicateModule, diag::Span{}, slash_name);
         (void)index;
-        return;
+        return NO_MODULE;
       }
       parent = child;
       prefix = child_path;
       start = slash + 1;
     }
-    file_data[file].module = parent;
+    return parent;
+  }
+
+  // A root named after the module it is: a single-file check of a suite
+  // source names the member's path, so the file is that member rather
+  // than a fileless root beside the staged copy of it. The name is the
+  // member's path within its package, so the modules above the leaf are
+  // the package's, and a package is the toolchain's exactly when the
+  // policies say so.
+  u32 attach_named_root(u32 root_file) {
+    const std::vector<std::string_view> segments =
+        split_segments(file_data[root_file].name);
+    if (segments.empty()) {
+      return NO_MODULE;
+    }
+    // The segments carry no source extension, and a module path does not
+    // either, so the chain is built from them rather than from the file
+    // name.
+    std::string slash;
+    for (const std::string_view segment : segments) {
+      if (!slash.empty()) {
+        slash.push_back('/');
+      }
+      slash.append(segment);
+    }
+    const u32 leaf = attach_chain(NO_MODULE, slash, root_file,
+                                  is_policy_package(segments.front()));
+    if (leaf != NO_MODULE) {
+      file_data[root_file].module = leaf;
+    }
+    return leaf;
+  }
+
+  // Whether the caller's policies name `package`: the package's own, the
+  // suite's members, and the path dependencies all appear there.
+  bool is_policy_package(std::string_view package) const {
+    for (const PackagePolicy& policy : package_policies_) {
+      if (policy.package == package) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Attaches one module of a dependency under the fileless root the
@@ -881,7 +960,8 @@ class Resolver {
     file_data.reserve(inputs.size());
     for (const ParsedModule& input : inputs) {
       file_data.push_back({input.input.id, input.input.name,
-                           input.path.as_view(), input.items});
+                           input.path.as_view(), input.items,
+                           input.input.is_facade});
     }
     prelude_data.reserve(prelude.size());
     for (const ParsedModule& input : prelude) {

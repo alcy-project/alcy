@@ -3,10 +3,12 @@
 
 #include "pipeline/check.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "analyzer/resolve.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "doctest/doctest.h"
@@ -15,6 +17,8 @@
 #include "i18n/language.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
+#include "pipeline/std_stage.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -307,6 +311,38 @@ TEST_CASE("Two statements that reach one moved place report twice") {
     findings += diagnostic.message.starts_with("Use of moved 'e'") ? 1 : 0;
   });
   CHECK(findings == 2);
+}
+
+TEST_CASE("A suite source checked alone is the member it is") {
+  // The target of a single-file check names the member it is when its path
+  // ends at one the suite stages, so its module is the tree's root instead
+  // of a root package holding a second copy of it. Two modules - the
+  // fileless module above the leaf and the leaf - is what that reading
+  // counts; a copy beside the staged one would count its own.
+  for (const std::string_view member :
+       {"core/string.al", "core/mem.al", "text/prelude.al"}) {
+    CAPTURE(member);
+    PipelineContext ctx{i18n::Language::EnUs};
+    const StdSelection selection = full_std_selection();
+    std::optional<std::string_view> bytes;
+    for (const analyzer::ModuleInput& input : std_prelude(ctx, selection)) {
+      if (input.name == member) {
+        bytes = ctx.sources.bytes(input.id);
+      }
+    }
+    CHECK(bytes.has_value());
+    if (!bytes.has_value()) {
+      continue;
+    }
+    const std::string name = "lib/std/" + std::string(member);
+    const source::FileId root = ctx.sources.add_virtual(name, *bytes);
+    base::Result<CheckOutcome, diag::Reported> outcome = check_root(ctx, root);
+    CAPTURE(ctx.bag.error_count());
+    CHECK(outcome.is_ok());
+    if (outcome.is_ok()) {
+      CHECK(std::move(outcome).unwrap().module_count == 2);
+    }
+  }
 }
 
 }  // namespace pipeline

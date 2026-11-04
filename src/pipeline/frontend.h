@@ -51,9 +51,11 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
 bool has_free_main(const PipelineContext& ctx,
                    const analyzer::ModuleTree& tree);
 
-// Prelude plus module resolution for one root file. The three
-// single-file entries share it; packages resolve through their
-// manifest instead.
+// Prelude plus module resolution for one root file. A root whose path
+// ends at a staged source is that member: the module the file declares is
+// the tree's root, in its own package, rather than a package of its own
+// beside a copy of the member. The three single-file entries share it;
+// packages resolve through their manifest instead.
 base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PipelineContext& ctx,
     source::FileId root,

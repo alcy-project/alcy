@@ -7,6 +7,7 @@
 #include <set>
 #include <span>
 #include <string_view>
+#include <vector>
 
 #include "analyzer/resolve.h"
 #include "doctest/doctest.h"
@@ -94,6 +95,35 @@ TEST_CASE("Staging names one facade per member") {
     }
   }
   CHECK(!facades.empty());
+}
+
+// A checkout keeps a member at `lib/std/<path>`, so a target's path on a
+// segment boundary names that member. The facade flag follows the name:
+// a file that only ends at one inside a longer segment names nothing.
+TEST_CASE("A checkout path names the staged source it ends at") {
+  const StdSelection selection = full_std_selection();
+  const std::optional<StagedMember> member =
+      staged_member("checkout/lib/std/core/string.al", selection);
+  CHECK(member.has_value());
+  if (member.has_value()) {
+    CHECK(member->path == "core/string.al");
+    CHECK(!member->is_facade);
+  }
+  const std::optional<StagedMember> facade =
+      staged_member("lib/std/text/prelude.al", selection);
+  CHECK(facade.has_value());
+  if (facade.has_value()) {
+    CHECK(facade->path == "text/prelude.al");
+    CHECK(facade->is_facade);
+  }
+  CHECK(!staged_member("lib/std/core/string", selection).has_value());
+  CHECK(!staged_member("lib/std/core/string.alt", selection).has_value());
+  CHECK(!staged_member("lib/std/strings/core.al", selection).has_value());
+
+  StdSelection narrowed{};
+  narrowed.members = std::vector<std::string_view>{"text"};
+  CHECK(staged_member("lib/std/text/string.al", narrowed).has_value());
+  CHECK(!staged_member("lib/std/core/string.al", narrowed).has_value());
 }
 
 }  // namespace pipeline

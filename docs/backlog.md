@@ -212,24 +212,6 @@ replaced. The foundations are in `roadmap.md`.
   see that a library's type implements one, and the roadmap asks a
   summary to carry them.
 
-- [ ] A single file checked or compiled on its own parses the target as
-  an unnamed root beside the embedded suite, so a standard-library
-  source handed to `--file` is not the member it copies. `alcy check
-  --file lib/std/core/string.al` reports `Type mismatch in method call:
-  expected 'StrIter', found 'StrIter'` (exit 4), because the root copy's
-  `impl str` declares its own `StrIter` while the call resolves to the
-  embedded member's, and two declarations print one spelling. Eighteen
-  of forty suite sources check cleanly, so refusing the form is not the
-  answer. Two shapes were tried and each leaves a hole: naming the root
-  after the member its path ends with drops the embedded copy, and then
-  `core/prelude.al` cannot resolve `package::string`, the target sitting
-  in the root package instead of `core`; swapping that member's input
-  for the checkout's bytes pairs one file into two modules, and the
-  root pairing cannot resolve the file's own `is_ascii_space`. The fix
-  is a single-file mode that loads the target as the member it is, in
-  the member's package, with that module as the root of the analysis
-  rather than a root package of its own.
-
 - [ ] `f64::parse` rounds correctly only while the digits fit one
   `u64` numerator, so `"18446744073709551616.0"` and
   `"0.00000000000000000001"` are refused rather than read. Reading

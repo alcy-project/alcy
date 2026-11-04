@@ -80,7 +80,8 @@ base::Result<CheckOutcome, diag::Reported> check_source(
 }
 
 // Single-file checks name the whole suite: there is no manifest to
-// select from, and no flags to narrow it with.
+// select from, and no flags to narrow it with. A file that is one of the
+// suite's own sources checks as the member it is.
 base::Result<CheckOutcome, diag::Reported> check_root(PipelineContext& ctx,
                                                       source::FileId root) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
