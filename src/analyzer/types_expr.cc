@@ -3343,6 +3343,14 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
   };
 
   const ir::TypeIdx head = types[0];
+  // Every arm below asks whether a row's head pattern is a wildcard, and the
+  // enum arm asks it once per variant. One pass over the rows answers the
+  // question for all of them.
+  std::vector<u8> row_wild;
+  row_wild.reserve(rows.size());
+  for (const std::vector<ast::PatternIdx>& row : rows) {
+    row_wild.push_back(static_cast<u8>(pattern_is_wildcard(head, row[0])));
+  }
   const std::vector<ir::TypeIdx> rest(types.begin() + 1, types.end());
   const ir::TypeTag tag = tag_of(head);
   switch (tag) {
@@ -3352,8 +3360,10 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
     case ir::TypeTag::I1: {
       for (usize value = 0; value < 2; ++value) {
         std::vector<std::vector<ast::PatternIdx>> next;
-        for (const std::vector<ast::PatternIdx>& row : rows) {
-          if (pattern_is_wildcard(head, row[0])) {
+        next.reserve(rows.size());
+        for (usize r = 0; r < rows.size(); ++r) {
+          const std::vector<ast::PatternIdx>& row = rows[r];
+          if (row_wild[r] != 0) {
             next.push_back(tails(row));
             continue;
           }
@@ -3388,6 +3398,12 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
       if (variants.empty() || variants.size() != enum_type.variants.size()) {
         return true;
       }
+      // The name a row's pattern spells is the same under every variant.
+      std::vector<std::string_view> row_ctor;
+      row_ctor.reserve(rows.size());
+      for (const std::vector<ast::PatternIdx>& row : rows) {
+        row_ctor.push_back(ctor_name(row[0]));
+      }
       for (usize index = 0; index < variants.size(); ++index) {
         const ir::TypeIdxRange fields =
             builder.enum_variant_types()[enum_type.variants[index]].fields;
@@ -3397,13 +3413,15 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
           columns.push_back(field);
         }
         std::vector<std::vector<ast::PatternIdx>> next;
-        for (const std::vector<ast::PatternIdx>& row : rows) {
+        next.reserve(rows.size());
+        for (usize r = 0; r < rows.size(); ++r) {
+          const std::vector<ast::PatternIdx>& row = rows[r];
           std::vector<ast::PatternIdx> tail = tails(row);
-          if (pattern_is_wildcard(head, row[0])) {
+          if (row_wild[r] != 0) {
             next.push_back(with(wild_args(arity), std::move(tail)));
             continue;
           }
-          const std::string_view name = ctor_name(row[0]);
+          const std::string_view name = row_ctor[r];
           if (name.empty()) {
             next.push_back(with(wild_args(arity), std::move(tail)));
             continue;
@@ -3456,8 +3474,10 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
           tag == ir::TypeTag::Struct ? struct_fields(head)
                                      : std::span<const ast::ItemStructField>{};
       std::vector<std::vector<ast::PatternIdx>> next;
-      for (const std::vector<ast::PatternIdx>& row : rows) {
-        if (pattern_is_wildcard(head, row[0])) {
+      next.reserve(rows.size());
+      for (usize r = 0; r < rows.size(); ++r) {
+        const std::vector<ast::PatternIdx>& row = rows[r];
+        if (row_wild[r] != 0) {
           next.push_back(with(wild_args(arity), tails(row)));
           continue;
         }
@@ -3496,9 +3516,11 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
       const ir::TypeIdx pointee =
           builder.ref_types()[builder.types()[head].as_ref()].pointee;
       std::vector<std::vector<ast::PatternIdx>> next;
-      for (const std::vector<ast::PatternIdx>& row : rows) {
+      next.reserve(rows.size());
+      for (usize r = 0; r < rows.size(); ++r) {
+        const std::vector<ast::PatternIdx>& row = rows[r];
         ast::PatternIdx inner = kwild;
-        if (!pattern_is_wildcard(head, row[0]) &&
+        if (row_wild[r] == 0 &&
             ast.patterns[row[0]].kind == ast::PatternKind::Ref) {
           inner = ast.patterns[row[0]].payload.ref.inner;
         }
@@ -3513,9 +3535,10 @@ bool Checker::patterns_cover(std::vector<ir::TypeIdx> types,
       // Values with no constructor patterns: only a wildcard covers the
       // column, and a column with none is a hole.
       std::vector<std::vector<ast::PatternIdx>> next;
-      for (const std::vector<ast::PatternIdx>& row : rows) {
-        if (pattern_is_wildcard(head, row[0])) {
-          next.push_back(tails(row));
+      next.reserve(rows.size());
+      for (usize r = 0; r < rows.size(); ++r) {
+        if (row_wild[r] != 0) {
+          next.push_back(tails(rows[r]));
         }
       }
       if (next.empty()) {
