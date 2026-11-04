@@ -95,6 +95,22 @@ SpecEntry* Checker::find_spec_in_scope(u32 module, std::string_view name) {
   return nullptr;
 }
 
+SpecEntry* Checker::find_spec_path(u32 module, ast::PathIdx path) {
+  const std::span<const ast::Ident> segments = ast.paths[path].segments;
+  if (segments.empty()) {
+    return nullptr;
+  }
+  if (segments.size() == 1) {
+    return find_spec_in_scope(module, segments.back().name);
+  }
+  u32 spec_module = NO_MODULE;
+  std::string_view spec_name;
+  if (!resolve_type_path(module, path, spec_module, spec_name)) {
+    return nullptr;
+  }
+  return find_spec(spec_module, spec_name);
+}
+
 bool Checker::spec_in_scope(u32 module, const SpecEntry& spec) {
   if (module >= static_cast<u32>(tree.modules.size())) {
     return false;
@@ -1302,20 +1318,14 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
         ast.paths[spec_path.path].segments;
     if (!segments.empty()) {
       spec_spelling = segments.back().name;
-      if (segments.size() == 1) {
-        spec_entry = find_spec_in_scope(module, spec_spelling);
-      } else {
-        u32 spec_module = NO_MODULE;
-        std::string_view spec_name;
-        if (resolve_type_path(module, spec_path.path, spec_module, spec_name)) {
-          spec_entry = find_spec(spec_module, spec_name);
-          if (spec_entry != nullptr &&
-              !check_item_access(module, spec_entry->module,
-                                 ast.items[spec_entry->item].is_pub,
-                                 spec_node.span, spec_name)) {
-            return;
-          }
-        }
+      spec_entry = find_spec_path(module, spec_path.path);
+      // A qualified name reaches into another package, so the item's
+      // visibility is checked where the name crossed.
+      if (spec_entry != nullptr && segments.size() > 1 &&
+          !check_item_access(module, spec_entry->module,
+                             ast.items[spec_entry->item].is_pub, spec_node.span,
+                             spec_spelling)) {
+        return;
       }
     }
   }

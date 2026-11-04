@@ -3798,6 +3798,13 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
       return entry;
     }
     const u32 inst = inst_index(self_type);
+    // A body the definition-site check stood in for is not walked
+    // again (ADR-0079).
+    if (once_checked_items.contains(method_item.idx)) {
+      type_params = std::move(outer_scope);
+      value_params = std::move(outer_values);
+      return entry;
+    }
     spec_scope.push_back(spec);
     FnStateScope scope;
     scope.save(*this);
@@ -4576,7 +4583,7 @@ void Checker::FnStateScope::restore(Checker& checker) {
   }
 }
 
-void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
+bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const ast::ItemNode& node = ast.items[fn];
   // The definition-site check records the signature it resolved, so
   // lowering can emit the parametric function (ADR-0079). A body check
@@ -4695,6 +4702,7 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   verify_comp_known = saved_verify_comp;
   bind_comp_known = saved_bind_comp;
   reported_too_deep_ = saved_reported_too_deep;
+  bool recorded = false;
   if (recording) {
     // A body the pass cannot stand in for stays checked at its calls:
     // a compile-time value it reads depends on the instantiation
@@ -4706,9 +4714,11 @@ void Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
         record.receiver = classify_receiver(record.params.front(), *self);
       }
       parametric_bodies.push_back(std::move(record));
+      recorded = true;
     }
     param_record_ = saved_record;
   }
+  return recorded;
 }
 
 void Checker::check_main(u32 module, ast::ItemIdx fn) {
@@ -5050,6 +5060,18 @@ base::Result<CheckedPackage, diag::Reported> check_package(
       }
     }
   }
+  // The definition-site check runs first: it binds each declared
+  // parameter to the `Param` node its index names and checks the body
+  // once, so a call site only instantiates a signature and knows the
+  // body needs no AST walk of its own (ADR-0079).
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "generic bodies",
+                                             "analyze");
+    checker.check_generic_bodies();
+  }
+  if (checker.name_table_exhausted_) {
+    return base::make_err(diag::Reported{});
+  }
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "bodies",
                                              "analyze");
@@ -5065,17 +5087,6 @@ base::Result<CheckedPackage, diag::Reported> check_package(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "drops",
                                              "analyze");
     checker.resolve_drops();
-  }
-  if (checker.name_table_exhausted_) {
-    return base::make_err(diag::Reported{});
-  }
-  // The definition-site check runs after every check that means a
-  // concrete type: its scope binds the parameters and its records
-  // carry PARAM_INST, which nothing else reads (ADR-0079).
-  {
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "generic bodies",
-                                             "analyze");
-    checker.check_generic_bodies();
   }
   if (checker.name_table_exhausted_) {
     return base::make_err(diag::Reported{});

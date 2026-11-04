@@ -1055,4 +1055,63 @@ TEST_CASE("A parametric body records the dispatch it waits on") {
   CHECK(saw_dispatch);
 }
 
+TEST_CASE("The specialization resolves a dispatch to a generic impl") {
+  // A generic impl registers no row until a call names it, and its
+  // method was checked once: the pass reaches the declaration through
+  // the checked-impl table and clones the method under the receiver's
+  // arguments (ADR-0079, ADR-0080).
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "spec Mark {\n"
+                   "  fn mark(self: &Self) -> i32;\n"
+                   "}\n"
+                   "struct Wrap<T> {\n"
+                   "  v: T,\n"
+                   "}\n"
+                   "impl<T: Mark> Mark for Wrap<T> {\n"
+                   "  fn mark(self: &Self) -> i32 {\n"
+                   "    ret self.v.mark()\n"
+                   "  }\n"
+                   "}\n"
+                   "struct Point {\n"
+                   "  x: i32,\n"
+                   "}\n"
+                   "impl Mark for Point {\n"
+                   "  fn mark(self: &Self) -> i32 {\n"
+                   "    ret self.x\n"
+                   "  }\n"
+                   "}\n"
+                   "fn call_mark<T: Mark>(x: T) -> i32 {\n"
+                   "  ret x.mark()\n"
+                   "}\n"
+                   "fn main() {\n"
+                   "  _ := call_mark(Wrap::<Point> { v: Point { x: 1 } })\n"
+                   "}\n"}});
+
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(result.ok);
+  CHECK(result.lowered.has_value());
+  if (!result.ok || !result.lowered.has_value()) {
+    return;
+  }
+  const ir::Storage& storage = *result.lowered->storage;
+  CHECK(ir::verify_storage(storage).is_ok());
+  // The receiver's clone reaches the declaration's method item as a
+  // concrete function.
+  bool saw_concrete = false;
+  for (const ir::FunctionIdx idx : storage.functions().idx_range()) {
+    const ir::FunctionMeta& meta = storage.functions()[idx].meta;
+    if (f.strings.get(meta.name) != "mark") {
+      continue;
+    }
+    bool mentions = storage.types()[meta.return_type].tag == ir::TypeTag::Param;
+    for (const ir::TypeIdx param : meta.param_types) {
+      mentions = mentions || storage.types()[param].tag == ir::TypeTag::Param;
+    }
+    saw_concrete = saw_concrete || !mentions;
+  }
+  CHECK(saw_concrete);
+}
+
 }  // namespace lowering

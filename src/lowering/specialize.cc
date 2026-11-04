@@ -11,6 +11,7 @@
 #include <bit>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -970,16 +971,86 @@ ir::FunctionIdx Lowerer::resolve_dispatch(str::StringPoolId spec,
     return ir::FunctionIdx::invalid();
   }
   const std::string_view method_name = strings.get(method);
+  // A nominal's name, so a declaration can stand for an instantiation
+  // no call checked (ADR-0079).
+  const auto nominal_name = [&](ir::TypeIdx type) -> str::StringPoolId {
+    const ir::TypeIdx at = canonical_type(type);
+    if (!at.is_valid() || at.idx >= builder.state().types.size()) {
+      return str::INVALID_STRING_POOL_ID;
+    }
+    const ir::TypeNode& node = builder.state().types[at];
+    if (node.tag == ir::TypeTag::Struct) {
+      return builder.state().struct_types[node.as_struct()].name;
+    }
+    if (node.tag == ir::TypeTag::Enum) {
+      return builder.state().enum_types[node.as_enum()].name;
+    }
+    return str::INVALID_STRING_POOL_ID;
+  };
+  const str::StringPoolId receiver_name = nominal_name(receiver);
+  const analyzer::CheckedModule::MethodInfo* declaration = nullptr;
   for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
     for (const analyzer::CheckedModule::MethodInfo& info :
          pkg.modules[m].methods) {
       if (info.spec != spec_index || info.name != method_name) {
         continue;
       }
-      if (!type_equivalent(info.self_type, receiver)) {
+      if (type_equivalent(info.self_type, receiver)) {
+        return method_function(m, info, span);
+      }
+      // The definition-site record: its body is cloned under the
+      // receiver's own arguments.
+      if (declaration == nullptr &&
+          type_names_param(builder.state(), info.self_type) &&
+          nominal_name(info.self_type) != str::INVALID_STRING_POOL_ID &&
+          nominal_name(info.self_type) == receiver_name) {
+        declaration = &info;
+      }
+    }
+  }
+  if (declaration != nullptr && declaration->item.is_valid()) {
+    std::vector<ir::TypeIdx> args = receiver_type_args(receiver);
+    for (const ir::TypeIdx arg : declaration->method_args) {
+      args.push_back(arg);
+    }
+    return specialize_generic(declaration->item, args, span);
+  }
+  // A generic impl registers no signature until a call names it: the
+  // spec table names the impl, and the checked body hangs on its method
+  // item (ADR-0079).
+  if (receiver_name != str::INVALID_STRING_POOL_ID) {
+    const std::string_view receiver_spelling = strings.get(receiver_name);
+    for (const auto& impl : pkg.spec_impls) {
+      if (impl.spec != spec_index || !impl.item.is_valid()) {
         continue;
       }
-      return method_function(m, info, span);
+      const ast::ItemNode& node = ast.items[impl.item];
+      if (node.kind != ast::ItemKind::Impl) {
+        continue;
+      }
+      const ast::ItemImpl& shape = node.payload.get<ast::ItemImpl>();
+      if (!shape.type.is_valid() ||
+          ast.types[shape.type].kind != ast::TypeKind::Path) {
+        continue;
+      }
+      const ast::TypePath& target =
+          ast.types[shape.type].payload.get<ast::TypePath>();
+      const std::span<const ast::Ident> segments =
+          ast.paths[target.path].segments;
+      if (segments.empty() || segments.back().name != receiver_spelling) {
+        continue;
+      }
+      for (const ast::ItemIdx method_item : shape.methods) {
+        const ast::ItemNode& method_node = ast.items[method_item];
+        if (method_node.kind != ast::ItemKind::Fn) {
+          continue;
+        }
+        if (method_node.payload.get<ast::ItemFn>().name.name != method_name) {
+          continue;
+        }
+        std::vector<ir::TypeIdx> args = receiver_type_args(receiver);
+        return specialize_generic(method_item, args, span);
+      }
     }
   }
   // A builtin convertible satisfies `Display` without an implementation

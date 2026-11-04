@@ -2997,6 +2997,39 @@ TEST_CASE("Check refuses a call on an unbounded type parameter") {
   CHECK(has_message(f.bag, "The bounds on 'T' do not provide 'bump'"));
 }
 
+// The definition-site check is a body's only check: a call
+// instantiates the signature and does not walk the body again, so a
+// mistake is reported against the declaration and never against a
+// caller's instantiation (ADR-0079).
+TEST_CASE("A generic body is checked once, not at each call") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn broken<T>(x: T) -> i32 {\n"
+                                      "  mut b: bool := x\n"
+                                      "  ret 0\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  _ := broken(1)\n"
+                                      "  _ := broken(2u8)\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  // One report, from the definition-site check: `T` against `bool`.
+  // Neither call walked the body, so neither `i32` nor `u8` appears.
+  CHECK(count_messages(
+            f.bag, "Type mismatch in path: expected 'bool', found 'T'") == 1);
+  CHECK(count_messages(
+            f.bag, "Type mismatch in path: expected 'bool', found 'i32'") == 0);
+  CHECK(count_messages(
+            f.bag, "Type mismatch in path: expected 'bool', found 'u8'") == 0);
+}
+
 // The declared bound is what a parameter's body may call: the
 // definition-site check resolves the call through it (ADR-0080).
 TEST_CASE("Check reads a call on a bounded type parameter") {

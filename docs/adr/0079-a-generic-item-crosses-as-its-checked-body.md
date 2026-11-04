@@ -118,18 +118,22 @@ carries into ADR-0079's second slice.
 
 ## Staged landing
 
-**The node, the once-check, the pass, and the body landed; the walk
-follows.** A dependent reads a generic body from a summary and
-instantiates it, and the per-instantiation checks stay until the
-AST-level walk is deleted.
+**The walk is deleted where the once-check stands in.** A dependent
+reads a generic body from a summary and instantiates it, and a call
+instantiates a signature rather than walking a body; the cases the
+definition-site pass cannot stand in for keep their per-instantiation
+check.
 
 1. Landed. A type parameter in the IR: a type node that names a
    parameter of the item it belongs to (`1ed02420`).
 2. Landed. The analyzer checks a generic body once, against its
-   parameters: a dedicated pass after every concrete check binds each
+   parameters: a dedicated pass binds each
    declared parameter to the `Param` node its index names, resolves
    the declaration's own signature under it, and checks the body
-   against that once. A call the parameter's type decides resolves
+   against that once. The walk visits every generic item the package
+   declares, instantiated or not, so a mistake in a generic nothing
+   calls is still reported where it is written. A call the parameter's
+   type decides resolves
    through the parameter's declared bounds (ADR-0080), and a call to a
    generic callee resolves only its signature, because each item is
    checked in its own context. The pass's records carry `PARAM_INST`,
@@ -185,4 +189,18 @@ AST-level walk is deleted.
    reachable body names; a build therefore holds the library's storage
    beside its own, and its reported count includes what the library
    lowered.
-5. The AST-level instantiation walk is deleted.
+5. Landed for the items the once-check stands in for. The pass runs
+   before the concrete body checks, so a call site knows the body was
+   checked: it registers the item's signature and claims the
+   instantiation's numbering slot for the readers that key on it, and
+   runs no body check. A dispatch the body recorded resolves against
+   the receiver's own implementation - the concrete row, a
+   definition-site row whose nominal is the receiver's, or the
+   checked-impl table's declaration, whose method item the pass clones
+   under the receiver's arguments - and the pass answers per item
+   whether it stood in, so only the items it did skip the walk. What
+   cannot stand in keeps its per-instantiation check: a value
+   parameter, a `comp fn`, an owning `fn()` slot or a parameter bounded
+   by the `Fn` spec (ADR-0116 carries the closure's half), an
+   intrinsic's shape a bare parameter would decide, and a body whose
+   compile-time value reads a parameter's layout.

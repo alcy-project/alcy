@@ -66,12 +66,13 @@ replaced. The foundations are in `roadmap.md`.
 
 - [ ] The generic boundary in a summary: a generic item crosses as its
   declaration and its checked body, and a dependent instantiates it
-  (ADR-0079). The IR's type parameter, the body checked once, its
+  (ADR-0079). The IR's type parameter, the once-checked body, its
   once-emission with recorded callees and ends, the specialization
-  pass, and the body in the summary landed; what remains is the
-  AST-level instantiation walk deleted, and a finer import than the
-  whole carried storage - the pass clones what a body reaches, but a
-  dependent's tables hold the library's storage with it.
+  pass, the body in the summary, and the AST-level instantiation walk
+  deleted for the items the once-check stands in for landed; what
+  remains is a finer import than the whole carried storage - the pass
+  clones what a body reaches, but a dependent's tables hold the
+  library's storage with it.
 
 - [ ] `core::string`'s `trim_start_matches` once reported `Returns
   reference to local 's'` for the `None` arm's `ret s` - the loop

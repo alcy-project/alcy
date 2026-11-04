@@ -1131,7 +1131,10 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   fn_instances.back().inst = inst;
   modules[module].functions[sig_index].inst = inst;
 
-  if (!is_intrinsic) {
+  // A body the definition-site check stood in for is not walked again:
+  // the call instantiates the signature, and the specialization pass
+  // clones the checked body (ADR-0079).
+  if (!is_intrinsic && !once_checked_items.contains(item.idx)) {
     const ir::TypeIdx saved_ret = fn_ret;
     const u32 saved_loop = loop_depth;
     const bool saved_in_fn = in_fn;
@@ -1634,11 +1637,12 @@ bool Checker::parametric_scope_ok(
 // checks keep their own records and stay the authority until the
 // specialization pass consumes these bodies instead (ADR-0079).
 
-void Checker::check_generic_body(u32 module,
-                                 ast::ItemIdx item,
-                                 std::span<const ast::GenericParam> impl_params,
-                                 ast::TypeIdx target,
-                                 bool has_target) {
+Checker::StandIn Checker::check_generic_body(
+    u32 module,
+    ast::ItemIdx item,
+    std::span<const ast::GenericParam> impl_params,
+    ast::TypeIdx target,
+    bool has_target) {
   const std::span<const ast::GenericParam> own = fn_generic_params(item);
   std::vector<std::pair<std::string_view, ir::TypeIdx>> saved_types =
       std::move(type_params);
@@ -1666,13 +1670,17 @@ void Checker::check_generic_body(u32 module,
   // The records of this pass key off the parameter instantiation, where
   // no other reader looks.
   cur_inst = PARAM_INST;
-  check_fn(module, item, has_target ? &self : nullptr);
+  const bool recorded = check_fn(module, item, has_target ? &self : nullptr);
   scope.restore(*this);
   type_params = std::move(saved_types);
   value_params = std::move(saved_values);
+  // A body the pass could not stand in for keeps its per-instantiation
+  // check (ADR-0079), and the call sites have to know that.
+  return recorded ? StandIn::Once : StandIn::PerInstantiation;
 }
 
 void Checker::check_generic_bodies() {
+  once_checked_items.clear();
   for (u32 m = 0; m < static_cast<u32>(tree.modules.size()); ++m) {
     for (ast::ItemIdx item : tree.modules[m]->items) {
       const ast::ItemNode& node = ast.items[item];
@@ -1682,18 +1690,27 @@ void Checker::check_generic_bodies() {
             !parametric_scope_ok({}, fn.generic)) {
           continue;
         }
-        check_generic_body(m, item, {}, ast::TypeIdx::invalid(), false);
+        if (check_generic_body(m, item, {}, ast::TypeIdx::invalid(), false) ==
+            StandIn::Once) {
+          once_checked_items.insert(item.idx);
+        }
         continue;
       }
       if (node.kind != ast::ItemKind::Impl) {
         continue;
       }
       const ast::ItemImpl& impl = node.payload.get<ast::ItemImpl>();
+      // The impl's spec, by the declaration it names: the checked-impl
+      // table is not built until the concrete bodies run, so both
+      // passes resolve the written path through the same lookup
+      // (ADR-0079).
       u32 spec_index = U32_MAX;
-      for (const SpecImplEntry& record : spec_impls) {
-        if (record.item == item) {
-          spec_index = record.spec;
-          break;
+      if (impl.spec.is_valid() &&
+          ast.types[impl.spec].kind == ast::TypeKind::Path) {
+        const ast::TypePath& spec_path =
+            ast.types[impl.spec].payload.get<ast::TypePath>();
+        if (const SpecEntry* found = find_spec_path(m, spec_path.path)) {
+          spec_index = static_cast<u32>(found - specs.data());
         }
       }
       for (ast::ItemIdx method_item : impl.methods) {
@@ -1715,7 +1732,10 @@ void Checker::check_generic_bodies() {
         if (spec_index != U32_MAX) {
           spec_scope.push_back(spec_index);
         }
-        check_generic_body(m, method_item, impl.params, impl.type, true);
+        if (check_generic_body(m, method_item, impl.params, impl.type, true) ==
+            StandIn::Once) {
+          once_checked_items.insert(method_item.idx);
+        }
         while (spec_scope.size() > pushed_specs) {
           spec_scope.pop_back();
         }

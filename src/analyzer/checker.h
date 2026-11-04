@@ -231,6 +231,10 @@ class Checker {
   // reached from inside one - must not touch it: only the check_fn the
   // once-check called records.
   std::vector<ParametricBody> parametric_bodies;
+  // The items a body was checked once for: a call instantiates their
+  // signature and the lowering clones the body, so no per-instantiation
+  // AST walk runs (ADR-0079).
+  std::unordered_set<u32> once_checked_items;
   ParametricBody* param_record_ = nullptr;
   // Shared instantiation numbering that keys lowering side tables.
   // Holds each generic enum/struct instance type in creation order and
@@ -501,6 +505,12 @@ class Checker {
   // A spec visible from `module`: declared there, imported, or
   // injected from a prelude facade. Mirrors the type-namespace walk.
   SpecEntry* find_spec_in_scope(u32 module, std::string_view name);
+  // The spec a written path names: the bare name through
+  // `find_spec_in_scope`, a qualified one through the module it walks
+  // to. The concrete check and the definition-site pass both resolve
+  // through here, so one spelling cannot bind two declarations
+  // (ADR-0079).
+  SpecEntry* find_spec_path(u32 module, ast::PathIdx path);
   // Whether `spec` answers method calls from `module`: declared
   // there, imported under any local name, or injected from a facade.
   bool spec_in_scope(u32 module, const SpecEntry& spec);
@@ -1508,7 +1518,10 @@ class Checker {
   // to know the statement does not fall through.
   ir::TypeIdx check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
-  void check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
+  // Answers whether the definition-site check recorded a body a call
+  // may stand in for (ADR-0079): false for a nested or concrete
+  // check, and for a body that keeps its per-instantiation check.
+  bool check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
   // Appends one function instance and links it into the chain its item
   // and module share.
   void push_fn_instance(ast::ItemIdx item,
@@ -1548,12 +1561,17 @@ class Checker {
   // false for a value parameter or an owning `fn()` slot.
   bool parametric_scope_ok(std::span<const ast::GenericParam> impl_params,
                            std::span<const ast::GenericParam> own) const;
-  // Checks one item's body once under the parametric scope.
-  void check_generic_body(u32 module,
-                          ast::ItemIdx item,
-                          std::span<const ast::GenericParam> impl_params,
-                          ast::TypeIdx target,
-                          bool has_target);
+  // What the definition-site check did for one item's body (ADR-0079):
+  // a call instantiates a once-checked body and the lowering clones it,
+  // while anything else keeps its per-instantiation check.
+  enum class StandIn : u8 { Once, PerInstantiation };
+  // Checks one item's body once under the parametric scope, answering
+  // what that check stood in for.
+  StandIn check_generic_body(u32 module,
+                             ast::ItemIdx item,
+                             std::span<const ast::GenericParam> impl_params,
+                             ast::TypeIdx target,
+                             bool has_target);
   // Whether the record a check is making belongs to the definition-
   // site pass: calls then resolve signatures without checking callee
   // bodies, and a receiver naming a parameter dispatches through its
