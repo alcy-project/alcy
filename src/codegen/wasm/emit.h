@@ -64,8 +64,10 @@ inline bool rides_as_address(ir::TypeTag tag) {
 // request owns the entry.
 //
 // Every IR block becomes a case of a `br_table` selected by a state
-// local, so any CFG emits without a relooper. Values live in wasm locals
-// (one per SSA register and word); `Alloca` bumps a shadow stack pointer
+// local, so any CFG emits without a relooper. Values live in wasm locals:
+// a register another block reads keeps one of its own, and a register
+// whose reads all sit in the block that defines it borrows one from a
+// pool every block starts empty. `Alloca` bumps a shadow stack pointer
 // that each function restores on return. A construct the emitter does
 // not encode is a spanned diagnostic, never a wrong encoding.
 class Emitter {
@@ -185,6 +187,20 @@ class Emitter {
       const std::vector<ir::TypeIdx>& param_types,
       u32 position) const;
   u32 allocate_local(ValType type);
+  // Reserves one local per word of `shape` and returns the first.
+  u32 allocate_words(ValueShape shape);
+  // Marks the registers a block other than their definer reads; those
+  // keep a local of their own instead of borrowing from the pool.
+  void mark_dedicated_registers();
+  // Fills `out` with the registers an instruction reads: its own
+  // operands, and the operand a checked build's condition reads in place
+  // of a masked shift count or a selected divisor.
+  void collect_reads(ir::InstructionIdx instr_idx,
+                     const ir::Instruction& instr,
+                     std::vector<ir::RegisterIdx>& out) const;
+  // Gives every register without a local one: a borrowed pool local when
+  // its reads stay in its block, its own otherwise.
+  EmitResult allocate_register_locals();
   EmitResult push_operand(const ir::Operand& operand);
   EmitResult push_word(const ir::Operand& operand, u32 word, ValType type);
   EmitResult push_immutable(const ir::Immutable& immutable, u32 word);
@@ -269,6 +285,18 @@ class Emitter {
   std::vector<ValType> locals_;
   std::vector<u32> reg_base_;
   std::vector<ValueShape> reg_shape_;
+  // A run of locals a block's registers borrow in turn: the register that
+  // took it wrote a value nothing outside the block reads, so the run is
+  // free again once that value's last read has passed.
+  struct PooledLocal {
+    ValType type = ValType::I32;
+    u32 words = 0;
+    u32 base = NO_LOCAL;
+    u32 last_read = 0;
+    bool held = false;
+  };
+  std::vector<PooledLocal> pool_;
+  std::vector<char> reg_dedicated_;
   // Aggregate-valued results live in the frame: the register holds the
   // address, and this is its byte offset from the frame base.
   std::vector<u32> reg_slot_;

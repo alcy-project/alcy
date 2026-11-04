@@ -111,6 +111,22 @@ std::span<const u8> code_body_at(const std::vector<u8>& module, u32 index) {
   return {};
 }
 
+// The locals a function body declares: the body opens with one group per
+// distinct type, each a count and a value type.
+u32 local_count_at(const std::vector<u8>& module, u32 index) {
+  std::span<const u8> body = code_body_at(module, index);
+  if (body.empty()) {
+    return 0;
+  }
+  const u32 groups = read_u32(body);
+  u32 total = 0;
+  for (u32 group = 0; group < groups; ++group) {
+    total += read_u32(body);
+    body = body.subspan(1);
+  }
+  return total;
+}
+
 // The eleven defined runtime functions occupy the first bodies; a module
 // with one own function finds that body here. Pinning the number keeps
 // the test honest if the runtime's function count moves.
@@ -153,6 +169,56 @@ ir::VerifiedStorage not_bool_storage(ir::SymbolTable& strings) {
       .meta = {.return_type = i1,
                .param_types = {},
                .name = strings.intern("not_bool"),
+               .path = str::EMPTY_STRING_ID,
+               .kind = ir::SymbolKind::Free,
+               .generics = {}},
+      .blocks = {block, 1},
+  });
+  return std::move(builder).build().unwrap();
+}
+
+// One verified free function: `fn chain() -> i32` whose single block adds
+// one to a running sum `steps` times. Every sum but the last dies at the
+// instruction that reads it, so the block holds two values at a time
+// however many it names.
+ir::VerifiedStorage chain_storage(ir::SymbolTable& strings, u32 steps) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx i32_type = builder.primitive(ir::TypeTag::I32);
+  const ir::ImmutableIdx one =
+      builder.immutable({.type = i32_type, .data = {.i32_value = 1}});
+  ir::RegisterIdx sum = ir::RegisterIdx::invalid();
+  for (u32 step = 0; step < steps; ++step) {
+    const ir::OperandIdx left =
+        sum.is_valid()
+            ? builder.operand(ir::Operand::from_register(sum, i32_type))
+            : builder.operand(ir::Operand::from_immutable(one, i32_type));
+    (void)builder.operand(ir::Operand::from_immutable(one, i32_type));
+    const ir::InstructionIdx add = builder.instr({
+        .op = ir::Opcode::IntAddWrap,
+        .flags = {},
+        .dst = ir::RegisterIdx(step),
+        .measure = ir::TypeIdx::invalid(),
+        .operands = {left, 2},
+    });
+    sum = builder.reg({.type = i32_type, .def_idx = add});
+  }
+  const ir::OperandIdx ret_arg =
+      builder.operand(ir::Operand::from_register(sum, i32_type));
+  (void)builder.instr({
+      .op = ir::Opcode::Ret,
+      .flags = {},
+      .dst = ir::RegisterIdx::invalid(),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {ret_arg, 1},
+  });
+  const ir::BlockIdx block = builder.block({
+      .instrs = ir::InstructionIdxRange{ir::InstructionIdx(0), steps + 1},
+      .block_params = {},
+  });
+  builder.function({
+      .meta = {.return_type = i32_type,
+               .param_types = {},
+               .name = strings.intern("chain"),
                .path = str::EMPTY_STRING_ID,
                .kind = ir::SymbolKind::Free,
                .generics = {}},
@@ -422,6 +488,23 @@ TEST_CASE("A bool complement is the logical not") {
   const std::array<u8, 3> complement{0x41, 0x7F, 0x73};
   CHECK(std::search(body.begin(), body.end(), complement.begin(),
                     complement.end()) == body.end());
+}
+
+TEST_CASE("A block's locals count the values it holds at once") {
+  // A local per register held a function at the engine's 50000 locals
+  // whatever the source spelled, and release inlining alone reached it.
+  // The local a value lives in is free once the last instruction that
+  // reads it has run.
+  ir::SymbolTable strings{16};
+  constexpr u32 STEPS = 60000;
+  base::Result<std::vector<u8>, codegen::EmitError> emitted =
+      emit_test_module(chain_storage(strings, STEPS), strings);
+  CHECK(emitted.is_ok());
+  if (emitted.is_err()) {
+    return;
+  }
+  const std::vector<u8> module = std::move(emitted).unwrap();
+  CHECK(local_count_at(module, FIRST_PROGRAM_BODY) < 16);
 }
 
 TEST_CASE("A failed wasm allocation panics instead of trapping") {

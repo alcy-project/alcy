@@ -407,6 +407,17 @@ u32 Emitter::allocate_local(ValType type) {
   return index;
 }
 
+u32 Emitter::allocate_words(ValueShape shape) {
+  u32 base = NO_LOCAL;
+  for (u32 word = 0; word < shape.words; ++word) {
+    const u32 local = allocate_local(shape.type);
+    if (word == 0) {
+      base = local;
+    }
+  }
+  return base;
+}
+
 void Emitter::begin_body(u32 param_words) {
   param_words_ = param_words;
   body_ = BinaryWriter{};
@@ -567,30 +578,8 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
     }
   }
 
-  for (const ir::BlockIdx block_index : blocks_) {
-    const ir::Block& block = storage_.blocks()[block_index];
-    for (const ir::InstructionIdx instr_index : block.instrs) {
-      const ir::Instruction& instr = storage_.instrs()[instr_index];
-      if (!instr.dst.is_valid() || reg_base_[instr.dst.idx] != NO_LOCAL) {
-        continue;
-      }
-      const std::optional<ValueShape> shape = shape_of_definition(instr);
-      if (!shape.has_value()) {
-        const ir::TypeIdx type = storage_.registers()[instr.dst].type;
-        return unsupported(span_of(instr_index),
-                           ir::type_to_str(storage_.types()[type].tag));
-      }
-      if (shape->words == 0) {
-        continue;
-      }
-      reg_shape_[instr.dst.idx] = *shape;
-      for (u32 word_index = 0; word_index < shape->words; ++word_index) {
-        const u32 local = allocate_local(shape->type);
-        if (word_index == 0) {
-          reg_base_[instr.dst.idx] = local;
-        }
-      }
-    }
+  if (allocate_register_locals().is_err()) {
+    return base::make_err(codegen::EmitError::Unsupported);
   }
 
   // An aggregate produced by a call or a load owns a slot the frame
@@ -653,10 +642,11 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
     }
   }
   // A wasm function declares all of its locals at once, and the engines
-  // cap that count (V8 refuses more than 50000). One local per register
-  // is this emitter's model (ADR-0049), so a function the release passes
-  // inline a great deal into can pass the cap; the module would then not
-  // parse. Report the function rather than write it.
+  // cap that count (V8 refuses more than 50000). The pool keeps the count
+  // near the values a block holds at once rather than the values the
+  // function names, but a block that itself names more values than the
+  // cap allows still reaches it; the module would then not parse. Report
+  // the function rather than write it.
   if (locals_.size() > LOCAL_LIMIT) {
     const ir::Block& entry = storage_.blocks()[function.blocks.head()];
     return unsupported(
@@ -664,6 +654,131 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
         "a function with more than 50000 locals");
   }
   frame_bytes_ = static_cast<u32>(ir::align_up(frame_bytes_, 16));
+  return base::make_ok();
+}
+
+void Emitter::collect_reads(ir::InstructionIdx instr_idx,
+                            const ir::Instruction& instr,
+                            std::vector<ir::RegisterIdx>& out) const {
+  out.clear();
+  for (const ir::OperandIdx operand_index : instr.operands) {
+    const ir::Operand& operand = storage_.operands()[operand_index];
+    if (operand.is<ir::RegisterIdx>()) {
+      out.push_back(operand.as_register());
+    }
+  }
+  if (const overlay::Entry* entry = overlay_entry(instr_idx);
+      entry != nullptr && entry->operand.is_valid()) {
+    const ir::Operand& operand = storage_.operands()[entry->operand];
+    if (operand.is<ir::RegisterIdx>()) {
+      out.push_back(operand.as_register());
+    }
+  }
+}
+
+void Emitter::mark_dedicated_registers() {
+  reg_dedicated_.assign(storage_.registers().size(), 0);
+  const u32 registers = static_cast<u32>(storage_.registers().size());
+  std::vector<u32> definer(registers, NO_LOCAL);
+  std::vector<ir::RegisterIdx> reads;
+  for (const ir::BlockIdx block_index : blocks_) {
+    const ir::Block& block = storage_.blocks()[block_index];
+    const u32 defining_case = block_case_[block_index.idx];
+    for (const ir::InstructionIdx instr_index : block.instrs) {
+      const ir::Instruction& instr = storage_.instrs()[instr_index];
+      if (instr.dst.is_valid()) {
+        definer[instr.dst.idx] = defining_case;
+      }
+      collect_reads(instr_index, instr, reads);
+      for (const ir::RegisterIdx reg : reads) {
+        if (definer[reg.idx] != defining_case) {
+          reg_dedicated_[reg.idx] = 1;
+        }
+      }
+    }
+  }
+}
+
+Emitter::EmitResult Emitter::allocate_register_locals() {
+  mark_dedicated_registers();
+  const u32 registers = static_cast<u32>(storage_.registers().size());
+  // Where in the block being walked each register is last read; a read
+  // list keeps the reset to the registers the block actually names.
+  std::vector<u32> last_read(registers, NO_LOCAL);
+  std::vector<u32> touched;
+  std::vector<ir::RegisterIdx> reads;
+  pool_.clear();
+  for (const ir::BlockIdx block_index : blocks_) {
+    const ir::Block& block = storage_.blocks()[block_index];
+    for (PooledLocal& entry : pool_) {
+      entry.held = false;
+    }
+    u32 position = 0;
+    for (const ir::InstructionIdx instr_index : block.instrs) {
+      collect_reads(instr_index, storage_.instrs()[instr_index], reads);
+      for (const ir::RegisterIdx reg : reads) {
+        if (last_read[reg.idx] == NO_LOCAL) {
+          touched.push_back(reg.idx);
+        }
+        last_read[reg.idx] = position;
+      }
+      ++position;
+    }
+    position = 0;
+    for (const ir::InstructionIdx instr_index : block.instrs) {
+      const ir::Instruction& instr = storage_.instrs()[instr_index];
+      if (!instr.dst.is_valid()) {
+        ++position;
+        continue;
+      }
+      const u32 reg = instr.dst.idx;
+      if (reg_base_[reg] != NO_LOCAL) {
+        ++position;
+        continue;
+      }
+      const std::optional<ValueShape> shape = shape_of_definition(instr);
+      if (!shape.has_value()) {
+        const ir::TypeIdx type = storage_.registers()[reg].type;
+        return unsupported(span_of(instr_index),
+                           ir::type_to_str(storage_.types()[type].tag));
+      }
+      reg_shape_[reg] = *shape;
+      if (shape->words != 0) {
+        // A register nothing in its block reads is dead the moment it is
+        // defined, so its run is as short as any def's.
+        const u32 read_at = last_read[reg];
+        const u32 dead_after = read_at == NO_LOCAL ? position : read_at;
+        u32 base = NO_LOCAL;
+        if (reg_dedicated_[reg] == 0) {
+          for (PooledLocal& entry : pool_) {
+            if (entry.type != shape->type || entry.words != shape->words) {
+              continue;
+            }
+            if (entry.held && entry.last_read >= position) {
+              continue;
+            }
+            entry.held = true;
+            entry.last_read = dead_after;
+            base = entry.base;
+            break;
+          }
+        }
+        if (base == NO_LOCAL) {
+          base = allocate_words(*shape);
+          if (reg_dedicated_[reg] == 0) {
+            pool_.push_back(
+                PooledLocal{shape->type, shape->words, base, dead_after, true});
+          }
+        }
+        reg_base_[reg] = base;
+      }
+      ++position;
+    }
+    for (const u32 touched_reg : touched) {
+      last_read[touched_reg] = NO_LOCAL;
+    }
+    touched.clear();
+  }
   return base::make_ok();
 }
 

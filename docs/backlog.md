@@ -131,10 +131,9 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] The direct-wasm stack budget: a frame past the reserve (the
   shadow stack's base) panics with "stack overflow", which is a
   per-target limit native does not share and no spec states; a
-  variable-length alloca still walks past it unchecked, and
-  `too-many-locals` provokes the local-cap report through release
-  register counts, so it wants rechecking when regalloc-adjacent work
-  lands.
+  variable-length alloca still walks past it unchecked, and the frame a
+  statement with a slot or a constant-count alloca takes is never
+  returned, so a function's frame grows with the statements it spells.
 
 - [ ] Owning function types (ADR-0075) beyond parameters and returns:
   a method's `fn(...)` parameter infers from its arguments, a turbofish
@@ -177,12 +176,12 @@ replaced. The foundations are in `roadmap.md`.
   the fix: a register that declared whether it holds an address or the
   pointee would let the check cover every tag.
 
-- [ ] The direct-wasm backend has no allocation model: every SSA
-  register gets a wasm local of its own, against ADR-0049's slot model,
-  so the local count is the register count and one inlined call crosses
-  the engine's cap, allocas need a second frame pass, and the stack
-  guard costs four or five instructions per call in functions whose
-  frame cannot reach the limit. The opcodes are raw hex whose only name
+- [ ] The direct-wasm backend still has no allocation model for the
+  frame: a value with a slot and every constant-count alloca keep their
+  storage until the function returns, and allocas need a second frame
+  pass, so a frame grows with the statements a function spells rather
+  than the values live at once, and the stack guard costs four or five
+  instructions per call in functions whose frame cannot reach the limit. The opcodes are raw hex whose only name
   is a comment, so a wide shift was misencoded while the suite was
   green, and a narrow result is canonicalized per operation rather than
   at one destination rule.

@@ -90,14 +90,24 @@ backend used to be an error rather than a silently unoptimized binary.
 Amended at the IR passes' landing: the pipeline runs the release passes over
 the IR before any backend is chosen (ADR-0067), so a direct backend now
 accepts `--release` and its module is the optimized one; what the emitter
-still lacks is a register allocator, and that stays true. Link-visible
-functions --
-anything another object may call -- follow the target's ABI where one exists
-(System V for x86-64), because an object from this backend has to be
-replaceable by one from the LLVM backend and vice versa; compiler-internal
-helpers may use a private convention. A feature the emitter does not cover is
-a diagnostic naming the construct and its source span, never a wrong
-encoding.
+still lacks is a register allocator, and that stays true.
+
+Link-visible functions -- anything another object may call -- follow the
+target's ABI where one exists (System V for x86-64), because an object from
+this backend has to be replaceable by one from the LLVM backend and vice
+versa; compiler-internal helpers may use a private convention. A feature the
+emitter does not cover is a diagnostic naming the construct and its source
+span, never a wrong encoding.
+
+Amended at the wasm emitter's local recycling: a register's wasm local comes
+from a pool that every block starts empty, and the local returns to the pool
+once the last instruction that reads the value has run. A block's local count
+is then the values it holds at once rather than the registers it names, which
+is what keeps a heavily inlined function under the engines' local cap. A
+register that another block reads keeps a local of its own, because a pooled
+local's contents matter only between a definition and a read inside one
+block. Reuse across blocks, and the frame a value with a slot takes, are not
+part of this.
 
 The wasm backend emits a final module, not a relocatable object, and its
 control flow is a dispatch loop: every IR block becomes a case of a
