@@ -1,7 +1,7 @@
 # Introduction
 
 alcy is an experimental, statically-typed programming language. The
-project is pre-MVP: the language, its standard library, and most of the
+project is pre-1.0: the language, its standard library, and most of the
 compiler pipeline are still being designed, so nothing in this guide
 promises stability. What it describes is what runs today.
 

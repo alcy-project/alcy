@@ -243,9 +243,8 @@ and ADR-0099 says what it means: the promises in `docs/adr/` stop
 being editable there. It is declared when the boxes below are ticked,
 and not on a date.
 
-- [ ] The spec's MVP sections are implemented, and every staged or
-  deferred marker is implemented or moved to an explicit post-1.0
-  list in `docs/spec/deferred.md`.
+- [ ] Everything `docs/spec/` states is implemented, and
+  `docs/spec/deferred.md` holds only what is explicitly moved past 1.0.
 - [ ] Every Accepted ADR is implemented or explicitly deferred, and
   none contradicts the code.
 - [ ] The suite's public surface is described in `docs/spec/`, so the

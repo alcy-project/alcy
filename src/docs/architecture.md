@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes the intended architecture of the alcy compiler at
-MVP: a working compiler that translates alcy source code into executables.
-Implementation details may differ while the project is under development;
-this document is updated when the design or its architectural contracts
-change.
+This document describes the intended architecture of the alcy compiler
+as it stands: a working compiler that translates alcy source code into
+executables. Implementation details may differ while the project is
+under development; this document is updated when the design or its
+architectural contracts change.
 
 This document covers *what* the compiler is and *why* it is structured this
 way. For day-to-day build, test, lint, formatting, and contribution rules,
@@ -65,7 +65,7 @@ management. The reference compiler is written in C++20 and lowers alcy
 source code to LLVM IR, relying on LLVM for optimization and object code
 generation.
 
-The MVP scope is a single-threaded batch compiler: given source files, it
+The scope is a single-threaded batch compiler: given source files, it
 produces an executable.
 
 In scope:
@@ -77,7 +77,7 @@ In scope:
 - A linear single-pass compilation pipeline.
 - LLVM IR emission and object-file generation.
 
-Deliberately out of scope for MVP:
+Deliberately out of scope:
 
 - Parallel or incremental compilation.
 - Language-server functionality in the compiler pipeline; the language
@@ -590,24 +590,24 @@ for testing the filesystem or writing an output artifact.
   infrastructure must be evaluated against the zero-allocation contracts of
   the hot-path stages.
 
-## Scope beyond MVP
+## Scope beyond the current compiler
 
-The following do not have a committed MVP design:
+The following do not have a committed design:
 
 - Parallel and incremental compilation.
 - Custom memory management beyond the current arena model.
 - Completing `codegen/x86`, or replacing LLVM/the system linker with a direct
   backend on both machines.
 - Advanced optimizations and whole-program analysis.
-- Language features beyond the MVP subset (defined in `docs/spec/`,
+- Language features beyond the implemented subset (defined in `docs/spec/`,
   which is normative for language behavior).
 
-These are intentionally left open until the MVP architecture provides a
-stable foundation for evaluating them.
+These are intentionally left open until the current architecture
+provides a stable foundation for evaluating them.
 
 ## Bootstrap vision
 
-The long-term project goal is to self-host the toolchain: once the MVP
+The long-term project goal is to self-host the toolchain: once the
 compiler, build system, core/alloc/std libraries, and surrounding tools
 (formatter, linter, LSP, setup action) are complete, the entire toolchain
 is rewritten in alcy and the C++ implementation retired. The grammar in
@@ -615,6 +615,6 @@ is rewritten in alcy and the C++ implementation retired. The grammar in
 parser from it, so self-hosting means a grammar for the grammar rather
 than a rewrite of this one.
 
-This is outside the MVP architecture. Production code must not depend on
+This is outside the current architecture. Production code must not depend on
 self-hosting assumptions, and the C++ implementation remains authoritative
 until a bootstrap is deliberately introduced.

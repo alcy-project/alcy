@@ -77,8 +77,8 @@ skips value binding for any producer with an invalid `dst`.
 |---|---|
 | `Call` | `operands[0]` is the callee (`Function`/`ExternalFunction`); the rest are arguments, count-checked against the signature. |
 | `Br` | `operands[0]` is the target block; `operands[1..]` fill its block parameters positionally. |
-| `CondBr` | Exactly `[cond(i1), true_block, false_block]`. Targets take no block parameters in MVP. |
-| `Switch` | `[value(integer), default_block, (case_imm, case_block)...]`; case values are integer immediates; targets take no block parameters in MVP. |
+| `CondBr` | Exactly `[cond(i1), true_block, false_block]`. Targets take no block parameters. |
+| `Switch` | `[value(integer), default_block, (case_imm, case_block)...]`; case values are integer immediates; targets take no block parameters. |
 | `Ret` | One operand, or none for `void` (`CreateRetVoid`). |
 | `Alloca` | The allocated element type comes from the destination register's type; the operand is the array size. |
 | `Load` / `Store` | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register. |
@@ -88,7 +88,7 @@ skips value binding for any producer with an invalid `dst`.
 | `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second). |
 | `TypeCast` | Determined by source/destination tags: integer resizing by width and signedness, int<->float, float resizing, int<->pointer. |
 | Comparisons | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only. |
-| Atomics | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent in MVP. |
+| Atomics | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent. |
 | `Move` / `Drop` | Register alias / ownership marker; no code emitted. |
 | `Select` | `[cond, true_value, false_value]`. |
 

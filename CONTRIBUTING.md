@@ -289,5 +289,5 @@ Which tool to reach for, in order: a unit test with an explicit expected value, 
 property test, a sanitized hostile-input case, and libFuzzer for coverage-guided
 exploration. Re-run everything with `./tools/check.sh`.
 
-The project is pre-MVP, so APIs and the IR are still allowed to change, but please call out
+The project is pre-1.0, so APIs and the IR are still allowed to change, but please call out
 breaking changes in the commit message.

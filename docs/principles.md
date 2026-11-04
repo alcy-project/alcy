@@ -6,7 +6,7 @@ This document governs the *language*. For how the compiler that
 implements it is put together, see [architecture.md](../src/docs/architecture.md);
 `docs/spec/` holds the specification itself.
 
-`docs/spec/overview.md` states the goals and the non-goals for the MVP.
+`docs/spec/overview.md` states the goals and the non-goals.
 This file is the longer view, and it is also the tie-breaker: when two
 designs are both defensible, the one that serves more of what follows
 wins. A change that trades one of these away for convenience has to say
