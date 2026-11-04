@@ -1012,12 +1012,12 @@ void Lexer::tokenize(std::vector<Token>& out) {
       } else if (c == '\n') {
         const usize newline = pos_;
         advance();
+        // Whatever the newline decides, the bytes it decides it from are
+        // trivia: the blanks and further newlines that open the next line
+        // hold no token, so the cursor moves to the first byte that is not
+        // one of them.
+        const usize next = skip_blanks(pos_);
         if (inserts_semi(last_significant_)) {
-          // The look-ahead runs over the blanks that open the next line,
-          // and the loop would run over them again: when no comment
-          // starts there nothing in between is a token, so the cursor
-          // moves straight to the byte the answer came from.
-          const usize next = skip_blanks(pos_);
           const bool comment_starts =
               next + 1 < bytes_.size() && bytes_[next] == '/' &&
               (bytes_[next + 1] == '/' || bytes_[next + 1] == '*');
@@ -1028,10 +1028,8 @@ void Lexer::tokenize(std::vector<Token>& out) {
             out.push_back(Token{.kind = TokenKind::Semicolon,
                                 .span = span_at(newline, 1)});
           }
-          if (!comment_starts) {
-            pos_ = next;
-          }
         }
+        pos_ = next;
       } else if (c == '/' && peek(1) == '/') {
         lex_line_comment(out);
       } else if (c == '/' && peek(1) == '*') {
