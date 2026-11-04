@@ -701,10 +701,26 @@ base::Result<ast::Ident, diag::Reported> Parser::parse_ident(
 ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
                                 u32* type_args_segment) {
   const usize mark = pos_;
-  // Nine paths in ten hold one segment and the tenth holds two. The
-  // segments live on the frame because a turbofish argument list may
-  // parse another path before this one is copied, so the storage cannot
-  // be the parser's; a path that outgrows the frame spills once.
+  // Nine paths in ten are one segment with nothing after it, and the walk
+  // below spends a step of the frame, the spill test, and the loop on the
+  // one. That shape is answered here, and everything else goes the long
+  // way.
+  if (is_path_segment(peek_kind()) &&
+      (pos_ + 1 >= tokens_.size() ||
+       tokens_[pos_ + 1].kind != lexer::TokenKind::ColonColon)) {
+    const diag::Span span = peek().span;
+    const ast::Ident only{bytes_.substr(span.offset, span.length), span};
+    advance();
+    ast::Path one;
+    one.segments =
+        ast::copy_to_arena(ast_.spans, std::span<const ast::Ident>(&only, 1));
+    one.span = span_from(mark);
+    return ast_.paths.push_back(one);
+  }
+  // A longer path. The segments live on the frame because a turbofish
+  // argument list may parse another path before this one is copied, so the
+  // storage cannot be the parser's; a path that outgrows the frame spills
+  // once.
   constexpr usize INLINE_PATH_SEGMENTS = 4;
   ast::Ident inline_segments[INLINE_PATH_SEGMENTS];
   std::vector<ast::Ident> spilled_segments;
@@ -724,11 +740,12 @@ ast::PathIdx Parser::parse_path(std::vector<ast::TypeIdx>* type_args,
   while (true) {
     // A scalar may open a path only as a member's prefix: `i64::parse`
     // parses, a bare `i64` expression stays the spelling error it was.
+    const lexer::TokenKind kind = peek_kind();
     const bool scalar_head =
-        segment_count == 0 && is_primitive_path_head(peek_kind()) &&
+        segment_count == 0 && is_primitive_path_head(kind) &&
         pos_ + 1 < tokens_.size() &&
         tokens_[pos_ + 1].kind == lexer::TokenKind::ColonColon;
-    if (!is_path_segment(peek_kind()) && !scalar_head) {
+    if (!is_path_segment(kind) && !scalar_head) {
       if (segment_count == 0) {
         expect(lexer::TokenKind::Ident, "path");
         return ast::PathIdx::invalid();
