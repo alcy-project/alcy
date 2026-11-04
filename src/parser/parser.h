@@ -203,16 +203,23 @@ class Parser {
   bool check(lexer::TokenKind kind) const {
     return !at_end() && tokens_[pos_].kind == kind;
   }
-  bool match(lexer::TokenKind kind) {
+  [[gnu::always_inline]] bool match(lexer::TokenKind kind) {
     if (!check(kind)) {
       return false;
     }
     advance();
     return true;
   }
-  bool expect(lexer::TokenKind kind, std::string_view what);
+  [[gnu::always_inline]] bool expect(lexer::TokenKind kind,
+                                     std::string_view what) {
+    if (match(kind)) {
+      return true;
+    }
+    report_unexpected(what);
+    return false;
+  }
   // Reports that the cursor is not on `what`, out of line for the sake of the
-  // check above, which inlines at every step of the grammar.
+  // checks above, which inline at every step of the grammar.
   void report_unexpected(std::string_view what);
   [[gnu::always_inline]] diag::Span span_from(usize mark) const {
     const u32 start = tokens_[mark].span.offset;

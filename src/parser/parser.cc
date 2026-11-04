@@ -173,14 +173,6 @@ void Parser::skip_insignificant() {
   }
 }
 
-bool Parser::expect(lexer::TokenKind kind, std::string_view what) {
-  if (match(kind)) {
-    return true;
-  }
-  report_unexpected(what);
-  return false;
-}
-
 void Parser::report_unexpected(std::string_view what) {
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedFoundEndOfFile>(
