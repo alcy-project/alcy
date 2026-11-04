@@ -941,9 +941,13 @@ bool Checker::resolve_value_argument(u32 module,
 }
 
 namespace {
-// A pointer steps by an `isize`-wide offset, so a size above
-// `isize::MAX` names no run of bytes the target can address.
-constexpr u64 MAX_TYPE_SIZE = static_cast<u64>(std::numeric_limits<i64>::max());
+// A pointer steps by an `isize`-wide offset, so a size above its target's
+// `isize::MAX` names no run of bytes that target can address.
+constexpr u64 max_type_size(ir::PointerWidth width) {
+  return width == ir::PointerWidth::W64
+             ? static_cast<u64>(std::numeric_limits<i64>::max())
+             : static_cast<u64>(std::numeric_limits<i32>::max());
+}
 }  // namespace
 
 // A shape that holds a type parameter or a const argument has no size
@@ -1002,6 +1006,7 @@ std::optional<Checker::SizeWalk> Checker::checked_size(
     return SizeWalk{};
   }
   const ir::TypeNode node = builder.types()[type];
+  const u64 limit = max_type_size(width);
   // A parameter or a const argument has no layout until the
   // instantiation binds it, and the body it binds is checked then.
   const auto align_of = [&](ir::TypeIdx field) -> u64 {
@@ -1030,7 +1035,7 @@ std::optional<Checker::SizeWalk> Checker::checked_size(
       }
       const u64 field_align = align_of(field);
       const u64 offset = (size + field_align - 1) / field_align * field_align;
-      if (field_walk->size > MAX_TYPE_SIZE - offset) {
+      if (offset > limit || field_walk->size > limit - offset) {
         return std::nullopt;
       }
       size = offset + field_walk->size;
@@ -1052,7 +1057,7 @@ std::optional<Checker::SizeWalk> Checker::checked_size(
       if (element->cyclic) {
         return SizeWalk{0, true};
       }
-      if (element->size != 0 && element->size > MAX_TYPE_SIZE / array.count) {
+      if (element->size != 0 && element->size > limit / array.count) {
         return std::nullopt;
       }
       return SizeWalk{element->size * array.count, false};
@@ -1115,7 +1120,7 @@ bool Checker::check_type_size(ir::TypeIdx type, diag::Span span) {
   if (walk.has_value() && walk->cyclic) {
     return true;
   }
-  if (walk.has_value() && walk->size <= MAX_TYPE_SIZE) {
+  if (walk.has_value() && walk->size <= max_type_size(width)) {
     return true;
   }
   const u32 index =

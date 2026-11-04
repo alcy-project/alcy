@@ -43,9 +43,9 @@ is an error.**
   refused instead of answering 0, and an aggregate whose fields
   each fit but whose sum does not is refused the same way
   (`err-type-too-large`, `err-type-too-large-fields`).
-- The bound is not a practical limit: 2^63 bytes is beyond any target
-  the compiler emits for, so the rule only names what wrap-around
-  would otherwise answer.
+- The bound is not a practical limit: it is the widest target's
+  `isize`, which is beyond any size a program names, so the rule only
+  names what wrap-around would otherwise answer.
 - A shape that holds itself has no size to bound, and the walk says so
   rather than asking the layout for the number: the layout follows the
   fields it is given, so a cycle left the walk where it started and the
@@ -54,3 +54,13 @@ is an error.**
 - `usize` arithmetic inside a program is unaffected; the rule bounds
   the compiler's layout, and a program that computes its own offsets
   keeps the panics `docs/spec/values.md` gives them.
+
+Amended at the target's width: a shape is bounded by the `isize` of the
+target the compilation lays it out for, not by a fixed 64-bit number.
+The analyzer asks a shape's size with the width it was built with, so
+`[[u8; 65536]; 65536]` is a size on a 64-bit target and is refused with
+`EC050` for wasm32, whose `isize` is 32 bits wide, where the constant
+the wider bound let through wrapped to 0 in the offset the module
+addresses (`e2e/wasm/type-too-large`). A program compiled for one width
+may therefore name a shape another width refuses, which is the same
+rule read against the target the value would live in.

@@ -986,6 +986,40 @@ TEST_CASE("Check maps pointer widths for sized integers") {
         ir::TypeTag::I64);
 }
 
+// A size is the offset a pointer carries, so the same shape is a size on
+// one target width and past the end of the address space on another.
+TEST_CASE("Check bounds a type's size by the target's isize") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Big {\n  a: [[u8; 65536]; 65536],\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+
+  Fixture wide;
+  const CheckOutcome wide_result =
+      check_case(dir, "main.al", {"main.al"}, wide, ir::PointerWidth::W64);
+  CHECK(wide_result.package.has_value());
+
+  Fixture narrow;
+  const CheckOutcome narrow_result =
+      check_case(dir, "main.al", {"main.al"}, narrow, ir::PointerWidth::W32);
+  CHECK(!narrow_result.package.has_value());
+  bool reported = false;
+  for (u32 i = 0; i < narrow.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = narrow.bag.at(i);
+    if (diag != nullptr &&
+        diag->code == diag::Code{diag::Stage::Analyzer,
+                                 static_cast<u8>(DiagCode::TypeTooLarge)}) {
+      reported = true;
+    }
+  }
+  CHECK(reported);
+}
+
 TEST_CASE("Check rejects unknown types") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
