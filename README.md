@@ -1,16 +1,37 @@
 # alcy programming language
 
-alcy is an experimental statically-typed programming language.
-The project is in early development and not yet usable.
+alcy is an experimental systems language. It is statically typed and
+move-only, it is memory safe without lifetime annotations, and it spans
+bare metal to high-level software with one compiler.
+
+```alcy
+fn main() {
+  println("hello, world")
+}
+```
+
+A function that returns a status declares the type, as in
+`fn main() -> i32`. Ownership is not written at the call site: region
+inference over function summaries works out what a signature would
+otherwise have to spell out. [principles.md](docs/principles.md) argues
+for the design, and the [tour of the
+language](docs/guide/03-language-tour.md) covers what the compiler
+accepts today, with every example on that page compiled when the site
+is built.
 
 ## Status
 
-Pre-MVP. The language specification, standard library, and most of the
-compiler pipeline are still being designed and implemented.
+Pre-1.0. The language, its standard library, and parts of the compiler
+pipeline are still being designed. Nothing here promises stability, and
+there is no backward compatibility guarantee before 1.0: a program that
+compiles today may need an edit tomorrow.
 
-- [principles.md](docs/principles.md) - where the language is going, and the
-  properties that decide design questions.
-- [architecture.md](src/docs/architecture.md) - the planned compiler design.
+- [docs/spec/](docs/spec/) - the specification of the language as it is
+  meant to be. `deferred.md` lists what is not implemented yet.
+- [src/docs/architecture.md](src/docs/architecture.md) - how the
+  compiler is put together.
+- [samples/](samples/) - small programs kept because they are worth
+  reading, `fizzbuzz` and `wordfreq` among them.
 
 ## Build & Install
 
