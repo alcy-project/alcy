@@ -493,11 +493,12 @@ TokenKind Lexer::peek_next_kind() const {
   }
   const char c = bytes_[i];
   if (is_alpha(c) || c == '_') {
-    usize end = i + 1;
-    while (end < bytes_.size() && is_alnum_or_underscore(bytes_[end])) {
-      ++end;
-    }
-    if (bytes_.substr(i, end - i) == "else") {
+    // `else` is the only identifier that changes the answer, and four
+    // bytes and the one after them settle it: scanning the identifier to
+    // compare the whole spelling read the bytes the lexer reads again.
+    if (i + 4 <= bytes_.size() && bytes_[i] == 'e' && bytes_[i + 1] == 'l' &&
+        bytes_[i + 2] == 's' && bytes_[i + 3] == 'e' &&
+        (i + 4 == bytes_.size() || !is_alnum_or_underscore(bytes_[i + 4]))) {
       return TokenKind::Else;
     }
     return TokenKind::Ident;
