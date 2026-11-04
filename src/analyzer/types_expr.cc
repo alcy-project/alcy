@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -3410,6 +3411,44 @@ bool Checker::patterns_cover(std::span<const ir::TypeIdx> types,
       for (const std::vector<ast::PatternIdx>& row : rows) {
         row_ctor.push_back(ctor_name(row[0]));
       }
+      // A wide match over a wide enum walks every row once per variant.
+      // Each row names one variant, so the rows are sorted under the
+      // variant they name once, and each variant then reads only its own.
+      const bool indexed = rows.size() > INDEX_MIN;
+      std::vector<u32> start;
+      std::vector<u32> order;
+      if (indexed) {
+        std::unordered_map<std::string_view, u32> variant_slot;
+        variant_slot.reserve(variants.size());
+        for (usize v = 0; v < variants.size(); ++v) {
+          variant_slot.emplace(variants[v].name.name, static_cast<u32>(v));
+        }
+        const u32 unnamed = static_cast<u32>(variants.size());
+        // A row naming something no variant here spells is read for no
+        // variant at all, the way the scan below drops it.
+        const u32 unknown = unnamed + 1;
+        std::vector<u32> bucket(rows.size(), unknown);
+        start.assign(variants.size() + 3, 0);
+        for (usize r = 0; r < rows.size(); ++r) {
+          if (row_wild[r] != 0 || row_ctor[r].empty()) {
+            bucket[r] = unnamed;
+          } else {
+            const auto found = variant_slot.find(row_ctor[r]);
+            if (found != variant_slot.end()) {
+              bucket[r] = found->second;
+            }
+          }
+          ++start[bucket[r] + 1];
+        }
+        for (usize slot = 0; slot + 1 < start.size(); ++slot) {
+          start[slot + 1] += start[slot];
+        }
+        order.resize(rows.size());
+        std::vector<u32> fill(start.begin(), start.end() - 1);
+        for (usize r = 0; r < rows.size(); ++r) {
+          order[fill[bucket[r]]++] = static_cast<u32>(r);
+        }
+      }
       for (usize index = 0; index < variants.size(); ++index) {
         const ir::TypeIdxRange fields =
             builder.enum_variant_types()[enum_type.variants[index]].fields;
@@ -3421,25 +3460,15 @@ bool Checker::patterns_cover(std::span<const ir::TypeIdx> types,
         std::vector<std::vector<ast::PatternIdx>> next;
         next.reserve(rows.size());
         const std::string_view variant_name = variants[index].name.name;
-        for (usize r = 0; r < rows.size(); ++r) {
-          const std::vector<ast::PatternIdx>& row = rows[r];
-          if (row_wild[r] != 0) {
-            next.push_back(with(wild_args(arity), tails(row)));
-            continue;
-          }
-          const std::string_view name = row_ctor[r];
-          if (name.empty()) {
-            next.push_back(with(wild_args(arity), tails(row)));
-            continue;
-          }
-          // Most rows name another variant and are dropped here, before
-          // the tail they would contribute is built.
-          if (!base::same_name(name, variant_name)) {
-            continue;
-          }
-          std::vector<ast::PatternIdx> tail = tails(row);
+        // A row that names nothing, and a row that names this variant,
+        // are the rows this variant reads.
+        const auto wild_row = [&](usize r) {
+          next.push_back(with(wild_args(arity), tails(rows[r])));
+        };
+        const auto named_row = [&](usize r) {
+          std::vector<ast::PatternIdx> tail = tails(rows[r]);
           std::vector<ast::PatternIdx> args;
-          const ast::PatternNode& node = ast.patterns[row[0]];
+          const ast::PatternNode& node = ast.patterns[rows[r][0]];
           if (node.kind == ast::PatternKind::Tuple) {
             for (ast::PatternIdx element : node.payload.tuple.elements) {
               args.push_back(element);
@@ -3453,6 +3482,33 @@ bool Checker::patterns_cover(std::span<const ir::TypeIdx> types,
             args = wild_args(arity);
           }
           next.push_back(with(std::move(args), std::move(tail)));
+        };
+        if (!indexed) {
+          for (usize r = 0; r < rows.size(); ++r) {
+            if (row_wild[r] != 0 || row_ctor[r].empty()) {
+              wild_row(r);
+              continue;
+            }
+            if (!base::same_name(row_ctor[r], variant_name)) {
+              continue;
+            }
+            named_row(r);
+          }
+        } else {
+          // Both runs ascend by row, so the merge keeps the rows in the
+          // order the match lists them.
+          usize rest_at = start[variants.size()];
+          const usize rest_end = start[variants.size() + 1];
+          usize matched_at = start[index];
+          const usize matched_end = start[index + 1];
+          while (rest_at < rest_end || matched_at < matched_end) {
+            if (matched_at >= matched_end ||
+                (rest_at < rest_end && order[rest_at] < order[matched_at])) {
+              wild_row(order[rest_at++]);
+            } else {
+              named_row(order[matched_at++]);
+            }
+          }
         }
         columns.insert(columns.end(), rest.begin(), rest.end());
         if (!patterns_cover(std::move(columns), std::move(next))) {
