@@ -54,6 +54,16 @@ bool is_digit(char c) {
   return c >= '0' && c <= '9';
 }
 
+// `else` is the only identifier that changes the answer the newline rule
+// asks for, and four bytes and the one after them settle it. Scanning the
+// identifier to compare the whole spelling read bytes the lexer reads
+// again to make the token.
+bool spells_else(std::string_view bytes, usize i) {
+  return i + 4 <= bytes.size() && bytes[i] == 'e' && bytes[i + 1] == 'l' &&
+         bytes[i + 2] == 's' && bytes[i + 3] == 'e' &&
+         (i + 4 == bytes.size() || !is_alnum_or_underscore(bytes[i + 4]));
+}
+
 // The first byte of a token settles which lexer it belongs to, so the dispatch
 // that follows trivia is one table load and a jump rather than a chain of
 // tests.
@@ -450,10 +460,7 @@ TokenKind Lexer::peek_next_kind() const {
     return (i + k < bytes_.size()) ? bytes_[i + k] : '\0';
   };
   while (true) {
-    while (i < bytes_.size() && (bytes_[i] == ' ' || bytes_[i] == '\t' ||
-                                 bytes_[i] == '\r' || bytes_[i] == '\n')) {
-      ++i;
-    }
+    i = skip_blanks(i);
     if (at(0) == '/' && at(1) == '/') {
       i += 2;
       while (i < bytes_.size() && bytes_[i] != '\n') {
@@ -488,20 +495,32 @@ TokenKind Lexer::peek_next_kind() const {
     }
     break;
   }
-  if (i >= bytes_.size()) {
+  return kind_at(i);
+}
+
+// Index of the first byte at or after `from` that is not layout whitespace.
+// Newlines count as whitespace: a caller that already settled what a run of
+// them decides may move the cursor here, because only the byte at this index
+// takes part in that decision.
+usize Lexer::skip_blanks(usize from) const {
+  while (from < bytes_.size() &&
+         (bytes_[from] == ' ' || bytes_[from] == '\t' || bytes_[from] == '\r' ||
+          bytes_[from] == '\n')) {
+    ++from;
+  }
+  return from;
+}
+
+// Classifies the significant byte at `index` for semicolon suppression.
+// Only the suppressed kinds are distinguished; everything else reports
+// Ident.
+TokenKind Lexer::kind_at(usize index) const {
+  if (index >= bytes_.size()) {
     return TokenKind::Eof;
   }
-  const char c = bytes_[i];
+  const char c = bytes_[index];
   if (is_alpha(c) || c == '_') {
-    // `else` is the only identifier that changes the answer, and four
-    // bytes and the one after them settle it: scanning the identifier to
-    // compare the whole spelling read the bytes the lexer reads again.
-    if (i + 4 <= bytes_.size() && bytes_[i] == 'e' && bytes_[i + 1] == 'l' &&
-        bytes_[i + 2] == 's' && bytes_[i + 3] == 'e' &&
-        (i + 4 == bytes_.size() || !is_alnum_or_underscore(bytes_[i + 4]))) {
-      return TokenKind::Else;
-    }
-    return TokenKind::Ident;
+    return spells_else(bytes_, index) ? TokenKind::Else : TokenKind::Ident;
   }
   switch (c) {
     case ',': return TokenKind::Comma;
@@ -993,11 +1012,25 @@ void Lexer::tokenize(std::vector<Token>& out) {
       } else if (c == '\n') {
         const usize newline = pos_;
         advance();
-        if (inserts_semi(last_significant_) &&
-            !suppress_semi(peek_next_kind())) {
-          last_significant_ = TokenKind::Semicolon;
-          out.push_back(
-              Token{.kind = TokenKind::Semicolon, .span = span_at(newline, 1)});
+        if (inserts_semi(last_significant_)) {
+          // The look-ahead runs over the blanks that open the next line,
+          // and the loop would run over them again: when no comment
+          // starts there nothing in between is a token, so the cursor
+          // moves straight to the byte the answer came from.
+          const usize next = skip_blanks(pos_);
+          const bool comment_starts =
+              next + 1 < bytes_.size() && bytes_[next] == '/' &&
+              (bytes_[next + 1] == '/' || bytes_[next + 1] == '*');
+          const TokenKind ahead =
+              comment_starts ? peek_next_kind() : kind_at(next);
+          if (!suppress_semi(ahead)) {
+            last_significant_ = TokenKind::Semicolon;
+            out.push_back(Token{.kind = TokenKind::Semicolon,
+                                .span = span_at(newline, 1)});
+          }
+          if (!comment_starts) {
+            pos_ = next;
+          }
         }
       } else if (c == '/' && peek(1) == '/') {
         lex_line_comment(out);

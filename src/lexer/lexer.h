@@ -54,7 +54,9 @@ class Lexer {
   void advance(usize count = 1);
   bool at_end() const;
 
+  usize skip_blanks(usize from) const;
   TokenKind peek_next_kind() const;
+  TokenKind kind_at(usize index) const;
   void lex_line_comment(std::vector<Token>& out);
   void lex_block_comment(std::vector<Token>& out);
   void lex_identifier(std::vector<Token>& out);
