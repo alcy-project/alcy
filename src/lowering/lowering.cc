@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstring>
 #include <functional>
 #include <initializer_list>
 #include <memory>
@@ -1709,22 +1710,26 @@ void Lowerer::fn_key(std::string& key,
                      u32 inst,
                      std::span<const CompVal> comp_args,
                      std::span<const ir::TypeIdx> extra_generics) {
-  // The numeric fields go into the string's own bytes: a key is rebuilt at
-  // every call site, and handing each field to the string paid a grow check,
-  // a size update, and a terminator write of its own.
-  key.resize(11 * (3 + params.size()));
+  // The indices travel as four bytes each: a key is written at every call
+  // site and read by nothing, so the digits it used to spell are work for a
+  // comparison that never looks at them. The opening word says where the
+  // indices end, which is what keeps the comp arguments that trail them from
+  // sliding into their place. The byte order is the host's, and never leaves
+  // the run that built the key.
+  const usize prefix = (4 + params.size()) * sizeof(u32);
+  key.resize(prefix);
   char* cursor = key.data();
-  const auto put_index = [&cursor](u32 value, char separator) {
-    cursor = std::to_chars(cursor, cursor + 10, value).ptr;
-    *cursor++ = separator;
+  const auto put_index = [&cursor](u32 value) {
+    std::memcpy(cursor, &value, sizeof value);
+    cursor += sizeof value;
   };
-  put_index(item.idx, '|');
-  put_index(inst, '|');
+  put_index(static_cast<u32>(prefix));
+  put_index(item.idx);
+  put_index(inst);
   for (ir::TypeIdx param : params) {
-    put_index(param.idx, ',');
+    put_index(param.idx);
   }
-  put_index(ret.idx, '|');
-  key.resize(static_cast<usize>(cursor - key.data()));
+  put_index(ret.idx);
   for (const CompVal& arg : comp_args) {
     comp_key_into(key, arg.value);
   }
