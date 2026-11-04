@@ -213,6 +213,16 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
   if (a.idx == b.idx) {
     return true;
   }
+  const ir::TypeTag ta = tag_of(a);
+  const ir::TypeTag tb = tag_of(b);
+  // Neither answer below recurses, so neither has a cycle to guard: the
+  // tag decides a mismatch, and a nominal's index is its identity.
+  if (ta != tb) {
+    return false;
+  }
+  if (ta == ir::TypeTag::Struct || ta == ir::TypeTag::Enum) {
+    return false;
+  }
   const u64 key = (static_cast<u64>(a.idx) << 32) | static_cast<u64>(b.idx);
   for (u64 prior : seen) {
     if (prior == key) {
@@ -220,11 +230,6 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
     }
   }
   seen.push_back(key);
-  const ir::TypeTag ta = tag_of(a);
-  const ir::TypeTag tb = tag_of(b);
-  if (ta != tb) {
-    return false;
-  }
   switch (ta) {
     case ir::TypeTag::Ref:
     case ir::TypeTag::MutRef:
@@ -296,8 +301,6 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
       return builder.types()[a].as_param().value ==
              builder.types()[b].as_param().value;
     }
-    case ir::TypeTag::Struct:
-    case ir::TypeTag::Enum: return false;
     default: return true;
   }
 }
