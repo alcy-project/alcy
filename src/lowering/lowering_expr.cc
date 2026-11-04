@@ -5242,6 +5242,9 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   std::vector<ast::PatternIdx> patterns;
   std::vector<ast::ExprIdx> guards;
   std::vector<ast::ExprIdx> arm_bodies;
+  patterns.reserve(match.arms.size());
+  guards.reserve(match.arms.size());
+  arm_bodies.reserve(match.arms.size());
   for (const ast::ExprMatchArm& arm : match.arms) {
     std::vector<std::pair<ast::PatternIdx, ast::ExprIdx>> expanded;
     expand_or_arms(arm, expanded);
@@ -5254,6 +5257,9 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   std::vector<ir::BlockIdx> tests;
   std::vector<ir::BlockIdx> bodies;
   std::vector<ir::BlockIdx> guard_blocks;
+  tests.reserve(patterns.size());
+  bodies.reserve(patterns.size());
+  guard_blocks.reserve(patterns.size());
   for (usize i = 0; i < patterns.size(); ++i) {
     tests.push_back(reserve_block());
     bodies.push_back(reserve_block());
