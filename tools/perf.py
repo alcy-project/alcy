@@ -78,10 +78,15 @@ WORK_DIR = "out/perf"
 # compare a phase with itself across two runs, not with its neighbour.
 PHASES = ("parse", "targets", "analyze", "lower", "borrow")
 
-SHAPES = ["plain", "generic", "drop", "adapt", "closure", "print", "comp"]
+SHAPES = ["plain", "generic", "drop", "adapt", "closure", "print", "comp", "wide"]
 
 # How many compile-time calls one module of the comp shape makes.
 COMP_CALLS = 8
+
+# How many names the wide shape's function declares. Past 32, a name is
+# settled on its key rather than scanned for, so the shape covers the path a
+# narrow body never reaches.
+WIDE_WIDTH = 64
 
 INSTRUCTIONS = re.compile(r"^(\d+),,.*instructions")
 
@@ -106,7 +111,7 @@ COST_LINE = re.compile(r"^[0-9+\-*]")
 COMPRESSED_NAME = re.compile(r"^\((\d+)\)(?: (.*))?$")
 
 
-def module_source(shape: str, index: int) -> str:
+def module_source(shape: str, index: int, width: int = WIDE_WIDTH) -> str:
     """One module of a corpus, whose shape is the corpus's shape."""
     i = index
     if shape == "plain":
@@ -265,6 +270,20 @@ pub fn use{i}(k: i32) -> i32 {{
   ret total
 }}
 """
+    if shape == "wide":
+        names = "".join(f"  mut a{j} := {j}\n" for j in range(width))
+        guards = "".join(
+            f"  if a{j} > {j} {{\n    a{j} = a{j} - 1\n  }} else {{\n"
+            f"    a{j} = a{j} + 1\n  }}\n"
+            for j in range(width)
+        )
+        return f"""// One function holding every name at one depth, and a block per name
+// that closes back onto them: a name set is walked once per use unless the
+// walk settles it on the keys it holds.
+pub fn wide{i}() -> i32 {{
+{names}{guards}  ret a0
+}}
+"""
     raise SystemExit(f"unknown shape: {shape}")
 
 
@@ -278,6 +297,7 @@ def main_source(shape: str, modules: int, main_calls: int) -> str:
         "adapt": "  total = total + m{i}::run{i}({k})",
         "closure": "  total = total + m{i}::run{i}({k})",
         "print": "  total = total + m{i}::say{i}({k})",
+        "wide": "  total = total + m{i}::wide{i}()",
     }[shape]
     calls = "\n".join(call.format(i=i % modules, k=i % 7) for i in range(main_calls))
     return f"""fn main() -> i32 {{
@@ -303,7 +323,7 @@ def manifest_source(shape: str, modules: int) -> str:
 "alcy/std/unicode" = {}
 "alcy/std/io" = {}
 """
-    elif shape != "plain":
+    elif shape not in ("plain", "wide"):
         dependencies = """
 [dependencies]
 "alcy/std/core" = {}
@@ -323,11 +343,13 @@ path = "main.al"
 """
 
 
-def write_corpus(shape: str, modules: int, main_calls: int, out: Path) -> Path:
+def write_corpus(
+    shape: str, modules: int, main_calls: int, out: Path, width: int = WIDE_WIDTH
+) -> Path:
     """Writes one corpus and returns its directory."""
     out.mkdir(parents=True, exist_ok=True)
     for i in range(modules):
-        (out / f"m{i}.al").write_text(module_source(shape, i))
+        (out / f"m{i}.al").write_text(module_source(shape, i, width))
     (out / "main.al").write_text(main_source(shape, modules, main_calls))
     (out / "alcy.toml").write_text(manifest_source(shape, modules))
     return out
@@ -455,11 +477,15 @@ def corpus_dir(text: str) -> Path:
     return path
 
 
-def corpus_name(shape: str, modules: int, main_calls: int) -> str:
+def corpus_name(
+    shape: str, modules: int, main_calls: int, width: int = WIDE_WIDTH
+) -> str:
     """A directory name that tells the two main sizes apart."""
     name = f"{shape}{modules}"
     if main_calls:
         name += f"-main{main_calls}"
+    if width != WIDE_WIDTH:
+        name += f"-w{width}"
     return name
 
 
@@ -469,7 +495,7 @@ def cmd_corpus(args: argparse.Namespace) -> int:
         out = REPO_ROOT / out
     modules = args.modules
     main_calls = args.main_calls if args.main_calls else modules
-    write_corpus(args.shape, modules, main_calls, out)
+    write_corpus(args.shape, modules, main_calls, out, args.width)
     print(f"{out}: {modules} modules, {main_calls} calls in main")
     return 0
 
@@ -625,7 +651,9 @@ def cmd_rss(args: argparse.Namespace) -> int:
             args.shape,
             modules,
             args.main_calls if args.main_calls else modules,
-            Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
+            Path(WORK_DIR)
+            / corpus_name(args.shape, modules, args.main_calls, args.width),
+            args.width,
         )
         kib = min(
             peak_rss_kib(binary, corpus, args.jobs, args.subcommand)
@@ -670,7 +698,9 @@ def cmd_scale(args: argparse.Namespace) -> int:
             args.shape,
             modules,
             args.main_calls if args.main_calls else modules,
-            Path(WORK_DIR) / corpus_name(args.shape, modules, args.main_calls),
+            Path(WORK_DIR)
+            / corpus_name(args.shape, modules, args.main_calls, args.width),
+            args.width,
         )
         count = instructions(binary, corpus, args.jobs, args.subcommand)
         rows.append((modules, count))
@@ -996,10 +1026,16 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_BINARY,
         help=f"compiler to measure (default: {DEFAULT_BINARY})",
     )
+    width = dict(
+        type=int,
+        default=WIDE_WIDTH,
+        help="names the wide shape declares (other shapes ignore it)",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     corpus = subparsers.add_parser("corpus", parents=[common], help="write one corpus")
     corpus.add_argument("--shape", default="plain", choices=SHAPES)
+    corpus.add_argument("--width", **width)
     corpus.add_argument("--modules", type=int, default=300)
     corpus.add_argument(
         "--main-calls",
@@ -1019,6 +1055,7 @@ def parse_args() -> argparse.Namespace:
         "scale", parents=[common], help="instructions per module at several sizes"
     )
     scale.add_argument("--shape", default="plain", choices=SHAPES)
+    scale.add_argument("--width", **width)
     scale.add_argument("--sizes", type=int, nargs="+", default=[300, 600, 1200])
     scale.add_argument(
         "--main-calls",
@@ -1035,6 +1072,7 @@ def parse_args() -> argparse.Namespace:
         "rss", parents=[common], help="peak RSS per module at several sizes"
     )
     rss.add_argument("--shape", default="plain", choices=SHAPES)
+    rss.add_argument("--width", **width)
     rss.add_argument("--sizes", type=int, nargs="+", default=[300, 600, 1200])
     rss.add_argument(
         "--main-calls",
@@ -1119,7 +1157,7 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     # --name only exists for corpus, and a missing one derives a directory name.
     if args.command == "corpus" and not args.name:
-        args.name = corpus_name(args.shape, args.modules, args.main_calls)
+        args.name = corpus_name(args.shape, args.modules, args.main_calls, args.width)
     return args
 
 
