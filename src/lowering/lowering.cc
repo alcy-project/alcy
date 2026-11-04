@@ -391,14 +391,6 @@ ir::RegisterIdx Lowerer::claim_reg() {
   return ir::RegisterIdx(static_cast<u32>(builder.state().registers.size()));
 }
 
-ir::OperandIdx Lowerer::to_operand(ir::RegisterIdx reg, ir::TypeIdx type) {
-  return builder.operand(ir::Operand::from_register(reg, type));
-}
-
-ir::OperandIdx Lowerer::to_operand(ir::ImmutableIdx imm, ir::TypeIdx type) {
-  return builder.operand(ir::Operand::from_immutable(imm, type));
-}
-
 // An instruction names its operands as a consecutive range of the table. A
 // lone operand is a range by itself, and lowering builds the operands of an
 // instruction right before emitting it, so a wider range reuses the tail it

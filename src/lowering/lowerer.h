@@ -301,8 +301,14 @@ class Lowerer {
   // into it, which is what lets it leave a value there.
   static bool can_write_through(ir::TypeTag tag);
   ir::RegisterIdx claim_reg();
-  ir::OperandIdx to_operand(ir::RegisterIdx reg, ir::TypeIdx type);
-  ir::OperandIdx to_operand(ir::ImmutableIdx imm, ir::TypeIdx type);
+  // Appending one operand is the whole body, so the callers in other
+  // translation units take it inline.
+  ir::OperandIdx to_operand(ir::RegisterIdx reg, ir::TypeIdx type) {
+    return builder.operand(ir::Operand::from_register(reg, type));
+  }
+  ir::OperandIdx to_operand(ir::ImmutableIdx imm, ir::TypeIdx type) {
+    return builder.operand(ir::Operand::from_immutable(imm, type));
+  }
   // Operands are a view: an instruction carries one to three indices,
   // so building a vector for the common case allocated on every emit.
   // A braced list reaches the same implementation without one.
