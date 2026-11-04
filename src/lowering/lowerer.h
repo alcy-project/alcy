@@ -1515,6 +1515,12 @@ class Lowerer {
   // (ADR-0137).
   u32 end_exempt_ = base::INVALID_IDX;
   void record_end(u32 mark, diag::Span span);
+  // The locals whose type ends with code, ascending by local, folded in as
+  // the table grows: an end site lists the ones above its mark.
+  std::vector<u32> dropping_;
+  usize dropping_built_for_ = 0;
+  void reset_locals();
+  void sync_dropping();
   void record_event(OwnershipEvent::Kind kind,
                     u32 local,
                     std::vector<u32> path,

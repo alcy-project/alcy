@@ -186,21 +186,44 @@ DropWorkingSet::DropWorkingSet() : tables_(std::make_unique<Tables>()) {}
 
 DropWorkingSet::~DropWorkingSet() = default;
 
+void Lowerer::reset_locals() {
+  locals.clear();
+  dropping_.clear();
+  dropping_built_for_ = 0;
+}
+
+void Lowerer::sync_dropping() {
+  for (usize i = dropping_built_for_; i < locals.size(); ++i) {
+    if (runs_destructor(locals[i].type)) {
+      dropping_.push_back(static_cast<u32>(i));
+    }
+  }
+  dropping_built_for_ = locals.size();
+}
+
 void Lowerer::record_end(u32 mark, diag::Span span) {
   if (failed || mark >= locals.size()) {
+    return;
+  }
+  sync_dropping();
+  const u32 seq = record_seq_++;
+  // The pass reads a site's list for the locals whose type ends with code,
+  // so the site carries those and not every local declared since the mark:
+  // an end over a function's copy types would otherwise hold the whole
+  // table and pay for all of it.
+  usize from = dropping_.size();
+  while (from > 0 && dropping_[from - 1] >= mark) {
+    --from;
+  }
+  if (from == dropping_.size()) {
     return;
   }
   EndSite site;
   site.block = cur_;
   site.offset = streams_[at(cur_)].size();
-  site.seq = record_seq_++;
-  site.locals.reserve(locals.size() - mark);
-  for (u32 i = mark; i < static_cast<u32>(locals.size()); ++i) {
-    site.locals.push_back(i);
-  }
-  if (site.locals.empty()) {
-    return;
-  }
+  site.seq = seq;
+  site.locals.assign(dropping_.data() + from,
+                     dropping_.data() + dropping_.size());
   site.span = span;
   end_sites_.push_back(std::move(site));
 }

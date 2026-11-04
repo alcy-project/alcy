@@ -2334,7 +2334,7 @@ const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
 }
 
 void Lowerer::begin_body() {
-  locals.clear();
+  reset_locals();
   local_index_.reset();
   ownership_.clear();
   end_sites_.clear();
