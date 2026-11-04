@@ -755,6 +755,14 @@ void DropElaborator::run() {
     }
   }
   const u32 place_count = static_cast<u32>(places.size());
+  // The chain is built newest first. Re-linking it oldest first puts a
+  // local's places in the order a scan of the whole table walks them.
+  std::fill(place_head.begin(), place_head.end(), base::INVALID_IDX);
+  for (u32 pi = place_count; pi-- > 0;) {
+    const u32 local = places[pi].local;
+    place_next[pi] = place_head[local];
+    place_head[local] = pi;
+  }
 
   // Blocks in lowering order, with their events and end sites in
   // (offset, seq) order. A site is a move: the end consumes the value,
@@ -1613,9 +1621,12 @@ void DropElaborator::run() {
           case Action::Kind::Site: run_site(action.index, out); break;
           case Action::Kind::Bind: {
             const OwnershipEvent& event = ownership_[action.index];
-            for (u32 pi = 0; pi < place_count; ++pi) {
-              if (places[pi].local != event.local || !flag_needed[pi] ||
-                  flag[pi].is_valid()) {
+            if (event.local == base::INVALID_IDX) {
+              break;
+            }
+            for (u32 pi = place_head[event.local]; pi != base::INVALID_IDX;
+                 pi = place_next[pi]) {
+              if (!flag_needed[pi] || flag[pi].is_valid()) {
                 continue;
               }
               const std::pair<ir::InstructionIdx, ir::InstructionIdx> pair =
@@ -1664,8 +1675,12 @@ void DropElaborator::run() {
           }
           case Action::Kind::StoreClear: {
             const OwnershipEvent& event = ownership_[action.index];
-            for (u32 pi = 0; pi < place_count; ++pi) {
-              if (places[pi].local == event.local && flag[pi].is_valid() &&
+            if (event.local == base::INVALID_IDX) {
+              break;
+            }
+            for (u32 pi = place_head[event.local]; pi != base::INVALID_IDX;
+                 pi = place_next[pi]) {
+              if (flag[pi].is_valid() &&
                   is_prefix(event.path, places[pi].path)) {
                 pass_emit_void(seq_of(out), ir::Opcode::Store,
                                {bool_operand(false), to_operand(flag[pi], i1)},
