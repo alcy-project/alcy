@@ -3,6 +3,7 @@
 
 #include "ir/verifier.h"
 
+#include <array>
 #include <vector>
 
 #include "fpag/base/numeric.h"
@@ -154,6 +155,24 @@ constexpr InstrShape shape_of(const Opcode op) {
     case O::InsertValue: return InstrShape::InsertValue;
     default: return InstrShape::Other;
   }
+}
+
+// Whether an opcode ends its block, as a byte per opcode: the five
+// comparisons is_terminator makes answer from one load instead.
+constexpr usize OPCODE_BYTES = 256;
+
+constexpr std::array<u8, OPCODE_BYTES> make_terminators() {
+  std::array<u8, OPCODE_BYTES> ends{};
+  for (usize value = 0; value < OPCODE_BYTES; ++value) {
+    ends[value] = static_cast<u8>(is_terminator(static_cast<Opcode>(value)));
+  }
+  return ends;
+}
+
+constexpr std::array<u8, OPCODE_BYTES> TERMINATORS = make_terminators();
+
+constexpr bool ends_block(const Opcode op) {
+  return TERMINATORS[static_cast<u8>(op)] != 0;
 }
 
 constexpr bool is_valid_symbol_kind(const SymbolKind kind) {
@@ -503,7 +522,7 @@ VerificationResult verify_storage(const Storage& storage) {
     for (const InstructionIdx iidx : block.instrs) {
       const Instruction& instr = storage.instrs()[iidx];
       const bool last = (iidx.idx + 1 == instr_end.idx);
-      if (last ? !is_terminator(instr.op) : is_terminator(instr.op)) {
+      if (ends_block(instr.op) != last) {
         if (last) {
           return err(VerificationErrorKind::UnterminatedBlock, bidx.idx);
         }
