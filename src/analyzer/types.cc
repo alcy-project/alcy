@@ -3890,6 +3890,21 @@ void Checker::record_call(u32 module,
       CheckedModule::call_target_key(callee, cur_inst), index);
 }
 
+void Checker::record_display_call(u32 module,
+                                  ast::ExprIdx arg,
+                                  const CheckedModule::MethodInfo* method) {
+  const auto found = position_by_address_.find(method);
+  if (found == position_by_address_.end()) {
+    return;
+  }
+  CheckedModule& target = modules[module];
+  const u32 index = static_cast<u32>(target.call_targets.size());
+  target.call_targets.push_back(
+      {arg, true, found->second.first, found->second.second, cur_inst});
+  target.display_target_by_key.emplace(
+      CheckedModule::call_target_key(arg, cur_inst), index);
+}
+
 CheckedModule::FnSig& Checker::add_function(u32 module,
                                             CheckedModule::FnSig sig,
                                             bool is_method) {

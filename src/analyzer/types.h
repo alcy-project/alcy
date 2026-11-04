@@ -253,6 +253,11 @@ struct CheckedModule {
   // list, and the entry module's list grows with the package: every call it
   // makes is an entry, and lowering each of them walked all of them.
   std::unordered_map<u64, u32> call_target_by_key;
+  // Where the `Display` dispatch a format argument reaches sits. A method
+  // call the argument performs records its own call under the argument's
+  // expression, so the two dispatches key in separate tables: the piece
+  // reads the dispatch, not whatever call the argument spells.
+  std::unordered_map<u64, u32> display_target_by_key;
   // One use of a value parameter as an ordinary value: the constant to
   // splice, the annotation type it carries, and the instantiation the
   // body was checked under. Lowering emits the value where the path is.
@@ -293,6 +298,12 @@ struct CheckedModule {
     const auto found = call_target_by_key.find(call_target_key(callee, inst));
     return found == call_target_by_key.end() ? nullptr
                                              : &call_targets[found->second];
+  }
+  [[nodiscard]] const CallTarget* display_target_of(ast::ExprIdx arg,
+                                                    u32 inst) const {
+    const auto found = display_target_by_key.find(call_target_key(arg, inst));
+    return found == display_target_by_key.end() ? nullptr
+                                                : &call_targets[found->second];
   }
   [[nodiscard]] const ValueSplice* value_splice_of(ast::ExprIdx expr,
                                                    u32 inst) const {

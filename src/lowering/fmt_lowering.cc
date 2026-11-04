@@ -150,7 +150,7 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
         tag == ir::TypeTag::Param) {
       const analyzer::CheckedModule::CallTarget* target =
           piece.arg < state.arg_exprs.size()
-              ? owner_.call_target(state.arg_exprs[piece.arg])
+              ? owner_.display_target(state.arg_exprs[piece.arg])
               : nullptr;
       if (target == nullptr) {
         owner_.unsupported(span, "argument is not formattable");

@@ -1097,7 +1097,7 @@ void Checker::record_fmt_display(u32 module,
   const CheckedModule::MethodInfo* method = lookup_method(
       element, "display", module, ast.exprs[arg].span, true, spec);
   if (method != nullptr) {
-    record_call(module, arg, method);
+    record_display_call(module, arg, method);
   }
 }
 

@@ -1217,6 +1217,11 @@ const analyzer::CheckedModule::CallTarget* Lowerer::call_target(
   return pkg.modules[module].callee_of(callee, cur_inst_);
 }
 
+const analyzer::CheckedModule::CallTarget* Lowerer::display_target(
+    ast::ExprIdx arg) const {
+  return pkg.modules[module].display_target_of(arg, cur_inst_);
+}
+
 const analyzer::CheckedModule::IndirectCall* Lowerer::indirect_call(
     ast::ExprIdx callee) const {
   return pkg.modules[module].indirect_call_of(callee, cur_inst_);

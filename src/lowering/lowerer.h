@@ -414,6 +414,8 @@ class Lowerer {
   ir::TypeIdx expr_type(ast::ExprIdx expr);
   const analyzer::CheckedModule::CallTarget* call_target(
       ast::ExprIdx callee) const;
+  const analyzer::CheckedModule::CallTarget* display_target(
+      ast::ExprIdx arg) const;
   const analyzer::CheckedModule::IndirectCall* indirect_call(
       ast::ExprIdx callee) const;
   const analyzer::CheckedModule::ClosureFn* closure_fn(ast::ExprIdx expr) const;

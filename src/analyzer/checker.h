@@ -1128,6 +1128,9 @@ class Checker {
   void record_call(u32 module,
                    ast::ExprIdx callee,
                    const CheckedModule::MethodInfo* method);
+  void record_display_call(u32 module,
+                           ast::ExprIdx arg,
+                           const CheckedModule::MethodInfo* method);
   // Recognizes a `drop` method and rejects a signature that could not
   // act as a destructor. Returns whether the method is one.
   bool check_drop_signature(u32 module,
