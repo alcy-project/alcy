@@ -1005,7 +1005,7 @@ class Checker {
                        std::vector<ir::TypeIdx>& stack,
                        const ir::Storage& storage);
   std::string_view nominal_name(ir::TypeIdx idx) const;
-  ir::TypeTag tag_of(ir::TypeIdx idx) const;
+  ir::TypeTag tag_of(ir::TypeIdx idx) const { return builder.types()[idx].tag; }
   bool is_integer_tag(ir::TypeTag tag) const;
   // Whether an unsuffixed integer literal's magnitude fits `tag`. A
   // negative sign is part of the literal's value, so it narrows the
@@ -1018,9 +1018,15 @@ class Checker {
   // the digits do not name.
   static bool float_literal_fits(std::string_view spelling, ir::TypeTag tag);
   bool is_float_tag(ir::TypeTag tag) const;
-  bool is_void(ir::TypeIdx idx) const;
-  bool is_never(ir::TypeIdx idx) const;
-  bool is_error(ir::TypeIdx idx) const;
+  bool is_void(ir::TypeIdx idx) const {
+    return tag_of(idx) == ir::TypeTag::Void;
+  }
+  bool is_never(ir::TypeIdx idx) const {
+    return tag_of(idx) == ir::TypeTag::Never;
+  }
+  bool is_error(ir::TypeIdx idx) const {
+    return tag_of(idx) == ir::TypeTag::Error;
+  }
   // Whether the backend compares the operand type directly: a scalar,
   // a thin address, or a tuple or array of comparable elements.
   bool is_builtin_comparable(ir::TypeIdx type) const;

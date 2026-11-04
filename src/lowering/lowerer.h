@@ -233,11 +233,15 @@ class Lowerer {
   // times, so the walk runs once per type instead of once per question.
   std::vector<u8> copy_memo_;
   static bool is_block_terminator(ir::Opcode op);
-  usize at(ir::BlockIdx block) const;
+  usize at(ir::BlockIdx block) const { return block.idx - fn_block_base_; }
   ir::BlockIdx reserve_block();
   void switch_to(ir::BlockIdx block);
   bool terminated(ir::BlockIdx block);
-  bool terminated_cur();
+  bool terminated_cur() {
+    const ir::InstructionIdx last = stream_last_[at(cur_)];
+    return last.is_valid() &&
+           is_block_terminator(builder.state().instrs[last].op);
+  }
   // Ends reserved blocks a divergent condition leaves behind: the paths
   // they would have carried never run, so an unreachable terminator is
   // their whole body. The current block is restored.
@@ -275,8 +279,23 @@ class Lowerer {
   // is not known at compile time; the detail names the operation.
   void comp_not_evaluable(diag::Span span, std::string_view what);
   ir::TypeIdx error_type();
-  bool is_copy(ir::TypeIdx type);
-  ir::TypeTag tag_of(ir::TypeIdx idx) const;
+  // A type's copy-ness is asked about repeatedly, so the memo hit is here
+  // and only the walk behind the first question stays out of line.
+  bool is_copy(ir::TypeIdx type) {
+    constexpr u8 kCopy = 1;
+    const usize index = type.idx;
+    if (index < copy_memo_.size()) {
+      const u8 memo = copy_memo_[index];
+      if (memo != 0) {
+        return memo == kCopy;
+      }
+    }
+    return is_copy_slow(type);
+  }
+  bool is_copy_slow(ir::TypeIdx type);
+  ir::TypeTag tag_of(ir::TypeIdx idx) const {
+    return builder.state().types[idx].tag;
+  }
   bool is_ref_tag(ir::TypeTag tag) const;
   // Whether a callee handed a place through such a parameter can write
   // into it, which is what lets it leave a value there.
@@ -294,11 +313,11 @@ class Lowerer {
   // which leaves them fresh and contiguous.
   [[gnu::always_inline]] ir::OperandIdxRange operand_range(
       std::span<const ir::OperandIdx> ops) {
-    const usize count = builder.state().operands.size();
     const u32 width = static_cast<u32>(ops.size());
     if (width == 1) {
       return {ops[0], width};
     }
+    const usize count = builder.state().operands.size();
     if (width > 1 && width <= count && ops[0].idx == count - width) {
       bool consecutive = true;
       for (u32 offset = 1; offset < width; ++offset) {

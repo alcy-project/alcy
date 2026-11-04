@@ -139,16 +139,10 @@ Val Lowerer::stopped_value() {
   return Val{size_one, builder.never_type(), false, false};
 }
 
-bool Lowerer::is_copy(ir::TypeIdx type) {
+bool Lowerer::is_copy_slow(ir::TypeIdx type) {
   constexpr u8 kCopy = 1;
   constexpr u8 kNotCopy = 2;
   const usize index = type.idx;
-  if (index < copy_memo_.size()) {
-    const u8 memo = copy_memo_[index];
-    if (memo != 0) {
-      return memo == kCopy;
-    }
-  }
   const bool copy = ir::is_copy_type(builder.state(), type, pkg.needs_drop,
                                      pkg.not_movable, copy_inside_);
   const usize types = builder.state().types.size();
@@ -159,10 +153,6 @@ bool Lowerer::is_copy(ir::TypeIdx type) {
     copy_memo_[index] = copy ? kCopy : kNotCopy;
   }
   return copy;
-}
-
-ir::TypeTag Lowerer::tag_of(ir::TypeIdx idx) const {
-  return builder.state().types[idx].tag;
 }
 
 bool Lowerer::is_ref_tag(ir::TypeTag tag) const {

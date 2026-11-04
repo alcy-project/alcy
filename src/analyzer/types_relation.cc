@@ -42,10 +42,6 @@ std::string_view Checker::nominal_name(ir::TypeIdx idx) const {
 
 // Expression checking
 
-ir::TypeTag Checker::tag_of(ir::TypeIdx idx) const {
-  return builder.types()[idx].tag;
-}
-
 bool Checker::is_integer_tag(ir::TypeTag tag) const {
   switch (tag) {
     case ir::TypeTag::I8:
@@ -62,18 +58,6 @@ bool Checker::is_integer_tag(ir::TypeTag tag) const {
 
 bool Checker::is_float_tag(ir::TypeTag tag) const {
   return tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64;
-}
-
-bool Checker::is_void(ir::TypeIdx idx) const {
-  return tag_of(idx) == ir::TypeTag::Void;
-}
-
-bool Checker::is_never(ir::TypeIdx idx) const {
-  return tag_of(idx) == ir::TypeTag::Never;
-}
-
-bool Checker::is_error(ir::TypeIdx idx) const {
-  return tag_of(idx) == ir::TypeTag::Error;
 }
 
 // Whether the backend compares the type directly. A nominal type or

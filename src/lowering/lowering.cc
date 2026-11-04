@@ -95,10 +95,6 @@ bool Lowerer::is_block_terminator(ir::Opcode op) {
          op == ir::Opcode::Unreachable;
 }
 
-usize Lowerer::at(ir::BlockIdx block) const {
-  return block.idx - fn_block_base_;
-}
-
 ir::BlockIdx Lowerer::reserve_block() {
   streams_.emplace_back();
   stream_last_.emplace_back(base::INVALID_IDX);
@@ -131,12 +127,6 @@ bool Lowerer::terminated(ir::BlockIdx block) {
     }
   }
   return false;
-}
-
-bool Lowerer::terminated_cur() {
-  const ir::InstructionIdx last = stream_last_[at(cur_)];
-  return last.is_valid() &&
-         is_block_terminator(builder.state().instrs[last].op);
 }
 
 Lowerer::Lowerer(analyzer::CheckedPackage package,
@@ -427,8 +417,9 @@ ir::RegisterIdx Lowerer::emit(ir::Opcode op,
                      .measure = ir::TypeIdx::invalid(),
                      .operands = range});
   builder.reg({.type = type, .def_idx = instr});
-  streams_[at(cur_)].push(instr);
-  stream_last_[at(cur_)] = instr;
+  const usize slot = at(cur_);
+  streams_[slot].push(instr);
+  stream_last_[slot] = instr;
   instr_spans_.push_back(cur_span_);
   return dst;
 }
@@ -561,8 +552,9 @@ void Lowerer::emit_void(ir::Opcode op,
                      .dst = ir::RegisterIdx(base::INVALID_IDX),
                      .measure = measure,
                      .operands = range});
-  streams_[at(cur_)].push(void_instr);
-  stream_last_[at(cur_)] = void_instr;
+  const usize slot = at(cur_);
+  streams_[slot].push(void_instr);
+  stream_last_[slot] = void_instr;
   instr_spans_.push_back(cur_span_);
 }
 
