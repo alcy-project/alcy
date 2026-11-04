@@ -315,6 +315,46 @@ executable image for the 1.59M, which belongs to the distribution rather than
 to a change made in passing; the table is here so that it can be decided on
 numbers.
 
+## What the job count costs
+
+Two loops spread work: reading the package (`pipeline::parse_files`, a file per
+slice) and asking LLVM for the objects (`codegen_llvm::emit`). Everything after
+the frontend - checking, lowering, borrow checking - runs on one thread, so the
+job count can only shorten the frontend. `--jobs` defaults to half the machine
+(`PipelineContext::requested_jobs`), four here, and what those four cost is
+measurable:
+
+| corpus | `-j 1` | `-j 4` | | wall `-j 1` | wall `-j 4` |
+| --- | --- | --- | --- | --- | --- |
+| `plain100` | 40.60M | 42.36M | +4.3% | 11 ms | 14 ms |
+| `plain600` | 223.12M | 233.50M | +4.7% | 49 ms | 45 ms |
+| `plain1200` | 442.48M | 462.47M | +4.5% | 95 ms | 92 ms |
+| `plain2400` | 596.29M | 639.99M | +7.3% | 133 ms | 130 ms |
+| `plain1-main4800` | 103.98M | 108.65M | +4.5% | 18 ms | 20 ms |
+
+The instruction counts are `perf stat -e cpu_core/instructions/u` and sum every
+thread; the wall times are the best of three and sit within a few milliseconds
+of each other. The default therefore costs 4 to 7% more instructions than
+`-j 1` and buys about 3% of the latency on the corpora long enough for the
+difference to show, nothing on the ones where start-up dominates. More workers
+do not buy more: `-j 8` on `plain600` is 238.44M and 51 ms, worse than `-j 4`
+on both counts, because 600 files in slices of 18 leaves each slice too small
+to pay for handing it out.
+
+The cost is per arena allocation, not contention. `plain100` under callgrind
+moves from 41.17M with one job to 42.67M with four, and 1.46M of that 1.51M is
+`mem::ConcurrentArena::alloc_from`, `lane_size` and `lane_begin`: a lane of a
+syntax arena is a range of the same buffer, and finding the bounds of that
+range happens on every allocation once there are several lanes, where the
+one-lane run folds it away. The price follows the arena traffic the parallel
+stage does, which is why it is largest on the largest corpus.
+
+That makes the default a trade of 4 to 7% of the run's instructions for a few
+percent of its latency, taken for a user who is not waiting on this compiler
+alone. It is the right trade for an interactive run and the wrong one for a
+measurement: every number in this document is `-j 1`, which is also the shape
+ADR-0048 makes byte-identical to the parallel one, so the two can be compared.
+
 ## What the formatter costs
 
 `fmt` costs more than `check` on the same corpus (`473.97M` against
@@ -347,6 +387,13 @@ here has to act on.
 Measured and rejected, so the next attempt starts from a number rather than
 from the idea.
 
+- **Gating the keyword lookup on the first byte.** Every identifier is looked
+  up among the reserved words, and a 256-entry table saying which first bytes
+  can start one looks like a cheaper test than the lookup it guards. It costs
+  `+0.43%` on `plain100` (`40.43M` to `40.60M`, three runs each): the
+  length switch in front of the table already answers the common case, so the
+  pre-test is one more load and one more branch on a path that was going to
+  find the answer anyway.
 - **A digest in the type instantiation search.** A request for a generic type
   compares its arguments against every instance the nominal has minted, once by
   index and once structurally, which is the shape the function instantiation
