@@ -2336,11 +2336,14 @@ ir::TypeIdx Checker::head_named_type(std::string_view name) {
 // classes.
 
 void Checker::validate_cycles(const ir::Storage& storage) {
+  // The walk empties the stack before it returns, so one stack serves
+  // every root: a root that allocates its own trades a reallocation for
+  // nothing.
+  std::vector<ir::TypeIdx> stack;
   for (const NominalEntry& entry : nominals) {
     if (!entry.complete) {
       continue;
     }
-    std::vector<ir::TypeIdx> stack;
     if (has_value_cycle(entry.type, stack, storage)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerRecursiveType>(
           DiagCode::RecursiveType, entry.span, entry.name);
@@ -2351,7 +2354,6 @@ void Checker::validate_cycles(const ir::Storage& storage) {
     if (!instance.complete) {
       continue;
     }
-    std::vector<ir::TypeIdx> stack;
     if (has_value_cycle(instance.type, stack, storage)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerRecursiveType>(
           DiagCode::RecursiveType, nominals[instance.nominal].span,

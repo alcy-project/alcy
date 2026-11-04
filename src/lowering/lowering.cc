@@ -2954,10 +2954,10 @@ void Lowerer::run() {
   // lowered is the one that gets published.
   struct Done {
     u32 fn;
-    std::vector<ir::BlockIdx> blocks;
+    ir::BlockIdxRange blocks;
   };
-  const auto lower_and_publish = [&](const FnEntry& entry,
-                                     std::vector<ir::BlockIdx>& blocks) {
+  const auto lower_and_publish =
+      [&](const FnEntry& entry) -> ir::BlockIdxRange {
     // The function name is interned storage: profiling by PrintableName
     // would allocate, so the trace names what the Lowerer names - the
     // source spelling, which collides only when overloads do, and
@@ -2968,16 +2968,18 @@ void Lowerer::run() {
       lower_fn(entry);
     }
     if (failed) {
-      return;
+      return ir::BlockIdxRange{};
     }
     // The ends of the body's places are the pass's to place; it rewrites
     // the streams before the blocks are published.
     place_ends();
     if (failed) {
-      return;
+      return ir::BlockIdxRange{};
     }
     // Publish reserved blocks in reservation order; entry block
-    // carries the recorded parameters.
+    // carries the recorded parameters. Reservation order is creation
+    // order, so the blocks a body published are one run and its index
+    // and count name them without a list.
     bool first = true;
     for (usize i = 0; i < fn_blocks_.size(); ++i) {
       ir::BlockIdx created =
@@ -2985,10 +2987,15 @@ void Lowerer::run() {
                          .block_params = first ? pending_block_params_
                                                : ir::BlockParamIdxRange{}});
       DCHECK(created.idx == fn_blocks_[i].idx);
+      DCHECK(created.idx == fn_blocks_.front().idx + i);
       first = false;
-      blocks.push_back(created);
     }
     pending_block_params_ = ir::BlockParamIdxRange{};
+    if (fn_blocks_.empty()) {
+      return ir::BlockIdxRange{};
+    }
+    return ir::BlockIdxRange{fn_blocks_.front(),
+                             static_cast<u32>(fn_blocks_.size())};
   };
   // The comp prefix is lowered and materialized before the rest; its
   // names are interned first so the function records can take them.
@@ -2997,9 +3004,7 @@ void Lowerer::run() {
   for (usize w = 0; w < comp_prefix && !failed; ++w) {
     const u32 fn = worklist_[w];
     const FnEntry entry = fns[fn];
-    std::vector<ir::BlockIdx> blocks;
-    lower_and_publish(entry, blocks);
-    prefix_done.push_back({fn, std::move(blocks)});
+    prefix_done.push_back({fn, lower_and_publish(entry)});
   }
   if (failed) {
     return;
@@ -3016,9 +3021,7 @@ void Lowerer::run() {
   for (usize w = comp_prefix; w < worklist_.size() && !failed; ++w) {
     const u32 fn = worklist_[w];
     const FnEntry entry = fns[fn];
-    std::vector<ir::BlockIdx> blocks;
-    lower_and_publish(entry, blocks);
-    done.push_back({fn, std::move(blocks)});
+    done.push_back({fn, lower_and_publish(entry)});
   }
   if (failed) {
     return;
@@ -3091,8 +3094,7 @@ bool Lowerer::resolve_names() {
   return true;
 }
 
-void Lowerer::materialize(const FnEntry& entry,
-                          const std::vector<ir::BlockIdx>& blocks) {
+void Lowerer::materialize(const FnEntry& entry, ir::BlockIdxRange blocks) {
   // Every staged module is toolchain sources, facades and siblings
   // alike; only facades are preludes. A parametric body counts
   // through the storage's parametric list instead, because no source
@@ -3100,9 +3102,7 @@ void Lowerer::materialize(const FnEntry& entry,
   if (pkg.tree.modules[entry.mod]->is_staged && !entry.parametric) {
     ++prelude_functions_;
   }
-  builder.set_function_blocks(
-      entry.idx,
-      ir::BlockIdxRange{blocks.front(), static_cast<u32>(blocks.size())});
+  builder.set_function_blocks(entry.idx, blocks);
 }
 
 // A function's streams are handed to the drop pass after its body is lowered,

@@ -1616,8 +1616,7 @@ class Lowerer {
   bool resolve_names();
   // Publishes one reserved entry into the built storage: its signature,
   // its blocks, and the symbol name. Called in reservation order.
-  void materialize(const FnEntry& entry,
-                   const std::vector<ir::BlockIdx>& blocks);
+  void materialize(const FnEntry& entry, ir::BlockIdxRange blocks);
   void index_origins();
   void index_structs();
   void lower_fn(const FnEntry& entry);
