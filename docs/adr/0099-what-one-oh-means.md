@@ -6,7 +6,7 @@
 
 ## Context
 
-`docs/spec/` marks sections MVP, Bootstrap, staged, and deferred, and
+`docs/spec/` marks sections Bootstrap, staged, and deferred, and
 `docs/roadmap.md` tracks the work those markers name. None of that
 says what the *number* 1.0 is about: whether it is a feature count, a
 date, or a compatibility line. Without an answer, "we need this
@@ -24,7 +24,7 @@ costs every dependent. The number is where that cost changes.
 in this record series stop being editable. It is declared when the
 conditions below hold, and not on a date.**
 
-- The spec's MVP sections are implemented, and every staged or
+- Everything the spec states is implemented, and every staged or
   deferred marker is either implemented or moved to an explicit
   post-1.0 list in `docs/spec/deferred.md`. A marker that ships
   as-is is named as the experiment it is.
@@ -57,6 +57,13 @@ thing this series exists to avoid.
   starts when the spec says it does.
 - After 1.0, breaking changes are a major version, and the growth
   rules (ADR-0094) are what makes most of them avoidable.
+
+Amended when the staging labels were retired (ADR-0138): the first
+condition read "the spec's MVP sections are implemented", and the
+Context named MVP among the markers. MVP was a milestone label that
+readers took for a promise in a window where nothing is promised, so
+the condition now covers the whole specification and the labels it
+lists now say what a document covers rather than when work lands.
 
 ## Alternatives considered
 
