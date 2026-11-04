@@ -18,6 +18,10 @@ TEST_CASE("Path normalizes duplicates dots and trailing slashes") {
   CHECK(Path::from_native("").unwrap().as_view() == ".");
   CHECK(Path::from_native(".").unwrap().as_view() == ".");
   CHECK(Path::from_native("/").unwrap().as_view() == "/");
+  CHECK(Path::from_native("a/.hidden").unwrap().as_view() == "a/.hidden");
+  CHECK(Path::from_native("a/b..").unwrap().as_view() == "a/b..");
+  CHECK(Path::from_native("./a").unwrap().as_view() == "a");
+  CHECK(Path::from_native("a/.").unwrap().as_view() == "a");
 }
 
 TEST_CASE("Path rejects embedded NUL bytes") {
@@ -32,6 +36,12 @@ TEST_CASE("Path joins and stays canonical") {
   CHECK(base.join("dep").as_view() == "pkg/dep");
   CHECK(base.join("dep/../other").as_view() == "pkg/other");
   CHECK(base.join("").as_view() == "pkg");
+  CHECK(base.join(".").as_view() == "pkg");
+  CHECK(base.join("..").as_view() == ".");
+  CHECK(Path::from_native("/").unwrap().join("a").as_view() == "/a");
+  CHECK(Path::from_native(".").unwrap().join("a").as_view() == "a");
+  CHECK(Path::from_native("pkg/x").unwrap().join("y.z").as_view() ==
+        "pkg/x/y.z");
 }
 
 TEST_CASE("Path compares spelling variants equally") {

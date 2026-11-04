@@ -5,6 +5,7 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "config/build_config.h"
@@ -61,6 +62,46 @@ std::string normalize_canonical(std::string_view path) {
   return out.empty() ? "." : out;
 }
 
+// A name a join appends as one segment: nothing in it to fold into the
+// parent's separators, and nothing the normalization walk would drop.
+bool is_plain_name(std::string_view name) {
+  if (name.empty() || name == "." || name == "..") {
+    return false;
+  }
+  for (const char c : name) {
+    if (c == DEFAULT_PATH_SEPARATOR || c == WINDOWS_PATH_SEPARATOR) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Whether normalization would return `path` unchanged: no empty segment
+// outside a leading separator, no "." or ".." segment, no trailing
+// separator. Joins hand their result back in this spelling, and a walk
+// that has nothing to fold only copies both halves to say the same thing.
+bool is_canonical(std::string_view path) {
+  if (path.empty() || path.back() == DEFAULT_PATH_SEPARATOR) {
+    return false;
+  }
+  usize start = 0;
+  for (usize i = 0; i <= path.size(); ++i) {
+    if (i < path.size() && path[i] != DEFAULT_PATH_SEPARATOR) {
+      continue;
+    }
+    const std::string_view segment = path.substr(start, i - start);
+    if (segment.empty()) {
+      if (start != 0) {
+        return false;
+      }
+    } else if (segment.size() <= 2 && (segment == "." || segment == "..")) {
+      return false;
+    }
+    start = i + 1;
+  }
+  return true;
+}
+
 #if BUILD_FLAG(IS_OS_WIN)
 std::string fold_separators(std::string_view path) {
   std::string out(path);
@@ -80,13 +121,26 @@ base::Result<Path, PathError> Path::from_native(std::string_view path) {
     return base::make_err(PathError::ContainsNul);
   }
 #if BUILD_FLAG(IS_OS_WIN)
-  return base::make_ok(Path(normalize_canonical(fold_separators(path))));
-#else
-  return base::make_ok(Path(normalize_canonical(path)));
+  if (path.find(WINDOWS_PATH_SEPARATOR) != std::string_view::npos) {
+    return base::make_ok(Path(normalize_canonical(fold_separators(path))));
+  }
 #endif
+  if (is_canonical(path)) {
+    return base::make_ok(Path(std::string(path)));
+  }
+  return base::make_ok(Path(normalize_canonical(path)));
 }
 
 Path Path::join(std::string_view child) const {
+  if (is_plain_name(child) && !value_.empty() && value_ != "." &&
+      value_.back() != DEFAULT_PATH_SEPARATOR) {
+    std::string out;
+    out.reserve(value_.size() + child.size() + 1);
+    out.append(value_);
+    out.push_back(DEFAULT_PATH_SEPARATOR);
+    out.append(child);
+    return Path(std::move(out));
+  }
   std::string out = value_;
   out.push_back(DEFAULT_PATH_SEPARATOR);
 #if BUILD_FLAG(IS_OS_WIN)
