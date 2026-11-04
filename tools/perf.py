@@ -51,6 +51,12 @@ one pattern each and report the call edges around it, which is how a cost that
 is spread over callers is attributed to the interface that causes it. A dump
 written on one build stays usable with `--dump`, so two rounds can be compared
 without a second run.
+
+`hotspots` is that same dump read the other way: the self instructions summed
+by module rather than by function. A flat profile of a healthy run is a couple
+of hundred rows of a tenth of a percent each, and which module they belong to
+is the question that says where to look next; `--by function` keeps the rows
+when one of them is worth reading on its own.
 """
 
 import argparse
@@ -109,6 +115,21 @@ COST_LINE = re.compile(r"^[0-9+\-*]")
 # A function name in a callgrind dump is written once, under an id: the first
 # mention spells it, and later ones are the bare id.
 COMPRESSED_NAME = re.compile(r"^\((\d+)\)(?: (.*))?$")
+
+# A function written down twice in a dump carries a number after its name.
+INSTANCE_MARKER = re.compile(r"'\d+$")
+
+# The namespace a symbol's name opens with, which is the module whose code it
+# is. A stripped binary has no file to group by, and the name is what is left.
+NAMESPACE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)::")
+
+# Code the compiler carries that no namespace names: the replacement allocator
+# spans the operators, and the function that carves its chunks is anonymous.
+UNSCOPED_OWN = (
+    "(anonymous namespace)::carve",
+    "operator new",
+    "operator delete",
+)
 
 
 def module_source(shape: str, index: int, width: int = WIDE_WIDTH) -> str:
@@ -923,9 +944,19 @@ def cmd_determinism(args: argparse.Namespace) -> int:
 
 
 def callgrind_dump(binary: Path, corpus: Path, jobs: int, out: Path) -> Path:
-    """Writes one callgrind dump of a check, and returns where it went."""
+    """Writes one callgrind dump of a check, and returns where it went.
+
+    A dump names a function only where the binary still has its symbol table,
+    and a release build strips it: everything collapses into the image and the
+    cost of a run cannot be split at all. The linker leaves an unstripped copy
+    next to the binary, which is the same code, so that is what is measured
+    when it is there.
+    """
     if shutil.which("valgrind") is None:
         raise SystemExit("valgrind is not on PATH; per-function costs need it")
+    unstripped = binary.parent / "exe.unstripped" / binary.name
+    if unstripped.is_file():
+        binary = unstripped
     validate(binary, corpus)
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -958,6 +989,10 @@ def callgrind_costs(
     ran and the edges it took. The cost under a `calls=` line is the callee's
     inclusive cost, so it is skipped: what a function costs of itself is what
     its own position lines add up to, which is what removing work changes.
+
+    One function can be written down more than once, with a numbered marker on
+    its name, when it holds more than one position range; the marker is taken
+    off so the copies add up to the function they are.
     """
     names: dict[str, str] = {}
     self_cost: dict[str, int] = {}
@@ -995,15 +1030,76 @@ def callgrind_costs(
         if len(parts) < 2:
             continue
         self_cost[caller] = self_cost.get(caller, 0) + int(parts[1])
+    resolved_names = {fid: INSTANCE_MARKER.sub("", name) for fid, name in names.items()}
     by_name: dict[str, int] = {}
     for fid, cost in self_cost.items():
-        name = names.get(fid, fid)
+        name = resolved_names.get(fid, fid)
         by_name[name] = by_name.get(name, 0) + cost
     resolved: dict[tuple[str, str], int] = {}
     for (from_id, to_id), count in edges.items():
-        key = (names.get(from_id, from_id), names.get(to_id, to_id))
+        key = (
+            resolved_names.get(from_id, from_id),
+            resolved_names.get(to_id, to_id),
+        )
         resolved[key] = resolved.get(key, 0) + count
     return by_name, resolved
+
+
+def namespace_of(name: str) -> str:
+    """The module a symbol is code of, from the name it was mangled from.
+
+    A release binary is stripped, so a dump attributes most of its functions to
+    the binary rather than to a source file, and the namespace is what is left
+    to group by. What the standard library, LLVM and the C runtime contribute
+    opens a namespace of its own, which keeps the scaffolding a run pays for
+    apart from the work the compiler was asked to do.
+    """
+    found = NAMESPACE.match(name)
+    if found:
+        return found.group(1)
+    if name.startswith(UNSCOPED_OWN):
+        return "base"
+    return "(unattributed)"
+
+
+def dump_for(args: argparse.Namespace, corpus: Path) -> Path:
+    """The dump a cost command reads, taking one first if it was not given."""
+    if args.dump:
+        dump = Path(args.dump)
+        if not dump.exists():
+            raise SystemExit(f"no callgrind dump at {dump}")
+        return dump
+    out = Path(args.out) if args.out else Path(WORK_DIR) / f"{corpus.name}.cg"
+    if not out.is_absolute():
+        out = REPO_ROOT / out
+    return callgrind_dump(binary_for(args.binary), corpus, args.jobs, out)
+
+
+def cmd_hotspots(args: argparse.Namespace) -> int:
+    """Self instructions grouped by module, from the same dump as costs."""
+    corpus = corpus_dir(args.corpus)
+    dump = dump_for(args, corpus)
+    self_cost, _ = callgrind_costs(dump)
+    total = sum(self_cost.values())
+    if not total:
+        raise SystemExit(f"the dump at {dump} carries no self cost")
+    print(f"{corpus.name}: {total:,} instructions, -j {args.jobs}  ({dump})")
+    if args.by == "function":
+        print(f"{'self':>12} {'share':>7}  function")
+        rows = sorted(((cost, name) for name, cost in self_cost.items()), reverse=True)
+        for cost, name in rows[: args.limit]:
+            print(f"{cost:>12,} {cost / total:>6.2%}  {name[:110]}")
+        return 0
+    table: dict[str, int] = {}
+    symbols: dict[str, int] = {}
+    for name, cost in self_cost.items():
+        key = namespace_of(name)
+        table[key] = table.get(key, 0) + cost
+        symbols[key] = symbols.get(key, 0) + 1
+    print(f"{'self':>12} {'share':>7} {'symbols':>8}  module")
+    for key, cost in sorted(table.items(), key=lambda kv: -kv[1])[: args.limit]:
+        print(f"{cost:>12,} {cost / total:>6.2%} {symbols[key]:>8,}  {key}")
+    return 0
 
 
 def cmd_costs(args: argparse.Namespace) -> int:
@@ -1011,16 +1107,7 @@ def cmd_costs(args: argparse.Namespace) -> int:
     corpus = corpus_dir(args.corpus)
     if args.callees and args.callers:
         raise SystemExit("--callees and --callers read one pattern each")
-    if args.dump:
-        dump = Path(args.dump)
-        if not dump.exists():
-            raise SystemExit(f"no callgrind dump at {dump}")
-    else:
-        binary = binary_for(args.binary)
-        out = Path(args.out) if args.out else Path(WORK_DIR) / f"{corpus.name}.cg"
-        if not out.is_absolute():
-            out = REPO_ROOT / out
-        dump = callgrind_dump(binary, corpus, args.jobs, out)
+    dump = dump_for(args, corpus)
     self_cost, edges = callgrind_costs(dump)
     total = sum(self_cost.values())
     if args.callees or args.callers:
@@ -1208,6 +1295,30 @@ def parse_args() -> argparse.Namespace:
         "--callers", default="", help="who calls functions matching this, and how often"
     )
     costs.set_defaults(func=cmd_costs)
+
+    hotspots = subparsers.add_parser(
+        "hotspots",
+        parents=[common],
+        help="the same self instructions grouped by module, from callgrind",
+    )
+    hotspots.add_argument("corpus", help="corpus directory or name under out/perf")
+    hotspots.add_argument("--jobs", type=int, default=1)
+    hotspots.add_argument("--limit", type=int, default=16, help="rows to show")
+    hotspots.add_argument(
+        "--by",
+        default="module",
+        choices=["module", "function"],
+        help="group by namespace, or keep the functions",
+    )
+    hotspots.add_argument(
+        "--dump", help="read this callgrind dump instead of running one"
+    )
+    hotspots.add_argument(
+        "--out",
+        default="",
+        help=f"where the dump goes (default: {WORK_DIR}/<corpus>.cg)",
+    )
+    hotspots.set_defaults(func=cmd_hotspots)
 
     determinism = subparsers.add_parser(
         "determinism",

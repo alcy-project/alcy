@@ -261,6 +261,46 @@ change (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`).
   attributable.
 - The unit suite, the wasm suite, and `./tools/check.sh --no-coverage`.
 
+## Where the instructions are
+
+The second step of the loop needs a table of modules, and the release binary is
+stripped, so a dump attributes very little of it to a source file. `uv run
+./tools/perf.py hotspots <corpus>` groups the same self costs by the namespace
+each symbol was mangled from, which is the module whose code it is, and
+`--by function` keeps the rows when one of them is worth reading alone.
+
+`plain100`, one job, 41.17M instructions:
+
+| module | self | share | |
+| --- | --- | --- | --- |
+| `lowering` | 7.55M | 18.3% | |
+| `parser` | 7.11M | 17.3% | |
+| `analyzer` | 6.33M | 15.4% | |
+| loader and C library | 5.03M | 12.2% | nothing names a namespace: `_dl_relocate_object_no_relro` 1.67M, `memset`/`memcpy`/`memcmp` 1.31M, three exit handlers 0.31M, 1.4M over 1,200 small ones |
+| `lexer` | 3.55M | 8.6% | |
+| `std` | 3.00M | 7.3% | containers, inlined into the callers above |
+| `ir` | 2.26M | 5.5% | 1.67M of it the storage verifier |
+| `borrow` | 1.52M | 3.7% | |
+| `base` | 1.31M | 3.2% | the allocator: `operator new` 0.63M, `operator delete` 0.43M, `carve` 0.24M |
+| `ast` | 1.00M | 2.4% | |
+| `mem` | 0.98M | 2.4% | the arenas |
+| `llvm` | 0.70M | 1.7% | |
+| the rest | 0.86M | 2.1% | `toml` 0.38M, `pipeline` 0.11M, `hash` 0.10M, `debug`, `path`, `comp` |
+
+Half of the run is the three modules that describe and pick apart a program -
+lowering, parsing, checking - and three fifths once the lexer is counted with
+them. Everything a list of functions shows on top of that is a
+subtotal of one of these rows, which is why the first question about a profile
+is which row it belongs to.
+
+A one-module run inverts the table. `plain1` costs 4.54M, and 3.12M of it is
+not compiler code: 2,863 `__cxa_atexit` registrations made by LLVM's static
+constructors, the handlers that unwind them when the process ends, and the
+relocation of the image that the loader section below measures. The compiler's
+own share of that run is about a tenth. Small inputs are
+therefore a measurement of what happens before `main`, and the loop reads the
+larger corpora for anything but start-up.
+
 ## What verification costs
 
 Three boundary checks run on every package, in the release binary as well as
@@ -519,12 +559,15 @@ half of the walk to read next.
 | `perf.py profile A B --binary BIN` | per-module self cost at two sizes, from `perf report` |
 | `perf.py ab CORPUS BEFORE AFTER` | interleaved wall clock, minimum of N, with per-phase totals |
 | `perf.py costs CORPUS` | per-function self instructions from callgrind, and the call edges around a symbol |
+| `perf.py hotspots CORPUS` | the same self instructions summed by module, or by function |
 | `perf.py rss --shape plain --sizes 300 1200` | peak RSS per module at several sizes |
 | `perf.py callers CORPUS --symbol NAME` | who reaches a symbol, and what runs under it |
 | `perf.py determinism CORPUS` | one emitted-IR hash across job counts and repeats |
 
-All of them take `--binary`, defaulting to `out/build_release/alcy`. Generated
-corpora live under `out/perf/`, which is not tracked.
+All of them take `--binary`, defaulting to `out/build_release/alcy`. The two
+that read a callgrind dump take it of the unstripped copy the linker leaves
+beside that binary, because a stripped one has no names to attribute.
+Generated corpora live under `out/perf/`, which is not tracked.
 
 ## Limits
 
