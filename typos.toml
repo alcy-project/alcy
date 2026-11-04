@@ -35,3 +35,5 @@ hel = "hel"
 pn = "pn"
 # Errno table variants: e_acces (EACCES), etc.
 acces = "acces"
+# The ELF relocation section, .rela.dyn.
+rela = "rela"
