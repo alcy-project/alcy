@@ -41,13 +41,10 @@ class Desugarer {
  public:
   struct Binding {
     Binding(std::string_view orig, std::string_view fresh)
-        : orig(orig), fresh(fresh), key(base::hash64(orig)) {}
+        : orig(orig), fresh(fresh) {}
 
     std::string_view orig;
     std::string_view fresh;
-    // A key of `orig`: a walk of a long scope settles most entries on an
-    // integer compare rather than on the bytes.
-    u64 key;
     // Pre-seeded from a sibling or-pattern alternative: reuse without
     // declaring, and track whether the name actually reappears.
     bool preseeded = false;
@@ -59,21 +56,29 @@ class Desugarer {
   // binding declared before it.
   struct ScopeIndex {
     std::unordered_map<u64, std::vector<u32>> by_key;
-    // How many of the scope's bindings `by_key` covers, and the view of
-    // the scopes it was built over.
+    // How many of the scope's bindings `by_key` covers.
     usize indexed = 0;
-    u64 epoch = 0;
+    // The scope this view was settled for; see `scope_serials`.
+    u64 serial = 0;
+  };
+
+  // A scope and the number that tells it apart from the next scope to take
+  // its depth over; see `push_scope`.
+  struct Scope {
+    std::vector<Binding> bindings;
+    u64 serial = 0;
   };
 
   ast::AstArena& ast;
   diag::DiagBag& bag;
   u32 counter = 0;
-  std::vector<std::vector<Binding>> scopes;
-  // The keyed view of each scope, by depth, kept only where the scope is
-  // wide enough to pay for one. `scope_epoch` moves whenever the scopes
-  // stop being append-only extensions of what a view indexed.
-  mutable std::vector<std::unique_ptr<ScopeIndex>> scope_keys;
-  u64 scope_epoch = 0;
+  std::vector<Scope> scopes;
+  u64 serial_counter = 0;
+  // The keyed view of the scope at each depth, once it is wide enough to pay
+  // for one. Blocks open and close around a wide body on every statement it
+  // holds, so a view settled for a scope has to outlive the blocks inside it
+  // and still tell itself apart from the scope that takes the depth over.
+  std::vector<std::unique_ptr<ScopeIndex>> scope_keys;
   std::vector<ast::Ident> path_scratch;
   // Bounds the tree walk; see base::MAX_NESTING.
   base::NestingGuard nesting_{base::MAX_NESTING};
@@ -96,48 +101,48 @@ class Desugarer {
 
   void push_scope() {
     scopes.emplace_back();
-    ++scope_epoch;
+    scopes.back().serial = ++serial_counter;
   }
 
-  void pop_scope() {
-    scopes.pop_back();
-    ++scope_epoch;
-  }
+  void pop_scope() { scopes.pop_back(); }
 
-  std::vector<Binding>& current() { return scopes.back(); }
+  std::vector<Binding>& current() { return scopes.back().bindings; }
 
   // The keyed view of scope `depth`, settling the bindings appended since
   // it was last asked for.
-  const ScopeIndex& keyed(usize depth) const {
+  const ScopeIndex& keyed(usize depth) {
     if (depth >= scope_keys.size()) {
       scope_keys.resize(depth + 1);
     }
     std::unique_ptr<ScopeIndex>& slot = scope_keys[depth];
+    Scope& scope = scopes[depth];
     if (!slot) {
       slot = std::make_unique<ScopeIndex>();
     }
-    const std::vector<Binding>& scope = scopes[depth];
-    if (slot->epoch != scope_epoch) {
+    if (slot->serial != scope.serial || slot->indexed > scope.bindings.size()) {
+      // Another scope took this depth over, or the or-pattern walk moved a
+      // scope's bindings out from under it.
       slot->by_key.clear();
       slot->indexed = 0;
-      slot->epoch = scope_epoch;
+      slot->serial = scope.serial;
     }
-    for (usize i = slot->indexed; i < scope.size(); ++i) {
-      slot->by_key[scope[i].key].push_back(static_cast<u32>(i));
+    for (usize i = slot->indexed; i < scope.bindings.size(); ++i) {
+      slot->by_key[base::hash64(scope.bindings[i].orig)].push_back(
+          static_cast<u32>(i));
     }
-    slot->indexed = scope.size();
+    slot->indexed = scope.bindings.size();
     return *slot;
   }
 
   // Where in scope `depth` the binding of `name` sits, if it sits there.
   // Only the bindings its key names are read.
-  std::optional<u32> find_keyed(usize depth, std::string_view name) const {
+  std::optional<u32> find_keyed(usize depth, std::string_view name) {
     const ScopeIndex& keys = keyed(depth);
     const auto found = keys.by_key.find(base::hash64(name));
     if (found == keys.by_key.end()) {
       return std::nullopt;
     }
-    const std::vector<Binding>& scope = scopes[depth];
+    const std::vector<Binding>& scope = scopes[depth].bindings;
     for (const u32 index : found->second) {
       if (base::same_name(scope[index].orig, name)) {
         return index;
@@ -146,12 +151,12 @@ class Desugarer {
     return std::nullopt;
   }
 
-  std::string_view lookup(std::string_view name) const {
+  std::string_view lookup(std::string_view name) {
     if (is_keyword_name(name)) {
       return name;
     }
     for (usize depth = scopes.size(); depth-- > 0;) {
-      const std::vector<Binding>& scope = scopes[depth];
+      const std::vector<Binding>& scope = scopes[depth].bindings;
       if (scope.size() > K_SCOPE_KEY_LIMIT) {
         if (const std::optional<u32> at = find_keyed(depth, name)) {
           return scope[*at].fresh;
@@ -187,7 +192,7 @@ class Desugarer {
     if (is_keyword_name(ident.name)) {
       return ident.name;
     }
-    std::vector<Binding>& inner = scopes.back();
+    std::vector<Binding>& inner = scopes.back().bindings;
     std::optional<u32> existing;
     if (inner.size() > K_SCOPE_KEY_LIMIT) {
       existing = find_keyed(scopes.size() - 1, ident.name);
@@ -212,7 +217,7 @@ class Desugarer {
     }
     bool shadowed = false;
     for (usize i = 0; i + 1 < scopes.size() && !shadowed; ++i) {
-      const std::vector<Binding>& scope = scopes[i];
+      const std::vector<Binding>& scope = scopes[i].bindings;
       if (scope.size() > K_SCOPE_KEY_LIMIT) {
         shadowed = find_keyed(i, ident.name).has_value();
         continue;
