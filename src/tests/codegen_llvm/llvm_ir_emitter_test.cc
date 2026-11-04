@@ -292,6 +292,9 @@ TEST_CASE("Inbounds addresses and copy alignment reach the module") {
       builder.immutable({.type = i32_ty, .data = {.i32_value = 1}});
   const ir::ImmutableIdx four =
       builder.immutable({.type = u64_ty, .data = {.u64_value = 4}});
+  const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
+  const ir::ImmutableIdx ones =
+      builder.immutable({.type = u8_ty, .data = {.u8_value = 0xFF}});
   const auto imm_op = [&](ir::ImmutableIdx imm, ir::TypeIdx type) {
     return builder.operand(ir::Operand::from_immutable(imm, type));
   };
@@ -338,6 +341,15 @@ TEST_CASE("Inbounds addresses and copy alignment reach the module") {
                              .dst = ir::RegisterIdx(base::INVALID_IDX),
                              .measure = ir::TypeIdx::invalid(),
                              .operands = bare_copy_args.finish()}));
+  ir::OperandSeq fill_args;
+  fill_args.push(reg_op(ir::RegisterIdx(1), i32_ty));
+  fill_args.push(imm_op(ones, u8_ty));
+  fill_args.push(imm_op(four, u64_ty));
+  instrs.push(builder.instr({.op = ir::Opcode::Memset,
+                             .flags = {},
+                             .dst = ir::RegisterIdx(base::INVALID_IDX),
+                             .measure = ir::TypeIdx::invalid(),
+                             .operands = fill_args.finish()}));
   ir::OperandSeq ret_args;
   ret_args.push(imm_op(zero, i32_ty));
   instrs.push(builder.instr({.op = ir::Opcode::Ret,
@@ -383,6 +395,13 @@ TEST_CASE("Inbounds addresses and copy alignment reach the module") {
   CHECK(text.substr(ref_copy, bare_copy - ref_copy).find("align 8") !=
         std::string::npos);
   CHECK(text.substr(bare_copy).find("align 1") != std::string::npos);
+  // A fill's destination promises only what its operand does: a
+  // pointer to one byte carries no alignment beyond the byte's.
+  const auto fill = text.find("call void @llvm.memset");
+  CHECK(fill != std::string::npos);
+  if (fill != std::string::npos) {
+    CHECK(text.substr(fill).find("align 1") != std::string::npos);
+  }
 }
 
 TEST_CASE("Emit struct and array calls") {

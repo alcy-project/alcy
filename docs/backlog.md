@@ -28,6 +28,15 @@ replaced. The foundations are in `roadmap.md`.
   a number; find the deep path, or budget the stack, before the
   headroom runs out the same way.
 
+- [ ] Codegen at the default optimization level costs seconds for a
+  function with many constant-size fills: 400 arrays of `[0u8; 64]`
+  reach an object in 16 s and 843 MiB, against 1.9 s and 624 MiB for
+  400 arrays of eight `u16` elements written through element stores, a
+  quarter of the bytes. The per-fill cost falls as the count rises, so
+  the curve is linear with a large constant rather than quadratic;
+  where the time goes inside `llvm.memset` expansion at `-O0` is
+  unmeasured.
+
 - [ ] The closure's parametric half (ADR-0116, ADR-0079 slice two):
   the spelling is bound to `core`'s `Fn` by identity, a hand-spelled
   `Fn` bound instantiates, and a call on a closure nominal is a direct

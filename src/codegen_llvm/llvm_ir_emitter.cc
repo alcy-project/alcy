@@ -706,6 +706,7 @@ void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
     case Op::Load:
     case Op::Store:
     case Op::Memcopy:
+    case Op::Memset:
     case Op::GetElementPtr:
     case Op::ElemOffset:
     case Op::EnumTagLoad:

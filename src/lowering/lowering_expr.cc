@@ -3991,6 +3991,47 @@ Val Lowerer::lower_tuple(ast::ExprIdx expr) {
   return Val{to_operand(addr, tuple_type), tuple_type, true, false};
 }
 
+// The u8 operand a repeat fills its elements with, when one byte
+// covers every byte of an element: a one-byte element's own bits, or a
+// wider element's value whose bytes are all equal. Absent means the
+// element stores stay, which alone can place a value the fill cannot.
+std::optional<ir::OperandIdx> Lowerer::repeat_fill_byte(Val value,
+                                                        ir::TypeIdx element) {
+  const u64 size = ir::type_layout(builder.state(), element, width).size;
+  if (size == 0 || size > 8) {
+    return std::nullopt;
+  }
+  const ir::TypeTag tag = tag_of(element);
+  const ir::Operand& operand = builder.state().operands[value.op];
+  if (!operand.is<ir::ImmutableIdx>()) {
+    if (size != 1 || !is_integer_type(tag) ||
+        !is_integer_type(tag_of(value.type))) {
+      return std::nullopt;
+    }
+    if (tag_of(value.type) == ir::TypeTag::U8) {
+      return use_value(value);
+    }
+    const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
+    const ir::RegisterIdx casted =
+        emit(ir::Opcode::TypeCast, u8_ty, {use_value(value)});
+    if (failed) {
+      return std::nullopt;
+    }
+    return to_operand(casted, u8_ty);
+  }
+  if (!is_integer_type(tag) && !is_float_type(tag)) {
+    return std::nullopt;
+  }
+  const u64 bits =
+      builder.state().immutables[operand.as_immutable()].as_u64_bits(tag);
+  const u64 mask = size == 8 ? ~u64{0} : ((u64{1} << (8 * size)) - 1);
+  const u64 byte = bits & 0xFF;
+  if ((bits & mask) != ((byte * 0x0101010101010101ULL) & mask)) {
+    return std::nullopt;
+  }
+  return int_operand(byte, builder.primitive(ir::TypeTag::U8));
+}
+
 Val Lowerer::lower_array(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
@@ -4011,6 +4052,30 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
     Val value = lower_moved(array.repeat, &shape.element);
     if (failed || terminated_cur()) {
       return stopped_value();
+    }
+    // One fill replaces the element stores when a byte pattern covers
+    // the element: a block carrying a store per element costs LLVM's
+    // store merging more than it costs the backend.
+    const std::optional<ir::OperandIdx> fill =
+        is_copy(shape.element) ? repeat_fill_byte(value, shape.element)
+                               : std::nullopt;
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (fill.has_value()) {
+      const ir::RegisterIdx first =
+          emit(ir::Opcode::GetElementPtr, shape.element,
+               {to_operand(addr, array_type), zero_i32, index_operand(0)},
+               {.inbounds = true});
+      const u64 size =
+          ir::type_layout(builder.state(), shape.element, width).size;
+      emit_void(ir::Opcode::Memset,
+                {to_operand(first, shape.element), *fill,
+                 int_operand(size * shape.count, usize_type())});
+      if (failed) {
+        return Val{size_one, error_type(), false, false};
+      }
+      return Val{to_operand(addr, array_type), array_type, true, false};
     }
     const ir::OperandIdx stored = use_value(value);
     for (u64 i = 0; i < shape.count && !failed; ++i) {

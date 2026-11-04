@@ -39,6 +39,7 @@ enum class VerificationErrorKind : u8 {
   InvalidExtractInsert,
   InvalidBorrow,
   InvalidMemcopy,
+  InvalidMemset,
   InvalidTypeQuery,
   EnumFieldsOutOfRange,
   TupleFieldsOutOfRange,
@@ -112,6 +113,7 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::InvalidExtractInsert: return "InvalidExtractInsert";
     case K::InvalidBorrow: return "InvalidBorrow";
     case K::InvalidMemcopy: return "InvalidMemcopy";
+    case K::InvalidMemset: return "InvalidMemset";
     case K::InvalidTypeQuery: return "InvalidTypeQuery";
     case K::EnumFieldsOutOfRange: return "EnumFieldsOutOfRange";
     case K::TupleFieldsOutOfRange: return "TupleFieldsOutOfRange";

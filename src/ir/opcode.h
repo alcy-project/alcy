@@ -124,6 +124,10 @@ enum class Opcode : u8 {
   // rewrites it to the concrete end or drops it. No backend meets one
   // (ADR-0079).
   ParametricDrop,
+
+  // Fills `len` bytes at `dst` with `byte` repeated:
+  // operands = [dst_ptr, byte(u8), len(integer)], discarded value.
+  Memset,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -200,8 +204,9 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::EnumTagLoad: return "EnumTagLoad";
     case O::EnumTagSet: return "EnumTagSet";
     case O::EnumFieldAddr: return "EnumFieldAddr";
-    case O::ParametricDrop:
-      return "ParametricDrop";
+    case O::ParametricDrop: return "ParametricDrop";
+    case O::Memset:
+      return "Memset";
 
       // case O::BorrowBegin: return "BorrowBegin";
       // case O::BorrowEnd: return "BorrowEnd";

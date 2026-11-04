@@ -948,6 +948,8 @@ class Lowerer {
   Val lower_struct(ast::ExprIdx expr);
   Val lower_tuple(ast::ExprIdx expr);
   Val lower_array(ast::ExprIdx expr);
+  std::optional<ir::OperandIdx> repeat_fill_byte(Val value,
+                                                 ir::TypeIdx element);
   ir::Opcode int_binop(ast::BinaryOp op, ir::TypeTag tag);
   // `a / b` and `a % b` with the defined semantics: a zero divisor
   // panics, and a signed divisor of -1 wraps.

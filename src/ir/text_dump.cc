@@ -568,6 +568,17 @@ class TextWriter {
         out_ += ')';
         break;
       }
+      case O::Memset: {
+        out_ += "memset(";
+        for (u32 i = 0; i < 3; ++i) {
+          if (i > 0) {
+            out_ += ", ";
+          }
+          write_operand(state_.operands[instr.operands.head() + i]);
+        }
+        out_ += ')';
+        break;
+      }
       case O::Memcopy: {
         out_ += "memcopy(";
         for (u32 i = 0; i < 3; ++i) {

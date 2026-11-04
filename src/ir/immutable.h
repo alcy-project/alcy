@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <bit>
+
 #include "debug/dcheck.h"
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
@@ -50,6 +52,17 @@ struct Immutable {
       case TypeTag::U32: return static_cast<u64>(data.u32_value);
       case TypeTag::U64: return static_cast<u64>(data.u64_value);
       default: UNREACHABLE();
+    }
+  }
+
+  // The immediate's stored bits: an integer's value, or a float's IEEE
+  // pattern, in the low bits of the word.
+  constexpr u64 as_u64_bits(TypeTag tag) const {
+    switch (tag) {
+      case TypeTag::F32:
+        return static_cast<u64>(std::bit_cast<u32>(data.f32_value));
+      case TypeTag::F64: return std::bit_cast<u64>(data.f64_value);
+      default: return as_u64_integer(tag);
     }
   }
 

@@ -871,6 +871,7 @@ Emitter::EmitResult Emitter::emit_instruction(ir::InstructionIdx instr_idx,
     case O::Load:
     case O::Store:
     case O::Memcopy:
+    case O::Memset:
     case O::GetElementPtr:
     case O::ElemOffset:
     case O::EnumTagLoad:

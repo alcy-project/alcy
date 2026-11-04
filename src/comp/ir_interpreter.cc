@@ -613,6 +613,22 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       }
       return write(operand_at(instr, 0).type, value, pointer.address, instr);
     }
+    case Opcode::Memset: {
+      Slot pointer;
+      u64 byte = 0;
+      u64 len = 0;
+      if (!resolve_at(instr, 0, frame, pointer) ||
+          !resolve_int_at(instr, 1, frame, byte) ||
+          !resolve_int_at(instr, 2, frame, len)) {
+        return false;
+      }
+      if (pointer.kind != Slot::Kind::Address) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "memset to a non-address");
+      }
+      return write_bytes(pointer.address, len, byte * 0x0101010101010101ULL,
+                         instr);
+    }
     case Opcode::GetElementPtr: return execute_gep(instr, frame);
     case Opcode::ParametricDrop:
       // The specialization rewrites every one to a concrete end before

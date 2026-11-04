@@ -98,6 +98,7 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::AtomicStore:
     case O::AtomicRmw: return {2, 2, true};
     case O::Memcopy:
+    case O::Memset:
     case O::Select:
     case O::CondBr:
     case O::AtomicCompareExchange: return {3, 3, true};
@@ -128,6 +129,7 @@ enum class InstrShape : u8 {
   TypeQuery,
   Borrow,
   Memcopy,
+  Memset,
   ExtractValue,
   InsertValue,
 };
@@ -145,6 +147,7 @@ constexpr InstrShape shape_of(const Opcode op) {
     case O::TypeAlignOf: return InstrShape::TypeQuery;
     case O::Borrow: return InstrShape::Borrow;
     case O::Memcopy: return InstrShape::Memcopy;
+    case O::Memset: return InstrShape::Memset;
     case O::ExtractValue: return InstrShape::ExtractValue;
     case O::InsertValue: return InstrShape::InsertValue;
     default: return InstrShape::Other;
@@ -734,6 +737,26 @@ VerificationResult verify_storage(const Storage& storage) {
           const Operand& len = storage.operands()[instr.operands.head() + 2];
           if (!is_integer_type(storage.types()[len.type.idx].tag)) {
             return err(VerificationErrorKind::InvalidMemcopy, iidx.idx);
+          }
+          break;
+        }
+        case InstrShape::Memset: {
+          if (instr.operands.size() != 3 || instr.dst.is_valid()) {
+            return err(VerificationErrorKind::InvalidMemset, iidx.idx);
+          }
+          // A fill names its destination as a store does: a register
+          // whose type carries the pointee, so the address needs no
+          // separate pointee row.
+          if (!storage.operands()[instr.operands.head()].is<RegisterIdx>()) {
+            return err(VerificationErrorKind::InvalidMemset, iidx.idx);
+          }
+          const Operand& byte = storage.operands()[instr.operands.head() + 1];
+          if (storage.types()[byte.type.idx].tag != TypeTag::U8) {
+            return err(VerificationErrorKind::InvalidMemset, iidx.idx);
+          }
+          const Operand& len = storage.operands()[instr.operands.head() + 2];
+          if (!is_integer_type(storage.types()[len.type.idx].tag)) {
+            return err(VerificationErrorKind::InvalidMemset, iidx.idx);
           }
           break;
         }

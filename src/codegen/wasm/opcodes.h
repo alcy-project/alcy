@@ -61,6 +61,10 @@ constexpr u8 OP_BLOCK_VOID = 0x40;
 // the stack.
 inline constexpr u8 MEMORY_COPY[4] = {0xFC, 0x0A, 0x00, 0x00};
 
+// memory.fill, the bulk byte fill: destination, byte, and length on the
+// stack. The encoding carries one memory index, memory.copy's two.
+inline constexpr u8 MEMORY_FILL[3] = {0xFC, 0x0B, 0x00};
+
 // The saturating float-to-integer conversions, each the 0xFC prefix and
 // its sub-opcode. A cast answers one value on both backends: NaN becomes
 // zero and a value past the destination takes its end, where the

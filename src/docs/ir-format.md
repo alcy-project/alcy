@@ -148,6 +148,7 @@ Named values (`@function`, immutables) print inline.
 | `ExtractValue` | `v = agg.0.1` |
 | `InsertValue` | `v = insert(agg, x, 0, 1)` |
 | `Memcopy` | `memcopy(dst, src, len)` |
+| `Memset` | `memset(dst, byte, len)` |
 | `IntAdd`/`IntSub`/`IntMul` | `a + b`, `a - b`, `a * b` |
 | `IntAddWrap`/`IntSubWrap`/`IntMulWrap` | `wrap_add(a, b)`, `wrap_sub(a, b)`, `wrap_mul(a, b)` |
 | `IntDiv`/`UintDiv` | `a / b` |

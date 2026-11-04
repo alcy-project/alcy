@@ -273,6 +273,17 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       body_.bytes(codegen::wasm::MEMORY_COPY);
       return base::make_ok();
     }
+    case O::Memset: {
+      DCHECK_EQ(ops.size(), 3u);
+      for (u32 index = 0; index < 3; ++index) {
+        const ir::Operand& operand = storage_.operands()[ops.head() + index];
+        if (push_word(operand, 0, ValType::I32).is_err()) {
+          return base::make_err(codegen::EmitError::Unsupported);
+        }
+      }
+      body_.bytes(codegen::wasm::MEMORY_FILL);
+      return base::make_ok();
+    }
     case O::GetElementPtr: {
       const ir::Operand& base = storage_.operands()[ops.head()];
       DCHECK(base.is<ir::RegisterIdx>());

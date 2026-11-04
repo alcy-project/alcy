@@ -151,6 +151,17 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
           resolve_operand_value(storage_->operands()[ops.head() + 2]));
       break;
     }
+    case Op::Memset: {
+      DCHECK(ops.size() == 3);
+      DCHECK(!i.dst.is_valid());
+      const ir::Operand& dst = storage_->operands()[ops.head()];
+      builder_->CreateMemSet(
+          resolve_operand_value(dst),
+          resolve_operand_value(storage_->operands()[ops.head() + 1]),
+          resolve_operand_value(storage_->operands()[ops.head() + 2]),
+          llvm::MaybeAlign(promised_alignment(*storage_, width_, dst)));
+      break;
+    }
     case Op::GetElementPtr: {
       // operands = [base_ptr, index...]. The element type is recovered from
       // the base pointer's tracked site; nested projections (which have
