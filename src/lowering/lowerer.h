@@ -232,6 +232,10 @@ class Lowerer {
   // tables are built, and the bodies ask about the same few types many
   // times, so the walk runs once per type instead of once per question.
   std::vector<u8> copy_memo_;
+  // What the borrow walk answered for each type, 0 while unasked, 1 when the
+  // type carries a borrow and 2 otherwise. Types are asked about far more
+  // often than they are interned, so the walk runs once per type.
+  mutable std::vector<u8> borrow_memo_;
   static bool is_block_terminator(ir::Opcode op);
   usize at(ir::BlockIdx block) const { return block.idx - fn_block_base_; }
   ir::BlockIdx reserve_block();
@@ -409,6 +413,7 @@ class Lowerer {
   // True when a value of `type` carries a borrow, either itself or in a
   // field of an aggregate.
   bool carries_borrow(ir::TypeIdx type) const;
+  bool carries_borrow_walk(ir::TypeIdx type) const;
   // Records what `&place` borrows, and what a read of `local` names, so
   // a reference reaches the extent rule even when a call, an aggregate,
   // or an alias stands between them.

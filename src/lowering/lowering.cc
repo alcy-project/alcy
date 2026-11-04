@@ -1112,6 +1112,27 @@ const Local* Lowerer::rooted_local(ast::ExprIdx place,
 }
 
 bool Lowerer::carries_borrow(ir::TypeIdx type) const {
+  constexpr u8 kBorrows = 1;
+  constexpr u8 kNoBorrow = 2;
+  const usize index = type.idx;
+  if (index < borrow_memo_.size()) {
+    const u8 memo = borrow_memo_[index];
+    if (memo != 0) {
+      return memo == kBorrows;
+    }
+  }
+  const bool borrows = carries_borrow_walk(type);
+  const usize types = builder.types().size();
+  if (index < types) {
+    if (borrow_memo_.size() < types) {
+      borrow_memo_.resize(types, 0);
+    }
+    borrow_memo_[index] = borrows ? kBorrows : kNoBorrow;
+  }
+  return borrows;
+}
+
+bool Lowerer::carries_borrow_walk(ir::TypeIdx type) const {
   const auto found = type_origins_.find(type.idx);
   if (found != type_origins_.end()) {
     return carries_borrow(ir::TypeIdx(found->second));
