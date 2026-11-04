@@ -82,6 +82,28 @@ syntax tree it prints. Only `check` has its corpus validated first: a
 formatter rewrites files and exits non-zero on a package it would change, and a
 linter reports findings, so both are measured as they run.
 
+A series that already exists needs no rebuild. `perf.py series` measures the
+corpora named on the command line and prints instructions and peak RSS per
+unit, with the growth between neighbours:
+
+```bash
+uv run ./tools/perf.py series --subcommand 'fmt --check' --units 5 50 100 200 \
+    --unit depth out/perf/nest5 out/perf/nest50 out/perf/nest100 out/perf/nest200
+```
+
+```text
+    depth  instructions    per unit   growth    peak RSS   per unit   growth  corpus
+        5          4.1M      824.3K        -      54484K   10896.8K        -  nest5
+       50          5.1M      101.1K    0.123      54744K    1094.9K    0.100  nest50
+      100          6.1M       60.8K    0.602      55500K     555.0K    0.507  nest100
+      200          8.1M       40.7K    0.669      56108K     280.5K    0.505  nest200
+```
+
+`--units` is what grows across the series - nesting depth here, and the modules
+each corpus declares when it is left out. Subtracting the base every run pays
+leaves about 1.03M of instructions per 50 levels of nesting and 1.6 MiB of peak
+RSS for the whole span, so both axes are linear too.
+
 The shapes exist to put weight where a cost can hide, and a corpus whose
 modules do not mention each other would not:
 

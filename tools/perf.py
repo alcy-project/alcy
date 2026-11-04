@@ -727,11 +727,55 @@ def cmd_scale(args: argparse.Namespace) -> int:
         intercept = per_module[0] - slope * first[0]
         grown = slope * last[0]
         share = grown / per_module[1] if per_module[1] else 0.0
-        print(
-            f"per module = {human(intercept)} + {human(slope)} x modules;"
-            f" at {last[0]} modules {share:.1%} of the run grows with the package"
-        )
+        print(f"per module = {human(intercept)} + {human(slope)} x modules")
+        if slope <= 0:
+            print("the run is a fixed base; per-module cost does not grow")
+        else:
+            print(f"at {last[0]} modules {share:.1%} of the run grows with the package")
         print(f"corpora under {REPO_ROOT / WORK_DIR}")
+    return 0
+
+
+def module_count(corpus: Path) -> int:
+    """The modules a corpus declares, one source file each."""
+    return len(list(corpus.glob("*.al")))
+
+
+def cmd_series(args: argparse.Namespace) -> int:
+    binary = binary_for(args.binary)
+    corpora = [corpus_dir(name) for name in args.corpora]
+    units = args.units if args.units else [module_count(corpus) for corpus in corpora]
+    if len(units) != len(corpora):
+        raise SystemExit(
+            f"--units took {len(units)} number(s) for {len(corpora)} corpora"
+        )
+    rows = []
+    for corpus, unit in zip(corpora, units, strict=True):
+        if unit <= 0:
+            raise SystemExit(f"{corpus} declares no {args.unit}; pass --units")
+        count = instructions(binary, corpus, args.jobs, args.subcommand)
+        kib = min(
+            peak_rss_kib(binary, corpus, args.jobs, args.subcommand)
+            for _ in range(args.runs)
+        )
+        rows.append((corpus.name, unit, count, kib))
+    run = "" if args.subcommand == DEFAULT_COMMAND else f"  run={args.subcommand}"
+    print(f"binary={args.binary}  jobs={args.jobs}{run}  unit={args.unit}")
+    print(
+        f"{args.unit:>9} {'instructions':>13} {'per unit':>11} {'growth':>8}"
+        f" {'peak RSS':>11} {'per unit':>10} {'growth':>8}  corpus"
+    )
+    for i, (name, unit, count, kib) in enumerate(rows):
+        grown, grew = "-", "-"
+        if i:
+            ratio = unit / rows[i - 1][1]
+            grown = f"{count / rows[i - 1][2] / ratio:.3f}"
+            grew = f"{kib / rows[i - 1][3] / ratio:.3f}"
+        print(
+            f"{unit:>9} {human(count):>13} {human(count / unit):>11} {grown:>8}"
+            f" {kib:>10}K {kib / unit:>9.1f}K {grew:>8}  {name}"
+        )
+    print("growth is the cost ratio over the unit ratio: 1.000 is linear")
     return 0
 
 
@@ -1067,6 +1111,27 @@ def parse_args() -> argparse.Namespace:
     scale.add_argument("--jobs", type=int, default=1)
     scale.add_argument("--subcommand", default=DEFAULT_COMMAND, help=subcommand_help)
     scale.set_defaults(func=cmd_scale)
+
+    series = subparsers.add_parser(
+        "series",
+        parents=[common],
+        help="instructions and peak RSS across a series of existing corpora",
+    )
+    series.add_argument("corpora", nargs="+", help="corpus directories, smallest first")
+    series.add_argument(
+        "--units",
+        type=int,
+        nargs="+",
+        help="what grows across the series, one number per corpus"
+        " (default: the modules each declares)",
+    )
+    series.add_argument(
+        "--unit", default="modules", help="what --units counts, for the heading"
+    )
+    series.add_argument("--jobs", type=int, default=1)
+    series.add_argument("--runs", type=int, default=1, help="runs to take the least of")
+    series.add_argument("--subcommand", default=DEFAULT_COMMAND, help=subcommand_help)
+    series.set_defaults(func=cmd_series)
 
     rss = subparsers.add_parser(
         "rss", parents=[common], help="peak RSS per module at several sizes"
