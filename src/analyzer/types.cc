@@ -3609,6 +3609,17 @@ const Checker::OwnFnSlot* Checker::own_fn_slot(std::string_view name) const {
   return nullptr;
 }
 
+bool Checker::is_own_fn_spelling(ast::TypeIdx type) const {
+  if (!type.is_valid() || ast.types[type].kind != ast::TypeKind::Path) {
+    return false;
+  }
+  const ast::TypePath& path = ast.types[type].payload.get<ast::TypePath>();
+  if (!path.args.empty() || ast.paths[path.path].segments.size() != 1) {
+    return false;
+  }
+  return own_fn_slot(ast.paths[path.path].segments[0].name) != nullptr;
+}
+
 std::span<const ast::GenericParam> Checker::fn_generic_params(
     ast::ItemIdx item) const {
   const ast::ItemNode& node = ast.items[item];
@@ -4739,7 +4750,8 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
       (void)index;
     }
     bind_comp_known = param.is_comp;
-    const bool refutable = bind_pattern(module, param.pattern, type);
+    const bool refutable = bind_pattern(module, param.pattern, type, false,
+                                        is_own_fn_spelling(param.type));
     bind_comp_known = false;
     if (refutable) {
       const u32 index =

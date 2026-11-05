@@ -153,10 +153,8 @@ replaced. The foundations are in `roadmap.md`.
   `exe-own-fn-return`, `err-own-fn-return-mismatch`,
   `err-own-fn-return-missing`, `ok-own-fn-turbofish`). What remains: a
   spelling nested inside another type (`-> Option<fn(i32) -> i32>`, a
-  struct field) still refuses (`err-own-func-type`); `fn()`-typed
-  bindings are not yet move-only (reassignment must be refused); and
-  named storage (`struct H { f: fn(...) }`) needs generics threaded by
-  hand.
+  struct field) still refuses (`err-own-func-type`); and named storage
+  (`struct H { f: fn(...) }`) needs generics threaded by hand.
 
 - [ ] `Map` key ergonomics, the rest: an `Entry` once the borrow rules
   allow, generic keys, which wait for a `Hash` spec, and

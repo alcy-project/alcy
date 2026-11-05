@@ -388,6 +388,10 @@ class Checker {
     ir::TypeIdx type;
     bool is_mut;
     bool comp_known = false;
+    // Whether the binding's declared type is an owning function type:
+    // the witness its instantiation fixed is the one value the slot
+    // holds, so the place cannot be reassigned (ADR-0075).
+    bool own_fn = false;
     // Index into the innermost closure's capture list when this local
     // is a capture binding, or NO_CAPTURE otherwise.
     u32 capture = NO_CAPTURE;
@@ -416,6 +420,9 @@ class Checker {
     ir::TypeIdx type;
     diag::Span span;
     bool used = false;
+    // Whether the captured binding is an owning function value, so the
+    // capture binding carries the same move-only rule.
+    bool own_fn = false;
   };
   // A closure nominal's signature: what a value of the type coerces to
   // and calls with. `self_type` is the nominal's own index, and
@@ -736,6 +743,10 @@ class Checker {
   // The recorded owning-function slot for a parameter name, or null
   // when the parameter is not one.
   const OwnFnSlot* own_fn_slot(std::string_view name) const;
+  // Whether a type spelling is the synthetic path an owning function
+  // parameter desugars to, which is how the body recognises the slot's
+  // binding.
+  bool is_own_fn_spelling(ast::TypeIdx type) const;
   // The witness recorded for a return-position slot of one
   // instantiation, or an invalid type while the body has not answered.
   ir::TypeIdx own_fn_return_witness(ast::ItemIdx item,
@@ -1295,7 +1306,8 @@ class Checker {
   bool bind_pattern(u32 module,
                     ast::PatternIdx pattern,
                     ir::TypeIdx type,
-                    bool by_ref = false);
+                    bool by_ref = false,
+                    bool own_fn = false);
   ir::TypeIdx borrow_binding(ir::TypeIdx type, bool by_ref);
   bool reads_through_ref(ast::ExprIdx expr) const;
   bool is_bare_int_literal(ast::ExprIdx expr) const;

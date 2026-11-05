@@ -113,7 +113,8 @@ bool Checker::reads_through_ref(ast::ExprIdx expr) const {
 bool Checker::bind_pattern(u32 module,
                            ast::PatternIdx pattern,
                            ir::TypeIdx type,
-                           bool by_ref) {
+                           bool by_ref,
+                           bool own_fn) {
   const bool comp = bind_comp_known || comp_eval_depth > 0;
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
@@ -123,6 +124,7 @@ bool Checker::bind_pattern(u32 module,
                                .type = borrow_binding(type, by_ref),
                                .is_mut = false,
                                .comp_known = comp,
+                               .own_fn = own_fn,
                                .span = node.payload.ident.name.span});
       return false;
     }
@@ -131,6 +133,7 @@ bool Checker::bind_pattern(u32 module,
                                .type = borrow_binding(type, by_ref),
                                .is_mut = true,
                                .comp_known = comp,
+                               .own_fn = own_fn,
                                .span = node.payload.mut_ident.name.span});
       return false;
     }
@@ -1379,8 +1382,11 @@ ir::TypeIdx Checker::check_closure(u32 module,
         local->capture < closureTables_.closure_bounds.back().captures.size()) {
       closureTables_.closure_bounds.back().captures[local->capture].used = true;
     }
-    entries.push_back(
-        {name, capture.mode, local->type, capture.name.span, false});
+    entries.push_back({.name = name,
+                       .mode = capture.mode,
+                       .type = local->type,
+                       .span = capture.name.span,
+                       .own_fn = local->own_fn});
   }
   // Parameter types: annotations first, expectation second, and
   // an annotation request when neither names one.
@@ -1430,6 +1436,7 @@ ir::TypeIdx Checker::check_closure(u32 module,
                              .type = entry.type,
                              .is_mut = entry.mode != ast::CaptureMode::Shared,
                              .comp_known = false,
+                             .own_fn = entry.own_fn,
                              .capture = static_cast<u32>(i),
                              .span = entry.span});
   }
@@ -4576,6 +4583,16 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
             return builder.primitive(ir::TypeTag::Void);
           }
           if (const Local* local = lookup_local(segments[0].name)) {
+            // The slot holds the one witness its instantiation fixed,
+            // so a second value cannot take the place (ADR-0075).
+            if (local->own_fn) {
+              const u32 index =
+                  bag.emit<i18n::Key::AnalyzerOwnFunctionReassign>(
+                      DiagCode::BadAssignment, node.span);
+              (void)index;
+              (void)check_expr(module, reassign.value, nullptr);
+              return builder.primitive(ir::TypeTag::Void);
+            }
             if (local->comp_known) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerConstBindingReassigned>(

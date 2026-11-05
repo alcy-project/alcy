@@ -71,3 +71,11 @@ system's satisfaction rule, an `Fn` bound can be written by hand, and
 a call on a closure value is a direct call to the function its
 literal registered. What this record settled about position,
 move-onlyness, and the coercions is unchanged.
+
+Amended when the reassignment rule reached every binding position:
+a parameter of owning function type is a binding like a `let` one,
+so assigning to a `mut` one is refused (`err-own-fn-reassign`)
+rather than storing a second witness over the slot the caller
+instantiated. A capture of such a value carries the rule into the
+closure that captures it. The witness stays a property of the
+instantiation, never of the place.

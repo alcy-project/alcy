@@ -224,6 +224,7 @@
   F(AnalyzerNotTupleVariant, Error, Analyzer, "Not a tuple variant") \
   F(AnalyzerOrPatternBindsDifferentNames, Error, Analyzer, "Or-pattern alternatives must bind the same names") \
   F(ParserOrPatternBindsDifferentNames, Error, Parser, "Or-pattern alternatives must bind the same names") \
+  F(AnalyzerOwnFunctionReassign, Error, Analyzer, "Cannot reassign an owning function value: the slot holds the one witness its instantiation fixed") \
   F(AnalyzerOwnFunctionReturn, Error, Analyzer, "The returned value does not carry the `fn(...)` signature of '{}'") \
   F(AnalyzerOwnFunctionReturnMissing, Error, Analyzer, "The body of '{}' never carries the `fn(...)` signature its return type declares") \
   F(AnalyzerOwnFunctionUnsupported, Error, Analyzer, "Owning function types are not supported here yet") \
