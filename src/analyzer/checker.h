@@ -236,8 +236,8 @@ class Checker {
   std::unordered_map<u32, u32> instance_by_type_;
   std::vector<std::vector<u32>> instances_by_nominal_;
   std::vector<FnInstance> fn_instances;
-  // The last instance minted for each (module, item), so a request walks
-  // only the instances of the function it asks about.
+  // The last instance minted for each (module, item, argument digest), so
+  // a request walks only the instances that can answer it.
   std::unordered_map<u64, u32> fn_instance_head_;
   // The definition-site check's bodies (ADR-0079), and the record the
   // check in progress fills. A nested body check - a const dependency

@@ -431,10 +431,10 @@ struct FnInstance {
   // `functions`.
   u32 module = 0;
   // Position in `Checker::fn_instance_head_`: the previous instance of
-  // the same item and module, or `base::INVALID_IDX` when this is the
-  // first. A request walks this chain instead of every instance the
-  // package has minted.
-  u32 prev_same_item = base::INVALID_IDX;
+  // the same item, module and argument digest, or `base::INVALID_IDX`
+  // when this is the first. A request walks this chain instead of the
+  // instances minted for other arguments.
+  u32 prev_same_args = base::INVALID_IDX;
   std::vector<ir::TypeIdx> args;
   // Digest of `args` under `Checker::args_digest`: a chain walk skips an
   // instance whose digest differs instead of comparing its arguments.

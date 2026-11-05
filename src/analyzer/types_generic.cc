@@ -1026,18 +1026,30 @@ bool Checker::bind_fn_slots(u32 module,
   return true;
 }
 
+// Key of `fn_instance_head_`: the function a request names together with
+// the digest of the arguments it binds. Two requests share a chain only when
+// both agree, so the walk compares arguments with the few instances that can
+// match instead of stepping over every instance of the item. A request whose
+// key collides with another function's is ruled out by the comparisons it
+// makes against the stored entry.
+static u64 fn_instance_key(u32 module, ast::ItemIdx item, u64 digest) {
+  constexpr u64 kMix = 0x9E3779B97F4A7C15ull;
+  const u64 head =
+      (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
+  return (head * kMix) ^ digest;
+}
+
 void Checker::push_fn_instance(ast::ItemIdx item,
                                u32 module,
                                const std::vector<ir::TypeIdx>& args,
                                u64 digest,
                                u32 sig_index,
                                u32 inst) {
-  const u64 head_key =
-      (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
-  const auto head = fn_instance_head_.find(head_key);
+  const u64 key = fn_instance_key(module, item, digest);
+  const auto head = fn_instance_head_.find(key);
   const u32 prev =
       head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
-  fn_instance_head_[head_key] = static_cast<u32>(fn_instances.size());
+  fn_instance_head_[key] = static_cast<u32>(fn_instances.size());
   FnInstance witness{item, module, prev, args, digest, sig_index, inst};
   fn_instances.push_back(std::move(witness));
 }
@@ -1050,17 +1062,15 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     u32 module,
     ast::ItemIdx item,
     const std::vector<ir::TypeIdx>& args) {
-  const u64 head_key =
-      (static_cast<u64>(module) << 32) | static_cast<u64>(item.idx);
-  const auto head = fn_instance_head_.find(head_key);
-  u32 at = head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
-  // Most of a long chain was minted for other arguments: the digest rules
-  // an instance out without comparing any of them.
   const u64 digest = args_digest(args);
+  const auto head =
+      fn_instance_head_.find(fn_instance_key(module, item, digest));
+  u32 at = head == fn_instance_head_.end() ? base::INVALID_IDX : head->second;
   while (at != base::INVALID_IDX) {
     const FnInstance& instance = fn_instances[at];
-    at = instance.prev_same_item;
-    if (instance.args_digest != digest || instance.args.size() != args.size()) {
+    at = instance.prev_same_args;
+    if (instance.item.idx != item.idx || instance.module != module ||
+        instance.args_digest != digest || instance.args.size() != args.size()) {
       continue;
     }
     bool same = true;
