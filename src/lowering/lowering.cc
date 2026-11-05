@@ -3316,16 +3316,48 @@ ir::SummaryKind summary_kind_of(ir::SymbolKind kind) {
   }
 }
 
+// A module's declaration tables, looked up by the item that declared the
+// row. A short table is scanned; past that it is indexed once here, keeping
+// the first row per item - the row a scan returns.
+constexpr usize DECL_INDEX_MIN = 64;
+
+struct ModuleDecls {
+  std::unordered_map<u32, ir::TypeIdx> structs;
+  std::unordered_map<u32, ir::TypeIdx> enums;
+  std::unordered_map<u32, ir::TypeIdx> methods;
+};
+
+template <typename Rows, typename Pick>
+std::unordered_map<u32, ir::TypeIdx> index_by_item(const Rows& rows,
+                                                   Pick pick) {
+  std::unordered_map<u32, ir::TypeIdx> index;
+  index.reserve(rows.size());
+  for (const auto& row : rows) {
+    index.emplace(row.item.idx, row.*pick);
+  }
+  return index;
+}
+
+ir::TypeIdx indexed_type(const std::unordered_map<u32, ir::TypeIdx>& index,
+                         ast::ItemIdx item) {
+  const auto found = index.find(item.idx);
+  return found == index.end() ? ir::TypeIdx(base::INVALID_IDX) : found->second;
+}
+
 // The nominal an associated function or method belongs to, found by the
 // item the checked method tables recorded for it. A generic impl's
 // declaration-shaped owner is the one whose type names a parameter; a
 // concrete instantiation is the fallback (ADR-0079).
 ir::TypeIdx method_owner_of(const analyzer::CheckedPackage& pkg,
+                            const std::vector<ModuleDecls>& decls,
                             u32 mod,
                             ast::ItemIdx item,
                             const ir::StorageState& state) {
   if (mod >= pkg.modules.size()) {
     return ir::TypeIdx(base::INVALID_IDX);
+  }
+  if (mod < decls.size() && !decls[mod].methods.empty()) {
+    return indexed_type(decls[mod].methods, item);
   }
   ir::TypeIdx found = ir::TypeIdx(base::INVALID_IDX);
   for (const analyzer::CheckedModule::MethodInfo& info :
@@ -3347,13 +3379,18 @@ ir::TypeIdx method_owner_of(const analyzer::CheckedPackage& pkg,
 // tables recorded for it; the definition's row precedes any
 // instantiation's.
 ir::TypeIdx nominal_type_of(const analyzer::CheckedPackage& pkg,
+                            const std::vector<ModuleDecls>& decls,
                             u32 mod,
                             ast::ItemIdx item,
                             bool is_struct) {
   if (mod >= pkg.modules.size()) {
     return ir::TypeIdx(base::INVALID_IDX);
   }
+  const ModuleDecls* index = mod < decls.size() ? &decls[mod] : nullptr;
   if (is_struct) {
+    if (index != nullptr && !index->structs.empty()) {
+      return indexed_type(index->structs, item);
+    }
     for (const analyzer::CheckedModule::StructInfo& info :
          pkg.modules[mod].structs) {
       if (info.item == item) {
@@ -3361,6 +3398,9 @@ ir::TypeIdx nominal_type_of(const analyzer::CheckedPackage& pkg,
       }
     }
     return ir::TypeIdx(base::INVALID_IDX);
+  }
+  if (index != nullptr && !index->enums.empty()) {
+    return indexed_type(index->enums, item);
   }
   for (const analyzer::CheckedModule::EnumInfo& info : pkg.modules[mod].enums) {
     if (info.item == item) {
@@ -3468,6 +3508,32 @@ std::vector<ir::SummaryEntry> collect_summary(
     const ir::StorageState& state,
     ir::SymbolTable& strings,
     std::vector<std::vector<ir::SummaryField>>& summary_fields) {
+  // A module with many declarations would otherwise scan its tables once per
+  // declaration; the table of modules stays empty until one is that large.
+  std::vector<ModuleDecls> decls;
+  for (u32 mod = 0; mod < pkg.modules.size(); ++mod) {
+    const analyzer::CheckedModule& checked = pkg.modules[mod];
+    if (checked.structs.size() <= DECL_INDEX_MIN &&
+        checked.enums.size() <= DECL_INDEX_MIN &&
+        checked.methods.size() <= DECL_INDEX_MIN) {
+      continue;
+    }
+    if (decls.empty()) {
+      decls.resize(pkg.modules.size());
+    }
+    if (checked.structs.size() > DECL_INDEX_MIN) {
+      decls[mod].structs = index_by_item(
+          checked.structs, &analyzer::CheckedModule::StructInfo::type);
+    }
+    if (checked.enums.size() > DECL_INDEX_MIN) {
+      decls[mod].enums = index_by_item(
+          checked.enums, &analyzer::CheckedModule::EnumInfo::type);
+    }
+    if (checked.methods.size() > DECL_INDEX_MIN) {
+      decls[mod].methods = index_by_item(
+          checked.methods, &analyzer::CheckedModule::MethodInfo::self_type);
+    }
+  }
   std::vector<ir::SummaryEntry> summary;
   // The parametric body a generic row carries: the definition-site body
   // a dependent's specialization clones (ADR-0079). An item whose body
@@ -3500,7 +3566,7 @@ std::vector<ir::SummaryEntry> collect_summary(
         .path = strings.intern(pkg.tree.modules[entry.mod]->path),
         .owner = entry.kind == ir::SymbolKind::Free
                      ? ir::TypeIdx(base::INVALID_IDX)
-                     : method_owner_of(pkg, entry.mod, entry.item, state),
+                     : method_owner_of(pkg, decls, entry.mod, entry.item, state),
         .kind = summary_kind_of(entry.kind)});
   }
   for (u32 mod = 0; mod < pkg.tree.modules.size(); ++mod) {
@@ -3531,7 +3597,7 @@ std::vector<ir::SummaryEntry> collect_summary(
         const str::StringPoolId type_name = strings.intern(name);
         const ir::TypeIdx type =
             generic ? generic_declaration_type(state, is_struct, type_name)
-                    : nominal_type_of(pkg, mod, item, is_struct);
+                    : nominal_type_of(pkg, decls, mod, item, is_struct);
         // A struct's field names ride with the row: without them a
         // dependent cannot spell the declaration's fields.
         std::span<const ir::SummaryField> field_names;
