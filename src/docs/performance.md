@@ -156,9 +156,12 @@ every doubling of the text near tripled the cost. `diag::LineIndex` counts a
 text's line starts once, on the second question about it - the first question is
 answered by the scan it would have paid anyway, so a file with one diagnostic
 keeps its single pass and allocates nothing - and searches the rest, which
-leaves that series at 6.8M, 9.6M, 15.2M, and 26.5M instructions at 250, 500,
-1000, and 2000 names. What remains is the checker's own walk over the names of
-the scope, not the rendering of what it finds.
+leaves that series at 6.4M, 8.7M, 13.4M, and 22.9M instructions at 250, 500,
+1000, and 2000 names. The renderer writes its fixed text and its numbers
+straight into the buffer for the same reason: a format string is parsed on
+every use, and a diagnostic that shows four numbers used to parse four of them,
+which was 9.2% of that last run by itself. What remains is the checker's own
+walk over the names of the scope, not the rendering of what it finds.
 
 Every figure above sits on a floor the process pays before it reads a byte, and
 that floor is worth knowing because the growth slopes are fitted over it.

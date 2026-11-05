@@ -4,7 +4,7 @@
 #include "diag/render.h"
 
 #include <algorithm>
-#include <iterator>
+#include <charconv>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -187,6 +187,17 @@ void append_text(fmt::memory_buffer& out, std::string_view text) {
   out.append(text.data(), text.data() + text.size());
 }
 
+// A decimal number written straight into the buffer: a diagnostic that
+// shows four numbers a line would otherwise parse four format strings.
+void append_number(fmt::memory_buffer& out, u32 value, u32 digits = 0) {
+  char buf[10];
+  char* const end = std::to_chars(buf, buf + sizeof(buf), value).ptr;
+  for (u32 width = static_cast<u32>(end - buf); width < digits; ++width) {
+    out.push_back('0');
+  }
+  out.append(buf, end);
+}
+
 void begin_style(fmt::memory_buffer& out,
                  bool enabled,
                  std::string_view color,
@@ -223,7 +234,7 @@ void write_gutter(fmt::memory_buffer& out, u32 width) {
   for (u32 i = 0; i < width; ++i) {
     out.push_back(' ');
   }
-  fmt::format_to(std::back_inserter(out), " |");
+  append_text(out, " |");
 }
 
 // One marker for every severity, in colour or not: the word and the code
@@ -237,27 +248,32 @@ void append_marker(fmt::memory_buffer& out,
   if (color) {
     begin_style(out, true, severity_color(diag.severity), true);
   }
-  fmt::format_to(std::back_inserter(out), "{}",
-                 severity_text(diag.severity, options.language));
+  append_text(out, severity_text(diag.severity, options.language));
   if (!diag.check_name.empty()) {
     // A lint names itself: severity and rule, `warning[unused-variable]`.
     // The name is what a reader configures and a docs page indexes, and
     // the code the rule also carries stays out of the text so a
     // configured lint reads the same however its code was assigned.
-    fmt::format_to(std::back_inserter(out), "[{}]", diag.check_name);
+    out.push_back('[');
+    append_text(out, diag.check_name);
+    out.push_back(']');
   } else if (diag.code.has_value()) {
     // Severity, component, id: `error[EA001]`. The component's letter is
     // the only part that needs the registry to interpret, and the id is
     // padded to three digits so codes sort in the order they were
     // assigned - which is the order a bug report lists them in.
-    fmt::format_to(std::back_inserter(out), "[{}{}{:03}]",
-                   severity_code(diag.severity), stage_letter(diag.code->stage),
-                   diag.code->id);
+    out.push_back('[');
+    out.push_back(severity_code(diag.severity));
+    out.push_back(stage_letter(diag.code->stage));
+    append_number(out, diag.code->id, 3);
+    out.push_back(']');
   }
   if (color) {
     end_style(out, true);
   }
-  fmt::format_to(std::back_inserter(out), ": {}\n", diag.message);
+  append_text(out, ": ");
+  append_text(out, diag.message);
+  out.push_back('\n');
 }
 
 }  // namespace
@@ -360,12 +376,14 @@ void render(const Diagnostic& diag,
           ? i18n::text<i18n::Key::RenderUnknownFile>(options.language)
           : source.name;
 
-  fmt::format_to(std::back_inserter(out), " --> ");
+  append_text(out, " --> ");
   append_colored(out, options.color, term::FG_CYAN, name);
   // No bytes, or a span past the end of the file: show the raw offset
   // rather than fabricate a line/column the text cannot support.
   if (source.bytes.empty() || diag.primary_span.offset > source.bytes.size()) {
-    fmt::format_to(std::back_inserter(out), ":{}\n", diag.primary_span.offset);
+    out.push_back(':');
+    append_number(out, diag.primary_span.offset);
+    out.push_back('\n');
     return;
   }
 
@@ -373,7 +391,11 @@ void render(const Diagnostic& diag,
       lines != nullptr ? lines->line_at(diag.primary_span.file, source.bytes,
                                         diag.primary_span.offset)
                        : scan_line(source.bytes, diag.primary_span.offset);
-  fmt::format_to(std::back_inserter(out), ":{}:{}\n", info.number, info.column);
+  out.push_back(':');
+  append_number(out, info.number);
+  out.push_back(':');
+  append_number(out, info.column);
+  out.push_back('\n');
 
   // Caret run clipped to the rendered snippet. The locators clamp
   // out-of-range offsets; mirror that here.
@@ -389,11 +411,11 @@ void render(const Diagnostic& diag,
 
   const u32 gutter = decimal_width(info.number);
   write_gutter(out, gutter);
-  fmt::format_to(std::back_inserter(out), "\n");
+  out.push_back('\n');
   begin_style(out, options.color, term::FG_BLUE);
-  fmt::format_to(std::back_inserter(out), "{}", info.number);
+  append_number(out, info.number);
   end_style(out, options.color);
-  fmt::format_to(std::back_inserter(out), " | ");
+  append_text(out, " | ");
   if (window.clipped_left) {
     append_text(out, "...");
   }
@@ -402,7 +424,7 @@ void render(const Diagnostic& diag,
   if (window.clipped_right) {
     append_text(out, "...");
   }
-  fmt::format_to(std::back_inserter(out), "\n");
+  out.push_back('\n');
 
   // The run is measured in display columns, so a span covering
   // multi-byte characters underlines as wide as it looks. Columns count
@@ -451,24 +473,31 @@ void render(const Diagnostic& diag,
         label_source.name.empty()
             ? i18n::text<i18n::Key::RenderUnknownFile>(options.language)
             : label_source.name;
-    fmt::format_to(std::back_inserter(out), " = ");
+    append_text(out, " = ");
     begin_style(out, options.color, term::FG_CYAN, true);
-    fmt::format_to(std::back_inserter(out), "{}",
-                   i18n::text<i18n::Key::RenderSeverityNote>(options.language));
+    append_text(out,
+                i18n::text<i18n::Key::RenderSeverityNote>(options.language));
     end_style(out, options.color);
-    fmt::format_to(std::back_inserter(out), ": {} --> ", label.message);
+    append_text(out, ": ");
+    append_text(out, label.message);
+    append_text(out, " --> ");
     append_colored(out, options.color, term::FG_CYAN, label_name);
     if (label_source.bytes.empty() ||
         label.span.offset > label_source.bytes.size()) {
-      fmt::format_to(std::back_inserter(out), ":{}\n", label.span.offset);
+      out.push_back(':');
+      append_number(out, label.span.offset);
+      out.push_back('\n');
       continue;
     }
     const SourceLine label_info =
         lines != nullptr ? lines->line_at(label.span.file, label_source.bytes,
                                           label.span.offset)
                          : scan_line(label_source.bytes, label.span.offset);
-    fmt::format_to(std::back_inserter(out), ":{}:{}\n", label_info.number,
-                   label_info.column);
+    out.push_back(':');
+    append_number(out, label_info.number);
+    out.push_back(':');
+    append_number(out, label_info.column);
+    out.push_back('\n');
   }
 }
 
