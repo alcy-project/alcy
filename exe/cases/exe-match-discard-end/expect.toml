@@ -1,0 +1,10 @@
+exit = 0
+stdout = """
+drop tags
+items
+drop tags
+n 5
+drop tags
+A
+done
+"""

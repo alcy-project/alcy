@@ -277,14 +277,15 @@ void Lowerer::emit_collected_drop(ir::OperandIdx tuple_place,
   }
 }
 
-void Lowerer::record_drop_in_place(ir::OperandIdx place,
-                                   ir::TypeIdx type,
-                                   diag::Span span) {
+void Lowerer::record_place_end(OwnershipEvent::Kind kind,
+                               ir::OperandIdx place,
+                               ir::TypeIdx type,
+                               diag::Span span) {
   if (failed) {
     return;
   }
   OwnershipEvent event;
-  event.kind = OwnershipEvent::Kind::DropInPlace;
+  event.kind = kind;
   event.place = place;
   event.place_type = type;
   // A discarded binding is spent; a value behind a reference or a
@@ -303,6 +304,18 @@ void Lowerer::record_drop_in_place(ir::OperandIdx place,
   event.seq = record_seq_++;
   event.span = span;
   ownership_.push_back(std::move(event));
+}
+
+void Lowerer::record_drop_in_place(ir::OperandIdx place,
+                                   ir::TypeIdx type,
+                                   diag::Span span) {
+  record_place_end(OwnershipEvent::Kind::DropInPlace, place, type, span);
+}
+
+void Lowerer::record_discard(ir::OperandIdx place,
+                             ir::TypeIdx type,
+                             diag::Span span) {
+  record_place_end(OwnershipEvent::Kind::Discard, place, type, span);
 }
 
 void Lowerer::record_store_element(ir::OperandIdx place,
@@ -723,14 +736,16 @@ void DropElaborator::run() {
       case OwnershipEvent::Kind::Store: return State::Owned;
       case OwnershipEvent::Kind::Move: return State::Moved;
       case OwnershipEvent::Kind::StoreElement:
-      case OwnershipEvent::Kind::DropInPlace: return state;
+      case OwnershipEvent::Kind::DropInPlace:
+      case OwnershipEvent::Kind::Discard: return state;
     }
     return state;
   };
   auto step_point = [&](State state, const Point& point, const Place& place) {
     if (point.kind == Point::Kind::Event) {
       const OwnershipEvent& event = ownership_[point.index];
-      if (event.kind == OwnershipEvent::Kind::DropInPlace) {
+      if (event.kind == OwnershipEvent::Kind::DropInPlace ||
+          event.kind == OwnershipEvent::Kind::Discard) {
         // A discarded binding is spent; a value behind a reference or a
         // container's element names no tracked place.
         if (event.local == base::INVALID_IDX) {
@@ -1254,6 +1269,7 @@ void DropElaborator::run() {
               Action{event.offset - 1, event.seq, Action::Kind::StoreEnd, ei};
           break;
         case OwnershipEvent::Kind::DropInPlace:
+        case OwnershipEvent::Kind::Discard:
           action_flat[at_cursor++] =
               Action{event.offset, event.seq, Action::Kind::DropHere, ei};
           break;
@@ -1457,8 +1473,15 @@ void DropElaborator::run() {
           case Action::Kind::StoreEnd: run_store_end(action.index, out); break;
           case Action::Kind::DropHere: {
             const OwnershipEvent& event = ownership_[action.index];
-            emit_end(out, event.local, event.path, event.place_type,
-                     event.place, owned_path, event.span);
+            // A discard ends a place its owner still names, so the value
+            // goes and the place stays: the borrow checker reads the owner
+            // as whole until the construct that discarded the value takes
+            // it, and marks it there.
+            const u32 owner = event.kind == OwnershipEvent::Kind::Discard
+                                  ? base::INVALID_IDX
+                                  : event.local;
+            emit_end(out, owner, event.path, event.place_type, event.place,
+                     owned_path, event.span);
             break;
           }
           case Action::Kind::StoreClear: {

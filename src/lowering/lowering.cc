@@ -684,6 +684,10 @@ void Lowerer::emit_move_marker(Val v) {
 }
 
 void Lowerer::record_move_event(Val v) {
+  record_move_event(v, cur_span_);
+}
+
+void Lowerer::record_move_event(Val v, diag::Span span) {
   if (!v.place || !v.address || is_copy(v.type)) {
     return;
   }
@@ -710,14 +714,13 @@ void Lowerer::record_move_event(Val v) {
           locals[local_index].type, std::span<const u32>(path.data(), i));
       if (type_has_custom_drop(prefix)) {
         const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
-            DiagCode::MoveOutOfDestructor, cur_span_, locals[local_index].name);
+            DiagCode::MoveOutOfDestructor, span, locals[local_index].name);
         (void)index;
         return;
       }
     }
   }
-  record_event(OwnershipEvent::Kind::Move, local_index, std::move(path),
-               cur_span_);
+  record_event(OwnershipEvent::Kind::Move, local_index, std::move(path), span);
 }
 
 bool Lowerer::is_destructor(ast::ItemIdx item) const {

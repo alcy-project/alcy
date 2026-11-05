@@ -302,6 +302,9 @@ class Lowerer {
   // and before them for the drop walk.
   void emit_move_marker(Val v);
   void record_move_event(Val v);
+  // The same event, reported at the span of the construct that moved the
+  // place rather than at the read that lowered last.
+  void record_move_event(Val v, diag::Span span);
   void mark_move(Val v);
   // A projection that takes a non-Copy value out of a field consumes the
   // field's place, so the enclosing owner's drop skips it.
@@ -1226,9 +1229,17 @@ class Lowerer {
                     u32 local,
                     std::vector<u32> path,
                     diag::Span span);
+  void record_place_end(OwnershipEvent::Kind kind,
+                        ir::OperandIdx place,
+                        ir::TypeIdx type,
+                        diag::Span span);
   void record_drop_in_place(ir::OperandIdx place,
                             ir::TypeIdx type,
                             diag::Span span);
+  // Ends a place the construct holding it discards: the value goes where
+  // it stands, and the place it came from stays the borrow checker's to
+  // retire when the construct takes the whole.
+  void record_discard(ir::OperandIdx place, ir::TypeIdx type, diag::Span span);
   // Records a store that replaces the value at an address no path names.
   // `root` is the local the address came from, or `INVALID_IDX`.
   void record_store_element(ir::OperandIdx place,
