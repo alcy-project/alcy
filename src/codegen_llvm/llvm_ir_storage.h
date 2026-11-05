@@ -27,6 +27,7 @@ class LlvmIrStorage {
     external_functions_.resize(size, nullptr);
   }
   void resize_alloca_types(usize size) { alloca_types_.resize(size, nullptr); }
+  void resize_slot_types(usize size) { slot_types_.resize(size, nullptr); }
 
   void add_function(ir::FunctionIdx id, llvm::Function* function) {
     DCHECK_MSG(function, "Function is null");
@@ -61,6 +62,13 @@ class LlvmIrStorage {
     alloca_types_[id] = type;
   }
 
+  // Records that a register's value is the address of the bytes it names
+  // rather than the value those bytes hold, and the type they hold.
+  void add_slot_type(ir::RegisterIdx id, llvm::Type* type) {
+    DCHECK_MSG(type, "Slot type is null");
+    slot_types_[id] = type;
+  }
+
   llvm::Function* function(ir::FunctionIdx id) const { return functions_[id]; }
   llvm::Value* register_value(ir::RegisterIdx id) const {
     return registers_[id];
@@ -75,6 +83,7 @@ class LlvmIrStorage {
   llvm::Type* alloca_type(ir::RegisterIdx id) const {
     return alloca_types_[id];
   }
+  llvm::Type* slot_type(ir::RegisterIdx id) const { return slot_types_[id]; }
 
  private:
   template <typename T>
@@ -89,6 +98,7 @@ class LlvmIrStorage {
   base::Vec<llvm::Function*, ir::ExternalFunctionIdx, Alloc<llvm::Function*>>
       external_functions_;
   base::Vec<llvm::Type*, ir::RegisterIdx, Alloc<llvm::Type*>> alloca_types_;
+  base::Vec<llvm::Type*, ir::RegisterIdx, Alloc<llvm::Type*>> slot_types_;
 };
 
 }  // namespace codegen_llvm

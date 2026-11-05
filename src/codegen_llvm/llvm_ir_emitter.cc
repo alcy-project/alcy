@@ -85,7 +85,7 @@ void LlvmIrEmitter::check_state() {
 }
 
 llvm::Value* LlvmIrEmitter::argument_value(const ir::Operand& op,
-                                           llvm::Type* wanted) const {
+                                           llvm::Type* wanted) {
   const ir::TypeTag tag = storage_->types()[op.type.idx].tag;
   if (tag == ir::TypeTag::Void || tag == ir::TypeTag::Never) {
     return llvm::UndefValue::get(wanted);
@@ -302,6 +302,7 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   values_.resize_immutables(storage_->immutables().size());
   values_.resize_external_functions(storage_->external_functions().size());
   values_.resize_alloca_types(storage_->registers().size());
+  values_.resize_slot_types(storage_->registers().size());
 
   setup_immutables();
   setup_external_functions();
@@ -341,7 +342,7 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   // Declare every function before defining any body so forward
   // calls resolve regardless of declaration order.
   llvm::Function* entry_function = nullptr;
-  ir::TypeTag entry_return = ir::TypeTag::Void;
+  ir::TypeIdx entry_return = ir::TypeIdx::invalid();
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
     if (parametric[function_idx.idx]) {
       continue;
@@ -357,7 +358,7 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
       renamed.name = interner_->intern("alcy_main");
       llvm_function = create_function(renamed);
       entry_function = llvm_function;
-      entry_return = storage_->types()[function.meta.return_type.idx].tag;
+      entry_return = function.meta.return_type;
       if (backtrace_) {
         // The optimizer would fold the entry into its wrapper and
         // leave the walk no named frame at all; one missed inlining
@@ -438,7 +439,15 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
   // Pre-generate phi nodes. The entry block (first in function
   // order) receives LLVM function arguments directly instead of
   // PHIs: lowering places one block parameter per declared parameter.
-  u32 arg_no = 0;
+  //
+  // A large aggregate carries no value through either path. The caller
+  // names a slot for the result ahead of the parameters, and passes each
+  // large argument as its slot, so the entry block copies what it was
+  // handed into a slot of its own and every later block reaches a join
+  // parameter through the slot the branch fills (ADR-0139).
+  const bool indirect_ret = in_memory_aggregate(function.meta.return_type);
+  return_slot_ = indirect_ret ? llvm_function->getArg(0) : nullptr;
+  u32 arg_no = indirect_ret ? 1 : 0;
   for (const ir::BlockIdx block_idx : function.blocks) {
     const ir::Block& block = storage_->blocks()[block_idx];
     llvm::BasicBlock* llvm_block = values_.block(block_idx);
@@ -449,7 +458,24 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
       const ir::BlockParam& param = storage_->block_params()[param_id];
 
       if (is_entry) {
-        values_.add_register(param.reg, llvm_function->getArg(arg_no++));
+        llvm::Value* arg = llvm_function->getArg(arg_no++);
+        if (in_memory_aggregate(param.type)) {
+          llvm::Type* param_type = type(param.type);
+          llvm::AllocaInst* slot = frame_slot(param_type);
+          builder_->CreateMemCpy(slot, llvm::MaybeAlign(), arg,
+                                 llvm::MaybeAlign(),
+                                 builder_->getInt64(memory_size(param_type)));
+          values_.add_register(param.reg, slot);
+          values_.add_slot_type(param.reg, param_type);
+          continue;
+        }
+        values_.add_register(param.reg, arg);
+        continue;
+      }
+      if (in_memory_aggregate(param.type)) {
+        llvm::Type* param_type = type(param.type);
+        values_.add_register(param.reg, frame_slot(param_type));
+        values_.add_slot_type(param.reg, param_type);
         continue;
       }
       llvm::PHINode* phi = builder_->CreatePHI(type(param.type), 0);
@@ -753,26 +779,30 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       llvm::BasicBlock* target_llvm_block = values_.block(target_block_idx);
       llvm::BasicBlock* current_llvm_block = builder_->GetInsertBlock();
 
-      builder_->CreateBr(target_llvm_block);
-
       const ir::Block& target_block = storage_->blocks()[target_block_idx];
       DCHECK(ops.size() == 1 + target_block.block_params.size());
       // Branch arguments fill the target's parameters positionally:
-      // operands[1..N] are the incoming values in parameter order.
+      // operands[1..N] are the incoming values in parameter order. A
+      // large aggregate parameter has no phi: its register names a slot
+      // the branch fills, so the value reaches every successor that
+      // joins through this block (ADR-0139).
       u32 position = 0;
       for (const ir::BlockParamIdx param_idx : target_block.block_params) {
         const ir::BlockParam& param = storage_->block_params()[param_idx];
-
-        auto* phi =
-            llvm::cast<llvm::PHINode>(values_.register_value(param.reg));
-
         const ir::Operand& arg_op =
             storage_->operands()[ops.head() + 1 + position];
         ++position;
-        llvm::Value* arg_val = resolve_operand_value(arg_op);
 
-        phi->addIncoming(arg_val, current_llvm_block);
+        if (in_memory_aggregate(param.type)) {
+          copy_to_slot(values_.register_value(param.reg), arg_op,
+                       type(param.type));
+          continue;
+        }
+        auto* phi =
+            llvm::cast<llvm::PHINode>(values_.register_value(param.reg));
+        phi->addIncoming(resolve_operand_value(arg_op), current_llvm_block);
       }
+      builder_->CreateBr(target_llvm_block);
       break;
     }
     case Op::CondBr: {
@@ -826,41 +856,74 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
                 ->func_types()[storage_->types()[closure_type.idx].as_func()];
         llvm::Value* code = builder_->CreateExtractValue(closure, {0u});
         llvm::Value* env = builder_->CreateExtractValue(closure, {1u});
+        // The signature the call site spells must match the one the
+        // synthetic function declares, result slot and argument slots
+        // included (ADR-0139).
         llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> param_types;
-        param_types.reserve(sig.params.size() + 1);
-        param_types.push_back(builder_->getPtrTy());
-        for (ir::TypeIdx param : sig.params) {
-          param_types.push_back(type(param));
+        const bool indirect_ret = in_memory_aggregate(sig.ret);
+        param_types.reserve(sig.params.size() + 2);
+        if (indirect_ret) {
+          param_types.push_back(builder_->getPtrTy());
         }
-        llvm::FunctionType* fn_type =
-            llvm::FunctionType::get(return_type(sig.ret), param_types, false);
+        param_types.push_back(builder_->getPtrTy());
+        for (const ir::TypeIdx param : sig.params) {
+          param_types.push_back(parameter_type(param));
+        }
+        llvm::FunctionType* fn_type = llvm::FunctionType::get(
+            indirect_ret ? builder_->getVoidTy() : return_type(sig.ret),
+            param_types, false);
+        u32 param_base = 0;
         llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
-        args.reserve(ops.size());
+        args.reserve(ops.size() + 1);
+        if (llvm::AllocaInst* result_slot = call_result_slot(sig.ret, i.dst);
+            result_slot != nullptr) {
+          args.push_back(result_slot);
+          ++param_base;
+        }
         args.push_back(env);
+        ++param_base;
         for (u32 idx = 1; idx < ops.size(); ++idx) {
           const ir::Operand& arg_op = storage_->operands()[ops.head() + idx];
-          args.push_back(argument_value(arg_op, param_types[idx]));
+          args.push_back(call_argument(arg_op, param_types[param_base]));
+          ++param_base;
         }
         llvm::CallInst* call_inst = builder_->CreateCall(fn_type, code, args);
-        if (i.dst.is_valid()) {
+        if (i.dst.is_valid() && !indirect_ret) {
           values_.add_register(i.dst, call_inst);
         }
         break;
       }
       llvm::Function* callee_func = resolve_operand_function(callee_op);
+      // An external declaration keeps the ABI it names: it takes scalars
+      // and pointers only, and answers no slot (ADR-0051).
+      const bool own_abi = callee_op.is<ir::FunctionIdx>();
 
       llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
-      args.reserve(ops.size() - 1);
+      args.reserve(ops.size());
+      llvm::AllocaInst* result_slot = nullptr;
+      if (own_abi) {
+        result_slot = call_result_slot(
+            storage_->functions()[callee_op.as_function()].meta.return_type,
+            i.dst);
+      }
+      u32 param_base = 0;
+      if (result_slot != nullptr) {
+        args.push_back(result_slot);
+        ++param_base;
+      }
 
       for (u32 idx = 1; idx < ops.size(); ++idx) {
         const ir::Operand& arg_op = storage_->operands()[ops.head() + idx];
-        args.push_back(argument_value(
-            arg_op, callee_func->getFunctionType()->getParamType(idx - 1)));
+        llvm::Type* wanted =
+            callee_func->getFunctionType()->getParamType(param_base);
+        ++param_base;
+        args.push_back(own_abi ? call_argument(arg_op, wanted)
+                               : argument_value(arg_op, wanted));
       }
 
       llvm::CallInst* call_inst = builder_->CreateCall(callee_func, args);
 
-      if (i.dst.is_valid()) {
+      if (i.dst.is_valid() && result_slot == nullptr) {
         values_.add_register(i.dst, call_inst);
       }
       break;
@@ -876,6 +939,11 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       const bool void_return =
           returned == ir::TypeTag::Void || returned == ir::TypeTag::Never;
       if (void_return) {
+        builder_->CreateRetVoid();
+      } else if (return_slot_ != nullptr) {
+        // The caller's slot stands where the value would return.
+        const ir::Operand& lhs = storage_->operands()[ops.head()];
+        copy_to_slot(return_slot_, lhs, type(lhs.type));
         builder_->CreateRetVoid();
       } else {
         const ir::Operand& lhs = storage_->operands()[ops.head()];
@@ -1047,12 +1115,19 @@ llvm::Function* LlvmIrEmitter::create_function(
   // DLOG("Function Name: {}, Param Count in Slice: {}",
   //      interner_->get(function_meta.name), function_meta.param_types.size());
 
+  // A result past the direct limit crosses in a slot the caller names
+  // first, and the signature returns void there (ADR-0139).
+  const bool indirect_ret = in_memory_aggregate(function_meta.return_type);
+  if (indirect_ret) {
+    parameter_types.emplace_back(builder_->getPtrTy());
+  }
   for (const ir::TypeIdx id : function_meta.param_types) {
-    parameter_types.emplace_back(type(id));
+    parameter_types.emplace_back(parameter_type(id));
   }
 
   llvm::FunctionType* func_type = llvm::FunctionType::get(
-      return_type(function_meta.return_type),
+      indirect_ret ? builder_->getVoidTy()
+                   : return_type(function_meta.return_type),
       llvm::ArrayRef<llvm::Type*>(parameter_types), false);
 
   const std::string func_name = linkable_name(function_meta);
@@ -1065,7 +1140,7 @@ llvm::Function* LlvmIrEmitter::create_function(
   // exclusive borrow is unaliased, a shared one read-only, and a
   // reference is never null. A reference to a slice crosses as the fat
   // pointer itself, where the attributes do not apply.
-  u32 index = 0;
+  u32 index = indirect_ret ? 1 : 0;
   for (const ir::TypeIdx id : function_meta.param_types) {
     llvm::Type* param_type = parameter_types[index];
     if (!param_type->isPointerTy()) {
@@ -1094,11 +1169,98 @@ llvm::Function* LlvmIrEmitter::create_function(
   return llvm_function;
 }
 
-llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) const {
+u64 LlvmIrEmitter::memory_size(llvm::Type* llvm_type) const {
+  return module_->getDataLayout().getTypeStoreSize(llvm_type).getFixedValue();
+}
+
+bool LlvmIrEmitter::in_memory_aggregate(ir::TypeIdx idx) const {
+  using T = ir::TypeTag;
+  const T tag = storage_->types()[idx.idx].tag;
+  if (tag != T::Struct && tag != T::Array && tag != T::Enum &&
+      tag != T::Tuple) {
+    return false;
+  }
+  llvm::Type* aggregate = type(idx);
+  if (!aggregate->isSized()) {
+    return false;
+  }
+  return module_->getDataLayout().getTypeAllocSize(aggregate) >=
+         IN_MEMORY_AGGREGATE_BYTES;
+}
+
+llvm::Type* LlvmIrEmitter::parameter_type(ir::TypeIdx idx) const {
+  return in_memory_aggregate(idx) ? builder_->getPtrTy() : type(idx);
+}
+
+llvm::AllocaInst* LlvmIrEmitter::frame_slot(llvm::Type* llvm_type) const {
+  llvm::BasicBlock& entry =
+      builder_->GetInsertBlock()->getParent()->getEntryBlock();
+  llvm::IRBuilder<> at_entry(&entry, entry.begin());
+  return at_entry.CreateAlloca(llvm_type);
+}
+
+llvm::Value* LlvmIrEmitter::operand_slot(const ir::Operand& operand,
+                                         llvm::Type* value_type) {
+  if (operand.is<ir::RegisterIdx>()) {
+    const ir::RegisterIdx reg = operand.as_register();
+    if (values_.slot_type(reg) != nullptr) {
+      return values_.register_value(reg);
+    }
+  }
+  llvm::AllocaInst* slot = frame_slot(value_type);
+  builder_->CreateStore(resolve_operand_value(operand), slot);
+  return slot;
+}
+
+void LlvmIrEmitter::copy_to_slot(llvm::Value* slot,
+                                 const ir::Operand& operand,
+                                 llvm::Type* value_type) {
+  llvm::Value* source = operand_slot(operand, value_type);
+  if (source == slot) {
+    return;
+  }
+  builder_->CreateMemCpy(slot, llvm::MaybeAlign(), source, llvm::MaybeAlign(),
+                         builder_->getInt64(memory_size(value_type)));
+}
+
+llvm::AllocaInst* LlvmIrEmitter::call_result_slot(ir::TypeIdx ret,
+                                                  ir::RegisterIdx dst) {
+  if (!in_memory_aggregate(ret)) {
+    return nullptr;
+  }
+  llvm::Type* slot_type = type(ret);
+  llvm::AllocaInst* slot = frame_slot(slot_type);
+  if (dst.is_valid()) {
+    values_.add_register(dst, slot);
+    values_.add_slot_type(dst, slot_type);
+  }
+  return slot;
+}
+
+llvm::Value* LlvmIrEmitter::call_argument(const ir::Operand& operand,
+                                          llvm::Type* wanted) {
+  if (!in_memory_aggregate(operand.type)) {
+    return argument_value(operand, wanted);
+  }
+  DCHECK_MSG(wanted->isPointerTy(), "A large aggregate crosses as a slot");
+  return operand_slot(operand, type(operand.type));
+}
+
+llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) {
   using Payload = ir::Operand::Payload;
   switch (op.tag()) {
-    case Payload::TagOf<ir::RegisterIdx>:
-      return values_.register_value(op.as_register());
+    case Payload::TagOf<ir::RegisterIdx>: {
+      const ir::RegisterIdx reg = op.as_register();
+      // A register that names a slot holds bytes, not a value: reading it
+      // is the load the register's type spells (ADR-0139). The selector
+      // bounds the width of the values it takes, so a consumer of a shape
+      // past IN_MEMORY_AGGREGATE_BYTES goes through operand_slot for the
+      // address rather than reading the register.
+      if (llvm::Type* slot_type = values_.slot_type(reg)) {
+        return builder_->CreateLoad(slot_type, values_.register_value(reg));
+      }
+      return values_.register_value(reg);
+    }
     case Payload::TagOf<ir::BlockIdx>: return values_.block(op.as_block());
     case Payload::TagOf<ir::ImmutableIdx>:
       return values_.immutable(op.as_immutable());
@@ -1206,9 +1368,10 @@ bool LlvmIrEmitter::is_entry_candidate(const ir::Function& function) const {
 }
 
 void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
-                               ir::TypeTag ret) {
+                               ir::TypeIdx entry_return) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler_, "main", "emit-fn");
   check_state();
+  const ir::TypeTag ret = storage_->types()[entry_return.idx].tag;
   llvm::LLVMContext& context = module_->getContext();
   // A freestanding entry is the ELF entry symbol itself and never
   // returns to a runtime; a hosted one is the C `main` a crt calls.
@@ -1234,7 +1397,24 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
         wrapper->getArg(1),
         module_->getOrInsertGlobal("alcy_argv", builder_->getPtrTy()));
   }
-  llvm::Value* result = builder_->CreateCall(entry_function);
+  // A result past the direct limit crosses in a slot the wrapper owns,
+  // so the exit code reads it out of memory (ADR-0139).
+  llvm::AllocaInst* result_slot = nullptr;
+  llvm::Value* result = nullptr;
+  if (in_memory_aggregate(entry_return)) {
+    result_slot = builder_->CreateAlloca(type(entry_return));
+    builder_->CreateCall(entry_function, {result_slot});
+  } else {
+    result = builder_->CreateCall(entry_function);
+  }
+  const auto result_tag = [&]() -> llvm::Value* {
+    if (result_slot == nullptr) {
+      return builder_->CreateExtractValue(result, 0);
+    }
+    return builder_->CreateLoad(
+        builder_->getInt32Ty(),
+        builder_->CreateStructGEP(type(entry_return), result_slot, 0));
+  };
   if (freestanding_) {
     // The exit status is the i32 main returned; an enum main exits
     // nonzero on a variant other than the first, and `()` exits zero.
@@ -1242,7 +1422,7 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     if (ret == ir::TypeTag::I32) {
       code = result;
     } else if (ret == ir::TypeTag::Enum) {
-      llvm::Value* tag = builder_->CreateExtractValue(result, 0);
+      llvm::Value* tag = result_tag();
       llvm::Value* is_ok = builder_->CreateICmpEQ(
           tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
       code = builder_->CreateSelect(
@@ -1262,7 +1442,7 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     // A two-variant enum whose first variant holds `()` returns by
     // value; a nonzero discriminant aborts through the panic path with
     // a generic message.
-    llvm::Value* tag = builder_->CreateExtractValue(result, 0);
+    llvm::Value* tag = result_tag();
     llvm::Value* is_ok = builder_->CreateICmpEQ(
         tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
     llvm::BasicBlock* ok_block = llvm::BasicBlock::Create(context, "", wrapper);

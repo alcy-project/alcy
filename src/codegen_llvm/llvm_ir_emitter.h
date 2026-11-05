@@ -26,6 +26,7 @@
 #include "overlay/overlay.h"
 
 namespace llvm {
+class AllocaInst;
 class BasicBlock;
 class Function;
 class Module;
@@ -149,13 +150,39 @@ class LlvmIrEmitter {
   // path and name, without the signature the linkable name encodes.
   std::string display_name(const ir::FunctionMeta& function_meta) const;
 
-  llvm::Value* resolve_operand_value(const ir::Operand& operand) const;
+  llvm::Value* resolve_operand_value(const ir::Operand& operand);
+
+  // The size at which an aggregate stops keeping an SSA value. LLVM names
+  // an aggregate's elements in one selection DAG node, so a load, a
+  // store, or a call operand past this size aborts the compiler; a shape
+  // this large lives in a slot of the frame instead, and its copies,
+  // arguments, returns, and joins go through memory (ADR-0139).
+  static constexpr u64 IN_MEMORY_AGGREGATE_BYTES = 4096;
+  bool in_memory_aggregate(ir::TypeIdx idx) const;
+  // The LLVM type a parameter of the IR type crosses as.
+  llvm::Type* parameter_type(ir::TypeIdx idx) const;
+  // The bytes a value of the type occupies in memory.
+  u64 memory_size(llvm::Type* type) const;
+  // The slot a call's result arrives in, named as its leading argument;
+  // null for a result that crosses as a value.
+  llvm::AllocaInst* call_result_slot(ir::TypeIdx ret, ir::RegisterIdx dst);
+  // The value an argument crosses as: a large aggregate crosses as its
+  // slot (ADR-0139).
+  llvm::Value* call_argument(const ir::Operand& operand, llvm::Type* wanted);
+  // An alloca in the entry block for a value an instruction builds: one
+  // slot per value, so a loop reuses it across iterations.
+  llvm::AllocaInst* frame_slot(llvm::Type* type) const;
+  // The slot an operand names, spilling a value operand first.
+  llvm::Value* operand_slot(const ir::Operand& operand, llvm::Type* type);
+  // Copies an operand's bytes into an existing slot of the same type.
+  void copy_to_slot(llvm::Value* slot,
+                    const ir::Operand& operand,
+                    llvm::Type* type);
   // The value an argument carries, as the callee's parameter type
   // wants it. A zero-sized parameter has no bits to fill, and the unit
   // type lowers to a dummy operand, so the empty struct is what goes
   // there whatever the operand holds.
-  llvm::Value* argument_value(const ir::Operand& operand,
-                              llvm::Type* wanted) const;
+  llvm::Value* argument_value(const ir::Operand& operand, llvm::Type* wanted);
   llvm::Function* resolve_operand_function(const ir::Operand& operand) const;
 
   // Whether an instruction is a call a backtrace names: a call whose
@@ -175,8 +202,9 @@ class LlvmIrEmitter {
   // exit code: `()`, `i32`, or a two-variant enum whose first variant
   // holds `()` (see docs/adr/0009-result-option-library-enums.md).
   bool is_entry_candidate(const ir::Function& function) const;
-  // Emits the C-ABI `main` wrapper around a renamed user entry.
-  void emit_entry(llvm::Function* entry_function, ir::TypeTag ret);
+  // Emits the C-ABI `main` wrapper around a renamed user entry,
+  // supplying a slot for a result past the direct limit (ADR-0139).
+  void emit_entry(llvm::Function* entry_function, ir::TypeIdx ret);
   // Ends a freestanding program through the target's exit syscall.
   // Answers false for a target with no sequence here, which the
   // pipeline refuses before emission.
@@ -220,6 +248,10 @@ class LlvmIrEmitter {
   std::vector<CallSiteName> call_sites_;
   std::vector<std::pair<llvm::BasicBlock*, llvm::BasicBlock*>> split_blocks_;
   LlvmIrStorage values_;
+  // The slot a return past the direct limit fills, named by the caller as
+  // the function's leading argument; null when the return crosses as a
+  // value (ADR-0139).
+  llvm::Value* return_slot_ = nullptr;
   // LLVM types are immutable once built, and one shape is requested for
   // every register, operand, and signature that names it, so each is
   // constructed once and shared.

@@ -359,21 +359,22 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       }
       break;
     }
-    case Op::Move: {
-      // Register alias; no code emitted.
-      DCHECK(ops.size() == 1);
-      if (i.dst.is_valid()) {
-        values_.add_register(
-            i.dst, resolve_operand_value(storage_->operands()[ops.head()]));
-      }
-      break;
-    }
+    case Op::Move:
     case Op::Borrow: {
-      // The address operand already is the reference value.
+      // Register alias; no code emitted. A slot aliases as the slot
+      // itself, so both registers name the same bytes (ADR-0139).
       DCHECK(ops.size() == 1);
       if (i.dst.is_valid()) {
-        values_.add_register(
-            i.dst, resolve_operand_value(storage_->operands()[ops.head()]));
+        const ir::Operand& src = storage_->operands()[ops.head()];
+        if (src.is<ir::RegisterIdx>()) {
+          if (llvm::Type* slot_type = values_.slot_type(src.as_register())) {
+            values_.add_register(i.dst,
+                                 values_.register_value(src.as_register()));
+            values_.add_slot_type(i.dst, slot_type);
+            break;
+          }
+        }
+        values_.add_register(i.dst, resolve_operand_value(src));
       }
       break;
     }

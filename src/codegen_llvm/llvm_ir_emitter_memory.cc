@@ -113,6 +113,16 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
         values_.add_register(i.dst, llvm::UndefValue::get(load_ty));
         break;
       }
+      if (in_memory_aggregate(dst_reg.type)) {
+        // The load is the copy into the destination's slot (ADR-0139).
+        llvm::AllocaInst* slot = frame_slot(load_ty);
+        builder_->CreateMemCpy(
+            slot, llvm::MaybeAlign(), resolve_operand_value(ptr_op),
+            llvm::MaybeAlign(), builder_->getInt64(memory_size(load_ty)));
+        values_.add_register(i.dst, slot);
+        values_.add_slot_type(i.dst, load_ty);
+        break;
+      }
       values_.add_register(
           i.dst, builder_->CreateLoad(load_ty, resolve_operand_value(ptr_op)));
       break;
@@ -128,6 +138,17 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       if (module_->getDataLayout().getTypeStoreSize(stored_ty) == 0) {
         if (i.dst.is_valid()) {
           values_.add_register(i.dst, llvm::UndefValue::get(stored_ty));
+        }
+        break;
+      }
+      if (in_memory_aggregate(lhs.type)) {
+        // The store is the copy out of the value's slot (ADR-0139).
+        llvm::CallInst* copy = builder_->CreateMemCpy(
+            resolve_operand_value(rhs), llvm::MaybeAlign(),
+            operand_slot(lhs, stored_ty), llvm::MaybeAlign(),
+            builder_->getInt64(memory_size(stored_ty)));
+        if (i.dst.is_valid()) {
+          values_.add_register(i.dst, copy);
         }
         break;
       }
