@@ -115,6 +115,9 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       i32_const(static_cast<i32>(size));
       op(OP_I32_MUL);
       op(OP_I32_ADD);
+      local_set(scratch1_);
+      guard_stack_end(scratch1_);
+      local_get(scratch1_);
       global_set(GLOBAL_SP);
       local_get(scratch0_);
       local_set(reg_base_[instr.dst.idx]);

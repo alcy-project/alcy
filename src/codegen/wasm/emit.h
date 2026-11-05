@@ -112,8 +112,14 @@ class Emitter {
   static constexpr u32 GLOBAL_STACK_LIMIT = 2;
   static constexpr u32 NO_LOCAL = 0xFFFFFFFF;
 
-  // Bytes reserved between the data and the heap for the shadow stack.
-  static constexpr u32 STACK_RESERVE = 64 * 1024;
+  // Bytes reserved between the data and the heap for the shadow stack. A
+  // call chain visits each function at most once unless it recurses, so the
+  // frames a program declares sum to a reserve every acyclic chain fits
+  // under; the floor keeps a small program's layout at the old size.
+  static constexpr u32 STACK_RESERVE_FLOOR = 64 * 1024;
+  // A reserve past this many bytes is the ceiling, and a chain needing more
+  // than the reserve panics rather than reaching the heap.
+  static constexpr u32 STACK_RESERVE_LIMIT = 64 * 1024 * 1024;
   // The engines cap a function's locals (V8 refuses more than 50000), and
   // this emitter spends one per register, so a function past the cap is
   // reported rather than written as a module that will not parse.
@@ -246,6 +252,10 @@ class Emitter {
   // locals `ptr_local` and `ptr_local + 1`: zero when the pointer is
   // null, the length otherwise.
   void guard_null_len(u32 ptr_local);
+  // Panics with "stack overflow" when the shadow stack pointer a bump
+  // would leave in `end` has passed the reserve; the heap starts where
+  // the reserve ends, so an unchecked bump writes over live allocations.
+  void guard_stack_end(u32 end);
 
   // --- module state ---
   ir::Storage storage_;
@@ -267,7 +277,11 @@ class Emitter {
   u32 data_end_ = 0;
   u32 scratch_ = 0;
   u32 stack_base_ = 0;
+  u32 stack_reserve_ = STACK_RESERVE_FLOOR;
   u32 heap_base_ = 0;
+  // Bytes of shadow stack the emitted frames and the entry's result slot
+  // take, accumulated before the layout publishes the reserve.
+  u64 stack_need_ = 0;
   u32 newline_ = NO_LOCAL;
   // The offset of the allocator's failure text in the data segment.
   u32 alloc_failure_ = 0;

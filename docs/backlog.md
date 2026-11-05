@@ -137,12 +137,13 @@ replaced. The foundations are in `roadmap.md`.
   carried beside the rounded one, a scaled long division; the spec's
   floor of about sixteen significant digits stands meanwhile.
 
-- [ ] The direct-wasm stack budget: a frame past the reserve (the
-  shadow stack's base) panics with "stack overflow", which is a
-  per-target limit native does not share and no spec states; a
-  variable-length alloca still walks past it unchecked, and the frame a
-  statement with a slot or a constant-count alloca takes is never
-  returned, so a function's frame grows with the statements it spells.
+- [ ] The direct-wasm stack budget: recursion deeper than the reserve
+  holds panics with "stack overflow" (ADR-0140), a per-target limit
+  native does not share and no spec states. The frame a statement with a
+  slot or a constant-count alloca takes is never returned either, so a
+  function's frame grows with the statements it spells, and the reserve
+  it feeds is the sum over the whole program rather than its deepest
+  chain.
 
 - [ ] Owning function types (ADR-0075) beyond parameters and returns:
   a method's `fn(...)` parameter infers from its arguments, a turbofish

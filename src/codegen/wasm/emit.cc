@@ -3,6 +3,7 @@
 
 #include "codegen/wasm/emit.h"
 
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -473,6 +474,7 @@ Emitter::EmitResult Emitter::emit_function(ir::FunctionIdx index) {
   if (build_locals(function).is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
+  stack_need_ += frame_bytes_;
 
   // The shadow stack pointer is restored on every return, so a loop that
   // allocates does not walk the stack up.
@@ -487,17 +489,7 @@ Emitter::EmitResult Emitter::emit_function(ir::FunctionIdx index) {
   // recursion used to overwrite a live buffer and keep running. The
   // bound is a panic rather than that corruption.
   local_set(scratch0_);
-  local_get(scratch0_);
-  global_get(GLOBAL_STACK_LIMIT);
-  op(OP_I32_GT_U);
-  if_void();
-  i32_const(static_cast<i32>(stack_text_));
-  i32_const(static_cast<i32>(STACK_FAILURE.size()));
-  i32_const(0);
-  i32_const(0);
-  call(PANIC);
-  op(OP_UNREACHABLE);
-  end_op();
+  guard_stack_end(scratch0_);
   local_get(scratch0_);
   global_set(GLOBAL_SP);
   set_state(0);
@@ -1351,7 +1343,12 @@ u32 Emitter::newline_offset() {
 void Emitter::add_memory_and_globals() {
   scratch_ = static_cast<u32>(ir::align_up(data_end_, SCRATCH_BYTES));
   stack_base_ = scratch_ + SCRATCH_BYTES;
-  heap_base_ = stack_base_ + STACK_RESERVE;
+  // A chain visits each function once unless it recurses, so the frames
+  // the program declares sum to a reserve no acyclic chain outgrows.
+  const u64 need = ir::align_up(stack_need_, 16);
+  stack_reserve_ = static_cast<u32>(std::min<u64>(
+      std::max<u64>(need, STACK_RESERVE_FLOOR), STACK_RESERVE_LIMIT));
+  heap_base_ = stack_base_ + stack_reserve_;
   // One page of heap beyond the cursor keeps the first small allocation
   // from having to grow the memory at all.
   const u32 pages = (heap_base_ + PAGE_BYTES) / PAGE_BYTES;
@@ -1693,6 +1690,20 @@ void Emitter::guard_null_len(u32 ptr_local) {
   op(OP_SELECT);
 }
 
+void Emitter::guard_stack_end(u32 end) {
+  local_get(end);
+  global_get(GLOBAL_STACK_LIMIT);
+  op(OP_I32_GT_U);
+  if_void();
+  i32_const(static_cast<i32>(stack_text_));
+  i32_const(static_cast<i32>(STACK_FAILURE.size()));
+  i32_const(0);
+  i32_const(0);
+  call(PANIC);
+  op(OP_UNREACHABLE);
+  end_op();
+}
+
 const overlay::Entry* Emitter::overlay_entry(
     ir::InstructionIdx instr_idx) const {
   if (overlay_ == nullptr || instr_idx.idx >= overlay_->entries.size()) {
@@ -1729,6 +1740,8 @@ Emitter::EmitResult Emitter::emit_start() {
     const u32 size = layout.size == 0 ? 1 : static_cast<u32>(layout.size);
     const u32 align = layout.align == 0 ? 1 : static_cast<u32>(layout.align);
     const u32 slot = allocate_local(ValType::I32);
+    const u32 end = allocate_local(ValType::I32);
+    stack_need_ += size;
     global_get(GLOBAL_SP);
     i32_const(static_cast<i32>(align - 1));
     op(OP_I32_ADD);
@@ -1738,6 +1751,9 @@ Emitter::EmitResult Emitter::emit_start() {
     local_get(slot);
     i32_const(static_cast<i32>(size));
     op(OP_I32_ADD);
+    local_set(end);
+    guard_stack_end(end);
+    local_get(end);
     global_set(GLOBAL_SP);
     // The callee writes the result through the leading pointer.
     local_get(slot);
