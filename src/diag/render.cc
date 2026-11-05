@@ -3,10 +3,12 @@
 
 #include "diag/render.h"
 
+#include <algorithm>
 #include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "diag/diagnostic.h"
 #include "diag/span.h"
@@ -17,6 +19,7 @@
 #include "fpag/term/style.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
+#include "source/source.h"
 
 namespace diag {
 
@@ -48,18 +51,6 @@ constexpr std::string_view severity_color(Severity severity) {
     case Severity::Note: return term::FG_CYAN;
   }
 }
-
-struct LineInfo {
-  u32 line = 1;
-  // 1-based display column: UTF-8 code points, with a tab advancing to
-  // the next multiple of TAB_WIDTH. Byte columns would put the caret
-  // after every multi-byte character and before every expanded tab.
-  u32 col = 1;
-  // Byte offset where the line starts, so callers converting a
-  // byte-relative length do not have to reverse the column arithmetic.
-  u32 start = 0;
-  std::string_view text;
-};
 
 constexpr u32 TAB_WIDTH = 4;
 
@@ -123,9 +114,10 @@ u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
   return col;
 }
 
-// Locates the 1-based line/column of a byte offset and extracts the line.
-// Out-of-range offsets clamp to the end of the buffer.
-LineInfo locate(std::string_view bytes, u32 offset) {
+// Locates the 1-based line/column of a byte offset and extracts the line,
+// counting the lines from the top of the text. Out-of-range offsets clamp to
+// the end of the buffer.
+SourceLine scan_line(std::string_view bytes, u32 offset) {
   if (offset > bytes.size()) {
     offset = static_cast<u32>(bytes.size());
   }
@@ -144,8 +136,8 @@ LineInfo locate(std::string_view bytes, u32 offset) {
       break;
     }
   }
-  return {.line = line,
-          .col = display_column(bytes, line_start, offset),
+  return {.number = line,
+          .column = display_column(bytes, line_start, offset),
           .start = line_start,
           .text = bytes.substr(line_start, line_end - line_start)};
 }
@@ -271,8 +263,8 @@ void append_marker(fmt::memory_buffer& out,
 }  // namespace
 
 LineColumn line_column(std::string_view bytes, u32 offset) {
-  const LineInfo info = locate(bytes, offset);
-  return {.line = info.line, .column = info.col};
+  const SourceLine line = scan_line(bytes, offset);
+  return {.line = line.number, .column = line.column};
 }
 
 LineColumn LineCursor::locate(std::string_view bytes, u32 offset) {
@@ -296,6 +288,50 @@ LineColumn LineCursor::locate(std::string_view bytes, u32 offset) {
   return {.line = line_, .column = display_column(bytes, line_start_, offset)};
 }
 
+SourceLine LineIndex::line_at(source::FileId file_id,
+                              std::string_view bytes,
+                              u32 offset) {
+  if (offset > bytes.size()) {
+    offset = static_cast<u32>(bytes.size());
+  }
+  Text* found = nullptr;
+  for (Text& text : texts_) {
+    if (text.file_id == file_id && text.bytes.data() == bytes.data() &&
+        text.bytes.size() == bytes.size()) {
+      found = &text;
+      break;
+    }
+  }
+  if (found == nullptr) {
+    texts_.push_back(Text{.file_id = file_id, .bytes = bytes, .starts = {}});
+    return scan_line(bytes, offset);
+  }
+  // The first question about a text was answered by the scan the renderer
+  // would have made anyway, so the pass that fills the index is the second
+  // one's to pay.
+  if (found->starts.empty()) {
+    found->starts.push_back(0);
+    for (u32 i = 0; i < static_cast<u32>(bytes.size()); ++i) {
+      if (bytes[i] == '\n') {
+        found->starts.push_back(i + 1);
+      }
+    }
+  }
+  const std::vector<u32>& starts = found->starts;
+  const auto after = std::upper_bound(starts.begin(), starts.end(), offset);
+  const usize index = static_cast<usize>(after - starts.begin());
+  const u32 start = starts[index - 1];
+  u32 end = static_cast<u32>(bytes.size());
+  if (after != starts.end()) {
+    // The next line starts after a newline; the newline is not on this one.
+    end = *after - 1;
+  }
+  return {.number = static_cast<u32>(index),
+          .column = display_column(bytes, start, offset),
+          .start = start,
+          .text = bytes.substr(start, end - start)};
+}
+
 std::string render(const Diagnostic& diag, const RenderOptions& options) {
   fmt::memory_buffer out;
   render(diag, out, options);
@@ -306,7 +342,8 @@ void render(const Diagnostic& diag,
             fmt::memory_buffer& out,
             const RenderOptions& options,
             SourceFetch fetch,
-            const void* ctx) {
+            const void* ctx,
+            LineIndex* lines) {
   append_marker(out, diag, options);
 
   if (!diag.has_primary_span) {
@@ -332,10 +369,13 @@ void render(const Diagnostic& diag,
     return;
   }
 
-  const LineInfo info = locate(source.bytes, diag.primary_span.offset);
-  fmt::format_to(std::back_inserter(out), ":{}:{}\n", info.line, info.col);
+  const SourceLine info =
+      lines != nullptr ? lines->line_at(diag.primary_span.file, source.bytes,
+                                        diag.primary_span.offset)
+                       : scan_line(source.bytes, diag.primary_span.offset);
+  fmt::format_to(std::back_inserter(out), ":{}:{}\n", info.number, info.column);
 
-  // Caret run clipped to the rendered snippet. locate() clamps
+  // Caret run clipped to the rendered snippet. The locators clamp
   // out-of-range offsets; mirror that here.
   u32 line_offset = diag.primary_span.offset;
   if (line_offset > source.bytes.size()) {
@@ -347,11 +387,11 @@ void render(const Diagnostic& diag,
       snippet_window(info.text, line_offset - info.start);
   const u32 base_offset = info.start + static_cast<u32>(window.begin);
 
-  const u32 gutter = decimal_width(info.line);
+  const u32 gutter = decimal_width(info.number);
   write_gutter(out, gutter);
   fmt::format_to(std::back_inserter(out), "\n");
   begin_style(out, options.color, term::FG_BLUE);
-  fmt::format_to(std::back_inserter(out), "{}", info.line);
+  fmt::format_to(std::back_inserter(out), "{}", info.number);
   end_style(out, options.color);
   fmt::format_to(std::back_inserter(out), " | ");
   if (window.clipped_left) {
@@ -423,9 +463,12 @@ void render(const Diagnostic& diag,
       fmt::format_to(std::back_inserter(out), ":{}\n", label.span.offset);
       continue;
     }
-    const LineInfo label_info = locate(label_source.bytes, label.span.offset);
-    fmt::format_to(std::back_inserter(out), ":{}:{}\n", label_info.line,
-                   label_info.col);
+    const SourceLine label_info =
+        lines != nullptr ? lines->line_at(label.span.file, label_source.bytes,
+                                          label.span.offset)
+                         : scan_line(label_source.bytes, label.span.offset);
+    fmt::format_to(std::back_inserter(out), ":{}:{}\n", label_info.number,
+                   label_info.column);
   }
 }
 

@@ -147,6 +147,19 @@ module measures 6.68M, 9.18M, 14.2M, and 24.2M instructions: 39K a name over a
 the name set once per block would pay for every name once per statement, and the
 per-name cost would climb with the count instead.
 
+Errors are the fifth axis, and the file's own text is their floor. A diagnostic
+reports where its span sits, and the renderer answered by counting newlines from
+the first byte, so a bag of D diagnostics on an N-byte text cost O(D * N). One
+file that binds the same name 2000 times in one scope draws a rejection per
+name: 500 of them measured 28.1M instructions and 2000 measured 323.1M, so
+every doubling of the text near tripled the cost. `diag::LineIndex` counts a
+text's line starts once, on the second question about it - the first question is
+answered by the scan it would have paid anyway, so a file with one diagnostic
+keeps its single pass and allocates nothing - and searches the rest, which
+leaves that series at 6.8M, 9.6M, 15.2M, and 26.5M instructions at 250, 500,
+1000, and 2000 names. What remains is the checker's own walk over the names of
+the scope, not the rendering of what it finds.
+
 Every figure above sits on a floor the process pays before it reads a byte, and
 that floor is worth knowing because the growth slopes are fitted over it.
 `alcy check` on a one-module package runs 4.49M instructions: 1.09M of that is

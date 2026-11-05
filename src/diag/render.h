@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "diag/diagnostic.h"
 #include "fmt/format.h"
@@ -71,14 +72,55 @@ struct RenderOptions {
   i18n::Language language = i18n::Language::EnUs;
 };
 
+// One line of a source text as the renderer reads it: the line the offset
+// falls on, the column it sits at, where the line starts, and the line's
+// characters.
+struct SourceLine {
+  // 1-based line number, and the display column line_column reports.
+  u32 number = 1;
+  u32 column = 1;
+  // Byte offset the line starts at, so a caller converting a byte length
+  // does not have to reverse the column arithmetic.
+  u32 start = 0;
+  std::string_view text;
+};
+
+// Where the lines of each text start, so the place of every diagnostic in a
+// bag costs a search rather than a scan from the top of the file. A text is
+// indexed from its second question on: the one diagnostic a file usually
+// carries pays the scan it would have paid anyway and no memory. The texts
+// stay the caller's and have to outlive the index.
+class LineIndex {
+ public:
+  // Answers the way line_column does, and clamps an offset past the end the
+  // same way.
+  SourceLine line_at(source::FileId file_id,
+                     std::string_view bytes,
+                     u32 offset);
+
+ private:
+  struct Text {
+    source::FileId file_id = source::UNKNOWN_FILE;
+    std::string_view bytes;
+    // Byte offset of every line start, ascending, or empty until the text
+    // is asked about a second time.
+    std::vector<u32> starts;
+  };
+
+  std::vector<Text> texts_;
+};
+
 // Renders one diagnostic into out. Snippets are single-line
 // (multi-line spans are clipped to their first line); secondary labels
 // render as location lines. Only out itself may grow; inputs are only read.
+// Passing an index answers positions from it; without one every span is
+// located by scanning the text.
 void render(const Diagnostic& diag,
             fmt::memory_buffer& out,
             const RenderOptions& options = {},
             SourceFetch fetch = nullptr,
-            const void* ctx = nullptr);
+            const void* ctx = nullptr,
+            LineIndex* lines = nullptr);
 
 // `render` for a caller that wants the text rather than a buffer, and has
 // no source to quote: the marker and the message, and nothing else. A

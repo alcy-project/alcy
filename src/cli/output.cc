@@ -57,9 +57,10 @@ std::optional<diag::SourceText> fetch_source(source::FileId id,
 void append_diagnostic_text(std::string& out,
                             const diag::Diagnostic& diagnostic,
                             const source::SourceManager& sources,
+                            diag::LineIndex& lines,
                             const diag::RenderOptions& options) {
   fmt::memory_buffer rendered;
-  diag::render(diagnostic, rendered, options, fetch_source, &sources);
+  diag::render(diagnostic, rendered, options, fetch_source, &sources, &lines);
   out.append(rendered.data(), rendered.size());
 }
 
@@ -473,8 +474,12 @@ std::string render_diagnostics(const Envelope& envelope,
                                const diag::RenderOptions& options) {
   std::string out;
   if (envelope.bag != nullptr && envelope.sources != nullptr) {
+    // One index for the whole bag: a file that reports several diagnostics
+    // counts its lines once rather than once per diagnostic.
+    diag::LineIndex lines;
     envelope.bag->for_each([&](const diag::Diagnostic& diagnostic) {
-      append_diagnostic_text(out, diagnostic, *envelope.sources, options);
+      append_diagnostic_text(out, diagnostic, *envelope.sources, lines,
+                             options);
     });
     const u32 dropped = envelope.bag->dropped_count();
     if (dropped > 0) {
