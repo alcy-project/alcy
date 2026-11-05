@@ -1,0 +1,3 @@
+subcommand = "run"
+exit = 0
+contains = ["bag kept", "slot kept", "pair kept", "cond kept", "sack took 1", "DROP 2", "done"]

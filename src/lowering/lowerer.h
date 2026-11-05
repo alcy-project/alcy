@@ -994,6 +994,28 @@ class Lowerer {
                           const std::vector<Val>& places,
                           ir::BlockIdx body,
                           ir::BlockIdx fail);
+  // A pattern that binds takes a value out of its place, so it waits
+  // until every test of its arm has passed: a pattern that fails leaves
+  // the scrutinee whole for its owners to end. The tests queue their
+  // bindings here, and the arm emits them where only a full match
+  // reaches.
+  struct QueuedBinding {
+    ast::PatternIdx pattern;
+    // The place the binding reads, or the place an in-place end covers.
+    Val place;
+    // Bind a shared reference to the place instead of moving its value.
+    bool borrowed = false;
+    // End the place instead of binding it: a payload an arm discards
+    // with a wildcard ends once the arm commits.
+    bool drop_here = false;
+    diag::Span span{};
+  };
+  void queue_binding(ast::PatternIdx pattern, Val place, bool borrowed);
+  void queue_drop(Val place, diag::Span span);
+  // Emits the queued bindings into the current block, which the tests
+  // reach only once the whole pattern matched.
+  void flush_queued_bindings();
+  std::vector<QueuedBinding> queued_bindings_;
   // Whether `bind_pattern` alone can place a pattern: an irrefutable
   // binding, a wildcard, or a destructuring of those. A refutable
   // sub-pattern needs a test, not a binding.
