@@ -1,0 +1,2 @@
+exit = 4
+contains = ["Type mismatch in call: expected 'Closure#1() -> i32', found 'Closure#2() -> i32'"]

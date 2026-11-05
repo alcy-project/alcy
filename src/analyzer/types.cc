@@ -300,10 +300,13 @@ std::string Checker::type_display_at(ir::TypeIdx type, usize depth) const {
       // A closure literal's nominal is the literal's own type, and the
       // signature it was checked against is what tells two literals
       // apart; spelling it is what keeps a mismatch of two literals
-      // from reading as a mismatch of a type with itself.
+      // from reading as a mismatch of a type with itself. The ordinal
+      // carries the same weight when two literals share one signature.
       if (shape.name == closure_name_id) {
         if (const ClosureSig* sig = closure_sig_of_type(origin)) {
           std::string out(interner.get(closure_sig_head_id));
+          out += std::to_string(sig->ordinal);
+          out += '(';
           for (usize i = 0; i < sig->params.size(); ++i) {
             if (i != 0) {
               out += ", ";
@@ -5027,7 +5030,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   if (checker.closure_name_id == str::INVALID_STRING_POOL_ID) {
     return base::make_err(diag::Reported{});
   }
-  checker.closure_sig_head_id = checker.intern_name("Closure(");
+  checker.closure_sig_head_id = checker.intern_name("Closure#");
   if (checker.closure_sig_head_id == str::INVALID_STRING_POOL_ID) {
     return base::make_err(diag::Reported{});
   }

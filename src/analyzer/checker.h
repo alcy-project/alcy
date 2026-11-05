@@ -318,7 +318,8 @@ class Checker {
   // formatter keys a signature spelling off it, so two literals told
   // apart in a diagnostic read as the signatures they were checked for.
   str::StringPoolId closure_name_id = str::INVALID_STRING_POOL_ID;
-  // The interned name of the formatter's head for a closure signature.
+  // The interned name of the formatter's head for a closure signature,
+  // which the nominal's ordinal completes.
   str::StringPoolId closure_sig_head_id = str::INVALID_STRING_POOL_ID;
   // Interned name every method type parameter's stand-in carries.
   str::StringPoolId method_param_name_id = str::INVALID_STRING_POOL_ID;
@@ -417,11 +418,15 @@ class Checker {
     bool used = false;
   };
   // A closure nominal's signature: what a value of the type coerces to
-  // and calls with. `self_type` is the nominal's own index.
+  // and calls with. `self_type` is the nominal's own index, and
+  // `ordinal` counts the literal's place among the closure nominals the
+  // package interned, which is what tells two literals of one signature
+  // apart in a diagnostic.
   struct ClosureSig {
     ir::TypeIdx self_type = ir::TypeIdx::invalid();
     std::vector<ir::TypeIdx> params;
     ir::TypeIdx ret = ir::TypeIdx::invalid();
+    u32 ordinal = 0;
   };
   struct ClosureBound {
     usize scope = 0;

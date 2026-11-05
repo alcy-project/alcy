@@ -1491,6 +1491,7 @@ ir::TypeIdx Checker::check_closure(u32 module,
       sig.params.push_back(storage_copy(param));
     }
     sig.ret = storage_copy(ret);
+    sig.ordinal = static_cast<u32>(closureTables_.closure_sigs.size()) + 1;
     closureTables_.closure_sigs.push_back(std::move(sig));
   }
   CheckedModule::ClosureLit lit{expr,     {},        ret,          closure.body,
