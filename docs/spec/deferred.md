@@ -8,8 +8,9 @@ it is implemented.
 
 - Destructor glue reaches a struct's or tuple's fields, an enum's live
   variant after a discriminant read, and an array's elements in a loop.
-  A move out of a type with its own `drop` is refused by design, and
-  `Vec::grow` moves elements rather than ending them. See
+  A move out of a type with its own `drop` is refused, except for a field
+  of the destructor's own receiver, and `Vec::grow` moves elements rather
+  than ending them. See
   `docs/adr/0013-destructors-consume-their-value.md`.
 - Generic structs, generic enums, generic free functions, and generic
   intrinsics are not deferred: they intern per instantiation,

@@ -699,16 +699,21 @@ void Lowerer::record_move_event(Val v) {
   if (!place_of_register(operand.as_register().idx, local_index, path)) {
     return;
   }
-  // A field cannot move out of a value with a user-written `drop`; the
-  // move has already been refused where it happened.
-  for (usize i = 0; i < path.size(); ++i) {
-    const ir::TypeIdx prefix = type_at_path(
-        locals[local_index].type, std::span<const u32>(path.data(), i));
-    if (type_has_custom_drop(prefix)) {
-      const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
-          DiagCode::MoveOutOfDestructor, cur_span_, locals[local_index].name);
-      (void)index;
-      return;
+  // A field cannot move out of a value with a user-written `drop`, because
+  // the method would run on a value with a hole where the field was. The
+  // receiver of the destructor being lowered is the exception: the body is
+  // that method, so a field it moves into a binding ends with the binding
+  // (ADR-0137).
+  if (local_index != end_exempt_) {
+    for (usize i = 0; i < path.size(); ++i) {
+      const ir::TypeIdx prefix = type_at_path(
+          locals[local_index].type, std::span<const u32>(path.data(), i));
+      if (type_has_custom_drop(prefix)) {
+        const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
+            DiagCode::MoveOutOfDestructor, cur_span_, locals[local_index].name);
+        (void)index;
+        return;
+      }
     }
   }
   record_event(OwnershipEvent::Kind::Move, local_index, std::move(path),

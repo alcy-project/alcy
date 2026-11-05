@@ -54,6 +54,11 @@
   either: an array ends its elements whole, so a move out of one is
   refused until the drop walk can name an element. A value without a
   destructor is read out by ordinary copy.
+- A non-`Copy` value cannot be moved out of a value whose type declares a
+  destructor: the method would run on a value with a hole where the field
+  was. A field of the destructor's own receiver is the exception, because
+  the body is that method and decides what its receiver still holds (see
+  `values.md`, and ADR-0137).
 - A non-`Copy` value cannot be moved out of a reference: reading `*r`
   as a value, taking a field out of the referent, and moving a pattern's
   payload out are all refused. A pattern over a borrowed value reads the

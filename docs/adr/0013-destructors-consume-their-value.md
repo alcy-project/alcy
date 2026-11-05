@@ -124,7 +124,11 @@ markers are the events the pass reads, and only a state a loop carries
 both ways is decided at run time. This supersedes the enum/array and
 partial-move consequences below and the discard error above: variants
 and array elements end through glue, field-level move tracking landed,
-and discarding ends the value.
+and discarding ends the value. One move stays refused: a field of a value
+whose type declares its own `drop` cannot move out, because that method
+would see a hole where the field was. The destructor's own receiver is
+the exception, since the body is that method and the walk places no end
+on what it leaves (ADR-0137).
 
 ## Consequences
 
