@@ -198,6 +198,52 @@ fn g(o: Option<i32>) -> i32 {
         (integer)))))
 
 ================================================================================
+A struct pattern in a condition
+================================================================================
+fn f(cond: Bag) {
+  if Bag { items: v, n: 4 } := cond {
+    println("x")
+  }
+}
+
+---
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier_pattern
+          (identifier))
+        (path_type
+          (path
+            (identifier)))))
+    (block
+      (if_expression
+        (declaration_condition
+          (struct_pattern
+            (path
+              (identifier))
+            (field_pattern
+              (identifier)
+              (identifier_pattern
+                (identifier)))
+            (field_pattern
+              (identifier)
+              (literal_pattern
+                (integer))))
+          (path_expression
+            (path
+              (identifier))))
+        (block
+          (call_expression
+            (path_expression
+              (path
+                (identifier)))
+            (arguments
+              (string))))))))
+
+================================================================================
 While
 ================================================================================
 

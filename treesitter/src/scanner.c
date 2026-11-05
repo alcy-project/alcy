@@ -6,7 +6,9 @@
 // Four tokens live here. Three cannot be written as a regular expression:
 //
 //   _block_lbrace   the `{` that opens a block whose header it belongs to,
-//                   which the specification requires to stay on that line
+//                   which the specification requires to stay on that line,
+//                   and which a `}:=` after its match says is a patterned
+//                   predicate's field list instead
 //   _newline        the `;` the lexer inserts when a line ends a statement
 //   block_comment   a `/* */` comment, which nests
 //
@@ -104,6 +106,33 @@ static bool continues_after_newline(TSLexer *lexer) {
   }
 }
 
+// Steps over a string or a character literal. Its body holds whichever
+// delimiters the enclosing lookahead counts, so the lookahead reads it
+// whole. An unterminated literal is the internal lexer's to report, and
+// the reading that was looking past it is over either way.
+static bool skip_quoted(TSLexer *lexer) {
+  const int32_t quote = lexer->lookahead;
+  advance(lexer);
+  for (;;) {
+    if (lexer->eof(lexer) || lexer->lookahead == '\n') {
+      return false;
+    }
+    if (lexer->lookahead == '\\') {
+      advance(lexer);
+      if (lexer->eof(lexer)) {
+        return false;
+      }
+      advance(lexer);
+      continue;
+    }
+    if (lexer->lookahead == quote) {
+      advance(lexer);
+      return true;
+    }
+    advance(lexer);
+  }
+}
+
 // A comment, of either nesting or not. Only `/* */` nests.
 static bool skip_block_comment(TSLexer *lexer) {
   int32_t depth = 1;
@@ -159,26 +188,8 @@ static bool scan_cond_pattern_paren(TSLexer *lexer) {
     }
     const int32_t c = lexer->lookahead;
     if (c == '"') {
-      advance(lexer);
-      for (;;) {
-        if (lexer->eof(lexer) || lexer->lookahead == '\n') {
-          // An unterminated string is the internal lexer's to report,
-          // and the pattern reading is over either way.
-          return false;
-        }
-        if (lexer->lookahead == '\\') {
-          advance(lexer);
-          if (lexer->eof(lexer)) {
-            return false;
-          }
-          advance(lexer);
-          continue;
-        }
-        if (lexer->lookahead == '"') {
-          advance(lexer);
-          break;
-        }
-        advance(lexer);
+      if (!skip_quoted(lexer)) {
+        return false;
       }
       continue;
     }
@@ -240,6 +251,67 @@ static bool scan_block_comment(TSLexer *lexer) {
   return true;
 }
 
+// A `{` opens a block, and the same token opens the field list of a struct
+// pattern: `if Bag { items: v } := held` reads the brace as a block until the
+// `:=` after its match says otherwise. That is the fork `(` has, one
+// token further along, and the same reading ahead settles it: a braced
+// body whose match is followed by `:=` is left to the internal lexer as a
+// plain `{`, so the pattern reading of the condition stays alive. A field
+// list may span lines, so the lookahead steps over newlines; a binding
+// keeps its `:=` on the line its match ends on, the same rule the `(` of
+// a condition follows.
+static bool brace_opens_pattern(TSLexer *lexer) {
+  int32_t depth = 1;
+  for (;;) {
+    if (lexer->eof(lexer)) {
+      return false;
+    }
+    const int32_t c = lexer->lookahead;
+    if (c == '"' || c == '\'') {
+      if (!skip_quoted(lexer)) {
+        return false;
+      }
+      continue;
+    }
+    if (c == '/') {
+      advance(lexer);
+      if (lexer->lookahead == '*') {
+        advance(lexer);
+        if (!skip_block_comment(lexer)) {
+          return false;
+        }
+        continue;
+      }
+      if (lexer->lookahead == '/') {
+        while (!lexer->eof(lexer) && lexer->lookahead != '\n') {
+          advance(lexer);
+        }
+        continue;
+      }
+      continue;
+    }
+    advance(lexer);
+    if (c == '{') {
+      ++depth;
+      continue;
+    }
+    if (c != '}') {
+      continue;
+    }
+    if (--depth != 0) {
+      continue;
+    }
+    while (is_horizontal_space(lexer->lookahead)) {
+      skip(lexer);
+    }
+    if (lexer->lookahead != ':') {
+      return false;
+    }
+    advance(lexer);
+    return lexer->lookahead == '=';
+  }
+}
+
 // The brace that opens a block, which the specification requires to be on
 // its header line.
 static bool scan_block_lbrace(Scanner *scanner, TSLexer *lexer) {
@@ -255,6 +327,9 @@ static bool scan_block_lbrace(Scanner *scanner, TSLexer *lexer) {
   }
   advance(lexer);
   lexer->mark_end(lexer);
+  if (brace_opens_pattern(lexer)) {
+    return false;
+  }
   lexer->result_symbol = BLOCK_LBRACE;
   scanner->newline_before_brace = false;
   return true;

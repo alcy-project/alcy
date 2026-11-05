@@ -986,6 +986,12 @@ module.exports = grammar({
     // and a plain parenthesized condition keeps its block: with both
     // readings alive the brace the block needs is a token only one of
     // them can ask the scanner for.
+    //
+    // A struct pattern's `{` is the same fork one token further in: it
+    // opens the field list here, and a block when the condition is an
+    // expression. The scanner settles this one the other way round,
+    // declining the block's brace when the matching `}` is followed by
+    // `:=`, so the pattern reading outlives the token.
     declaration_condition: $ => choice(
       seq(
         field('pattern', alias($.cond_tuple_pattern, $.tuple_pattern)),
@@ -1019,8 +1025,9 @@ module.exports = grammar({
     // settled by the scanner rather than by the first token: everything
     // a pattern can be except one that starts with a plain `(`. Once the
     // reading is committed the inside is the ordinary pattern grammar,
-    // where a `(` is no longer ambiguous. The aliases keep the node
-    // names the queries and the corpus read.
+    // where a `(` is no longer ambiguous. A leading `{` is a struct
+    // pattern's, which the scanner has already told from a block's. The
+    // aliases keep the node names the queries and the corpus read.
     _condition_pattern: $ => choice(
       $._condition_primary,
       $._condition_or_pattern,
