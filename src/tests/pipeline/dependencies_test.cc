@@ -4,6 +4,8 @@
 #include "pipeline/dependencies.h"
 
 #include <initializer_list>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,6 +20,11 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/common.h"
+#include "ir/deserialize.h"
+#include "ir/external_function.h"
+#include "ir/function.h"
+#include "ir/type.h"
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
@@ -1431,6 +1438,251 @@ TEST_CASE("A dependency a summary answers for is not read") {
     }
   }
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)
+}
+
+TEST_CASE("A summary import carries what a carried body reaches") {
+  // A dependent holds the generic bodies a summary carries and the
+  // concrete code those bodies call, not the library's whole lowered
+  // storage (ADR-0079).
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_reach_test_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "fn tag() -> i32 {\n  ret 7\n}\n\n"
+        "fn sink() -> i32 {\n  ret 3\n}\n\n"
+        "pub fn identity<T>(x: T) -> T {\n"
+        "  _ := tag()\n"
+        "  ret x\n"
+        "}\n\n"
+        "pub fn double(x: i32) -> i32 {\n  ret x + x\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  // Build the library once, so the summary and the artifact exist.
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+  // The library's sources are gone, so the summary answers for it.
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::identity\n\nfn main() -> i32 {\n"
+        "  ret identity(21i32) - 21\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+  const std::optional<std::string> bytes =
+      io::read_file(dir.join("proj/out/app.irb"));
+  CHECK(bytes.has_value());
+  if (!bytes.has_value() || bytes->size() < 4) {
+    return;
+  }
+  const std::span<const u8> written_ir(
+      reinterpret_cast<const u8*>(bytes->data()), bytes->size());
+  const base::Result<ir::LoadedIr, ir::IrLoadError> loaded =
+      ir::deserialize(written_ir);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  const ir::LoadedIr& package = loaded.value();
+  // The carried body and the concrete helper it calls cross; the
+  // library's unreached functions - a private helper no carried body
+  // calls and an unused surface function - stay in the library's own
+  // storage.
+  bool inherited_body = false;
+  bool inherited_helper = false;
+  bool inherited_unreached = false;
+  for (const ir::FunctionIdx idx : package.storage->functions().idx_range()) {
+    const ir::FunctionMeta& meta = package.storage->functions()[idx].meta;
+    const std::string_view name = package.strings->get(meta.name);
+    if (name == "identity") {
+      bool mentions =
+          package.storage->types()[meta.return_type].tag == ir::TypeTag::Param;
+      for (const ir::TypeIdx param : meta.param_types) {
+        mentions = mentions ||
+                   package.storage->types()[param].tag == ir::TypeTag::Param;
+      }
+      inherited_body = inherited_body || mentions;
+    }
+    if (name == "tag") {
+      inherited_helper = true;
+    }
+    if (name == "sink" || name == "double") {
+      inherited_unreached = true;
+    }
+  }
+  CHECK(inherited_body);
+  CHECK(inherited_helper);
+  CHECK_FALSE(inherited_unreached);
+  for (const ir::ExternalFunction& external :
+       package.storage->external_functions()) {
+    CHECK(package.strings->get(external.meta.name) != "double");
+  }
+}
+
+TEST_CASE("A package's storage merges once for all of its modules") {
+  // Every module of a summary dependency shares one artifact storage,
+  // so the merge copies a reached entry once, however many modules name
+  // it: one module's generic calling another's crosses as one body
+  // (ADR-0079).
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_shared_test_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\", \"extra\"]\nexport = [\"extra\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al", "pub fn identity<T>(x: T) -> T {\n  ret x\n}\n"},
+       {"extra.al",
+        "use package::identity\n\n"
+        "pub fn wrap<T>(x: T) -> T {\n  ret identity(x)\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  CHECK(io::remove_file(dir.join("dep/extra.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::extra::wrap\n\nfn main() -> i32 {\n"
+        "  ret wrap(21i32) - 21\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+  const std::optional<std::string> bytes =
+      io::read_file(dir.join("proj/out/app.irb"));
+  CHECK(bytes.has_value());
+  if (!bytes.has_value() || bytes->size() < 4) {
+    return;
+  }
+  const std::span<const u8> written_ir(
+      reinterpret_cast<const u8*>(bytes->data()), bytes->size());
+  const base::Result<ir::LoadedIr, ir::IrLoadError> loaded =
+      ir::deserialize(written_ir);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  const ir::LoadedIr& package = loaded.value();
+  usize identity_bodies = 0;
+  usize wrap_bodies = 0;
+  for (const ir::FunctionIdx idx : package.storage->functions().idx_range()) {
+    const ir::FunctionMeta& meta = package.storage->functions()[idx].meta;
+    const std::string_view name = package.strings->get(meta.name);
+    if (name != "identity" && name != "wrap") {
+      continue;
+    }
+    bool mentions =
+        package.storage->types()[meta.return_type].tag == ir::TypeTag::Param;
+    for (const ir::TypeIdx param : meta.param_types) {
+      mentions =
+          mentions || package.storage->types()[param].tag == ir::TypeTag::Param;
+    }
+    if (!mentions) {
+      continue;
+    }
+    identity_bodies += name == "identity" ? 1 : 0;
+    wrap_bodies += name == "wrap" ? 1 : 0;
+  }
+  CHECK(identity_bodies == 1);
+  CHECK(wrap_bodies == 1);
 }
 
 }  // namespace pipeline

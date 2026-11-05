@@ -1236,6 +1236,12 @@ class Lowerer {
   // Merged summary storages, by module: the appending ran once, and its
   // bases name every body the module carried (ADR-0079).
   std::unordered_map<u32, ir::StorageBases> merged_modules_;
+  // The same, by the storage the appending ran for: every module one
+  // artifact answers for shares the result, so a package's storage is
+  // copied once however many modules name it. The key borrows the
+  // run's loaded artifact, which the dependency table owns for as long
+  // as the lowering does, so the pointer stays valid.
+  std::unordered_map<const ir::Storage*, ir::StorageBases> merged_storages_;
   // Whether the pass built its item and instance indexes.
   bool specialize_indexes_ready_ = false;
   // Minted nominal instances by declaring item, so a substitution finds

@@ -176,19 +176,23 @@ check.
    its owner's parameters and each method only its own, and a path
    opens its package by the identity a `use` writes, so a signature
    resolves in the module that holds the item and in a dependent that
-   reads the declaration. A carrying package appends its tables to the
-   dependent's by a per-table base - every index the appended half
-   holds keeps its meaning, and every name moves into the dependent's
-   interner - and the specialization pass clones a carried body beside
-   the dependent's own code. A function the summary names by symbol
-   keeps no body: a reference to it is a call by that symbol, so the
-   library's object stays the code that runs, and a library object now
-   internalizes everything its surface does not name, which keeps a
-   promoted symbol of a split build from meeting another object's copy.
-   The carried tables are appended whole rather than followed to what a
-   reachable body names; a build therefore holds the library's storage
-   beside its own, and its reported count includes what the library
-   lowered.
+   reads the declaration. A carrying package copies into the
+   dependent's tables what the carried bodies reach - their blocks,
+   instructions, operands, the types they name, and the functions they
+   call - with every reference rewritten through the map its entry
+   moved through: every index keeps its meaning, and every name moves
+   into the dependent's interner. Every module one artifact answers for
+   shares the one merge, so a package's storage is copied once however
+   many of its modules name it, and the specialization pass clones a
+   carried body beside the dependent's own code. A function the summary
+   names by symbol keeps no body: a reference to it is a call by that
+   symbol, so the library's object stays the code that runs, and a
+   library object now internalizes everything its surface does not
+   name, which keeps a promoted symbol of a split build from meeting
+   another object's copy. A build therefore holds what its carried
+   bodies reach rather than the library's whole lowered storage, and
+   its reported count excludes what the library lowered and the
+   dependent does not reach.
 5. Landed for the items the once-check stands in for. The pass runs
    before the concrete body checks, so a call site knows the body was
    checked: it registers the item's signature and claims the

@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -54,8 +55,9 @@ struct StorageBases {
   u32 external_functions = 0;
   u32 parametric_callees = 0;
   // Where each function of the appended half landed. A function a
-  // symbol answers for is `U32_MAX` here: its code is the package's own
-  // object's, and a reference to it names that symbol (ADR-0078).
+  // symbol answers for, or one no root reaches, is `U32_MAX` here: the
+  // code stays the package's own object's for the first, and the second
+  // is not carried at all (ADR-0078, ADR-0079).
   std::vector<u32> function_map;
 };
 
@@ -128,16 +130,21 @@ class StorageBuilder {
   // ADR-0079).
   using SurfaceResolver =
       std::function<std::optional<str::StringPoolId>(FunctionIdx)>;
-  // Copies every table of `other` after this build's, rewriting each
-  // reference by the base of the table it names. `map_string` copies a
-  // name into this build's interner; a name the other storage's table
-  // holds is remapped through it. A function `surface_of` names by
-  // symbol keeps no body: its row stays a declaration and a call to it
-  // names the symbol.
-  StorageBases append_storage(
+  // Copies the part of `other` that `roots` reach after this build's,
+  // rewriting each reference through the map its entry moved through:
+  // the roots' blocks, instructions, operands, the types they name, the
+  // functions they call, and those functions' own closure. An entry no
+  // root reaches is not copied, so a dependent holds what its carried
+  // bodies reach rather than the other package's whole lowered storage
+  // (ADR-0079). `map_string` copies a name into this build's
+  // interner; a name the other storage's table holds is remapped
+  // through it. A function `surface_of` names by symbol keeps no body:
+  // a reference to it stays a call by that name.
+  StorageBases append_reachable(
       const Storage& other,
       const std::function<str::StringPoolId(str::StringPoolId)>& map_string,
-      const SurfaceResolver& surface_of);
+      const SurfaceResolver& surface_of,
+      std::span<const FunctionIdx> roots);
   // Backpatches a function's block range: a caller that must see its own
   // index while its body is still being built reserves the row first
   // (the specialization pass does).

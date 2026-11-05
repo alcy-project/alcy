@@ -618,22 +618,43 @@ void Lowerer::merge_summary_module(u32 module) {
     return;
   }
   const analyzer::ModuleNode& node = *pkg.tree.modules[module];
-  const ir::SymbolTable& source_strings = *node.summary_strings;
-  // The functions the summary names by symbol: their code is the
-  // package's own object, so a merged call names the symbol instead of
-  // carrying a copy (ADR-0078).
+  const ir::Storage* const storage = node.summary_storage;
+  // Every module one artifact answers for shares its storage: the merge
+  // copies each reached entry once, so a later module aliases the result
+  // instead of appending a second copy (ADR-0079).
+  const auto merged = merged_storages_.find(storage);
+  if (merged != merged_storages_.end()) {
+    merged_modules_.emplace(module, merged->second);
+    return;
+  }
+  // The functions the surface names by symbol and the bodies it carries
+  // - the roots the merge follows - gathered over every module the
+  // artifact answers for: a reference from one module's body reaches the
+  // declarations of the rest, and a function one module writes code for
+  // names its symbol wherever it is referenced.
   std::unordered_map<u32, str::StringPoolId> surface;
-  for (const analyzer::SummarySymbol& symbol : node.summary_symbols) {
-    if (symbol.function.is_valid() &&
-        symbol.symbol != str::INVALID_STRING_POOL_ID) {
+  std::vector<ir::FunctionIdx> carried;
+  for (const analyzer::ModuleNode* const sibling : pkg.tree.modules) {
+    if (sibling->summary_storage != storage) {
+      continue;
+    }
+    for (const analyzer::SummarySymbol& symbol : sibling->summary_symbols) {
+      if (!symbol.function.is_valid()) {
+        continue;
+      }
+      if (symbol.symbol == str::INVALID_STRING_POOL_ID) {
+        carried.push_back(symbol.function);
+        continue;
+      }
       surface.emplace(symbol.function.idx, symbol.symbol);
     }
   }
+  const ir::SymbolTable& source_strings = *node.summary_strings;
   const u32 functions_before = static_cast<u32>(fns.size());
   const u32 externals_before =
       static_cast<u32>(builder.state().external_functions.size());
-  const ir::StorageBases bases = builder.append_storage(
-      *node.summary_storage,
+  const ir::StorageBases bases = builder.append_reachable(
+      *storage,
       [&](str::StringPoolId id) {
         const std::optional<str::StringPoolId> copied =
             strings.intern_copied(source_strings.get(id));
@@ -645,7 +666,8 @@ void Lowerer::merge_summary_module(u32 module) {
           return std::nullopt;
         }
         return found->second;
-      });
+      },
+      carried);
   // The declarations the merge made are this build's too: a later call
   // to the same symbol reuses the entry `declare_external` names.
   for (u32 i = externals_before;
@@ -661,13 +683,14 @@ void Lowerer::merge_summary_module(u32 module) {
       static_cast<u32>(builder.state().functions.size()) - functions_before;
   fns.reserve(fns.size() + appended);
   for (u32 i = 0; i < appended; ++i) {
-    FnEntry merged;
-    merged.idx = ir::FunctionIdx(functions_before + i);
-    fns.push_back(std::move(merged));
+    FnEntry merged_entry;
+    merged_entry.idx = ir::FunctionIdx(functions_before + i);
+    fns.push_back(std::move(merged_entry));
   }
   // The bodies arrive without spans: a diagnostic names the call the
   // dependent wrote, and the library's files are not here.
   instr_spans_.resize(builder.state().instrs.size(), diag::Span{});
+  merged_storages_.emplace(storage, bases);
   merged_modules_.emplace(module, bases);
 }
 
