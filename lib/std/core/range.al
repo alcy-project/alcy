@@ -38,16 +38,17 @@ pub struct RangeIter<T> {
   done: bool,
 }
 
-impl<T: Add> Bound<T> {
+impl<T> Bound<T> {
   // The first value a range starting at this bound yields. `Excluded`
-  // steps once, honoring the language's wrapping arithmetic; only
-  // hand-built intervals can hold one, since range expressions always
-  // include their start. `Unbounded` has no first value, so asking
-  // for one is an error rather than a guess at a minimum.
+  // steps once, honoring the language's wrapping arithmetic, so a
+  // start at the width's maximum wraps instead of leaving the type;
+  // only hand-built intervals can hold one, since range expressions
+  // always include their start. `Unbounded` has no first value, so
+  // asking for one is an error rather than a guess at a minimum.
   fn first(self: Self) -> T {
     ret match self {
       Bound::Included(s) => s,
-      Bound::Excluded(s) => s + 1,
+      Bound::Excluded(s) => wrapping_add(s, 1),
       Bound::Unbounded => panic("cannot iterate a range with no start"),
     }
   }
@@ -66,29 +67,46 @@ impl<T: PartialOrd> Bound<T> {
   }
 }
 
-impl<T: PartialOrd + PartialEq + Sub> Bound<T> {
+// Whether stepping `current` by `stride` reaches `end`, counting
+// `end` itself when `inclusive` is set. The step is the cursor's own
+// wrapping addition, so the question is asked about the value the
+// cursor would take, never about the distance between the endpoints:
+// a span wider than the type's maximum - `-128i8..=127i8` - has no
+// distance the element type can hold, while `0..=255u8` still never
+// computes `255 + 1` at any stride. A step that wrapped lands past
+// every end the type holds, and a stride is always positive.
+fn step_reaches<T: PartialOrd + PartialEq>(end: T, current: T, stride: T, inclusive: bool) -> bool {
+  stepped := wrapping_add(current, stride)
+  if stepped < current {
+    ret true
+  }
+  if inclusive {
+    ret stepped > end
+  }
+  ret stepped >= end
+}
+
+impl<T: PartialOrd + PartialEq> Bound<T> {
   // Whether the cursor is spent after yielding `current` with this
   // stride: an inclusive end hit exactly, or a next step that would
-  // pass the end. The differences are exact - a yielded value always
-  // lies on the admitted side - so nothing wraps while deciding, and
-  // `0..=255u8` never computes `255 + 1` at any stride.
+  // reach or pass the end.
   fn done_after(self: Self, current: T, stride: T) -> bool {
     ret match self {
-      Bound::Included(e) => current == e || stride > e - current,
-      Bound::Excluded(e) => stride >= e - current,
+      Bound::Included(e) => step_reaches(e, current, stride, true),
+      Bound::Excluded(e) => step_reaches(e, current, stride, false),
       Bound::Unbounded => false,
     }
   }
 }
 
-impl<T: Add> Range<T> {
+impl<T> Range<T> {
   // Names the cursor `for` iterates, advancing one value at a time.
   pub fn into_iter(self: Self) -> RangeIter<T> {
     ret RangeIter { current: self.start.first(), end: self.end, stride: 1, done: false, }
   }
 }
 
-impl<T: Add + PartialOrd> Range<T> {
+impl<T: PartialOrd> Range<T> {
   // Names a cursor advancing `stride` values at a time: `(0..<10)`
   // `.step_by(2)` yields 0, 2, 4, 6, 8. A stride must be positive;
   // zero - or, for signed ranges, a negative one - has no meaning as
@@ -110,7 +128,7 @@ impl<T> RangeIter<T> {
   }
 }
 
-impl<T: PartialOrd + PartialEq + Sub> Iterator < T > for RangeIter<T> {
+impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
   fn next(mut self: &mut Self) -> Option<T> {
     if self.done {
       ret Option::None

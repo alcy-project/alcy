@@ -61,3 +61,16 @@ scope: descending iteration, which stays empty rather than yielding
 downward; re-striding a cursor, which is built with its pace;
 and any further adapter, which a future proposal can carry on its
 own.
+
+The stop rule decides from the stepped value rather than from the
+distance between the endpoints. A difference is exact only while the
+span fits the element type, and a span need not: `-128i8..=127i8`
+covers 256 values in a type whose widest difference is 255, so
+`e - current` underflowed and the cursor was declared spent after its
+first value — a panic under overflow checks, a one-value run behind
+them. The predicate now takes the cursor's next value with the same
+wrapping addition the step uses, reads a wrapped step as past every
+end the type holds, and compares that value with the end. At stride
+one the rule still stops at an included end and before passing an
+excluded one, and `0..=255u8` still never computes `255 + 1`: the step
+that would leave the type is the step that ends the run.

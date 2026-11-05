@@ -242,8 +242,11 @@
   `RangeIter` cursor built by `into_iter`; float ranges have no
   iteration method. The cursor ascends from the start and stops at
   the end: `..<` stops before it, `..=` yields it without stepping
-  past it (so `0..=255u8` never computes `255 + 1`). An inverted or
-  empty range yields nothing. A range with no start has no first
+  past it (so `0..=255u8` never computes `255 + 1`). Stopping reads
+  the value the next step would take, never the distance between the
+  endpoints, so a span wider than the type's own range still runs in
+  full: `-128i8..=127i8` yields all 256 values of `i8`. An inverted
+  or empty range yields nothing. A range with no start has no first
   value, so naming a cursor for one fails; a range with no end
   yields until the loop stops it. Stepping lives on the cursor,
   never on the interval.
