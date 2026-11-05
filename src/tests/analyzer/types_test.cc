@@ -6333,6 +6333,28 @@ TEST_CASE("Check keeps comparing thin references") {
   CHECK(!f.bag.has_errors());
 }
 
+TEST_CASE("Check refuses a method named in a path") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"main.al",
+                       "struct Thing {\n  n: i32,\n}\n"
+                       "impl Thing {\n"
+                       "  fn get(self: &Self) -> i32 {\n    ret self.n\n  }\n"
+                       "}\n"
+                       "fn f(t: &Thing) -> i32 {\n  ret Thing::get(t)\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(has_message(
+      f.bag, "Method 'Thing::get' needs a receiver; call it on a value"));
+}
+
 TEST_CASE("Check suppresses a std hint for a staged member") {
   VirtualDir dir;
   const bool setup =

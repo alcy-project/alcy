@@ -4323,6 +4323,12 @@ bool Checker::resolve_value_path_impl(u32 module,
           out.method = method;
           return true;
         }
+        if (method != nullptr) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerMethodNeedsReceiver>(
+              DiagCode::MethodNeedsReceiver, node.span, head, member);
+          (void)index;
+          return false;
+        }
       } else if (!call_args.empty()) {
         // A call's arguments bind an associated function's own
         // parameters the way they bind a method's: the declaration
@@ -4345,6 +4351,12 @@ bool Checker::resolve_value_path_impl(u32 module,
         if (bag.error_count() > before) {
           return false;
         }
+        if (method != nullptr) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerMethodNeedsReceiver>(
+              DiagCode::MethodNeedsReceiver, node.span, head, member);
+          (void)index;
+          return false;
+        }
       }
       if (const CheckedModule::MethodInfo* method =
               lookup_method(self, member, module, node.span, false)) {
@@ -4353,6 +4365,10 @@ bool Checker::resolve_value_path_impl(u32 module,
           out.method = method;
           return true;
         }
+        const u32 index = bag.emit<i18n::Key::AnalyzerMethodNeedsReceiver>(
+            DiagCode::MethodNeedsReceiver, node.span, head, member);
+        (void)index;
+        return false;
       }
     }
     // A scalar or a bound type parameter as the prefix: `i64::parse`
@@ -4369,6 +4385,10 @@ bool Checker::resolve_value_path_impl(u32 module,
           out.method = method;
           return true;
         }
+        const u32 index = bag.emit<i18n::Key::AnalyzerMethodNeedsReceiver>(
+            DiagCode::MethodNeedsReceiver, node.span, head, member);
+        (void)index;
+        return false;
       }
     }
     // The hint names the package that carries `member` when one does,

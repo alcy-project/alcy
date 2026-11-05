@@ -90,3 +90,13 @@ member.**
 
 - Default methods (ADR-0132's iterator note).
 - Associated values (constants) on specs.
+
+## Amendments
+
+**A path reports the receiver a method lacks.** The decision above gives
+the path form to a member declared with no receiver, and a member that
+takes one had no report of its own: `Foo::get(&x)` read as
+`Unresolved value 'Foo::get'`, which sends a reader looking for a
+declaration that is in scope. The checker answers such a path with
+`Method 'Foo::get' needs a receiver; call it on a value` (EC051), and
+`docs/spec/grammar.md` states the rule the report follows.

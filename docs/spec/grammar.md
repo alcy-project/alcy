@@ -149,6 +149,9 @@ Declaration left-hand sides use this grammar with `:=`
   method call; without one, the parameters bind from the argument
   types. Its position names what it binds: `P::<T>::member` supplies
   the owner's arguments and `P::member::<U>` the member's.
+- `P::member(args)` reaches an associated function, one declared with
+  no receiver. A method binds its receiver from the value it is called
+  on, so a path that names one is an error.
 - Array indexing is builtin with panic-on-out-of-bounds semantics;
   indexing a nominal type resolves through the sealed `Index` and
   `IndexMut` specs (see `types.md`).

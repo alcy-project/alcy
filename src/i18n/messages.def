@@ -212,6 +212,7 @@
   F(AnalyzerMatchNotExhaustiveStruct, Error, Analyzer, "Non-exhaustive struct match: add a wildcard arm") \
   F(AnalyzerMatchNotExhaustiveTuple, Error, Analyzer, "Non-exhaustive tuple match: add a wildcard arm") \
   F(AnalyzerMaybeUninitArity, Error, Analyzer, "Type 'MaybeUninit' takes one type argument") \
+  F(AnalyzerMethodNeedsReceiver, Error, Analyzer, "Method '{}::{}' needs a receiver; call it on a value") \
   F(AnalyzerMissingField, Error, Analyzer, "Missing field '{}'") \
   F(AnalyzerMissingOperatorSpec, Error, Analyzer, "Type does not implement the '{}' spec") \
   F(AnalyzerMissingSpecMethod, Error, Analyzer, "Missing method '{}' in implementation of '{}'") \

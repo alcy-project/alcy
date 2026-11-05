@@ -113,6 +113,10 @@ enum class DiagCode : u8 {
   // A size is an offset a pointer can carry: a shape whose size does
   // not fit has no layout to allocate, index, or step past.
   TypeTooLarge = 50,
+  // A path names an associated function, so the member it reaches has to
+  // be declared without a receiver: a method binds its receiver from the
+  // value it is called on, and a path leaves that value out.
+  MethodNeedsReceiver = 51,
 };
 
 }  // namespace analyzer
