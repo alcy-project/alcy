@@ -141,7 +141,20 @@ def unread(paths: list[Path]) -> set[Path]:
     """
     if not paths:
         return set()
-    result = run(["tree-sitter", "parse", "--quiet", *map(str, paths)], cwd=GRAMMAR_DIR)
+    # The parser the CLI loads is cached under the language's name, so a
+    # build another checkout wrote there would decide this verdict. Naming
+    # the grammar directory rebuilds from the tables in this tree instead.
+    result = run(
+        [
+            "tree-sitter",
+            "parse",
+            "--quiet",
+            "--grammar-path",
+            str(GRAMMAR_DIR),
+            *map(str, paths),
+        ],
+        cwd=GRAMMAR_DIR,
+    )
     if result.returncode != 0 and not result.stdout.strip():
         # A crashed or missing parser prints nothing, which would read as
         # "every file parsed"; name them all so the caller fails loudly.
