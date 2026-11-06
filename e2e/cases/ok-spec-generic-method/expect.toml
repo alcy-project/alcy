@@ -1,0 +1,6 @@
+# The bound holds, and the method's own type argument instantiates
+# through the specification's declaration.
+exit = 0
+subcommand = "run"
+contains = ["mapped 3"]
+not_contains = ["error"]

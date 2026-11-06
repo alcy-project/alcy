@@ -605,6 +605,48 @@ bool Checker::spec_method_sig(u32 spec,
   return false;
 }
 
+bool Checker::resolve_spec_impl_args(
+    const SpecImplEntry& impl,
+    const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+    std::vector<ir::TypeIdx>& out) {
+  out.clear();
+  out.reserve(impl.spec_args.size());
+  for (const SpecTarget::Arg& shape : impl.spec_args) {
+    if (shape.shape.is_valid()) {
+      const usize pushed = type_params.size();
+      for (const auto& binding : scope) {
+        type_params.emplace_back(binding.first, binding.second);
+      }
+      const ir::TypeIdx resolved =
+          resolve_type(impl.module, shape.shape, nullptr);
+      while (type_params.size() > pushed) {
+        type_params.pop_back();
+      }
+      if (is_error(resolved)) {
+        return false;
+      }
+      out.push_back(resolved);
+      continue;
+    }
+    if (!shape.is_param) {
+      out.push_back(shape.type);
+      continue;
+    }
+    ir::TypeIdx bound = error_type();
+    for (const auto& binding : scope) {
+      if (binding.first == shape.param) {
+        bound = binding.second;
+        break;
+      }
+    }
+    if (is_error(bound)) {
+      return false;
+    }
+    out.push_back(bound);
+  }
+  return true;
+}
+
 bool Checker::check_spec_method_bounds(u32 spec,
                                        std::string_view name,
                                        std::span<const ir::TypeIdx> spec_args,

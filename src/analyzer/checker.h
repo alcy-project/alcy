@@ -605,6 +605,15 @@ class Checker {
       std::span<const ast::GenericParam> params,
       const std::vector<std::pair<std::string_view, ir::TypeIdx>>& bindings,
       diag::Span span);
+  // A specification implementation's arguments as its target declares
+  // them: an argument that names one of the implementation's parameters
+  // takes its binding, a nested shape that mentions one resolves through
+  // it, and a concrete argument is itself. Answers false when a parameter
+  // the implementation writes has no binding.
+  bool resolve_spec_impl_args(
+      const SpecImplEntry& impl,
+      const std::vector<std::pair<std::string_view, ir::TypeIdx>>& scope,
+      std::vector<ir::TypeIdx>& out);
   // The bounds a specification's method declaration states, checked
   // against the arguments a call spelled for it. An implementation may
   // leave a bound out, so the declaration is the only place that says

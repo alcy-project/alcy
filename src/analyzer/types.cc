@@ -3268,15 +3268,27 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     }
     // A method of a spec impl answers its call through this path, so
     // the declaration's bounds are checked here too: the impl may spell
-    // the method's parameters more permissively than the spec does.
+    // the method's parameters more permissively than the spec does. The
+    // arguments are the implementation's, which are the specification's,
+    // and not the receiver's: `impl Checkable<Q> for P` writes one where
+    // `P` writes none.
     if (impl.spec.is_valid()) {
       const SpecEntry* spec_entry = spec_of_impl_path(entry.module, impl.spec);
       if (spec_entry == nullptr) {
         return nullptr;
       }
       const u32 spec = static_cast<u32>(spec_entry - specs.data());
-      if (!check_spec_method_bounds(spec, name, target_args, method_args,
-                                    span)) {
+      const SpecImplEntry* record = nullptr;
+      for (const SpecImplEntry& candidate : spec_impls) {
+        if (candidate.item == entry.impl_item &&
+            candidate.module == entry.module) {
+          record = &candidate;
+        }
+      }
+      std::vector<ir::TypeIdx> spec_args;
+      if (record == nullptr ||
+          !resolve_spec_impl_args(*record, scope, spec_args) ||
+          !check_spec_method_bounds(spec, name, spec_args, method_args, span)) {
         return nullptr;
       }
     }

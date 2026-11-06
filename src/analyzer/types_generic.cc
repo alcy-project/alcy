@@ -741,42 +741,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
       const ast::ItemImpl& impl =
           ast.items[entry.item].payload.get<ast::ItemImpl>();
       std::vector<ir::TypeIdx> record_spec_args;
-      for (const SpecTarget::Arg& shape : entry.spec_args) {
-        if (shape.shape.is_valid()) {
-          const usize pushed = type_params.size();
-          for (const auto& binding : scope) {
-            type_params.emplace_back(binding.first, binding.second);
-          }
-          const ir::TypeIdx resolved =
-              resolve_type(entry.module, shape.shape, nullptr);
-          while (type_params.size() > pushed) {
-            type_params.pop_back();
-          }
-          if (is_error(resolved)) {
-            shape_ok = false;
-            break;
-          }
-          record_spec_args.push_back(resolved);
-          continue;
-        }
-        if (!shape.is_param) {
-          record_spec_args.push_back(shape.type);
-          continue;
-        }
-        ir::TypeIdx bound = error_type();
-        for (const auto& binding : scope) {
-          if (binding.first == shape.param) {
-            bound = binding.second;
-            break;
-          }
-        }
-        if (is_error(bound)) {
-          shape_ok = false;
-          break;
-        }
-        record_spec_args.push_back(bound);
-      }
-      if (!shape_ok) {
+      if (!resolve_spec_impl_args(entry, scope, record_spec_args)) {
         continue;
       }
       // The impl's bounds have to hold for this instantiation before
