@@ -54,6 +54,7 @@ def build(
     gn_args_extra: str = "",
     llvm_dir: str = "",
     debug_info: str = "line",
+    sanitizer: str = "address",
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
@@ -65,6 +66,9 @@ def build(
     # argument is inert: one spelling keeps a build directory's recorded
     # arguments honest about what it was configured with.
     gn_args += f' alcy_debug_info="{debug_info}"'
+    # Inert in release, where no sanitizer is added; forwarded for the same
+    # reason as the debug information.
+    gn_args += f' alcy_sanitizer="{sanitizer}"'
     if llvm_dir:
         # A preinstalled LLVM prefix instead of the tag artifact.
         # Absolute, because gn resolves it from the build directory.
@@ -178,6 +182,14 @@ def main():
         "or the full macro and type detail -g3 carries",
     )
     parser.add_argument(
+        "--sanitizer",
+        default="address",
+        choices=["address", "thread"],
+        help="Sanitizer in a debug build: the address sanitizer (default) "
+        "or the thread sanitizer, which is what a race in the job system "
+        "needs to be seen",
+    )
+    parser.add_argument(
         "--gn-arg",
         dest="gn_args_extra",
         default="",
@@ -209,6 +221,7 @@ def main():
         args.gn_args_extra,
         args.llvm_dir,
         debug_info=args.debug_info,
+        sanitizer=args.sanitizer,
     )
 
 

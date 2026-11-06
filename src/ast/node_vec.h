@@ -178,22 +178,22 @@ class NodeVec {
   Idx push_back(T&& node) { return emplace_back(std::move(node)); }
 
   [[nodiscard]] const T& operator[](const Idx idx) const {
-    FPAG_DCHECK_LT(static_cast<usize>(idx.idx), size());
+    FPAG_DCHECK_LT(static_cast<usize>(idx.idx), reach_bound());
     return *reinterpret_cast<const T*>(base() + offset(idx.idx));
   }
 
   [[nodiscard]] T& operator[](const Idx idx) {
-    FPAG_DCHECK_LT(static_cast<usize>(idx.idx), size());
+    FPAG_DCHECK_LT(static_cast<usize>(idx.idx), reach_bound());
     return *reinterpret_cast<T*>(base() + offset(idx.idx));
   }
 
   [[nodiscard]] const T& operator[](usize at) const {
-    FPAG_DCHECK_LT(at, size());
+    FPAG_DCHECK_LT(at, reach_bound());
     return *reinterpret_cast<const T*>(base() + at * sizeof(T));
   }
 
   [[nodiscard]] T& operator[](usize at) {
-    FPAG_DCHECK_LT(at, size());
+    FPAG_DCHECK_LT(at, reach_bound());
     return *reinterpret_cast<T*>(base() + at * sizeof(T));
   }
 
@@ -250,6 +250,19 @@ class NodeVec {
 
   [[nodiscard]] usize offset(IdxType idx) const noexcept {
     return static_cast<usize>(idx) * sizeof(T);
+  }
+
+  // The bound a check reads while appends are still in flight.
+  //
+  // A lane's cursor is written by the thread appending to that lane, and a
+  // table is appended to by every parse worker at once, so `size()` - which
+  // asks each lane how far it got - only answers once the workers have joined.
+  // `operator[]` is called in the middle of that, so it reads the reservation,
+  // which no append moves. Room between two lanes passes this bound; `bound` is
+  // what tells a node from that room, and it is asked once the appends are
+  // done.
+  [[nodiscard]] usize reach_bound() const noexcept {
+    return lanes_ == 0 ? size() : arena_.capacity() / sizeof(T);
   }
 
   mem::ConcurrentArena arena_;

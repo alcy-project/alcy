@@ -203,6 +203,11 @@ config("asan") {
   ldflags = [ "-fsanitize=address" ]
 }
 
+config("tsan") {
+  cflags = [ "-fsanitize=thread" ]
+  ldflags = [ "-fsanitize=thread" ]
+}
+
 config("coverage") {
   # Source-based coverage, which is what llvm-cov reports on: it maps
   # counters to source regions rather than to blocks, so a refactor moves

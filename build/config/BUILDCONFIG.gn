@@ -95,6 +95,17 @@ declare_args() {
 assert(alcy_debug_info == "line" || alcy_debug_info == "full",
        "alcy_debug_info must be \"line\" or \"full\"")
 
+# The sanitizer a debug build carries. AddressSanitizer asks whether the
+# compiler reads memory it does not own; the thread sanitizer asks whether
+# two workers touch one object, which the job system can only answer under
+# it. Two runtimes that both own the heap cannot share a binary, so the
+# build carries one of them at a time.
+declare_args() {
+  alcy_sanitizer = "address"
+}
+assert(alcy_sanitizer == "address" || alcy_sanitizer == "thread",
+       "alcy_sanitizer must be \"address\" or \"thread\"")
+
 if (!is_win && !is_mac && !is_ios) {
   declare_args() {
     use_mold =
@@ -187,7 +198,11 @@ if (is_debug) {
   default_compiler_configs += [ "//build/config/compiler:debug" ]
 
   if (!is_win && !is_wasm) {
-    default_compiler_configs += [ "//build/config/compiler:asan" ]
+    if (alcy_sanitizer == "thread") {
+      default_compiler_configs += [ "//build/config/compiler:tsan" ]
+    } else {
+      default_compiler_configs += [ "//build/config/compiler:asan" ]
+    }
   }
 } else {
   default_compiler_configs += [ "//build/config/compiler:release" ]

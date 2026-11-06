@@ -55,6 +55,10 @@ uv run ./tools/build_time.py
 
 # Debug builds carry line tables; --debug-info=full restores -g3 detail:
 uv run ./tools/build.py --target=tests --debug-info=full
+
+# A debug build carries AddressSanitizer. --sanitizer=thread swaps in
+# ThreadSanitizer, which is what asks whether two workers touch one object:
+uv run ./tools/build.py --target=tests --sanitizer=thread --build-subdir=tsan
 ```
 
 End-to-end acceptance cases live in `e2e/cases/<name>/` (sources plus

@@ -270,3 +270,26 @@ sharper: a stage's speedup is capped by what the stage writes through, and
 changing that is a change to what an index means rather than to how work is
 handed out. The cursor was twenty lines; the meaning was eighty-two call
 sites.
+
+## Amendments
+
+**A check that runs mid-parse reads the reservation, not the reach.** The
+reach the decision gives `size()` is the far end of the last run, so answering
+it asks every lane how far it got -- and a lane's cursor is a plain field,
+written by the thread appending to that lane. One table is appended to by
+every parse worker at once, and `operator[]` is called while they are still
+appending, so its assertion read cursor bytes another worker was moving: the
+one field the lanes exist to keep to one thread each. It was also a weaker
+check than it looked, since an index in the room between two runs is below the
+far end of the run after it and passed. What a check may read before the
+workers join is the reservation, which no append moves, and that is what
+`NodeVec::reach_bound` answers. `bound` still tells a node from the room
+between runs, and it is asked after the join, where the reach is settled.
+
+## Reference
+
+- `src/ast/node_vec.h`: `reach_bound`, `size`, `bound`, and the four
+  `operator[]` overloads that check an index.
+- `build/config/BUILDCONFIG.gn` and `tools/build.py`: the sanitizer a debug
+  build carries, one at a time, since the address and thread runtimes both own
+  the heap.
