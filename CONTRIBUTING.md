@@ -214,9 +214,7 @@ optionally a scope, then a subject, then a body.
 The type says what kind of change this is, so a reader can filter the log before reading any of
 it. The standard types are `feat` for a new capability, `fix` for a correction, `refactor` for a
 change that neither adds nor repairs behaviour, `perf`, `test`, `docs`, `build`, `ci`, `chore`,
-and `style`. Two the convention does not name are in use here: `check` for a change to one of
-the acceptance scripts under `tools/`, and `borrow` for a change to the borrow checker, which is
-large enough that its commits are worth reading as a series.
+and `style`.
 
 The scope is the module or area the change belongs to, and it is encouraged: `fix(borrow)`,
 `feat(cli)`, `refactor(diag)`, `build(deps)`, `ci(wasm)`. It names where a reader would look
