@@ -707,19 +707,19 @@ void Lowerer::record_move_event(Val v, diag::Span span) {
   }
   // A field cannot move out of a value with a user-written `drop`, because
   // the method would run on a value with a hole where the field was. The
-  // receiver of the destructor being lowered is the exception: the body is
-  // that method, so a field it moves into a binding ends with the binding
-  // (ADR-0137).
-  if (local_index != end_exempt_) {
-    for (usize i = 0; i < path.size(); ++i) {
-      const ir::TypeIdx prefix = type_at_path(
-          locals[local_index].type, std::span<const u32>(path.data(), i));
-      if (type_has_custom_drop(prefix)) {
-        const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
-            DiagCode::MoveOutOfDestructor, span, locals[local_index].name);
-        (void)index;
-        return;
-      }
+  // receiver of the destructor being lowered is exempt at its own place:
+  // the body is that method, so a field it moves into a binding ends with
+  // the binding (ADR-0137). A value reached through one of its fields still
+  // keeps the check, because the field's own destructor ends the hole.
+  const usize first_prefix = local_index == end_exempt_ ? 1 : 0;
+  for (usize i = first_prefix; i < path.size(); ++i) {
+    const ir::TypeIdx prefix = type_at_path(
+        locals[local_index].type, std::span<const u32>(path.data(), i));
+    if (type_has_custom_drop(prefix)) {
+      const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
+          DiagCode::MoveOutOfDestructor, span, locals[local_index].name);
+      (void)index;
+      return;
     }
   }
   record_event(OwnershipEvent::Kind::Move, local_index, std::move(path), span);
