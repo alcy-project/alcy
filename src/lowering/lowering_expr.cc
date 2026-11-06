@@ -283,16 +283,18 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     return Val{to_operand(imm, type), type, false, false};
   }
   if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-    const std::string digits = float_literal_digits(lit);
-    ir::Immutable imm{.type = type, .data = {};
+    // The digits round once, to the literal's own type (ADR-0134): a
+    // value read through `f64` and cast rounds twice, and the second
+    // rounding can land on the neighbour of the one the digits name.
+    ir::Immutable imm{.type = type, .data = {}};
     if (tag == ir::TypeTag::F32) {
-      f32 value = digits.empty() ? 0.0f : std::strtof(digits.c_str(), nullptr);
+      f32 value = comp::parse_f32_value(lit.spelling);
       if (negative) {
         value = -value;
       }
       imm.data.f32_value = value;
     } else {
-      f64 value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
+      f64 value = comp::parse_f64_value(lit.spelling);
       if (negative) {
         value = -value;
       }

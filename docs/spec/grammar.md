@@ -57,6 +57,12 @@ stands; reserved forms are rejected with guidance diagnostics.
   its sign is optional. Its value is the digits rounded once to the
   literal's type, to the nearest and a tie to even, so the same digits
   at `f32` and at `f64` may name different numbers.
+- A float literal must stay finite at the type it takes, that of its
+  suffix, of the position that claims an unsuffixed one, or the `f64`
+  default: `1e40f32` and `1e400` are errors, because past the largest
+  finite value the nearest value the type holds is infinity, which the
+  digits do not name. A magnitude too small for the type rounds to
+  zero, the nearest value it holds there, and stays a literal.
 - String escapes: `\n \t \r \\ \" \0 \u{HEX}`. The `\u{...}` value
   must name a Unicode scalar value: `\u{110000}` is past the last one,
   and a surrogate such as `\u{D800}` is not one. `'x'` character

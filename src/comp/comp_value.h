@@ -74,6 +74,11 @@ bool mul_overflows(u64 left, u64 right, ir::TypeTag tag);
 // `overflow`, when given, is set for a magnitude past `u64`, which the
 // accumulation wraps rather than rejects.
 u64 parse_numeric_value(std::string_view spelling, bool* overflow = nullptr);
+// A float literal's digits, read once at the type's own width
+// (ADR-0134): the suffix and any `_` separators are not part of the
+// digits.
+f32 parse_f32_value(std::string_view spelling);
+f64 parse_f64_value(std::string_view spelling);
 // Whether the spelling ends in a known type suffix.
 bool has_type_suffix(std::string_view spelling);
 // The truth a comp value carries; an integer is true when nonzero.

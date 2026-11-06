@@ -3,6 +3,7 @@
 
 #include "comp/comp_value.h"
 
+#include <cstdlib>
 #include <limits>
 #include <ranges>
 #include <string>
@@ -187,6 +188,36 @@ u64 parse_numeric_value(std::string_view spelling, bool* overflow) {
     value = value * base + digit;
   }
   return value;
+}
+
+namespace {
+// The digits a float spelling names, without the suffix or the
+// separators: 1_000.5e3f32 reads as 1000.5e3.
+std::string float_digits(std::string_view spelling) {
+  std::string digits;
+  for (const char ch : spelling) {
+    if (ch == '_') {
+      continue;
+    }
+    if ((ch >= '0' && ch <= '9') || ch == '.' || ch == 'e' || ch == 'E' ||
+        ch == '+' || ch == '-') {
+      digits.push_back(ch);
+      continue;
+    }
+    break;
+  }
+  return digits;
+}
+}  // namespace
+
+f32 parse_f32_value(std::string_view spelling) {
+  const std::string digits = float_digits(spelling);
+  return digits.empty() ? 0.0f : std::strtof(digits.c_str(), nullptr);
+}
+
+f64 parse_f64_value(std::string_view spelling) {
+  const std::string digits = float_digits(spelling);
+  return digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
 }
 
 const CompVal* lookup(const CompScope& scope, std::string_view name) {

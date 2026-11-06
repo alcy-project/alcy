@@ -918,6 +918,10 @@ class Checker {
   static bool int_literal_fits(std::string_view spelling,
                                ir::TypeTag tag,
                                bool negative);
+  // Whether a float literal's digits round to a finite value at `tag`.
+  // A magnitude past the largest finite one rounds to infinity, which
+  // the digits do not name.
+  static bool float_literal_fits(std::string_view spelling, ir::TypeTag tag);
   bool is_float_tag(ir::TypeTag tag) const;
   bool is_void(ir::TypeIdx idx) const;
   bool is_never(ir::TypeIdx idx) const;

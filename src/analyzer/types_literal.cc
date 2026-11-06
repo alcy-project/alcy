@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <span>
 #include <string>
@@ -171,6 +172,13 @@ bool Checker::int_literal_fits(std::string_view spelling,
   }
 }
 
+bool Checker::float_literal_fits(std::string_view spelling, ir::TypeTag tag) {
+  if (tag == ir::TypeTag::F32) {
+    return std::isfinite(comp::parse_f32_value(spelling));
+  }
+  return std::isfinite(comp::parse_f64_value(spelling));
+}
+
 ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
                                    const ir::TypeIdx* expected) {
   using LK = ast::LiteralKind;
@@ -260,8 +268,25 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
         return error_type();
       }
       if (!has_suffix && expected != nullptr &&
-          (is_float_tag(tag_of(*expected)) ||
-           tag_of(*expected) == ir::TypeTag::Param)) {
+          tag_of(*expected) == ir::TypeTag::Param) {
+        // The parameter stands for a float type the instantiation
+        // chooses: the definition-site check adopts it, as an integer
+        // literal's does (ADR-0079).
+        return *expected;
+      }
+      // A position that names a float fixes an unsuffixed literal's
+      // type, and the digits must round to a finite value at whichever
+      // type the literal takes: past the largest finite one the nearest
+      // value is infinity, which the digits do not name.
+      const bool adopts =
+          !has_suffix && expected != nullptr && is_float_tag(tag_of(*expected));
+      if (!float_literal_fits(lit.spelling, adopts ? tag_of(*expected) : tag)) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerFloatLiteralOutOfRange>(
+            DiagCode::TypeMismatch, lit.span);
+        (void)index;
+        return error_type();
+      }
+      if (adopts) {
         return *expected;
       }
       const ir::TypeIdx type = builder.primitive(tag);

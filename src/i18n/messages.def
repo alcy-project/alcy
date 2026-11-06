@@ -173,6 +173,7 @@
   F(AnalyzerExternGeneric, Error, Analyzer, "External function '{}' cannot be generic") \
   F(AnalyzerExternTypeNotSupported, Error, Analyzer, "Type '{}' cannot cross a C boundary yet") \
   F(AnalyzerFatReferenceComparison, Error, Analyzer, "Cannot compare references to an unsized value") \
+  F(AnalyzerFloatLiteralOutOfRange, Error, Analyzer, "Float literal is out of range for its type") \
   F(AnalyzerFloatRangeDoesNotIterate, Error, Analyzer, "Float ranges do not iterate; a `for` loop needs an integer range") \
   F(AnalyzerFloatSuffixOnInteger, Error, Analyzer, "Float suffix on an integer literal") \
   F(AnalyzerForRequiresIterator, Error, Analyzer, "A 'for' loop requires an 'Iterator' implementation in scope for this type") \

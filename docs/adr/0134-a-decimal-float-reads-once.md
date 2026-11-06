@@ -86,3 +86,13 @@ quotient is divided once only while both of its operands are exact, so
 that path now asks that the scale also be at most 2^53; a longer scale
 goes through the significand assembly, which reads the same integers
 without a rounding of its own.
+
+**A literal past its type's largest finite value is refused.** The
+digits read once, and past that value the nearest one they can round to
+is infinity, which they do not name: `1e40f32` and `1e400` compiled to
+an infinite constant that reads as a finite number, and an unsuffixed
+literal hid the overflow behind the position that claimed it
+(`x: f32 := 1e40`). The analyzer now reads the digits at the type
+literal takes, before a position claims it, and reports one out of
+range as it reports an integer past its type. A magnitude that rounds
+to zero stays a value, since zero is the nearest one the type holds.
