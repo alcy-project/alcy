@@ -133,6 +133,14 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
 
+      # The standard library carries its tests beside the definitions they
+      # cover (ADR-0139), so the suite is a program the compiler runs. A
+      # run links and executes, which is a question each platform answers
+      # for itself.
+      - name: Run Stdlib Tests
+        shell: bash
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_stdlib_tests.py --build-subdir=build
+
       - name: Run Exe Cases
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
