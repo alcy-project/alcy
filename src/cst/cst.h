@@ -34,6 +34,8 @@ enum class BraceRole : u8 {
   ImplBody,
   SpecBody,
   ExternBody,
+  // A `test` block: items, one per line, laid out like an impl body.
+  TestBody,
   MatchBody,
   Literal,
 };

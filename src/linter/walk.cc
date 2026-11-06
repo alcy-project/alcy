@@ -482,6 +482,18 @@ void walk_item(LintContext& ctx, ast::ItemIdx item, const Visitor& visitor) {
       }
       break;
     }
+    case K::Test: {
+      for (const ast::ItemIdx entry : node.payload.get<ast::ItemTest>().items) {
+        walk_item(ctx, entry, visitor);
+      }
+      break;
+    }
+    case K::TestEntry: {
+      const ast::ItemTestEntry& entry = node.payload.get<ast::ItemTestEntry>();
+      walk_type(ctx, entry.return_type, visitor);
+      walk_block(ctx, entry.body, visitor);
+      break;
+    }
     case K::Use: break;
   }
 }

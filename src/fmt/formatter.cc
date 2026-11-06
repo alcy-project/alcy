@@ -920,9 +920,9 @@ Doc Printer::print_brace_body(const cst::Node& group) {
   const cst::BraceRole role = group.brace_role;
   const std::vector<Chunk> chunks = collect_chunks(inner, role);
 
-  const bool member_body = role == cst::BraceRole::ImplBody ||
-                           role == cst::BraceRole::SpecBody ||
-                           role == cst::BraceRole::ExternBody;
+  const bool member_body =
+      role == cst::BraceRole::ImplBody || role == cst::BraceRole::SpecBody ||
+      role == cst::BraceRole::ExternBody || role == cst::BraceRole::TestBody;
   if (chunks.empty()) {
     // A member body still opens its lines: an impl that owns nothing
     // reads as the pair of braces the grammar gives it.
@@ -1484,7 +1484,8 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
                               bool top_level) {
   const bool member = top_level || role == cst::BraceRole::ImplBody ||
                       role == cst::BraceRole::SpecBody ||
-                      role == cst::BraceRole::ExternBody;
+                      role == cst::BraceRole::ExternBody ||
+                      role == cst::BraceRole::TestBody;
   std::vector<Doc> parts;
   parts.reserve(chunks.size() * 2);
   for (usize k = 0; k < chunks.size(); ++k) {

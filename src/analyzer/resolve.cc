@@ -118,6 +118,12 @@ class Resolver {
   // The caller's spec policies, held so the tree's arena copy can be
   // built after every package root exists.
   std::vector<PackagePolicy> package_policies_;
+  // The module a staged source roots the tree at, when the root file is
+  // not one of the package's own: a run whose entry is staged names its
+  // tree from there, and the root module is only known once staging has
+  // placed it.
+  u32 staged_root = NO_MODULE;
+  bool root_in_staging = false;
   // Set when a node could not be placed, so the tree was left unfinished.
   bool out_of_arena = false;
 
@@ -177,6 +183,20 @@ class Resolver {
     return std::string_view(path).substr(slash + 1);
   }
 
+  // The module the package's own tree hangs from: the fileless root, or
+  // the staged source a run of one staged package roots the tree at.
+  u32 package_root_module() const {
+    if (staged_root != NO_MODULE) {
+      return staged_root;
+    }
+    for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
+      if (modules[i]->path.empty()) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
   u32 find_child_module(u32 module, std::string_view name) const {
     const auto found = children_by_name_[module].find(name);
     return found == children_by_name_[module].end() ? NO_MODULE : found->second;
@@ -190,11 +210,9 @@ class Resolver {
       }
     }
     if (root_file == NO_MODULE) {
-      // The root file was not among the inputs, so there is nothing to
-      // attach a tree to. A checked index would read out of bounds.
-      const u32 index = bag.emit<i18n::Key::AnalyzerRootFileNotAModuleInput>(
-          DiagCode::InvalidPath, diag::Span{});
-      (void)index;
+      // The root file may be a staged source instead: staging names the
+      // module then, and the tree is checked for a root once it has run.
+      root_in_staging = true;
       return;
     }
     const u32 root_module =
@@ -435,7 +453,9 @@ class Resolver {
             break;
           }
           case I::Use:
-          case I::Impl: break;
+          case I::Impl:
+          case I::Test:
+          case I::TestEntry: break;
         }
       }
       for (u32 child : module_children[m]) {
@@ -714,13 +734,7 @@ class Resolver {
         current = parents[current];
       }
     } else if (head == package_name) {
-      current = 0;
-      for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
-        if (modules[i]->path.empty()) {
-          current = i;
-          break;
-        }
-      }
+      current = package_root_module();
     } else if (head == "self") {
       current = module;
     } else {
@@ -918,6 +932,9 @@ class Resolver {
             // The whole staged tree is toolchain sources, facades and
             // siblings alike; only facades are preludes.
             modules[child]->is_staged = true;
+            if (leaf && file.id == root) {
+              staged_root = child;
+            }
           } else if (leaf) {
             // Two staged sources resolved to the same leaf: the later one
             // would silently overwrite the earlier module's items.
@@ -951,6 +968,14 @@ class Resolver {
     // other module rather than read as toolchain sources.
     const u32 staged_modules =
         static_cast<u32>(modules.size()) - modules_before;
+    if (root_in_staging && staged_root == NO_MODULE) {
+      // Neither the package's files nor the staged ones hold the root
+      // file, so there is nothing to attach a tree to.
+      const u32 index = bag.emit<i18n::Key::AnalyzerRootFileNotAModuleInput>(
+          DiagCode::InvalidPath, diag::Span{});
+      (void)index;
+      return ModuleTree{};
+    }
     {
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "stage-dependencies",
                                                "frontend");
@@ -1040,13 +1065,7 @@ class Resolver {
       }
     }
     std::sort(staged_items.begin(), staged_items.end());
-    u32 root_index = 0;
-    for (u32 i = 0; i < static_cast<u32>(modules.size()); ++i) {
-      if (modules[i]->path.empty()) {
-        root_index = i;
-        break;
-      }
-    }
+    const u32 root_index = package_root_module();
     ModuleTree tree;
     tree.modules = ast::copy_to_arena(
         ast.spans, std::vector<ModuleNode*>(modules.begin(), modules.end()));

@@ -152,8 +152,19 @@ class Parser {
   // valid program reads differently.
   bool scan_closure() const;
 
-  // Items.
+  // Items. An item is read in the position it appears in: inside a `test`
+  // block `test <name>()` declares a test and nothing may be `pub`, and
+  // how many blocks the cursor is in is what says the position is one.
   ast::ItemIdx parse_item();
+  // One item with the doc comments written above it attached.
+  ast::ItemIdx parse_documented_item();
+  // `test` in item position: a block at module level, an entry inside
+  // one.
+  ast::ItemIdx parse_test_item(bool is_pub, bool is_unsafe);
+  // Whether the item position being parsed is a `test` block's.
+  bool in_test_block() const { return test_block_depth_ != 0; }
+  ast::ItemIdx parse_test_block();
+  ast::ItemIdx parse_test_entry();
   // An item spelled like a neighboring language's keyword (`func`,
   // `trait`, `import`) is parsed as the item it meant; `mod` has no alcy
   // form and is reported and skipped (ADR-0061).
@@ -304,6 +315,9 @@ class Parser {
   // Set once the budget is spent, so the many frames that then fail
   // report one diagnostic rather than one per level.
   bool reported_too_deep_ = false;
+  // The `test` blocks the cursor is inside. A block does not nest, so
+  // this is one inside one and zero at every other position.
+  u32 test_block_depth_ = 0;
 
   // Reports the nesting budget once and returns true when the caller
   // must stop descending.

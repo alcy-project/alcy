@@ -85,6 +85,10 @@
   F(ParserReservedName, Error, Parser, "Name `{}` is reserved for future use") \
   F(ParserReturnSpelling, Error, Parser, "`ret` returns; write `ret ...`") \
   F(ParserSpecItemSpelling, Error, Parser, "`spec` declares a capability; `impl Spec for Type` opts a type in") \
+  F(ParserTestBlockHoldsTestsAndHelpers, Error, Parser, "a `test` block holds tests and helpers; move this item outside the block") \
+  F(ParserTestBlockNested, Error, Parser, "a `test` block holds tests and helpers; it does not nest") \
+  F(ParserTestEntryTakesNoArguments, Error, Parser, "a test takes no arguments") \
+  F(ParserTestItemNotPublic, Error, Parser, "a `test` block and its items are never `pub`") \
   F(ParserTypeFirstDeclarationSpelling, Error, Parser, "a declaration puts the type after the name: `x: T := ...`") \
   F(ParserTypedDeclarationSpelling, Error, Parser, "a typed declaration is `x: T := ...`; `=` only reassigns") \
   F(ParserUnsafeOnlyOnFunctions, Error, Parser, "`unsafe` applies to functions") \
@@ -460,6 +464,10 @@
   F(PipelineSuiteAlreadyHasMember, Error, Pipeline, "Suite '{}' already lists member '{}'") \
   F(PipelineSuiteHasMemberNamed, Error, Pipeline, "Suite '{}' already has a member named '{}'") \
   F(PipelineTargetOutputsCollide, Error, Pipeline, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
+  F(PipelineTestCollidesWithItem, Error, Pipeline, "`{}` in a `test` block is already declared in module `{}`; rename the block item") \
+  F(PipelineTestDuplicateName, Error, Pipeline, "`{}` is declared twice by the `test` blocks of module `{}`") \
+  F(PipelineTestEntryNamedMain, Error, Pipeline, "A `test` block in module `{}` declares `main`; the run writes the package entry point") \
+  F(PipelineTestEntryReturns, Error, Pipeline, "Test entry '{}::{}' writes a return type; a run reports whether a test returned, so write a helper `fn` beside it") \
   F(PipelineNoBackend, Error, Pipeline, "This build of the compiler has no code generation backend") \
   F(PipelineUnknownProfile, Error, Pipeline, "Unknown profile '{}'; the built-in profiles are debug and release, and .alcy/profile.toml defines the rest") \
   F(PipelineUnknownTarget, Error, Pipeline, "Cannot build for target '{}'; the compiler was not built with that backend") \
@@ -532,6 +540,23 @@
   F(CliFmtStdinTakesNoFiles, Note, Pipeline, "The `--stdin` flag takes no files") \
   F(CliSuiteHelp, Note, Pipeline, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
   F(CliTargetHelp, Note, Pipeline, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
+  F(CliTestAbout, Note, Pipeline, "Build a package with its tests and run them") \
+  F(CliTestCaseAborted, Note, Pipeline, "test {} ... FAILED (aborted by signal {})") \
+  F(CliTestCaseFailed, Note, Pipeline, "test {} ... FAILED (exit status {})") \
+  F(CliTestCaseOk, Note, Pipeline, "test {} ... ok") \
+  F(CliTestExecutionHelp, Note, Pipeline, "How a run executes the tests: multi-process (the default) gives each test a process of its own, so one that aborts does not end the run; single-thread runs them all in one process and reports how far it got.") \
+  F(CliTestFailed, Note, Pipeline, "{} {} failed") \
+  F(CliTestFilterHelp, Note, Pipeline, "Keep only the tests whose report name contains this text.") \
+  F(CliTestListHelp, Note, Pipeline, "Print the selected tests, one name per line, and run none.") \
+  F(CliTestNoRunHelp, Note, Pipeline, "Build the program the tests became and stop before executing it.") \
+  F(CliTestPassed, Note, Pipeline, "{} {} passed") \
+  F(CliTestPlural, Note, Pipeline, "tests") \
+  F(CliTestRunning, Note, Pipeline, "running {} {} (package {})") \
+  F(CliTestSingular, Note, Pipeline, "test") \
+  F(CliTestStopped, Note, Pipeline, "the run stopped before every test finished") \
+  F(CliTestSuiteNotSupported, Note, Pipeline, "The `test` command tests one package; give a member's directory instead of the suite's") \
+  F(CliTestTakesDirectory, Note, Pipeline, "The `test` command takes a package directory; use `check` for a file") \
+  F(CliTestTargetNotRunnable, Error, Pipeline, "Cannot run tests for target '{}'; a test is a process the run starts") \
   F(CliTimeTraceHelp, Note, Pipeline, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
   F(CliUnknownSubcommand, Note, Pipeline, "Unknown subcommand '{}'; see '{} --help'") \
   F(CliVcsHelp, Note, Pipeline, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \
@@ -542,7 +567,9 @@
   F(CliVerbCreatedSuite, Note, Pipeline, "Created suite") \
   F(CliVerbFailed, Note, Pipeline, "Failed") \
   F(CliVerbFormatted, Note, Pipeline, "Formatted") \
+  F(CliVerbListed, Note, Pipeline, "Listed") \
   F(CliVerbRan, Note, Pipeline, "Ran") \
+  F(CliVerbTested, Note, Pipeline, "Tested") \
   /* linter */ \
   F(CliLintAbout, Note, Pipeline, "Check a package for lint findings") \
   F(CliLspAbout, Note, Pipeline, "Serve the language server over standard input and output") \

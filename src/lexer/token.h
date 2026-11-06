@@ -24,6 +24,7 @@ enum class TokenKind : u8 {
   Const,
   Mut,
   Use,
+  Test,
 
   // Control flow.
   If,

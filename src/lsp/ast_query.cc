@@ -32,7 +32,9 @@ diag::Span item_name_span(const ast::AstArena& ast, const ast::ItemNode& item) {
     case K::Const: return item.payload.get<ast::ItemConst>().name.span;
     case K::Spec: return item.payload.get<ast::ItemSpec>().name.span;
     case K::Impl: return ast.types[item.payload.get<ast::ItemImpl>().type].span;
+    case K::TestEntry: return item.payload.get<ast::ItemTestEntry>().name.span;
     case K::Extern:
+    case K::Test:
     case K::Use: return item.span;
   }
   return item.span;

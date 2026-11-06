@@ -1964,6 +1964,66 @@ TEST_CASE("A spelled item reports the alcy form once") {
   }
 }
 
+TEST_CASE("A test block refuses the items it cannot hold") {
+  // A run splices the entries and the helpers and drops everything
+  // else, so an item the block cannot hold is a parse error rather than
+  // code that is checked here and discarded there.
+  const std::string_view sources[] = {
+      "test {\n  use foo::Bar;\n}\n",
+      "test {\n  struct F {\n  }\n}\n",
+      "test {\n  enum E {\n  }\n}\n",
+      "test {\n  impl F {\n  }\n}\n",
+  };
+  for (const std::string_view source : sources) {
+    Fixture f;
+    const ParseResult result = parse(source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag,
+                      "a `test` block holds tests and helpers; move this item "
+                      "outside the block"));
+    CHECK(f.bag.error_count() == 1);
+  }
+}
+
+TEST_CASE("A test block and its entries refuse the shapes they cannot take") {
+  struct Case {
+    std::string_view source;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"unsafe test a() {\n}\n", "`unsafe` applies to functions"},
+      {"pub test a() {\n}\n", "a `test` block and its items are never `pub`"},
+      {"test {\n  test {\n  }\n}\n",
+       "a `test` block holds tests and helpers; it does not nest"},
+      {"test {\n  test a(x: i32) {\n  }\n}\n", "a test takes no arguments"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    const ParseResult result = parse(c.source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag, c.message));
+  }
+
+  // The block and its entries have punctuation of their own, so a source
+  // that loses a piece fails to parse rather than reading as a block of
+  // nothing.
+  const std::string_view malformed[] = {
+      "test a {\n}\n",
+      "test {\n  test () {\n  }\n}\n",
+      "test {\n  test a {\n  }\n}\n",
+      "test {\n  test a(x: i32 {\n  }\n}\n",
+      "test {\n  test a() -> {\n  }\n}\n",
+      "test {\n  test a()\n}\n",
+      "test {\n  test a() {\n  }\n",
+      "test {\n  fn\n}\n",
+  };
+  for (const std::string_view source : malformed) {
+    Fixture f;
+    const ParseResult result = parse(source, f);
+    CHECK(!result.ok);
+  }
+}
+
 TEST_CASE("A spelled receiver reports once") {
   const std::string_view sources[] = {
       "struct F {}\nimpl F {\n  fn g(&self) -> i32 {\n    ret 1\n  }\n}\n",

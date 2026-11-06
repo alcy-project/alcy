@@ -95,6 +95,19 @@ struct NameCollector {
         }
         break;
       }
+      case ast::ItemKind::Test: {
+        const ast::ItemTest& block = item.payload.get<ast::ItemTest>();
+        for (ast::ItemIdx member_idx : block.items) {
+          visit_item(member_idx);
+        }
+        break;
+      }
+      case ast::ItemKind::TestEntry: {
+        const ast::ItemTestEntry& entry =
+            item.payload.get<ast::ItemTestEntry>();
+        visit_block(entry.body);
+        break;
+      }
       case ast::ItemKind::Struct:
       case ast::ItemKind::Enum:
       case ast::ItemKind::Use:

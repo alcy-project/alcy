@@ -870,6 +870,8 @@ enum class ItemKind : u8 {
   Static,
   Const,
   Use,
+  Test,
+  TestEntry,
 };
 
 struct Item {
@@ -1025,6 +1027,22 @@ struct ItemUse {
   Ident alias;
 };
 
+// One `test name() { ... }` entry of a test block. A test returns
+// unit, so a written `->` annotation is a diagnostic rather than a
+// type; `alcy test` is what runs the body.
+struct ItemTestEntry {
+  Ident name;
+  TypeIdx return_type = TypeIdx::invalid();
+  BlockIdx body = BlockIdx::invalid();
+};
+
+// A `test { ... }` block: the tests plus the helpers they call, in
+// source order. No other target analyzes its items, so a program that
+// is not being tested compiles as if the block were a comment.
+struct ItemTest {
+  std::span<const ItemIdx> items;
+};
+
 struct ItemNode {
   ItemKind kind;
   diag::Span span;
@@ -1046,7 +1064,9 @@ struct ItemNode {
                                   ItemSpec,
                                   ItemStatic,
                                   ItemConst,
-                                  ItemUse>;
+                                  ItemUse,
+                                  ItemTest,
+                                  ItemTestEntry>;
   ItemPayload payload;
 
   std::string_view name() const {
@@ -1059,6 +1079,8 @@ struct ItemNode {
       case I::Intrinsic: return payload.get<ItemIntrinsic>().name.name;
       case I::Static: return payload.get<ItemStatic>().name.name;
       case I::Const: return payload.get<ItemConst>().name.name;
+      case I::TestEntry: return payload.get<ItemTestEntry>().name.name;
+      case I::Test:
       case I::Use:
       case I::Impl:
       default: return "unknown";

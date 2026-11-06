@@ -502,6 +502,20 @@ bool verify_item_children(const ItemNode& node, const AstArena& arena) {
       const ItemUse use_item = node.payload.get<ItemUse>();
       return bound(use_item.path, arena.paths);
     }
+    case ItemKind::Test: {
+      const ItemTest test = node.payload.get<ItemTest>();
+      for (const ItemIdx item : test.items) {
+        if (!bound(item, arena.items)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ItemKind::TestEntry: {
+      const ItemTestEntry entry = node.payload.get<ItemTestEntry>();
+      return bound(entry.return_type, arena.types) &&
+             bound(entry.body, arena.blocks);
+    }
   }
   return false;
 }

@@ -104,6 +104,7 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
   bool has_extern = false;
   bool has_fn = false;
   bool has_control = false;
+  bool has_test = false;
   bool has_any = false;
   // Whether the lead holds anything the layout itself wrote down: a
   // real token or a closed delimiter. A lead of nothing but unread
@@ -132,6 +133,7 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
       case lexer::TokenKind::Impl: has_impl = true; break;
       case lexer::TokenKind::Spec: has_spec = true; break;
       case lexer::TokenKind::Extern: has_extern = true; break;
+      case lexer::TokenKind::Test: has_test = true; break;
       case lexer::TokenKind::Fn:
       case lexer::TokenKind::Intrinsic: has_fn = true; break;
       case lexer::TokenKind::If:
@@ -145,6 +147,17 @@ BraceRole classify_brace(const std::vector<Node>& lead) {
     }
   }
 
+  if (has_test) {
+    // The keyword directly owns the brace of a block of items; after a
+    // parameter list it heads an entry, whose brace holds statements
+    // the way a function body does.
+    if (last == lexer::TokenKind::Test) {
+      return BraceRole::TestBody;
+    }
+    if (last == lexer::TokenKind::RParen) {
+      return BraceRole::FnBody;
+    }
+  }
   if (has_match) {
     return BraceRole::MatchBody;
   }
