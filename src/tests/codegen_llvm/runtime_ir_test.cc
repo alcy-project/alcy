@@ -326,6 +326,31 @@ TEST_CASE("A freestanding runtime calls no libc") {
   CHECK(text.find("asm sideeffect") != std::string::npos);
 }
 
+TEST_CASE("A freestanding runtime provides the memory primitives") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto i8 = llvm::Type::getInt8Ty(context);
+  const auto pointer = opaque_pointer(context);
+
+  // Nothing declares these: the code generator reaches them for the
+  // copies and fills the program never named, so they exist whether or
+  // not a declaration would have asked for them.
+  add_runtime_definitions(module, target_of(ir::PointerWidth::W64),
+                          /*freestanding=*/true);
+
+  CHECK(!llvm::verifyModule(module));
+  check_definition(module, target_of(ir::PointerWidth::W64), "memcpy",
+                   signature(pointer, {pointer, pointer, usize}));
+  check_definition(module, target_of(ir::PointerWidth::W64), "memset",
+                   signature(pointer, {pointer, i8, usize}));
+  // A host build leaves both to the libc it links.
+  llvm::Module hosted("runtime_ir_test", context);
+  add_runtime_definitions(hosted, target_of(ir::PointerWidth::W64));
+  CHECK(hosted.getFunction("memcpy") == nullptr);
+  CHECK(hosted.getFunction("memset") == nullptr);
+}
+
 TEST_CASE("A failed allocation panics instead of returning null") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_test", context);

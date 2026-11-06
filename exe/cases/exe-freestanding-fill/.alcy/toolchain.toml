@@ -1,0 +1,4 @@
+# No startup objects, no dynamic linker, and no C library: print
+# reaches the kernel through a raw syscall.
+# See docs/adr/0052-freestanding-is-a-link-mode.md.
+freestanding = true

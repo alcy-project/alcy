@@ -80,3 +80,13 @@ anonymous memory, so the heap containers work without a C
 allocator. A freestanding program prints and grows a `Vec` end to
 end in the exe suite, with no crt, no loader, and no libc in the
 binary.
+
+## Amendments
+
+**The code generator's own calls exist without a declaration.** The
+rule above defines a runtime piece from a declaration, and `memcpy`
+and `memset` are the two that outrun it: the code generator
+synthesizes those calls for the aggregate copies and fills it does
+not inline, so a program that names neither still reaches both. Each
+is a byte loop over the runtime's own code, which is what keeps the
+symbol resolvable with no libc behind it.

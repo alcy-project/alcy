@@ -57,9 +57,11 @@ class RuntimeBuilder {
     newline_text_ = text_constant("\n");
     if (freestanding_) {
       build_syscall();
-      // The backend lowers aggregate copies to `memcpy` calls, and a
-      // freestanding program has no libc to resolve them (ADR-0052).
+      // The code generator lowers an aggregate copy and a fill it will
+      // not inline to `memcpy` and `memset` calls, and a freestanding
+      // program has no libc to resolve them (ADR-0052).
       build_memcpy();
+      build_memset();
     }
     // A piece is defined only when the program declares it. A module
     // that never allocates carries no allocator, and a freestanding
@@ -486,6 +488,49 @@ class RuntimeBuilder {
         builder_.CreateAdd(at, llvm::ConstantInt::get(usize_, 1), "next");
     builder_.CreateBr(loop);
     at->addIncoming(next, copy);
+
+    builder_.SetInsertPoint(done);
+    builder_.CreateRet(dst);
+  }
+
+  // The fill half of the same stand-in: the byte comes from the caller,
+  // so a fill the backend keeps as a loop still stores the value it was
+  // handed rather than a constant.
+  void build_memset() {
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getPtrTy(),
+        {builder_.getPtrTy(), builder_.getInt8Ty(), usize_}, false);
+    llvm::Function* function = runtime("memset", type);
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* loop =
+        llvm::BasicBlock::Create(context, "loop", function);
+    llvm::BasicBlock* fill =
+        llvm::BasicBlock::Create(context, "fill", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+
+    llvm::Value* dst = function->getArg(0);
+    llvm::Value* value = function->getArg(1);
+    llvm::Value* count = function->getArg(2);
+
+    builder_.SetInsertPoint(entry);
+    builder_.CreateBr(loop);
+
+    builder_.SetInsertPoint(loop);
+    llvm::PHINode* at = builder_.CreatePHI(usize_, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(usize_, 0), entry);
+    llvm::Value* more = builder_.CreateICmpULT(at, count, "more");
+    builder_.CreateCondBr(more, fill, done);
+
+    builder_.SetInsertPoint(fill);
+    llvm::Value* to = builder_.CreateGEP(builder_.getInt8Ty(), dst, at, "to");
+    builder_.CreateStore(value, to);
+    llvm::Value* next =
+        builder_.CreateAdd(at, llvm::ConstantInt::get(usize_, 1), "next");
+    builder_.CreateBr(loop);
+    at->addIncoming(next, fill);
 
     builder_.SetInsertPoint(done);
     builder_.CreateRet(dst);
