@@ -214,7 +214,9 @@ u64 integer_literal_value(const ast::Literal& lit, bool negative) {
 }
 
 // The value a float literal spells, as the widest float.
-f64 float_literal_value(const ast::Literal& lit, bool negative) {
+// The spelling's numeric digits, up to the first character that does
+// not belong: the separators and the suffix stay behind.
+std::string float_literal_digits(const ast::Literal& lit) {
   std::string digits;
   for (char c : lit.spelling) {
     if (c == '_') {
@@ -227,6 +229,11 @@ f64 float_literal_value(const ast::Literal& lit, bool negative) {
       break;
     }
   }
+  return digits;
+}
+
+f64 float_literal_value(const ast::Literal& lit, bool negative) {
+  const std::string digits = float_literal_digits(lit);
   const f64 value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
   return negative ? -value : value;
 }
@@ -276,12 +283,20 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     return Val{to_operand(imm, type), type, false, false};
   }
   if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-    const f64 value = float_literal_value(lit, negative);
-    ir::Immutable imm{.type = type, .data = {}};
+    const std::string digits = float_literal_digits(lit);
+    ir::Immutable imm{.type = type, .data = {};
     if (tag == ir::TypeTag::F32) {
-      imm.data.f32_value = static_cast<f32>(value);
+      f32 value = digits.empty() ? 0.0f : std::strtof(digits.c_str(), nullptr);
+      if (negative) {
+        value = -value;
+      }
+      imm.data.f32_value = value;
     } else {
-      imm.data.f64_value = static_cast<f64>(value);
+      f64 value = digits.empty() ? 0.0 : std::strtod(digits.c_str(), nullptr);
+      if (negative) {
+        value = -value;
+      }
+      imm.data.f64_value = value;
     }
     const ir::ImmutableIdx idx = builder.immutable(imm);
     return Val{to_operand(idx, type), type, false, false};

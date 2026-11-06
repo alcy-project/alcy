@@ -54,7 +54,9 @@ stands; reserved forms are rejected with guidance diagnostics.
   position fits it; the `i32` default is what remains unclaimed.
 - A float literal may carry an exponent, with or without a fraction:
   `2e9`, `1.5e-3`, `6.02E23`. The exponent needs at least one digit, and
-  its sign is optional.
+  its sign is optional. Its value is the digits rounded once to the
+  literal's type, to the nearest and a tie to even, so the same digits
+  at `f32` and at `f64` may name different numbers.
 - String escapes: `\n \t \r \\ \" \0 \u{HEX}`. The `\u{...}` value
   must name a Unicode scalar value: `\u{110000}` is past the last one,
   and a surrogate such as `\u{D800}` is not one. `'x'` character

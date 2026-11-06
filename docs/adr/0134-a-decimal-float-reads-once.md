@@ -58,3 +58,17 @@ carry as a literal.**
 - A decimal whose digits do not fit a `u64` numerator is still refused
   rather than approximated (`"0.00000000000000000001"`), which is the
   work `docs/backlog.md` records for a wider word.
+
+## Amendments
+
+**A literal reads once at its own type too.** The compiler read an
+`f32` literal with `strtod` and narrowed the double, so the digits
+rounded twice and the second rounding could land on a neighbour of the
+value they name: `1.0000000596046447753906250000000000000001f32` is a
+hair above the midpoint between `1.0` and `1 + 2^-23` and answers
+`1 + 2^-23`, but the double landed on the midpoint and tied to the even
+significand, `1.0`; `3.4028235677973366e38f32` is just under the
+overflow threshold and answers the largest finite `f32`, but the double
+rounded past the threshold and answered infinity. An `f32` literal now
+reads with `strtof`, which rounds the digits once to `f32`, and the
+rule above holds for either float type.
