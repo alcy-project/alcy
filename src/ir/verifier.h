@@ -72,10 +72,12 @@ enum class VerificationErrorKind : u8 {
   // A type parameter in a body the specialization pass resolved: no
   // layout answers for it, and no pass replaces it (ADR-0079).
   MisplacedParametricType,
-  // An operand that names a register of another primitive type: the
-  // register's row and the operand naming it are two of the places a
-  // value's type is written, and a reader of the artifact takes one of
-  // them as the width of the word.
+  // An operand that names a register of another primitive type, or of
+  // another value width: the register's row and the operand naming it are
+  // two of the places a value's type is written, and a reader of the
+  // artifact takes one of them as the width of the word. A pointer-shaped
+  // type on either side names an address, which is a word wide whatever
+  // the row holds.
   OperandTypeMismatch,
 };
 

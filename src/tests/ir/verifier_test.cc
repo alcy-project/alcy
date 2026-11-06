@@ -83,6 +83,17 @@ FunctionMeta void_meta() {
                       .generics = TypeIdxRange{}};
 }
 
+// A state whose table holds the pre-interned primitive slots and then
+// `node`: the shape a type table built through the builder has.
+StorageState state_with(TypeNode node) {
+  StorageState state;
+  for (u32 i = 0; i < PRIMITIVE_TYPE_COUNT; ++i) {
+    state.types.emplace_back(TypeNode{});
+  }
+  state.types.emplace_back(node);
+  return state;
+}
+
 VerificationErrorKind check(Storage&& storage) {
   VerificationResult result = verify_storage(storage);
   CHECK(result.is_err());
@@ -282,6 +293,68 @@ TEST_CASE("Verify an operand naming a register of another type") {
   });
   check_invalid(std::move(builder).build(),
                 VerificationErrorKind::OperandTypeMismatch);
+}
+
+TEST_CASE("Verify an operand naming a str register as a word") {
+  StorageBuilder builder;
+  InstrSeq instrs;
+  const ImmutableIdx imm = builder.immutable(
+      {.type = primitive_idx(TypeTag::I32), .data = {.i32_value = 1}});
+  const OperandIdx alloc_arg = builder.operand(
+      Operand::from_immutable(imm, primitive_idx(TypeTag::I32)));
+  const InstructionIdx inst_alloc = builder.instr({
+      .op = Opcode::Alloca,
+      .flags = {},
+      .dst = RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {alloc_arg, 1},
+  });
+  instrs.push(inst_alloc);
+  builder.reg({.type = primitive_idx(TypeTag::Str), .def_idx = inst_alloc});
+  // The register rides as a data pointer and a length while the operand
+  // naming it declares one word: a reader taking the operand's type reads
+  // past the end of the pair.
+  const OperandIdx ret_arg = builder.operand(
+      Operand::from_register(RegisterIdx(0), primitive_idx(TypeTag::I32)));
+  const InstructionIdx inst_ret = builder.instr({
+      .op = Opcode::Ret,
+      .flags = {},
+      .dst = RegisterIdx(base::INVALID_IDX),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {ret_arg, 1},
+  });
+  instrs.push(inst_ret);
+  const BlockIdx block = builder.block({
+      .instrs = instrs.finish(),
+      .block_params = {},
+  });
+  builder.function({
+      .meta = {.return_type = primitive_idx(TypeTag::I32),
+               .param_types = {},
+               .name = str::EMPTY_STRING_ID,
+               .path = str::EMPTY_STRING_ID,
+               .kind = SymbolKind::Foreign,
+               .generics = TypeIdxRange{}},
+      .blocks = {block, 1},
+  });
+  check_invalid(std::move(builder).build(),
+                VerificationErrorKind::OperandTypeMismatch);
+}
+
+TEST_CASE("Verify a reference whose payload is outside the table") {
+  TypeNode referencing{};
+  referencing.tag = TypeTag::Ref;
+  referencing.data.set(RefTypeIdx(0));
+  CHECK(check(Storage(state_with(referencing))) ==
+        VerificationErrorKind::TypeMetadataOutOfRange);
+
+  TypeNode outward{};
+  outward.tag = TypeTag::MutRef;
+  outward.data.set(RefTypeIdx(0));
+  StorageState pointing_outside = state_with(outward);
+  pointing_outside.ref_types.emplace_back(RefType{.pointee = TypeIdx(1000)});
+  CHECK(check(Storage(std::move(pointing_outside))) ==
+        VerificationErrorKind::TypeIdxOutOfRange);
 }
 
 TEST_CASE("Verify redefined register") {

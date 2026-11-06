@@ -16,6 +16,7 @@
 #include "ir/operand.h"
 #include "ir/parametric.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 #include "ir/type_util.h"
 
 namespace ir {
@@ -188,6 +189,25 @@ VerificationResult check_function_meta(const Storage& storage,
   return base::make_ok();
 }
 
+// How many words a value of this type rides as, read from the tag alone. A
+// `str` and a slice are a data pointer and a length; the primitive block
+// below them is one word per tag. A pointer-shaped tag names the address of
+// a place rather than the value stored there, so a row and an operand of
+// pointer shape say nothing about the width of what the other one holds, and
+// an aggregate's width is in its layout table. Neither answers a width here.
+enum class WordCount : u8 { One, Two, Unknown };
+
+WordCount word_count(TypeTag tag) {
+  if (tag == TypeTag::Str || tag == TypeTag::Slice) {
+    return WordCount::Two;
+  }
+  if (tag != TypeTag::Void &&
+      static_cast<u8>(tag) < static_cast<u8>(TypeTag::Str)) {
+    return WordCount::One;
+  }
+  return WordCount::Unknown;
+}
+
 }  // namespace
 
 VerificationResult verify_storage(const Storage& storage) {
@@ -219,6 +239,19 @@ VerificationResult verify_storage(const Storage& storage) {
       if (storage.slice_types()[sidx].element.idx >= storage.types().size()) {
         return err(VerificationErrorKind::TypeIdxOutOfRange,
                    storage.slice_types()[sidx].element.idx);
+      }
+    } else if (tidx.idx >= PRIMITIVE_TYPE_COUNT &&
+               has_pointer_payload(node.tag)) {
+      // The pre-interned slots of the pointer tags carry no payload and no
+      // value names them; every reference the builder created sits past
+      // them and points at a real pointee.
+      const RefTypeIdx ridx = node.as_ref();
+      if (ridx.idx >= storage.ref_types().size()) {
+        return err(VerificationErrorKind::TypeMetadataOutOfRange, tidx.idx);
+      }
+      if (storage.ref_types()[ridx].pointee.idx >= storage.types().size()) {
+        return err(VerificationErrorKind::TypeIdxOutOfRange,
+                   storage.ref_types()[ridx].pointee.idx);
       }
     } else if (node.tag == TypeTag::Array) {
       const ArrayTypeIdx aidx = node.as_array();
@@ -507,9 +540,20 @@ VerificationResult verify_storage(const Storage& storage) {
                   storage.registers()[operand.as_register()].type;
               const TypeTag row_tag = storage.types()[row_type.idx].tag;
               const TypeTag op_tag = storage.types()[operand.type.idx].tag;
-              if (row_tag != op_tag &&
-                  static_cast<u8>(row_tag) < static_cast<u8>(TypeTag::Str) &&
-                  static_cast<u8>(op_tag) < static_cast<u8>(TypeTag::Str)) {
+              const bool row_scalar =
+                  static_cast<u8>(row_tag) < static_cast<u8>(TypeTag::Str);
+              const bool op_scalar =
+                  static_cast<u8>(op_tag) < static_cast<u8>(TypeTag::Str);
+              if (row_tag != op_tag && row_scalar && op_scalar) {
+                return err(VerificationErrorKind::OperandTypeMismatch,
+                           first_operand + offset);
+              }
+              // A pair read as a word, or a word as a pair, reads past
+              // the end of the value whatever the tags are called.
+              const WordCount row_words = word_count(row_tag);
+              const WordCount op_words = word_count(op_tag);
+              if (row_words != WordCount::Unknown &&
+                  op_words != WordCount::Unknown && row_words != op_words) {
                 return err(VerificationErrorKind::OperandTypeMismatch,
                            first_operand + offset);
               }

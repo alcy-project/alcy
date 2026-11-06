@@ -65,6 +65,11 @@ inline constexpr bool is_pointer_type(TypeTag tag) {
          is_raw_ptr_type(tag);
 }
 
+// The tags whose type node names a pointee in its payload.
+inline constexpr bool has_pointer_payload(TypeTag tag) {
+  return tag == TypeTag::Ref || tag == TypeTag::MutRef || is_raw_ptr_type(tag);
+}
+
 // The unsigned tag of the same width, for the tags that have one.
 // Reinterpreting a signed value through it preserves every bit, which
 // is how a magnitude gets widened without re-extending the sign.

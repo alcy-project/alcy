@@ -162,15 +162,6 @@ bool Checker::layout_names_param(ir::TypeIdx type) const {
       return false;
     default: return false;
   }
-<<<<<<< HEAD
-||||||| parent of 5d72bc6 (fix(analyzer): refuse a fat reference compared inside a tuple)
-}
-
-||||||| parent of 2a242e19 (fixup! fix(analyzer): refuse a fat reference compared inside a tuple)
-||||||| parent of 5d72bc6 (fix(analyzer): refuse a fat reference compared inside a tuple)
-}
-
-=======
 }
 
 bool Checker::holds_fat_reference(ir::TypeIdx type) const {
@@ -197,7 +188,6 @@ bool Checker::holds_fat_reference(ir::TypeIdx type) const {
     return holds_fat_reference(array.element);
   }
   return false;
->>>>>>> 5d72bc6 (fix(analyzer): refuse a fat reference compared inside a tuple)
 }
 
 // User-facing type names: the table spells bool as `i1` and unit as
