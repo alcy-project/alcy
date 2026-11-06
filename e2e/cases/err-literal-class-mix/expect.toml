@@ -1,0 +1,6 @@
+exit = 4
+contains = [
+  "Type mismatch in binary: 'f64' vs 'i32'",
+  "Type mismatch in integer literal: expected 'f32', found 'i32'",
+  "Type mismatch in float literal: expected 'f32', found 'f64'",
+]

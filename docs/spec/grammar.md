@@ -52,12 +52,18 @@ stands; reserved forms are rejected with guidance diagnostics.
   position names - a declaration's annotation, a cast's target, the
   operand beside it in a binary expression, the operand of `-`, `~`,
   or `!` - and holds only where the position fits it; the `i32`
-  default is what remains unclaimed.
+  default is what remains unclaimed. A position reaches the operands
+  of an arithmetic expression it names, so `x: f32 := 1.5 * 2.0`
+  reads both digits at `f32`.
 - A float literal may carry an exponent, with or without a fraction:
   `2e9`, `1.5e-3`, `6.02E23`. The exponent needs at least one digit, and
   its sign is optional. Its value is the digits rounded once to the
   literal's type, to the nearest and a tie to even, so the same digits
-  at `f32` and at `f64` may name different numbers.
+  at `f32` and at `f64` may name different numbers. An unsuffixed
+  float literal takes the type its position names the way an integer
+  literal does, and a position of one class does not claim a literal
+  of the other: `1.5f32 * 2.0` reads `2.0` at `f32`, while
+  `1.5 * 2` and `x: f32 := 1 * 2.0` are mismatches.
 - A float literal must stay finite at the type it takes, that of its
   suffix, of the position that claims an unsuffixed one, or the `f64`
   default: `1e40f32` and `1e400` are errors, because past the largest

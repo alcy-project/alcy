@@ -1319,6 +1319,9 @@ class Checker {
   // a position may give it the type. The index and range rules want the
   // narrower decimal-only form above.
   bool is_unsuffixed_int_literal(ast::ExprIdx expr) const;
+  // A float literal with no type suffix: a position that names a float
+  // type may give it the type, the way an integer literal takes one.
+  bool is_unsuffixed_float_literal(ast::ExprIdx expr) const;
   // The types a comp-known value can have (docs/spec/comp.md): the
   // integer tags, `bool`, `str`, and the composites of them. The comp
   // engine carries no float, reference, slice, or function value, so a

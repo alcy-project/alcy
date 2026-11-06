@@ -367,6 +367,19 @@ bool Checker::is_unsuffixed_int_literal(ast::ExprIdx expr) const {
   return !comp::has_type_suffix(value.spelling);
 }
 
+bool Checker::is_unsuffixed_float_literal(ast::ExprIdx expr) const {
+  const ast::ExprNode& node = ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Literal) {
+    return false;
+  }
+  const ast::Literal& value =
+      ast.literals[node.payload.get<ast::ExprLiteral>().value];
+  if (value.kind != ast::LiteralKind::Float) {
+    return false;
+  }
+  return !comp::has_type_suffix(value.spelling);
+}
+
 bool Checker::is_bare_int_literal(ast::ExprIdx expr) const {
   const ast::ExprNode& node = ast.exprs[expr];
   if (node.kind != ast::ExprKind::Literal) {
@@ -725,11 +738,12 @@ bool Checker::expr_comp_known_block(
   return !node.value.is_valid() || expr_comp_known(module, node.value, names);
 }
 
-// Checks operands of a binary operator: same-type numerics, with
-// bare integer literals coerced to the other side (so `x + 42`
-// works for any integer x without an annotation). An integer
-// expectation reaches both operands, so `1 + 2` adopts an annotated
-// type the way a lone literal does.
+// Checks operands of a binary operator: same-type numerics, with an
+// unsuffixed literal taking the other operand's type when the classes
+// match (so `x + 42` works for any integer x and `y * 2.0` for any
+// float y, without an annotation). A numeric expectation reaches both
+// operands, so `1 + 2` and `1.0 * 2.0` adopt an annotated type the way
+// a lone literal does.
 ir::TypeIdx Checker::check_binary_operands(u32 module,
                                            ast::ExprIdx lhs,
                                            ast::ExprIdx rhs,
@@ -737,43 +751,39 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
                                            std::string_view what,
                                            const ir::TypeIdx* expected) {
   const ir::TypeIdx* operand_expected =
-      (expected != nullptr && (is_integer_tag(tag_of(*expected)) ||
-                               tag_of(*expected) == ir::TypeTag::Param))
+      (expected != nullptr &&
+       (is_integer_tag(tag_of(*expected)) || is_float_tag(tag_of(*expected)) ||
+        tag_of(*expected) == ir::TypeTag::Param))
           ? expected
           : nullptr;
-  // An unsuffixed integer literal takes the other operand's type, so the
-  // sibling is checked first: ranking it against the default would report
-  // a magnitude the position holds.
+  // An unsuffixed literal takes the other operand's type within its own
+  // class - digits that spell an integer adopt an integer operand, a
+  // float literal adopts a float one - so the sibling is checked first:
+  // ranking the literal against the default would report a magnitude or
+  // a width the position holds.
   ir::TypeIdx left = ir::TypeIdx::invalid();
   ir::TypeIdx right = ir::TypeIdx::invalid();
-  const bool lhs_literal = is_unsuffixed_int_literal(lhs);
-  const bool rhs_literal = is_unsuffixed_int_literal(rhs);
+  const bool lhs_literal =
+      is_unsuffixed_int_literal(lhs) || is_unsuffixed_float_literal(lhs);
+  const bool rhs_literal =
+      is_unsuffixed_int_literal(rhs) || is_unsuffixed_float_literal(rhs);
   if (lhs_literal != rhs_literal) {
-    if (lhs_literal) {
-      right = check_expr(module, rhs, operand_expected);
-      left = check_expr(
-          module, lhs,
-          is_integer_tag(tag_of(right)) || tag_of(right) == ir::TypeTag::Param
-              ? &right
-              : operand_expected);
-    } else {
-      left = check_expr(module, lhs, operand_expected);
-      right = check_expr(
-          module, rhs,
-          is_integer_tag(tag_of(left)) || tag_of(left) == ir::TypeTag::Param
-              ? &left
-              : operand_expected);
-    }
+    const ast::ExprIdx literal = lhs_literal ? lhs : rhs;
+    const ast::ExprIdx sibling = lhs_literal ? rhs : lhs;
+    const ir::TypeIdx sibling_type =
+        check_expr(module, sibling, operand_expected);
+    const ir::TypeTag sibling_tag = tag_of(sibling_type);
+    const bool adopts =
+        is_unsuffixed_int_literal(literal)
+            ? is_integer_tag(sibling_tag) || sibling_tag == ir::TypeTag::Param
+            : is_float_tag(sibling_tag) || sibling_tag == ir::TypeTag::Param;
+    const ir::TypeIdx literal_type =
+        check_expr(module, literal, adopts ? &sibling_type : operand_expected);
+    left = lhs_literal ? literal_type : sibling_type;
+    right = lhs_literal ? sibling_type : literal_type;
   } else {
     left = check_expr(module, lhs, operand_expected);
     right = check_expr(module, rhs, operand_expected);
-  }
-  if (!types_equal(left, right) && !is_error(left) && !is_error(right)) {
-    if (is_integer_tag(tag_of(right)) && is_bare_int_literal(lhs)) {
-      left = check_expr(module, lhs, &right);
-    } else if (is_integer_tag(tag_of(left)) && is_bare_int_literal(rhs)) {
-      right = check_expr(module, rhs, &left);
-    }
   }
   if (is_error(left)) {
     return right;
