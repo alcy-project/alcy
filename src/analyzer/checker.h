@@ -935,6 +935,10 @@ class Checker {
   // instance names its parameters through its arguments, and every
   // layout it has follows from them (ADR-0079).
   bool layout_names_param(ir::TypeIdx type) const;
+  // Whether the type is a reference to an unsized value, or a tuple or
+  // array holding one. Such a reference is a two-word aggregate, so the
+  // backend has no comparison for it.
+  bool holds_fat_reference(ir::TypeIdx type) const;
   // The type a scalar spelling names (`i64`, `usize`), or an error
   // type for a spelling no scalar carries.
   ir::TypeIdx primitive_by_name(std::string_view name);

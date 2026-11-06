@@ -84,9 +84,11 @@ bool Checker::is_error(ir::TypeIdx idx) const {
 bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
   const ir::TypeTag tag = tag_of(type);
   if (is_integer_tag(tag) || is_float_tag(tag) || tag == ir::TypeTag::I1 ||
-      tag == ir::TypeTag::Ptr || tag == ir::TypeTag::Ref ||
-      tag == ir::TypeTag::MutRef || ir::is_raw_ptr_type(tag)) {
+      tag == ir::TypeTag::Ptr || ir::is_raw_ptr_type(tag)) {
     return true;
+  }
+  if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+    return !holds_fat_reference(type);
   }
   if (tag == ir::TypeTag::Tuple) {
     const ir::TupleType tuple =
@@ -160,6 +162,42 @@ bool Checker::layout_names_param(ir::TypeIdx type) const {
       return false;
     default: return false;
   }
+<<<<<<< HEAD
+||||||| parent of 5d72bc6 (fix(analyzer): refuse a fat reference compared inside a tuple)
+}
+
+||||||| parent of 2a242e19 (fixup! fix(analyzer): refuse a fat reference compared inside a tuple)
+||||||| parent of 5d72bc6 (fix(analyzer): refuse a fat reference compared inside a tuple)
+}
+
+=======
+}
+
+bool Checker::holds_fat_reference(ir::TypeIdx type) const {
+  const ir::TypeTag tag = tag_of(type);
+  if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+    const ir::TypeIdx pointee =
+        builder.ref_types()[builder.types()[type].as_ref()].pointee;
+    const ir::TypeTag pointee_tag = tag_of(pointee);
+    return pointee_tag == ir::TypeTag::Slice || pointee_tag == ir::TypeTag::Str;
+  }
+  if (tag == ir::TypeTag::Tuple) {
+    const ir::TupleType tuple =
+        builder.tuple_types()[builder.types()[type].as_tuple()];
+    for (const ir::TypeIdx element : tuple.elements) {
+      if (holds_fat_reference(element)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (tag == ir::TypeTag::Array) {
+    const ir::ArrayType array =
+        builder.array_types()[builder.types()[type].as_array()];
+    return holds_fat_reference(array.element);
+  }
+  return false;
+>>>>>>> 5d72bc6 (fix(analyzer): refuse a fat reference compared inside a tuple)
 }
 
 // User-facing type names: the table spells bool as `i1` and unit as

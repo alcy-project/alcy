@@ -4082,21 +4082,13 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           // floats, and thin addresses. A function value or an aggregate
           // has no comparison, and a reference to an unsized value is a
           // fat aggregate rather than a thin address, so the emitter has
-          // no comparison for it either.
-          const bool is_reference =
-              tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef;
-          if (is_reference) {
-            const ir::TypeIdx pointee =
-                builder.ref_types()[builder.types()[operands].as_ref()].pointee;
-            const ir::TypeTag pointee_tag = tag_of(pointee);
-            if (pointee_tag == ir::TypeTag::Slice ||
-                pointee_tag == ir::TypeTag::Str) {
-              const u32 index =
-                  bag.emit<i18n::Key::AnalyzerFatReferenceComparison>(
-                      DiagCode::InvalidOperation, node.span);
-              (void)index;
-              return error_type();
-            }
+          // no comparison for it either, wherever the operand holds it.
+          if (holds_fat_reference(operands)) {
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerFatReferenceComparison>(
+                    DiagCode::InvalidOperation, node.span);
+            (void)index;
+            return error_type();
           }
           // A tuple or array is comparable when its elements are:
           // the builtin comparison walks it element-wise.
