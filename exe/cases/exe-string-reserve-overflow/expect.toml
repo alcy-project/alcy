@@ -1,0 +1,4 @@
+# The panic path is what the case asserts; the program aborts after
+# the message reaches stderr.
+exit = "non-zero"
+stderr_contains = ["capacity overflow"]

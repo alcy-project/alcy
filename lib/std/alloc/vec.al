@@ -55,9 +55,14 @@ impl<T> Vec<T> {
 
   // Ensures room for `extra` more elements without changing the
   // length. Growth doubles, so the loop is bounded by the next power
-  // of two above the request.
+  // of two above the request. A request past the largest `usize` is
+  // refused, the way the growth step refuses a wrapped capacity: a
+  // wrapped sum would name less room than the elements that follow it.
   pub fn reserve(mut self: &mut Self, extra: usize) {
-    while self.cap < self.len + extra {
+    if extra > wrapping_sub(0 as usize, 1 as usize) - self.len {
+      panic("capacity overflow")
+    }
+    while self.cap - self.len < extra {
       self.grow()
     }
   }

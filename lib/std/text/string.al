@@ -217,7 +217,10 @@ impl String {
 
   // Reserves room for `extra` more bytes.
   pub fn reserve(mut self: &mut Self, extra: usize) {
-    needed := self.len + extra
+    // The sum is formed in the wrapping form so a request past the
+    // largest `usize` reaches the refusal below, rather than aborting
+    // on the checked addition that computes it.
+    needed := wrapping_add(self.len, extra)
     if needed < self.len {
       panic("capacity overflow")
     }
