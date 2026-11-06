@@ -50,8 +50,9 @@ stands; reserved forms are rejected with guidance diagnostics.
   errors), and a negated literal may name the signed minimum, one
   past the positive maximum. An unsuffixed literal takes the type the
   position names - a declaration's annotation, a cast's target, the
-  operand beside it in a binary expression - and holds only where the
-  position fits it; the `i32` default is what remains unclaimed.
+  operand beside it in a binary expression, the operand of `-`, `~`,
+  or `!` - and holds only where the position fits it; the `i32`
+  default is what remains unclaimed.
 - A float literal may carry an exponent, with or without a fraction:
   `2e9`, `1.5e-3`, `6.02E23`. The exponent needs at least one digit, and
   its sign is optional. Its value is the digits rounded once to the

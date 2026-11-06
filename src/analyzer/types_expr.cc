@@ -3857,16 +3857,34 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
       // A negated integer literal is checked as a negative magnitude:
       // the signed minimum fits even though its positive form does not.
+      const bool literal_operand =
+          ast.exprs[unary.inner].kind == ast::ExprKind::Literal;
       const bool negates_literal =
-          unary.op == ast::UnaryOp::Neg &&
-          ast.exprs[unary.inner].kind == ast::ExprKind::Literal &&
+          unary.op == ast::UnaryOp::Neg && literal_operand &&
           ast.literals
                   [ast.exprs[unary.inner].payload.get<ast::ExprLiteral>().value]
                       .kind == ast::LiteralKind::Integer;
       if (negates_literal) {
         literal_negated_ = true;
       }
-      const ir::TypeIdx inner = check_expr(module, unary.inner, nullptr);
+      // An unsuffixed literal takes the type the position names, and a
+      // unary operator carries that name to its operand, so that the
+      // digits read at the type the position claims rather than at the
+      // default, which the result could not be unified with.
+      const ir::TypeIdx* operand_expected = nullptr;
+      if (expected != nullptr && literal_operand) {
+        const ir::TypeTag wanted = tag_of(*expected);
+        const bool carried =
+            (unary.op == ast::UnaryOp::Neg &&
+             (is_integer_tag(wanted) || is_float_tag(wanted))) ||
+            (unary.op == ast::UnaryOp::BitNot && is_integer_tag(wanted)) ||
+            (unary.op == ast::UnaryOp::Not && wanted == ir::TypeTag::I1);
+        if (carried) {
+          operand_expected = expected;
+        }
+      }
+      const ir::TypeIdx inner =
+          check_expr(module, unary.inner, operand_expected);
       if (negates_literal) {
         literal_negated_ = false;
       }

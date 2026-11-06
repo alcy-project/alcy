@@ -1,0 +1,5 @@
+exit = 4
+contains = [
+  "Integer literal is out of range for its type",
+  "Float literal is out of range for its type",
+]

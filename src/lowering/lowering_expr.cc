@@ -821,10 +821,24 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
             info->type.is_valid()
                 ? info->type
                 : (expected != nullptr ? *expected : error_type());
-        if (ast.exprs[info->init].kind == ast::ExprKind::Literal) {
+        // A `-` before a literal is the literal's own sign, so the
+        // initializer folds through the literal path as the digits
+        // themselves do.
+        ast::ExprIdx init = info->init;
+        bool negate = false;
+        if (ast.exprs[init].kind == ast::ExprKind::Unary) {
+          const ast::ExprUnary& unary =
+              ast.exprs[init].payload.get<ast::ExprUnary>();
+          if (unary.op == ast::UnaryOp::Neg &&
+              ast.exprs[unary.inner].kind == ast::ExprKind::Literal) {
+            init = unary.inner;
+            negate = true;
+          }
+        }
+        if (ast.exprs[init].kind == ast::ExprKind::Literal) {
           return lower_literal(
-              ast.exprs[info->init].payload.get<ast::ExprLiteral>().value,
-              info->type.is_valid() ? &want : expected);
+              ast.exprs[init].payload.get<ast::ExprLiteral>().value,
+              info->type.is_valid() ? &want : expected, negate);
         }
         // Anything else is a compile-time value: evaluate the
         // initializer and splice it.
