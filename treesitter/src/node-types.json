@@ -3737,6 +3737,10 @@
           "named": true
         },
         {
+          "type": "test_block_item",
+          "named": true
+        },
+        {
           "type": "use_item",
           "named": true
         }
@@ -4007,6 +4011,61 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "test_block_item",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "function_item",
+          "named": true
+        },
+        {
+          "type": "test_entry_item",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "test_entry_item",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "block",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "return_type": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "return_type",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -4844,6 +4903,10 @@
   },
   {
     "type": "struct",
+    "named": false
+  },
+  {
+    "type": "test",
     "named": false
   },
   {

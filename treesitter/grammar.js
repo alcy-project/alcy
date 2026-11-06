@@ -144,6 +144,7 @@ module.exports = grammar({
       $.static_item,
       $.const_item,
       $.use_item,
+      $.test_block_item,
     ),
 
     visibility: _ => 'pub',
@@ -304,6 +305,48 @@ module.exports = grammar({
       field('path', $.path),
       optional(seq('as', field('alias', $.identifier))),
       ';',
+    ),
+
+    // A module's tests, one entry per line, beside the helpers they share.
+    // The block is module level only and does not nest: what it holds is an
+    // entry or a helper, so a second `test` block here reads as neither and
+    // is a parse error, as it is in the compiler (items.md, "Tests";
+    // ADR-0139).
+    test_block_item: $ => seq(
+      'test',
+      $._block_lbrace,
+      itemList($, choice($.test_entry_item, $._test_helper_item)),
+      '}',
+    ),
+
+    // A test takes no arguments, so its parameter list is empty by syntax:
+    // the two parentheses are tokens rather than a `parameters` node. A
+    // declared return type parses, and it is the `alcy test` command that
+    // reports it, not the parse (ADR-0139).
+    test_entry_item: $ => seq(
+      'test',
+      field('name', $.identifier),
+      '(',
+      ')',
+      optional(field('return_type', $.return_type)),
+      field('body', $.block),
+    ),
+
+    // A helper is an ordinary function whose name is scoped to the block, so
+    // it reads as `function_item` in the tree. It carries no visibility:
+    // nothing in a block is reachable from another module, so `pub` there
+    // would mean nothing (items.md, "Tests"). The alias wraps the whole
+    // rule, which is why the function itself is a rule of its own.
+    _test_helper_item: $ => alias($._test_helper_fn, $.function_item),
+
+    _test_helper_fn: $ => seq(
+      optional(choice('unsafe', 'comp')),
+      'fn',
+      field('name', $.identifier),
+      optional(field('type_parameters', $.type_parameters)),
+      field('parameters', $.parameters),
+      optional(field('return_type', $.return_type)),
+      field('body', $.block),
     ),
 
     return_type: $ => seq('->', field('type', $._type)),

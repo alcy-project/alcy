@@ -688,3 +688,189 @@ fn log(comp fmt: str, args: ..) -> i32 {
     (block
       (return_expression
         (integer)))))
+
+================================================================================
+A test block with one entry
+================================================================================
+
+test {
+  test adds() {
+    assert(true)
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_block_item
+    (test_entry_item
+      (identifier)
+      (block
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (boolean)))))))
+
+================================================================================
+A test block holds the helpers its entries share
+================================================================================
+
+test {
+  test adds() {
+    assert_eq(twice(2), 4)
+  }
+
+  fn assert_eq(left: i64, right: i64) {
+    if left != right {
+      panic("not equal")
+    }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_block_item
+    (test_entry_item
+      (identifier)
+      (block
+        (call_expression
+          (path_expression
+            (path
+              (identifier)))
+          (arguments
+            (call_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (arguments
+                (integer)))
+            (integer)))))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (primitive_type))
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (primitive_type)))
+      (block
+        (if_expression
+          (comparison_expression
+            (path_expression
+              (path
+                (identifier)))
+            (path_expression
+              (path
+                (identifier))))
+          (block
+            (call_expression
+              (path_expression
+                (path
+                  (identifier)))
+              (arguments
+                (string)))))))))
+
+================================================================================
+A test block sits among the module's other items
+================================================================================
+
+const TWICE: i64 = 2
+
+test {
+  test adds() {
+  }
+}
+
+fn main() -> i32 {
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (const_item
+    (identifier)
+    (primitive_type)
+    (integer))
+  (test_block_item
+    (test_entry_item
+      (identifier)
+      (block)))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))
+
+================================================================================
+A test entry may declare a return type
+================================================================================
+
+test {
+  test gives_a_value() -> i32 {
+    ret 1
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_block_item
+    (test_entry_item
+      (identifier)
+      (return_type
+        (primitive_type))
+      (block
+        (return_expression
+          (integer))))))
+
+================================================================================
+A test block does not nest
+================================================================================
+
+test {
+  test one() {
+  }
+
+  test {
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_block_item
+    (test_entry_item
+      (identifier)
+      (block))
+    (ERROR))
+  (ERROR))
+
+================================================================================
+A test entry takes no arguments
+================================================================================
+
+test {
+  test one(n: i32) {
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_block_item
+    (test_entry_item
+      (identifier)
+      (ERROR
+        (identifier)
+        (primitive_type))
+      (block))))

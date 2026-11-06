@@ -30,14 +30,14 @@ empty, and the file says why.
 These live in `src/scanner.c`.
 
 **The brace that opens a block.** The specification requires the `{` of
-`if`, `while`, `match`, `loop`, `for`, `fn`, `impl`, `struct`, `enum`,
-`spec`, `extern`, `comp`, `unsafe`, and `else` to stay on the line of the
-header it belongs to. That brace is `_block_lbrace`, and the scanner
-produces it only when no newline stands between the header and the brace,
-and asks for it before any other token. So in a header position it wins
-over the plain `{` a struct literal would use, which keeps `if c { }` a
-block rather than a struct literal on `c` and makes parentheses the way to
-lift that ban, as the specification says they are.
+`if`, `while`, `match`, `loop`, `for`, `fn`, `test`, `impl`, `struct`,
+`enum`, `spec`, `extern`, `comp`, `unsafe`, and `else` to stay on the
+line of the header it belongs to. That brace is `_block_lbrace`, and the
+scanner produces it only when no newline stands between the header and
+the brace, and asks for it before any other token. So in a header
+position it wins over the plain `{` a struct literal would use, which
+keeps `if c { }` a block rather than a struct literal on `c` and makes
+parentheses the way to lift that ban, as the specification says they are.
 
 A block used as an expression in its own right has no header, so its brace
 is an ordinary one and `{ ... }` on a line of its own is a block-valued
@@ -88,7 +88,7 @@ One place reads wider by design: a parenthesized expression is a node.
 `(a)` wraps rather than yielding its contents unchanged, and the braces it
 lifts are the reason it is worth having.
 
-Two places read narrower:
+Three places read narrower:
 
 - **A float needs a digit after the point.** `1..<2` must not reach for the
   second `.`, and asking for one digit is what keeps it from doing so. The
@@ -96,6 +96,11 @@ Two places read narrower:
 - **A block opener on a following line.** The specification forbids it, so
   `if c` and a `{` on the next line is an `ERROR` node, as it is a
   diagnostic in the compiler.
+- **The body of a `test` block.** It reads the two item kinds the
+  specification gives it, a test entry and a helper `fn`, and nothing
+  `pub`. The compiler reuses the module's item list there, so it also
+  takes a `struct` or a `use` inside a block. Both readings that are
+  errors on either side are pinned by a corpus case.
 
 ## Reserved words
 

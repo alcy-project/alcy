@@ -10,6 +10,7 @@
 (function_item name: (identifier) @function)
 (intrinsic_fn_item name: (identifier) @function)
 (extern_fn_item name: (identifier) @function)
+(test_entry_item name: (identifier) @function)
 (spec_method name: (identifier) @function.method)
 (method_call_expression name: (identifier) @function.method)
 
@@ -43,6 +44,7 @@
   "static"
   "const"
   "use"
+  "test"
 ] @keyword
 
 ; `pub` is a named node of its own, so it is captured by name rather than
