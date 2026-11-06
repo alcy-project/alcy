@@ -1,0 +1,14 @@
+[package]
+name = "test-single-thread-fail"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "test-single-thread-fail"
+path = "main.al"

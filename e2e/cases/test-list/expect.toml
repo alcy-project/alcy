@@ -1,0 +1,4 @@
+exit = 0
+subcommand = "test"
+args = ["--list"]
+contains = ["main::adds", "util::doubles"]

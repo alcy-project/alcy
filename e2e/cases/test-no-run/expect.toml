@@ -1,0 +1,7 @@
+exit = 0
+subcommand = "test"
+args = ["--no-run"]
+# The program the tests became is built and then left to be run by hand,
+# so the run's own verdict lines are absent.
+contains = ["Built     out/test-no-run-test"]
+not_contains = ["tests passed", " ok"]

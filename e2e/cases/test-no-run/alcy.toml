@@ -1,0 +1,14 @@
+[package]
+name = "test-no-run"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "test-no-run"
+path = "main.al"

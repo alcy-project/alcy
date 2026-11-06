@@ -1,0 +1,7 @@
+exit = 0
+subcommand = "test"
+args = ["--no-run", "--filter", "nothing-matches"]
+# A filter says what executes, not what compiles: the run selected nothing
+# and still built the program the package's tests became.
+contains = ["Built     out/test-filter-none-test"]
+not_contains = ["tests passed", "running 0 tests"]

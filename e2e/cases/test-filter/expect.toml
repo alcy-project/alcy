@@ -1,0 +1,4 @@
+exit = 0
+subcommand = "test"
+args = ["--filter", "doubles"]
+contains = ["running 1 test (package test-filter)", "test util::doubles ... ok", "1 test passed"]

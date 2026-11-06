@@ -1,0 +1,14 @@
+[package]
+name = "test-json-capture"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "test-json-capture"
+path = "main.al"

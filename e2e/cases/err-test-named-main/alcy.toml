@@ -1,0 +1,14 @@
+[package]
+name = "err-test-named-main"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "err-test-named-main"
+path = "main.al"

@@ -1,0 +1,3 @@
+exit = 4
+subcommand = "test"
+contains = ["Type mismatch in boolean literal"]

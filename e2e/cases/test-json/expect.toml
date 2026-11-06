@@ -1,0 +1,4 @@
+exit = 0
+subcommand = "test"
+args = ["--json"]
+contains = ["\"outcome\":\"tested\"", "\"tests\":2", "\"test_failures\":0"]

@@ -1,0 +1,8 @@
+# A suite names the packages that carry tests; it does not carry them
+# itself, so `alcy test` refuses one. See ADR-0139.
+[suite]
+name = "sample"
+license = ""
+owner = "case"
+
+packages = ["main"]

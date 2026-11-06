@@ -1,0 +1,14 @@
+[package]
+name = "main"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+name = "main"
+path = "main.al"

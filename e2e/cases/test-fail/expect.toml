@@ -1,0 +1,8 @@
+exit = 1
+subcommand = "test"
+contains = [
+  "test main::passing ... ok",
+  "test main::failing ... FAILED",
+  "1 test passed",
+  "1 test failed",
+]

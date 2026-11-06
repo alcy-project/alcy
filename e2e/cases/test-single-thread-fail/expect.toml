@@ -1,0 +1,8 @@
+exit = 1
+subcommand = "test"
+args = ["--execution=single-thread"]
+# In one process the child is the only witness to where the run stopped, so
+# it says which test it is about to run and the report says the rest have no
+# verdict.
+contains = ["alcy-test: running main::fails", "the run stopped before every test finished"]
+not_contains = ["alcy-test: running main::later", "tests passed"]
