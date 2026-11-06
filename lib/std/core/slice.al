@@ -143,14 +143,18 @@ impl<T>[T] {
     ret Option::Some(unsafe { slice_at_mut(self, n - 1) })
   }
 
-  // The views before and after `at`. The caller knows `at` is a
-  // boundary it chose, so it must not exceed the length.
+  // The views before and after `at`. `at` may equal the length, which
+  // leaves the tail empty; a larger boundary panics.
   pub fn split_at(self: &Self, at: usize) -> (&[T], &[T]) {
-    if at >= slice_len(self) {
+    n := slice_len(self)
+    if at > n {
+      panic("slice split out of bounds")
+    }
+    if at == n {
       ret (self, unsafe { slice_from_parts(slice_at(self, 0), 0) })
     }
     head := unsafe { slice_from_parts(slice_at(self, 0), at) }
-    tail := unsafe { slice_from_parts(slice_at(self, at), slice_len(self) - at) }
+    tail := unsafe { slice_from_parts(slice_at(self, at), n - at) }
     ret (head, tail)
   }
 
