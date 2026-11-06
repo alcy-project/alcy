@@ -907,18 +907,24 @@ class RuntimeBuilder {
     return builder_.CreateLoad(builder_.getPtrTy(), slot, "entries");
   }
 
-  // One table lookup: the name and length of the entry with the
+  // One table lookup: the name, length and start of the entry with the
   // greatest start below `pc` and in range, or null and zero. Builds
   // its own scan loop and leaves the insert point past it. The caller
   // only looks up a table it defined beside the function table, so
-  // entries is never null where this runs.
+  // entries is never null where this runs. With `lowest` set, only the
+  // entries whose start is at or above it count: a call site lies in the
+  // text of the function that holds the call, so the site a frame reads
+  // is above the start of the function the frame matched.
   struct TableMatch {
     llvm::Value* name = nullptr;
     llvm::Value* len = nullptr;
     llvm::BasicBlock* matched = nullptr;
+    llvm::Value* start = nullptr;
   };
 
-  TableMatch build_table_lookup(llvm::Value* pc, llvm::Value* entries) {
+  TableMatch build_table_lookup(llvm::Value* pc,
+                                llvm::Value* entries,
+                                llvm::Value* lowest = nullptr) {
     llvm::LLVMContext& context = module_.getContext();
     llvm::Type* ptr = builder_.getPtrTy();
     llvm::StructType* entry_type =
@@ -969,6 +975,12 @@ class RuntimeBuilder {
         builder_.CreateSub(pc_word, start_word),
         llvm::ConstantInt::get(usize_, MAX_BACKTRACE_DISTANCE), "near");
     llvm::Value* candidate = builder_.CreateAnd(after, near, "candidate");
+    if (lowest != nullptr) {
+      llvm::Value* above = builder_.CreateICmpUGE(
+          start_word, builder_.CreatePtrToInt(lowest, usize_, "low_word"),
+          "above");
+      candidate = builder_.CreateAnd(candidate, above, "candidate");
+    }
     llvm::Value* closer = builder_.CreateICmpUGT(
         start_word, builder_.CreatePtrToInt(best_start, usize_, "best_word"),
         "closer");
@@ -983,7 +995,7 @@ class RuntimeBuilder {
     builder_.CreateBr(scan);
 
     builder_.SetInsertPoint(matched);
-    return {best_name, best_len, matched};
+    return {best_name, best_len, matched, best_start};
   }
 
   // Walks the frame chain outward from `alcy_panic` and prints one line
@@ -1066,8 +1078,12 @@ class RuntimeBuilder {
         "show");
     builder_.CreateCondBr(show, site, next_frame);
 
+    // The frame reads only the calls its own function made. The site
+    // table spans the module, and the nearest entry below a return
+    // address can be a call another function made, so the lookup starts
+    // no lower than the function the frame matched.
     builder_.SetInsertPoint(site);
-    TableMatch at = build_table_lookup(pc, site_entries);
+    TableMatch at = build_table_lookup(pc, site_entries, frame.start);
     builder_.CreateBr(print);
 
     builder_.SetInsertPoint(print);

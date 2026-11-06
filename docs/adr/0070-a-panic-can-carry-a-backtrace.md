@@ -112,6 +112,20 @@ unreachable there and `--on-panic` is the whole override.
   call on every backend including wasm. The frame walk covers the
   native crashes that need reading first.
 
+## Amendments
+
+**A frame reads only the call sites of its own function.** The site
+lookup starts no lower than the function the frame matched, so the
+nearest entry below a return address counts only when it also lies above
+that function's start. The distance alone is not enough: a call site's
+block address sits in the text of the function that holds the call, and
+a program function that records no call of its own — every checked
+arithmetic, division, and bounds abort, whose check the emitter calls
+inline — had the nearest start below its return address supplied by an
+unrelated function, so the frame printed that function's call site as
+its own. A frame with no recorded call now prints its name alone, the
+form the decision gives a frame whose call site it does not know.
+
 ## Reference
 
 - `src/codegen_llvm/llvm_ir_emitter.{h,cc}`: `BacktraceName`,
