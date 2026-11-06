@@ -36,3 +36,60 @@ pub intrinsic fn wrapping_add<T>(a: T, b: T) -> T;
 pub intrinsic fn wrapping_sub<T>(a: T, b: T) -> T;
 
 pub intrinsic fn wrapping_mul<T>(a: T, b: T) -> T;
+
+// A module's own tests: 'alcy test' splices the block into a driver and
+// runs each entry as a process of its own.
+test {
+  test a_byte_holds_one_byte() {
+    assert(size_of::<u8>() == 1, "the unit of size is the byte")
+  }
+
+  test an_i32_holds_four_bytes() {
+    assert(size_of::<i32>() == 4, "four bytes, as the width says")
+  }
+
+  test an_i64_holds_twice_an_i32() {
+    assert(size_of::<i64>() == 2 * size_of::<i32>(), "the wider integer is twice as wide")
+  }
+
+  test an_array_holds_all_its_elements() {
+    assert(size_of::<[i32; 3]>() == 3 * size_of::<i32>(), "three elements, three times the element")
+  }
+
+  test an_i32_sits_on_a_four_byte_boundary() {
+    assert(align_of::<i32>() == 4, "the alignment matches the width")
+  }
+
+  test a_byte_sits_on_a_one_byte_boundary() {
+    assert(align_of::<u8>() == 1, "a byte needs no padding")
+  }
+
+  test wrapping_add_rolls_a_byte_over() {
+    assert(wrapping_add(255u8, 1u8) == 0u8, "the sum is taken modulo 256")
+  }
+
+  test wrapping_sub_rolls_a_byte_under() {
+    assert(wrapping_sub(0u8, 1u8) == 255u8, "the difference is taken modulo 256")
+  }
+
+  test wrapping_mul_keeps_the_low_byte() {
+    assert(wrapping_mul(200u8, 2u8) == 144u8, "the product is taken modulo 256")
+  }
+
+  test wrapping_add_rolls_an_i32_to_its_minimum() {
+    assert(
+      wrapping_add(2147483647i32, 1i32) == 0i32 - 2147483647i32 - 1i32,
+      "one past the maximum is the minimum",
+    )
+  }
+
+  test wrapping_add_of_values_that_fit_is_plain_addition() {
+    assert(wrapping_add(2u8, 3u8) == 5u8, "no wrap happens below the limit")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

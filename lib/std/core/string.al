@@ -645,3 +645,453 @@ impl Iterator < str > for SplitIter {
     }
   }
 }
+
+// A module's own tests: 'alcy test' splices the block into a driver and
+// runs each entry as a process of its own.
+test {
+  test an_empty_text_holds_no_bytes() {
+    assert("".len_bytes() == 0, "there are no bytes to count")
+    assert("".is_empty(), "a view of no bytes is empty")
+  }
+
+  test one_letter_is_one_byte() {
+    assert("a".len_bytes() == 1, "an ASCII letter is one byte")
+    assert(!"a".is_empty(), "one byte is not nothing")
+  }
+
+  test len_bytes_counts_bytes_and_not_scalars() {
+    assert("日本".len_bytes() == 6, "two three-byte scalars are six bytes")
+  }
+
+  test byte_reads_the_byte_at_each_end() {
+    assert("abc".byte(0) == 0x61u8, "the first byte is the first letter")
+    assert("abc".byte(2) == 0x63u8, "the last byte of a three-byte view sits at two")
+  }
+
+  test byte_slice_past_the_end_clamps_to_the_end() {
+    assert("abc".byte_slice(1, 99) == "bc", "an end past the view stops at the view")
+    assert("abc".byte_slice(99, 100) == "", "a start past the view leaves nothing")
+  }
+
+  test byte_slice_with_the_ends_swapped_is_empty() {
+    assert("abc".byte_slice(2, 1) == "", "an end before the start names no bytes")
+  }
+
+  test is_char_boundary_accepts_the_start_and_the_end() {
+    assert("日本".is_char_boundary(0), "the first byte begins a scalar")
+    assert("日本".is_char_boundary(6), "the position past the last byte is a boundary")
+  }
+
+  test is_char_boundary_rejects_a_continuation_byte() {
+    assert(!"日本".is_char_boundary(1), "the second byte of a scalar continues it")
+    assert(!"日本".is_char_boundary(2), "the third byte of a scalar continues it")
+    assert("日本".is_char_boundary(3), "the next scalar starts at three")
+  }
+
+  test starts_with_a_matching_prefix() {
+    assert("hello".starts_with("he"), "the first two bytes are the prefix")
+    assert("hello".starts_with("hello"), "a view starts with itself")
+  }
+
+  test starts_with_of_a_missing_prefix_is_false() {
+    assert(!"hello".starts_with("hi"), "a differing byte ends the match")
+    assert(!"he".starts_with("hello"), "a longer prefix does not fit")
+  }
+
+  test the_empty_prefix_matches_every_text() {
+    assert("hello".starts_with(""), "an empty prefix asks for no byte")
+  }
+
+  test ends_with_a_matching_suffix() {
+    assert("hello".ends_with("lo"), "the last two bytes are the suffix")
+    assert("hello".ends_with("hello"), "a view ends with itself")
+  }
+
+  test ends_with_of_a_missing_suffix_is_false() {
+    assert(!"hello".ends_with("no"), "a differing byte ends the match")
+    assert(!"lo".ends_with("hello"), "a longer suffix does not fit")
+  }
+
+  test the_empty_suffix_matches_every_text() {
+    assert("hello".ends_with(""), "an empty suffix asks for no byte")
+  }
+
+  test strip_prefix_removes_a_prefix_it_finds() {
+    rest := "hello".strip_prefix("he").or_panic_with_message("the view starts with he")
+    assert(rest == "llo", "what follows the prefix is the rest")
+  }
+
+  test strip_prefix_of_a_miss_is_none() {
+    assert("hello".strip_prefix("hi").is_none(), "a view without the prefix has no rest")
+  }
+
+  test strip_prefix_of_the_whole_text_is_empty() {
+    rest := "hello".strip_prefix("hello").or_panic_with_message("a view starts with itself")
+    assert(rest == "", "nothing follows a prefix that is the whole view")
+  }
+
+  test strip_prefix_of_an_empty_prefix_is_the_whole_text() {
+    rest := "hello".strip_prefix("").or_panic_with_message("an empty prefix always matches")
+    assert(rest == "hello", "an empty prefix strips nothing")
+  }
+
+  test strip_suffix_removes_a_suffix_it_finds() {
+    rest := "hello".strip_suffix("lo").or_panic_with_message("the view ends with lo")
+    assert(rest == "hel", "what precedes the suffix is the rest")
+  }
+
+  test strip_suffix_of_a_miss_is_none() {
+    assert("hello".strip_suffix("no").is_none(), "a view without the suffix has no front")
+  }
+
+  test strip_suffix_of_the_whole_text_is_empty() {
+    rest := "hello".strip_suffix("hello").or_panic_with_message("a view ends with itself")
+    assert(rest == "", "nothing precedes a suffix that is the whole view")
+  }
+
+  test contains_finds_a_needle_in_the_middle() {
+    assert("banana".contains("nan"), "the needle spans the middle bytes")
+  }
+
+  test contains_of_an_absent_needle_is_false() {
+    assert(!"banana".contains("zz"), "no byte of the needle appears")
+  }
+
+  test the_empty_needle_is_contained_everywhere() {
+    assert("banana".contains(""), "an empty needle asks for no byte")
+    assert("".contains(""), "even a view of no bytes has the empty needle at its start")
+  }
+
+  test find_reports_the_first_byte_offset() {
+    at := "banana".find("na").or_panic_with_message("the needle is there")
+    assert(at == 2, "the first na starts at two")
+  }
+
+  test find_of_an_absent_needle_is_none() {
+    assert("banana".find("zz").is_none(), "a needle that never appears has no offset")
+  }
+
+  test find_of_the_empty_needle_is_zero() {
+    at := "banana".find("").or_panic_with_message("an empty needle is at the start")
+    assert(at == 0, "an empty needle appears before the first byte")
+  }
+
+  test find_from_starts_the_search_at_the_offset() {
+    at := "banana".find_from(3, "na").or_panic_with_message("the second na is there")
+    assert(at == 4, "the search skips the match before from")
+  }
+
+  test find_from_past_the_end_of_an_empty_needle_is_none() {
+    assert("banana".find_from(7, "").is_none(), "a position past the view names nothing")
+  }
+
+  test find_from_at_the_end_of_an_empty_needle_is_the_end() {
+    at := "banana".find_from(6, "").or_panic_with_message("the end is within the view")
+    assert(at == 6, "an empty needle at the end sits past the last byte")
+  }
+
+  test find_byte_reports_the_first_index() {
+    at := "banana".find_byte(0x6eu8).or_panic_with_message("the byte is there")
+    assert(at == 2, "the first n sits at two")
+  }
+
+  test find_byte_of_an_absent_byte_is_none() {
+    assert("banana".find_byte(0x7au8).is_none(), "a byte the view lacks has no index")
+  }
+
+  test rfind_reports_the_last_offset() {
+    at := "banana".rfind("na").or_panic_with_message("the needle is there")
+    assert(at == 4, "the last na starts at four")
+  }
+
+  test rfind_of_an_absent_needle_is_none() {
+    assert("banana".rfind("zz").is_none(), "a needle that never appears has no offset")
+  }
+
+  test rfind_of_the_empty_needle_is_the_end() {
+    at := "banana".rfind("").or_panic_with_message("an empty needle is at the end")
+    assert(at == 6, "an empty needle sits past the last byte")
+  }
+
+  test rfind_byte_reports_the_last_index() {
+    at := "banana".rfind_byte(0x6eu8).or_panic_with_message("the byte is there")
+    assert(at == 4, "the last n sits at four")
+  }
+
+  test rfind_byte_of_an_absent_byte_is_none() {
+    assert("banana".rfind_byte(0x7au8).is_none(), "a byte the view lacks has no index")
+  }
+
+  test split_once_reports_the_bytes_either_side() {
+    (key, value) := "key=value".split_once("=").or_panic_with_message("the delimiter is there")
+    assert(key == "key", "the first piece precedes the delimiter")
+    assert(value == "value", "the second piece follows it")
+  }
+
+  test split_once_without_the_delimiter_is_none() {
+    assert("key".split_once("=").is_none(), "a view without the delimiter does not split")
+  }
+
+  test split_once_of_an_empty_delimiter_splits_at_the_start() {
+    (empty, rest) :=
+      "key"
+      .split_once("")
+      .or_panic_with_message("an empty delimiter is at the start")
+    assert(empty == "", "nothing precedes a delimiter at the start")
+    assert(rest == "key", "the whole view follows it")
+  }
+
+  test split_yields_the_pieces_in_order() {
+    mut it := "a,b,c".split(",")
+    assert(
+      it.next().or_panic_with_message("three pieces") == "a",
+      "the first piece precedes the first delimiter",
+    )
+    assert(
+      it.next().or_panic_with_message("two more pieces") == "b",
+      "the middle piece lies between the delimiters",
+    )
+    assert(
+      it.next().or_panic_with_message("one more piece") == "c",
+      "the last piece follows the last delimiter",
+    )
+    assert(it.next().is_none(), "the cursor is spent after the last piece")
+  }
+
+  test split_without_the_delimiter_yields_the_whole_view() {
+    mut it := "abc".split(",")
+    assert(
+      it.next().or_panic_with_message("one piece") == "abc",
+      "a view with no delimiter is one piece",
+    )
+    assert(it.next().is_none(), "the cursor is spent after it")
+  }
+
+  test split_of_an_empty_delimiter_yields_the_whole_view_once() {
+    mut it := "abc".split("")
+    assert(
+      it.next().or_panic_with_message("one piece") == "abc",
+      "an empty delimiter separates nothing",
+    )
+    assert(it.next().is_none(), "the cursor advances instead of repeating")
+  }
+
+  test split_of_an_empty_text_yields_one_empty_piece() {
+    mut it := "".split(",")
+    assert(
+      it.next().or_panic_with_message("one piece") == "",
+      "a view of no bytes is one empty piece",
+    )
+    assert(it.next().is_none(), "the cursor is spent after it")
+  }
+
+  test split_whitespace_skips_runs_of_space() {
+    mut it := "  a \t b  ".split_whitespace()
+    assert(it.next().or_panic_with_message("two tokens") == "a", "leading runs are skipped")
+    assert(
+      it.next().or_panic_with_message("one more token") == "b",
+      "the run between tokens is skipped",
+    )
+    assert(it.next().is_none(), "the trailing run yields no token")
+  }
+
+  test split_whitespace_of_a_blank_text_yields_nothing() {
+    assert("   \t ".split_whitespace().next().is_none(), "whitespace alone is no token")
+  }
+
+  test lines_separates_on_newline() {
+    mut it := "a\nb".lines()
+    assert(
+      it.next().or_panic_with_message("two lines") == "a",
+      "the first line stops at the newline",
+    )
+    assert(it.next().or_panic_with_message("one more line") == "b", "the last line runs to the end")
+    assert(it.next().is_none(), "the cursor is spent after the last line")
+  }
+
+  test a_trailing_newline_does_not_yield_a_final_empty_line() {
+    mut it := "a\n".lines()
+    assert(it.next().or_panic_with_message("one line") == "a", "the newline ends the last line")
+    assert(it.next().is_none(), "what follows the newline is not a line")
+  }
+
+  test a_trailing_carriage_return_is_dropped() {
+    mut it := "a\r\nb".lines()
+    assert(
+      it.next().or_panic_with_message("two lines") == "a",
+      "the carriage return before the newline goes",
+    )
+    assert(it.next().or_panic_with_message("one more line") == "b", "the later line is untouched")
+  }
+
+  test a_blank_text_yields_no_lines() {
+    assert("".lines().next().is_none(), "a view of no bytes has no line")
+  }
+
+  test bytes_yields_each_byte_in_order() {
+    mut it := "abc".bytes()
+    assert(
+      it.next().or_panic_with_message("three bytes") == 0x61u8,
+      "the first byte is the first letter",
+    )
+    assert(
+      it.next().or_panic_with_message("two more bytes") == 0x62u8,
+      "the second byte follows it",
+    )
+    assert(
+      it.next().or_panic_with_message("one more byte") == 0x63u8,
+      "the third byte is the last letter",
+    )
+    assert(it.next().is_none(), "the cursor is spent after the last byte")
+  }
+
+  test bytes_of_a_multibyte_text_yields_every_byte() {
+    mut n := 0 as usize
+    for _ in "日本".bytes() {
+      n = n + 1
+    }
+    assert(n == 6, "a cursor over bytes never groups a scalar")
+  }
+
+  test trim_removes_space_at_both_ends() {
+    assert("  a b  ".trim() == "a b", "only the space outside the text goes")
+  }
+
+  test trim_start_removes_only_the_leading_space() {
+    assert(" a ".trim_start() == "a ", "the trailing space stays")
+  }
+
+  test trim_end_removes_only_the_trailing_space() {
+    assert(" a ".trim_end() == " a", "the leading space stays")
+  }
+
+  test trim_strips_every_ascii_space_byte() {
+    assert("\t\n\r a \r\n\t".trim() == "a", "tab, newline, and carriage return are whitespace too")
+  }
+
+  test trim_of_a_blank_text_is_empty() {
+    assert(" \t\n\r".trim() == "", "a view of whitespace alone trims to nothing")
+  }
+
+  test trim_of_a_text_with_no_space_is_the_text() {
+    assert("abc".trim() == "abc", "nothing outside the text is there to remove")
+  }
+
+  test trim_start_matches_removes_every_leading_hit() {
+    assert("xxyxx".trim_start_matches("xx") == "yxx", "the whole leading run goes")
+    assert("ababab".trim_start_matches("ab") == "", "the text can be a run all the way through")
+  }
+
+  test trim_end_matches_removes_every_trailing_hit() {
+    assert("xxyxx".trim_end_matches("xx") == "xxy", "the whole trailing run goes")
+  }
+
+  test trim_start_matches_of_an_empty_pattern_is_the_whole_text() {
+    assert("abc".trim_start_matches("") == "abc", "an empty pattern would never advance")
+  }
+
+  test trim_end_matches_of_an_empty_pattern_is_the_whole_text() {
+    assert("abc".trim_end_matches("") == "abc", "an empty pattern would never advance")
+  }
+
+  test eq_ignore_ascii_case_matches_text_that_differs_in_case() {
+    assert("Hello".eq_ignore_ascii_case("hELLO"), "each ASCII letter folds to one case")
+  }
+
+  test eq_ignore_ascii_case_of_a_different_length_is_false() {
+    assert(!"abc".eq_ignore_ascii_case("ab"), "views of different lengths differ")
+  }
+
+  test eq_ignore_ascii_case_of_a_different_letter_is_false() {
+    assert(
+      !"abc".eq_ignore_ascii_case("abd"),
+      "a letter that folds to neither case decides the answer",
+    )
+  }
+
+  test eq_ignore_ascii_case_folds_only_ascii() {
+    assert(!"É".eq_ignore_ascii_case("é"), "a non-ASCII letter keeps its byte")
+  }
+
+  test is_ascii_of_plain_text_is_true() {
+    assert("hello ~".is_ascii(), "every byte of the text is below 0x80")
+    assert("".is_ascii(), "a view of no bytes has no byte above 0x80")
+  }
+
+  test is_ascii_of_multibyte_text_is_false() {
+    assert(!"日本".is_ascii(), "a scalar above 0x7f spells a byte above 0x80")
+  }
+
+  test split_at_reports_the_bytes_either_side() {
+    (head, tail) := "abcdef".split_at(3)
+    assert(head == "abc", "the head runs up to the offset")
+    assert(tail == "def", "the tail starts at the offset")
+  }
+
+  test split_at_zero_puts_the_whole_text_in_the_tail() {
+    (head, tail) := "abcdef".split_at(0)
+    assert(head == "", "no byte precedes zero")
+    assert(tail == "abcdef", "the tail is the whole view")
+  }
+
+  test split_at_the_end_puts_the_whole_text_in_the_head() {
+    (head, tail) := "abcdef".split_at(6)
+    assert(head == "abcdef", "the head is the whole view")
+    assert(tail == "", "no byte follows the end")
+  }
+
+  test count_reports_each_occurrence() {
+    assert("banana".count("a") == 3, "every a is counted")
+    assert("banana".count("na") == 2, "a multi-byte needle counts the same way")
+  }
+
+  test count_of_a_missing_needle_is_zero() {
+    assert("banana".count("zz") == 0, "a needle that never appears counts nothing")
+    assert("".count("a") == 0, "a view of no bytes holds no occurrence")
+  }
+
+  test count_does_not_overlap_its_hits() {
+    assert("aaa".count("aa") == 1, "the hit consumes the bytes it matched")
+  }
+
+  test count_of_an_empty_needle_counts_the_gaps() {
+    assert("abc".count("") == 4, "an empty needle sits before, between, and after the bytes")
+    assert("".count("") == 1, "the one gap of an empty view is its start")
+  }
+
+  test count_byte_reports_each_occurrence() {
+    assert("banana".count_byte(0x61u8) == 3, "every a is counted")
+  }
+
+  test count_byte_of_an_absent_byte_is_zero() {
+    assert("banana".count_byte(0x7au8) == 0, "a byte the view lacks counts nothing")
+  }
+
+  test count_matches_does_not_overlap_its_hits() {
+    assert("aaa".count_matches("aa") == 1, "the hit consumes the bytes it matched")
+    assert("aaaa".count_matches("aa") == 2, "the next hit starts after the first")
+  }
+
+  test count_matches_of_an_empty_needle_is_zero() {
+    assert("abc".count_matches("") == 0, "an empty needle never advances")
+  }
+
+  test count_chars_counts_scalars_rather_than_bytes() {
+    assert("日本語".count_chars() == 3, "three three-byte scalars are three characters")
+    assert("hello".count_chars() == 5, "an ASCII letter is a character of its own")
+    assert("".count_chars() == 0, "a view of no bytes holds no character")
+  }
+
+  test count_chars_counts_a_truncated_sequence_once() {
+    assert(
+      str_slice("日", 0, 1).count_chars() == 1,
+      "an ill-formed subsequence is one replacement unit",
+    )
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

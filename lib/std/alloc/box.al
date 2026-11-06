@@ -50,3 +50,36 @@ impl<T> Box<T> {
     unsafe { dealloc(self.cell, 1) }
   }
 }
+
+test {
+  test a_new_box_holds_the_value_it_was_built_from() {
+    b := Box::<i32>::new(42)
+    assert(*b.get() == 42, "the box reads back the value it was built from")
+  }
+
+  test get_mut_writes_through_to_the_value() {
+    mut b := Box::<i32>::new(1)
+    slot := b.get_mut()
+    *slot = 2
+    assert(*b.get() == 2, "the write lands in the box's own value")
+  }
+
+  test into_inner_reads_the_value_out() {
+    b := Box::<i32>::new(7)
+    assert(b.into_inner() == 7, "the value comes back out of the handle")
+  }
+
+  test a_box_carries_a_value_that_is_not_a_scalar() {
+    mut b := Box::<Vec<i32>>::new(Vec::<i32>::new())
+    held := b.get_mut()
+    held.push(5)
+    inner := b.into_inner()
+    assert(inner.len() == 1, "the boxed vec keeps what was pushed into it")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

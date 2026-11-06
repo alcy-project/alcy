@@ -65,3 +65,37 @@ pub fn valid(text: str) -> bool {
   }
   ret true
 }
+
+// A module's own tests: `alcy test` splices the block into a driver and
+// runs each entry as a process of its own.
+test {
+  test empty_text_is_valid() {
+    assert(valid(""), "no bytes decode")
+  }
+
+  test ascii_is_valid() {
+    assert(valid("hello"), "every byte is a scalar of its own")
+  }
+
+  test multibyte_is_valid() {
+    assert(valid("日本語"), "three scalars of three bytes each")
+  }
+
+  test a_truncated_sequence_is_not_valid() {
+    assert(!valid(str_slice("日本", 0, 1)), "a lead byte alone decodes nothing")
+  }
+
+  test a_sequence_that_starts_on_a_continuation_is_not_valid() {
+    assert(!valid(str_slice("日本", 1, 3)), "no scalar has a continuation lead")
+  }
+
+  test the_first_scalar_alone_is_valid() {
+    assert(valid(str_slice("日本語", 0, 3)), "the slice stops on a boundary")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

@@ -161,3 +161,134 @@ impl BufReader {
     ret Result::Ok(out)
   }
 }
+
+test {
+  test a_reader_holds_its_capacity_as_bytes_from_the_start() {
+    r := BufReader::new(Fd::from_raw(-1), 4)
+    assert(r.buf.len_bytes() == 4, "four bytes exist to read into")
+    assert(r.buf.byte(0) == 0u8, "the first is zeroed")
+    assert(r.buf.byte(3) == 0u8, "the last is zeroed")
+    assert(r.pos == 0, "nothing is consumed")
+    assert(r.len == 0, "nothing is read")
+  }
+
+  test a_zero_capacity_still_holds_one_byte() {
+    r := BufReader::new(Fd::from_raw(-1), 0)
+    assert(r.buf.len_bytes() == 1, "a read always has a byte to land in")
+  }
+
+  test read_byte_consumes_the_buffered_bytes_in_order() {
+    mut r := buffered("ab")
+    assert(next_byte(&mut r) == 0x61u8, "the first byte is a")
+    assert(r.pos == 1, "one byte is consumed")
+    assert(next_byte(&mut r) == 0x62u8, "the second byte is b")
+    assert(r.pos == 2, "two bytes are consumed")
+  }
+
+  test peek_byte_leaves_the_position_where_it_was() {
+    mut r := buffered("ab")
+    assert(peeked_byte(&mut r) == 0x61u8, "the first byte is a")
+    assert(peeked_byte(&mut r) == 0x61u8, "a second peek sees the same byte")
+    assert(r.pos == 0, "nothing is consumed")
+    assert(next_byte(&mut r) == 0x61u8, "the peeked byte is still the next one")
+  }
+
+  test a_line_drops_the_newline_that_ends_it() {
+    mut r := buffered("ab\ncd\n")
+    first := line(&mut r)
+    assert(first.as_str() == "ab", "the newline is not part of the line")
+    assert(r.pos == 3, "the reader stops after the newline")
+    second := line(&mut r)
+    assert(second.as_str() == "cd", "the rest of the buffer is the next line")
+  }
+
+  test a_line_drops_one_carriage_return_before_the_newline() {
+    mut r := buffered("ab\r\n")
+    got := line(&mut r)
+    assert(got.as_str() == "ab", "the pair ends the line and neither byte is in it")
+  }
+
+  test a_line_keeps_a_carriage_return_that_is_not_the_last_byte() {
+    mut r := buffered("a\r\r\n")
+    got := line(&mut r)
+    assert(got.as_str() == "a\r", "only one carriage return goes with the newline")
+  }
+
+  test an_empty_line_is_a_line() {
+    mut r := buffered("\n")
+    got := line(&mut r)
+    assert(got.len_bytes() == 0, "the line is there and empty")
+  }
+
+  // A reader whose buffer holds `bytes`: the buffered part is read
+  // without a descriptor, so `fill` is never reached.
+  fn buffered(bytes: str) -> BufReader {
+    n := bytes.len_bytes()
+    buf := String::from(bytes)
+    ret BufReader { fd: Fd::from_raw(-1), buf: buf, pos: 0, len: n }
+  }
+
+  fn next_byte(r: &mut BufReader) -> u8 {
+    mut out := 0u8
+    match r.read_byte() {
+      Result::Ok(v) => {
+        match v {
+          Option::Some(b) => {
+            out = b
+          }
+          Option::None => {
+            panic("a buffered byte was expected")
+          }
+        }
+      }
+      Result::Err(_) => {
+        panic("a buffered byte needs no read")
+      }
+    }
+    ret out
+  }
+
+  fn peeked_byte(r: &mut BufReader) -> u8 {
+    mut out := 0u8
+    match r.peek_byte() {
+      Result::Ok(v) => {
+        match v {
+          Option::Some(b) => {
+            out = b
+          }
+          Option::None => {
+            panic("a buffered byte was expected")
+          }
+        }
+      }
+      Result::Err(_) => {
+        panic("a buffered byte needs no read")
+      }
+    }
+    ret out
+  }
+
+  fn line(r: &mut BufReader) -> String {
+    match r.read_line() {
+      Result::Ok(v) => {
+        match v {
+          Option::Some(s) => {
+            ret s
+          }
+          Option::None => {
+            panic("a buffered line was expected")
+          }
+        }
+      }
+      Result::Err(_) => {
+        panic("a buffered line needs no read")
+      }
+    }
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

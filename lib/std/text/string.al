@@ -554,3 +554,528 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
   }
   ret out
 }
+
+test {
+  // Construction: a string starts with no bytes, and reports them.
+
+  test a_new_string_is_empty() {
+    s := String::new()
+    assert_count(s.len_bytes(), 0, "a new string has no bytes")
+    assert(s.is_empty(), "a new string is empty")
+    assert_text(s.as_str(), "", "the view over no bytes is empty text")
+  }
+
+  test a_string_from_text_holds_that_text() {
+    s := String::from("héllo")
+    assert_text(s.as_str(), "héllo", "the text survives the copy")
+    assert_count(s.len_bytes(), 6, "the length counts bytes, not scalars")
+    assert_count(s.count_chars(), 5, "five scalars were copied")
+  }
+
+  test with_capacity_reserves_room_for_that_many_bytes() {
+    s := String::with_capacity(16)
+    assert(s.capacity() >= 16, "sixteen bytes of room were reserved")
+    assert_count(s.len_bytes(), 0, "reserving room writes no bytes")
+    assert(s.is_empty(), "the string is empty until something is pushed")
+    assert_text(s.as_str(), "", "the view over no bytes is empty text")
+  }
+
+  test the_capacity_never_falls_below_the_length() {
+    mut s := String::new()
+    assert(s.capacity() >= s.len_bytes(), "on an empty string")
+    s.push_str("abcdefghijklmnopqrstuvwxyz")
+    assert(s.capacity() >= s.len_bytes(), "after growing past the empty room")
+    s.push_str("abcdefghijklmnopqrstuvwxyz")
+    assert(s.capacity() >= s.len_bytes(), "after growing again")
+    s.push(0x21u8)
+    assert(s.capacity() >= s.len_bytes(), "after one more byte")
+  }
+
+  // push, push_str, and the growth path.
+
+  test push_appends_one_byte() {
+    mut s := String::from("ab")
+    s.push(0x63u8)
+    assert_text(s.as_str(), "abc", "the byte lands after the last one")
+    assert_count(s.len_bytes(), 3, "one byte was added")
+  }
+
+  test push_str_appends_the_whole_text() {
+    mut s := String::from("wid")
+    s.push_str("get")
+    assert_text(s.as_str(), "widget", "the whole run lands after the last byte")
+    assert_count(s.len_bytes(), 6, "three bytes were added")
+  }
+
+  test push_str_of_no_text_changes_nothing() {
+    mut s := String::from("abc")
+    s.push_str("")
+    assert_text(s.as_str(), "abc", "the text is untouched")
+    assert_count(s.len_bytes(), 3, "the length is untouched")
+  }
+
+  test a_string_grown_one_byte_at_a_time_keeps_every_byte() {
+    text := "abcdefghij"
+    mut s := String::new()
+    mut i := 0 as usize
+    while i < str_len(text) {
+      s.push(str_byte(text, i))
+      i = i + 1
+    }
+    assert_text(s.as_str(), text, "each byte landed after the previous one")
+    assert_count(s.len_bytes(), 10, "ten bytes were pushed")
+  }
+
+  test a_run_pushed_past_the_room_keeps_the_prefix() {
+    mut s := String::from("abc")
+    s.push_str("defghijklmnopqrstuvwxyz")
+    assert_text(
+      s.as_str(),
+      "abcdefghijklmnopqrstuvwxyz",
+      "the earlier bytes survive the reallocation",
+    )
+    assert_count(s.len_bytes(), 26, "the run was appended whole")
+  }
+
+  test reserve_keeps_the_text_and_makes_room() {
+    mut s := String::from("abc")
+    s.reserve(64)
+    assert(s.capacity() >= 67, "room for the length and the extra bytes")
+    assert_text(s.as_str(), "abc", "reserving moves the bytes but not their text")
+    assert_count(s.len_bytes(), 3, "reserving changes no length")
+  }
+
+  // pop_byte
+
+  test pop_byte_answers_the_last_byte() {
+    mut s := String::from("ab")
+    b := s.pop_byte().or_panic_with_message("the string held a byte")
+    assert_byte(b, 0x62u8, "the last byte is the one removed")
+    assert_text(s.as_str(), "a", "only the last byte was removed")
+    assert_count(s.len_bytes(), 1, "the length dropped by one")
+  }
+
+  test pop_byte_on_an_empty_string_answers_none() {
+    mut s := String::new()
+    assert(s.pop_byte().is_none(), "an empty string has no byte to remove")
+    assert_count(s.len_bytes(), 0, "a failed pop changes no length")
+  }
+
+  test popping_every_byte_empties_the_string() {
+    mut s := String::from("abc")
+    _ := s.pop_byte()
+    _ := s.pop_byte()
+    _ := s.pop_byte()
+    assert(s.is_empty(), "three pops take a three-byte string to empty")
+    assert_text(s.as_str(), "", "the view is empty too")
+  }
+
+  test pop_byte_removes_one_byte_of_a_multibyte_scalar() {
+    mut s := String::from("日")
+    assert_count(s.len_bytes(), 3, "the scalar is three bytes")
+    b := s.pop_byte().or_panic_with_message("the string held a byte")
+    assert_byte(b, 0xa5u8, "pop removes the last byte, not the last scalar")
+    assert_count(s.len_bytes(), 2, "two bytes remain")
+  }
+
+  // insert_byte and insert_str at each end and in the middle.
+
+  test insert_byte_at_the_start_shifts_the_rest() {
+    mut s := String::from("bc")
+    s.insert_byte(0, 0x61u8)
+    assert_text(s.as_str(), "abc", "the new byte is first")
+  }
+
+  test insert_byte_at_the_end_appends() {
+    mut s := String::from("ab")
+    s.insert_byte(2, 0x63u8)
+    assert_text(s.as_str(), "abc", "inserting at the length appends")
+  }
+
+  test insert_byte_in_the_middle_shifts_the_tail() {
+    mut s := String::from("ac")
+    s.insert_byte(1, 0x62u8)
+    assert_text(s.as_str(), "abc", "the bytes from the position up moved one place")
+    assert_count(s.len_bytes(), 3, "the length grew by one")
+  }
+
+  test insert_str_at_the_start_prefixes_the_text() {
+    mut s := String::from("world")
+    s.insert_str(0, "hello ")
+    assert_text(s.as_str(), "hello world", "the run is now the prefix")
+  }
+
+  test insert_str_between_two_halves() {
+    mut s := String::from("ac")
+    s.insert_str(1, "b")
+    assert_text(s.as_str(), "abc", "the halves stay on their sides of the run")
+  }
+
+  test insert_str_at_the_end_appends() {
+    mut s := String::from("ab")
+    s.insert_str(2, "cd")
+    assert_text(s.as_str(), "abcd", "inserting at the length appends")
+  }
+
+  test insert_str_into_an_empty_string() {
+    mut s := String::new()
+    s.insert_str(0, "hi")
+    assert_text(s.as_str(), "hi", "an empty string takes the run whole")
+    assert_count(s.len_bytes(), 2, "two bytes arrived")
+  }
+
+  test insert_str_into_a_full_buffer_shifts_past_the_room() {
+    mut s := String::with_capacity(2)
+    s.push_str("ab")
+    s.insert_str(1, "XYZ")
+    assert_text(s.as_str(), "aXYZb", "the tail moved past the end of the old room")
+    assert_count(s.len_bytes(), 5, "the length grew by the run")
+  }
+
+  test insert_str_of_no_text_changes_nothing() {
+    mut s := String::from("abc")
+    s.insert_str(1, "")
+    assert_text(s.as_str(), "abc", "an empty run moves nothing")
+    assert_count(s.len_bytes(), 3, "the length is untouched")
+  }
+
+  // truncate and clear.
+
+  test truncate_keeps_the_first_bytes() {
+    mut s := String::from("abcdef")
+    s.truncate(3)
+    assert_text(s.as_str(), "abc", "the kept prefix is the first bytes")
+    assert_count(s.len_bytes(), 3, "the length is the new one")
+  }
+
+  test truncate_to_zero_empties_the_string() {
+    mut s := String::from("abc")
+    s.truncate(0)
+    assert(s.is_empty(), "nothing is left")
+    assert_text(s.as_str(), "", "the view is empty")
+  }
+
+  test truncate_to_the_length_changes_nothing() {
+    mut s := String::from("abc")
+    s.truncate(3)
+    assert_text(s.as_str(), "abc", "the length is already n")
+    assert_count(s.len_bytes(), 3, "the length is unchanged")
+  }
+
+  test truncate_past_the_length_changes_nothing() {
+    mut s := String::from("abc")
+    s.truncate(99)
+    assert_text(s.as_str(), "abc", "a longer n keeps everything")
+    assert_count(s.len_bytes(), 3, "the length is unchanged")
+  }
+
+  test a_byte_pushed_after_truncate_lands_at_the_new_end() {
+    mut s := String::from("abcd")
+    s.truncate(2)
+    s.push(0x58u8)
+    assert_text(s.as_str(), "abX", "the byte replaced the first dropped one")
+    assert_count(s.len_bytes(), 3, "the length is the truncated one plus the push")
+  }
+
+  test clear_empties_the_string_and_keeps_the_room() {
+    mut s := String::from("a text with room")
+    room := s.capacity()
+    s.clear()
+    assert(s.is_empty(), "clear leaves nothing")
+    assert_text(s.as_str(), "", "the view is empty")
+    assert(s.capacity() >= room, "the room already reserved is kept")
+  }
+
+  test a_push_after_clear_starts_at_the_beginning() {
+    mut s := String::from("abc")
+    s.clear()
+    s.push_str("xy")
+    assert_text(s.as_str(), "xy", "the pushed bytes are the whole text")
+    assert_count(s.len_bytes(), 2, "the cleared length is not counted")
+  }
+
+  // The views over the buffer.
+
+  test as_bytes_holds_every_byte_of_a_multibyte_text() {
+    s := String::from("日本")
+    bytes := s.as_bytes()
+    assert_count(bytes.len(), 6, "the view is as long as the byte length")
+    first := bytes.at(0).or_panic_with_message("the byte is within the view")
+    assert_byte(*first, 0xe6u8, "the first byte of the first scalar")
+    third := bytes.at(3).or_panic_with_message("the byte is within the view")
+    assert_byte(*third, 0xe6u8, "the second scalar starts at byte three")
+  }
+
+  test byte_reads_the_ends_of_the_text() {
+    s := String::from("abc")
+    assert_byte(s.byte(0), 0x61u8, "the first byte")
+    assert_byte(s.byte(2), 0x63u8, "the last byte")
+  }
+
+  test as_mut_slice_spans_the_length_bytes() {
+    mut s := String::from("abc")
+    assert_count(s.as_mut_slice().len(), 3, "the view stops at the length")
+  }
+
+  test spare_capacity_mut_offers_the_room_past_the_length() {
+    mut s := String::with_capacity(8)
+    assert_count(s.spare_capacity_mut().len(), 8, "a fresh buffer is all spare")
+    s.push_str("abc")
+    assert_count(s.spare_capacity_mut().len(), 5, "the used bytes are no longer spare")
+  }
+
+  test byte_slice_clamps_to_the_length() {
+    s := String::from("abc")
+    assert_text(s.byte_slice(1, 100), "bc", "an end past the last byte clamps to it")
+    assert_text(s.byte_slice(0, 0), "", "an empty span reads no bytes")
+  }
+
+  // Comparison.
+
+  test equal_text_compares_equal() {
+    a := String::from("abc")
+    b := String::from("abc")
+    assert(a == b, "the same bytes read as equal")
+  }
+
+  test text_of_different_lengths_compares_unequal() {
+    a := String::from("abc")
+    b := String::from("abcd")
+    assert(a != b, "a longer string is not equal")
+  }
+
+  test one_differing_byte_at_the_end_compares_unequal() {
+    a := String::from("abd")
+    b := String::from("abc")
+    assert(a != b, "the comparison reaches the last byte")
+  }
+
+  test ordering_follows_the_bytes() {
+    a := String::from("abc")
+    b := String::from("abd")
+    assert(a.cmp(&b).is_lt(), "the first differing byte decides")
+    assert(a.cmp(&a).is_eq(), "a string compares equal to itself")
+  }
+
+  test a_prefix_sorts_before_the_longer_text() {
+    a := String::from("ab")
+    b := String::from("abc")
+    assert(a.cmp(&b).is_lt(), "the shorter text is the smaller one")
+  }
+
+  // ASCII case folding.
+
+  test to_ascii_lowercase_folds_uppercase_letters() {
+    s := String::from("AbC")
+    assert_text(s.to_ascii_lowercase().as_str(), "abc", "every uppercase letter was folded")
+    assert_text(s.as_str(), "AbC", "the source is unchanged")
+  }
+
+  test to_ascii_uppercase_folds_lowercase_letters() {
+    s := String::from("aBc")
+    assert_text(s.to_ascii_uppercase().as_str(), "ABC", "every lowercase letter was folded")
+  }
+
+  test to_ascii_lowercase_leaves_a_non_ascii_byte_alone() {
+    s := String::from("É")
+    assert_text(
+      s.to_ascii_lowercase().as_str(),
+      "É",
+      "a two-byte scalar has no ascii case to fold",
+    )
+  }
+
+  test to_ascii_lowercase_copies_every_other_byte() {
+    s := String::from("Hi 42! Å")
+    assert_text(
+      s.to_ascii_lowercase().as_str(),
+      "hi 42! Å",
+      "digits, blanks, and punctuation copy unchanged",
+    )
+  }
+
+  test the_text_view_folds_case_without_an_owned_source() {
+    assert_text("AbC".to_ascii_lowercase().as_str(), "abc", "a str view folds the same way")
+  }
+
+  // replace, repeat, retain, extend.
+
+  test replace_substitutes_every_occurrence() {
+    s := String::from("a-b-c")
+    assert_text(s.replace("-", "+").as_str(), "a+b+c", "each occurrence was replaced")
+  }
+
+  test replace_does_not_overlap_occurrences() {
+    s := String::from("aaa")
+    assert_text(s.replace("aa", "bb").as_str(), "bba", "the first match takes both bytes")
+  }
+
+  test replace_with_an_empty_pattern_copies_the_text() {
+    s := String::from("abc")
+    assert_text(s.replace("", "-").as_str(), "abc", "an empty pattern has no occurrence to replace")
+  }
+
+  test replace_of_a_missing_pattern_copies_the_text() {
+    s := String::from("abc")
+    assert_text(s.replace("zz", "-").as_str(), "abc", "nothing occurred, so nothing changed")
+  }
+
+  test replace_with_an_empty_replacement_deletes_the_occurrence() {
+    s := String::from("abc")
+    assert_text(s.replace("b", "").as_str(), "ac", "the neighbours close up")
+  }
+
+  test repeat_zero_times_is_empty() {
+    s := String::from("ab")
+    assert(s.repeat(0).is_empty(), "no repetition leaves nothing")
+  }
+
+  test repeat_once_copies_the_text() {
+    s := String::from("ab")
+    assert_text(s.repeat(1).as_str(), "ab", "one repetition is the text itself")
+  }
+
+  test repeat_three_times_repeats_the_text() {
+    s := String::from("ab")
+    assert_text(s.repeat(3).as_str(), "ababab", "each repetition follows the previous one")
+  }
+
+  test retain_keeps_the_bytes_the_predicate_accepts() {
+    mut s := String::from("a1b2c3")
+    s.retain((b: u8) -> b >= 0x30u8 && b <= 0x39u8)
+    assert_text(s.as_str(), "123", "only the digits are kept, in order")
+    assert_count(s.len_bytes(), 3, "the length is the kept count")
+  }
+
+  test retain_rejecting_every_byte_empties_the_string() {
+    mut s := String::from("abcd")
+    s.retain((b: u8) -> false)
+    assert(s.is_empty(), "nothing was kept")
+    assert_text(s.as_str(), "", "the view is empty")
+  }
+
+  test retain_accepting_every_byte_keeps_the_text() {
+    mut s := String::from("abcd")
+    s.retain((b: u8) -> true)
+    assert_text(s.as_str(), "abcd", "compacting with every byte kept changes nothing")
+  }
+
+  test extend_appends_another_string() {
+    mut s := String::from("ab")
+    s.extend(String::from("cd"))
+    assert_text(s.as_str(), "abcd", "the other string's bytes follow")
+    assert_count(s.len_bytes(), 4, "both lengths were counted")
+  }
+
+  // join
+
+  test join_with_no_parts_is_empty() {
+    parts := Vec::<String>::new()
+    assert(join(&parts, "-").is_empty(), "no parts means no text")
+  }
+
+  test join_puts_the_separator_between_parts() {
+    mut parts := Vec::<String>::new()
+    parts.push(String::from("a"))
+    parts.push(String::from("bb"))
+    parts.push(String::from("ccc"))
+    assert_text(join(&parts, ", ").as_str(), "a, bb, ccc", "the separator sits only between parts")
+  }
+
+  test join_of_one_part_has_no_separator() {
+    mut parts := Vec::<String>::new()
+    parts.push(String::from("x"))
+    assert_text(join(&parts, "-").as_str(), "x", "a single part has no neighbour")
+  }
+
+  // from_slice
+
+  test from_slice_holds_the_given_bytes() {
+    source := String::from("abc")
+    copy := String::from_slice(source.as_bytes())
+    assert_text(copy.as_str(), "abc", "each byte was copied")
+    assert_count(copy.len_bytes(), 3, "the length is the byte count")
+  }
+
+  test from_slice_of_no_bytes_is_empty() {
+    source := String::new()
+    copy := String::from_slice(source.as_bytes())
+    assert(copy.is_empty(), "an empty slice builds an empty string")
+  }
+
+  // The view the accessors hand out is the whole text, in bytes.
+
+  test find_answers_a_byte_offset() {
+    s := String::from("héllo")
+    at := s.find("llo").or_panic_with_message("the needle is in the text")
+    assert_count(at, 3, "the offset counts bytes")
+  }
+
+  test find_answers_none_when_the_needle_is_absent() {
+    s := String::from("abc")
+    assert(s.find("zz").is_none(), "an absent needle has no offset")
+  }
+
+  test trim_answers_a_view_without_touching_the_string() {
+    s := String::from("  ab  ")
+    assert_text(s.trim(), "ab", "the view drops the surrounding blanks")
+    assert_count(s.len_bytes(), 6, "the string keeps its bytes")
+  }
+
+  test strip_prefix_answers_the_remainder() {
+    s := String::from("abc")
+    rest := s.strip_prefix("ab").or_panic_with_message("the prefix is there")
+    assert_text(rest, "c", "the remainder follows the prefix")
+    assert(s.strip_prefix("zz").is_none(), "a missing prefix has no remainder")
+  }
+
+  test split_at_answers_both_halves() {
+    s := String::from("abcd")
+    (left, right) := s.split_at(2)
+    assert_text(left, "ab", "the left half ends at the position")
+    assert_text(right, "cd", "the right half starts there")
+  }
+
+  test eq_ignore_ascii_case_ignores_case() {
+    s := String::from("AbC")
+    assert(s.eq_ignore_ascii_case("aBc"), "case is the only difference")
+    assert(!s.eq_ignore_ascii_case("abd"), "a differing letter is a difference")
+  }
+
+  // A string built and dropped in a loop leaves the allocator balanced.
+
+  test dropping_strings_built_in_a_loop_is_balanced() {
+    mut i := 0 as usize
+    while i < 200 {
+      mut s := String::new()
+      s.push_str("first ")
+      s.push_str("second")
+      assert_text(s.as_str(), "first second", "the buffer survived two growths")
+      i = i + 1
+    }
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+
+  fn assert_count(actual: usize, expected: usize, what: str) {
+    if actual != expected {
+      panic(what)
+    }
+  }
+
+  fn assert_text(actual: str, expected: str, what: str) {
+    if actual != expected {
+      panic(what)
+    }
+  }
+
+  fn assert_byte(actual: u8, expected: u8, what: str) {
+    if actual != expected {
+      panic(what)
+    }
+  }
+}

@@ -130,3 +130,32 @@ impl Scanner {
     }
   }
 }
+
+test {
+  test is_space_accepts_the_four_separators() {
+    assert(is_space(0x20u8), "a space separates")
+    assert(is_space(0x09u8), "a tab separates")
+    assert(is_space(0x0du8), "a carriage return separates")
+    assert(is_space(0x0au8), "a newline separates")
+  }
+
+  test is_space_rejects_whitespace_that_is_not_a_separator() {
+    assert(!is_space(0x00u8), "a NUL is part of a token")
+    assert(!is_space(0x0bu8), "a vertical tab is part of a token")
+    assert(!is_space(0x0cu8), "a form feed is part of a token")
+    assert(!is_space(0xa0u8), "a non-breaking space is part of a token")
+  }
+
+  test is_space_rejects_printable_bytes() {
+    assert(!is_space(0x2eu8), "a dot is part of a token")
+    assert(!is_space(0x30u8), "a digit is part of a token")
+    assert(!is_space(0x61u8), "a letter is part of a token")
+    assert(!is_space(0x7fu8), "a delete is part of a token")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

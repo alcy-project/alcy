@@ -525,3 +525,276 @@ impl<V> Entry<V> {
     }
   }
 }
+
+// Tests for the table: one entry per property `Map` promises.
+test {
+  test a_new_map_is_empty() {
+    m := Map::<i32>::new()
+    assert(m.is_empty(), "a map that was never inserted into holds nothing")
+    assert(m.len() == 0, "a map that was never inserted into is of length zero")
+    assert(m.get("alpha").is_none(), "an empty table has no key to find")
+  }
+
+  test insert_of_a_new_key_then_get_returns_its_value() {
+    mut m := Map::<i32>::new()
+    first := m.insert("alpha", 1)
+    assert(first.is_none(), "the key was not there before")
+    assert(m.len() == 1, "the insert added one entry")
+    assert(value_at(&m, "alpha") == 1, "the entry holds the value it was given")
+  }
+
+  test inserting_an_existing_key_replaces_the_value() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    replaced := m.insert("alpha", 2)
+    assert(
+      replaced.or_panic_with_message("the key was there") == 1,
+      "the insert hands back what it replaced",
+    )
+    assert(m.len() == 1, "replacing a key does not add an entry")
+    assert(value_at(&m, "alpha") == 2, "the entry holds the newer value")
+  }
+
+  test get_of_an_absent_key_is_none() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    assert(m.get("beta").is_none(), "the table holds a different key")
+    assert(m.len() == 1, "a failed lookup changes nothing")
+  }
+
+  test remove_of_a_present_key_returns_its_value() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    _ := m.insert("beta", 2)
+    gone := m.remove("alpha")
+    assert(
+      gone.or_panic_with_message("the key was there") == 1,
+      "the removed entry's value comes back",
+    )
+    assert(m.len() == 1, "the removal shortens the map")
+    assert(m.get("alpha").is_none(), "the removed key reads as absent")
+    assert(value_at(&m, "beta") == 2, "the other entry is untouched")
+  }
+
+  test remove_of_an_absent_key_reports_nothing() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    assert(m.remove("beta").is_none(), "a key the map does not hold comes back empty-handed")
+    assert(m.len() == 1, "the failed removal keeps the length")
+  }
+
+  test clear_drops_every_entry_and_keeps_the_room() {
+    mut m := Map::<i32>::with_capacity(8)
+    _ := m.insert("alpha", 1)
+    _ := m.insert("beta", 2)
+    reserved := m.capacity()
+    m.clear()
+    assert(m.is_empty(), "clearing leaves no entry")
+    assert(m.capacity() == reserved, "the room reserved before the clear is kept")
+    assert(m.get("alpha").is_none(), "a cleared key reads as absent")
+    _ := m.insert("gamma", 3)
+    assert(value_at(&m, "gamma") == 3, "the cleared table takes a new key")
+  }
+
+  test a_key_is_copied_when_inserted() {
+    mut key := String::with_capacity(2)
+    key.push_str("al")
+    mut m := Map::<i32>::new()
+    _ := m.insert(key.as_str(), 1)
+    key.push_str("pha")
+    assert(value_at(&m, "al") == 1, "the entry keeps the bytes it was inserted with")
+    assert(m.get("alpha").is_none(), "bytes added to the source afterwards are not the key")
+  }
+
+  test every_key_is_found_after_the_table_grows() {
+    mut m := Map::<i32>::new()
+    first := nth_key(0)
+    _ := m.insert(first.as_str(), 0 as i32)
+    first_cap := m.capacity()
+    mut i := 1 as usize
+    while i < 40 {
+      k := nth_key(i)
+      _ := m.insert(k.as_str(), i as i32)
+      i = i + 1
+    }
+    assert(m.capacity() > first_cap, "the inserts outgrew the room the table started with")
+    assert(m.len() == 40, "forty inserts are forty entries")
+    mut j := 0 as usize
+    while j < 40 {
+      k := nth_key(j)
+      want := j as i32
+      assert(value_at(&m, k.as_str()) == want, "a key inserted before a growth is still found")
+      j = j + 1
+    }
+  }
+
+  test iteration_visits_every_entry_once() {
+    mut m := Map::<i32>::new()
+    mut i := 0 as usize
+    while i < 40 {
+      k := nth_key(i)
+      _ := m.insert(k.as_str(), i as i32)
+      i = i + 1
+    }
+    mut seen := 0 as usize
+    mut total := 0 as i32
+    for (_, v) in m.iter() {
+      val := *v
+      seen = seen + 1
+      total = total + val
+    }
+    assert(seen == 40, "the cursor yields one item per entry")
+    assert(total == 780, "each value is yielded exactly once")
+  }
+
+  test into_iter_yields_every_entry() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    _ := m.insert("beta", 2)
+    mut seen := 0 as usize
+    mut total := 0 as i32
+    for (_, v) in m.into_iter() {
+      seen = seen + 1
+      total = total + v
+    }
+    assert(seen == 2, "the consuming cursor yields one item per entry")
+    assert(total == 3, "the values come back with their keys")
+  }
+
+  test a_key_inserted_after_a_remove_is_found() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    _ := m.insert("beta", 2)
+    _ := m.remove("alpha")
+    _ := m.insert("gamma", 3)
+    assert(value_at(&m, "gamma") == 3, "the slot a removal freed takes a new key")
+    assert(value_at(&m, "beta") == 2, "a key past the freed slot is still found")
+    assert(m.len() == 2, "one removal and one insert cancel out")
+  }
+
+  // A freed slot must not end a lookup: the second key's probe starts
+  // where the first one's did, so it is placed past it. The table is
+  // sized first so both keys start at the same slot whatever the hash is.
+  test a_lookup_passes_over_a_freed_slot() {
+    mut m := Map::<i32>::with_capacity(4)
+    cap := m.capacity()
+    first := nth_key(0)
+    mut second := nth_key(1)
+    mut i := 1 as usize
+    while i < 64 && slot_of(second.as_str(), cap) != slot_of(first.as_str(), cap) {
+      i = i + 1
+      second = nth_key(i)
+    }
+    _ := m.insert(first.as_str(), 1)
+    _ := m.insert(second.as_str(), 2)
+    assert(m.remove(first.as_str()).is_some(), "the first key was inserted")
+    assert(
+      value_at(&m, second.as_str()) == 2,
+      "a key whose probe passed the freed slot is still found",
+    )
+  }
+
+  test removals_do_not_hide_the_keys_that_remain() {
+    mut m := Map::<i32>::new()
+    mut i := 0 as usize
+    while i < 30 {
+      k := nth_key(i)
+      _ := m.insert(k.as_str(), i as i32)
+      i = i + 1
+    }
+    mut gone := 0 as usize
+    while gone < 30 {
+      k := nth_key(gone)
+      _ := m.remove(k.as_str())
+      gone = gone + 3
+    }
+    mut fresh := 0 as usize
+    while fresh < 30 {
+      k := nth_key(30 + fresh)
+      _ := m.insert(k.as_str(), fresh as i32)
+      fresh = fresh + 1
+    }
+    assert(m.len() == 50, "twenty survivors plus thirty new keys")
+    mut j := 0 as usize
+    while j < 30 {
+      k := nth_key(j)
+      if j % 3 == 0 {
+        assert(m.get(k.as_str()).is_none(), "a removed key stays removed")
+      } else {
+        want := j as i32
+        assert(value_at(&m, k.as_str()) == want, "a survivor is still found with its value")
+      }
+      j = j + 1
+    }
+    mut t := 0 as usize
+    while t < 30 {
+      k := nth_key(30 + t)
+      want := t as i32
+      assert(value_at(&m, k.as_str()) == want, "a key inserted after the removals is found")
+      t = t + 1
+    }
+  }
+
+  test a_value_written_through_get_mut_is_the_one_read_back() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    slot := m.get_mut("alpha").or_panic_with_message("the key is there")
+    *slot = 7
+    assert(value_at(&m, "alpha") == 7, "the write lands in the entry")
+  }
+
+  test get_or_insert_keeps_an_existing_value() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    slot := m.get_or_insert("alpha", 2)
+    kept := *slot
+    assert(kept == 1, "a key already present keeps the value it had")
+    assert(m.len() == 1, "the call adds nothing for a key that is there")
+  }
+
+  test get_or_insert_fills_an_absent_key() {
+    mut m := Map::<i32>::new()
+    slot := m.get_or_insert("alpha", 2)
+    got := *slot
+    assert(got == 2, "the entry holds the default the call was given")
+    assert(value_at(&m, "alpha") == 2, "the inserted key is there afterwards")
+    assert(m.len() == 1, "the call inserts one entry")
+  }
+
+  test entry_or_insert_fills_only_the_vacant_key() {
+    mut m := Map::<i32>::new()
+    _ := m.insert("alpha", 1)
+    occupied := m.entry("alpha").or_insert(2)
+    kept := *occupied
+    assert(kept == 1, "the occupied entry keeps its value")
+    vacant := m.entry("beta").or_insert(3)
+    filled := *vacant
+    assert(filled == 3, "the vacant entry takes the default")
+    assert(m.len() == 2, "the second call adds an entry")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+
+  // The slot a lookup starts at for `key` in a table of `cap` slots.
+  fn slot_of(key: str, cap: usize) -> usize {
+    ret (hash(key) as usize) % cap
+  }
+
+  // The value under `key`, for a test that expects the entry to be there.
+  fn value_at(m: &Map<i32>, key: str) -> i32 {
+    ret *m.get(key).or_panic_with_message("no entry for the key")
+  }
+
+  // A distinct two-letter key per `n` below 676, so a test can
+  // enumerate keys without a number formatter.
+  fn nth_key(n: usize) -> String {
+    mut s := String::with_capacity(2)
+    s.push(0x61u8 + (n / 26) as u8)
+    s.push(0x61u8 + (n % 26) as u8)
+    ret s
+  }
+}

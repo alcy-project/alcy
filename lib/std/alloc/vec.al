@@ -600,3 +600,430 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     ret true
   }
 }
+
+test {
+  test a_new_vec_holds_nothing_and_reserves_nothing() {
+    v := Vec::<i32>::new()
+    assert(v.is_empty(), "a vec that was never pushed into holds nothing")
+    assert(v.len() == 0, "a vec that was never pushed into is of length zero")
+    assert(v.capacity() == 0, "a vec that was never pushed into has no room yet")
+  }
+
+  test with_capacity_reserves_room_without_a_length() {
+    v := Vec::<i32>::with_capacity(8)
+    assert(v.capacity() == 8, "the room asked for is the room the vec reports")
+    assert(v.is_empty(), "reserving room adds no element")
+  }
+
+  test push_puts_each_value_behind_the_last() {
+    mut v := Vec::<i32>::new()
+    v.push(1)
+    v.push(2)
+    assert(v.len() == 2, "one element per push")
+    assert(!v.is_empty(), "a pushed vec is no longer empty")
+    assert(value(&v, 0) == 1, "the first push takes the first index")
+    assert(value(&v, 1) == 2, "the second push follows it")
+  }
+
+  test the_first_push_takes_a_block_of_four() {
+    mut v := Vec::<i32>::new()
+    v.push(1)
+    assert(v.capacity() == 4, "an empty vec reads its first block as four elements")
+  }
+
+  test a_grown_vec_keeps_every_element_in_order() {
+    mut v := Vec::<i32>::new()
+    mut i := 0 as i32
+    while i < 5 {
+      v.push(i)
+      i = i + 1
+    }
+    assert(v.len() == 5, "five pushes are five elements")
+    assert(v.capacity() == 8, "the full block of four grows to eight")
+    assert(value(&v, 0) == 0, "the element pushed before the growth is still first")
+    assert(value(&v, 4) == 4, "the last push is still last")
+  }
+
+  test reserve_raises_the_room_without_a_length() {
+    mut v := Vec::<i32>::new()
+    v.push(1)
+    v.reserve(10)
+    assert(v.capacity() >= 11, "the room covers the element held and the ten asked for")
+    assert(v.len() == 1, "reserving room adds no element")
+    assert(value(&v, 0) == 1, "the element held stays where it was")
+  }
+
+  test at_answers_none_past_the_end() {
+    vals := [1i32, 2i32]
+    v := vec_of(vals.as_slice())
+    assert(value(&v, 0) == 1, "the first index names the first element")
+    assert(v.at(2).is_none(), "one past the last element is not an element")
+  }
+
+  test first_and_last_of_an_empty_vec_are_none() {
+    v := Vec::<i32>::new()
+    assert(v.first().is_none(), "an empty vec has no first element")
+    assert(v.last().is_none(), "an empty vec has no last element")
+  }
+
+  test first_and_last_name_the_ends() {
+    vals := [1i32, 2i32, 3i32]
+    v := vec_of(vals.as_slice())
+    assert(
+      *v.first().or_panic_with_message("the vec is not empty") == 1,
+      "the first element comes first",
+    )
+    assert(
+      *v.last().or_panic_with_message("the vec is not empty") == 3,
+      "the last element comes last",
+    )
+  }
+
+  test at_mut_writes_through_to_the_element() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    slot := v.at_mut(1).or_panic_with_message("the index is inside the vec")
+    *slot = 9
+    assert(value(&v, 1) == 9, "the write lands in the element at the index")
+    assert(value(&v, 0) == 1, "the other element is untouched")
+  }
+
+  test last_mut_names_the_last_element() {
+    vals := [3i32, 4i32]
+    mut v := vec_of(vals.as_slice())
+    slot := v.last_mut().or_panic_with_message("the vec is not empty")
+    *slot = 5
+    assert(value(&v, 1) == 5, "the write lands in the last element")
+  }
+
+  test pop_hands_back_the_last_element_then_nothing() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    assert(
+      v.pop().or_panic_with_message("the vec is not empty") == 2,
+      "the last element comes out first",
+    )
+    assert(v.len() == 1, "a pop shortens the vec")
+    assert(
+      v.pop().or_panic_with_message("the vec is not empty") == 1,
+      "the element before it comes out next",
+    )
+    assert(v.pop().is_none(), "an emptied vec has nothing to hand back")
+  }
+
+  test insert_at_the_length_appends() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    v.insert(2, 3)
+    assert(v.len() == 3, "an insert adds one element")
+    assert(value(&v, 2) == 3, "an index equal to the length puts the value last")
+  }
+
+  test insert_at_zero_shifts_the_rest_up() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    v.insert(0, 9)
+    assert(value(&v, 0) == 9, "the inserted value takes the index")
+    assert(value(&v, 1) == 1, "the element that was first follows it")
+    assert(value(&v, 2) == 2, "the rest keeps its order")
+  }
+
+  test remove_hands_back_the_element_and_closes_the_gap() {
+    vals := [1i32, 2i32, 3i32]
+    mut v := vec_of(vals.as_slice())
+    assert(v.remove(1) == 2, "the element at the index comes out")
+    assert(v.len() == 2, "a removal shortens the vec")
+    assert(value(&v, 1) == 3, "the elements after the gap shift down in order")
+  }
+
+  test swap_remove_fills_the_gap_with_the_last_element() {
+    vals := [1i32, 2i32, 3i32]
+    mut v := vec_of(vals.as_slice())
+    assert(v.swap_remove(0) == 1, "the element at the index comes out")
+    assert(v.len() == 2, "a swap removal shortens the vec")
+    assert(value(&v, 0) == 3, "the last element moves into the gap")
+    assert(value(&v, 1) == 2, "the element between them stays where it was")
+  }
+
+  test swap_exchanges_two_elements() {
+    vals := [1i32, 2i32, 3i32]
+    mut v := vec_of(vals.as_slice())
+    v.swap(0, 2)
+    assert(value(&v, 0) == 3, "the last element is now first")
+    assert(value(&v, 1) == 2, "the element between them did not move")
+    assert(value(&v, 2) == 1, "the first element is now last")
+  }
+
+  test swap_of_one_index_with_itself_changes_nothing() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    v.swap(1, 1)
+    assert(value(&v, 0) == 1, "the element outside the swap is untouched")
+    assert(value(&v, 1) == 2, "the element the swap names twice is untouched")
+  }
+
+  test reverse_turns_the_order_around() {
+    vals := [1i32, 2i32, 3i32]
+    mut v := vec_of(vals.as_slice())
+    v.reverse()
+    assert(value(&v, 0) == 3, "the last element is now first")
+    assert(value(&v, 1) == 2, "the middle element stays in the middle")
+    assert(value(&v, 2) == 1, "the first element is now last")
+  }
+
+  test clear_empties_the_vec_and_keeps_the_room() {
+    mut v := Vec::<i32>::with_capacity(4)
+    v.push(1)
+    v.push(2)
+    v.clear()
+    assert(v.is_empty(), "clearing leaves no element")
+    assert(v.capacity() == 4, "the room reserved before the clear is kept")
+    v.push(3)
+    assert(value(&v, 0) == 3, "a cleared vec takes a new element")
+  }
+
+  test truncate_keeps_the_first_count() {
+    vals := [1i32, 2i32, 3i32, 4i32]
+    mut v := vec_of(vals.as_slice())
+    v.truncate(2)
+    assert(v.len() == 2, "the length stops at the count kept")
+    assert(value(&v, 0) == 1, "the kept elements are the first ones")
+    assert(value(&v, 1) == 2, "in the order they arrived in")
+  }
+
+  test truncate_past_the_length_changes_nothing() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    v.truncate(5)
+    assert(v.len() == 2, "a count past the length keeps every element")
+    assert(value(&v, 1) == 2, "and leaves them where they were")
+  }
+
+  test retain_keeps_the_accepted_elements_in_order() {
+    vals := [1i32, 2i32, 3i32, 4i32, 5i32]
+    mut v := vec_of(vals.as_slice())
+    v.retain((x: &i32) -> *x % 2 == 1)
+    assert(v.len() == 3, "the rejected elements leave")
+    assert(value(&v, 0) == 1, "the first accepted element is still first")
+    assert(value(&v, 1) == 3, "the accepted elements keep their order")
+    assert(value(&v, 2) == 5, "and the last one is still last")
+  }
+
+  test dedup_by_removes_each_run_of_repeats() {
+    vals := [1i32, 1i32, 2i32, 2i32, 1i32]
+    mut v := vec_of(vals.as_slice())
+    v.dedup_by((a: &i32, b: &i32) -> *a == *b)
+    assert(v.len() == 3, "each run of repeats keeps one element")
+    assert(value(&v, 0) == 1, "the first run keeps its value")
+    assert(value(&v, 1) == 2, "the second run keeps its value")
+    assert(value(&v, 2) == 1, "a repeat that is not consecutive is kept")
+  }
+
+  test extend_moves_every_element_of_the_other_vec() {
+    vals2 := [2i32, 3i32]
+    vals := [1i32]
+    mut v := vec_of(vals.as_slice())
+    v.extend(vec_of(vals2.as_slice()))
+    assert(v.len() == 3, "the other vec's elements are added")
+    assert(value(&v, 0) == 1, "the element held stays first")
+    assert(value(&v, 1) == 2, "the added elements follow in order")
+    assert(value(&v, 2) == 3, "and end the vec")
+  }
+
+  test map_takes_each_element_through_the_closure() {
+    vals := [1i32, 2i32]
+    v := vec_of(vals.as_slice())
+    doubled := v.map((x: &i32) -> *x * 2)
+    assert(doubled.len() == 2, "one element per element")
+    assert(value(&doubled, 0) == 2, "the first element went through the closure")
+    assert(value(&doubled, 1) == 4, "and so did the second")
+    assert(value(&v, 0) == 1, "the vec the closure read is unchanged")
+  }
+
+  test fold_carries_the_state_across_every_element() {
+    vals := [1i32, 2i32, 3i32]
+    v := vec_of(vals.as_slice())
+    total := v.fold(0 as i32, (acc: i32, x: &i32) -> acc + *x)
+    assert(total == 6, "the state crosses every element in order")
+    empty_total := Vec::<i32>::new().fold(10 as i32, (acc: i32, x: &i32) -> acc + *x)
+    assert(empty_total == 10, "an empty vec answers the state it was given")
+  }
+
+  test all_and_any_read_the_predicate_over_the_elements() {
+    vals := [2i32, 4i32]
+    v := vec_of(vals.as_slice())
+    assert(v.all((x: &i32) -> *x % 2 == 0), "every element passes the predicate")
+    assert(v.any((x: &i32) -> *x == 4), "one element passes the predicate")
+    vals2 := [2i32, 3i32]
+    w := vec_of(vals2.as_slice())
+    assert(!(w.all((x: &i32) -> *x % 2 == 0)), "one element that fails makes all false")
+    assert(w.any((x: &i32) -> *x % 2 == 1), "one element that passes makes any true")
+  }
+
+  test all_of_an_empty_vec_is_true_and_any_is_false() {
+    v := Vec::<i32>::new()
+    assert(v.all((x: &i32) -> *x > 0), "no element fails the predicate")
+    assert(!(v.any((x: &i32) -> *x > 0)), "no element passes the predicate")
+  }
+
+  test position_answers_the_first_index_the_predicate_accepts() {
+    vals := [1i32, 2i32, 2i32]
+    v := vec_of(vals.as_slice())
+    found := v.position((x: &i32) -> *x > 1).or_panic_with_message("an element is above one")
+    assert(found == 1, "the first index the predicate accepts is the answer")
+    assert(v.position((x: &i32) -> *x > 2).is_none(), "a predicate nothing accepts finds no index")
+  }
+
+  test rposition_answers_the_last_index_the_predicate_accepts() {
+    vals := [1i32, 2i32, 2i32]
+    v := vec_of(vals.as_slice())
+    found := v.rposition((x: &i32) -> *x > 1).or_panic_with_message("an element is above one")
+    assert(found == 2, "the search runs from the end of the vec")
+    assert(v.rposition((x: &i32) -> *x > 2).is_none(), "a predicate nothing accepts finds no index")
+  }
+
+  test find_answers_the_first_element_the_predicate_accepts() {
+    vals := [1i32, 2i32, 3i32]
+    v := vec_of(vals.as_slice())
+    assert(
+      *v.find((x: &i32) -> *x > 1).or_panic_with_message("an element is above one") == 2,
+      "the first element the predicate accepts comes back",
+    )
+    assert(v.find((x: &i32) -> *x > 3).is_none(), "a predicate nothing accepts finds nothing")
+  }
+
+  test binary_search_by_answers_the_index_of_a_match() {
+    vals := [1i32, 3i32, 5i32]
+    v := vec_of(vals.as_slice())
+    found := v.binary_search_by((x: &i32) -> *x - 3).or_panic_with_message("three sits in the vec")
+    assert(found == 1, "the compare that answers zero names the index")
+    assert(
+      v.binary_search_by((x: &i32) -> *x - 4).is_none(),
+      "a value the vec does not hold has no index",
+    )
+  }
+
+  test contains_compares_the_elements_for_equality() {
+    vals := [1i32, 2i32]
+    v := vec_of(vals.as_slice())
+    assert(v.contains(&2), "an element the vec holds is found")
+    assert(!(v.contains(&9)), "an element the vec does not hold is not found")
+  }
+
+  test sort_orders_the_elements() {
+    vals := [3i32, 1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    v.sort()
+    assert(value(&v, 0) == 1, "the smallest element ends up first")
+    assert(value(&v, 1) == 2, "the elements in between follow")
+    assert(value(&v, 2) == 3, "the largest element ends up last")
+  }
+
+  test sort_by_takes_the_order_from_the_predicate() {
+    vals := [2i32, 3i32, 1i32]
+    mut v := vec_of(vals.as_slice())
+    v.sort_by((a: &i32, b: &i32) -> *a > *b)
+    assert(value(&v, 0) == 3, "the order the predicate names puts the largest first")
+    assert(value(&v, 1) == 2, "the elements in between follow")
+    assert(value(&v, 2) == 1, "and the smallest last")
+  }
+
+  test equality_compares_the_length_then_the_elements() {
+    vals := [1i32, 2i32]
+    a := vec_of(vals.as_slice())
+    mut wide := Vec::<i32>::with_capacity(8)
+    wide.push(1)
+    wide.push(2)
+    assert(a == wide, "the same elements in the same order are equal, whatever room they hold")
+    vals2 := [1i32]
+    assert(!(a == vec_of(vals2.as_slice())), "a vec of another length is not equal")
+    vals3 := [1i32, 3i32]
+    assert(!(a == vec_of(vals3.as_slice())), "an element that differs makes the vecs unequal")
+  }
+
+  test as_slice_is_a_view_of_every_element() {
+    vals := [1i32, 2i32]
+    v := vec_of(vals.as_slice())
+    view := v.as_slice()
+    assert(view.len() == 2, "the view has one element per element")
+    assert(
+      *view.at(0).or_panic_with_message("the view holds an index 0") == 1,
+      "the view reads the first element",
+    )
+    assert(
+      *view.at(1).or_panic_with_message("the view holds an index 1") == 2,
+      "the view reads the last element",
+    )
+  }
+
+  test as_mut_slice_writes_through_to_the_elements() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    view := v.as_mut_slice()
+    slot := unsafe { slice_at_mut(view, 1) }
+    *slot = 8
+    assert(value(&v, 0) == 1, "the element outside the write is untouched")
+    assert(value(&v, 1) == 8, "the write lands in the element at the index")
+  }
+
+  test iter_yields_every_element_by_reference_in_order() {
+    vals := [1i32, 2i32, 3i32]
+    v := vec_of(vals.as_slice())
+    mut total := 0i32
+    for x in v.iter() {
+      total = total * 10 + *x
+    }
+    assert(total == 123, "the cursor walks the elements once, in order")
+  }
+
+  test iter_mut_writes_through_every_element() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    for x in v.iter_mut() {
+      *x = *x + 1
+    }
+    assert(value(&v, 0) == 2, "the first element was written")
+    assert(value(&v, 1) == 3, "the last element was written")
+  }
+
+  test into_iter_yields_every_element_then_nothing() {
+    vals := [1i32, 2i32]
+    mut cursor := vec_of(vals.as_slice()).into_iter()
+    assert(
+      cursor.next().or_panic_with_message("the cursor holds an index 0") == 1,
+      "the first element comes out",
+    )
+    assert(
+      cursor.next().or_panic_with_message("the cursor holds an index 1") == 2,
+      "then the second",
+    )
+    assert(cursor.next().is_none(), "one past the last element hands out nothing")
+  }
+
+  test the_index_operators_reach_the_elements() {
+    vals := [1i32, 2i32]
+    mut v := vec_of(vals.as_slice())
+    assert(v[0] + v[1] == 3, "the read operator names the element at the index")
+    v[1] = 5
+    assert(v[1] == 5, "the write operator lands in the element at the index")
+    assert(value(&v, 0) == 1, "the other element is untouched")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+
+  fn value(v: &Vec<i32>, i: usize) -> i32 {
+    ret *v.at(i).or_panic_with_message("the index is inside the vec")
+  }
+
+  fn vec_of(values: &[i32]) -> Vec<i32> {
+    mut out := Vec::<i32>::new()
+    for x in values.iter() {
+      out.push(*x)
+    }
+    ret out
+  }
+}

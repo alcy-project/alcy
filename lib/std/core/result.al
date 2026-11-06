@@ -85,3 +85,92 @@ impl<T: PartialEq, E: PartialEq> PartialEq for Result<T, E> {
 
 impl<T: Eq, E: Eq> Eq for Result<T, E> {
 }
+
+test {
+  test an_ok_is_ok() {
+    ok: Result<i32, str> := Result::Ok(7)
+    assert(ok.is_ok(), "an Ok is a success")
+  }
+
+  test an_ok_is_not_err() {
+    ok: Result<i32, str> := Result::Ok(7)
+    assert(!ok.is_err(), "an Ok is not a failure")
+  }
+
+  test an_err_is_err() {
+    bad: Result<i32, str> := Result::Err("bad")
+    assert(bad.is_err(), "an Err is a failure")
+  }
+
+  test an_err_is_not_ok() {
+    bad: Result<i32, str> := Result::Err("bad")
+    assert(!bad.is_ok(), "an Err is not a success")
+  }
+
+  test or_on_an_ok_yields_the_value() {
+    ok: Result<i32, str> := Result::Ok(7)
+    assert(ok.or(9) == 7, "a success keeps its value")
+  }
+
+  test or_on_an_err_yields_the_default() {
+    bad: Result<i32, str> := Result::Err("bad")
+    assert(bad.or(9) == 9, "the default stands in for a failure")
+  }
+
+  test or_else_on_an_ok_yields_the_value() {
+    ok: Result<i32, str> := Result::Ok(7)
+    assert(ok.or_else(() -> 9) == 7, "a success keeps its value")
+  }
+
+  test or_else_on_an_err_builds_the_default() {
+    bad: Result<i32, str> := Result::Err("bad")
+    assert(bad.or_else(() -> 9) == 9, "the fallback runs for a failure")
+  }
+
+  test or_panic_with_message_yields_the_value_of_an_ok() {
+    ok: Result<i32, str> := Result::Ok(7)
+    assert(ok.or_panic_with_message("a success has a value") == 7, "a success carries its value")
+  }
+
+  test or_panic_with_yields_the_value_of_an_ok() {
+    ok: Result<i32, str> := Result::Ok(7)
+    assert(ok.or_panic_with((e: str) -> e) == 7, "the message builder never runs for a success")
+  }
+
+  test two_oks_with_equal_values_are_equal() {
+    a: Result<i32, str> := Result::Ok(7)
+    b: Result<i32, str> := Result::Ok(7)
+    assert(a == b, "equal payloads make equal results")
+  }
+
+  test oks_with_different_values_are_unequal() {
+    a: Result<i32, str> := Result::Ok(7)
+    b: Result<i32, str> := Result::Ok(8)
+    assert(a != b, "different payloads make unequal results")
+  }
+
+  test two_errs_with_equal_errors_are_equal() {
+    a: Result<i32, str> := Result::Err("bad")
+    b: Result<i32, str> := Result::Err("bad")
+    assert(a == b, "equal errors make equal results")
+  }
+
+  test errs_with_different_errors_are_unequal() {
+    a: Result<i32, str> := Result::Err("bad")
+    b: Result<i32, str> := Result::Err("worse")
+    assert(a != b, "different errors make unequal results")
+  }
+
+  test a_success_and_a_failure_are_unequal() {
+    ok: Result<i32, str> := Result::Ok(7)
+    bad: Result<i32, str> := Result::Err("bad")
+    assert(ok != bad, "a success is not a failure")
+    assert(bad != ok, "and a failure is not a success")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

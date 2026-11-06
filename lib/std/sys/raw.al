@@ -39,3 +39,16 @@ pub fn read(fd: Fd, out: &mut [u8]) -> Result<usize, OsError> {
   }
   ret Result::Ok(n as usize)
 }
+
+test {
+  test a_write_to_a_descriptor_that_is_not_open_reports_an_error() {
+    written := write(Fd::from_raw(-1), "x")
+    assert(written.is_err(), "the call reports the error the system answered")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}

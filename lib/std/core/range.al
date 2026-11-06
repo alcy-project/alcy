@@ -138,3 +138,133 @@ impl<T: PartialOrd + PartialEq + Sub> Iterator < T > for RangeIter<T> {
     ret Option::Some(v)
   }
 }
+
+test {
+  test a_range_yields_its_start_first() {
+    first := find::<RangeIter<i32>, i32>((0..<5).into_iter(), (x: i32) -> true)
+    assert(first.or_panic_with_message("the range yields") == 0, "the start is the first value")
+  }
+
+  test an_exclusive_end_is_not_yielded() {
+    assert(how_many((0..<3).into_iter()) == 3, "the end itself stays out")
+    assert(top_of((0..<3).into_iter()) == 2, "the last value is one below the end")
+  }
+
+  test an_inclusive_end_is_yielded() {
+    assert(how_many((0..=3).into_iter()) == 4, "the end itself is included")
+    assert(top_of((0..=3).into_iter()) == 3, "the last value is the end")
+  }
+
+  test a_range_of_one_value_yields_it() {
+    assert(how_many((7..<8).into_iter()) == 1, "one value lies in the range")
+    assert(top_of((7..<8).into_iter()) == 7, "and it is the start")
+  }
+
+  test an_empty_range_yields_nothing() {
+    assert(how_many((3..<3).into_iter()) == 0, "no value is below the end")
+    assert(yields_nothing((3..<3).into_iter()), "so there is no last value")
+  }
+
+  test an_inverted_range_yields_nothing() {
+    assert(how_many((5..<2).into_iter()) == 0, "a start past the end admits nothing")
+  }
+
+  test a_spent_cursor_yields_nothing_more() {
+    mut it := (0..<1).into_iter()
+    assert(it.next().or_panic_with_message("the range yields") == 0, "the single value comes out")
+    assert(it.next().is_none(), "the cursor is spent")
+    assert(it.next().is_none(), "and stays spent")
+  }
+
+  test an_excluded_start_begins_one_past_its_value() {
+    hand_built: Range<i32> := Range { start: Bound::Excluded(0), end: Bound::Included(2) }
+    assert(walked(hand_built.into_iter()) == 12, "the walk starts at one")
+  }
+
+  test an_open_end_keeps_yielding() {
+    mut it := (5..).into_iter()
+    assert(it.next().or_panic_with_message("the range yields") == 5, "the start is the first value")
+    assert(it.next().or_panic_with_message("the range yields") == 6, "the next value follows")
+    assert(it.next().or_panic_with_message("the range yields") == 7, "and the one after that")
+  }
+
+  test a_cursor_iterates_as_itself() {
+    cursor := (0..<3).into_iter()
+    assert(how_many(cursor.into_iter()) == 3, "naming the cursor again changes nothing")
+  }
+
+  test step_by_yields_every_stride_value() {
+    assert(walked((0..<10).step_by(2)) == 2468, "0, 2, 4, 6 and 8 come out in order")
+  }
+
+  test step_by_keeps_the_start() {
+    assert(walked((1..<10).step_by(3)) == 147, "1, 4 and 7 come out in order")
+  }
+
+  test step_by_stops_before_passing_the_end() {
+    assert(walked((0..<10).step_by(4)) == 48, "0, 4 and 8 come out and 12 does not")
+  }
+
+  test an_inclusive_stride_can_land_on_the_end() {
+    assert(how_many((0..=10).step_by(5)) == 3, "0, 5 and 10 all fall in the range")
+    assert(top_of((0..=10).step_by(5)) == 10, "and the end is the last of them")
+  }
+
+  test a_stride_longer_than_the_range_yields_one_value() {
+    assert(how_many((5..<6).step_by(3)) == 1, "the start is the only value below the end")
+  }
+
+  test a_stride_of_one_matches_plain_iteration() {
+    assert(
+      how_many((0..<5).step_by(1)) == how_many((0..<5).into_iter()),
+      "a stride of one steps like plain iteration",
+    )
+  }
+
+  test an_unsigned_range_reaches_the_top_of_its_width() {
+    assert(
+      byte_count((250u8..=255u8).into_iter()) == 6,
+      "the last six values of a byte are reachable",
+    )
+    assert(byte_top((250u8..=255u8).into_iter()) == 255u8, "and the top one is the last")
+  }
+
+  test a_for_loop_reads_the_range() {
+    mut joined := 0
+    for i in 3..<6 {
+      joined = joined * 10 + i
+    }
+    assert(joined == 345, "the body sees 3, 4 and 5 in order")
+  }
+
+  // Folds the values into a decimal number, so inclusion and order both show.
+  fn walked(r: RangeIter<i32>) -> i32 {
+    ret fold::<RangeIter<i32>, i32, i32>(r, 0, (a: i32, x: i32) -> a * 10 + x)
+  }
+
+  fn how_many(r: RangeIter<i32>) -> usize {
+    ret count::<RangeIter<i32>, i32>(r)
+  }
+
+  fn top_of(r: RangeIter<i32>) -> i32 {
+    ret last::<RangeIter<i32>, i32>(r).or_panic_with_message("the range yields")
+  }
+
+  fn yields_nothing(r: RangeIter<i32>) -> bool {
+    ret last::<RangeIter<i32>, i32>(r).is_none()
+  }
+
+  fn byte_count(r: RangeIter<u8>) -> usize {
+    ret count::<RangeIter<u8>, u8>(r)
+  }
+
+  fn byte_top(r: RangeIter<u8>) -> u8 {
+    ret last::<RangeIter<u8>, u8>(r).or_panic_with_message("the range yields")
+  }
+
+  fn assert(ok: bool, what: str) {
+    if !ok {
+      panic(what)
+    }
+  }
+}
