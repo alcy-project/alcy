@@ -60,6 +60,28 @@ std::optional<std::string_view> source_of(const LintContext& ctx,
   return bytes->substr(node.span.offset, node.span.length);
 }
 
+// Whether the digits under a cast are typed by the cast alone: a
+// literal has no type of its own, and the `-` or `~` it wears passes
+// the target down to them, so `-5 as isize` writes the type rather
+// than converting the value.
+bool types_a_literal(const LintContext& ctx, ast::ExprIdx expr) {
+  while (expr.is_valid()) {
+    const ast::ExprNode& node = ctx.ast.exprs[expr];
+    if (node.kind == ast::ExprKind::Literal) {
+      return true;
+    }
+    if (node.kind != ast::ExprKind::Unary) {
+      return false;
+    }
+    const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
+    if (unary.op != ast::UnaryOp::Neg && unary.op != ast::UnaryOp::BitNot) {
+      return false;
+    }
+    expr = unary.inner;
+  }
+  return false;
+}
+
 // Offers the repair that replaces outer with the bytes of inner, when
 // that cannot change the grouping. The replacement is the inner
 // expression exactly as the reader wrote it, so the fix reads as the
@@ -89,7 +111,7 @@ void check_useless_cast(LintContext& ctx, ast::ExprIdx expr) {
   const ast::ExprNode& inner = ctx.ast.exprs[cast.inner];
   // A literal that has no type of its own takes the cast's, so the two
   // agree by construction and the cast is how the type was written.
-  if (inner.kind == ast::ExprKind::Literal) {
+  if (types_a_literal(ctx, cast.inner)) {
     return;
   }
   const std::optional<ir::TypeIdx> from = expression_type(ctx, cast.inner);

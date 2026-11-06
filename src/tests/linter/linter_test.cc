@@ -357,6 +357,32 @@ TEST_CASE("useless-cast reports a cast to the value's own type") {
   }
 }
 
+TEST_CASE("useless-cast leaves the type of a prefixed literal to the cast") {
+  Run run;
+  // The target reaches the digits through the `-` and the `~`, so both
+  // casts state the type rather than convert the value.
+  run("fn main() -> i32 {\n  a: isize := -5 as isize\n  b := ~0 as u32\n"
+      "  if a == 0i64 && b == 0u32 {\n    ret 1\n  }\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "useless-cast") == 0);
+  CHECK(fix_for(run.ctx.bag, "useless-cast") == nullptr);
+}
+
+TEST_CASE("useless-cast reports a cast of a prefixed bool literal") {
+  Run run;
+  // A `!` gives the literal a type of its own, so the cast converts
+  // nothing and the repair drops it.
+  run("fn main() -> i32 {\n  b := !true as bool\n  if b {\n    ret 1\n"
+      "  }\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "useless-cast") == 1);
+  const diag::Fix* fix = fix_for(run.ctx.bag, "useless-cast");
+  CHECK(fix != nullptr);
+  if (fix != nullptr) {
+    CHECK(fix->replacement == "!true");
+  }
+}
+
 TEST_CASE("float-equality is off until it is asked for") {
   Run run;
   const std::string_view source =
