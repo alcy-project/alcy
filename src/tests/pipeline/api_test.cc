@@ -162,10 +162,10 @@ TEST_CASE("Pipeline release build produces a working executable") {
     return;
   }
   // Release runs the O3 pipeline; the binary must still exit 3.
-  base::Result<i32, SpawnError> ran = run_command({exe_path});
+  base::Result<SpawnOutcome, SpawnError> ran = run_command({exe_path});
   CHECK(ran.is_ok());
   if (ran.is_ok()) {
-    CHECK(std::move(ran).unwrap() == 3);
+    CHECK(std::move(ran).unwrap().code == 3);
   }
 }
 

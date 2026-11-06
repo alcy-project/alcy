@@ -23,6 +23,7 @@
 #include "analyzer/summary.h"
 #include "ast/ast.h"
 #include "config/build_config.h"
+#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -48,14 +49,22 @@
 #include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
+#include "testgen/driver.h"
+#include "testgen/tests.h"
 
 namespace pipeline {
 
 namespace {
 
-// Whether the root module declares a free `main`. A method named `main`
-// is not the entry point: the linker resolves the symbol, and an
-// associated function lives under its type's name.
+// What a test run's entry module is filed under. Nothing on disk is
+// discovered by this name: the driver is synthesized once the package's
+// files are in, and it is named after the package because one source
+// manager may resolve more than one.
+std::string driver_file_name(std::string_view package) {
+  std::string name(package);
+  name += "-test.al";
+  return name;
+}
 
 }  // namespace
 
@@ -246,6 +255,13 @@ struct PackageSources {
   ParsedFiles parsed;
   std::vector<analyzer::ParsedModule> prelude;
   std::vector<analyzer::ModuleInput> selection;
+  // The package's modules named the way the tree holds them, for a
+  // package that stages itself as an embedded member: the same files as
+  // `selection`, behind the member's own root. Empty otherwise, when the
+  // tree holds `selection` as it is. These inputs are not in `prelude`
+  // yet: a run splices them first and appends them afterwards, so that the
+  // prelude names the items the splice wrote.
+  std::vector<analyzer::ModuleInput> staged_member;
   // The path dependencies' modules, appended in resolution order.
   // `dependencies` holds spans into this vector, so nothing resizes
   // it once the last module is in: the targets borrow the spans for
@@ -266,10 +282,16 @@ struct PackageSources {
 // Discovers, stages, parses, and selects the whole package, with
 // every path dependency it declares loaded from source into the
 // same closed world.
+//
+// `member` names the embedded suite member this package's directory is a
+// copy of, when it is one: the package is then staged as that member
+// rather than beside it, so its own modules are the ones the tree holds
+// under the member's name and the embedded copy is not staged at all.
 base::Result<PackageSources, diag::Reported> collect_package_sources(
     PipelineContext& ctx,
     const path::Path& root,
-    const pkg::PackageManifest& manifest) {
+    const pkg::PackageManifest& manifest,
+    std::string_view member) {
   // Path dependencies load first: a dependency's own manifest names
   // standard-library members, and the selection below covers the
   // whole closure rather than this manifest alone.
@@ -313,7 +335,16 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   if (selected.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  const StdSelection selection = std::move(selected).unwrap();
+  StdSelection selection = std::move(selected).unwrap();
+  // A member under test stages its own files below, so the embedded copy
+  // of that member is dropped: staging both would name one module twice.
+  // Everything else the closure selected stays, because a member reaches
+  // the members it depends on the same way any package does.
+  if (!member.empty()) {
+    selection.members.erase(
+        std::remove(selection.members.begin(), selection.members.end(), member),
+        selection.members.end());
+  }
 
   // A package root is one name in the tree: two dependencies behind
   // one identity, a dependency named like the package that loads it,
@@ -410,6 +441,23 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
     return base::make_err(diag::Reported{});
   }
   sources.selection = std::move(selection_inputs).unwrap();
+  // A member under test brings its own modules into the staged tree: the
+  // run then checks it where every other package reaches it, which is the
+  // only place its dialect holds - declarations of builtin types,
+  // implementations of the specs its suite seals, and the facade that
+  // offers its surface without a `use`. The name is the one the embedded
+  // copy has, so a `use` path spells the member either way, and the
+  // facade keeps the role the embedded path gives it.
+  if (!member.empty()) {
+    sources.staged_member.reserve(sources.selection.size());
+    for (const analyzer::ModuleInput& input : sources.selection) {
+      std::string path(member);
+      path += '/';
+      path += input.name;
+      sources.staged_member.push_back(analyzer::ModuleInput{
+          pkg::copy_str(ctx.arena, path), input.id, input.name == "prelude"});
+    }
+  }
 
   // A dependency's modules pair with the files they came from the
   // way the package's own do, and the identity the resolver stages
@@ -488,10 +536,12 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
     begin = end;
   }
   // The root's policy names the package itself and no suite; a sealed
-  // spec it declares is implementable only from inside it.
+  // spec it declares is implementable only from inside it. A package
+  // staged as an embedded member is the exception: it carries the
+  // embedded suite's identity, because that is the identity its tree was
+  // staged with and the one its own sealed specs are implemented under.
   sources.policies.push_back(analyzer::PackagePolicy{
-      manifest.name,
-      {},
+      manifest.name, member.empty() ? std::string_view{} : STD_SUITE_IDENTITY,
       std::span<const std::string_view>(manifest.suite_only,
                                         manifest.suite_only_count),
       std::span<const std::string_view>(manifest.implement,
@@ -629,15 +679,22 @@ base::Result<Artifact, diag::Reported> resolve_target(
   return base::make_ok(target);
 }
 
-}  // namespace
+// The package a command works on: its manifest with the keys it takes
+// from the suite it sits in, and whether that suite lists it.
+struct LoadedPackage {
+  pkg::PackageManifest manifest;
+  std::optional<EnclosingSuite> suite;
+  bool member = false;
+};
 
-base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
+// Parses the manifest the caller probed and merges the suite it sits in.
+// Every command that reads a package starts here: a package's license, its
+// version, and its spec seals all come from the same walk.
+base::Result<LoadedPackage, diag::Reported> load_package(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,
-    std::string_view manifest_name,
-    ArtifactScope scope) {
-  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "targets", "frontend");
+    std::string_view manifest_name) {
   // Entry validation: the caller supplies a raw manifest id, which must
   // name a loaded file, and the bytes must then be structurally whole
   // before any field is read.
@@ -655,53 +712,94 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
   if (parsed.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  pkg::PackageManifest manifest = std::move(parsed).unwrap();
+  LoadedPackage loaded;
+  loaded.manifest = std::move(parsed).unwrap();
   // A package that sits inside a suite takes the keys it spelled from
   // it; one that is not listed is standalone, and a marker with no
   // suite to resolve against is an error rather than a silent {0,0,0}.
-  const std::optional<EnclosingSuite> suite = find_enclosing_suite(ctx, root);
-  if (!suite.has_value() && ctx.bag.has_errors()) {
+  loaded.suite = find_enclosing_suite(ctx, root);
+  if (!loaded.suite.has_value() && ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  const bool member =
-      suite.has_value() && suite_lists_member(suite->manifest, suite->member);
-  if (member) {
+  loaded.member =
+      loaded.suite.has_value() &&
+      suite_lists_member(loaded.suite->manifest, loaded.suite->member);
+  if (loaded.member) {
     base::Result<void, pkg::InheritError> inherited =
-        pkg::inherit_from_suite(manifest, suite->manifest);
+        pkg::inherit_from_suite(loaded.manifest, loaded.suite->manifest);
     if (inherited.is_err()) {
       pkg::report_inherit_error(std::move(inherited).unwrap_err(),
                                 manifest_name, ctx.bag);
       return base::make_err(diag::Reported{});
     }
-  } else if (manifest.version_from_suite || manifest.owner_from_suite ||
-             manifest.license_from_suite) {
+  } else if (loaded.manifest.version_from_suite ||
+             loaded.manifest.owner_from_suite ||
+             loaded.manifest.license_from_suite) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineInheritsWithoutSuite>(
         DiagCode::NoManifest, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   base::Result<void, pkg::ManifestError> verified =
-      pkg::verify_manifest(manifest);
+      pkg::verify_manifest(loaded.manifest);
   if (verified.is_err()) {
     pkg::report_manifest_error(std::move(verified).unwrap_err(), manifest_name,
                                ctx.bag);
     return base::make_err(diag::Reported{});
   }
-  if (manifest.bin_count == 0 && manifest.lib == nullptr) {
+  return base::make_ok(std::move(loaded));
+}
+
+// The embedded suite member a package's directory is a copy of, or empty
+// when it is not one: the directory sits in a suite named for the embedded
+// one, that suite lists it, and the embedded library ships a member of
+// that name. The names alone are not enough, because a suite of one's own
+// may be spelled the same way; the shipped member is what makes the
+// staging below the same tree every package compiles against.
+std::string_view embedded_member_of(const LoadedPackage& package) {
+  if (!package.member || !package.suite.has_value()) {
+    return {};
+  }
+  if (suite_spelling(package.suite->manifest) != STD_SUITE_IDENTITY) {
+    return {};
+  }
+  const std::string_view name = package.manifest.name;
+  if (std_seals_for(name) == nullptr) {
+    return {};
+  }
+  return name;
+}
+
+}  // namespace
+
+base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    ArtifactScope scope) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "targets", "frontend");
+  base::Result<LoadedPackage, diag::Reported> loaded =
+      load_package(ctx, root, manifest_file, manifest_name);
+  if (loaded.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  LoadedPackage package = std::move(loaded).unwrap();
+  if (package.manifest.bin_count == 0 && package.manifest.lib == nullptr) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoTarget>(
         DiagCode::NoTargets, manifest_name);
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  if (manifest.bin_count > 1) {
+  if (package.manifest.bin_count > 1) {
     const u32 index =
         ctx.bag.emit<i18n::Key::PipelineManifestTooManyBinArtifacts>(
-            DiagCode::NoTargets, manifest_name, manifest.bin_count);
+            DiagCode::NoTargets, manifest_name, package.manifest.bin_count);
     (void)index;
     return base::make_err(diag::Reported{});
   }
   base::Result<PackageSources, diag::Reported> sources =
-      collect_package_sources(ctx, root, manifest);
+      collect_package_sources(ctx, root, package.manifest, {});
   if (sources.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -713,37 +811,277 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
   const auto add =
       [&](std::string_view path, std::string_view name,
           ArtifactKind kind) -> base::Result<void, diag::Reported> {
-    base::Result<Artifact, diag::Reported> target =
-        resolve_target(ctx, root, manifest, collected, path, name, kind);
+    base::Result<Artifact, diag::Reported> target = resolve_target(
+        ctx, root, package.manifest, collected, path, name, kind);
     if (target.is_err() || ctx.bag.has_errors()) {
       return base::make_err(diag::Reported{});
     }
     targets.push_back(std::move(target).unwrap());
     return base::make_ok();
   };
-  if (manifest.bin_count == 1) {
+  if (package.manifest.bin_count == 1) {
     base::Result<void, diag::Reported> added =
-        add(manifest.bins[0].path, manifest.bins[0].name, ArtifactKind::Bin);
+        add(package.manifest.bins[0].path, package.manifest.bins[0].name,
+            ArtifactKind::Bin);
     if (added.is_err()) {
       return base::make_err(diag::Reported{});
     }
   }
-  if (scope == ArtifactScope::All && manifest.lib != nullptr) {
+  if (scope == ArtifactScope::All && package.manifest.lib != nullptr) {
     base::Result<void, diag::Reported> added =
-        add(manifest.lib->path, manifest.lib->name, ArtifactKind::Lib);
+        add(package.manifest.lib->path, package.manifest.lib->name,
+            ArtifactKind::Lib);
     if (added.is_err()) {
       return base::make_err(diag::Reported{});
     }
   }
   // A member's artifacts belong to the suite: one out/ for the whole
   // suite, one directory per member (ADR-0057).
-  const path::Path output_dir =
-      member ? suite->root.join(path::DEFAULT_OUT_DIR).join(suite->member)
-             : root.join(path::DEFAULT_OUT_DIR);
+  path::Path output_dir = root.join(path::DEFAULT_OUT_DIR);
+  const std::optional<EnclosingSuite>& suite = package.suite;
+  if (suite.has_value() && package.member) {
+    output_dir = suite->root.join(path::DEFAULT_OUT_DIR).join(suite->member);
+  }
   for (Artifact& target : targets) {
     target.output_dir = output_dir;
   }
   return base::make_ok(targets);
+}
+
+namespace {
+
+// A target's path names the module a build enters through: `main.al` is
+// the module `main`, and `text/run.al` is `text/run`.
+std::string_view module_of(std::string_view target_path) {
+  if (target_path.ends_with(path::SOURCE_EXTENSION)) {
+    target_path.remove_suffix(path::SOURCE_EXTENSION.size());
+  }
+  return target_path;
+}
+
+}  // namespace
+
+base::Result<TestPackage, diag::Reported> resolve_test_package(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    testgen::Execution execution) {
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "tests", "frontend");
+  base::Result<LoadedPackage, diag::Reported> loaded =
+      load_package(ctx, root, manifest_file, manifest_name);
+  if (loaded.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  LoadedPackage package = std::move(loaded).unwrap();
+  // A package whose directory is a copy of an embedded member is tested as
+  // that member: the run stages the package's own files in the member's
+  // tree, so the sealed specs and builtin type declarations its dialect
+  // allows are in force exactly where every other package meets them.
+  const std::string_view member = embedded_member_of(package);
+  // A run needs modules rather than a target: a package that builds no
+  // artifact of its own - every member of a suite is one - still has
+  // tests, so this resolves the selection rather than a target's tree.
+  base::Result<PackageSources, diag::Reported> collected =
+      collect_package_sources(ctx, root, package.manifest, member);
+  if (collected.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  PackageSources sources = std::move(collected).unwrap();
+
+  // A build enters the tree through the module its target names, and a run
+  // enters the same way: a test body then reaches the package's other
+  // modules by the names the module's own code already uses, and the
+  // driver stands in for that module's entry point instead of beside it. A
+  // package that declares no target - every member of a suite is one -
+  // enters through the driver, and its modules hang below it.
+  const analyzer::ModuleInput* entry = nullptr;
+  if (member.empty()) {
+    std::string_view entry_name;
+    if (package.manifest.bin_count > 0) {
+      entry_name = module_of(package.manifest.bins[0].path);
+    } else if (package.manifest.lib != nullptr) {
+      entry_name = module_of(package.manifest.lib->path);
+    }
+    for (const analyzer::ModuleInput& input : sources.selection) {
+      if (!entry_name.empty() && input.name == entry_name) {
+        entry = &input;
+        break;
+      }
+    }
+  }
+
+  TestPackage result;
+  // Splicing replaces a file's items before the modules are paired with
+  // their files, so the tree resolves the functions a test block became.
+  // A file reached by two module inputs is spliced once, and the second
+  // input keeps the items the first wrote.
+  std::vector<source::FileId> spliced;
+  for (const analyzer::ModuleInput& input : sources.selection) {
+    if (std::find(spliced.begin(), spliced.end(), input.id) != spliced.end()) {
+      continue;
+    }
+    const ParsedFile* const file = sources.parsed.find(input.id);
+    DCHECK(file != nullptr);
+    if (file == nullptr) {
+      continue;
+    }
+    testgen::SplicedModule module =
+        testgen::splice_tests(file->items, input.name, ctx.ast);
+    sources.parsed.files[sources.parsed.by_id[input.id]].items = module.items;
+    spliced.push_back(input.id);
+    for (const testgen::RefusedItem& refused : module.refused) {
+      switch (refused.reason) {
+        case testgen::Refusal::Returns:
+          (void)ctx.bag.emit<i18n::Key::PipelineTestEntryReturns>(
+              DiagCode::TestEntryReturns, refused.name.span, input.name,
+              refused.name.name);
+          break;
+        case testgen::Refusal::NamedMain:
+          (void)ctx.bag.emit<i18n::Key::PipelineTestEntryNamedMain>(
+              DiagCode::TestEntryNamedMain, refused.name.span, input.name);
+          break;
+        case testgen::Refusal::Collides:
+          (void)ctx.bag.emit<i18n::Key::PipelineTestCollidesWithItem>(
+              DiagCode::TestCollidesWithItem, refused.name.span,
+              refused.name.name, input.name);
+          break;
+        case testgen::Refusal::Duplicates:
+          (void)ctx.bag.emit<i18n::Key::PipelineTestDuplicateName>(
+              DiagCode::TestDuplicateName, refused.name.span, refused.name.name,
+              input.name);
+          break;
+      }
+    }
+    for (testgen::TestCase& test : module.tests) {
+      test.in_root = entry != nullptr && entry->id == input.id;
+      result.tests.push_back(std::move(test));
+    }
+  }
+  // The member's modules join the prelude the tree resolves, and only
+  // now: the splice above replaced their items, so this is where the
+  // prelude names what the run wrote.
+  for (const analyzer::ModuleInput& input : sources.staged_member) {
+    sources.prelude.push_back(parsed_module(sources.parsed, input));
+  }
+
+  // A package with no tests has nothing for the driver to call: a module
+  // the run enters through that declares its own entry point keeps it and
+  // the driver joins as an empty module, so the package builds as the
+  // program it is - its entry point included, which a run with tests
+  // replaces. A package whose entry declares no entry point, and one
+  // entered through the driver itself, keep the stand-in: either way the
+  // tree a run builds can be entered.
+  bool entry_keeps_its_main = false;
+  if (entry != nullptr && result.tests.empty()) {
+    const ParsedFile* const entry_file = sources.parsed.find(entry->id);
+    if (entry_file != nullptr) {
+      for (const ast::ItemIdx index : entry_file->items) {
+        if (!ctx.ast.items.bound(index)) {
+          continue;
+        }
+        const ast::ItemNode& item = ctx.ast.items[index];
+        if (item.kind == ast::ItemKind::Fn &&
+            item.payload.get<ast::ItemFn>().name.name == "main") {
+          entry_keeps_its_main = true;
+          break;
+        }
+      }
+    }
+  }
+  // The driver is syntax like any other module, so it is parsed through
+  // the same path: it is the entry module of the tree the run enters, or
+  // the items of that module when the package names one.
+  // The driver's imports start at the tree the driver and the package's
+  // own modules form, whichever module the tree grew from.
+  const std::string driver =
+      entry_keeps_its_main ? std::string()
+                           : testgen::driver_source(result.tests, execution);
+  const source::FileId driver_file =
+      ctx.sources.add_virtual(driver_file_name(package.manifest.name), driver);
+  base::Result<ParsedFiles, diag::Reported> driver_parsed =
+      parse_files(ctx, std::span<const source::FileId>(&driver_file, 1));
+  if (driver_parsed.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const ParsedFiles parsed_driver = std::move(driver_parsed).unwrap();
+  // A member's tree is the member's: the driver is its root module, so
+  // the imports above reach the member's modules below it and the member
+  // reaches them the way its own code does.
+  const analyzer::ModuleInput driver_input{
+      member.empty() ? std::string_view{} : member, driver_file};
+  source::FileId tree_root = driver_file;
+  if (entry != nullptr) {
+    const ParsedFile* const module_file = sources.parsed.find(entry->id);
+    const ParsedFile* const driver_items_file = parsed_driver.find(driver_file);
+    DCHECK(module_file != nullptr);
+    DCHECK(driver_items_file != nullptr);
+    if (module_file != nullptr && driver_items_file != nullptr) {
+      if (entry_keeps_its_main) {
+        // The module builds as the program it is, entry point included;
+        // the driver joins nothing, and the tree enters through the
+        // module it always does.
+        tree_root = entry->id;
+      } else {
+        // The driver joins the module here, so here is where a name the
+        // two share is refused: resolution would find the duplicate and
+        // point at the generated module, which names neither the item the
+        // reader wrote nor the reason it cannot stay.
+        const std::vector<ast::Ident> clashes =
+            testgen::driver_collisions(module_file->items, execution, ctx.ast);
+        if (!clashes.empty()) {
+          for (const ast::Ident& clash : clashes) {
+            (void)ctx.bag.emit<i18n::Key::PipelineTestDriverReserved>(
+                DiagCode::TestDriverReserved, clash.span, clash.name,
+                entry->name);
+          }
+          return base::make_err(diag::Reported{});
+        }
+        sources.parsed.files[sources.parsed.by_id[entry->id]].items =
+            testgen::entry_items(module_file->items, driver_items_file->items,
+                                 ctx.ast);
+        tree_root = entry->id;
+      }
+    }
+  }
+
+  // A member's modules are already the staged tree, so the driver joins
+  // that tree as its root rather than standing beside it: naming them
+  // again would open one module twice.
+  std::vector<analyzer::ParsedModule> modules;
+  if (member.empty()) {
+    modules.reserve(sources.selection.size() + 1);
+    if (entry == nullptr) {
+      modules.push_back(parsed_module(parsed_driver, driver_input));
+    }
+    for (const analyzer::ModuleInput& input : sources.selection) {
+      modules.push_back(parsed_module(sources.parsed, input));
+    }
+  } else {
+    sources.prelude.insert(sources.prelude.begin(),
+                           parsed_module(parsed_driver, driver_input));
+  }
+  base::Result<analyzer::ModuleTree, diag::Reported> tree = [&] {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-tree",
+                                             "frontend");
+    return analyzer::resolve_modules(tree_root, modules, package.manifest.name,
+                                     ctx.ast, ctx.bag, sources.prelude,
+                                     std_hints(), sources.dependencies,
+                                     sources.policies, ctx.profiler);
+  }();
+  if (tree.is_err() || ctx.bag.has_errors()) {
+    return base::make_err(diag::Reported{});
+  }
+  result.artifact.tree = std::move(tree).unwrap();
+  result.artifact.file_count = sources.file_count;
+  result.artifact.name = package.manifest.name;
+  result.artifact.kind = ArtifactKind::Bin;
+  for (const analyzer::DependencyPackage& dependency : sources.dependencies) {
+    if (!dependency.object.empty()) {
+      result.artifact.linked_objects.emplace_back(dependency.object);
+    }
+  }
+  return base::make_ok(std::move(result));
 }
 
 base::Result<pkg::Toolchain, diag::Reported> load_toolchain(

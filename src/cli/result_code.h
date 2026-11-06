@@ -23,6 +23,10 @@ enum class ResultCode : u8 {
   // A denied lint finding, or a lint run that could not read its
   // input.
   LintFailed = 9,
+  // A test run that built its package and then saw a test fail. It shares
+  // 1 with a rejected command line, the way a shell reports any command
+  // that failed: the run's own status is zero and anything else is not.
+  TestFailed = 1,
 };
 
 inline constexpr i32 result_code(ResultCode code) {

@@ -24,6 +24,8 @@ enum class ConfigError : u8 {
   BuildSingleFile,
   // `run` takes a package directory; a single file is `compile`'s.
   RunSingleFile,
+  // `test` takes a package directory; a single file is `check`'s.
+  TestSingleFile,
   // `compile` needs something to compile: a file or `--stdin`.
   CompileNeedsInput,
   // Reading the pipe and also naming an input is a contradiction.

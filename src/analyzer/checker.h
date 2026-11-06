@@ -502,6 +502,12 @@ class Checker {
   // The spec policy of `package`, or nullptr when the tree carries
   // none, which reads as every spec being open.
   const PackagePolicy* policy_of(std::string_view package) const;
+  // Whether `module` writes inside the staged suite: a staged source,
+  // or a module of the root package when that package is a member a
+  // test run stages in place of its embedded copy (ADR-0090,
+  // ADR-0139). A dependency's package carries the suite it was loaded
+  // from, and that alone does not put its code inside the suite.
+  bool in_staged_suite(u32 module) const;
   // A spec visible from `module`: declared there, imported, or
   // injected from a prelude facade. Mirrors the type-namespace walk.
   SpecEntry* find_spec_in_scope(u32 module, std::string_view name);

@@ -50,14 +50,18 @@ base::Result<RunOutcome, diag::Reported> execute(
   if (announce != nullptr) {
     announce(target, announce_ctx);
   }
-  base::Result<i32, SpawnError> executed = run_command(argv);
+  base::Result<SpawnOutcome, SpawnError> executed = run_command(argv);
   if (executed.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotExecute>(
         DiagCode::LinkError, exe_path);
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  return base::make_ok(RunOutcome{.exit_code = std::move(executed).unwrap()});
+  const SpawnOutcome ending = std::move(executed).unwrap();
+  // A program a signal ended has no exit status to hand on, and a run
+  // says so the way a shell does: 128 above the signal.
+  const i32 exit_code = ending.signaled ? 128 + ending.code : ending.code;
+  return base::make_ok(RunOutcome{.exit_code = exit_code});
 }
 
 }  // namespace

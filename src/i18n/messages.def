@@ -465,6 +465,7 @@
   F(PipelineSuiteHasMemberNamed, Error, Pipeline, "Suite '{}' already has a member named '{}'") \
   F(PipelineTargetOutputsCollide, Error, Pipeline, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
   F(PipelineTestCollidesWithItem, Error, Pipeline, "`{}` in a `test` block is already declared in module `{}`; rename the block item") \
+  F(PipelineTestDriverReserved, Error, Pipeline, "`{}` in module `{}` is a name the test driver declares; rename the item") \
   F(PipelineTestDuplicateName, Error, Pipeline, "`{}` is declared twice by the `test` blocks of module `{}`") \
   F(PipelineTestEntryNamedMain, Error, Pipeline, "A `test` block in module `{}` declares `main`; the run writes the package entry point") \
   F(PipelineTestEntryReturns, Error, Pipeline, "Test entry '{}::{}' writes a return type; a run reports whether a test returned, so write a helper `fn` beside it") \
@@ -544,9 +545,9 @@
   F(CliTestCaseAborted, Note, Pipeline, "test {} ... FAILED (aborted by signal {})") \
   F(CliTestCaseFailed, Note, Pipeline, "test {} ... FAILED (exit status {})") \
   F(CliTestCaseOk, Note, Pipeline, "test {} ... ok") \
-  F(CliTestExecutionHelp, Note, Pipeline, "How a run executes the tests: multi-process (the default) gives each test a process of its own, so one that aborts does not end the run; single-thread runs them all in one process and reports how far it got.") \
+  F(CliTestExecutionHelp, Note, Pipeline, "How a run executes the tests: multi-process (the default) gives each test a process of its own, so one that aborts does not end the run; single-thread runs them all in one process, where a failing test ends the run and the report says the run stopped early rather than how many tests passed.") \
   F(CliTestFailed, Note, Pipeline, "{} {} failed") \
-  F(CliTestFilterHelp, Note, Pipeline, "Keep only the tests whose report name contains this text.") \
+  F(CliTestFilterHelp, Note, Pipeline, "Keep only the tests whose report name contains this text, so 'vector' keeps 'my_vector' too.") \
   F(CliTestListHelp, Note, Pipeline, "Print the selected tests, one name per line, and run none.") \
   F(CliTestNoRunHelp, Note, Pipeline, "Build the program the tests became and stop before executing it.") \
   F(CliTestPassed, Note, Pipeline, "{} {} passed") \

@@ -44,10 +44,21 @@ Every verb builds an envelope, including the ones with no consumer for
 machine-readable output today, so that adding a result field means
 filling in a field rather than finding the call sites that print.
 
-`--json` applies to `build`, `compile`, and `check`. Help, version, and
-parse failures keep their text form: a parse error is reported before
-there is a command, and the rendered help is documentation rather than
-a result.
+`--json` applies to `build`, `compile`, `check`, `lint`, and `test`. A
+test run reports `stats.tests` and `stats.test_failures`, and a listing
+adds the labels it named as `test_labels`, so a tool that drives a suite
+reads counts rather than the lines meant for a person. In `--json` mode a
+test process's standard output is captured and counted as
+`stats.output_bytes`, because the document is the whole of standard
+output and a printing test would otherwise write through it; a text report
+sends those bytes to the terminal, where the program under test has always
+written, and the count stays zero there. A run in one
+process sets `stats.test_ended_early` when the process ended inside a
+test: the counts are then the selection and the failures it lived to
+count, and the flag is what says the run did not reach the end. Help,
+version, and parse failures keep their text form: a parse error is
+reported before there is a command, and the rendered help is
+documentation rather than a result.
 
 `--time-trace` composes with it rather than replacing it. On its own it
 prints the phases as a pruned call tree, one row per phase with its share

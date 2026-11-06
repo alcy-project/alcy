@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "cli/logger.h"
 #include "cli/trace.h"
@@ -41,6 +42,12 @@ enum class Outcome : u8 {
   Checked,
   Linted,
   Ran,
+  // Tests ran: the package was built with its tests and each selected one
+  // executed.
+  Tested,
+  // The tests were named and not run: `--list` answers what a run
+  // would select.
+  Listed,
   CreatedPackage,
   CreatedSuite,
   Formatted,
@@ -103,7 +110,24 @@ struct Envelope {
   // Repairs a lint run wrote. Zero when --fix was not given or nothing
   // needed one.
   usize fix_count = 0;
-  // Size of what was written, or zero when the command wrote nothing.
+  // Tests a test run selected, and how many of them failed. Zero for every
+  // other verb, and zero for a run that stopped before the first test.
+  usize test_count = 0;
+  usize test_failed = 0;
+  // Whether a run in one process stopped inside a test. The counts above
+  // then describe the selection rather than what finished: the process is
+  // the only witness to the tests it carried, it is gone, and the ones
+  // after the death carry no verdict, so the passes cannot be read as the
+  // whole selection.
+  bool test_ended_early = false;
+  // The tests a listing named, in report order. Empty for a run, which
+  // reports the count instead, and for every other verb.
+  std::vector<std::string> test_labels;
+  // Size of what the command wrote, or zero when it wrote nothing to
+  // measure: the artifact's size for a build or a compile, and the bytes a
+  // test run captured from its tests when the run's own output was a
+  // document (ADR-0020). The two never meet, because a command is one
+  // verb; a test run's text report captures nothing and reports zero.
   u64 output_bytes = 0;
   // Wall time of the whole invocation, measured by the caller with a
   // monotonic clock. The profiler's clock is wall-clock derived and is

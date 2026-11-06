@@ -665,15 +665,15 @@ base::Result<void, diag::Reported> link_executable(
   argv.emplace_back("-o");
   argv.emplace_back(exe_path);
 
-  base::Result<i32, SpawnError> linked = run_command(argv);
+  base::Result<SpawnOutcome, SpawnError> linked = run_command(argv);
   if (linked.is_err()) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineCannotRunSystemCompiler>(
         DiagCode::LinkError);
     (void)index;
     return base::make_err(diag::Reported{});
   }
-  const i32 code = std::move(linked).unwrap();
-  if (code != 0) {
+  const SpawnOutcome ending = std::move(linked).unwrap();
+  if (ending.code != 0 || ending.signaled) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineLinkFailed>(
         DiagCode::LinkError, exe_path);
     (void)index;

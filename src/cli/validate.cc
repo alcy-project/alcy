@@ -32,6 +32,10 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
       path::has_source_extension(config.input)) {
     return base::make_err(ConfigError::RunSingleFile);
   }
+  if (config.subcommand == Subcommand::Test &&
+      path::has_source_extension(config.input)) {
+    return base::make_err(ConfigError::TestSingleFile);
+  }
   if (config.subcommand == Subcommand::Fmt && config.fmt_stdin &&
       !config.fmt_files.empty()) {
     return base::make_err(ConfigError::FmtStdinWithFiles);
@@ -59,7 +63,8 @@ base::Result<void, ConfigError> validate_cli_config(const CliConfig& config) {
   if (config.json && config.subcommand != Subcommand::Build &&
       config.subcommand != Subcommand::Compile &&
       config.subcommand != Subcommand::Check &&
-      config.subcommand != Subcommand::Lint) {
+      config.subcommand != Subcommand::Lint &&
+      config.subcommand != Subcommand::Test) {
     return base::make_err(ConfigError::JsonWithoutResult);
   }
   return base::make_ok();
@@ -76,6 +81,8 @@ std::string describe_config_error(ConfigError error, i18n::Language language) {
       return i18n::format<Key::CliBuildTakesDirectory>(language);
     case ConfigError::RunSingleFile:
       return i18n::format<Key::CliRunTakesDirectory>(language);
+    case ConfigError::TestSingleFile:
+      return i18n::format<Key::CliTestTakesDirectory>(language);
     case ConfigError::CompileNeedsInput:
       return i18n::format<Key::CliCompileNeedsInput>(language);
     case ConfigError::CompileInputWithStdin:

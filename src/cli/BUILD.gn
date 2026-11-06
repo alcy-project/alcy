@@ -65,6 +65,8 @@ source_set("cli") {
     "run_command.h",
     "suggest.cc",
     "suggest.h",
+    "test_command.cc",
+    "test_command.h",
     "trace.cc",
     "trace.h",
     "trace_report.cc",
@@ -81,6 +83,7 @@ source_set("cli") {
     "//src/linter",
     "//src/lsp",
     "//src/pipeline",
+    "//src/testgen",
   ]
   defines = [ "ALCY_PROJECT_NAME=\"$project_name\"" ]
 

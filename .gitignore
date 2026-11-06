@@ -73,6 +73,9 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# The program `alcy test --no-run` builds beside the package it tests
+lib/std/*/out/
+
 # debug information files
 *.dw
 *.dwo

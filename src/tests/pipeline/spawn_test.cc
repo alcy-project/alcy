@@ -16,7 +16,7 @@ namespace pipeline {
 namespace {
 
 TEST_CASE("Spawn rejects empty argv") {
-  base::Result<i32, SpawnError> result = run_command({});
+  base::Result<SpawnOutcome, SpawnError> result = run_command({});
   CHECK(result.is_err());
   if (result.is_err()) {
     CHECK(std::move(result).unwrap_err() == SpawnError::EmptyArgv);
@@ -24,7 +24,7 @@ TEST_CASE("Spawn rejects empty argv") {
 }
 
 TEST_CASE("Spawn reports missing programs") {
-  base::Result<i32, SpawnError> result =
+  base::Result<SpawnOutcome, SpawnError> result =
       run_command({"alcy-no-such-program-xyz"});
   CHECK(result.is_err());
 }
@@ -32,19 +32,57 @@ TEST_CASE("Spawn reports missing programs") {
 #if !BUILD_FLAG(IS_OS_ASMJS)
 #if BUILD_FLAG(IS_OS_WIN)
 TEST_CASE("Spawn forwards exit codes") {
-  base::Result<i32, SpawnError> result =
+  base::Result<SpawnOutcome, SpawnError> result =
       run_command({"cmd", "/c", "exit", "3"});
   CHECK(result.is_ok());
   if (result.is_ok()) {
-    CHECK(std::move(result).unwrap() == 3);
+    CHECK(std::move(result).unwrap().code == 3);
   }
 }
 #else
 TEST_CASE("Spawn forwards exit codes") {
-  base::Result<i32, SpawnError> result = run_command({"sh", "-c", "exit 3"});
+  base::Result<SpawnOutcome, SpawnError> result =
+      run_command({"sh", "-c", "exit 3"});
   CHECK(result.is_ok());
   if (result.is_ok()) {
-    CHECK(std::move(result).unwrap() == 3);
+    CHECK(std::move(result).unwrap().code == 3);
+  }
+}
+#endif
+#endif
+
+#if !BUILD_FLAG(IS_OS_ASMJS)
+#if BUILD_FLAG(IS_OS_WIN)
+TEST_CASE("Capture counts the child's standard output") {
+  base::Result<CapturedSpawn, SpawnError> result =
+      run_command_capture({"cmd", "/c", "echo hello"});
+  CHECK(result.is_ok());
+  if (result.is_ok()) {
+    const CapturedSpawn captured = std::move(result).unwrap();
+    CHECK(captured.outcome.code == 0);
+    CHECK(captured.output_bytes > 0);
+  }
+}
+#else
+TEST_CASE("Capture counts the child's standard output") {
+  base::Result<CapturedSpawn, SpawnError> result =
+      run_command_capture({"sh", "-c", "printf hello"});
+  CHECK(result.is_ok());
+  if (result.is_ok()) {
+    const CapturedSpawn captured = std::move(result).unwrap();
+    CHECK(captured.outcome.code == 0);
+    CHECK(captured.output_bytes == 5);
+  }
+}
+
+TEST_CASE("Capture reports the child's exit status") {
+  base::Result<CapturedSpawn, SpawnError> result =
+      run_command_capture({"sh", "-c", "printf quiet; exit 3"});
+  CHECK(result.is_ok());
+  if (result.is_ok()) {
+    const CapturedSpawn captured = std::move(result).unwrap();
+    CHECK(captured.outcome.code == 3);
+    CHECK(captured.output_bytes == 5);
   }
 }
 #endif

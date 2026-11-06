@@ -151,6 +151,12 @@ UsageText::UsageText(Language language)
   set(Key::CliVcsHelp, i18n::format<Key::CliVcsHelp>(language));
   set(Key::CliCheckAbout, i18n::format<Key::CliCheckAbout>(language));
   set(Key::CliCheckFileHelp, i18n::format<Key::CliCheckFileHelp>(language));
+  set(Key::CliTestAbout, i18n::format<Key::CliTestAbout>(language));
+  set(Key::CliTestExecutionHelp,
+      i18n::format<Key::CliTestExecutionHelp>(language));
+  set(Key::CliTestFilterHelp, i18n::format<Key::CliTestFilterHelp>(language));
+  set(Key::CliTestListHelp, i18n::format<Key::CliTestListHelp>(language));
+  set(Key::CliTestNoRunHelp, i18n::format<Key::CliTestNoRunHelp>(language));
   set(Key::CliFmtAbout, i18n::format<Key::CliFmtAbout>(language));
   set(Key::CliFmtCheckHelp, i18n::format<Key::CliFmtCheckHelp>(language));
   set(Key::CliLintAbout, i18n::format<Key::CliLintAbout>(language));

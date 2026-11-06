@@ -31,7 +31,10 @@ without a descriptor.
 
 Standard error carries the diagnostics and standard output carries the
 answer: the result line, the time-trace summary, `--help`, `--version`,
-and the whole `--json` document. `docs/adr/0033-errors-on-stderr-results-on-stdout.md`
+and the whole `--json` document. A `--json` test run captures the bytes
+its tests write to standard output and counts them as
+`stats.output_bytes`, so the document stays the only thing on the
+channel. `docs/adr/0033-errors-on-stderr-results-on-stdout.md`
 has the reasoning; `Interruption` is the split for an invocation that
 stopped before a command ran.
 
@@ -52,7 +55,7 @@ stopped before a command ran.
   `ArgParseError`; semantic failures report a diagnostic and exit the
   same way; dispatch only ever sees a validated config.
 - `run_build` / `run_compile` / `run_check` / `run_fmt` / `run_run` /
-  `run_new` / `run_init`.
+  `run_test` / `run_new` / `run_init`.
 - `trace` owns `--time-trace` sessions: `TraceSession` points the
   context at the global profiler while a command runs and writes the
   Chromium trace JSON on `finish()`.

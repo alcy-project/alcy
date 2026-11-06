@@ -1454,7 +1454,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     // package implements a spec for one, sealed or not (ADR-0133). The
     // seal above still governs which package may implement a sealed
     // spec, for a scalar as for a nominal.
-    if (!tree.modules[module]->is_staged) {
+    if (!in_staged_suite(module)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerSpecRequiresNominalTarget>(
           DiagCode::UnknownType, target_node.span);
       (void)index;
@@ -1534,7 +1534,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   // the staged suite, and a package outside it cannot implement for
   // one.
   if (primitive_target) {
-    if (!tree.modules[module]->is_staged) {
+    if (!in_staged_suite(module)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
           DiagCode::ImplOutsideItsHome, target_node.span, target_display);
       (void)index;

@@ -146,6 +146,8 @@ std::string_view verb_for(Outcome outcome, i18n::Language language) {
     case Outcome::Checked: return i18n::text<Key::CliVerbChecked>(language);
     case Outcome::Linted: return i18n::text<Key::CliVerbLinted>(language);
     case Outcome::Ran: return i18n::text<Key::CliVerbRan>(language);
+    case Outcome::Tested: return i18n::text<Key::CliVerbTested>(language);
+    case Outcome::Listed: return i18n::text<Key::CliVerbListed>(language);
     case Outcome::CreatedPackage:
       return i18n::text<Key::CliVerbCreatedPackage>(language);
     case Outcome::CreatedSuite:
@@ -166,6 +168,8 @@ const char* outcome_name(Outcome outcome) {
     case Outcome::Checked: return "checked";
     case Outcome::Linted: return "linted";
     case Outcome::Ran: return "ran";
+    case Outcome::Tested: return "tested";
+    case Outcome::Listed: return "listed";
     case Outcome::CreatedPackage: return "created-package";
     case Outcome::CreatedSuite: return "created-suite";
     case Outcome::Formatted: return "formatted";
@@ -314,6 +318,14 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
                      i18n::text<Key::CliLintFixSingular>(language),
                      i18n::text<Key::CliLintFixPlural>(language));
       }
+      return subject;
+    }
+    case Outcome::Tested:
+    case Outcome::Listed: {
+      std::string subject;
+      append_count(subject, envelope.test_count,
+                   i18n::text<Key::CliTestSingular>(language),
+                   i18n::text<Key::CliTestPlural>(language));
       return subject;
     }
     case Outcome::Built:
@@ -583,6 +595,12 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   append_json_number(out, envelope.lint_count);
   out += R"(,"fixes":)";
   append_json_number(out, envelope.fix_count);
+  out += R"(,"tests":)";
+  append_json_number(out, envelope.test_count);
+  out += R"(,"test_failures":)";
+  append_json_number(out, envelope.test_failed);
+  out += R"(,"test_ended_early":)";
+  out += envelope.test_ended_early ? "true" : "false";
   out += R"(,"output_bytes":)";
   append_json_number(out, envelope.output_bytes);
   out += R"(,"wall_ns":)";
@@ -597,6 +615,21 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   diag::append_diagnostics_json(
       out, envelope.bag, envelope.sources, language,
       envelope.failure.has_value() ? &*envelope.failure : nullptr);
+  // A listing names its tests, so a tool reads them from the document
+  // rather than from the lines a human reads. A run reports them one
+  // verdict at a time on standard error instead.
+  if (!envelope.test_labels.empty()) {
+    out += R"(,"test_labels":[)";
+    bool first = true;
+    for (const std::string& label : envelope.test_labels) {
+      if (!first) {
+        out.push_back(',');
+      }
+      first = false;
+      append_json_string(out, label);
+    }
+    out.push_back(']');
+  }
   // Only when there is something to carry: an empty array would say the
   // trace ran and recorded nothing, which is a different statement.
   if (!envelope.trace.events.empty()) {

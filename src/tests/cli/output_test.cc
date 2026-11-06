@@ -119,6 +119,47 @@ TEST_CASE("A run reports no result line, having announced itself already") {
         std::string::npos);
 }
 
+TEST_CASE("A test run reports its tests in the json result") {
+  Envelope listing;
+  listing.command = "test";
+  listing.status = Status::Ok;
+  listing.outcome = Outcome::Listed;
+  listing.test_count = 2;
+  listing.test_labels = {"main::adds", "util::parses"};
+
+  const std::string listed = render_json(listing, i18n::Language::EnUs);
+  CHECK(listed.find("\"tests\":2") != std::string::npos);
+  CHECK(listed.find("\"test_labels\":[\"main::adds\",\"util::parses\"]") !=
+        std::string::npos);
+
+  // A run says how many tests it selected and how many failed; the
+  // verdicts themselves are lines on standard error, so the document
+  // carries no array of names.
+  Envelope ran;
+  ran.command = "test";
+  ran.status = Status::Ok;
+  ran.outcome = Outcome::Tested;
+  ran.test_count = 2;
+  ran.test_failed = 1;
+
+  const std::string tested = render_json(ran, i18n::Language::EnUs);
+  CHECK(tested.find("\"tests\":2") != std::string::npos);
+  CHECK(tested.find("\"test_failures\":1") != std::string::npos);
+  CHECK(tested.find("test_labels") == std::string::npos);
+  CHECK(tested.find("\"test_ended_early\":false") != std::string::npos);
+
+  // A run that died inside a test reports the tests it selected and none
+  // of the failures it did not live to count, so the document says the run
+  // stopped rather than leaving the missing verdicts to arithmetic.
+  Envelope stopped;
+  stopped.command = "test";
+  stopped.test_count = 2;
+  stopped.test_ended_early = true;
+
+  const std::string early = render_json(stopped, i18n::Language::EnUs);
+  CHECK(early.find("\"test_ended_early\":true") != std::string::npos);
+}
+
 TEST_CASE("A scaffold reports its own shape, not a padded column") {
   // `Created package` is longer than the column and says something
   // different from a build, so it is not padded to match.

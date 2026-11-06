@@ -1550,10 +1550,10 @@ TEST_CASE("A dependency a summary answers for is not read") {
         dir.join("proj/out/app" + std::string(exe_suffix()));
     CHECK(io::is_file(exe));
     // The linked program runs the dependency's code.
-    base::Result<i32, SpawnError> ran = run_command({exe});
+    base::Result<SpawnOutcome, SpawnError> ran = run_command({exe});
     CHECK(ran.is_ok());
     if (ran.is_ok()) {
-      CHECK(std::move(ran).unwrap() == 0);
+      CHECK(std::move(ran).unwrap().code == 0);
     }
   }
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)

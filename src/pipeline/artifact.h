@@ -17,6 +17,8 @@
 #include "pkg/manifest.h"
 #include "pkg/toolchain.h"
 #include "source/source.h"
+#include "testgen/driver.h"
+#include "testgen/tests.h"
 
 namespace pipeline {
 
@@ -114,6 +116,29 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     source::FileId manifest_file,
     std::string_view manifest_name,
     ArtifactScope scope);
+
+// A package resolved for testing: the module tree a test run enters
+// through, and the tests the tree's driver calls, in the order the driver
+// numbers them. The entry module is the synthesized driver, so the
+// package's own modules keep the names their files have rather than the
+// names a target gives them.
+struct TestPackage {
+  Artifact artifact;
+  std::vector<testgen::TestCase> tests;
+};
+
+// Resolves a package's tests: the modules its manifest selects with their
+// `test` blocks spliced into functions, and a driver module that calls
+// them. A package needs no target to be tested, which is why this does not
+// go through resolve_artifacts. `execution` decides how the driver
+// reaches the tests, and the driver is part of the tree, so it is read
+// here rather than by the caller.
+base::Result<TestPackage, diag::Reported> resolve_test_package(
+    PipelineContext& ctx,
+    const path::Path& root,
+    source::FileId manifest_file,
+    std::string_view manifest_name,
+    testgen::Execution execution);
 
 // Loads `.alcy/toolchain.toml` beside the package root. An absent file
 // means defaults; a corrupt one lands in the bag.

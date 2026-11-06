@@ -19,6 +19,7 @@
 #include "pipeline/vcs.h"
 #include "pkg/profile.h"
 #include "pkg/toolchain.h"
+#include "testgen/driver.h"
 
 namespace cli {
 
@@ -30,6 +31,7 @@ enum class Subcommand : u8 {
   New,
   Init,
   Check,
+  Test,
   Fmt,
   Lint,
   Lsp,
@@ -152,6 +154,18 @@ struct CliConfig {
   // Emit the result as one JSON document on standard output instead of
   // the text report, for an editor or another tool reading it.
   bool json = false;
+  // The text a test run keeps tests by: empty keeps every one of them,
+  // and any other value keeps the tests whose report name contains it.
+  // Borrows argv storage like input.
+  std::string_view test_filter = "";
+  // test was asked to print the selected tests and run none of them.
+  bool test_list = false;
+  // test was asked to build the program the tests became and stop before
+  // executing it.
+  bool test_no_run = false;
+  // How a run executes the tests: a process of its own for each, or one
+  // process for all of them.
+  testgen::Execution test_execution = testgen::Execution::MultiProcess;
   // How many threads may read the source at once. Zero means the command
   // line did not say, which the pipeline answers with one.
   u32 jobs = 0;

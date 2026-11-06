@@ -120,6 +120,8 @@ source_set("pipeline") {
     "std_select.h",
     "std_stage.cc",
     "std_stage.h",
+    "test.cc",
+    "test.h",
     "vcs.cc",
     "vcs.h",
   ]
@@ -147,6 +149,7 @@ source_set("pipeline") {
     "//src/pkg",
     "//src/source",
     "//src/symbol",
+    "//src/testgen",
   ]
 
   # The dispatch reaches the implementations; a build that carries none

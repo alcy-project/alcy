@@ -27,6 +27,7 @@
 #include "cli/parse_output.h"
 #include "cli/result_code.h"
 #include "cli/run_command.h"
+#include "cli/test_command.h"
 #include "cli/validate.h"
 #include "cli/version.h"
 #include "debug/fatal.h"
@@ -55,6 +56,7 @@ i32 dispatch(const CliConfig& config,
     case Subcommand::Init: return result_code(run_init(config, ctx, envelope));
     case Subcommand::Check:
       return result_code(run_check(config, ctx, envelope));
+    case Subcommand::Test: return run_test(config, ctx, envelope);
     case Subcommand::Fmt: return result_code(run_fmt(config, ctx, envelope));
     case Subcommand::Lint: return result_code(run_lint(config, ctx, envelope));
     case Subcommand::Lsp: return run_lsp(config, ctx, envelope);
@@ -75,6 +77,7 @@ std::string_view command_name(Subcommand subcommand) {
     case Subcommand::New: return "new";
     case Subcommand::Init: return "init";
     case Subcommand::Check: return "check";
+    case Subcommand::Test: return "test";
     case Subcommand::Fmt: return "fmt";
     case Subcommand::Lint: return "lint";
     case Subcommand::Lsp: return "lsp";

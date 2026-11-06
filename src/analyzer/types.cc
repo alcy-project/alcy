@@ -183,6 +183,20 @@ const PackagePolicy* Checker::policy_of(std::string_view package) const {
   return nullptr;
 }
 
+bool Checker::in_staged_suite(u32 module) const {
+  if (tree.modules[module]->is_staged) {
+    return true;
+  }
+  // A member under test stages its own files in place of the embedded
+  // copy, and its policy carries the suite's identity for that reason
+  // alone. The policy of every other package names the suite the
+  // dependency that loaded it came from, which says nothing about who
+  // its code is; only the root package is the one this run builds.
+  const PackagePolicy* const policy = policy_of(package_of(module));
+  return policy != nullptr && !policy->suite.empty() &&
+         policy->package == tree.package_name;
+}
+
 bool Checker::is_param_value(ir::TypeIdx type) const {
   ir::TypeIdx inner = type_origin(type);
   const ir::TypeTag tag = tag_of(inner);
@@ -1999,7 +2013,7 @@ void Checker::process_module(u32 module) {
         } else if (self_node.kind == ast::TypeKind::Str) {
           // `impl str`: the string view is a builtin, and the staged
           // suite owns the methods on it (ADR-0090).
-          if (!tree.modules[module]->is_staged) {
+          if (!in_staged_suite(module)) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
                     DiagCode::ImplOutsideItsHome, self_node.span, "str");
@@ -2012,7 +2026,7 @@ void Checker::process_module(u32 module) {
                    self_node.kind == ast::TypeKind::Array) {
           // A slice or array is a builtin too: the staged suite owns
           // the methods on one (ADR-0090).
-          if (!tree.modules[module]->is_staged) {
+          if (!in_staged_suite(module)) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
                     DiagCode::ImplOutsideItsHome, self_node.span, "[T]");

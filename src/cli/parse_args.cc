@@ -33,6 +33,7 @@
 #include "pipeline/emit_mode.h"
 #include "pipeline/vcs.h"
 #include "pkg/profile.h"
+#include "testgen/driver.h"
 
 namespace cli {
 
@@ -74,6 +75,8 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
     c.subcommand = Subcommand::Init;
   } else if (selected == "check") {
     c.subcommand = Subcommand::Check;
+  } else if (selected == "test") {
+    c.subcommand = Subcommand::Test;
   } else if (selected == "fmt") {
     c.subcommand = Subcommand::Fmt;
   } else if (selected == "lint") {
@@ -169,6 +172,16 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
       }
     }
   }
+  c.test_filter = matches.get<std::string_view>("filter").unwrap_or("");
+  c.test_list = matches.get<bool>("list").unwrap_or(false);
+  c.test_no_run = matches.get<bool>("no-run").unwrap_or(false);
+  // The choices above already rejected any other spelling, so an absent
+  // flag leaves the default standing rather than reporting twice.
+  const std::string_view execution =
+      matches.get<std::string_view>("execution").unwrap_or("multi-process");
+  c.test_execution = execution == "single-thread"
+                         ? testgen::Execution::SingleThread
+                         : testgen::Execution::MultiProcess;
   c.no_std = matches.get<bool>("no-std").unwrap_or(false);
   c.no_cache = matches.get<bool>("no-cache").unwrap_or(false);
   // `vcs` is declared on the two scaffolding verbs only, so the default
@@ -517,6 +530,62 @@ arg::Parser build_parser(i18n::Language language) {
           .add_arg(arg::ArgBuilder("file")
                        .help(usage.text(i18n::Key::CliCheckFileHelp))
                        .default_value("")
+                       .build())
+          .build());
+  builder.add_subcommand(
+      build_subcommand("test", std::string(usage.text(i18n::Key::CliTestAbout)))
+          .add_arg(arg::ArgBuilder("release")
+                       .help(usage.text(i18n::Key::CliReleaseHelp))
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("profile")
+                       .help(usage.text(i18n::Key::CliProfileHelp))
+                       .value_name("NAME")
+                       .build())
+          .add_arg(arg::ArgBuilder("on-panic")
+                       .help(usage.text(i18n::Key::CliOnPanicHelp))
+                       .choices({"abort", "backtrace"})
+                       .value_name("BEHAVIOR")
+                       .build())
+          .add_arg(arg::ArgBuilder("optimize")
+                       .help(usage.text(i18n::Key::CliOptimizeHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
+                       .build())
+          .add_arg(arg::ArgBuilder("overflow-checks")
+                       .help(usage.text(i18n::Key::CliOverflowChecksHelp))
+                       .choices({"on", "off"})
+                       .value_name("ON|OFF")
+                       .build())
+          .add_arg(arg::ArgBuilder("linker")
+                       .help(usage.text(i18n::Key::CliLinkerOverrideHelp))
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("link-args")
+                       .help(usage.text(i18n::Key::CliLinkArgsOverrideHelp))
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("no-cache")
+                       .help(usage.text(i18n::Key::CliNoCacheHelp))
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("filter")
+                       .help(usage.text(i18n::Key::CliTestFilterHelp))
+                       .value_name("TEXT")
+                       .default_value("")
+                       .build())
+          .add_arg(arg::ArgBuilder("list")
+                       .help(usage.text(i18n::Key::CliTestListHelp))
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("no-run")
+                       .help(usage.text(i18n::Key::CliTestNoRunHelp))
+                       .is_flag(true)
+                       .build())
+          .add_arg(arg::ArgBuilder("execution")
+                       .help(usage.text(i18n::Key::CliTestExecutionHelp))
+                       .choices({"multi-process", "single-thread"})
+                       .default_value("multi-process")
                        .build())
           .build());
   builder.add_subcommand(

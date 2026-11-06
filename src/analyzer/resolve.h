@@ -71,8 +71,9 @@ struct PackageRoot {
 };
 
 // One package's spec policy: the identity a `use` spells, the suite the
-// dependency that loaded it puts it in (empty for the root package and
-// for a dependency no suite names), and the specs its manifest seals to
+// dependency that loaded it puts it in (empty for the root package unless
+// it is the standard-library member under test, and for a dependency no
+// suite names), and the specs its manifest seals to
 // that suite (ADR-0053). One row per package - the root's, each path
 // dependency's, each staged standard-library member's - so an
 // implementation's package is placed even when it seals nothing.

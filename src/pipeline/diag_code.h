@@ -85,6 +85,35 @@ enum class DiagCode : u8 {
   // A binary target declares no free `main`: the program reaches the
   // linker, whose failure names the tool rather than the entry point.
   NoEntryPoint = 24,
+  // A test entry writes a return type. A run reports a test by whether it
+  // returned, so a value has no reader; a helper beside the entries is
+  // what a test that needs one calls.
+  TestEntryReturns = 25,
+  // A test entry named `main`. The run writes the entry point its
+  // module needs, so a block cannot declare one.
+  TestEntryNamedMain = 26,
+  // A block item takes a name its module declares at its own level:
+  // both are items of one namespace, so the module would hold two of
+  // that name.
+  TestCollidesWithItem = 27,
+  // Two block items take one name, which the module would likewise hold
+  // twice.
+  TestDuplicateName = 28,
+  // `alcy test` was given a suite manifest, which names the packages
+  // that carry tests rather than carrying them itself.
+  TestSuiteGiven = 29,
+  // The target is not a machine that starts a process, so a test process
+  // cannot be the unit a run reports.
+  TestTargetNotRunnable = 30,
+  // The executable the run built could not be started. A test is reported
+  // by the status its process exited with, and a process that never
+  // existed has none.
+  CannotStartProcess = 31,
+  // A module the run enters through declares a name its generated
+  // driver declares: both are items of one namespace, so the tree would
+  // hold two of that name and resolution would point at the generated
+  // module rather than the reader's.
+  TestDriverReserved = 32,
 };
 
 }  // namespace pipeline
