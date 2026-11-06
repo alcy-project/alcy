@@ -930,6 +930,18 @@ TEST_CASE("apply_edits drops an edit outside the file") {
   CHECK(out.applied == 0);
 }
 
+TEST_CASE("a walk after the check reads a desugared fn parameter") {
+  // The desugarer grows the item's generic list for a `fn(...)`
+  // spelling; the walk runs on the item list the check left behind.
+  Run run;
+  run("fn apply(f: fn (i32) -> i32, x: i32) -> i32 {\n"
+      "  unused := 1\n"
+      "  ret f(x)\n"
+      "}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "unused-variable") == 1);
+}
+
 TEST_CASE("collect_fixes names the file and the repair") {
   Run run;
   run("fn main() -> i32 {\n  while true {\n    break\n  }\n  ret 0\n}\n",

@@ -865,17 +865,29 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
   // mutable accessor, so a changed item is set back whole.
   ast::ItemFn fn = node.payload.get<ast::ItemFn>();
   std::vector<ast::GenericParam> added;
+  // A minted name is written into the AST's arena, which the item's
+  // view of it borrows: the item list outlives the check, and a reader
+  // that walks it afterwards would follow a name the checker owned.
+  auto mint_name = [&](std::string_view spelling, diag::Span span) {
+    char* const owned =
+        static_cast<char*>(ast.spans.alloc(spelling.size(), alignof(char)));
+    if (owned == nullptr) {
+      // The arena is spent, so the file is refused and no name minted
+      // here is read; keeping the spelling says what the name was.
+      return ast::Ident{spelling, span};
+    }
+    spelling.copy(owned, spelling.size());
+    return ast::Ident{std::string_view(owned, spelling.size()), span};
+  };
   // One spelling: the type becomes a path to a fresh synthetic
   // parameter, the item's generic list grows, and the signature is
   // recorded for the witness check. `display` names the spelling in a
   // diagnostic, empty when only the synthetic name can.
   auto rewrite = [&](ast::TypeIdx spelling, ast::TypeFunc sig, bool is_return,
                      std::string_view display) {
-    ownFnTables_.own_fn_names_.push_back("__fn" +
-                                         std::to_string(next_own_fn_++));
-    const ast::Ident name{ownFnTables_.own_fn_names_.back(),
-                          ast.types[spelling].span};
     const diag::Span span = ast.types[spelling].span;
+    const ast::Ident name =
+        mint_name("__fn" + std::to_string(next_own_fn_++), span);
     // The parameter is bounded by the spec its spelling names
     // (ADR-0116): `fn(A, B) -> R` is `Fn<(A, B), R>`, with the
     // parameters as one tuple so one spec covers every arity.
@@ -935,8 +947,9 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
   }
   std::vector<ast::GenericParam> all(fn.generic.begin(), fn.generic.end());
   all.insert(all.end(), added.begin(), added.end());
-  ownFnTables_.own_fn_params_.push_back(std::move(all));
-  fn.generic = ownFnTables_.own_fn_params_.back();
+  // The rewritten list lives in the same arena as any the parser wrote,
+  // for the same reason: the item keeps it past the end of the check.
+  fn.generic = ast::copy_to_arena(ast.spans, all);
   ast.items[item].payload.set(fn);
 }
 

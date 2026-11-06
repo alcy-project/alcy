@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <deque>
 #include <optional>
 #include <span>
 #include <string>
@@ -732,12 +731,12 @@ class Checker {
     // The instantiation this record answers for.
     std::vector<ir::TypeIdx> args;
   };
-  // Return-position `fn()` desugaring: the parameters rewritten in
-  // place, the slots they declare, and the returns still waiting for
-  // a witness to bind against.
+  // Return-position `fn()` desugaring: the slots the rewritten
+  // parameters declare, and the returns still waiting for a witness to
+  // bind against. What the rewrite writes into the item - its name and
+  // its generic list - goes in the AST's arena instead, because the
+  // item outlives the check.
   struct OwnFnTables {
-    std::deque<std::vector<ast::GenericParam>> own_fn_params_;
-    std::deque<std::string> own_fn_names_;
     std::vector<OwnFnSlot> own_fn_slots_;
     std::vector<OwnFnReturnWitness> own_fn_return_witnesses_;
     std::vector<PendingOwnFnReturn> pending_own_fn_returns_;
