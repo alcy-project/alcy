@@ -60,6 +60,7 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::EnumTagLoad:
     case O::Not:
     case O::BitReverse:
+    case O::FNeg:
     case O::TypeCast:
     case O::AtomicLoad:
     case O::Move:

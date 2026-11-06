@@ -184,6 +184,15 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       }
       break;
     }
+    case Op::FNeg: {
+      DCHECK(ops.size() == 1);
+      const ir::Operand& lhs = storage_->operands()[ops.head()];
+      if (i.dst.is_valid()) {
+        values_.add_register(i.dst,
+                             builder_->CreateFNeg(resolve_operand_value(lhs)));
+      }
+      break;
+    }
     case Op::Eq:
     case Op::Ne:
     case Op::Lt:

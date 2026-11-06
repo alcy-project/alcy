@@ -5625,16 +5625,19 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
             emit(ir::Opcode::Not, inner.type, {use_value(inner)});
         return Val{to_operand(dst, inner.type), inner.type, false, false};
       }
+      // A float's negation is its sign bit flipped; `0.0 - x` answers
+      // `+0.0` for `+0.0`, where the source asks for `-0.0`.
+      if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
+        const ir::RegisterIdx dst =
+            emit(ir::Opcode::FNeg, inner.type, {use_value(inner)});
+        return Val{to_operand(dst, inner.type), inner.type, false, false};
+      }
       Val zero = lower_literal_zero(inner.type, node.span);
       if (failed || terminated_cur()) {
         return stopped_value();
       }
-      ir::Opcode op = ir::Opcode::IntSub;
-      if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-        op = ir::Opcode::FSub;
-      }
       const ir::RegisterIdx dst =
-          emit(op, inner.type, {zero.op, use_value(inner)});
+          emit(ir::Opcode::IntSub, inner.type, {zero.op, use_value(inner)});
       return Val{to_operand(dst, inner.type), inner.type, false, false};
     }
     case ast::ExprKind::Borrow: {

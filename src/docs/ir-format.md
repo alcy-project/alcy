@@ -154,6 +154,7 @@ Named values (`@function`, immutables) print inline.
 | `IntDiv`/`UintDiv` | `a / b` |
 | `IntRem`/`UintRem` | `a % b` |
 | `FAdd`/`FSub`/`FMul`/`FDiv` | `a + b`, `a - b`, `a * b`, `a / b` |
+| `FNeg` | `-a` |
 | `And`/`Or`/`Xor` | `a & b`, `a \| b`, `a ^ b` |
 | `ShiftLeft` | `a << b` |
 | `ArithmeticShiftRight`/`LogicalShiftRight` | `a >> b` |

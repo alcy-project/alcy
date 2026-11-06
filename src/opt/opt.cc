@@ -290,6 +290,7 @@ bool prunable(Opcode op) {
     case Opcode::FSub:
     case Opcode::FMul:
     case Opcode::FDiv:
+    case Opcode::FNeg:
     case Opcode::And:
     case Opcode::Or:
     case Opcode::Xor:

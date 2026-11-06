@@ -949,8 +949,10 @@ void Lowerer::Fmt::emit_float(diag::Span span,
       owner_.emit(ir::Opcode::Or, boolean,
                   {owner_.to_operand(below_zero, boolean),
                    owner_.to_operand(reciprocal_below_zero, boolean)});
-  const ir::RegisterIdx flipped = owner_.emit(
-      ir::Opcode::FSub, f64_ty, {zero, owner_.to_operand(value, f64_ty)});
+  // The magnitude of a value the sign piece above already reported as
+  // negative, so dropping the sign bit is the whole of it.
+  const ir::RegisterIdx flipped =
+      owner_.emit(ir::Opcode::FNeg, f64_ty, {owner_.to_operand(value, f64_ty)});
   const ir::RegisterIdx magnitude = owner_.emit(
       ir::Opcode::Select, f64_ty,
       {owner_.to_operand(negative, boolean), owner_.to_operand(flipped, f64_ty),

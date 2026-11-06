@@ -625,6 +625,12 @@ class TextWriter {
         out_ += ')';
         break;
       }
+      case O::FNeg: {
+        write_dst(instr);
+        out_ += '-';
+        write_operand(state_.operands[instr.operands.head()]);
+        break;
+      }
       case O::Eq: write_binary(instr, "=="); break;
       case O::Ne: write_binary(instr, "!="); break;
       case O::Le: write_binary(instr, "<="); break;

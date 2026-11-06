@@ -706,6 +706,7 @@ void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
     case Op::FSub:
     case Op::FMul:
     case Op::FDiv:
+    case Op::FNeg:
     case Op::And:
     case Op::Or:
     case Op::Xor:

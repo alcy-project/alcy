@@ -229,6 +229,19 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
       }
       return store_dst();
     }
+    case O::FNeg: {
+      DCHECK_EQ(ops.size(), 1u);
+      const ir::Operand& lhs = storage_.operands()[ops.head()];
+      const ir::TypeTag tag = storage_.types()[lhs.type].tag;
+      if (!ir::is_float_type(tag)) {
+        return unsupported(current_span_, "this negation");
+      }
+      if (push_operand(lhs).is_err()) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+      op(tag == ir::TypeTag::F64 ? 0x9A : 0x8C);  // f64.neg / f32.neg
+      return store_dst();
+    }
     case O::BitReverse: return unsupported(current_span_, "a bit reversal");
     case O::Eq:
     case O::Ne:

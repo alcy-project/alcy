@@ -24,6 +24,8 @@
 - `a ** b` is integer-only, repeated squaring under `*`'s checks: a
   negative exponent panics, `x ** 0` is one (`0 ** 0` included), and a
   float `**` is undefined - the operator is declared for integers only.
+- `-x` on a float flips its sign bit, so `-(0.0)` is `-0.0` and a
+  NaN keeps its payload; on an integer it is the checked `0 - x` above.
 - Casts: a cast between a float and an integer truncates toward zero,
   and a value the destination cannot hold saturates - its minimum below
   the destination's range and its maximum above it, with NaN becoming

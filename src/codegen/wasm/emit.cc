@@ -837,6 +837,7 @@ Emitter::EmitResult Emitter::emit_instruction(ir::InstructionIdx instr_idx,
     case O::FSub:
     case O::FMul:
     case O::FDiv:
+    case O::FNeg:
     case O::And:
     case O::Or:
     case O::Xor:

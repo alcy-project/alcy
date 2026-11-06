@@ -872,6 +872,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
     case Opcode::FSub:
     case Opcode::FMul:
     case Opcode::FDiv:
+    case Opcode::FNeg:
       return fail(IrRunError::Kind::Unsupported, instr,
                   "float arithmetic in comp evaluation");
     case Opcode::TypeSizeOf:

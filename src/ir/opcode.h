@@ -128,6 +128,11 @@ enum class Opcode : u8 {
   // Fills `len` bytes at `dst` with `byte` repeated:
   // operands = [dst_ptr, byte(u8), len(integer)], discarded value.
   Memset,
+
+  // Negation of a float: operands = [value]. IEEE negation acts on the
+  // sign bit, so it is not a subtraction from zero, which answers `+0.0`
+  // where the source asks for `-0.0`.
+  FNeg,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -156,6 +161,7 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::FSub: return "FSub";
     case O::FMul: return "FMul";
     case O::FDiv: return "FDiv";
+    case O::FNeg: return "FNeg";
 
     case O::And: return "And";
     case O::Or: return "Or";
