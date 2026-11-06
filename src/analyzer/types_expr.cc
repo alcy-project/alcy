@@ -2446,13 +2446,26 @@ ir::TypeIdx Checker::check_cast(u32 module,
   // spelled. One that fits its default `i32` keeps it, and the cast
   // then converts it: `300 as u8` truncates rather than tripping the
   // literal's range check. A suffixed literal keeps its own type, which
-  // the cast converts.
+  // the cast converts. The target reaches the digits through the `-` or
+  // `~` the literal wears, so `-9223372036854775808 as i64` casts the
+  // signed minimum instead of subtracting it from an out-of-range
+  // `i32`.
+  ast::ExprIdx lit = operand;
+  bool negated = false;
+  while (ast.exprs[lit].kind == ast::ExprKind::Unary) {
+    const ast::ExprUnary& unary = ast.exprs[lit].payload.get<ast::ExprUnary>();
+    if (unary.op != ast::UnaryOp::Neg && unary.op != ast::UnaryOp::BitNot) {
+      break;
+    }
+    negated = unary.op == ast::UnaryOp::Neg;
+    lit = unary.inner;
+  }
   bool retypes = false;
-  if (is_unsuffixed_int_literal(operand) && is_integer_tag(tag_of(target))) {
+  if (is_unsuffixed_int_literal(lit) && is_integer_tag(tag_of(target))) {
     const ast::Literal& value =
-        ast.literals[ast.exprs[operand].payload.get<ast::ExprLiteral>().value];
+        ast.literals[ast.exprs[lit].payload.get<ast::ExprLiteral>().value];
     retypes = int_literal_fits(value.spelling, tag_of(target),
-                               value.is_negative != literal_negated_);
+                               value.is_negative != negated);
   }
   const ir::TypeIdx inner =
       check_expr(module, operand, retypes ? &target : nullptr);

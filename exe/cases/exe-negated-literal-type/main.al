@@ -51,6 +51,23 @@ fn main() -> i32 {
   if MINIMUM != -128i8 || FRACTION != -1.5f32 {
     ret 8
   }
+  // A cast's target is a position of the same kind, and it reaches the
+  // digits through the `-` or `~` the literal wears.
+  if -9223372036854775808 as i64 != minimum {
+    ret 9
+  }
+  wide: i64 := 3000000000
+  if -3000000000 as i64 != 0i64 - wide {
+    ret 10
+  }
+  if ~4294967295 as u32 != 0u32 {
+    ret 11
+  }
+  // The target claims the digits only where it holds them: a magnitude
+  // the default `i32` holds keeps it, and the cast then truncates.
+  if -300 as u8 != 212u8 {
+    ret 12
+  }
   println("{} {} {} {}", plain, minimum, bits, ZERO)
   ret 0
 }
