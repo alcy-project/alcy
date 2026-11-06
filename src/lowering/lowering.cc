@@ -142,10 +142,12 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
                  ast::AstArena& ast,
                  ir::SymbolTable& strings,
                  diag::DiagBag& bag,
+                 usize max_functions,
                  debug::Profiler* profiler)
     : pkg(std::move(package)),
       builder(std::move(pkg.types).unwrap().take_state()),
       width(width),
+      max_functions(max_functions),
       ast(ast),
       strings(strings),
       bag(bag),
@@ -1423,17 +1425,12 @@ bool Lowerer::try_run_comp_ir(u32 def_module,
   return true;
 }
 
-// The lowering's function budget. A package that needs more is refused
-// with a diagnostic; the number is one so the two reservation paths
-// cannot disagree about the limit.
-constexpr usize MAX_FN_ENTRIES = 8192;
-
-bool Lowerer::fn_budget_available() {
-  if (fns.size() < MAX_FN_ENTRIES) {
+bool Lowerer::fn_budget_available(diag::Span span) {
+  if (fns.size() < max_functions) {
     return true;
   }
   const u32 index = bag.emit<i18n::Key::LowerFunctionBudgetExhausted>(
-      DiagCode::FunctionBudgetExhausted, cur_span_);
+      DiagCode::FunctionBudgetExhausted, span);
   (void)index;
   failed = true;
   return false;
@@ -1493,7 +1490,8 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
     }
     return existing;
   }
-  if (!fn_budget_available()) {
+  const diag::Span span = item.is_valid() ? ast.items[item].span : cur_span_;
+  if (!fn_budget_available(span)) {
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
@@ -1627,7 +1625,9 @@ ir::FunctionIdx Lowerer::closure_fn_index(
       }
     }
   }
-  if (!fn_budget_available()) {
+  const diag::Span closure_span =
+      key.is_valid() ? ast.exprs[key.idx].span : cur_span_;
+  if (!fn_budget_available(closure_span)) {
     return ir::FunctionIdx(base::INVALID_IDX);
   }
   const ir::FunctionIdx idx(static_cast<u32>(fns.size()));
@@ -3129,8 +3129,10 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     ir::SymbolTable& strings,
     diag::DiagBag& bag,
     debug::Profiler* profiler,
-    const source::SourceManager* sources) {
-  Lowerer lowerer(std::move(package), width, ast, strings, bag, profiler);
+    const source::SourceManager* sources,
+    usize max_functions) {
+  Lowerer lowerer(std::move(package), width, ast, strings, bag, max_functions,
+                  profiler);
   lowerer.sources = sources;
   // A dependency with no sources carries its generic bodies in the
   // summary: merging them before any body is lowered keeps every index

@@ -110,6 +110,17 @@ struct LoweredPackage {
   std::vector<u8> needs_drop;
 };
 
+// How many functions one package may reserve. A package that needs more
+// is refused with a diagnostic rather than left to exhaust memory: the
+// entry table, the per-function caches, and the work list are
+// package-sized. Lowering a plain function costs about five microseconds
+// and 1.4 KiB measured (ADR-0046), so this many keeps those tables under
+// 200 MiB.
+inline constexpr usize MAX_FUNCTIONS = 65536;
+
+// The budget is a parameter so a caller - a case that has to spend it -
+// can say how much it wants rather than generating a package of that
+// size.
 base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
@@ -117,6 +128,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     ir::SymbolTable& strings,
     diag::DiagBag& bag,
     debug::Profiler* profiler = nullptr,
-    const source::SourceManager* sources = nullptr);
+    const source::SourceManager* sources = nullptr,
+    usize max_functions = MAX_FUNCTIONS);
 
 }  // namespace lowering

@@ -103,15 +103,6 @@ replaced. The foundations are in `roadmap.md`.
   the checks an earlier one dominates, and the `Switch` opcode stays
   unemitted for match chains.
 
-- [ ] Raise the lowering's function budget. `MAX_FN_ENTRIES` caps the
-  functions one package may lower at 8192, and a package that needs more
-  is refused with `ED013` where the last slot is spent. Nothing
-  measures what a larger number would cost: the summary walks every
-  entry once, and the per-function and per-instantiation caches are
-  package-sized, so the cap moves on a measurement rather than a guess.
-  The side tables that made the scan-based readers expensive are indexed
-  now, which is the part the proportionality work (ADR-0046) closed.
-
 - [ ] Borrow-pass scratch sized by the program, not the function: the
   arrays are allocated at package size and each function clears only the
   entries it names. The final pass's per-worker memory cost is why

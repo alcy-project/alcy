@@ -31,17 +31,20 @@ namespace lowering {
 
 // The pipeline context a case builds its package in. The context owns
 // the arena, the bag, and the interner the cases inspect. `name_capacity`
-// caps the shared name table; zero takes its default, and a case that
-// has to spend it asks for less.
+// caps the shared name table and `fn_budget` the lowering's functions;
+// zero takes either one's default, and a case that has to spend them asks
+// for less.
 struct Fixture {
-  explicit Fixture(usize name_capacity = 0)
+  explicit Fixture(usize name_capacity = 0, usize fn_budget = 0)
       : ctx{i18n::Language::EnUs, ast::AstArena::DEFAULT_SPAN_CAPACITY,
-            name_capacity} {}
+            name_capacity},
+        fn_budget(fn_budget == 0 ? MAX_FUNCTIONS : fn_budget) {}
   pipeline::PipelineContext ctx;
   ast::AstArena& ast = ctx.ast;
   diag::DiagBag& bag = ctx.bag;
   source::SourceManager& sources = ctx.sources;
   ir::SymbolTable& strings = ctx.strings;
+  usize fn_budget;
 };
 
 // The sources one case declared, held in memory. It stands in for a
@@ -126,7 +129,7 @@ inline LowerCase lower_checked_case(analyzer::CheckedPackage checked,
                                     Fixture& f) {
   base::Result<LoweredPackage, diag::Reported> lowered_result =
       lower_package(std::move(checked), ir::PointerWidth::W64, f.ast, f.strings,
-                    f.bag, nullptr, &f.sources);
+                    f.bag, nullptr, &f.sources, f.fn_budget);
   if (lowered_result.is_err()) {
     return {std::nullopt, false};
   }

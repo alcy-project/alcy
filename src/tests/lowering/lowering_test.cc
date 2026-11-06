@@ -808,6 +808,44 @@ TEST_CASE("Lowering reports a spent name table") {
   CHECK(reported);
 }
 
+// A package past the lowering's function budget is refused rather than
+// left to exhaust memory, and the refusal names the declaration whose slot
+// the table could not hold.
+TEST_CASE("Lowering refuses a package past its function budget") {
+  // Two slots and three declarations, so the table is full when the last
+  // one asks for its slot.
+  const std::string source =
+      "fn g0() -> i32 {\n"
+      "  ret 0\n"
+      "}\n"
+      "fn g1() -> i32 {\n"
+      "  ret 1\n"
+      "}\n"
+      "fn main() {\n"
+      "}\n";
+  VirtualDir dir;
+  write_all(dir, {{"main.al", source}});
+
+  Fixture f{0, 2};
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.ok);
+  CHECK(!result.lowered.has_value());
+  CHECK(f.bag.has_errors());
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->code ==
+            diag::Code{diag::Stage::Lowering,
+                       static_cast<u8>(DiagCode::FunctionBudgetExhausted)}) {
+      reported = true;
+      CHECK(diag->has_primary_span);
+      CHECK(diag->primary_span.offset == source.find("fn main"));
+    }
+  }
+  CHECK(reported);
+}
+
 // A constant expression the compiler evaluates overflows its type: the
 // program is refused with the check's own code rather than a
 // not-supported report (ADR-0065).

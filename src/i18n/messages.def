@@ -332,7 +332,7 @@
   F(LowerCompOutOfBounds, Error, Lowering, "Index out of bounds in constant evaluation") \
   F(LowerCompBudget, Error, Lowering, "Constant evaluation exhausted its budget") \
   F(LowerCompNotEvaluable, Error, Lowering, "Constant evaluation cannot continue: {}") \
-  F(LowerFunctionBudgetExhausted, Error, Lowering, "The compiler's function budget cannot hold the specialized functions this package needs") \
+  F(LowerFunctionBudgetExhausted, Error, Lowering, "The compiler's function budget cannot hold the functions this package needs") \
   F(LowerGuardMovesBinding, Error, Lowering, "A guard cannot bind '{}' by value: a false guard falls through to the next arm after the value is taken") \
   F(LowerIrVerificationFailed, Error, Lowering, "Lowered IR failed verification") \
   F(LowerMoveOutOfBorrow, Error, Lowering, "Cannot move a non-`Copy` value out of a reference") \

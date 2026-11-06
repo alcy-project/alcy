@@ -76,6 +76,8 @@ class Lowerer {
   analyzer::CheckedPackage pkg;
   ir::StorageBuilder builder;
   ir::PointerWidth width;
+  // How many functions this run may reserve, the prelude's included.
+  usize max_functions;
   ast::AstArena& ast;
   ir::SymbolTable& strings;
   diag::DiagBag& bag;
@@ -232,6 +234,7 @@ class Lowerer {
           ast::AstArena& ast,
           ir::SymbolTable& strings,
           diag::DiagBag& bag,
+          usize max_functions,
           debug::Profiler* profiler = nullptr);
   void unsupported(diag::Span span, std::string_view what);
   void internal(diag::Span span, std::string_view what);
@@ -412,8 +415,9 @@ class Lowerer {
       std::string_view name) const;
   // Whether the function table has room for one more: a package past the
   // budget is a diagnostic the reader can act on rather than an internal
-  // failure, and both reservation paths share the one number.
-  bool fn_budget_available();
+  // failure, and both reservation paths share the one number. `span` is
+  // the declaration whose slot the budget could not hold.
+  bool fn_budget_available(diag::Span span);
   ir::TypeIdx expr_type(ast::ExprIdx expr);
   const analyzer::CheckedModule::CallTarget* call_target(
       ast::ExprIdx callee) const;

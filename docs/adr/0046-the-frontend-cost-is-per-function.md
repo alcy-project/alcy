@@ -160,3 +160,19 @@ The parallelism is not built yet. What is recorded here is the measurement
 that says where the seconds were, the order in which the stages can become
 per-function, and the one stage in that order whose blocker is a data
 structure rather than scratch.
+
+## Amendments
+
+**2026-11-06: the function budget is measured, and its refusal names a
+declaration.** The budget capped a package at 8192 lowered functions with
+nothing behind the number. Lowering is proportional enough now to
+price: 32768 plain functions lower in 177 ms with a 107 MiB peak, and in a
+debug build 4096 take 240 ms with 118 MiB, so a function costs about 5
+microseconds and 1.4 KiB across the entry table, the per-function caches,
+and the work list. `lowering::MAX_FUNCTIONS` is 65536, which keeps those
+tables under 200 MiB and leaves a package a person writes nowhere near the
+limit; it is a parameter of `lower_package`, so a case that has to spend it
+asks for a small one instead of generating a package of that size. The
+refusal also names the declaration whose slot the table could not hold,
+where it used to carry an empty span and read as an error about no file in
+particular.
