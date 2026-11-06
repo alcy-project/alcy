@@ -228,7 +228,10 @@ expression.
 `nested-if` collapses the pair it reports: `if a { if b { body } }` is
 `if a && b { body }`. Only `||` binds looser than the join, so a
 condition that is one is parenthesized and every other reads bare; a
-pattern test cannot be joined, so the finding stays without a repair.
+pattern test cannot be joined, so the finding stays without a repair. A
+block that holds a statement besides the inner `if` is not reported:
+the join would leave that statement out, and it is often what the inner
+test reads.
 
 ## Adding a rule
 

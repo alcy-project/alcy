@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -134,6 +135,29 @@ std::optional<std::string_view> source_of(const LintContext& ctx,
   return source_of_span(ctx, node.span);
 }
 
+// Whether the bytes between two offsets of a span a repair rewrites
+// are blank: whitespace and the braces a block is written with. The
+// repair owns the whole span, so a comment among them would leave with
+// the bytes the replacement drops (ADR-0111 - a repair is the rule's
+// assertion that it knows the bytes it replaces).
+bool only_blank_between(const LintContext& ctx,
+                        diag::Span span,
+                        u32 from,
+                        u32 to) {
+  if (to < from || to > span.offset + span.length) {
+    return false;
+  }
+  const std::optional<std::string_view> text = source_of_span(
+      ctx, diag::Span{span.file, from, static_cast<u32>(to - from)});
+  if (!text.has_value()) {
+    return false;
+  }
+  return std::all_of(text->begin(), text->end(), [](char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '{' ||
+           c == '}';
+  });
+}
+
 // Whether moving an expression out of the construct that wraps it
 // cannot change how its neighbours group it.
 bool binds_tightly(ast::ExprKind kind) {
@@ -245,7 +269,10 @@ void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
   }
   const ast::Block& then_block = ctx.ast.blocks[outer.then_block];
   // The inner if may be the block's only statement or its tail value;
-  // the two are the same shape with or without the separator.
+  // the two are the same shape with or without the separator. The block
+  // holds nothing else: a statement ahead of the inner if is what the
+  // outer test was for, and joining the tests into one condition would
+  // leave it out.
   ast::ExprIdx inner_expr = then_block.value;
   if (!inner_expr.is_valid()) {
     if (then_block.statements.size() != 1) {
@@ -256,6 +283,8 @@ void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
       return;
     }
     inner_expr = stmt.payload.get<ast::StmtExpr>().value;
+  } else if (!then_block.statements.empty()) {
+    return;
   }
   if (!inner_expr.is_valid()) {
     return;
@@ -284,6 +313,23 @@ void check_nested_if(LintContext& ctx, ast::ExprIdx expr) {
   const std::optional<std::string_view> body =
       source_of_span(ctx, ctx.ast.blocks[inner.then_block].span);
   if (!body.has_value()) {
+    return;
+  }
+  // The replacement rewrites the outer span whole, so the bytes it does
+  // not reproduce have to be blank: a comment between the braces would
+  // leave with them.
+  const diag::Span& outer_test =
+      ctx.ast.exprs[ctx.ast.conds[outer.cond].value].span;
+  const diag::Span& inner_test =
+      ctx.ast.exprs[ctx.ast.conds[inner.cond].value].span;
+  const diag::Span& inner_body = ctx.ast.blocks[inner.then_block].span;
+  const u32 outer_end = node.span.offset + node.span.length;
+  if (!only_blank_between(ctx, node.span, outer_test.offset + outer_test.length,
+                          inner_node.span.offset) ||
+      !only_blank_between(ctx, node.span, inner_test.offset + inner_test.length,
+                          inner_body.offset) ||
+      !only_blank_between(ctx, node.span, inner_body.offset + inner_body.length,
+                          outer_end)) {
     return;
   }
   std::string replacement = "if ";

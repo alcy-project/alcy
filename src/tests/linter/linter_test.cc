@@ -322,6 +322,29 @@ TEST_CASE("nested-if reports without a repair for a pattern test") {
   CHECK(fix_for(run.ctx.bag, "nested-if") == nullptr);
 }
 
+TEST_CASE("nested-if leaves a block that binds before the inner if") {
+  Run run;
+  // The binding is what the inner test reads, so stating the two tests
+  // as one condition would leave it out of the block.
+  run("fn main() -> i32 {\n  a := true\n  if a {\n    n := 1\n"
+      "    if n > 0 {\n      println(\"x\")\n    }\n  }\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "nested-if") == 0);
+  CHECK(fix_for(run.ctx.bag, "nested-if") == nullptr);
+}
+
+TEST_CASE("nested-if keeps a comment between the braces") {
+  Run run;
+  // The repair rewrites the outer if whole, so it is offered only when
+  // the bytes it does not reproduce are blank.
+  run("fn main() -> i32 {\n  a := true\n  b := true\n  if a {\n"
+      "    // only when b\n    if b {\n      ret 1\n    }\n  }\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "nested-if") == 1);
+  CHECK(fix_for(run.ctx.bag, "nested-if") == nullptr);
+}
+
 TEST_CASE("useless-cast reports a cast to the value's own type") {
   Run run;
   run("fn main() -> i32 {\n  n := 1\n  m := n as i32\n  ret m\n}\n",
