@@ -162,6 +162,11 @@ def main() -> int:
     tool("check_e2e.py", f"--build-subdir={debug_subdir}")
     tool("check_borrow_rules.py", f"--build-subdir={debug_subdir}")
 
+    # The standard library carries its own tests beside the definitions
+    # they cover (ADR-0139), so the suite is a program the compiler runs
+    # rather than a corpus it reads.
+    tool("check_stdlib_tests.py", f"--build-subdir={debug_subdir}")
+
     # The formatter's own check, over every source rather than a sample:
     # the tree is what it would write, formatting formatted output
     # changes nothing, and the compiler's verdict about a file survives
