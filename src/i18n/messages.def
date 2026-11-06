@@ -337,7 +337,7 @@
   F(LowerGuardMovesBinding, Error, Lowering, "A guard cannot bind '{}' by value: a false guard falls through to the next arm after the value is taken") \
   F(LowerIrVerificationFailed, Error, Lowering, "Lowered IR failed verification") \
   F(LowerMoveOutOfBorrow, Error, Lowering, "Cannot move a non-`Copy` value out of a reference") \
-  F(LowerMoveOutOfDestructor, Error, Lowering, "Cannot move a field out of '{}'; its type implements `drop`") \
+  F(LowerMoveOutOfDestructor, Error, Lowering, "Cannot move a field out of a value of type '{}', which declares `drop`") \
   F(LowerMoveOutOfElement, Error, Lowering, "Moving a non-`Copy` value out from under an array's element is not implemented yet") \
   F(LowerNameTableExhausted, Error, Lowering, "The compiler's name table cannot hold the names this package interns") \
   F(LowerUnreachableExpression, Warning, Lowering, "Unreachable expression") \

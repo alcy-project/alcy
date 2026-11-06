@@ -642,12 +642,24 @@ bool Lowerer::place_of_register(u32 reg,
   return true;
 }
 
-bool Lowerer::type_has_custom_drop(ir::TypeIdx type) const {
+std::optional<std::string_view> Lowerer::custom_drop_name(
+    ir::TypeIdx type) const {
   const ir::TypeIdx origin = canonical_type(type);
-  if (origin.idx < pkg.drop_glue.size()) {
-    return pkg.drop_glue[origin.idx].index != base::INVALID_IDX;
+  if (origin.idx >= pkg.drop_glue.size() ||
+      pkg.drop_glue[origin.idx].index == base::INVALID_IDX) {
+    return std::nullopt;
   }
-  return false;
+  // Every glue entry names a destructor an `impl` block declared, so the
+  // type it belongs to is a struct or an enum and holds its own name.
+  const ir::TypeNode node = builder.types()[origin];
+  if (node.tag == ir::TypeTag::Struct) {
+    return strings.get(builder.struct_types()[node.as_struct()].name);
+  }
+  if (node.tag == ir::TypeTag::Enum) {
+    return strings.get(builder.enum_types()[node.as_enum()].name);
+  }
+  DCHECK(false);
+  return std::nullopt;
 }
 
 ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
@@ -715,9 +727,10 @@ void Lowerer::record_move_event(Val v, diag::Span span) {
   for (usize i = first_prefix; i < path.size(); ++i) {
     const ir::TypeIdx prefix = type_at_path(
         locals[local_index].type, std::span<const u32>(path.data(), i));
-    if (type_has_custom_drop(prefix)) {
+    const std::optional<std::string_view> holder = custom_drop_name(prefix);
+    if (holder.has_value()) {
       const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
-          DiagCode::MoveOutOfDestructor, span, locals[local_index].name);
+          DiagCode::MoveOutOfDestructor, span, *holder);
       (void)index;
       return;
     }

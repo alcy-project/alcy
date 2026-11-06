@@ -315,8 +315,9 @@ class Lowerer {
   // Resolves a register to the local it names and the field path from
   // that local's root, when it names either.
   bool place_of_register(u32 reg, u32& local_out, std::vector<u32>& path) const;
-  // A type with a user-written `drop` method.
-  bool type_has_custom_drop(ir::TypeIdx type) const;
+  // The name of the type that declares the `drop` a value of `type` ends
+  // with, or nothing when no `impl` block declares one for it.
+  std::optional<std::string_view> custom_drop_name(ir::TypeIdx type) const;
   ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
   ir::OperandIdx use_value(Val v);
   const Local* lookup_local(std::string_view name) const;
