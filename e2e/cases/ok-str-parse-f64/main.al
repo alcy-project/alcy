@@ -84,7 +84,9 @@ fn main() -> i32 {
   if f64::parse("18446744073709551616.0").is_some() {
     ret 23
   }
-  if f64::parse("0.00000000000000000001").is_some() {
+  // Twenty decimal places fit the scale as factors of five, which a u64
+  // holds twenty-seven times, so the digits read like the literal.
+  if f64::parse("0.00000000000000000001").or_panic_with_message("expected a value") != 0.00000000000000000001 {
     ret 24
   }
   // The exponent form the formatter writes reads back to the same value.
@@ -135,6 +137,21 @@ fn main() -> i32 {
   }
   if f64::parse("1e-400").is_some() {
     ret 40
+  }
+  // A negative power folds fives into the scale the way a positive one
+  // folds them into the numerator, so a small magnitude reads.
+  if f64::parse("1e-27").or_panic_with_message("expected a value") != 1e-27 {
+    ret 41
+  }
+  if f64::parse("-3.9577e-16").or_panic_with_message("expected a value") != 0.0f64 - 3.9577e-16 {
+    ret 42
+  }
+  if f64::parse("0.6666666666666666667e-6").or_panic_with_message("expected a value") != 0.6666666666666666667e-6 {
+    ret 43
+  }
+  // The scale's twenty-eighth five passes the word the read works in.
+  if f64::parse("1e-28").is_some() {
+    ret 44
   }
   ret 0
 }

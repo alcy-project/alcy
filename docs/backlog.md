@@ -210,16 +210,18 @@ replaced. The foundations are in `roadmap.md`.
   see that a library's type implements one, and the roadmap asks a
   summary to carry them.
 
-- [ ] `f64::parse` rounds correctly only while the digits fit one
-  `u64` numerator, so `"18446744073709551616.0"` and
-  `"0.00000000000000000001"` are refused rather than read. Reading
-  them wants the conversion to run over two words or more, and the
-  language has no arithmetic wider than `u64` yet (`u128` is
-  deferred). The same budget bounds the exponent: a positive power
-  folds into the numerator as factors of five with the twos riding the
-  binary exponent, so `6.02e23` rounds once from exact digits, while
-  `1e308` and `1e-400` are refused where a two-word numerator would
-  read them.
+- [ ] `f64::parse` rounds correctly only while the digits and the
+  factors of five the decimal places and the exponent need fit one
+  `u64`, which holds five twenty-seven times:
+  `"0.00000000000000000001"` reads, while
+  `"18446744073709551616.0"`, `"56748e22"` and `"1e400"` are refused
+  rather than read. Reading them wants the conversion to run over two
+  words or more, and the language has no arithmetic wider than `u64` yet
+  (`u128` is deferred). The exponent folds into the numerator or the
+  scale as factors of five with the twos riding the binary exponent, so
+  `6.02e23` and `3.9577e-16` round once from exact digits, while
+  `1e308` and `1e-400` are refused where a two-word numerator and
+  scale would read them.
 
 - [ ] A value that carries a container's buffer loan cannot leave the
   function that owns the container: `fn take() -> Option<String> { mut v

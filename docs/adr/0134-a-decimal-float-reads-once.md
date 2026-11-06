@@ -55,9 +55,10 @@ carry as a literal.**
 - A zero arrives with a sign now, so `Display` reads the sign of a
   float through its reciprocal rather than a comparison
   (`docs/spec/fmt.md`): `-0.0` prints as `-0`.
-- A decimal whose digits do not fit a `u64` numerator is still refused
-  rather than approximated (`"0.00000000000000000001"`), which is the
-  work `docs/backlog.md` records for a wider word.
+- A decimal whose digits and factors of five pass what a `u64` holds is
+  still refused rather than approximated (`"18446744073709551616.0"`,
+  `"1e-400"`), which is the work `docs/backlog.md` records for a wider
+  word.
 
 ## Amendments
 
@@ -72,3 +73,16 @@ overflow threshold and answers the largest finite `f32`, but the double
 rounded past the threshold and answered infinity. An `f32` literal now
 reads with `strtof`, which rounds the digits once to `f32`, and the
 rule above holds for either float type.
+
+**A decimal place folds fives into the scale too.** A positive power
+folded into the numerator as factors of five, the twos riding the binary
+exponent, while a decimal place and a negative power folded a whole ten
+into the scale - so a `u64` held ten nineteen times where it holds five
+twenty-seven, and `f64::parse("3.9577e-16")` answered `None` although
+the literal `3.9577e-16` compiles to a value. A decimal place and a
+negative power now fold a factor of five into the scale and a factor of
+two onto the binary exponent, as their positive counterpart does. The
+quotient is divided once only while both of its operands are exact, so
+that path now asks that the scale also be at most 2^53; a longer scale
+goes through the significand assembly, which reads the same integers
+without a rounding of its own.

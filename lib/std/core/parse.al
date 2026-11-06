@@ -171,11 +171,12 @@ fn apply_sign(value: f64, negative: bool) -> f64 {
 // Parses a decimal floating point number with an optional sign,
 // fractional part and exponent, the spelling a float literal takes, so
 // the exponent form the formatter writes reads back. `None` when the
-// bytes are not a number, when the exponent is empty, or when the digits,
-// their scale and the exponent's power of ten pass what a `u64` holds; a
-// magnitude past that budget is refused rather than read approximately.
-// Otherwise the result is the nearest `f64` to the written decimal, so
-// text and a literal of the same digits agree bit for bit.
+// bytes are not a number, when the exponent is empty, or when the digits
+// and the fives the decimal places and the exponent need pass what a
+// `u64` holds; a magnitude past that budget is refused rather than read
+// approximately. Otherwise the result is the nearest `f64` to the
+// written decimal, so text and a literal of the same digits agree bit
+// for bit.
 impl Parse for f64 {
   fn parse(text: str) -> Option<f64> {
     n := str_len(text)
@@ -196,6 +197,7 @@ impl Parse for f64 {
     }
     mut numerator := 0u64
     mut scale := 1u64
+    mut binary_power := 0i32
     mut seen := false
     mut point := false
     while i < n {
@@ -220,10 +222,15 @@ impl Parse for f64 {
       }
       numerator = numerator * 10u64 + digit
       if point {
-        if scale > 1844674407370955161u64 {
+        // A decimal place divides by ten: a factor of five into the
+        // scale, and the twos onto the binary exponent, which a power of
+        // two carries exactly. A `u64` holds five twenty-seven times,
+        // against ten nineteen.
+        if scale > 3689348814741910323u64 {
           ret Option::None
         }
-        scale = scale * 10u64
+        scale = scale * 5u64
+        binary_power = binary_power - 1i32
       }
       seen = true
       i = i + 1
@@ -271,10 +278,9 @@ impl Parse for f64 {
     if numerator == 0u64 {
       ret Option::Some(apply_sign(0.0f64, negative))
     }
-    // A positive power folds into the numerator as many factors of five,
-    // which a `u64` holds longer than factors of ten, and the twos ride
-    // the binary exponent afterwards, where scaling is exact.
-    mut binary_power := 0i32
+    // A power folds into the numerator or the scale as many factors of
+    // five as it asks for, which a `u64` holds longer than factors of
+    // ten, and the twos ride the binary exponent, where scaling is exact.
     while power > 0i32 {
       if numerator > 3689348814741910323u64 {
         ret Option::None
@@ -284,15 +290,17 @@ impl Parse for f64 {
       power = power - 1i32
     }
     while power < 0i32 {
-      if scale > 1844674407370955161u64 {
+      if scale > 3689348814741910323u64 {
         ret Option::None
       }
-      scale = scale * 10u64
+      scale = scale * 5u64
+      binary_power = binary_power - 1i32
       power = power + 1i32
     }
-    // A numerator the significand holds exactly is divided once, and
-    // IEEE division of two exact operands is the nearest value already.
-    if numerator <= 9007199254740992u64 {
+    // A numerator and a scale the significand holds exactly are divided
+    // once, and IEEE division of two exact operands is the nearest value
+    // already.
+    if numerator <= 9007199254740992u64 && scale <= 9007199254740992u64 {
       quotient := scale_by_power_of_two((numerator as f64) / (scale as f64), binary_power)
       ret Option::Some(apply_sign(quotient, negative))
     }
