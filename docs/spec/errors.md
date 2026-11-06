@@ -57,6 +57,31 @@
   message and a nonzero exit status; the error payload is never
   printed (no `Debug` bound exists).
 
+## Tests
+
+- A `test` block states a module's tests. It sits at module level, does
+  not nest, and its entries and helpers are never `pub`; each of those is
+  an error where it is written.
+- An entry takes no arguments, and the empty parameter list is syntax.
+  Success is returning, so an entry's return type is `()`. A written
+  return type is reported by the command that runs tests rather than by
+  the parse, which is what keeps a build from failing over a body it
+  never emits.
+- A block item's name must be free in the module the block joins. A name
+  the module already declares, a name a second block item takes, and
+  `main` are each refused: the first two put one name in one namespace
+  twice, and the third takes the entry point a test run supplies itself.
+  See `docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`.
+- A test fails by panicking, and a panic is all a test can fail with:
+  there is no error value and no unwinding, so an expectation is an
+  ordinary expression that panics when it does not hold, and the
+  panic's message and source position are what says why the test failed.
+- `alcy test` tests one package. A suite names the packages that carry
+  the tests rather than carrying them itself, so it is refused with the
+  member's directory to give instead, and a target that starts no
+  processes - a freestanding profile, or the wasm backend - is refused
+  because a test is a process the run starts and watches.
+
 ## Unused values
 
 - An expression statement whose value is neither `()` nor `!` warns.

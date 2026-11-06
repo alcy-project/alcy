@@ -8,7 +8,7 @@ specification update.
 ## In use
 
 Declarations: `fn`, `struct`, `enum`, `impl`, `spec`, `static`, `pub`,
-`const`, `mut`, `use`
+`const`, `mut`, `use`, `test`
 
 Control flow: `if`, `else`, `loop`, `while`, `for`, `in`, `break`,
 `continue`, `ret`, `match`

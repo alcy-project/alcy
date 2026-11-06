@@ -293,3 +293,45 @@ replaced. The foundations are in `roadmap.md`.
   process into the package, which formats the repository when the run
   happens under a manifest. A runner option that sets a case's working
   directory pins it the way the other package verbs are pinned.
+
+- [ ] A failing test says so by panicking, so an expected failure is
+  spelled as a panic and a run cannot tell a test that expected to fail
+  from one that broke. An entry with a return type - `Result<(), E>`, the
+  form the entry point already takes - would let a run report `Err` as a
+  failure in the error's own words, and let a test keep the error it
+  expects rather than aborting on it. ADR-0009 keeps `Result` an ordinary
+  `core` enum, so the run would have to read a type it does not own, and
+  a package that shadows the name would change what the run reads.
+
+- [ ] The doctest files under `src/tests` hold two kinds of case, and
+  only one of them belongs there. A case that asserts on a program which
+  should work - a snippet the pipeline accepts, a borrow the checker
+  allows, a value that lowers to the shape it should - is a statement
+  about alcy source, and it is written in C++ only because the standard
+  library had nowhere to state its own behaviour until `alcy test` could
+  compile a block. Such a case goes in a `test` block in the std module
+  whose behaviour it describes, so `alcy test lib/std/<member>` runs it
+  with the same command a user runs, over the source the module ships: a
+  case that sits beside the code it describes cannot drift from that
+  code's surface without the run failing. A case that asserts a program
+  should be refused - a diagnostic, a rejected form - stays, because a
+  refusal is only observable from the outside. What the doctest keeps of
+  the rest is the case about the compiler's own API, which no `test`
+  block can address.
+
+- [ ] A run starts one test process at a time, so a package's tests cost
+  the sum of their times. `-j N` would start up to N of them and still
+  report in selection order, which is the order a reader diffs against the
+  previous run; the loop is already one index at a time, so what is
+  missing is the state a parallel loop needs. The child inherits the
+  runner's stdout, so concurrent tests would interleave their output, and
+  the report would have to hold a test's lines until its status arrives
+  rather than write as it goes.
+
+- [ ] `--execution=multi-thread` runs a package's tests as threads of one
+  process, which is what a suite of cheap tests wants: no spawn, no
+  separate address space. It waits for unwinding to exist. A test fails by
+  aborting and an abort ends the process, so today the run can offer
+  either one process per test or one process for all of them, and
+  `--execution=single-thread` exists for the second because a debugger
+  needs it, not because a suite does.

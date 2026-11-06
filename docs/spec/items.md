@@ -48,6 +48,21 @@
   for the same target shape, the super must resolve to a spec in
   scope, and the chain must not cycle. A generic super-spec is
   deferred, as is a bound admitting the super's methods.
+- `test` declares a module's tests. The block holds one `test`
+  entry per test, `test name() { ... }`, and `fn` items for the
+  helpers they share. A test takes no arguments, so its parameter list
+  is empty, and it reports success by returning rather than by a value:
+  `()` is its return type. A block sits at module level and does not
+  nest, its items are never `pub`, and any other item in it is a parse
+  error: a run compiles the entries and the helpers, and nothing else.
+  A test declares nothing a program reads: the block is checked and
+  given a body only by the tool that runs tests, and a build, a check,
+  or a run of the package reads it and keeps it out of the program. The
+  tool that runs tests enters the package through a module of its own
+  making, whose items declare the `alcy_test_` prefix and the argument
+  intrinsics they need, so a module that declares those names itself is
+  refused by the run; `docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`
+  states the reservation and the diagnostic that reports it.
 - `static` items have storage and MUST NOT contain `&mut`.
   `const X: T = ...` items are compile-time values: the initializer is
   evaluated during compilation, must terminate within the evaluation

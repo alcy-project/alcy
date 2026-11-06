@@ -60,6 +60,11 @@ it is implemented.
 - `From`-style error conversion; `Debug` printing; the combinators
   (`map`, `and_then`, `or`) on `Result` (they landed on
   `Option`).
+- A test entry with a return type, and above all one that returns
+  `Result` and fails by yielding a value: an entry reports success by
+  returning, so an expectation that does not hold has no value to hand
+  back and aborts the process instead. See
+  `docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`.
 - `break` with a value; `main` returning richer types.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `char`/`Ascii`/

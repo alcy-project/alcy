@@ -23,7 +23,8 @@ file        = { item } ;
 
 item        = [ vis ] , ( fn_item | intrinsic_fn_item | extern_item
                         | struct_item | enum_item | impl_item
-                        | spec_item | static_item | const_item | use_item ) ;
+                        | spec_item | static_item | const_item | use_item
+                        | test_item ) ;
 vis         = "pub" ;
 fn_item     = [ "unsafe" ] , [ "comp" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;
@@ -87,6 +88,12 @@ spec_method = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] ,
 static_item = "static" , IDENT , ":" , type , "=" , expr ;
 const_item  = "const" , IDENT , ":" , type , "=" , expr ;
 use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
+test_item   = "test" , "{" , { test_entry | fn_item } , "}" ;
+test_entry  = "test" , IDENT , "(" , ")" , [ "->" , type ] , block ;
+              (* A module's tests, one per line, beside the helpers they
+                 need. A test takes no arguments and reports success by
+                 returning; the command that runs it rejects any other
+                 return type. See docs/spec/items.md, "Tests". *)
 
 (* Types *)
 

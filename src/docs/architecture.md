@@ -186,6 +186,9 @@ state between stages beyond the data explicitly passed along.
 | `opt`                     | The release IR passes: over verified lowered storage, rebuilt through the verifier (ADR-0067).                                                        | One rebuilt storage per run; release builds only.                               |
 | `overlay`                 | The build's arithmetic checks beside the shared IR: one walk turns the profile's policy into per-instruction entries the backends realize (ADR-0068). | One entry table per build; the IR is borrowed, never copied.                    |
 | `pipeline`                | Project-level build flow: package discovery, source loading, and per-file stage orchestration. It calls every stage; none calls the next.             | Explicit phase boundaries and arena resets.                                     |
+| `pipeline/test`           | The test run: the package under test spliced into one module tree, compiled to one executable, and executed a process per test (ADR-0139).            | One executable per run in a scratch directory; owned argument strings.          |
+| `testgen`                 | Stands for test generation. The tree a run enters through: `test` blocks spliced into free functions and a driver `main` calling them.                | Owned source text for the driver; AST nodes come from the pipeline's arena.     |
+| `cli/test_command`        | The `alcy test` verb: what it refuses (a suite, a target that cannot start a process), the selection, the listing, and the per-test report.           | Standard allocation; setup-time work only.                                      |
 | `pkg`                     | Stands for `package`. Package manifests (`alcy.toml`) and the toolchain file: parsed bytes, never a file opened.                                      | Arena-backed views; no heap allocation in the model itself.                     |
 | `playground`              | The compiler as a host API: `alcy_check`, `alcy_compile`, and `alcy_release` over one source buffer, with the CLI's JSON diagnostics array.           | One pipeline context per call; the result owns malloc'd buffers.                |
 | `source`                  | Source file registry: memory-mapped file loading with stable file ids.                                                                                | Mapped files plus small owned tables.                                           |
@@ -438,6 +441,22 @@ that happens to read them.
    `alcy_sys_write`, over libc — is defined in that same module, so a build
    spawns no compiler for it and it is optimized with the program
    ([`docs/adr/0023-program-runtime-in-process.md`](../../docs/adr/0023-program-runtime-in-process.md)).
+
+A test run walks the same stages over a different tree, and it is the only
+mode in which the items a stage reads are not the ones the package's files
+declare. Before name resolution, `pipeline` resolves the package's `test`
+blocks: each entry and each helper becomes a free function of the module that
+wrote it, the module the run enters through keeps its items and not its entry
+point, and a generated module supplies the entry point that calls the selected
+tests in order
+([`docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`](../../docs/adr/0139-a-test-is-an-item-the-test-command-owns.md)).
+Nothing below that step changes, which is the point: a test resolves its
+module's siblings and dependencies exactly as that module does, so it is
+resolved, lowered, and emitted by the same code as the program it belongs to.
+The run then starts the resulting executable once per test and reads each
+status as that test's verdict. A build, a check, and a run of the package
+splice nothing - they read the block, keep it out of the program, and stop
+where they already stopped.
 
 Each stage should expose the minimum data needed by the next stage. A stage
 must not reach backward into another stage's private state as a shortcut.
