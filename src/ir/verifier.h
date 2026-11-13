@@ -68,6 +68,9 @@ enum class VerificationErrorKind : u8 {
   // call would reach a backend as an opcode operand it cannot name
   // (ADR-0079).
   MisplacedParametricCall,
+  // A type parameter in a body the specialization pass resolved: no
+  // layout answers for it, and no pass replaces it (ADR-0079).
+  MisplacedParametricType,
 };
 
 struct VerificationError {
@@ -121,6 +124,7 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::ParametricFunctionOutOfRange: return "ParametricFunctionOutOfRange";
     case K::MisplacedParametricDrop: return "MisplacedParametricDrop";
     case K::MisplacedParametricCall: return "MisplacedParametricCall";
+    case K::MisplacedParametricType: return "MisplacedParametricType";
   }
 }
 

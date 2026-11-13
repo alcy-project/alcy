@@ -310,14 +310,43 @@ VerificationResult verify_storage(const Storage& storage) {
     if (meta.is_err()) {
       return meta;
     }
-    // A body outside the list has resolved its ends: a parametric end
-    // here has no pass left that would rewrite it (ADR-0079).
+    // A body outside the list has resolved everything the parametric
+    // form waits on: an end or a callee record has no pass left that
+    // would rewrite it, and a type parameter has no layout any reader
+    // could answer (ADR-0079).
     if (!parametric[fidx.idx]) {
+      const auto names_param = [&](TypeIdx type) {
+        return type.is_valid() && type.idx < storage.types().size() &&
+               storage.types()[type].tag == TypeTag::Param;
+      };
+      if (names_param(func.meta.return_type) || names_param(func.meta.owner)) {
+        return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
+      }
+      for (const TypeIdx param : func.meta.param_types) {
+        if (names_param(param)) {
+          return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
+        }
+      }
+      for (const TypeIdx generic : func.meta.generics) {
+        if (names_param(generic)) {
+          return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
+        }
+      }
       for (const BlockIdx block_idx : func.blocks) {
         const Block& block = storage.blocks()[block_idx];
         if (!range_in_bounds(block.instrs.head(), block.instrs.size(),
                              storage.instrs().size())) {
           break;
+        }
+        if (range_in_bounds(block.block_params.head(),
+                            block.block_params.size(),
+                            storage.block_params().size())) {
+          for (const BlockParamIdx pidx : block.block_params) {
+            if (names_param(storage.block_params()[pidx].type)) {
+              return err(VerificationErrorKind::MisplacedParametricType,
+                         pidx.idx);
+            }
+          }
         }
         for (const InstructionIdx iidx : block.instrs) {
           const Instruction& instr = storage.instrs()[iidx];
@@ -325,13 +354,24 @@ VerificationResult verify_storage(const Storage& storage) {
             return err(VerificationErrorKind::MisplacedParametricDrop,
                        iidx.idx);
           }
+          if (names_param(instr.measure)) {
+            return err(VerificationErrorKind::MisplacedParametricType,
+                       iidx.idx);
+          }
           // The pass resolves a callee record into a function before
           // any backend runs; an unresolved one is a hole (ADR-0079).
           for (const OperandIdx operand : instr.operands) {
-            if (operand.idx < storage.operands().size() &&
-                storage.operands()[operand].is<ParametricCalleeIdx>()) {
+            if (operand.idx >= storage.operands().size()) {
+              continue;
+            }
+            const Operand& entry = storage.operands()[operand];
+            if (entry.is<ParametricCalleeIdx>()) {
               return err(VerificationErrorKind::MisplacedParametricCall,
                          iidx.idx);
+            }
+            if (names_param(entry.type)) {
+              return err(VerificationErrorKind::MisplacedParametricType,
+                         operand.idx);
             }
           }
         }

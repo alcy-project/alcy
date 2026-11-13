@@ -1170,6 +1170,38 @@ TEST_CASE("Verify an unresolved callee outside a parametric body") {
   CHECK(build(true).is_ok());
 }
 
+TEST_CASE("Verify a type parameter outside a parametric body") {
+  // A resolved body names no parameter: every type a clone holds was
+  // substituted, and a parameter has no layout any reader could answer
+  // (ADR-0079).
+  const auto build = [](bool parametric) {
+    StorageBuilder builder;
+    InstrSeq instrs;
+    const TypeIdx param = builder.param_type(0);
+    const RegisterIdx value(0);
+    builder.reg({.type = param, .def_idx = InstructionIdx::invalid()});
+    const BlockParamIdx bound =
+        builder.block_param({.type = param, .reg = value});
+    const InstructionIdx ret = builder.instr({
+        .op = Opcode::Ret,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = TypeIdx::invalid(),
+        .operands = {},
+    });
+    instrs.push(ret);
+    const BlockIdx block =
+        builder.block({.instrs = instrs.finish(), .block_params = {bound, 1}});
+    builder.function({.meta = void_meta(), .blocks = {block, 1}});
+    if (parametric) {
+      builder.add_parametric_function(FunctionIdx(0));
+    }
+    return std::move(builder).build();
+  };
+  check_invalid(build(false), VerificationErrorKind::MisplacedParametricType);
+  CHECK(build(true).is_ok());
+}
+
 TEST_CASE("Verify external function metadata") {
   // `build_external` produces an otherwise valid package whose one
   // external carries the metadata under test; consumers dereference
