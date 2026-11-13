@@ -1,0 +1,4 @@
+# The same rule one precedence level down: `&&`'s left operand already
+# carries a comparison, so the next `<` closes the condition.
+exit = 4
+contains = ["Expected `{`, found `<`"]

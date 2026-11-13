@@ -133,7 +133,8 @@ ast::ExprIdx Parser::parse_range() {
   const usize mark = pos_;
   ast::ExprIdx start = ast::ExprIdx::invalid();
   if (!is_range_op(peek_kind())) {
-    start = parse_binary(BINARY_PREC_LOWEST);
+    bool compared = false;
+    start = parse_binary(BINARY_PREC_LOWEST, compared);
     if (!start.is_valid()) {
       return ast::ExprIdx::invalid();
     }
@@ -149,7 +150,8 @@ ast::ExprIdx Parser::parse_range() {
       starts_range_end(peek_kind()) &&
       (allow_brace_range_end_ || peek_kind() != lexer::TokenKind::LBrace);
   if (opens_end) {
-    end = parse_binary(BINARY_PREC_LOWEST);
+    bool compared = false;
+    end = parse_binary(BINARY_PREC_LOWEST, compared);
     if (!end.is_valid()) {
       return ast::ExprIdx::invalid();
     }
@@ -178,13 +180,13 @@ ast::ExprIdx Parser::parse_range() {
   return ast_.exprs.push_back(node);
 }
 
-ast::ExprIdx Parser::parse_binary(u8 min_prec) {
+ast::ExprIdx Parser::parse_binary(u8 min_prec, bool& compared) {
   const usize mark = pos_;
+  compared = false;
   ast::ExprIdx lhs = parse_cast();
   if (!lhs.is_valid()) {
     return ast::ExprIdx::invalid();
   }
-  bool compared = false;
   while (true) {
     const u16 entry = BINARY_OP_TABLE[static_cast<u8>(peek_kind())];
     const u8 prec = static_cast<u8>(entry & BINARY_PREC_MASK);
@@ -193,7 +195,8 @@ ast::ExprIdx Parser::parse_binary(u8 min_prec) {
     }
     // A comparison may stand once in front of the operand it compares: a
     // second one closes the expression it belongs to, leaving the token for
-    // whoever holds the operand.
+    // whoever holds the operand. The flag comes back from the operands a frame
+    // builds, so a comparison at the right edge of an operand counts as well.
     if ((entry & BINARY_NONASSOC) != 0) {
       if (compared) {
         return lhs;
@@ -203,10 +206,12 @@ ast::ExprIdx Parser::parse_binary(u8 min_prec) {
     const u8 next_prec =
         (entry & BINARY_RIGHT_ASSOC) != 0 ? prec : static_cast<u8>(prec + 1);
     advance();
-    ast::ExprIdx rhs = parse_binary(next_prec);
+    bool inner = false;
+    ast::ExprIdx rhs = parse_binary(next_prec, inner);
     if (!rhs.is_valid()) {
       return ast::ExprIdx::invalid();
     }
+    compared = compared || inner;
     ast::ExprNode node;
     node.kind = ast::ExprKind::Binary;
     node.span = span_from(mark);

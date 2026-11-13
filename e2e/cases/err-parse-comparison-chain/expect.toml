@@ -1,0 +1,4 @@
+# `cmp_expr` holds one comparison, and `||` does not open a second one for
+# the operand it already holds: the trailing comparison is a syntax error.
+exit = 4
+contains = ["Expected `{`, found `==`"]
