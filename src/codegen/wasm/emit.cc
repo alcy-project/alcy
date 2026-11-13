@@ -389,6 +389,18 @@ std::optional<ValueShape> Emitter::shape_of_definition(
       instr.op == ir::Opcode::EnumFieldAddr) {
     return ValueShape{ValType::I32, 1};
   }
+  // A move aliases its operand, and an ownership marker's operand is
+  // the place's address: the local follows what the operand holds, not
+  // the type the destination names (ADR-0079).
+  if (instr.op == ir::Opcode::Move && !instr.operands.empty()) {
+    const ir::Operand& operand = storage_.operands()[instr.operands.head()];
+    if (operand.is<ir::RegisterIdx>()) {
+      const ValueShape source = reg_shape_[operand.as_register().idx];
+      if (source.words != 0) {
+        return source;
+      }
+    }
+  }
   if (!instr.dst.is_valid()) {
     return ValueShape{ValType::I32, 0};
   }
