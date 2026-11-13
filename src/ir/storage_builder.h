@@ -386,23 +386,6 @@ class StorageBuilder {
     return pointer_type(is_mut ? TypeTag::RawMutPtr : TypeTag::RawPtr, pointee);
   }
 
- private:
-  TypeIdx pointer_type(TypeTag tag, TypeIdx pointee) {
-    std::unordered_map<u32, TypeIdx>* interned = pointer_table(tag);
-    DCHECK(interned != nullptr);
-    const auto found = interned->find(pointee.idx);
-    if (found != interned->end()) {
-      return found->second;
-    }
-    TypeNode node{};
-    node.tag = tag;
-    node.data.set(state_.ref_types.emplace_back(RefType{.pointee = pointee}));
-    const TypeIdx idx = state_.types.emplace_back(node);
-    interned->emplace(pointee.idx, idx);
-    return idx;
-  }
-
- public:
   TypeIdx tuple_type(TypeIdxRange elements) {
     const u64 key = elements_key(elements);
     const auto found = tuple_by_key_.find(key);
@@ -549,6 +532,21 @@ class StorageBuilder {
   }
 
  private:
+  TypeIdx pointer_type(TypeTag tag, TypeIdx pointee) {
+    std::unordered_map<u32, TypeIdx>* interned = pointer_table(tag);
+    DCHECK(interned != nullptr);
+    const auto found = interned->find(pointee.idx);
+    if (found != interned->end()) {
+      return found->second;
+    }
+    TypeNode node{};
+    node.tag = tag;
+    node.data.set(state_.ref_types.emplace_back(RefType{.pointee = pointee}));
+    const TypeIdx idx = state_.types.emplace_back(node);
+    interned->emplace(pointee.idx, idx);
+    return idx;
+  }
+
   // Pre-interns every non-composite tag so primitive() resolves without a
   // table lookup. Only the default constructor does this; a builder created
   // from an existing state assumes its table is already populated.
@@ -563,7 +561,6 @@ class StorageBuilder {
     state_.types.emplace_back(func);
   }
 
-  // The interning table of a pointer kind, or null for every other tag.
   // A tuple's elements as one key. The count leads so that a prefix cannot
   // collide with the longer shape by construction, and the elements are
   // combined in order; two shapes that still collide share a bucket and the
@@ -577,6 +574,7 @@ class StorageBuilder {
     return key;
   }
 
+  // The interning table of a pointer kind, or null for every other tag.
   std::unordered_map<u32, TypeIdx>* pointer_table(TypeTag tag) {
     if (tag == TypeTag::Ref) {
       return &ref_by_pointee_;

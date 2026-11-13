@@ -634,6 +634,14 @@ class Storage {
   const std::vector<FunctionIdx>& parametric_functions() const {
     return state_.parametric_functions;
   }
+  // Whether a function is emitted once in its parametric form. The
+  // list is the authority, and every pass that skips such a body asks
+  // here rather than walking the list its own way (ADR-0079).
+  [[nodiscard]] bool is_parametric(FunctionIdx function) const {
+    const std::vector<FunctionIdx>& functions = parametric_functions();
+    return std::find(functions.begin(), functions.end(), function) !=
+           functions.end();
+  }
   const std::vector<FunctionIdx>& prelude_specializations() const {
     return state_.prelude_specializations;
   }

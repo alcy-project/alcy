@@ -338,17 +338,9 @@ struct Emission {
     // (ADR-0078); a parametric body is cloned from the summary instead
     // (ADR-0079). Everything else in a library object stays this
     // object's own code.
-    const std::vector<ir::FunctionIdx>& parametric =
-        package.storage->parametric_functions();
     for (const ir::SummaryEntry& row : package.summary) {
-      if (!row.function.is_valid()) {
-        continue;
-      }
-      bool carried = false;
-      for (const ir::FunctionIdx fn : parametric) {
-        carried = carried || fn.idx == row.function.idx;
-      }
-      if (!carried) {
+      if (row.function.is_valid() &&
+          !package.storage->is_parametric(row.function)) {
         exported_functions.push_back(row.function);
       }
     }
