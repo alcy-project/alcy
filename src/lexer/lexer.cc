@@ -12,6 +12,7 @@
 #include <string_view>
 #include <vector>
 
+#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -1056,7 +1057,10 @@ void Lexer::tokenize(std::vector<Token>& out) {
       case TokenOpen::DoubleQuote: lex_string(out); break;
       case TokenOpen::SingleQuote: lex_char(out); break;
       case TokenOpen::Symbol: lex_symbol(out); break;
-      case TokenOpen::Trivia: break;
+      case TokenOpen::Trivia:
+        DCHECK_MSG(false, "trivia is consumed before the token switch");
+        advance();
+        break;
     }
   }
   last_significant_ = TokenKind::Eof;
