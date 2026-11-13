@@ -263,9 +263,12 @@ impl<T> Vec<T> {
       }
       scan = scan + 1
     }
-    while self.len > write {
-      _ := self.pop()
+    mut i := write
+    while i < self.len {
+      unsafe { drop_in_place::<T>(uninit_assume(elem_ptr(self.buf, i))) }
+      i = i + 1
     }
+    self.len = write
   }
 
   // The index of a value the comparator answers zero for, assuming the
@@ -303,8 +306,8 @@ impl<T> Vec<T> {
 
   // Keeps the elements the predicate accepts and drops the rest, in
   // order. A write cursor follows a read cursor; the swaps leave the
-  // kept prefix in place and the tail is popped, so each rejected
-  // element ends once.
+  // kept prefix in place, and the rejected tail ends from first to last
+  // like every other sequence (ADR-0086).
   pub fn retain(mut self: &mut Self, keep: (&T) -> bool) {
     mut write := 0 as usize
     mut scan := 0 as usize
@@ -315,9 +318,12 @@ impl<T> Vec<T> {
       }
       scan = scan + 1
     }
-    while self.len > write {
-      _ := self.pop()
+    mut i := write
+    while i < self.len {
+      unsafe { drop_in_place::<T>(uninit_assume(elem_ptr(self.buf, i))) }
+      i = i + 1
     }
+    self.len = write
   }
 
   // Moves every element of `other` onto the end, ending `other`.
@@ -400,13 +406,19 @@ impl<T> Vec<T> {
     self.len = 0
   }
 
-  // Ends the elements past `n` and keeps the first `n`. A length at
-  // or beyond the current one changes nothing.
+  // Ends the elements past `n` and keeps the first `n`, from first to
+  // last like every other sequence (ADR-0086). A length at or beyond the
+  // current one changes nothing.
   pub fn truncate(mut self: &mut Self, n: usize) {
-    while self.len > n {
-      self.len = self.len - 1
-      unsafe { drop_in_place::<T>(uninit_assume(elem_ptr(self.buf, self.len))) }
+    if self.len <= n {
+      ret
     }
+    mut i := n
+    while i < self.len {
+      unsafe { drop_in_place::<T>(uninit_assume(elem_ptr(self.buf, i))) }
+      i = i + 1
+    }
+    self.len = n
   }
 
   pub fn drop(mut self: Vec<T>) {
