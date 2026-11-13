@@ -82,122 +82,130 @@ bool forces_block_brace(lexer::TokenKind kind) {
   }
 }
 
-// Reads the role of a brace from the header in front of it. The header is
-// the run of siblings since the last separator; the run is flat, because
-// every nested delimiter is already a node of its own.
-BraceRole classify_brace(const std::vector<Node>& lead) {
-  usize start = 0;
-  for (usize i = lead.size(); i > 0; --i) {
-    const Node& node = lead[i - 1];
+// The header in front of a brace: the run of siblings since the last
+// separator, flat because every nested delimiter is already a node of its
+// own. The summary catches up with the siblings that landed since the
+// previous brace, so a run is read once instead of once per brace.
+class Header {
+ public:
+  [[gnu::always_inline]] void add(const Node& node) {
+    if (node.kind == NodeKind::Comment) {
+      return;
+    }
     if (node.kind == NodeKind::Token &&
         node.token == lexer::TokenKind::Semicolon) {
-      start = i;
-      break;
+      *this = Header{};
+      return;
     }
-  }
-
-  bool has_match = false;
-  bool has_struct = false;
-  bool has_enum = false;
-  bool has_impl = false;
-  bool has_spec = false;
-  bool has_extern = false;
-  bool has_fn = false;
-  bool has_control = false;
-  bool has_test = false;
-  bool has_any = false;
-  // Whether the lead holds anything the layout itself wrote down: a
-  // real token or a closed delimiter. A lead of nothing but unread
-  // bytes classifies as a block, because whether a separator stood in
-  // front of it is exactly what the layout cannot promise to carry
-  // into the next pass.
-  bool has_read = false;
-  lexer::TokenKind last = lexer::TokenKind::Eof;
-  for (usize i = start; i < lead.size(); ++i) {
-    const Node& node = lead[i];
-    if (node.kind == NodeKind::Comment) {
-      continue;
-    }
-    has_any = true;
+    has_any_ = true;
     if (node.kind == NodeKind::Group) {
-      last = closer_of_group(node);
-      has_read = true;
-      continue;
+      last_ = closer_of_group(node);
+      has_read_ = true;
+      return;
     }
-    last = node.token;
-    has_read = node.token != lexer::TokenKind::Error;
+    last_ = node.token;
+    has_read_ = node.token != lexer::TokenKind::Error;
     switch (node.token) {
-      case lexer::TokenKind::Match: has_match = true; break;
-      case lexer::TokenKind::Struct: has_struct = true; break;
-      case lexer::TokenKind::Enum: has_enum = true; break;
-      case lexer::TokenKind::Impl: has_impl = true; break;
-      case lexer::TokenKind::Spec: has_spec = true; break;
-      case lexer::TokenKind::Extern: has_extern = true; break;
-      case lexer::TokenKind::Test: has_test = true; break;
+      case lexer::TokenKind::Match: has_match_ = true; break;
+      case lexer::TokenKind::Struct: has_struct_ = true; break;
+      case lexer::TokenKind::Enum: has_enum_ = true; break;
+      case lexer::TokenKind::Impl: has_impl_ = true; break;
+      case lexer::TokenKind::Spec: has_spec_ = true; break;
+      case lexer::TokenKind::Extern: has_extern_ = true; break;
+      case lexer::TokenKind::Test: has_test_ = true; break;
       case lexer::TokenKind::Fn:
-      case lexer::TokenKind::Intrinsic: has_fn = true; break;
+      case lexer::TokenKind::Intrinsic: has_fn_ = true; break;
       case lexer::TokenKind::If:
       case lexer::TokenKind::Else:
       case lexer::TokenKind::While:
       case lexer::TokenKind::For:
       case lexer::TokenKind::Loop:
       case lexer::TokenKind::Unsafe:
-      case lexer::TokenKind::Comp: has_control = true; break;
+      case lexer::TokenKind::Comp: has_control_ = true; break;
       default: break;
     }
   }
 
-  if (has_test) {
-    // The keyword directly owns the brace of a block of items; after a
-    // parameter list it heads an entry, whose brace holds statements
-    // the way a function body does.
-    if (last == lexer::TokenKind::Test) {
-      return BraceRole::TestBody;
+  BraceRole brace_role() const {
+    if (has_test_) {
+      // The keyword directly owns the brace of a block of items; after a
+      // parameter list it heads an entry, whose brace holds statements
+      // the way a function body does.
+      if (last_ == lexer::TokenKind::Test) {
+        return BraceRole::TestBody;
+      }
+      if (last_ == lexer::TokenKind::RParen) {
+        return BraceRole::FnBody;
+      }
     }
-    if (last == lexer::TokenKind::RParen) {
+    if (has_match_) {
+      return BraceRole::MatchBody;
+    }
+    if (has_struct_) {
+      return BraceRole::StructBody;
+    }
+    if (has_enum_) {
+      return BraceRole::EnumBody;
+    }
+    if (has_impl_) {
+      return BraceRole::ImplBody;
+    }
+    if (has_spec_) {
+      return BraceRole::SpecBody;
+    }
+    if (has_extern_) {
+      return BraceRole::ExternBody;
+    }
+    if (has_fn_) {
       return BraceRole::FnBody;
     }
+    // A brace the unsafe or comp keyword opens is the expression the
+    // keyword owns, however deeply the line around it is spelled.
+    if (last_ == lexer::TokenKind::Unsafe || last_ == lexer::TokenKind::Comp) {
+      return BraceRole::ExprBlock;
+    }
+    if (has_control_) {
+      return BraceRole::Block;
+    }
+    if (!has_any_) {
+      return BraceRole::Block;
+    }
+    if (!has_read_) {
+      return BraceRole::Block;
+    }
+    if (forces_block_brace(last_)) {
+      return BraceRole::Block;
+    }
+    return BraceRole::Literal;
   }
-  if (has_match) {
-    return BraceRole::MatchBody;
-  }
-  if (has_struct) {
-    return BraceRole::StructBody;
-  }
-  if (has_enum) {
-    return BraceRole::EnumBody;
-  }
-  if (has_impl) {
-    return BraceRole::ImplBody;
-  }
-  if (has_spec) {
-    return BraceRole::SpecBody;
-  }
-  if (has_extern) {
-    return BraceRole::ExternBody;
-  }
-  if (has_fn) {
-    return BraceRole::FnBody;
-  }
-  // A brace the unsafe or comp keyword opens is the expression the
-  // keyword owns, however deeply the line around it is spelled.
-  if (last == lexer::TokenKind::Unsafe || last == lexer::TokenKind::Comp) {
-    return BraceRole::ExprBlock;
-  }
-  if (has_control) {
-    return BraceRole::Block;
-  }
-  if (!has_any) {
-    return BraceRole::Block;
-  }
-  if (!has_read) {
-    return BraceRole::Block;
-  }
-  if (forces_block_brace(last)) {
-    return BraceRole::Block;
-  }
-  return BraceRole::Literal;
-}
+
+ private:
+  bool has_match_;
+  bool has_struct_;
+  bool has_enum_;
+  bool has_impl_;
+  bool has_spec_;
+  bool has_extern_;
+  bool has_test_;
+  bool has_fn_;
+  bool has_control_;
+  bool has_any_;
+  // Whether the header holds anything the layout itself wrote down: a
+  // real token or a closed delimiter. A header of nothing but unread
+  // bytes classifies as a block, because whether a separator stood in
+  // front of it is exactly what the layout cannot promise to carry
+  // into the next pass.
+  bool has_read_;
+  lexer::TokenKind last_;
+};
+
+// One open sequence: its header summary and how many of its siblings that
+// summary has read. A frame reads as the empty summary only through Frame{},
+// which the sequence opening it applies before it pushes anything.
+struct Frame {
+  Header header;
+  usize absorbed;
+};
 
 // Builds the delimiter tree. Each opener is consumed with its matching
 // closer; an unclosed opener yields a group without a closer and a stray
@@ -225,6 +233,8 @@ class Builder {
   }
 
   Node build_sequence(lexer::TokenKind expected_closer) {
+    Frame& frame = frames_[depth_];
+    frame = Frame{};
     Node sequence;
     sequence.kind = NodeKind::Sequence;
     while (pos_ < lexemes_.size()) {
@@ -244,24 +254,38 @@ class Builder {
         continue;
       }
       if (is_opener(lexeme.token)) {
-        sequence.kids.push_back(build_group(lexeme, sequence.kids));
+        if (lexeme.token == lexer::TokenKind::LBrace) {
+          catch_up(frame, sequence.kids);
+        }
+        Node group = build_group(lexeme, frame.header);
+        sequence.kids.push_back(std::move(group));
         continue;
       }
       if (is_closer(lexeme.token)) {
         if (lexeme.token == expected_closer) {
           break;
         }
-        sequence.kids.push_back(leaf(lexeme));
+        Node stray = leaf(lexeme);
+        sequence.kids.push_back(std::move(stray));
         ++pos_;
         continue;
       }
-      sequence.kids.push_back(leaf(lexeme));
+      Node node = leaf(lexeme);
+      sequence.kids.push_back(std::move(node));
       ++pos_;
     }
     return sequence;
   }
 
-  Node build_group(const Lexeme& opener, const std::vector<Node>& lead) {
+  // Folds the siblings appended since the last brace into the summary the
+  // next brace reads.
+  static void catch_up(Frame& frame, const std::vector<Node>& kids) {
+    for (; frame.absorbed < kids.size(); ++frame.absorbed) {
+      frame.header.add(kids[frame.absorbed]);
+    }
+  }
+
+  Node build_group(const Lexeme& opener, const Header& header) {
     if (depth_ >= MAX_DEPTH) {
       // Out of budget: keep the opener as a leaf and let the rest read as
       // siblings rather than descend further.
@@ -272,7 +296,7 @@ class Builder {
     group.kind = NodeKind::Group;
     group.group_role = group_role_of(opener.token);
     group.brace_role = group.group_role == GroupRole::Brace
-                           ? classify_brace(lead)
+                           ? header.brace_role()
                            : BraceRole::Literal;
     group.offset = opener.offset;
     group.length = opener.length;
@@ -294,6 +318,10 @@ class Builder {
   }
 
   const std::vector<Lexeme>& lexemes_;
+  // One frame per open sequence; the depth budget bounds the stack. The
+  // array stays unset so a shallow parse does not zero the depth it never
+  // opens.
+  Frame frames_[MAX_DEPTH + 1];
   usize pos_ = 0;
   u32 depth_ = 0;
 };
