@@ -36,6 +36,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "ir/type_name.h"
 #include "ir/type_util.h"
 #include "lowering/diag_code.h"
 #include "lowering/drop_elaboration.h"
@@ -79,6 +80,15 @@ void Lowerer::unsupported(diag::Span span, std::string_view what) {
 void Lowerer::internal(diag::Span span, std::string_view what) {
   const u32 index =
       bag.emit<i18n::Key::LowerInternalError>(DiagCode::Internal, span, what);
+  (void)index;
+  failed = true;
+}
+
+void Lowerer::summary_drop_not_carried(diag::Span span, ir::TypeIdx type) {
+  const std::string name =
+      ir::type_name(builder.state(), strings, canonical_type(type));
+  const u32 index = bag.emit<i18n::Key::LowerSummaryDropNotCarried>(
+      DiagCode::SummaryDropNotCarried, span, name);
   (void)index;
   failed = true;
 }

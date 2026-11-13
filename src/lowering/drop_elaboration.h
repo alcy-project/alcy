@@ -23,6 +23,7 @@ class DiagBag;
 
 namespace ir {
 class StorageBuilder;
+class SymbolTable;
 struct StorageState;
 }  // namespace ir
 
@@ -94,6 +95,8 @@ struct DropElaborationInputs {
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
+  // Where a diagnostic resolves a type's name (ADR-0079).
+  const ir::SymbolTable& strings;
   std::span<const Local> locals;
   // The receiver of a destructor. Its end belongs to the destructor's
   // own body, so the walk leaves it alone: there is no way to spell a

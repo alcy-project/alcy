@@ -15,6 +15,7 @@
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
@@ -29,6 +30,7 @@
 #include "ir/opcode.h"
 #include "ir/operand.h"
 #include "ir/type.h"
+#include "lowering/diag_code.h"
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
@@ -1767,9 +1769,36 @@ TEST_CASE("A summary destructor the carrier did not cross is refused") {
       build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                     "", BuildPlan{}, EmitMode::IrBinary);
   CHECK(built.is_err());
-  CHECK(reports(
-      ctx.bag,
-      "Internal lowering error: a summary type's destructor did not cross"));
+  // The refusal carries its own code, names the type, and points at the
+  // call the body was instantiated from (ADR-0079).
+  constexpr std::string_view app_source =
+      "use dep::outer\n\nfn main() -> i32 {\n  ret outer(3) - 3\n}\n";
+  base::Result<source::FileId, source::SourceError> main_file =
+      ctx.sources.load(root_path.join("main.al").as_view());
+  CHECK(main_file.is_ok());
+  if (main_file.is_err()) {
+    return;
+  }
+  const source::FileId main_id = std::move(main_file).unwrap();
+  bool refused = false;
+  ctx.bag.for_each([&](const diag::Diagnostic& diagnostic) {
+    if (!diagnostic.code.has_value() ||
+        diagnostic.code->stage != diag::Stage::Lowering ||
+        diagnostic.code->id !=
+            static_cast<u8>(lowering::DiagCode::SummaryDropNotCarried)) {
+      return;
+    }
+    refused = true;
+    CHECK(diagnostic.message ==
+          "The destructor of 'Box<i32>' is defined in a dependency and its "
+          "body did not cross with the summary; ending a value of this type "
+          "here is not supported yet");
+    CHECK(diagnostic.has_primary_span);
+    CHECK(diagnostic.primary_span.file == main_id);
+    CHECK(diagnostic.primary_span.offset == app_source.find("outer(3)"));
+    CHECK(diagnostic.primary_span.length == 8);
+  });
+  CHECK(refused);
 }
 
 TEST_CASE("A carried body ends a summary type the library did not arm") {

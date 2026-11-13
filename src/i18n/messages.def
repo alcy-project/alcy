@@ -335,6 +335,7 @@
   F(LowerUnreachableExpression, Warning, Lowering, "Unreachable expression") \
   F(LowerUnreachableStatement, Warning, Lowering, "Unreachable statement") \
   F(LowerUnsupportedConstruct, Error, Lowering, "Construct '{}' is not supported in this lowering slice") \
+  F(LowerSummaryDropNotCarried, Error, Lowering, "The destructor of '{}' is defined in a dependency and its body did not cross with the summary; ending a value of this type here is not supported yet") \
   /* borrow */ \
   F(BorrowAssignWhileBorrowed, Error, Borrow, "Cannot assign to '{}' while borrowed") \
   F(BorrowConflict, Error, Borrow, "Conflicting borrows of '{}'") \

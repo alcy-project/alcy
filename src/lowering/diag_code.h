@@ -70,6 +70,10 @@ enum class DiagCode : u8 {
   // value the expression would answer with is not known at compile
   // time; the message names the operation.
   CompNotEvaluable = 19,
+  // A carried generic body ends a value whose destructor the library
+  // measured: its body did not cross with the summary, so the end
+  // cannot run there and skipping it would leak (ADR-0079, ADR-0085).
+  SummaryDropNotCarried = 20,
 };
 
 }  // namespace lowering

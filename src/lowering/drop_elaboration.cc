@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -29,7 +30,9 @@
 #include "ir/operand.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "ir/type_name.h"
 #include "lowering/diag_code.h"
 #include "lowering/immediate.h"
 #include "lowering/lowerer.h"
@@ -185,11 +188,11 @@ void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
   if (glue_type.idx >= pkg.drop_glue.size()) {
     // The glue table is the analyzer's, and a summary type it did not
     // measure may carry a destructor whose body did not cross; skipping
-    // the end silently would leak, so the build stops instead
-    // (ADR-0085).
+    // the end silently would leak, so the build stops and names what
+    // did not cross (ADR-0085).
     if (glue_type.idx < summary_drops_.size() &&
         summary_drops_[glue_type.idx] != 0) {
-      internal(span, "a summary type's destructor did not cross");
+      summary_drop_not_carried(span, glue_type);
     }
     return;
   }
@@ -211,7 +214,6 @@ void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
             {builder.operand(ir::Operand::from_function(
                  fn, builder.primitive(ir::TypeTag::Function))),
              to_operand(value, type)});
-  (void)span;
 }
 
 void Lowerer::emit_collected_drop(ir::OperandIdx tuple_place,
@@ -302,6 +304,7 @@ class DropElaborator {
         drop_glue(inputs.drop_glue),
         builder(inputs.builder),
         bag(inputs.bag),
+        strings(inputs.strings),
         locals(inputs.locals),
         end_exempt_(inputs.end_exempt),
         ownership_(inputs.ownership),
@@ -407,6 +410,7 @@ class DropElaborator {
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
+  const ir::SymbolTable& strings;
   std::span<const Local> locals;
   u32 end_exempt_ = base::INVALID_IDX;
   // A destructor's receiver ends from its own body alone (ADR-0137).
@@ -947,8 +951,13 @@ void DropElaborator::run() {
         glue_type.idx < summary_drops.size() &&
         summary_drops[glue_type.idx] != 0) {
       // The destructor's body did not cross with the type; the field
-      // walk alone would leak what it owned (ADR-0085).
-      internal(span, "a summary type's destructor did not cross");
+      // walk alone would leak what it owned, so the build stops and
+      // names the type (ADR-0085).
+      const std::string name =
+          ir::type_name(builder.state(), strings, glue_type);
+      const u32 index = bag.emit<i18n::Key::LowerSummaryDropNotCarried>(
+          DiagCode::SummaryDropNotCarried, span, name);
+      (void)index;
       return;
     }
     if (glue_type.idx < drop_glue.size()) {
@@ -1457,6 +1466,7 @@ void Lowerer::place_ends() {
       .drop_glue = pkg.drop_glue,
       .builder = builder,
       .bag = bag,
+      .strings = strings,
       .locals = locals,
       .end_exempt = end_exempt_,
       .ownership = ownership_,

@@ -235,6 +235,11 @@ class Lowerer {
           debug::Profiler* profiler = nullptr);
   void unsupported(diag::Span span, std::string_view what);
   void internal(diag::Span span, std::string_view what);
+  // A carried generic body ends a value whose destructor's body did
+  // not cross with the summary: the end cannot run there, and skipping
+  // it would leak, so the build stops and names what did not cross
+  // (ADR-0079).
+  void summary_drop_not_carried(diag::Span span, ir::TypeIdx type);
   // A constant expression overflowed its type; the diagnostic names
   // the rule rather than calling the program unsupported.
   void comp_overflow(diag::Span span);
@@ -476,6 +481,10 @@ class Lowerer {
     std::unordered_map<u32, ir::RegisterIdx> registers;
     std::unordered_map<u32, ir::BlockIdx> blocks;
     std::unordered_map<u32, LoweredPackage::AddrInfo> addr_names;
+    // The call that instantiates the clone. A carried body's
+    // instructions have no spans of their own, so a diagnostic from the
+    // clone names the dependent's call instead (ADR-0079).
+    diag::Span instantiation_span;
   };
   // One instruction of a clone, staged until its operands can be
   // appended as a single contiguous run.
@@ -491,7 +500,8 @@ class Lowerer {
   // Clones one definition-site body under `args`.
   void clone_body(ir::FunctionIdx source,
                   ir::FunctionIdx clone,
-                  const std::vector<ir::TypeIdx>& args);
+                  const std::vector<ir::TypeIdx>& args,
+                  diag::Span instantiation_span);
   void translate_instruction(ir::InstructionIdx source,
                              CloneState& state,
                              std::vector<StagedInstruction>& out);
@@ -512,7 +522,8 @@ class Lowerer {
   // The clone of one parametric body under the type arguments a use
   // settled, memoized by (body, arguments) (ADR-0079).
   ir::FunctionIdx specialize_body(ir::FunctionIdx source,
-                                  const std::vector<ir::TypeIdx>& args);
+                                  const std::vector<ir::TypeIdx>& args,
+                                  diag::Span instantiation_span);
   // The function a summary module's carried body names after its
   // storage merged into this build (ADR-0079).
   ir::FunctionIdx merge_summary_function(u32 module, ir::FunctionIdx function);

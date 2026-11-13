@@ -208,3 +208,16 @@ check.
    by the `Fn` spec (ADR-0116 carries the closure's half), an
    intrinsic's shape a bare parameter would decide, and a body whose
    compile-time value reads a parameter's layout.
+6. Landed, with a boundary named here. The trait answers a dependent's
+   passes read travel in the same artifact (ADR-0085), so a carried
+   body's ends and moves decide as the library decided them. A
+   destructor's body does not cross with its type yet: a carried body
+   that ends a value whose destructor the library recorded is refused -
+   naming the type and the call that instantiated the body - rather
+   than skipped, which would leak. Because a dependency a summary
+   answers for is not read from source (ADR-0078), the refusal fires
+   once a fresh summary answers for the library and not while its
+   sources do: a program built against the sources is accepted where
+   the same program built against the summary is refused. The summary
+   keeps its priority because it is the interface; closing the gap is
+   the destructor's body crossing, which this record does not settle.

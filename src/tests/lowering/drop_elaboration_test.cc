@@ -23,6 +23,7 @@
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 
 namespace lowering {
@@ -33,6 +34,7 @@ struct Fixture {
   mem::Arena arena;
   diag::DiagBag bag{arena, i18n::Language::EnUs};
   ir::StorageBuilder builder;
+  ir::SymbolTable strings;
   std::vector<u8> needs_drop;
   std::vector<analyzer::CheckedModule::DropGlue> drop_glue;
   std::unordered_map<u32, u32> type_origins;
@@ -90,6 +92,7 @@ TEST_CASE("The drop pass ends a bound local at its site") {
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
       .bag = fx.bag,
+      .strings = fx.strings,
       .locals = locals,
       .ownership = events,
       .end_sites = sites,
@@ -154,6 +157,7 @@ TEST_CASE("The drop pass leaves a moved local alone") {
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
       .bag = fx.bag,
+      .strings = fx.strings,
       .locals = locals,
       .ownership = events,
       .end_sites = sites,
@@ -210,6 +214,7 @@ std::vector<u32> placed_calls(Fixture& fx,
       .drop_glue = fx.drop_glue,
       .builder = fx.builder,
       .bag = fx.bag,
+      .strings = fx.strings,
       .locals = locals,
       .ownership = events,
       .end_sites = sites,

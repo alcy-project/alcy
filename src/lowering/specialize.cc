@@ -40,6 +40,7 @@
 #include "lowering/immediate.h"
 #include "lowering/lowerer.h"
 #include "lowering/lowering.h"
+#include "source/source.h"
 
 namespace lowering {
 
@@ -583,11 +584,12 @@ ir::FunctionIdx Lowerer::specialize_generic(
     internal(span, "a generic call has no parametric body");
     return ir::FunctionIdx::invalid();
   }
-  return specialize_body(ir::FunctionIdx(parametric->second), args);
+  return specialize_body(ir::FunctionIdx(parametric->second), args, span);
 }
 
 ir::FunctionIdx Lowerer::specialize_body(ir::FunctionIdx source_idx,
-                                         const std::vector<ir::TypeIdx>& args) {
+                                         const std::vector<ir::TypeIdx>& args,
+                                         diag::Span instantiation_span) {
   specialization_key(source_idx, args, specialization_key_scratch_);
   const auto found = specialization_by_key_.find(
       std::string_view(specialization_key_scratch_));
@@ -636,7 +638,7 @@ ir::FunctionIdx Lowerer::specialize_body(ir::FunctionIdx source_idx,
       builder.add_prelude_specialization(clone);
     }
   }
-  clone_body(source_idx, clone, args);
+  clone_body(source_idx, clone, args, instantiation_span);
   return clone;
 }
 
@@ -732,8 +734,13 @@ void Lowerer::translate_instruction(ir::InstructionIdx source,
   staged.measure = instr.measure.is_valid()
                        ? substitute_type(instr.measure, *state.args)
                        : ir::TypeIdx::invalid();
-  staged.span = source.idx < instr_spans_.size() ? instr_spans_[source.idx]
-                                                 : diag::Span{};
+  // A body carried from a summary has no spans: its instructions name
+  // the call that instantiated it, which is where a reader can look
+  // (ADR-0079).
+  staged.span = source.idx < instr_spans_.size() &&
+                        instr_spans_[source.idx].file != source::UNKNOWN_FILE
+                    ? instr_spans_[source.idx]
+                    : state.instantiation_span;
   if (instr.op == ir::Opcode::ParametricDrop) {
     const ir::Operand place =
         translate_operand(builder.state().operands[operands.head()]);
@@ -857,14 +864,15 @@ void Lowerer::resolve_parametric_drop(const ir::Operand& place,
   if (failed) {
     return;
   }
+  // A summary type's destructor body does not cross with the type
+  // (ADR-0085): the end cannot run it here, and skipping it would
+  // leak, so the build stops and names what did not cross.
+  const ir::TypeIdx marker = canonical_type(type);
+  if (marker.idx < summary_drops_.size() && summary_drops_[marker.idx] != 0) {
+    summary_drop_not_carried(span, type);
+    return;
+  }
   if (!runs_destructor(type)) {
-    // A summary type whose destructor the library measured needs a body
-    // that did not cross with it: skipping the end silently would leak,
-    // so the build stops instead (ADR-0085).
-    const ir::TypeIdx marker = canonical_type(type);
-    if (marker.idx < summary_drops_.size() && summary_drops_[marker.idx] != 0) {
-      internal(span, "a summary type's destructor did not cross");
-    }
     return;
   }
   // The end is the drop pass's own walk, emitted once per type as a
@@ -896,10 +904,12 @@ void Lowerer::resolve_parametric_drop(const ir::Operand& place,
 
 void Lowerer::clone_body(ir::FunctionIdx source_idx,
                          ir::FunctionIdx clone,
-                         const std::vector<ir::TypeIdx>& args) {
+                         const std::vector<ir::TypeIdx>& args,
+                         diag::Span instantiation_span) {
   const ir::Function source = builder.state().functions[source_idx];
   CloneState state;
   state.args = &args;
+  state.instantiation_span = instantiation_span;
   // The clone keeps the address names its allocas had, so the borrow
   // pass can still name the places it reports.
   for (const LoweredPackage::AddrInfo& info : addr_names_) {
@@ -1118,7 +1128,7 @@ ir::FunctionIdx Lowerer::resolve_callee(ir::ParametricCalleeIdx callee,
       internal(span, "a generic callee names no body");
       return ir::FunctionIdx::invalid();
     }
-    return specialize_body(row.function, args);
+    return specialize_body(row.function, args, span);
   }
   if (args.size() != 1) {
     internal(span, "a dispatch names one receiver");

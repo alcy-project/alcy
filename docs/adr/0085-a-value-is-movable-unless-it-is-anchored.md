@@ -104,7 +104,9 @@ it never saw, and they travel inside a library's artifact (ADR-0079). A
 dependent's merge copies the entries its carried types reached. A
 destructor's body does not cross with its type yet: ending a type whose
 destructor the library recorded is refused rather than skipped, so a
-value the library would have ended is never leaked silently.
+value the library would have ended is never leaked silently. The
+refusal is a user-facing error that names the type and the call the
+carried body was instantiated at (ADR-0079).
 
 ## Consequences
 
