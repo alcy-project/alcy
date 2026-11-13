@@ -320,9 +320,19 @@ VerificationResult verify_storage(const Storage& storage) {
           break;
         }
         for (const InstructionIdx iidx : block.instrs) {
-          if (storage.instrs()[iidx].op == Opcode::ParametricDrop) {
+          const Instruction& instr = storage.instrs()[iidx];
+          if (instr.op == Opcode::ParametricDrop) {
             return err(VerificationErrorKind::MisplacedParametricDrop,
                        iidx.idx);
+          }
+          // The pass resolves a callee record into a function before
+          // any backend runs; an unresolved one is a hole (ADR-0079).
+          for (const OperandIdx operand : instr.operands) {
+            if (operand.idx < storage.operands().size() &&
+                storage.operands()[operand].is<ParametricCalleeIdx>()) {
+              return err(VerificationErrorKind::MisplacedParametricCall,
+                         iidx.idx);
+            }
           }
         }
       }

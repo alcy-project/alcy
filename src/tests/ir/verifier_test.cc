@@ -1124,6 +1124,52 @@ TEST_CASE("Verify a parametric end outside a parametric body") {
   CHECK(build(true).is_ok());
 }
 
+TEST_CASE("Verify an unresolved callee outside a parametric body") {
+  // The specialization pass rewrites a callee record into the function
+  // its arguments instantiate; a record left in a body it resolved
+  // would reach a backend as an operand it cannot name (ADR-0079).
+  const auto build = [](bool parametric) {
+    StorageBuilder builder;
+    InstrSeq instrs;
+    const TypeIdx void_ty = builder.primitive(TypeTag::Void);
+    const ParametricCalleeIdx callee = builder.parametric_callee({
+        .kind = ParametricCalleeKind::Generic,
+        .function = FunctionIdx(0),
+        .spec = str::INVALID_STRING_POOL_ID,
+        .method = str::INVALID_STRING_POOL_ID,
+        .args = {},
+    });
+    const TypeIdx callee_ty = builder.func_type(TypeIdxRange{}, void_ty);
+    const OperandIdx head =
+        builder.operand(Operand::from_parametric_callee(callee, callee_ty));
+    const InstructionIdx call = builder.instr({
+        .op = Opcode::Call,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = TypeIdx::invalid(),
+        .operands = {head, 1},
+    });
+    instrs.push(call);
+    const InstructionIdx ret = builder.instr({
+        .op = Opcode::Ret,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = TypeIdx::invalid(),
+        .operands = {},
+    });
+    instrs.push(ret);
+    const BlockIdx block =
+        builder.block({.instrs = instrs.finish(), .block_params = {}});
+    builder.function({.meta = void_meta(), .blocks = {block, 1}});
+    if (parametric) {
+      builder.add_parametric_function(FunctionIdx(0));
+    }
+    return std::move(builder).build();
+  };
+  check_invalid(build(false), VerificationErrorKind::MisplacedParametricCall);
+  CHECK(build(true).is_ok());
+}
+
 TEST_CASE("Verify external function metadata") {
   // `build_external` produces an otherwise valid package whose one
   // external carries the metadata under test; consumers dereference

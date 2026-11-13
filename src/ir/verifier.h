@@ -64,6 +64,10 @@ enum class VerificationErrorKind : u8 {
   // A parametric end in a body the specialization pass resolved: no
   // pass rewrites it, so it would reach a backend (ADR-0079).
   MisplacedParametricDrop,
+  // A callee record in a body the specialization pass resolved: the
+  // call would reach a backend as an opcode operand it cannot name
+  // (ADR-0079).
+  MisplacedParametricCall,
 };
 
 struct VerificationError {
@@ -116,6 +120,7 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
       return "ParametricCalleeArgsOutOfRange";
     case K::ParametricFunctionOutOfRange: return "ParametricFunctionOutOfRange";
     case K::MisplacedParametricDrop: return "MisplacedParametricDrop";
+    case K::MisplacedParametricCall: return "MisplacedParametricCall";
   }
 }
 
