@@ -607,7 +607,9 @@ arg::Parser build_parser(i18n::Language language) {
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("diff")
-                       .help("Show a unified diff instead of writing.")
+                       .help("Show a unified diff instead of writing. A change "
+                             "set too scattered to line up is shown as a "
+                             "wholesale replacement.")
                        .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("exclude")
