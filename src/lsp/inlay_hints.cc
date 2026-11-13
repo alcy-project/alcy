@@ -19,12 +19,12 @@
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/storage.h"
+#include "ir/type_name.h"
 #include "lsp/analysis.h"
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/layout.h"
 #include "lsp/protocol.h"
-#include "lsp/typing.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 #include "text/json.h"
@@ -87,10 +87,10 @@ void collect_binding_hints(const DocumentAnalysis& analysis,
     if (!type.has_value()) {
       return;
     }
-    out->push_back(
-        Hint{name.offset + name.length,
-             ": " + type_name(package.types->state(), context.strings, *type),
-             true});
+    out->push_back(Hint{
+        name.offset + name.length,
+        ": " + ir::type_name(package.types->state(), context.strings, *type),
+        true});
   });
 }
 

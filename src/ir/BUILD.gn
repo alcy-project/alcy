@@ -46,6 +46,8 @@ source_set("ir") {
     "text_dump.h",
     "type.cc",
     "type.h",
+    "type_name.cc",
+    "type_name.h",
     "type_util.cc",
     "type_util.h",
     "verifier.cc",
