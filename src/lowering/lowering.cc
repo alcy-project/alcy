@@ -3210,7 +3210,9 @@ void Lowerer::compact_instrs() {
     instrs[to] = instrs[i];
     instr_spans_[to] = instr_spans_[i];
   }
-  // Instruction is not default constructible, and this only ever shrinks.
+  // Instruction is not default constructible, and the early return above leaves
+  // a table with an entry to fill from: this only ever shrinks.
+  DCHECK_GT(count, 0);
   state.instrs.resize(kept, instrs[0]);
   instr_spans_.resize(kept);
   for (usize b = 0; b < state.blocks.size(); ++b) {
