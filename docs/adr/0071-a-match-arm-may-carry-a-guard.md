@@ -33,5 +33,12 @@ the arm line. The conservative coverage rule can ask for an arm that
 a guard makes unreachable at run time, which is the bargain the
 wildcard arm already strikes. Lowering is one block per guarded arm:
 the pattern test branches to the guard, and the guard branches to
-the body or to the next arm. String-literal patterns and slice
-patterns remain deferred.
+the body or to the next arm.
+
+An end the arm performs lands in the body for that reason: the guard
+tests before the arm commits, so a value the arm discards belongs to
+it only once it wins. An end placed where the guard is tested would
+sit on both edges out of it, and the arm the guard turns away from
+would end a value it never took.
+
+String-literal patterns and slice patterns remain deferred.

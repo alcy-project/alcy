@@ -1021,8 +1021,10 @@ class Lowerer {
   void queue_binding(ast::PatternIdx pattern, Val place, bool borrowed);
   void queue_drop(Val place, diag::Span span);
   // Emits the queued bindings into the current block, which the tests
-  // reach only once the whole pattern matched.
-  void flush_queued_bindings();
+  // reach only once the whole pattern matched. A discard lands in
+  // `discard_block` instead: an arm's value ends where the arm commits,
+  // not where its guard is tested.
+  void flush_queued_bindings(ir::BlockIdx discard_block);
   std::vector<QueuedBinding> queued_bindings_;
   // Whether `bind_pattern` alone can place a pattern: an irrefutable
   // binding, a wildcard, or a destructuring of those. A refutable
@@ -1237,14 +1239,18 @@ class Lowerer {
   void record_place_end(OwnershipEvent::Kind kind,
                         ir::OperandIdx place,
                         ir::TypeIdx type,
-                        diag::Span span);
+                        diag::Span span,
+                        ir::BlockIdx block);
   void record_drop_in_place(ir::OperandIdx place,
                             ir::TypeIdx type,
                             diag::Span span);
   // Ends a place the construct holding it discards: the value goes where
   // it stands, and the place it came from stays the borrow checker's to
   // retire when the construct takes the whole.
-  void record_discard(ir::OperandIdx place, ir::TypeIdx type, diag::Span span);
+  void record_discard(ir::OperandIdx place,
+                      ir::TypeIdx type,
+                      diag::Span span,
+                      ir::BlockIdx block);
   // Records a store that replaces the value at an address no path names.
   // `root` is the local the address came from, or `INVALID_IDX`.
   void record_store_element(ir::OperandIdx place,

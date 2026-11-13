@@ -280,7 +280,8 @@ void Lowerer::emit_collected_drop(ir::OperandIdx tuple_place,
 void Lowerer::record_place_end(OwnershipEvent::Kind kind,
                                ir::OperandIdx place,
                                ir::TypeIdx type,
-                               diag::Span span) {
+                               diag::Span span,
+                               ir::BlockIdx block) {
   if (failed) {
     return;
   }
@@ -299,8 +300,8 @@ void Lowerer::record_place_end(OwnershipEvent::Kind kind,
       event.path = std::move(path);
     }
   }
-  event.block = cur_;
-  event.offset = streams_[at(cur_)].size();
+  event.block = block;
+  event.offset = streams_[at(block)].size();
   event.seq = record_seq_++;
   event.span = span;
   ownership_.push_back(std::move(event));
@@ -309,13 +310,14 @@ void Lowerer::record_place_end(OwnershipEvent::Kind kind,
 void Lowerer::record_drop_in_place(ir::OperandIdx place,
                                    ir::TypeIdx type,
                                    diag::Span span) {
-  record_place_end(OwnershipEvent::Kind::DropInPlace, place, type, span);
+  record_place_end(OwnershipEvent::Kind::DropInPlace, place, type, span, cur_);
 }
 
 void Lowerer::record_discard(ir::OperandIdx place,
                              ir::TypeIdx type,
-                             diag::Span span) {
-  record_place_end(OwnershipEvent::Kind::Discard, place, type, span);
+                             diag::Span span,
+                             ir::BlockIdx block) {
+  record_place_end(OwnershipEvent::Kind::Discard, place, type, span, block);
 }
 
 void Lowerer::record_store_element(ir::OperandIdx place,
@@ -564,7 +566,10 @@ void DropElaborator::run() {
     if (has_end) {
       break;
     }
-    if (event.kind == OwnershipEvent::Kind::DropInPlace) {
+    const bool ends = event.kind == OwnershipEvent::Kind::StoreElement ||
+                      event.kind == OwnershipEvent::Kind::DropInPlace ||
+                      event.kind == OwnershipEvent::Kind::Discard;
+    if (ends) {
       has_end = may_end(event.place_type);
     } else if (event.kind == OwnershipEvent::Kind::Store) {
       has_end = may_end(type_at_path(locals[event.local].type, event.path));
