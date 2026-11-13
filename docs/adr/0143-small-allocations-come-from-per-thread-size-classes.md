@@ -43,8 +43,9 @@ replaces the global `operator new`, `operator new[]`, and their
   thread, and a chunk is never handed back. A block freed on one
   thread joins that thread's list for its class without reading the
   memory of the thread that cut it, and neither path takes a lock.
-- A build under AddressSanitizer or ThreadSanitizer keeps the system
-  allocator: the file compiles to nothing when either is defined.
+- A build under AddressSanitizer, ThreadSanitizer, or MemorySanitizer
+  keeps the system allocator: the file compiles to nothing when any of
+  them is defined.
 - A request for over-aligned storage keeps the system allocator's
   aligned pair, which is separate from the one replaced here, so the
   two never free each other's blocks.
@@ -78,6 +79,9 @@ replaces the global `operator new`, `operator new[]`, and their
   a thread that allocates and exits leaves its chunks to the process.
   The compiler's worker threads live for the run (ADR-0048), and a
   chunk is 64 KiB.
+- A system request that fails ends the program in `std::abort()` with no
+  diagnostic: the build has no exceptions, so a failure has nowhere to
+  unwind to and `std::bad_alloc` has no handler.
 - `std::malloc` and `std::free` reach the system only from this file;
   the `no-c-heap` rule keeps that true and the three call sites carry
   its ignore.

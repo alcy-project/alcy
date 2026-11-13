@@ -6,7 +6,11 @@
 #include <cstdlib>
 #include <new>
 
-#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
+// A sanitizer build keeps the system allocator: each sanitizer tracks the size
+// and the lifetime of the block it handed out, and the recycled blocks a size
+// class holds would hide that.
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) && \
+    !defined(__SANITIZE_MEMORY__)
 
 namespace {
 
