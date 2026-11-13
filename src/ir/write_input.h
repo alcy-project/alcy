@@ -55,6 +55,15 @@ struct WriteInput {
   // The package's public surface, for the summary a library's artifact
   // carries (ADR-0078). Empty when the caller has none.
   std::span<const SummaryEntry> summary;
+  // The per-type tables the drop and borrow passes read, aligned with
+  // the type table: one byte per type, zero meaning no (ADR-0085). A
+  // dependent's merge copies the entries its carried types reached, so
+  // a destructor or an anchor the writer measured crosses with them.
+  // Empty when the caller has none.
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const u8> needs_drop = {};
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const u8> not_movable = {};
   usize prelude_functions = 0;
   // The pointer width lowering ran with; the text header and the binary
   // header both record it.

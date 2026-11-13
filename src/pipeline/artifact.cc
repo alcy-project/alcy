@@ -462,6 +462,8 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
         const ir::LoadedIr& artifact = *dependency.artifact;
         spelled.summary_storage = &*artifact.storage;
         spelled.summary_strings = artifact.strings.get();
+        spelled.summary_needs_drop = artifact.needs_drop;
+        spelled.summary_not_movable = artifact.not_movable;
       }
       sources.dependency_modules.push_back(analyzer::ParsedModule{
           spelled, path::Path::from_native(std::string_view{}).unwrap(),

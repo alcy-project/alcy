@@ -306,6 +306,8 @@ class Resolver {
       modules[root]->summary_generic_names = input.input.summary_generic_names;
       modules[root]->summary_storage = input.input.summary_storage;
       modules[root]->summary_strings = input.input.summary_strings;
+      modules[root]->summary_needs_drop = input.input.summary_needs_drop;
+      modules[root]->summary_not_movable = input.input.summary_not_movable;
       return;
     }
     u32 parent = root_module;
@@ -333,6 +335,8 @@ class Resolver {
               input.input.summary_generic_names;
           modules[child]->summary_storage = input.input.summary_storage;
           modules[child]->summary_strings = input.input.summary_strings;
+          modules[child]->summary_needs_drop = input.input.summary_needs_drop;
+          modules[child]->summary_not_movable = input.input.summary_not_movable;
         }
         if (out_of_arena) {
           return;

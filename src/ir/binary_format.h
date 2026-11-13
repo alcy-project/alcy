@@ -15,7 +15,8 @@ namespace ir::binary {
 inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
 inline constexpr u16 MAJOR = 5;
 // Minor 1 adds the specialization and synthetic function lists.
-inline constexpr u16 MINOR = 1;
+// Minor 2 adds the per-type trait tables.
+inline constexpr u16 MINOR = 2;
 // Bit 0: the payload is little-endian. Always set; a reader rejects a
 // file that clears it.
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;
@@ -83,6 +84,14 @@ enum class Section : u8 {
   // The bodies the specialization pass synthesized (ADR-0079). Rows: a
   // u32 count, then that many function indexes. Absent means none.
   SyntheticFunctions = 29,
+  // The per-type tables the drop and borrow passes read, aligned with
+  // the type table: whether ending a value of the type runs code, and
+  // whether one is never moved (ADR-0085, ADR-0079). Rows: a u32
+  // needs_drop length and that many bytes, then a u32 not_movable
+  // length and that many bytes. A dependent's merge copies the entries
+  // its carried types reached into its own tables. Absent means the
+  // writer measured neither.
+  TypeTraits = 30,
 };
 
 }  // namespace ir::binary

@@ -468,6 +468,7 @@ StorageBases StorageBuilder::append_reachable(
     }
   }
   bases.function_map = function_map;
+  bases.type_map = type_map;
 
   const auto type = [&](TypeIdx idx) {
     return mapped(idx, type_map, bases.types);

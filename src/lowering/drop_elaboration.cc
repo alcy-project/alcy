@@ -179,7 +179,18 @@ void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
   // lowering interns copies the analyzer's table never measured, and
   // a destructor belongs to the declaration, not to the copy.
   const ir::TypeIdx glue_type = type_origin(type);
-  if (!runs_destructor(type) || glue_type.idx >= pkg.drop_glue.size()) {
+  if (!runs_destructor(type)) {
+    return;
+  }
+  if (glue_type.idx >= pkg.drop_glue.size()) {
+    // The glue table is the analyzer's, and a summary type it did not
+    // measure may carry a destructor whose body did not cross; skipping
+    // the end silently would leak, so the build stops instead
+    // (ADR-0085).
+    if (glue_type.idx < summary_drops_.size() &&
+        summary_drops_[glue_type.idx] != 0) {
+      internal(span, "a summary type's destructor did not cross");
+    }
     return;
   }
   const analyzer::CheckedModule::DropGlue& glue = pkg.drop_glue[glue_type.idx];
@@ -287,6 +298,7 @@ class DropElaborator {
                  DropWorkingSet::Tables& tables)
       : needs_drop(inputs.needs_drop),
         not_movable(inputs.not_movable),
+        summary_drops(inputs.summary_drops),
         drop_glue(inputs.drop_glue),
         builder(inputs.builder),
         bag(inputs.bag),
@@ -382,9 +394,17 @@ class DropElaborator {
   [[nodiscard]] ir::FunctionIdx drop_method(u32 module, u32 method) const {
     return drop_method_(module, method);
   }
+  // A construct the pass cannot lower: the detail names it, and the
+  // build stops where the bag is read.
+  void internal(diag::Span span, std::string_view what) {
+    const u32 index =
+        bag.emit<i18n::Key::LowerInternalError>(DiagCode::Internal, span, what);
+    (void)index;
+  }
 
   std::span<const u8> needs_drop;
   std::span<const u8> not_movable;
+  std::span<const u8> summary_drops;
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
@@ -924,6 +944,14 @@ void DropElaborator::run() {
     // The same origin rule the collected call follows: a copy's
     // glue is the one the type it came from declared.
     const ir::TypeIdx glue_type = type_origin(type);
+    if (glue_type.idx >= drop_glue.size() &&
+        glue_type.idx < summary_drops.size() &&
+        summary_drops[glue_type.idx] != 0) {
+      // The destructor's body did not cross with the type; the field
+      // walk alone would leak what it owned (ADR-0085).
+      internal(span, "a summary type's destructor did not cross");
+      return;
+    }
     if (glue_type.idx < drop_glue.size()) {
       const analyzer::CheckedModule::DropGlue& glue = drop_glue[glue_type.idx];
       if (glue.index != base::INVALID_IDX) {
@@ -1426,6 +1454,7 @@ void Lowerer::place_ends() {
   const DropElaborationInputs inputs{
       .needs_drop = pkg.needs_drop,
       .not_movable = pkg.not_movable,
+      .summary_drops = summary_drops_,
       .drop_glue = pkg.drop_glue,
       .builder = builder,
       .bag = bag,

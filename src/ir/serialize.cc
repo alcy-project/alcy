@@ -166,6 +166,9 @@ class Serializer {
       sections.push_back({Section::SyntheticFunctions,
                           function_list_section(state_.synthetic_functions)});
     }
+    if (!input_.needs_drop.empty() || !input_.not_movable.empty()) {
+      sections.push_back({Section::TypeTraits, type_traits_section()});
+    }
 
     // The header and the table come first, so an offset depends on the
     // table's own size; compute them before writing anything.
@@ -619,6 +622,19 @@ class Serializer {
     out.put_u32(static_cast<u32>(functions.size()));
     for (const FunctionIdx function : functions) {
       out.put_u32(function.idx);
+    }
+    return out;
+  }
+
+  ByteWriter type_traits_section() const {
+    ByteWriter out;
+    out.put_u32(static_cast<u32>(input_.needs_drop.size()));
+    for (const u8 bit : input_.needs_drop) {
+      out.put_u8(bit);
+    }
+    out.put_u32(static_cast<u32>(input_.not_movable.size()));
+    for (const u8 bit : input_.not_movable) {
+      out.put_u8(bit);
     }
     return out;
   }

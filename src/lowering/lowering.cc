@@ -4,6 +4,7 @@
 #include "lowering/lowering.h"
 
 #include <charconv>
+#include <functional>
 #include <initializer_list>
 #include <optional>
 #include <ranges>
@@ -11,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -190,6 +192,154 @@ void Lowerer::mark_drops() {
         drop_items_[method.item.idx] = true;
       }
     }
+  }
+}
+
+void Lowerer::complete_traits() {
+  const u32 count = static_cast<u32>(builder.state().types.size());
+  std::vector<u8> needs(count, 0);
+  std::vector<u8> anchors(count, 0);
+  // The shapes whose declaration gives every instance a destructor: a
+  // copy or an interned instance keeps the declaration's name, so the
+  // seed reaches what the analyzer measured under another index.
+  std::unordered_set<u32> drop_shapes;
+  const auto seed_shape = [&](ir::TypeIdx type) {
+    const ir::TypeIdx at = canonical_type(type);
+    if (at.idx >= count) {
+      return;
+    }
+    const ir::TypeNode& node = builder.state().types[at];
+    if (node.tag == ir::TypeTag::Struct) {
+      drop_shapes.insert(
+          builder.state().struct_types[node.as_struct()].name.offset);
+    } else if (node.tag == ir::TypeTag::Enum) {
+      drop_shapes.insert(
+          builder.state().enum_types[node.as_enum()].name.offset);
+    }
+  };
+  for (const auto& [type, info] : structs_) {
+    if (info->item.is_valid() && is_destructor(info->item)) {
+      seed_shape(ir::TypeIdx(type));
+    }
+  }
+  for (const auto& [type, info] : enums_) {
+    if (info->item.is_valid() && is_destructor(info->item)) {
+      seed_shape(ir::TypeIdx(type));
+    }
+  }
+  for (u32 i = 0; i < count; ++i) {
+    const ir::TypeIdx type(i);
+    const ir::TypeIdx source = canonical_type(type);
+    if (source.idx < pkg.needs_drop.size() && pkg.needs_drop[source.idx]) {
+      needs[i] = 1;
+    }
+    if (source.idx < pkg.not_movable.size() && pkg.not_movable[source.idx]) {
+      anchors[i] = 1;
+    }
+    const ir::TypeNode& node = builder.state().types[type];
+    str::StringPoolId name = str::INVALID_STRING_POOL_ID;
+    if (node.tag == ir::TypeTag::Struct) {
+      name = builder.state().struct_types[node.as_struct()].name;
+    } else if (node.tag == ir::TypeTag::Enum) {
+      name = builder.state().enum_types[node.as_enum()].name;
+    }
+    if (name != str::INVALID_STRING_POOL_ID &&
+        drop_shapes.contains(name.offset)) {
+      needs[i] = 1;
+    }
+  }
+  // The seeds close over what a value holds: an end runs its fields'
+  // destructors, and a value holding an anchor is not movable. A
+  // reference owns nothing, and a `MaybeUninit` ends nothing of its
+  // payload, so neither passes its parts through (ADR-0085).
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (u32 i = 0; i < count; ++i) {
+      if (needs[i] != 0 && anchors[i] != 0) {
+        continue;
+      }
+      const ir::TypeNode& node = builder.state().types[ir::TypeIdx(i)];
+      const auto absorb = [&](ir::TypeIdx child, bool holds) {
+        if (child.idx >= count) {
+          return;
+        }
+        if (holds && needs[child.idx] && needs[i] == 0) {
+          needs[i] = 1;
+          changed = true;
+        }
+        if (anchors[child.idx] && anchors[i] == 0) {
+          anchors[i] = 1;
+          changed = true;
+        }
+      };
+      switch (node.tag) {
+        case ir::TypeTag::Struct: {
+          const ir::StructType& shape =
+              builder.state().struct_types[node.as_struct()];
+          if (strings.get(shape.name) == "MaybeUninit") {
+            for (const ir::TypeIdx field : shape.fields) {
+              absorb(field, false);
+            }
+            break;
+          }
+          for (const ir::TypeIdx field : shape.fields) {
+            absorb(field, true);
+          }
+          break;
+        }
+        case ir::TypeTag::Enum: {
+          const ir::EnumType& shape =
+              builder.state().enum_types[node.as_enum()];
+          for (ir::EnumVariantTypeIdx vidx = shape.variants.head();
+               vidx.idx < shape.variants.head().idx + shape.variants.size();
+               vidx = ir::EnumVariantTypeIdx(vidx.idx + 1)) {
+            for (const ir::TypeIdx field :
+                 builder.state().enum_variant_types[vidx].fields) {
+              absorb(field, true);
+            }
+          }
+          break;
+        }
+        case ir::TypeTag::Array:
+          absorb(builder.state().array_types[node.as_array()].element, true);
+          break;
+        case ir::TypeTag::Tuple:
+          for (const ir::TypeIdx element :
+               builder.state().tuple_types[node.as_tuple()].elements) {
+            absorb(element, true);
+          }
+          break;
+        case ir::TypeTag::Slice:
+          // Ending a slice ends nothing; a value of one cannot hold an
+          // anchor, so the anchor question does not travel either.
+          break;
+        default: break;
+      }
+    }
+  }
+  pkg.needs_drop = std::move(needs);
+  pkg.not_movable = std::move(anchors);
+}
+
+void Lowerer::ensure_traits_parallel() {
+  const u32 count = static_cast<u32>(builder.state().types.size());
+  while (pkg.needs_drop.size() < count) {
+    const ir::TypeIdx at(static_cast<u32>(pkg.needs_drop.size()));
+    pkg.needs_drop.push_back(runs_destructor(at) ? 1 : 0);
+  }
+  const auto origin = [this](ir::TypeIdx idx) { return type_origin(idx); };
+  while (pkg.not_movable.size() < count) {
+    const ir::TypeIdx at(static_cast<u32>(pkg.not_movable.size()));
+    // A const argument is never a value, so the movability question
+    // does not apply to it and the structural walk refuses it.
+    const bool movable =
+        builder.state().types[at].tag == ir::TypeTag::Const ||
+        ir::is_movable_type(builder.state(), at, pkg.not_movable, origin);
+    pkg.not_movable.push_back(movable ? 0 : 1);
+  }
+  if (summary_drops_.size() < count) {
+    summary_drops_.resize(count, 0);
   }
 }
 
@@ -678,7 +828,8 @@ void Lowerer::merge_summary_module(u32 module) {
   }
   // The merged bodies take function indexes like any other. Their
   // entries carry no source, so nothing lowers them, and `fns` stays
-  // in step with the table every reservation reads.
+  // in step with the table every reservation reads. The work list is
+  // what lowering walks, and none of these entries is on it.
   const u32 appended =
       static_cast<u32>(builder.state().functions.size()) - functions_before;
   fns.reserve(fns.size() + appended);
@@ -688,8 +839,58 @@ void Lowerer::merge_summary_module(u32 module) {
     fns.push_back(std::move(merged_entry));
   }
   // The bodies arrive without spans: a diagnostic names the call the
-  // dependent wrote, and the library's files are not here.
+  // dependent wrote, and the library's files are not here. The table
+  // is resized so the empty entries sit at the merged instructions and
+  // every later emit appends past them.
   instr_spans_.resize(builder.state().instrs.size(), diag::Span{});
+  // The trait tables run parallel to the type table. The analyzer's
+  // tables may end before it - an index past the end answers from
+  // structure - so the gap takes the same structural answer before the
+  // carried bits are placed, and a merge that arrives after the
+  // lowering interned shapes is refused rather than misaligned: a
+  // carried type keeps the destructor and anchor answers its library
+  // measured, and a destructor whose body did not cross stays visible
+  // as a marker (ADR-0085).
+  const auto extend_traits = [&](std::vector<u8>& table,
+                                 std::span<const u8> source,
+                                 const std::function<u8(ir::TypeIdx)>& gap) {
+    if (table.size() > bases.types) {
+      return false;
+    }
+    while (table.size() < bases.types) {
+      table.push_back(gap(ir::TypeIdx(static_cast<u32>(table.size()))));
+    }
+    for (usize i = 0; i < bases.type_map.size(); ++i) {
+      const u32 at = bases.type_map[i];
+      if (at == U32_MAX) {
+        continue;
+      }
+      DCHECK_EQ(bases.types + at, table.size());
+      table.push_back(i < source.size() ? source[i] : u8{0});
+    }
+    return true;
+  };
+  const auto drop_answer = [&](ir::TypeIdx type) -> u8 {
+    return lowering::runs_destructor(pkg.needs_drop, builder, type_origins_,
+                                     type)
+               ? 1
+               : 0;
+  };
+  const auto anchor_answer = [&](ir::TypeIdx type) -> u8 {
+    const auto origin = [this](ir::TypeIdx idx) { return type_origin(idx); };
+    return ir::is_movable_type(builder.state(), type, pkg.not_movable, origin)
+               ? 0
+               : 1;
+  };
+  const auto no_marker = [](ir::TypeIdx) -> u8 { return 0; };
+  if (!extend_traits(pkg.needs_drop, node.summary_needs_drop, drop_answer) ||
+      !extend_traits(pkg.not_movable, node.summary_not_movable,
+                     anchor_answer) ||
+      !extend_traits(summary_drops_, node.summary_needs_drop, no_marker)) {
+    internal(diag::Span{},
+             "a summary merge ran after the lowering interned shapes");
+    return;
+  }
   merged_storages_.emplace(storage, bases);
   merged_modules_.emplace(module, bases);
 }
@@ -705,9 +906,11 @@ ir::FunctionIdx Lowerer::merge_summary_function(u32 module,
   }
   const std::vector<u32>& map = merged_modules_[module].function_map;
   if (function.idx >= map.size() || map[function.idx] == U32_MAX) {
-    // A function the summary names by symbol is another object's code;
-    // nothing carries it, so nothing here can clone it.
-    internal(diag::Span{}, "a carried body is another object's code");
+    // A function the summary names by symbol is another object's code,
+    // and the merge reached nothing for it; a row that names it as a
+    // body is a checker answer the lowering cannot honour.
+    internal(diag::Span{},
+             "a carried row names a body the summary does not carry");
     return ir::FunctionIdx::invalid();
   }
   return ir::FunctionIdx(map[function.idx]);
@@ -2956,6 +3159,11 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   // Side tables move out before the builder, which finish() consumes. The
   // spans are one per instruction, so they are renumbered with the table.
   lowerer.compact_instrs();
+  // The artifact carries the trait tables, and the analyzer measured a
+  // type only when its own build ended one; re-derive them over the
+  // whole storage so a dependent inherits an answer for every type a
+  // carried body can name (ADR-0085).
+  lowerer.complete_traits();
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   // The borrow pass reads both tables through the lowered package, so

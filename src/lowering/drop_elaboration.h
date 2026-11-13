@@ -86,6 +86,11 @@ struct DropElaborationInputs {
   std::span<const u8> needs_drop;
   // Types that are never moved (ADR-0085): their end only ends.
   std::span<const u8> not_movable;
+  // Parallel to the type table: whether a type a summary brought in
+  // carries a destructor whose body did not cross. Ending one is
+  // refused rather than skipped (ADR-0085).
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const u8> summary_drops = {};
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;

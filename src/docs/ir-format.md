@@ -357,6 +357,22 @@ the field the kind does not use is `U32_MAX`. Absent means none.
 once in their parametric form; the specialization pass clones them per
 instantiation and no backend receives them (ADR-0079). Absent means none.
 
+**PRELUDE_SPECIALIZATIONS**: `count` × `function u32`, the
+specializations of staged items a build lowered; a reported count
+excludes them (ADR-0079). Absent means none.
+
+**SYNTHETIC_FUNCTIONS**: `count` × `function u32`, the bodies the
+specialization pass synthesized (`drop$`, `display$`); a reported count
+excludes them (ADR-0079). Absent means none.
+
+**TYPE_TRAITS**: `u32 needs_drop_size, u8[needs_drop_size], u32
+not_movable_size, u8[not_movable_size]`, one byte per type of the
+storage's type table: whether ending a value of the type runs code, and
+whether one is never moved (ADR-0085). A dependent's merge copies the
+entries its carried types reached, so a destructor or an anchor the
+writer measured crosses with them. Absent means the writer measured
+neither.
+
 ### 3.5 Reading
 
 A reader MUST build a `StorageState`, re-intern `STRINGS`, remap every

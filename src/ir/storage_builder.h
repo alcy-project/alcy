@@ -59,6 +59,11 @@ struct StorageBases {
   // code stays the package's own object's for the first, and the second
   // is not carried at all (ADR-0078, ADR-0079).
   std::vector<u32> function_map;
+  // Where each type of the appended half landed, relative to `types`.
+  // A type no root reaches is `U32_MAX`. The per-type tables run
+  // parallel to the type table, so this is what a caller extends them
+  // by (ADR-0085).
+  std::vector<u32> type_map;
 };
 
 class StorageBuilder {

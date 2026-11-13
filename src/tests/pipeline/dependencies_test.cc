@@ -1685,4 +1685,166 @@ TEST_CASE("A package's storage merges once for all of its modules") {
   CHECK(wrap_bodies == 1);
 }
 
+TEST_CASE("A summary destructor the carrier did not cross is refused") {
+  // A carried body's end waits for the substitution, and a type the
+  // library ends through a destructor crosses as structure alone: the
+  // drop cannot run in the dependent, so the build stops rather than
+  // leak what the destructor owned (ADR-0085, ADR-0079).
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_drop_refused_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "struct Box<T> {\n  value: T,\n}\n\n"
+        "impl<T> Box<T> {\n"
+        "  fn new(value: T) -> Box<T> {\n    ret Box { value: value }\n  }\n\n"
+        "  fn drop(self: Box<T>) {\n  }\n"
+        "}\n\n"
+        "fn internal<U>(x: U) {\n}\n\n"
+        "pub fn outer<T>(x: T) -> T {\n"
+        "  internal(Box::<i32>::new(7))\n"
+        "  ret x\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::outer\n\nfn main() -> i32 {\n  ret outer(3) - 3\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(root_path.join("alcy.toml").as_view());
+  CHECK(manifest.is_ok());
+  if (manifest.is_err()) {
+    return;
+  }
+  const base::Result<std::string, diag::Reported> built =
+      build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                    "", BuildPlan{}, EmitMode::IrBinary);
+  CHECK(built.is_err());
+  CHECK(reports(
+      ctx.bag,
+      "Internal lowering error: a summary type's destructor did not cross"));
+}
+
+TEST_CASE("A carried body ends a summary type the library did not arm") {
+  // The other side of the boundary: a type with no destructor crosses
+  // as structure, and ending a value of it runs nothing in the
+  // dependent, so the drop is a plain no-op (ADR-0085, ADR-0079).
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_drop_plain_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "struct Cell<T> {\n  value: T,\n}\n\n"
+        "impl<T> Cell<T> {\n"
+        "  fn new(value: T) -> Cell<T> {\n    ret Cell { value: value }\n  }\n"
+        "}\n\n"
+        "fn internal<U>(x: U) {\n}\n\n"
+        "pub fn outer<T>(x: T) -> T {\n"
+        "  internal(Cell::<i32>::new(7))\n"
+        "  ret x\n}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::outer\n\nfn main() -> i32 {\n  ret outer(3) - 3\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  CHECK(root.is_ok());
+  if (root.is_err()) {
+    return;
+  }
+  const path::Path root_path = std::move(root).unwrap();
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(root_path.join("alcy.toml").as_view());
+  CHECK(manifest.is_ok());
+  if (manifest.is_err()) {
+    return;
+  }
+  const base::Result<std::string, diag::Reported> built =
+      build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                    "", BuildPlan{}, EmitMode::IrBinary);
+  CHECK(built.is_ok());
+  CHECK(!ctx.bag.has_errors());
+}
+
 }  // namespace pipeline

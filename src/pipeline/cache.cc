@@ -152,10 +152,15 @@ std::optional<lowering::LoweredPackage> cache_load(
                                   // A stored entry was checked before it
                                   // was stored, and the key names the
                                   // compiler that checked it, so the
-                                  // borrow pass needs no tables from it.
+                                  // lowering's origin table is not
+                                  // rebuilt. The trait tables ride with
+                                  // the entry: the borrow pass reads
+                                  // them, and a re-serialization writes
+                                  // the bytes the fresh build wrote
+                                  // (ADR-0085).
                                   {},
-                                  {},
-                                  {}};
+                                  std::move(entry.not_movable),
+                                  std::move(entry.needs_drop)};
 }
 
 bool cache_store(std::string_view dir,

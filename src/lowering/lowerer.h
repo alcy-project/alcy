@@ -1201,6 +1201,14 @@ class Lowerer {
   // every method in the package charged each function for the whole package.
   std::vector<bool> drop_items_;
   void mark_drops();
+  // Re-derives the per-type destructor and anchor tables over the whole
+  // storage, so the artifact carries an answer for every type rather
+  // than only the ones the analyzer happened to measure (ADR-0085).
+  void complete_traits();
+  // Grows the trait tables to the current type count, filling each gap
+  // with the structural answer its readers would compute, so an entry
+  // can be placed at a shape the lowering just interned (ADR-0085).
+  void ensure_traits_parallel();
   // Where each type copy came from, and where each struct's shape is
   // recorded, both answered by table.
   std::unordered_map<u32, u32> type_origins_;
@@ -1242,6 +1250,10 @@ class Lowerer {
   // run's loaded artifact, which the dependency table owns for as long
   // as the lowering does, so the pointer stays valid.
   std::unordered_map<const ir::Storage*, ir::StorageBases> merged_storages_;
+  // Parallel to the type table: whether a type a summary brought in
+  // carries a destructor the library measured. Its body did not cross,
+  // so ending such a type is refused rather than skipped (ADR-0085).
+  std::vector<u8> summary_drops_;
   // Whether the pass built its item and instance indexes.
   bool specialize_indexes_ready_ = false;
   // Minted nominal instances by declaring item, so a substitution finds

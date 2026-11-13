@@ -130,6 +130,11 @@ struct ModuleNode {
   // resolve in (ADR-0079); null for a module whose sources resolved.
   const ir::Storage* summary_storage = nullptr;
   const ir::SymbolTable* summary_strings = nullptr;
+  // The per-type tables that came with the storage, aligned with its
+  // type table: the destructor and movability answers a carried type's
+  // questions read (ADR-0085). Empty when the artifact carried none.
+  std::span<const u8> summary_needs_drop;
+  std::span<const u8> summary_not_movable;
 };
 
 // What a trace row for a module reads: the path the tree gave it, or the
@@ -264,6 +269,12 @@ struct ModuleInput {
   const ir::Storage* summary_storage = nullptr;
   // The interner the summary's ids resolve in.
   const ir::SymbolTable* summary_strings = nullptr;
+  // The per-type tables that came with the storage, aligned with its
+  // type table; empty when the artifact carried none (ADR-0085).
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const u8> summary_needs_drop = {};
+  // NOLINTNEXTLINE(readability-redundant-member-init)
+  std::span<const u8> summary_not_movable = {};
 };
 
 // One module input and the syntax the parser made of its file. Lexing,

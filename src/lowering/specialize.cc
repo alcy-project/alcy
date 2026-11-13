@@ -131,6 +131,10 @@ void Lowerer::specialization_key(ir::FunctionIdx source,
   }
 }
 
+// The type a storage copy stands for: the lowering interns a copy of a
+// type for each field slot and argument, and the origin chain it
+// records leads back to the declaration. The walk is capped, so a
+// corrupt cycle answers with what it reached rather than spinning.
 ir::TypeIdx Lowerer::canonical_type(ir::TypeIdx type) const {
   for (u32 step = 0; step < MAX_COPY_CHAIN; ++step) {
     const auto found = type_origins_.find(type.idx);
@@ -142,6 +146,9 @@ ir::TypeIdx Lowerer::canonical_type(ir::TypeIdx type) const {
   return type;
 }
 
+// Structural equality after the origin chains: two storage copies of
+// one type, and two instances over the same declaration and arguments,
+// are one type wherever a table is keyed by identity.
 bool Lowerer::type_equivalent(ir::TypeIdx a, ir::TypeIdx b) const {
   a = canonical_type(a);
   b = canonical_type(b);
@@ -251,6 +258,9 @@ bool Lowerer::type_equivalent(ir::TypeIdx a, ir::TypeIdx b) const {
   }
 }
 
+// The instance of a nominal declaration at `args`, found among the ones
+// already interned for its item. A partial instance names a parameter
+// and is skipped: the substitution must mint a whole shape instead.
 ir::TypeIdx Lowerer::nominal_instance(ast::ItemIdx item,
                                       const std::vector<ir::TypeIdx>& args) {
   const auto matches = [&](const std::vector<ir::TypeIdx>& candidates,
@@ -316,6 +326,26 @@ ir::TypeIdx Lowerer::mint_nominal(ir::TypeIdx generic_type,
       struct_instances_[item.idx].push_back(minted);
     }
   };
+  // A nominal minted from a summary shape takes what the declaration
+  // measured: the tables grow parallel to the type table, and the
+  // destructor marker stays visible so ending the instance refuses a
+  // body that did not cross (ADR-0085).
+  const auto inherit_summary = [&](ir::TypeIdx minted) {
+    ensure_traits_parallel();
+    const u8 needs = generic_type.idx < pkg.needs_drop.size()
+                         ? pkg.needs_drop[generic_type.idx]
+                         : u8{0};
+    const u8 anchor = generic_type.idx < pkg.not_movable.size()
+                          ? pkg.not_movable[generic_type.idx]
+                          : u8{0};
+    if (needs != 0) {
+      pkg.needs_drop[minted.idx] = 1;
+      summary_drops_[minted.idx] = 1;
+    }
+    if (anchor != 0) {
+      pkg.not_movable[minted.idx] = 1;
+    }
+  };
   if (node.tag == ir::TypeTag::Struct) {
     const ir::StructType shape = builder.state().struct_types[node.as_struct()];
     // The row exists before its fields do: a field may name the very
@@ -324,6 +354,7 @@ ir::TypeIdx Lowerer::mint_nominal(ir::TypeIdx generic_type,
     const ir::TypeIdx minted =
         builder.struct_type(shape.name, ir::TypeIdxRange{}, params.finish());
     remember(minted);
+    inherit_summary(minted);
     named_struct_instances_[shape.name.offset].push_back(minted);
     std::vector<ir::TypeIdx> fields;
     fields.reserve(shape.fields.size());
@@ -345,6 +376,7 @@ ir::TypeIdx Lowerer::mint_nominal(ir::TypeIdx generic_type,
   const ir::TypeIdx minted = builder.enum_type(
       shape.name, ir::EnumVariantTypeIdxRange{}, params.finish());
   remember(minted);
+  inherit_summary(minted);
   named_enum_instances_[shape.name.offset].push_back(minted);
   ir::EnumVariantTypeSeq variants;
   for (const ir::EnumVariantTypeIdx vidx : shape.variants) {
@@ -378,7 +410,14 @@ ir::TypeIdx Lowerer::substitute_type(ir::TypeIdx type,
   switch (node.tag) {
     case T::Param: {
       const u32 index = node.as_param().value;
-      return index < args.size() ? args[index] : type;
+      if (index >= args.size()) {
+        // The record and the clone disagree about the parameter list;
+        // leaving the node would put a Param in a resolved body, which
+        // no layout answers.
+        internal(diag::Span{}, "a substitution misses a type argument");
+        return type;
+      }
+      return args[index];
     }
     case T::Ref:
     case T::MutRef: {
@@ -540,7 +579,11 @@ ir::TypeIdx Lowerer::substitute_type(ir::TypeIdx type,
       }
       return mint_nominal(type, found->second->item, instance_args);
     }
-    default: return type;
+    default:
+      // A tag with no parameter inside it - a primitive, a const
+      // argument - is already the type the clone names; a parameter is
+      // caught above, so nothing here can leave one behind.
+      return type;
   }
 }
 
@@ -824,7 +867,17 @@ void Lowerer::resolve_parametric_drop(const ir::Operand& place,
   // address (an explicit end), whose own type is a reference.
   const ir::TypeIdx value = dropped.is_valid() ? dropped : place.type;
   const ir::TypeIdx type = substitute_type(value, *state.args);
-  if (failed || !runs_destructor(type)) {
+  if (failed) {
+    return;
+  }
+  if (!runs_destructor(type)) {
+    // A summary type whose destructor the library measured needs a body
+    // that did not cross with it: skipping the end silently would leak,
+    // so the build stops instead (ADR-0085).
+    const ir::TypeIdx marker = type_origin(type);
+    if (marker.idx < summary_drops_.size() && summary_drops_[marker.idx] != 0) {
+      internal(span, "a summary type's destructor did not cross");
+    }
     return;
   }
   // The end is the drop pass's own walk, emitted once per type as a

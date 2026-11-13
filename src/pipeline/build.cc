@@ -517,6 +517,8 @@ struct IrWriteInput {
         .files = ir::FileTable{.names = files.names, .hashes = files.hashes},
         .addr_names = addr_names,
         .summary = summary,
+        .needs_drop = package.needs_drop,
+        .not_movable = package.not_movable,
         .prelude_functions = package.prelude_functions,
         .width = ctx.target.width,
         .compiler_version = ctx.version,

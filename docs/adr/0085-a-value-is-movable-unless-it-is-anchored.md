@@ -97,6 +97,15 @@ destructor table beside the origin links and the never-moved marks to
 answer it (ADR-0079). A move of a `Copy` type is a copy: the source
 stays owned, and the destructor table is what tells the two apart.
 
+Amended at the generic boundary's landing: the tables are re-derived
+over the whole storage, because the analyzer measured a type only when
+its own build ended one and the lowering interns copies and instances
+it never saw, and they travel inside a library's artifact (ADR-0079). A
+dependent's merge copies the entries its carried types reached. A
+destructor's body does not cross with its type yet: ending a type whose
+destructor the library recorded is refused rather than skipped, so a
+value the library would have ended is never leaked silently.
+
 ## Consequences
 
 - There is no `Pin`, no `Unpin` bound, no projection boilerplate, and

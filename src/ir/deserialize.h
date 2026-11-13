@@ -84,6 +84,13 @@ struct LoadedIr {
   // The build identity the file recorded; empty when its writer knew
   // none, which is a file from before the section existed.
   base::Digest128 identity;
+  // The per-type tables the writer measured, aligned with the storage's
+  // type table: whether ending a value of the type runs code, and
+  // whether one is never moved (ADR-0085). A dependent's merge copies
+  // the entries its carried types reached. Empty when the file carried
+  // none.
+  std::vector<u8> needs_drop;
+  std::vector<u8> not_movable;
 };
 
 // Rebuilds verified IR from the bytes `serialize` wrote, or says why it

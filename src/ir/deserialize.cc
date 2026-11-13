@@ -160,6 +160,8 @@ struct Parsed {
   std::vector<SummaryEntry> summary;
   std::vector<SummaryField> summary_fields;
   std::vector<diag::Span> spans;
+  std::vector<u8> needs_drop;
+  std::vector<u8> not_movable;
   usize prelude_functions = 0;
   PointerWidth width = PointerWidth::W64;
   std::string compiler_version;
@@ -990,6 +992,29 @@ bool read_addr_names(Parsed& parsed, std::span<const u8> payload) {
   return true;
 }
 
+bool read_type_traits(Parsed& parsed, std::span<const u8> payload) {
+  Cursor cursor(payload);
+  u32 needs_drop_size = 0;
+  if (!cursor.read_u32(needs_drop_size)) {
+    return false;
+  }
+  std::span<const u8> needs_drop;
+  if (!cursor.bytes(needs_drop_size, needs_drop)) {
+    return false;
+  }
+  parsed.needs_drop.assign(needs_drop.begin(), needs_drop.end());
+  u32 not_movable_size = 0;
+  if (!cursor.read_u32(not_movable_size)) {
+    return false;
+  }
+  std::span<const u8> not_movable;
+  if (!cursor.bytes(not_movable_size, not_movable)) {
+    return false;
+  }
+  parsed.not_movable.assign(not_movable.begin(), not_movable.end());
+  return true;
+}
+
 bool read_summary(Parsed& parsed, std::span<const u8> payload) {
   if (payload.size() < 4) {
     return false;
@@ -1184,13 +1209,14 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
       return read_prelude_specializations(parsed, payload);
     case Section::SyntheticFunctions:
       return read_synthetic_functions(parsed, payload);
+    case Section::TypeTraits: return read_type_traits(parsed, payload);
   }
   return true;
 }
 
 bool known_kind(u32 kind) {
   return kind >= static_cast<u32>(Section::Strings) &&
-         kind <= static_cast<u32>(Section::SyntheticFunctions);
+         kind <= static_cast<u32>(Section::TypeTraits);
 }
 
 base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
@@ -1306,7 +1332,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   }
 
   for (u32 kind = static_cast<u32>(Section::Strings);
-       kind <= static_cast<u32>(Section::ParametricFunctions); ++kind) {
+       kind <= static_cast<u32>(Section::TypeTraits); ++kind) {
     if (!sections[kind].present) {
       continue;
     }
@@ -1338,6 +1364,8 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   loaded.identity = parsed.identity;
   loaded.summary = std::move(parsed.summary);
   loaded.summary_fields = std::move(parsed.summary_fields);
+  loaded.needs_drop = std::move(parsed.needs_drop);
+  loaded.not_movable = std::move(parsed.not_movable);
   loaded.width = parsed.width;
   loaded.compiler_version = std::move(parsed.compiler_version);
   return base::make_ok(std::move(loaded));
