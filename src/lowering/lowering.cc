@@ -328,7 +328,7 @@ void Lowerer::ensure_traits_parallel() {
     const ir::TypeIdx at(static_cast<u32>(pkg.needs_drop.size()));
     pkg.needs_drop.push_back(runs_destructor(at) ? 1 : 0);
   }
-  const auto origin = [this](ir::TypeIdx idx) { return type_origin(idx); };
+  const auto origin = [this](ir::TypeIdx idx) { return canonical_type(idx); };
   while (pkg.not_movable.size() < count) {
     const ir::TypeIdx at(static_cast<u32>(pkg.not_movable.size()));
     // A const argument is never a value, so the movability question
@@ -640,7 +640,7 @@ bool Lowerer::place_of_register(u32 reg,
 }
 
 bool Lowerer::type_has_custom_drop(ir::TypeIdx type) const {
-  const ir::TypeIdx origin = type_origin(type);
+  const ir::TypeIdx origin = canonical_type(type);
   if (origin.idx < pkg.drop_glue.size()) {
     return pkg.drop_glue[origin.idx].index != base::INVALID_IDX;
   }
@@ -877,7 +877,7 @@ void Lowerer::merge_summary_module(u32 module) {
                : 0;
   };
   const auto anchor_answer = [&](ir::TypeIdx type) -> u8 {
-    const auto origin = [this](ir::TypeIdx idx) { return type_origin(idx); };
+    const auto origin = [this](ir::TypeIdx idx) { return canonical_type(idx); };
     return ir::is_movable_type(builder.state(), type, pkg.not_movable, origin)
                ? 0
                : 1;
@@ -1883,11 +1883,6 @@ u32 Lowerer::callee_inst(
   return def.functions[target->index].inst;
 }
 
-ir::TypeIdx Lowerer::type_origin(ir::TypeIdx type) const {
-  const auto found = type_origins_.find(type.idx);
-  return found == type_origins_.end() ? type : ir::TypeIdx(found->second);
-}
-
 // A copy the lowering interns carries the same origin link the
 // checker's copies do, or the origin-based lookups - the destructor
 // tables, the owner scans - cannot name the declaration a copy came
@@ -1908,7 +1903,7 @@ ir::TypeIdx Lowerer::storage_copy(ir::TypeIdx type) {
 
 const analyzer::CheckedModule::StructInfo* Lowerer::struct_info(
     ir::TypeIdx type) const {
-  const ir::TypeIdx origin = type_origin(type);
+  const ir::TypeIdx origin = canonical_type(type);
   const auto found = structs_.find(origin.idx);
   return found == structs_.end() ? nullptr : found->second;
 }

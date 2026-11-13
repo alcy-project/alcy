@@ -533,7 +533,8 @@ class Lowerer {
   ir::TypeIdx mint_nominal(ir::TypeIdx generic_type,
                            ast::ItemIdx item,
                            const std::vector<ir::TypeIdx>& args);
-  // Follows storage copies to the type they came from.
+  // The type a storage copy stands for: follows the origin chain to
+  // its end, so a copy of a copy resolves past both.
   ir::TypeIdx canonical_type(ir::TypeIdx type) const;
   // Whether two types are the same declaration under copies: equal
   // indexes, or equal once copies and composite parts resolve.
@@ -567,8 +568,6 @@ class Lowerer {
   u32 generic_inst_index(ir::TypeIdx type) const;
   const analyzer::CheckedModule::StructInfo* struct_info(
       ir::TypeIdx type) const;
-  // Follows a field storage copy back to the type it was copied from.
-  ir::TypeIdx type_origin(ir::TypeIdx type) const;
   ir::TypeIdx storage_copy(ir::TypeIdx type);
   ir::TypeTag literal_tag(ast::LiteralIdx value, const ir::TypeIdx* expected);
   // Interns a name whose bytes outlive the call, or one whose bytes may not

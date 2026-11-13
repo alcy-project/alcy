@@ -36,6 +36,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_util.h"
+#include "lowering/drop_elaboration.h"
 #include "lowering/immediate.h"
 #include "lowering/lowerer.h"
 #include "lowering/lowering.h"
@@ -108,9 +109,6 @@ std::optional<BuiltinOperator> builtin_operator(std::string_view spec,
 // Whether the opcode compares its operands, which the spec's method
 // borrows: the builtin compares the values, so each operand is read
 // through its reference first.
-// A type copy chain is short; the bound keeps a cycle from looping.
-constexpr u32 MAX_COPY_CHAIN = 8;
-
 bool comparison_opcode(ir::Opcode op) {
   return op == ir::Opcode::Eq || op == ir::Opcode::Ne || op == ir::Opcode::Lt ||
          op == ir::Opcode::Le || op == ir::Opcode::Gt || op == ir::Opcode::Ge;
@@ -131,19 +129,8 @@ void Lowerer::specialization_key(ir::FunctionIdx source,
   }
 }
 
-// The type a storage copy stands for: the lowering interns a copy of a
-// type for each field slot and argument, and the origin chain it
-// records leads back to the declaration. The walk is capped, so a
-// corrupt cycle answers with what it reached rather than spinning.
 ir::TypeIdx Lowerer::canonical_type(ir::TypeIdx type) const {
-  for (u32 step = 0; step < MAX_COPY_CHAIN; ++step) {
-    const auto found = type_origins_.find(type.idx);
-    if (found == type_origins_.end() || found->second == type.idx) {
-      return type;
-    }
-    type = ir::TypeIdx(found->second);
-  }
-  return type;
+  return canonical_origin(type_origins_, type);
 }
 
 // Structural equality after the origin chains: two storage copies of
@@ -874,7 +861,7 @@ void Lowerer::resolve_parametric_drop(const ir::Operand& place,
     // A summary type whose destructor the library measured needs a body
     // that did not cross with it: skipping the end silently would leak,
     // so the build stops instead (ADR-0085).
-    const ir::TypeIdx marker = type_origin(type);
+    const ir::TypeIdx marker = canonical_type(type);
     if (marker.idx < summary_drops_.size() && summary_drops_[marker.idx] != 0) {
       internal(span, "a summary type's destructor did not cross");
     }
@@ -895,9 +882,9 @@ void Lowerer::resolve_parametric_drop(const ir::Operand& place,
   const ir::RegisterIdx loaded = builder.reg(
       ir::Register{.type = type, .def_idx = ir::InstructionIdx::invalid()});
   emit_staged(ir::Opcode::Load, loaded, {place});
-  const bool movable =
-      ir::is_movable_type(builder.state(), type, pkg.not_movable,
-                          [this](ir::TypeIdx idx) { return type_origin(idx); });
+  const bool movable = ir::is_movable_type(
+      builder.state(), type, pkg.not_movable,
+      [this](ir::TypeIdx idx) { return canonical_type(idx); });
   if (end_moved && movable) {
     emit_staged(ir::Opcode::Move, ir::RegisterIdx::invalid(), {place});
   }

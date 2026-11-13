@@ -20,10 +20,14 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/block.h"
 #include "ir/common.h"
 #include "ir/deserialize.h"
 #include "ir/external_function.h"
 #include "ir/function.h"
+#include "ir/instruction.h"
+#include "ir/opcode.h"
+#include "ir/operand.h"
 #include "ir/type.h"
 #include "path/path.h"
 #include "pipeline/build.h"
@@ -1845,6 +1849,139 @@ TEST_CASE("A carried body ends a summary type the library did not arm") {
                     "", BuildPlan{}, EmitMode::IrBinary);
   CHECK(built.is_ok());
   CHECK(!ctx.bag.has_errors());
+}
+
+TEST_CASE("A carried body ends a generic aggregate once per element") {
+  // The substitution reaches an element through storage copies, and
+  // the end still runs the destructor the declaration measured: a copy
+  // of a copy resolves past both (ADR-0079, ADR-0085).
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_tuple_drop_");
+  const bool written = write_package(
+      dir, "dep",
+      "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "pub fn sink_pair<T>(a: T, b: T) {\n"
+        "  p := (a, b)\n"
+        "  q := &p\n"
+        "  ret\n"
+        "}\n"}});
+  CHECK(written);
+  if (!written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("dep"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+  }
+  CHECK(io::remove_file(dir.join("dep/lib.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "dep = { path = \"../dep\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use dep::sink_pair\n\n"
+        "struct Noisy {\n"
+        "  n: i32,\n"
+        "}\n\n"
+        "impl Noisy {\n"
+        "  fn drop(self: Noisy) {\n  }\n"
+        "}\n\n"
+        "fn main() -> i32 {\n"
+        "  sink_pair(Noisy { n: 1 }, Noisy { n: 2 })\n"
+        "  ret 0\n"
+        "}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::IrBinary);
+    CHECK(built.is_ok());
+    CHECK(!ctx.bag.has_errors());
+  }
+  const std::optional<std::string> bytes =
+      io::read_file(dir.join("proj/out/app.irb"));
+  CHECK(bytes.has_value());
+  if (!bytes.has_value() || bytes->size() < 4) {
+    return;
+  }
+  const std::span<const u8> written_ir(
+      reinterpret_cast<const u8*>(bytes->data()), bytes->size());
+  const base::Result<ir::LoadedIr, ir::IrLoadError> loaded =
+      ir::deserialize(written_ir);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  const ir::LoadedIr& package = loaded.value();
+  // The aggregate's drop walk calls the destructor once per element;
+  // the clone reaches the walk, and the walk's calls are the count.
+  usize element_drops = 0;
+  for (const ir::FunctionIdx idx : package.storage->functions().idx_range()) {
+    const ir::Function& function = package.storage->functions()[idx];
+    const std::string_view name = package.strings->get(function.meta.name);
+    if (!name.starts_with("drop$")) {
+      continue;
+    }
+    for (const ir::BlockIdx block_idx : function.blocks) {
+      const ir::Block& block = package.storage->blocks()[block_idx];
+      for (const ir::InstructionIdx iidx : block.instrs) {
+        const ir::Instruction& instr = package.storage->instrs()[iidx];
+        if (instr.op != ir::Opcode::Call || instr.operands.empty()) {
+          continue;
+        }
+        const ir::Operand& callee =
+            package.storage->operands()[instr.operands.head()];
+        if (!callee.is<ir::FunctionIdx>()) {
+          continue;
+        }
+        const ir::FunctionMeta& meta =
+            package.storage->functions()[callee.as_function()].meta;
+        if (package.strings->get(meta.name) == "drop") {
+          ++element_drops;
+        }
+      }
+    }
+  }
+  CHECK(element_drops == 2);
 }
 
 }  // namespace pipeline

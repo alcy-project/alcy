@@ -159,6 +159,13 @@ void elaborate_drops(const DropElaborationInputs& inputs,
                      DropWorkingSet& working);
 void elaborate_drops(const DropElaborationInputs& inputs);
 
+// The declaration a copy stands for: the end of the origin chain, so
+// a copy of a copy resolves past both. The walk is capped, so corrupt
+// data answers with what it reached rather than looping.
+[[nodiscard]] ir::TypeIdx canonical_origin(
+    const std::unordered_map<u32, u32>& type_origins,
+    ir::TypeIdx type);
+
 // The type a place path names, following the field and element slots
 // the path walks. A path that leaves the shape answers the error type.
 [[nodiscard]] ir::TypeIdx type_at_path(

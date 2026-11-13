@@ -594,7 +594,7 @@ ir::OperandIdx Lowerer::index_operand(u32 index) {
 bool Lowerer::struct_field_index(ir::TypeIdx type,
                                  std::string_view name,
                                  u32& index_out) {
-  const ir::TypeIdx origin = type_origin(type);
+  const ir::TypeIdx origin = canonical_type(type);
   // Where a structure's shape is recorded, by the type it was recorded for.
   // A field access asked by walking every structure in the package, so one
   // access cost the package.
@@ -2673,7 +2673,7 @@ ir::OperandIdx Lowerer::int_operand(u64 value, ir::TypeIdx type) {
 }
 
 bool Lowerer::is_range_type(ir::TypeIdx type) {
-  const ir::TypeIdx origin = type_origin(type);
+  const ir::TypeIdx origin = canonical_type(type);
   if (tag_of(origin) != ir::TypeTag::Struct) {
     return false;
   }
@@ -2706,7 +2706,7 @@ bool Lowerer::run_bounds(Val range,
   if (failed) {
     return false;
   }
-  const ir::TypeIdx bound_ty = type_origin(start_slot.type);
+  const ir::TypeIdx bound_ty = canonical_type(start_slot.type);
   u32 included_v = 0;
   u32 excluded_v = 0;
   u32 unbounded_v = 0;
@@ -2850,7 +2850,7 @@ bool Lowerer::store_bound(ast::ExprIdx expr,
   if (failed) {
     return false;
   }
-  const ir::TypeIdx bound_ty = type_origin(slot.type);
+  const ir::TypeIdx bound_ty = canonical_type(slot.type);
   const std::string_view variant_name =
       endpoint.is_valid() ? (included ? "Included" : "Excluded") : "Unbounded";
   u32 variant = 0;
@@ -3831,7 +3831,7 @@ Val Lowerer::lower_spec_ordering(
     return Val{size_one, error_type(), false, false};
   }
   const ir::TypeIdx option_ty = call.type;
-  const ir::TypeIdx option_origin = type_origin(option_ty);
+  const ir::TypeIdx option_origin = canonical_type(option_ty);
   u32 some = 0;
   if (!variant_index(option_origin, "Some", some)) {
     internal(node.span, "comparison without Option::Some");
@@ -3843,7 +3843,7 @@ Val Lowerer::lower_spec_ordering(
     internal(node.span, "comparison payload arity");
     return Val{size_one, error_type(), false, false};
   }
-  const ir::TypeIdx ordering_ty = type_origin(payloads[0]);
+  const ir::TypeIdx ordering_ty = canonical_type(payloads[0]);
   u32 less = 0;
   u32 equal = 0;
   u32 greater = 0;
@@ -4594,7 +4594,7 @@ void Lowerer::lower_arm_sequence(
     // A projected field carries a contiguity copy; the test needs the
     // type it stands for (the enum a variant names, the pointee a
     // reference pattern reads).
-    const ir::TypeIdx type = type_origin(places[i].type);
+    const ir::TypeIdx type = canonical_type(places[i].type);
     lower_arm_test(patterns[i],
                    Val{places[i].op, type, places[i].address, places[i].place},
                    type, next, fail);

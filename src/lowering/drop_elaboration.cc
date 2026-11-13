@@ -175,10 +175,10 @@ void Lowerer::record_event(OwnershipEvent::Kind kind,
 void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
                                   ir::TypeIdx type,
                                   diag::Span span) {
-  // A storage copy calls the glue of the type it came from: the
-  // lowering interns copies the analyzer's table never measured, and
-  // a destructor belongs to the declaration, not to the copy.
-  const ir::TypeIdx glue_type = type_origin(type);
+  // A storage copy calls the glue of the declaration it came from:
+  // the lowering interns copies the analyzer's table never measured,
+  // and a destructor belongs to the declaration, not to the copy.
+  const ir::TypeIdx glue_type = canonical_type(type);
   if (!runs_destructor(type)) {
     return;
   }
@@ -350,16 +350,15 @@ class DropElaborator {
   [[nodiscard]] bool movable(ir::TypeIdx type) const {
     return ir::is_movable_type(
         builder.state(), type, not_movable,
-        [this](ir::TypeIdx idx) { return type_origin(idx); });
+        [this](ir::TypeIdx idx) { return canonical_type(idx); });
   }
   [[nodiscard]] ir::BlockIdx reserve_block() { return reserve_block_(); }
   [[nodiscard]] usize at(ir::BlockIdx block) const { return block.idx - base_; }
   [[nodiscard]] ir::TypeTag tag_of(ir::TypeIdx idx) const {
     return builder.state().types[idx].tag;
   }
-  [[nodiscard]] ir::TypeIdx type_origin(ir::TypeIdx type) const {
-    const auto found = type_origins_.find(type.idx);
-    return found == type_origins_.end() ? type : ir::TypeIdx(found->second);
+  [[nodiscard]] ir::TypeIdx canonical_type(ir::TypeIdx type) const {
+    return canonical_origin(type_origins_, type);
   }
   [[nodiscard]] ir::TypeIdx usize_type() const {
     return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
@@ -942,8 +941,8 @@ void DropElaborator::run() {
       }
     }
     // The same origin rule the collected call follows: a copy's
-    // glue is the one the type it came from declared.
-    const ir::TypeIdx glue_type = type_origin(type);
+    // glue is the one the declaration it came from measured.
+    const ir::TypeIdx glue_type = canonical_type(type);
     if (glue_type.idx >= drop_glue.size() &&
         glue_type.idx < summary_drops.size() &&
         summary_drops[glue_type.idx] != 0) {
@@ -1496,13 +1495,27 @@ void elaborate_drops(const DropElaborationInputs& inputs) {
   elaborate_drops(inputs, working);
 }
 
+// A type copy chain is short; the bound keeps a cycle from looping.
+constexpr u32 MAX_COPY_CHAIN = 8;
+
+ir::TypeIdx canonical_origin(const std::unordered_map<u32, u32>& type_origins,
+                             ir::TypeIdx type) {
+  for (u32 step = 0; step < MAX_COPY_CHAIN; ++step) {
+    const auto found = type_origins.find(type.idx);
+    if (found == type_origins.end() || found->second == type.idx) {
+      return type;
+    }
+    type = ir::TypeIdx(found->second);
+  }
+  return type;
+}
+
 ir::TypeIdx type_at_path(ir::StorageBuilder& builder,
                          const std::unordered_map<u32, u32>& type_origins,
                          ir::TypeIdx type,
                          std::span<const u32> path) {
   const auto origin_of = [&](ir::TypeIdx idx) {
-    const auto found = type_origins.find(idx.idx);
-    return found == type_origins.end() ? idx : ir::TypeIdx(found->second);
+    return canonical_origin(type_origins, idx);
   };
   ir::TypeIdx current = origin_of(type);
   for (u32 index : path) {
