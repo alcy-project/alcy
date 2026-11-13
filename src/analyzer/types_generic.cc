@@ -1054,6 +1054,39 @@ void Checker::push_fn_instance(ast::ItemIdx item,
   fn_instances.push_back(std::move(witness));
 }
 
+void Checker::relink_fn_instance(usize index, u64 old_key, u64 new_key) {
+  if (old_key == new_key) {
+    return;
+  }
+  const auto old_head = fn_instance_head_.find(old_key);
+  if (old_head != fn_instance_head_.end()) {
+    if (old_head->second == index) {
+      const u32 next = fn_instances[index].prev_same_args;
+      if (next == base::INVALID_IDX) {
+        fn_instance_head_.erase(old_head);
+      } else {
+        old_head->second = static_cast<u32>(next);
+      }
+    } else {
+      u32 at = old_head->second;
+      while (at != base::INVALID_IDX &&
+             fn_instances[at].prev_same_args != index) {
+        at = fn_instances[at].prev_same_args;
+      }
+      if (at != base::INVALID_IDX) {
+        fn_instances[at].prev_same_args = fn_instances[index].prev_same_args;
+      }
+    }
+  }
+  const auto target = fn_instance_head_.try_emplace(new_key, index);
+  if (target.second) {
+    fn_instances[index].prev_same_args = base::INVALID_IDX;
+  } else {
+    fn_instances[index].prev_same_args = target.first->second;
+    target.first->second = static_cast<u32>(index);
+  }
+}
+
 // Instantiates a generic function or intrinsic against `args` and
 // checks its body. Returns null when the signature does not match the
 // intrinsic's canonical shape.
@@ -1187,12 +1220,19 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
         own_fn_return_witness(item, pending.slot, pending.args);
     if (witness.is_valid()) {
       modules[module].functions[sig_index].ret = witness;
-      for (FnInstance& instance : fn_instances) {
-        if (instance.sig_index == sig_index &&
-            pending.slot < instance.args.size()) {
-          instance.args[pending.slot] = witness;
-          instance.args_digest = args_digest(instance.args);
+      for (usize i = 0; i < fn_instances.size(); ++i) {
+        FnInstance& instance = fn_instances[i];
+        if (instance.sig_index != sig_index ||
+            pending.slot >= instance.args.size()) {
+          continue;
         }
+        instance.args[pending.slot] = witness;
+        const u64 old_key = fn_instance_key(instance.module, instance.item,
+                                            instance.args_digest);
+        instance.args_digest = args_digest(instance.args);
+        relink_fn_instance(i, old_key,
+                           fn_instance_key(instance.module, instance.item,
+                                           instance.args_digest));
       }
     } else {
       // No return named the signature: the error type keeps the

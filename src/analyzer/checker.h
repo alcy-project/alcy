@@ -1796,6 +1796,9 @@ class Checker {
                         u64 digest,
                         u32 sig_index,
                         u32 inst);
+  // Moves the instance at `index` from the chain `old_key` heads to the head
+  // of the chain `new_key` heads.
+  void relink_fn_instance(usize index, u64 old_key, u64 new_key);
   // The per-function state a nested body check writes: every field
   // `check_fn` mutates on its way through a body, plus the two scopes a
   // nested check appends to.
