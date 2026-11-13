@@ -1,4 +1,4 @@
-# ADR-0139: A large aggregate lives in memory, not in a value
+# ADR-0140: A large aggregate lives in memory, not in a value
 
 - Subject: the compiler
 - Status: Accepted

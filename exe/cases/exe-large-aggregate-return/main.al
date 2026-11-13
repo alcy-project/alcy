@@ -1,5 +1,5 @@
 // A result too large to return in a register lands in a slot the caller
-// provides, and reaches it whole (ADR-0139).
+// provides, and reaches it whole (ADR-0140).
 struct Big {
   buf: [u8; 5000],
   tag: i32,

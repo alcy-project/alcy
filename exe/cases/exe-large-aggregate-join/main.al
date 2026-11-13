@@ -1,6 +1,6 @@
 // A large aggregate that reaches a block from several predecessors is
 // stored by each branch, and a call through a function value passes and
-// returns it the same way a direct call does (ADR-0139).
+// returns it the same way a direct call does (ADR-0140).
 struct Big {
   buf: [u8; 5000],
   tag: i32,

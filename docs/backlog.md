@@ -129,7 +129,7 @@ replaced. The foundations are in `roadmap.md`.
   floor of about sixteen significant digits stands meanwhile.
 
 - [ ] The direct-wasm stack budget: recursion deeper than the reserve
-  holds panics with "stack overflow" (ADR-0140), a per-target limit
+  holds panics with "stack overflow" (ADR-0141), a per-target limit
   native does not share and no spec states. The frame a statement with a
   slot or a constant-count alloca takes is never returned either, so a
   function's frame grows with the statements it spells, and the reserve

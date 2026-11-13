@@ -1,5 +1,5 @@
 // Copying a large aggregate copies the bytes: the binding that follows
-// a later write keeps its own value (ADR-0139).
+// a later write keeps its own value (ADR-0140).
 const FILLED: [u8; 5000] = [8u8; 5000]
 
 fn main() -> i32 {

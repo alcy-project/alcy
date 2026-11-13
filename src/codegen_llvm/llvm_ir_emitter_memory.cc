@@ -114,7 +114,7 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
         break;
       }
       if (in_memory_aggregate(dst_reg.type)) {
-        // The load is the copy into the destination's slot (ADR-0139).
+        // The load is the copy into the destination's slot (ADR-0140).
         llvm::AllocaInst* slot = frame_slot(load_ty);
         builder_->CreateMemCpy(
             slot, llvm::MaybeAlign(), resolve_operand_value(ptr_op),
@@ -142,7 +142,7 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
         break;
       }
       if (in_memory_aggregate(lhs.type)) {
-        // The store is the copy out of the value's slot (ADR-0139).
+        // The store is the copy out of the value's slot (ADR-0140).
         llvm::CallInst* copy = builder_->CreateMemCpy(
             resolve_operand_value(rhs), llvm::MaybeAlign(),
             operand_slot(lhs, stored_ty), llvm::MaybeAlign(),

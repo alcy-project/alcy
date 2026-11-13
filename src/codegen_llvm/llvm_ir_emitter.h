@@ -156,7 +156,7 @@ class LlvmIrEmitter {
   // an aggregate's elements in one selection DAG node, so a load, a
   // store, or a call operand past this size aborts the compiler; a shape
   // this large lives in a slot of the frame instead, and its copies,
-  // arguments, returns, and joins go through memory (ADR-0139).
+  // arguments, returns, and joins go through memory (ADR-0140).
   static constexpr u64 IN_MEMORY_AGGREGATE_BYTES = 4096;
   bool in_memory_aggregate(ir::TypeIdx idx) const;
   // The LLVM type a parameter of the IR type crosses as.
@@ -167,7 +167,7 @@ class LlvmIrEmitter {
   // null for a result that crosses as a value.
   llvm::AllocaInst* call_result_slot(ir::TypeIdx ret, ir::RegisterIdx dst);
   // The value an argument crosses as: a large aggregate crosses as its
-  // slot (ADR-0139).
+  // slot (ADR-0140).
   llvm::Value* call_argument(const ir::Operand& operand, llvm::Type* wanted);
   // An alloca in the entry block for a value an instruction builds: one
   // slot per value, so a loop reuses it across iterations.
@@ -203,7 +203,7 @@ class LlvmIrEmitter {
   // holds `()` (see docs/adr/0009-result-option-library-enums.md).
   bool is_entry_candidate(const ir::Function& function) const;
   // Emits the C-ABI `main` wrapper around a renamed user entry,
-  // supplying a slot for a result past the direct limit (ADR-0139).
+  // supplying a slot for a result past the direct limit (ADR-0140).
   void emit_entry(llvm::Function* entry_function, ir::TypeIdx ret);
   // Ends a freestanding program through the target's exit syscall.
   // Answers false for a target with no sequence here, which the
@@ -250,7 +250,7 @@ class LlvmIrEmitter {
   LlvmIrStorage values_;
   // The slot a return past the direct limit fills, named by the caller as
   // the function's leading argument; null when the return crosses as a
-  // value (ADR-0139).
+  // value (ADR-0140).
   llvm::Value* return_slot_ = nullptr;
   // LLVM types are immutable once built, and one shape is requested for
   // every register, operand, and signature that names it, so each is

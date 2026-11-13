@@ -371,7 +371,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
     case Op::Move:
     case Op::Borrow: {
       // Register alias; no code emitted. A slot aliases as the slot
-      // itself, so both registers name the same bytes (ADR-0139).
+      // itself, so both registers name the same bytes (ADR-0140).
       DCHECK(ops.size() == 1);
       if (i.dst.is_valid()) {
         const ir::Operand& src = storage_->operands()[ops.head()];

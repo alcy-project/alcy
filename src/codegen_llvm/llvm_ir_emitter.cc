@@ -444,7 +444,7 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
   // names a slot for the result ahead of the parameters, and passes each
   // large argument as its slot, so the entry block copies what it was
   // handed into a slot of its own and every later block reaches a join
-  // parameter through the slot the branch fills (ADR-0139).
+  // parameter through the slot the branch fills (ADR-0140).
   const bool indirect_ret = in_memory_aggregate(function.meta.return_type);
   return_slot_ = indirect_ret ? llvm_function->getArg(0) : nullptr;
   u32 arg_no = indirect_ret ? 1 : 0;
@@ -786,7 +786,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       // operands[1..N] are the incoming values in parameter order. A
       // large aggregate parameter has no phi: its register names a slot
       // the branch fills, so the value reaches every successor that
-      // joins through this block (ADR-0139).
+      // joins through this block (ADR-0140).
       u32 position = 0;
       for (const ir::BlockParamIdx param_idx : target_block.block_params) {
         const ir::BlockParam& param = storage_->block_params()[param_idx];
@@ -859,7 +859,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
         llvm::Value* env = builder_->CreateExtractValue(closure, {1u});
         // The signature the call site spells must match the one the
         // synthetic function declares, result slot and argument slots
-        // included (ADR-0139).
+        // included (ADR-0140).
         llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> param_types;
         const bool indirect_ret = in_memory_aggregate(sig.ret);
         param_types.reserve(sig.params.size() + 2);
@@ -1117,7 +1117,7 @@ llvm::Function* LlvmIrEmitter::create_function(
   //      interner_->get(function_meta.name), function_meta.param_types.size());
 
   // A result past the direct limit crosses in a slot the caller names
-  // first, and the signature returns void there (ADR-0139).
+  // first, and the signature returns void there (ADR-0140).
   const bool indirect_ret = in_memory_aggregate(function_meta.return_type);
   if (indirect_ret) {
     parameter_types.emplace_back(builder_->getPtrTy());
@@ -1253,7 +1253,7 @@ llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) {
     case Payload::TagOf<ir::RegisterIdx>: {
       const ir::RegisterIdx reg = op.as_register();
       // A register that names a slot holds bytes, not a value: reading it
-      // is the load the register's type spells (ADR-0139). The selector
+      // is the load the register's type spells (ADR-0140). The selector
       // bounds the width of the values it takes, so a consumer of a shape
       // past IN_MEMORY_AGGREGATE_BYTES goes through operand_slot for the
       // address rather than reading the register.
@@ -1399,7 +1399,7 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
         module_->getOrInsertGlobal("alcy_argv", builder_->getPtrTy()));
   }
   // A result past the direct limit crosses in a slot the wrapper owns,
-  // so the exit code reads it out of memory (ADR-0139).
+  // so the exit code reads it out of memory (ADR-0140).
   llvm::AllocaInst* result_slot = nullptr;
   llvm::Value* result = nullptr;
   if (in_memory_aggregate(entry_return)) {
