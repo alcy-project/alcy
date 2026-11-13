@@ -1016,15 +1016,21 @@ class Lowerer {
     // End the place instead of binding it: a payload an arm discards
     // with a wildcard ends once the arm commits.
     bool drop_here = false;
+    // The block an end lands in: the one the arm's body starts in. Only
+    // an end names a block, since a binding is emitted where the tests
+    // arrive.
+    ir::BlockIdx landing{base::INVALID_IDX};
     diag::Span span{};
   };
   void queue_binding(ast::PatternIdx pattern, Val place, bool borrowed);
-  void queue_drop(Val place, diag::Span span);
+  // Queues an end for `place`, whose code lands at the head of
+  // `landing`. The queue is what decides where an end goes, so a
+  // pattern tested on a path a guard can leave names the body.
+  void queue_drop(Val place, diag::Span span, ir::BlockIdx landing);
   // Emits the queued bindings into the current block, which the tests
-  // reach only once the whole pattern matched. A discard lands in
-  // `discard_block` instead: an arm's value ends where the arm commits,
-  // not where its guard is tested.
-  void flush_queued_bindings(ir::BlockIdx discard_block);
+  // reach only once the whole pattern matched. An end goes to the block
+  // its entry names, which the arm reaches only once it commits.
+  void flush_queued_bindings();
   std::vector<QueuedBinding> queued_bindings_;
   // Whether `bind_pattern` alone can place a pattern: an irrefutable
   // binding, a wildcard, or a destructuring of those. A refutable

@@ -130,6 +130,12 @@ would see a hole where the field was. The destructor's own receiver is
 the exception, since the body is that method and the walk places no end
 on what it leaves (ADR-0137).
 
+A type that declares one therefore ends its own destructible fields:
+the walk places no end on a field of that receiver, and a field the
+body leaves alone leaks, with nothing to report it. A body ends a
+field with `drop_in_place(&mut self.field)`, or hands it to the walk
+by moving it into a binding.
+
 ## Consequences
 
 - `Vec<T>` and a growable `String` can release a block they no longer

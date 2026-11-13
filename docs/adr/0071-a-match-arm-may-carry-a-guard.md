@@ -41,4 +41,18 @@ it only once it wins. An end placed where the guard is tested would
 sit on both edges out of it, and the arm the guard turns away from
 would end a value it never took.
 
+It lands at the head of that body, before the body's own first
+statement: in `match make() { _ => print("wild\n") }` the discarded
+value's destructor runs first and the arm's print follows. The arm
+gives the value up at the commit, and the block it ends in holds
+nothing else yet, so its end is the block's entry. A reader from Rust
+expects the other order, because there `_` binds nothing and the
+scrutinee ends with the owner after the match; here the discard is the
+arm's own, performed on the edge it won, and the body runs with only
+what the pattern bound in hand.
+
+`exe/cases/exe-match-guard-discard` fixes that order in its expected
+output, so a lowering that moved an end to the body's exit would be
+visible.
+
 String-literal patterns and slice patterns remain deferred.
