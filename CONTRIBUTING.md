@@ -67,6 +67,16 @@ runner executes the built `alcy` binary against every case; add a case
 when a user-visible behavior needs a regression anchor that does not
 belong in unit tests.
 
+Programs that run live in `exe/cases/<name>/`, and `check_exe.py`
+builds and runs each one. `--direct-wasm` asks the same questions of the
+direct wasm backend instead: every case becomes a module for
+`wasm32-unknown-emscripten`, bun runs it under WASI, and the same
+`expect.toml` is the verdict. One program, two lowerings, one set of
+answers, so a construct the two disagree about has nowhere to hide. The
+cases the target cannot hold or the backend declines by name are listed in
+`WASM_UNPORTABLE` with the reason and reported as skipped; a case that
+starts failing to build is a line to add there deliberately, not a pass.
+
 The grammar in `treesitter/` is a second reading of the language, written
 against `docs/spec/` rather than against the parser. `grammar.js` follows
 `docs/spec/grammar.ebnf` production for production, so a change to the
@@ -112,8 +122,9 @@ Please make sure the CI pass before requesting a review.
 against the debug build and again against the release one (the unit
 tests, the e2e cases, and the exe programs -- a bug that only a release
 build has is invisible to the debug checks), plus the benchmark smoke, the
-WebAssembly tests, the direct-backend wasm acceptance, and the playground
-smoke, which need `emcc` and `bun` on `PATH`. `./tools/check.sh --help`
+WebAssembly tests, the direct-backend wasm acceptance, the exe programs
+against that backend, and the playground smoke, which need `emcc` and
+`bun` on `PATH`. `./tools/check.sh --help`
 lists what each flag skips.
 
 ```bash

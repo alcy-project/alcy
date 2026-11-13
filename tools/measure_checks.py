@@ -143,6 +143,16 @@ CHECKS = [
         ["uv", "run", "./tools/check_wasm.py", "--build-subdir=build"],
     ),
     (
+        "exe on wasm",
+        [
+            "uv",
+            "run",
+            "./tools/check_exe.py",
+            "--build-subdir=build",
+            "--direct-wasm",
+        ],
+    ),
+    (
         "playground smoke",
         [
             "uv",

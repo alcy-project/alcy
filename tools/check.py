@@ -286,6 +286,12 @@ def main() -> int:
         # it in every matrix entry, so the local check asks it too.
         tool("check_wasm.py", f"--build-subdir={debug_subdir}")
 
+        # The direct backend is a second lowering of the exe programs too:
+        # the same sources against the same expectations, with an
+        # interpreter where the other arm links an executable. A construct
+        # the two lowerings disagree about shows up here and nowhere else.
+        tool("check_exe.py", f"--build-subdir={debug_subdir}", "--direct-wasm")
+
         # The playground carries no LLVM and no tests, so it is its own
         # configure; the smoke is what says the artifact a site loads
         # runs.

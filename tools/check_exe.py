@@ -25,6 +25,14 @@ files.
 Cases are copied to a scratch directory, built to executables with
 `alcy compile` for a single file or `alcy build` for a package, executed,
 and asserted. Directories holding alcy.toml build as packages.
+
+`--direct-wasm` builds every case for `wasm32-unknown-emscripten` with
+the direct wasm backend and runs the module under Bun instead of the
+executable, asserting the same expectations. One program, two lowerings,
+one set of answers: that is what notices a backend lowering a construct
+differently from the one the cases were written against. The cases the
+backend cannot build are named in WASM_UNPORTABLE with the reason, so a
+case that joins them is a line to decide on rather than a pass.
 """
 
 import argparse
@@ -92,6 +100,39 @@ SANITIZERS = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-g"]
 # program. Without it the sanitized run cannot happen, and asking for one
 # that cannot happen is a refusal rather than a downgrade: see main().
 SYSTEM_CLANG = shutil.which("clang")
+
+WASM_TARGET = "wasm32-unknown-emscripten"
+WASM_BACKEND = "direct-wasm"
+WASM_MODULE = "main.wasm"
+
+# Bun runs the module against WASI. Without it the differential cannot
+# happen, which is a refusal for the same reason as a missing clang.
+WASM_INTERPRETER = shutil.which("bun")
+WASM_SHIM = project_root_dir / "tools" / "wasm_run.mjs"
+
+# The cases the direct wasm backend cannot build, and why. A 32-bit target
+# makes `usize` four bytes, so a program whose `usize` literal is past
+# that range asks for a value the target cannot hold, and the rest reach
+# for an entry or a host call the backend declines by name.
+WASM_UNPORTABLE = {
+    "exe-alloc-ceiling": "a usize literal past the 32-bit range",
+    "exe-alloc-refuse": "a usize literal past the 32-bit range",
+    "exe-args": "`alcy_arg_count`, which the backend declines",
+    "exe-args-len": "`alcy_arg_count`, which the backend declines",
+    "exe-extern-c-abs": "`abs`, which the backend declines",
+    "exe-file-round-trip": "`alcy_file_size`, which the backend declines",
+    "exe-freestanding-exit": "a freestanding entry, which the target declines",
+    "exe-freestanding-fill": "a freestanding entry, which the target declines",
+    "exe-freestanding-heap": "a freestanding entry, which the target declines",
+    "exe-freestanding-refuse": "a usize literal past the 32-bit range",
+    "exe-io-args": "`alcy_arg_count`, which the backend declines",
+    "exe-io-eprint": "`alcy_eprint`, which the backend declines",
+    "exe-io-file": "`alcy_file_size`, which the backend declines",
+    "exe-mini-pipeline": "`alcy_file_size`, which the backend declines",
+    "exe-read-file": "`alcy_file_size`, which the backend declines",
+    "exe-vec-remove-bounds": "a usize literal past the 32-bit range",
+    "exe-write-file": "`alcy_file_size`, which the backend declines",
+}
 
 
 def mark_instrumentable(ir: Path) -> None:
@@ -268,7 +309,48 @@ def image_facts(exe: Path) -> str:
     return "\n".join(out) + "\n"
 
 
-def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
+def compare_streams(
+    expected_exit,
+    expected_stdout,
+    stdout_contains,
+    stderr_contains,
+    walk_stderr_contains,
+    proc,
+):
+    """The expectations an observed run misses, and whether a frame was one.
+
+    Both backends answer the same file with the same streams, so the
+    comparison is one function and what differs between them is how the
+    program was made to run.
+    """
+    problems = []
+    if isinstance(expected_exit, str) and expected_exit.lower() in (
+        "non-zero",
+        "nonzero",
+        "!0",
+    ):
+        if proc.returncode == 0:
+            problems.append(f"exit: got {proc.returncode}, want non-zero")
+    elif proc.returncode != expected_exit:
+        problems.append(f"exit: got {proc.returncode}, want {expected_exit}")
+
+    if expected_stdout is not None and proc.stdout != expected_stdout:
+        problems.append(f"stdout: got {proc.stdout!r}, want {expected_stdout!r}")
+    missing_walk = False
+    for needle in stdout_contains:
+        if needle not in proc.stdout:
+            problems.append(f"missing stdout: {needle!r}")
+    for needle in stderr_contains:
+        if needle not in proc.stderr:
+            problems.append(f"missing stderr: {needle!r}")
+            if needle in walk_stderr_contains:
+                missing_walk = True
+    return problems, missing_walk
+
+
+def run_case(
+    alcy: Path, case_dir: Path, sanitize: bool = False, direct_wasm: bool = False
+):
     is_package = (case_dir / "alcy.toml").is_file()
     main_al = case_dir / "main.al"
     expect_path = case_dir / "expect.toml"
@@ -292,8 +374,19 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
         expected_input,
         extra_args,
     ) = parse_expect(expect_path)
-    if host_walks_frames():
+    # The walk is a property of the runtime the program runs on. The
+    # direct wasm backend writes the message and its site and exits, so a
+    # module owes no frame even on a host whose frame pointer is a chain
+    # (ADR-0070).
+    if host_walks_frames() and not direct_wasm:
         stderr_contains = [*stderr_contains, *walk_stderr_contains]
+    if direct_wasm:
+        reason = WASM_UNPORTABLE.get(case_dir.name)
+        if reason is not None:
+            return None, reason
+        if WASM_INTERPRETER is None:
+            return False, "bun is not on PATH, so the module cannot be run"
+
     problems = []
     missing_walk = False
 
@@ -314,70 +407,114 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
             target = "main.al"
 
         command = "build" if is_package else "compile"
-        if sanitize:
-            proc, why = build_sanitized(
-                alcy, work, is_package, work / exe_name, extra_args
-            )
-            if why:
-                return False, f"{why}\n--- stderr ---\n{proc.stderr}"
-        else:
-            build_argv = [str(alcy), command, target, *extra_args, "-o", exe_name]
+        if direct_wasm:
+            # A module is the whole artifact the direct backend writes: the
+            # interpreter supplies the runtime the executable would link.
+            exe_path = None
+            module = work / WASM_MODULE
             proc = subprocess.run(
-                build_argv,
+                [
+                    str(alcy),
+                    command,
+                    target,
+                    *extra_args,
+                    f"--target={WASM_TARGET}",
+                    f"--backend={WASM_BACKEND}",
+                    "-o",
+                    WASM_MODULE,
+                ],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 cwd=work,
                 env=run_environment(),
             )
-        if proc.returncode != 0:
-            return False, (
-                f"alcy {command} failed: exit={proc.returncode}\n"
-                f"--- build stdout ---\n{proc.stdout}"
-                f"--- build stderr ---\n{proc.stderr}"
-            )
+            if proc.returncode != 0:
+                return False, (
+                    f"alcy {command} for {WASM_TARGET} failed: "
+                    f"exit={proc.returncode}\n"
+                    f"--- build stdout ---\n{proc.stdout}"
+                    f"--- build stderr ---\n{proc.stderr}"
+                )
+            if not module.is_file():
+                return False, (
+                    f"alcy {command} succeeded but '{WASM_MODULE}' is missing\n"
+                    f"--- build stdout ---\n{proc.stdout}"
+                    f"--- build stderr ---\n{proc.stderr}"
+                )
+            try:
+                proc = subprocess.run(
+                    [WASM_INTERPRETER, str(WASM_SHIM), str(module)],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    cwd=work,
+                    input=expected_input,
+                    env=run_environment(),
+                )
+            except OSError as e:
+                return False, f"cannot run '{WASM_MODULE}': {e}"
+        else:
+            if sanitize:
+                proc, why = build_sanitized(
+                    alcy, work, is_package, work / exe_name, extra_args
+                )
+                if why:
+                    return False, f"{why}\n--- stderr ---\n{proc.stderr}"
+            else:
+                build_argv = [
+                    str(alcy),
+                    command,
+                    target,
+                    *extra_args,
+                    "-o",
+                    exe_name,
+                ]
+                proc = subprocess.run(
+                    build_argv,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    cwd=work,
+                    env=run_environment(),
+                )
+            if proc.returncode != 0:
+                return False, (
+                    f"alcy {command} failed: exit={proc.returncode}\n"
+                    f"--- build stdout ---\n{proc.stdout}"
+                    f"--- build stderr ---\n{proc.stderr}"
+                )
 
-        exe_path = work / exe_name
-        if not exe_path.is_file():
-            return False, (
-                f"alcy build succeeded but '{exe_name}' is missing\n"
-                f"--- build stdout ---\n{proc.stdout}"
-                f"--- build stderr ---\n{proc.stderr}"
-            )
+            exe_path = work / exe_name
+            if not exe_path.is_file():
+                return False, (
+                    f"alcy build succeeded but '{exe_name}' is missing\n"
+                    f"--- build stdout ---\n{proc.stdout}"
+                    f"--- build stderr ---\n{proc.stderr}"
+                )
 
-        try:
-            proc = subprocess.run(
-                [str(exe_path)],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                cwd=work,
-                input=expected_input,
-                env=run_environment(instrumented=sanitize),
-            )
-        except OSError as e:
-            return False, f"cannot execute '{exe_name}': {e}"
+            try:
+                proc = subprocess.run(
+                    [str(exe_path)],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    cwd=work,
+                    input=expected_input,
+                    env=run_environment(instrumented=sanitize),
+                )
+            except OSError as e:
+                return False, f"cannot execute '{exe_name}': {e}"
 
-        if isinstance(expected_exit, str) and expected_exit.lower() in (
-            "non-zero",
-            "nonzero",
-            "!0",
-        ):
-            if proc.returncode == 0:
-                problems.append(f"exit: got {proc.returncode}, want non-zero")
-        elif proc.returncode != expected_exit:
-            problems.append(f"exit: got {proc.returncode}, want {expected_exit}")
-
-        if expected_stdout is not None and proc.stdout != expected_stdout:
-            problems.append(f"stdout: got {proc.stdout!r}, want {expected_stdout!r}")
-        for needle in stdout_contains:
-            if needle not in proc.stdout:
-                problems.append(f"missing stdout: {needle!r}")
-        for needle in stderr_contains:
-            if needle not in proc.stderr:
-                problems.append(f"missing stderr: {needle!r}")
-                if needle in walk_stderr_contains:
-                    missing_walk = True
+        stream_problems, missing_walk = compare_streams(
+            expected_exit,
+            expected_stdout,
+            stdout_contains,
+            stderr_contains,
+            walk_stderr_contains,
+            proc,
+        )
+        problems += stream_problems
 
         # A sanitizer writes its report to stderr and exits non-zero, which
         # the exit check may already have caught. This catches the case
@@ -399,7 +536,7 @@ def run_case(alcy: Path, case_dir: Path, sanitize: bool = False):
 
         # Read the image back while it still exists: a frame the walk
         # resolved is a fact about the binary that resolved it.
-        facts = image_facts(exe_path) if missing_walk else ""
+        facts = image_facts(exe_path) if missing_walk and exe_path else ""
 
     if problems:
         detail = "; ".join(problems)
@@ -445,6 +582,16 @@ def main():
         ),
     )
     parser.add_argument(
+        "--direct-wasm",
+        action="store_true",
+        help=(
+            "Build each case for wasm32-unknown-emscripten with the direct "
+            "wasm backend and run the module under Bun, asserting the same "
+            "expectations. The cases the backend cannot build are named in "
+            "WASM_UNPORTABLE and reported as skipped."
+        ),
+    )
+    parser.add_argument(
         "--jobs",
         type=int,
         default=0,
@@ -464,6 +611,21 @@ def main():
         # reason nobody reading it can see.
         print(
             "error: --sanitize needs clang on PATH, and it is not there",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.direct_wasm and args.sanitize:
+        print(
+            "error: --direct-wasm runs the module under Bun, which no "
+            "sanitizer instruments",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.direct_wasm and WASM_INTERPRETER is None:
+        print(
+            "error: --direct-wasm needs bun on PATH, and it is not there",
             file=sys.stderr,
         )
         return 1
@@ -495,40 +657,47 @@ def main():
     # were handed out in.
     jobs = args.jobs or min(os.cpu_count() or 2, 8)
     selected_dirs = []
-    skipped = 0
+    selected_out = 0
     for case_dir in sorted(cases_root.iterdir()):
         if not case_dir.is_dir():
             continue
         if selected is not None and case_dir.name not in selected:
             continue
-        if not runs_freestanding and is_freestanding(case_dir):
-            skipped += 1
+        if not args.direct_wasm and not runs_freestanding and is_freestanding(case_dir):
+            selected_out += 1
             continue
         selected_dirs.append(case_dir)
 
     def checked(case_dir: Path):
         try:
-            return run_case(alcy, case_dir, args.sanitize)
+            return run_case(alcy, case_dir, args.sanitize, args.direct_wasm)
         except Exception as e:  # noqa: BLE001 - a harness bug is a case failure
             return False, f"the harness raised: {e!r}"
 
     failures = 0
     ran = 0
+    skipped = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         for case_dir, (ok, detail) in zip(
             selected_dirs, pool.map(checked, selected_dirs), strict=True
         ):
+            if ok is None:
+                skipped += 1
+                print(f"SKIP {case_dir.name}: {detail}")
+                continue
             ran += 1
             print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
             if not ok:
                 failures += 1
                 print(detail)
     sys.stdout.flush()
-    if skipped:
+    if selected_out:
         print(
-            f"note: {skipped} freestanding case(s) skipped: "
+            f"note: {selected_out} freestanding case(s) skipped: "
             f"{sys.platform} is not a Linux syscall host"
         )
+    if skipped:
+        print(f"note: {skipped} case(s) skipped: the backend cannot build them")
     print(f"exe: {ran - failures}/{ran} passed")
     return 1 if failures else 0
 
