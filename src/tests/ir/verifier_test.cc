@@ -1202,6 +1202,45 @@ TEST_CASE("Verify a type parameter outside a parametric body") {
   CHECK(build(true).is_ok());
 }
 
+TEST_CASE("Verify a parameter inside a composite outside a parametric body") {
+  // The refusal reads a type's parts: a tuple holding a parameter names
+  // one just as a bare parameter does, whether the body carries it in a
+  // signature or in a block (ADR-0079).
+  const auto build = [](bool parametric) {
+    StorageBuilder builder;
+    TypeSeq elements;
+    elements.push(builder.param_type(0));
+    elements.push(builder.ref_type(builder.primitive(TypeTag::I32)));
+    const TypeIdx tuple = builder.tuple_type(elements.finish());
+    const RegisterIdx value(0);
+    builder.reg({.type = tuple, .def_idx = InstructionIdx::invalid()});
+    const BlockParamIdx bound =
+        builder.block_param({.type = tuple, .reg = value});
+    const InstructionIdx ret = builder.instr({
+        .op = Opcode::Ret,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = TypeIdx::invalid(),
+        .operands = {},
+    });
+    InstrSeq instrs;
+    instrs.push(ret);
+    const BlockIdx block =
+        builder.block({.instrs = instrs.finish(), .block_params = {bound, 1}});
+    FunctionMeta meta = void_meta();
+    TypeSeq params;
+    params.push(tuple);
+    meta.param_types = params.finish();
+    builder.function({.meta = meta, .blocks = {block, 1}});
+    if (parametric) {
+      builder.add_parametric_function(FunctionIdx(0));
+    }
+    return std::move(builder).build();
+  };
+  check_invalid(build(false), VerificationErrorKind::MisplacedParametricType);
+  CHECK(build(true).is_ok());
+}
+
 TEST_CASE("Verify external function metadata") {
   // `build_external` produces an otherwise valid package whose one
   // external carries the metadata under test; consumers dereference

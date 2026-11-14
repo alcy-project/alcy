@@ -32,11 +32,11 @@
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
-#include "ir/type_name.h"
+#include "ir/type_display.h"
+#include "ir/type_util.h"
 #include "lowering/diag_code.h"
 #include "lowering/immediate.h"
 #include "lowering/lowerer.h"
-#include "lowering/lowering.h"
 
 namespace lowering {
 
@@ -229,7 +229,7 @@ void Lowerer::emit_collected_drop(ir::OperandIdx tuple_place,
     const ir::RegisterIdx field =
         emit(ir::Opcode::GetElementPtr, type,
              {tuple_place, zero_i32, index_operand(static_cast<u32>(i))});
-    if (lowering::type_names_param(builder.state(), type)) {
+    if (ir::type_names_param(builder.state(), type)) {
       emit_void(ir::Opcode::Drop, {to_operand(field, type)});
       emit_void(ir::Opcode::ParametricDrop, {to_operand(field, type)}, {},
                 type);
@@ -906,7 +906,7 @@ void DropElaborator::run() {
                           tag == ir::TypeTag::Tuple ||
                           tag == ir::TypeTag::Array || tag == ir::TypeTag::Enum;
     if (tag == ir::TypeTag::Param ||
-        (compound && type_names_param(builder.state(), type))) {
+        (compound && ir::type_names_param(builder.state(), type))) {
       // The take is the parametric body's; the record only waits for
       // the substitution to say what the end is.
       pass_emit_void(seq_of(out), ir::Opcode::Drop, {place}, span);

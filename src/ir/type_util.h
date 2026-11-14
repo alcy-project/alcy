@@ -3,9 +3,14 @@
 
 #pragma once
 
+#include <vector>
+
+#include "ir/common.h"
 #include "ir/type.h"
 
 namespace ir {
+
+struct StorageState;
 
 inline constexpr bool is_integer_type(TypeTag tag) {
   using T = TypeTag;
@@ -73,5 +78,16 @@ inline constexpr TypeTag unsigned_integer_type(TypeTag tag) {
     default: return tag;
   }
 }
+
+// Whether a type names a `Param` anywhere its parts can: a nominal
+// instance's arguments or fields, a reference's pointee, a sequence's
+// element, a tuple's parts, or a function's signature. A signature that
+// names one has no layout to lower; the specialization pass is what
+// settles it (ADR-0079). `path` is the visit stack, so a recursive type
+// reaches itself once.
+[[nodiscard]] bool type_names_param(const StorageState& state,
+                                    TypeIdx type,
+                                    std::vector<u32>& path);
+[[nodiscard]] bool type_names_param(const StorageState& state, TypeIdx type);
 
 }  // namespace ir

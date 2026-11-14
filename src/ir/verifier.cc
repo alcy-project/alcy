@@ -315,20 +315,17 @@ VerificationResult verify_storage(const Storage& storage) {
     // would rewrite it, and a type parameter has no layout any reader
     // could answer (ADR-0079).
     if (!parametric[fidx.idx]) {
-      const auto names_param = [&](TypeIdx type) {
-        return type.is_valid() && type.idx < storage.types().size() &&
-               storage.types()[type].tag == TypeTag::Param;
-      };
-      if (names_param(func.meta.return_type) || names_param(func.meta.owner)) {
+      if (type_names_param(storage.state(), func.meta.return_type) ||
+          type_names_param(storage.state(), func.meta.owner)) {
         return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
       }
       for (const TypeIdx param : func.meta.param_types) {
-        if (names_param(param)) {
+        if (type_names_param(storage.state(), param)) {
           return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
         }
       }
       for (const TypeIdx generic : func.meta.generics) {
-        if (names_param(generic)) {
+        if (type_names_param(storage.state(), generic)) {
           return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
         }
       }
@@ -342,7 +339,8 @@ VerificationResult verify_storage(const Storage& storage) {
                             block.block_params.size(),
                             storage.block_params().size())) {
           for (const BlockParamIdx pidx : block.block_params) {
-            if (names_param(storage.block_params()[pidx].type)) {
+            if (type_names_param(storage.state(),
+                                 storage.block_params()[pidx].type)) {
               return err(VerificationErrorKind::MisplacedParametricType,
                          pidx.idx);
             }
@@ -354,7 +352,7 @@ VerificationResult verify_storage(const Storage& storage) {
             return err(VerificationErrorKind::MisplacedParametricDrop,
                        iidx.idx);
           }
-          if (names_param(instr.measure)) {
+          if (type_names_param(storage.state(), instr.measure)) {
             return err(VerificationErrorKind::MisplacedParametricType,
                        iidx.idx);
           }
@@ -369,7 +367,7 @@ VerificationResult verify_storage(const Storage& storage) {
               return err(VerificationErrorKind::MisplacedParametricCall,
                          iidx.idx);
             }
-            if (names_param(entry.type)) {
+            if (type_names_param(storage.state(), entry.type)) {
               return err(VerificationErrorKind::MisplacedParametricType,
                          operand.idx);
             }

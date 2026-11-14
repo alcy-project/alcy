@@ -262,7 +262,7 @@ ir::TypeIdx Lowerer::nominal_instance(ast::ItemIdx item,
       }
       // A partially substituted instance has the right arguments and
       // the wrong shape; the substitution must mint a whole one.
-      if (type_names_param(builder.state(), candidate)) {
+      if (ir::type_names_param(builder.state(), candidate)) {
         continue;
       }
       ir::TypeIdxRange params{};
@@ -485,7 +485,7 @@ ir::TypeIdx Lowerer::substitute_type(ir::TypeIdx type,
       return builder.func_type(seq.finish(), ret);
     }
     case T::Struct: {
-      if (!type_names_param(builder.state(), type)) {
+      if (!ir::type_names_param(builder.state(), type)) {
         return type;
       }
       const analyzer::CheckedModule::StructInfo* info = struct_info(type);
@@ -507,7 +507,7 @@ ir::TypeIdx Lowerer::substitute_type(ir::TypeIdx type,
         }
         for (const ir::TypeIdx candidate :
              named_struct_instances_[shape.name.offset]) {
-          if (type_names_param(builder.state(), candidate)) {
+          if (ir::type_names_param(builder.state(), candidate)) {
             continue;
           }
           const ir::TypeNode candidate_node =
@@ -547,7 +547,7 @@ ir::TypeIdx Lowerer::substitute_type(ir::TypeIdx type,
       return mint_nominal(type, info->item, instance_args);
     }
     case T::Enum: {
-      if (!type_names_param(builder.state(), type)) {
+      if (!ir::type_names_param(builder.state(), type)) {
         return type;
       }
       const auto found = enums_.find(canonical_type(type).idx);
@@ -690,7 +690,7 @@ void Lowerer::translate_instruction(ir::InstructionIdx source,
         return ir::Operand::from_block(block->second, operand.type);
       }
       case Payload::TagOf<ir::ImmutableIdx>: {
-        if (!type_names_param(builder.state(), operand.type)) {
+        if (!ir::type_names_param(builder.state(), operand.type)) {
           return ir::Operand{operand};
         }
         const ir::Immutable immutable =
@@ -1051,7 +1051,7 @@ ir::FunctionIdx Lowerer::resolve_dispatch(str::StringPoolId spec,
       // The definition-site record: its body is cloned under the
       // receiver's own arguments.
       if (declaration == nullptr &&
-          type_names_param(builder.state(), info.self_type) &&
+          ir::type_names_param(builder.state(), info.self_type) &&
           nominal_name(info.self_type) != str::INVALID_STRING_POOL_ID &&
           nominal_name(info.self_type) == receiver_name) {
         declaration = &info;

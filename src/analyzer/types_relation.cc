@@ -107,7 +107,7 @@ bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
 }
 
 // Whether a type's layout depends on a parameter (ADR-0079).
-bool Checker::type_names_param(ir::TypeIdx type) const {
+bool Checker::layout_names_param(ir::TypeIdx type) const {
   if (!type.is_valid() || type.idx >= builder.types().size()) {
     return false;
   }
@@ -119,15 +119,15 @@ bool Checker::type_names_param(ir::TypeIdx type) const {
     case T::MutRef:
     case T::RawPtr:
     case T::RawMutPtr:
-      return type_names_param(builder.ref_types()[node.as_ref()].pointee);
+      return layout_names_param(builder.ref_types()[node.as_ref()].pointee);
     case T::Array:
-      return type_names_param(builder.array_types()[node.as_array()].element);
+      return layout_names_param(builder.array_types()[node.as_array()].element);
     case T::Slice:
-      return type_names_param(builder.slice_types()[node.as_slice()].element);
+      return layout_names_param(builder.slice_types()[node.as_slice()].element);
     case T::Tuple: {
       for (const ir::TypeIdx element :
            builder.tuple_types()[node.as_tuple()].elements) {
-        if (type_names_param(element)) {
+        if (layout_names_param(element)) {
           return true;
         }
       }
@@ -136,16 +136,16 @@ bool Checker::type_names_param(ir::TypeIdx type) const {
     case T::Func: {
       const ir::FuncType shape = builder.func_types()[node.as_func()];
       for (const ir::TypeIdx param : shape.params) {
-        if (type_names_param(param)) {
+        if (layout_names_param(param)) {
           return true;
         }
       }
-      return type_names_param(shape.ret);
+      return layout_names_param(shape.ret);
     }
     case T::Struct:
       for (const ir::TypeIdx arg :
            builder.struct_types()[node.as_struct()].params) {
-        if (type_names_param(arg)) {
+        if (layout_names_param(arg)) {
           return true;
         }
       }
@@ -153,7 +153,7 @@ bool Checker::type_names_param(ir::TypeIdx type) const {
     case T::Enum:
       for (const ir::TypeIdx arg :
            builder.enum_types()[node.as_enum()].params) {
-        if (type_names_param(arg)) {
+        if (layout_names_param(arg)) {
           return true;
         }
       }

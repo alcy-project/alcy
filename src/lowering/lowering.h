@@ -110,11 +110,6 @@ struct LoweredPackage {
   std::vector<u8> needs_drop;
 };
 
-// Whether a type names an IR type parameter anywhere in its parts: a
-// place, a signature, or a value that does waits for the
-// specialization pass (ADR-0079).
-bool type_names_param(const ir::StorageState& state, ir::TypeIdx type);
-
 base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,

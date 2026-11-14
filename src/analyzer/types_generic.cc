@@ -1404,7 +1404,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   if (parametric_mode() && param_record_ != nullptr &&
       (comp_eval_depth > 0 || comp_argument_depth_ > 0)) {
     for (const ir::TypeIdx arg : bound) {
-      if (type_names_param(arg)) {
+      if (layout_names_param(arg)) {
         param_record_->per_instantiation = true;
         break;
       }

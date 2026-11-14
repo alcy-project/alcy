@@ -677,7 +677,7 @@ void Lowerer::emit_move_marker(Val v) {
   // conservatively: the borrow pass re-decides for the substitution's
   // type (ADR-0079).
   ir::InstructionFlags flags;
-  flags.maybe_copy = type_names_param(builder.state(), v.type);
+  flags.maybe_copy = ir::type_names_param(builder.state(), v.type);
   const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op}, flags);
   (void)marker;
 }
@@ -1354,108 +1354,15 @@ bool Lowerer::fn_budget_available() {
   return false;
 }
 
-// Whether a type names an `ir::TypeTag::Param` where a signature can
-// see one: the arguments of a nominal instance, a reference's
-// pointee, a sequence's element, a tuple's parts. Fields are not
-// walked: a signature names its types, and a parameter reaches one
-// through an argument the source wrote.
-static bool type_names_param_impl(const ir::StorageState& state,
-                                  ir::TypeIdx type,
-                                  std::vector<u32>& path) {
-  if (!type.is_valid() || type.idx >= state.types.size()) {
-    return false;
-  }
-  // A recursive type reaches itself; a cycle contributes nothing new.
-  for (const u32 seen : path) {
-    if (seen == type.idx) {
-      return false;
-    }
-  }
-  path.push_back(type.idx);
-  const ir::TypeNode& node = state.types[type];
-  using T = ir::TypeTag;
-  switch (node.tag) {
-    case T::Param: return true;
-    case T::Ref:
-    case T::MutRef:
-    case T::RawPtr:
-    case T::RawMutPtr:
-      return type_names_param_impl(
-          state, state.ref_types[node.as_ref()].pointee, path);
-    case T::Array:
-      return type_names_param_impl(
-          state, state.array_types[node.as_array()].element, path);
-    case T::Slice:
-      return type_names_param_impl(
-          state, state.slice_types[node.as_slice()].element, path);
-    case T::Tuple: {
-      for (ir::TypeIdx element : state.tuple_types[node.as_tuple()].elements) {
-        if (type_names_param_impl(state, element, path)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    case T::Func: {
-      const ir::FuncType& shape = state.func_types[node.as_func()];
-      for (ir::TypeIdx param : shape.params) {
-        if (type_names_param_impl(state, param, path)) {
-          return true;
-        }
-      }
-      return type_names_param_impl(state, shape.ret, path);
-    }
-    case T::Struct: {
-      const ir::StructType& shape = state.struct_types[node.as_struct()];
-      for (ir::TypeIdx arg : shape.params) {
-        if (type_names_param_impl(state, arg, path)) {
-          return true;
-        }
-      }
-      // A field can name one where the instance's arguments do not: an
-      // instance minted before a substitution completed.
-      for (ir::TypeIdx field : shape.fields) {
-        if (type_names_param_impl(state, field, path)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    case T::Enum: {
-      const ir::EnumType& shape = state.enum_types[node.as_enum()];
-      for (ir::TypeIdx arg : shape.params) {
-        if (type_names_param_impl(state, arg, path)) {
-          return true;
-        }
-      }
-      for (ir::EnumVariantTypeIdx vidx : shape.variants) {
-        for (ir::TypeIdx field : state.enum_variant_types[vidx].fields) {
-          if (type_names_param_impl(state, field, path)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-    default: return false;
-  }
-}
-
-bool type_names_param(const ir::StorageState& state, ir::TypeIdx type) {
-  static thread_local std::vector<u32> path;
-  path.clear();
-  return type_names_param_impl(state, type, path);
-}
-
 static bool signature_names_param(const ir::StorageState& state,
                                   const std::vector<ir::TypeIdx>& params,
                                   ir::TypeIdx ret,
                                   ir::TypeIdx owner) {
-  if (type_names_param(state, ret) || type_names_param(state, owner)) {
+  if (ir::type_names_param(state, ret) || ir::type_names_param(state, owner)) {
     return true;
   }
   for (const ir::TypeIdx param : params) {
-    if (type_names_param(state, param)) {
+    if (ir::type_names_param(state, param)) {
       return true;
     }
   }
@@ -2854,7 +2761,7 @@ ir::TypeIdx method_owner_of(const analyzer::CheckedPackage& pkg,
     if (info.item != item || !info.self_type.is_valid()) {
       continue;
     }
-    if (type_names_param(state, info.self_type)) {
+    if (ir::type_names_param(state, info.self_type)) {
       return info.self_type;
     }
     if (!found.is_valid()) {

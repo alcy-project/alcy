@@ -904,7 +904,7 @@ class Checker {
   // sequence's element, a tuple's parts. Fields are not walked: an
   // instance names its parameters through its arguments, and every
   // layout it has follows from them (ADR-0079).
-  bool type_names_param(ir::TypeIdx type) const;
+  bool layout_names_param(ir::TypeIdx type) const;
   // The type a scalar spelling names (`i64`, `usize`), or an error
   // type for a spelling no scalar carries.
   ir::TypeIdx primitive_by_name(std::string_view name);
