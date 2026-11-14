@@ -15,7 +15,7 @@
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
-#include "ir/type_name.h"
+#include "ir/type_display.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
@@ -65,11 +65,11 @@ std::string function_detail(const pipeline::PipelineContext& context,
       out += ", ";
     }
     first = false;
-    out += ir::type_name(state, context.strings, param);
+    out += ir::type_display(state, context.strings, param);
   }
   out += ')';
   if (ret != ir::primitive_idx(ir::TypeTag::Void)) {
-    out += " -> " + ir::type_name(state, context.strings, ret);
+    out += " -> " + ir::type_display(state, context.strings, ret);
   }
   return out;
 }
@@ -100,7 +100,7 @@ void collect(const pipeline::PipelineContext& context,
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
       const ir::TypeNode& type = state.types[named.type];
       out->push_back(Item{std::string(named.name),
-                          ir::type_name(state, context.strings, named.type),
+                          ir::type_display(state, context.strings, named.type),
                           type.tag == ir::TypeTag::Enum
                               ? CompletionItemKind::Enum
                               : CompletionItemKind::Struct});
@@ -115,7 +115,7 @@ void collect(const pipeline::PipelineContext& context,
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
       out->push_back(Item{std::string(info.name),
-                          ir::type_name(state, context.strings, info.type),
+                          ir::type_display(state, context.strings, info.type),
                           info.is_const ? CompletionItemKind::Constant
                                         : CompletionItemKind::Variable});
     }

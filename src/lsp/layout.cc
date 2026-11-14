@@ -17,7 +17,7 @@
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
-#include "ir/type_name.h"
+#include "ir/type_display.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "pipeline/pipeline_context.h"
@@ -153,7 +153,7 @@ std::optional<StructLayout> struct_layout_of(const DocumentAnalysis& analysis,
     if (i < declaration.fields.size()) {
       entry.name = std::string(declaration.fields[i].name.name);
     }
-    entry.type = ir::type_name(state, context.strings, field_type);
+    entry.type = ir::type_display(state, context.strings, field_type);
     entry.offset =
         ir::field_offset(state, struct_type.fields, i, context.target.width);
     entry.size = field.size;
@@ -229,7 +229,7 @@ std::optional<EnumLayout> enum_layout_of(const DocumentAnalysis& analysis,
           ir::type_layout(state, field_type, context.target.width);
       FieldLayout field_entry;
       field_entry.name = std::to_string(j);
-      field_entry.type = ir::type_name(state, context.strings, field_type);
+      field_entry.type = ir::type_display(state, context.strings, field_type);
       field_entry.offset =
           ir::field_offset(state, variant.fields, j, context.target.width);
       field_entry.size = field.size;

@@ -17,7 +17,7 @@
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
-#include "ir/type_name.h"
+#include "ir/type_display.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "pipeline/pipeline_context.h"
@@ -101,11 +101,11 @@ std::string signature_label(const pipeline::PipelineContext& context,
       out += ", ";
     }
     first = false;
-    out += ir::type_name(state, context.strings, param);
+    out += ir::type_display(state, context.strings, param);
   }
   out += ')';
   if (ret != ir::primitive_idx(ir::TypeTag::Void)) {
-    out += " -> " + ir::type_name(state, context.strings, ret);
+    out += " -> " + ir::type_display(state, context.strings, ret);
   }
   return out;
 }
@@ -176,7 +176,7 @@ text::JsonValue signature_help(const Document& document,
   for (const ir::TypeIdx param : params) {
     text::JsonValue entry = text::JsonValue::make_object();
     entry.set("label", text::JsonValue::make_string(
-                           ir::type_name(state, context.strings, param)));
+                           ir::type_display(state, context.strings, param)));
     parameters.push(std::move(entry));
   }
 

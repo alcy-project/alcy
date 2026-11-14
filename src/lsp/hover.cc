@@ -16,7 +16,7 @@
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
-#include "ir/type_name.h"
+#include "ir/type_display.h"
 #include "lsp/analysis.h"
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
@@ -47,11 +47,11 @@ std::string signature_markdown(const pipeline::PipelineContext& context,
       out += ", ";
     }
     first = false;
-    out += ir::type_name(state, context.strings, param);
+    out += ir::type_display(state, context.strings, param);
   }
   out += ')';
   if (ret != ir::primitive_idx(ir::TypeTag::Void)) {
-    out += " -> " + ir::type_name(state, context.strings, ret);
+    out += " -> " + ir::type_display(state, context.strings, ret);
   }
   out += "\n~~~\n";
   return out;
@@ -136,8 +136,8 @@ std::string type_reference_markdown(const pipeline::PipelineContext& context,
               continue;
             }
             return "~~~alcy\n" +
-                   ir::type_name(package.types->state(), context.strings,
-                                 named.type) +
+                   ir::type_display(package.types->state(), context.strings,
+                                    named.type) +
                    "\n~~~\n" + layout_line(context, package, named.type);
           }
         }
@@ -263,7 +263,8 @@ std::optional<std::string> hover_markdown(const Document& document,
           return "~~~alcy\n" +
                  std::string(item.kind == K::Const ? "const " : "static ") +
                  std::string(name) + ": " +
-                 ir::type_name(state, context.strings, info->type) + "\n~~~\n";
+                 ir::type_display(state, context.strings, info->type) +
+                 "\n~~~\n";
         }
         default: break;
       }
@@ -280,7 +281,7 @@ std::optional<std::string> hover_markdown(const Document& document,
     const std::optional<ir::TypeIdx> type = checked_expr_type(package, *expr);
     if (type.has_value()) {
       return "~~~alcy\n" +
-             ir::type_name(package.types->state(), context.strings, *type) +
+             ir::type_display(package.types->state(), context.strings, *type) +
              "\n~~~\n" + layout_line(context, package, *type);
     }
   }

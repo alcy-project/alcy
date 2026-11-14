@@ -14,8 +14,8 @@ namespace ir {
 // its keyword, a struct or enum by its interned name, and a composite
 // structurally. Diagnostics and the language server read a type through
 // this one function, so they cannot disagree about its name.
-std::string type_name(const StorageState& state,
-                      const SymbolTable& strings,
-                      TypeIdx type);
+std::string type_display(const StorageState& state,
+                         const SymbolTable& strings,
+                         TypeIdx type);
 
 }  // namespace ir

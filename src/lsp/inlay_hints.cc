@@ -19,7 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/storage.h"
-#include "ir/type_name.h"
+#include "ir/type_display.h"
 #include "lsp/analysis.h"
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
@@ -89,7 +89,7 @@ void collect_binding_hints(const DocumentAnalysis& analysis,
     }
     out->push_back(Hint{
         name.offset + name.length,
-        ": " + ir::type_name(package.types->state(), context.strings, *type),
+        ": " + ir::type_display(package.types->state(), context.strings, *type),
         true});
   });
 }

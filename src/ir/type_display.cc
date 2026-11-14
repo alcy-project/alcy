@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "ir/type_name.h"
+#include "ir/type_display.h"
 
 #include <string>
 
@@ -16,10 +16,10 @@ namespace ir {
 
 namespace {
 
-std::string type_name_at(const StorageState& state,
-                         const SymbolTable& strings,
-                         TypeIdx type,
-                         u32 depth);
+std::string type_display_at(const StorageState& state,
+                            const SymbolTable& strings,
+                            TypeIdx type,
+                            u32 depth);
 
 std::string argument_list(const StorageState& state,
                           const SymbolTable& strings,
@@ -32,15 +32,15 @@ std::string argument_list(const StorageState& state,
       out += ", ";
     }
     first = false;
-    out += type_name_at(state, strings, arg, depth + 1);
+    out += type_display_at(state, strings, arg, depth + 1);
   }
   return out;
 }
 
-std::string type_name_at(const StorageState& state,
-                         const SymbolTable& strings,
-                         TypeIdx type,
-                         u32 depth) {
+std::string type_display_at(const StorageState& state,
+                            const SymbolTable& strings,
+                            TypeIdx type,
+                            u32 depth) {
   if (depth > base::MAX_NESTING) {
     return "...";
   }
@@ -63,31 +63,32 @@ std::string type_name_at(const StorageState& state,
     case TypeTag::Str: return "str";
     case TypeTag::Slice: {
       const SliceType& slice = state.slice_types[node.as_slice()];
-      return "[" + type_name_at(state, strings, slice.element, depth + 1) + "]";
+      return "[" + type_display_at(state, strings, slice.element, depth + 1) +
+             "]";
     }
     case TypeTag::Ref:
-      return "&" + type_name_at(state, strings,
-                                state.ref_types[node.as_ref()].pointee,
-                                depth + 1);
+      return "&" + type_display_at(state, strings,
+                                   state.ref_types[node.as_ref()].pointee,
+                                   depth + 1);
     case TypeTag::MutRef:
-      return "&mut " + type_name_at(state, strings,
-                                    state.ref_types[node.as_ref()].pointee,
-                                    depth + 1);
+      return "&mut " + type_display_at(state, strings,
+                                       state.ref_types[node.as_ref()].pointee,
+                                       depth + 1);
     case TypeTag::Ptr:
-      return "*" + type_name_at(state, strings,
-                                state.ref_types[node.as_ref()].pointee,
-                                depth + 1);
+      return "*" + type_display_at(state, strings,
+                                   state.ref_types[node.as_ref()].pointee,
+                                   depth + 1);
     case TypeTag::RawPtr:
-      return "*const " + type_name_at(state, strings,
-                                      state.ref_types[node.as_ref()].pointee,
-                                      depth + 1);
+      return "*const " + type_display_at(state, strings,
+                                         state.ref_types[node.as_ref()].pointee,
+                                         depth + 1);
     case TypeTag::RawMutPtr:
-      return "*mut " + type_name_at(state, strings,
-                                    state.ref_types[node.as_ref()].pointee,
-                                    depth + 1);
+      return "*mut " + type_display_at(state, strings,
+                                       state.ref_types[node.as_ref()].pointee,
+                                       depth + 1);
     case TypeTag::Array: {
       const ArrayType& array = state.array_types[node.as_array()];
-      return "[" + type_name_at(state, strings, array.element, depth + 1) +
+      return "[" + type_display_at(state, strings, array.element, depth + 1) +
              "; " + std::to_string(array.count) + "]";
     }
     case TypeTag::Tuple: {
@@ -116,7 +117,7 @@ std::string type_name_at(const StorageState& state,
     case TypeTag::Func: {
       const FuncType& function = state.func_types[node.as_func()];
       return "fn(" + argument_list(state, strings, function.params, depth) +
-             ") -> " + type_name_at(state, strings, function.ret, depth + 1);
+             ") -> " + type_display_at(state, strings, function.ret, depth + 1);
     }
     case TypeTag::Const:
       return "const " +
@@ -128,10 +129,10 @@ std::string type_name_at(const StorageState& state,
 
 }  // namespace
 
-std::string type_name(const StorageState& state,
-                      const SymbolTable& strings,
-                      TypeIdx type) {
-  return type_name_at(state, strings, type, 0);
+std::string type_display(const StorageState& state,
+                         const SymbolTable& strings,
+                         TypeIdx type) {
+  return type_display_at(state, strings, type, 0);
 }
 
 }  // namespace ir
