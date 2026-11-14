@@ -1,5 +1,6 @@
 // A repeat of a value whose bytes are all equal lowers to one byte fill,
-// and a value whose bytes differ keeps one store per slot.
+// and a repeat of any other value lowers to one store plus copies of the
+// prefix already written.
 fn main() {
   zeros := [0u8; 64]
   mut zero_sum := 0
@@ -37,6 +38,22 @@ fn main() {
     mixed_sum += v as i32
   }
   println("{}", mixed_sum)
+
+  // A count no power of two reaches, so the copies end on a range
+  // shorter than the prefix they read.
+  odd_half_words := [0x0102u16; 5]
+  mut odd_half_sum := 0
+  for v in odd_half_words {
+    odd_half_sum += v as i32
+  }
+  println("{}", odd_half_sum)
+
+  words := [0x01020304u32; 7]
+  mut word_sum := 0
+  for v in words {
+    word_sum += v as i32
+  }
+  println("{}", word_sum)
 
   bytes := 3u8
   runtime := [bytes; 100]

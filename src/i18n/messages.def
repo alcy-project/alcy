@@ -107,7 +107,6 @@
   F(AnalyzerArrayLengthNotConst, Error, Analyzer, "Array length must be a constant integer value") \
   F(AnalyzerArrayLiteralWithoutCount, Error, Analyzer, "Array literal needs elements or a repeat count") \
   F(AnalyzerArrayRepeatArity, Error, Analyzer, "Array expects {} elements, found repeat of {}") \
-  F(AnalyzerArrayRepeatTooLarge, Error, Analyzer, "Array repeat count {} exceeds the limit of {}") \
   F(AnalyzerArrayRepeatNotCopy, Error, Analyzer, "An array repeat copies its element once per slot, so the element must be Copy") \
   F(AnalyzerArrayRunNeedsBorrow, Error, Analyzer, "A run of a fixed array must be borrowed (`&a[..]`)") \
   F(AnalyzerTypeTooLarge, Error, Analyzer, "The size of this type does not fit in `isize`, so it has no layout") \

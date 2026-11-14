@@ -3737,9 +3737,6 @@ ir::TypeIdx Checker::check_array(u32 module,
       !const_array_length(module, array.count_path, node.span, count)) {
     return error_type();
   }
-  // Bounds compiler-time expansion: repeat counts are unbounded
-  // literals, and lowering stores per element.
-  static constexpr u64 MAX_ARRAY_ELEMENTS = 1u << 20;
   const ir::TypeIdx* element_expected = nullptr;
   ir::TypeIdx expected_element = error_type();
   u64 expected_count = 0;
@@ -3753,12 +3750,6 @@ ir::TypeIdx Checker::check_array(u32 module,
     has_expected_count = true;
   }
   if (array.repeat.is_valid()) {
-    if (count > MAX_ARRAY_ELEMENTS) {
-      const u32 index = bag.emit<i18n::Key::AnalyzerArrayRepeatTooLarge>(
-          DiagCode::InvalidOperation, node.span, count, MAX_ARRAY_ELEMENTS);
-      (void)index;
-      return error_type();
-    }
     const ir::TypeIdx element =
         check_expr(module, array.repeat, element_expected);
     if (!is_copy(element)) {

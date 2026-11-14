@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <algorithm>
 #include <bit>
 #include <cstdlib>
 #include <optional>
@@ -4109,12 +4110,32 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
       return Val{to_operand(addr, array_type), array_type, true, false};
     }
     const ir::OperandIdx stored = use_value(value);
-    for (u64 i = 0; i < shape.count && !failed; ++i) {
-      const ir::RegisterIdx gep = emit(ir::Opcode::GetElementPtr, shape.element,
-                                       {to_operand(addr, array_type), zero_i32,
-                                        index_operand(static_cast<u32>(i))},
-                                       {.inbounds = true});
-      emit_void(ir::Opcode::Store, {stored, to_operand(gep, shape.element)});
+    const ir::RegisterIdx first =
+        emit(ir::Opcode::GetElementPtr, shape.element,
+             {to_operand(addr, array_type), zero_i32, index_operand(0)},
+             {.inbounds = true});
+    emit_void(ir::Opcode::Store, {stored, to_operand(first, shape.element)});
+    // Every slot past the first copies slots already written, so the
+    // written prefix doubles instead of holding a store per slot: a
+    // count no literal spells leaves the block the size of a store.
+    const u64 element_size =
+        ir::type_layout(builder.state(), shape.element, width).size;
+    if (element_size != 0) {
+      const ir::TypeIdx slot_ref = builder.reference_type(shape.element, false);
+      for (u64 filled = 1; filled < shape.count && !failed;) {
+        // The chunk starts where the written prefix ends, so the two
+        // ranges a copy names never overlap.
+        const u64 chunk = std::min(filled, shape.count - filled);
+        const ir::RegisterIdx dst =
+            emit(ir::Opcode::GetElementPtr, shape.element,
+                 {to_operand(addr, array_type), zero_i32,
+                  int_operand(filled, usize_type())},
+                 {.inbounds = true});
+        emit_void(ir::Opcode::Memcopy,
+                  {to_operand(dst, slot_ref), to_operand(first, slot_ref),
+                   int_operand(element_size * chunk, usize_type())});
+        filled += chunk;
+      }
     }
   } else {
     if (shape.count != array.elements.size()) {

@@ -3,6 +3,7 @@
 
 #include "comp/ir_interpreter.h"
 
+#include <cstring>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -146,6 +147,7 @@ class Interpreter {
              ir::InstructionIdx instr);
   bool read_bytes(u64 address, u64 size, ir::InstructionIdx instr, u64& out);
   bool write_bytes(u64 address, u64 size, u64 value, ir::InstructionIdx instr);
+  bool copy_bytes(u64 dst, u64 src, u64 size, ir::InstructionIdx instr);
 
   bool resolve(const ir::Operand& operand,
                ir::InstructionIdx instr,
@@ -254,6 +256,27 @@ bool Interpreter::write_bytes(u64 address,
     memory_[static_cast<usize>(address + i)] =
         static_cast<u8>(value >> (8 * i));
   }
+  return true;
+}
+
+bool Interpreter::copy_bytes(u64 dst,
+                             u64 src,
+                             u64 size,
+                             ir::InstructionIdx instr) {
+  const u64 size_available = static_cast<u64>(memory_.size());
+  if (dst > size_available || size > size_available - dst ||
+      src > size_available || size > size_available - src) {
+    return fail(IrRunError::Kind::Internal, instr,
+                "memory access out of bounds");
+  }
+  if (size == 0 || dst == src) {
+    return true;
+  }
+  // A copy's ranges may touch, as the fill of an array repeat has them
+  // do, so the bytes move the way overlapped ranges do.
+  std::memmove(memory_.data() + static_cast<usize>(dst),
+               memory_.data() + static_cast<usize>(src),
+               static_cast<usize>(size));
   return true;
 }
 
@@ -865,9 +888,21 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
     case Opcode::InsertValue:
       return fail(IrRunError::Kind::Unsupported, instr,
                   "aggregate insertion in comp evaluation");
-    case Opcode::Memcopy:
-      return fail(IrRunError::Kind::Unsupported, instr,
-                  "memory copy in comp evaluation");
+    case Opcode::Memcopy: {
+      Slot dst;
+      Slot src;
+      u64 len = 0;
+      if (!resolve_at(instr, 0, frame, dst) ||
+          !resolve_at(instr, 1, frame, src) ||
+          !resolve_int_at(instr, 2, frame, len)) {
+        return false;
+      }
+      if (dst.kind != Slot::Kind::Address || src.kind != Slot::Kind::Address) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "memory copy of a non-address");
+      }
+      return copy_bytes(dst.address, src.address, len, instr);
+    }
     case Opcode::FAdd:
     case Opcode::FSub:
     case Opcode::FMul:

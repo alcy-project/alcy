@@ -1277,4 +1277,105 @@ TEST_CASE("IR interpreter agrees on a jump in a match arm") {
   CHECK(check_engines_agree(scenario, "skip_three", {}, 1));
 }
 
+// One instruction row over `operands`, which the caller emitted
+// back to back so the row can name them as a range.
+ir::InstructionIdx emit(ir::StorageBuilder& builder,
+                        ir::Opcode op,
+                        ir::RegisterIdx dst,
+                        std::initializer_list<ir::OperandIdx> operands) {
+  return builder.instr(
+      {.op = op,
+       .flags = {},
+       .dst = dst,
+       .measure = ir::TypeIdx::invalid(),
+       .operands = {*operands.begin(), static_cast<u32>(operands.size())}});
+}
+
+// Eight bytes filled in two halves, then a copy of six bytes reading
+// from offset 0 into offset 2: the source and destination ranges touch,
+// so a copy that moves bytes as it goes reads bytes it already wrote.
+// The returned byte sits at offset 6, which the copy reaches only from
+// the untouched first half.
+ir::Storage touching_copy_storage(ir::SymbolTable& strings) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
+  const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+  const ir::TypeIdx u8_ref = builder.reference_type(u8, false);
+
+  const auto count = [&](::i32 value) {
+    return builder.operand(ir::Operand::from_immutable(
+        builder.immutable({.type = i32, .data = {.i32_value = value}}), i32));
+  };
+  const auto byte = [&](::u8 value) {
+    return builder.operand(ir::Operand::from_immutable(
+        builder.immutable({.type = u8, .data = {.u8_value = value}}), u8));
+  };
+  const auto place = [&](ir::RegisterIdx reg) {
+    return builder.operand(ir::Operand::from_register(reg, u8));
+  };
+  const auto ref = [&](ir::RegisterIdx reg) {
+    return builder.operand(ir::Operand::from_register(reg, u8_ref));
+  };
+
+  const ir::RegisterIdx buffer(0);
+  const ir::RegisterIdx high_half(1);
+  const ir::RegisterIdx low_start(2);
+  const ir::RegisterIdx tail(3);
+  const ir::RegisterIdx loaded(4);
+
+  const ir::InstructionIdx alloc =
+      emit(builder, ir::Opcode::Alloca, buffer, {count(8)});
+  emit(builder, ir::Opcode::Memset, ir::RegisterIdx::invalid(),
+       {place(buffer), byte(0x41), count(4)});
+  const ir::InstructionIdx at_high = emit(builder, ir::Opcode::GetElementPtr,
+                                          high_half, {ref(buffer), count(4)});
+  emit(builder, ir::Opcode::Memset, ir::RegisterIdx::invalid(),
+       {place(high_half), byte(0x42), count(4)});
+  const ir::InstructionIdx at_low = emit(builder, ir::Opcode::GetElementPtr,
+                                         low_start, {ref(buffer), count(2)});
+  emit(builder, ir::Opcode::Memcopy, ir::RegisterIdx::invalid(),
+       {ref(low_start), ref(buffer), count(6)});
+  const ir::InstructionIdx at_tail =
+      emit(builder, ir::Opcode::GetElementPtr, tail, {ref(buffer), count(6)});
+  const ir::InstructionIdx load =
+      emit(builder, ir::Opcode::Load, loaded, {ref(tail)});
+  emit(builder, ir::Opcode::Ret, ir::RegisterIdx::invalid(), {place(loaded)});
+
+  builder.reg({.type = u8, .def_idx = alloc});
+  builder.reg({.type = u8, .def_idx = at_high});
+  builder.reg({.type = u8, .def_idx = at_low});
+  builder.reg({.type = u8, .def_idx = at_tail});
+  builder.reg({.type = u8, .def_idx = load});
+
+  const ir::BlockIdx entry =
+      builder.block({.instrs = {alloc, 9}, .block_params = {}});
+  const ir::FunctionMeta meta{
+      .return_type = u8,
+      .param_types = {},
+      .name = strings.intern("copy_bytes"),
+      .path = str::EMPTY_STRING_ID,
+      .kind = ir::SymbolKind::Free,
+      .generics = ir::TypeIdxRange{},
+  };
+  builder.function({.meta = meta, .blocks = {entry, 1}});
+  return std::move(builder).build().unwrap().unwrap();
+}
+
+TEST_CASE("IR interpreter copies bytes a touching range already wrote") {
+  ir::SymbolTable strings;
+  const ir::Storage storage = touching_copy_storage(strings);
+  u64 quota = comp::COMP_BRANCH_QUOTA;
+  u32 depth = 0;
+  base::Result<comp::CompVal, comp::IrRunError> result =
+      comp::interpret_function(storage, strings, ir::PointerWidth::W64,
+                               ir::FunctionIdx(0),
+                               std::span<const comp::CompVal>{}, quota, depth);
+  CHECK(result.is_ok());
+  if (result.is_err()) {
+    INFO("interpreter refused the copy: ", std::move(result).unwrap_err().what);
+    return;
+  }
+  check_int_value(storage, result.value(), 0x42);
+}
+
 }  // namespace lowering

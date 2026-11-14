@@ -2668,7 +2668,7 @@ TEST_CASE("Check rejects oversized array repeats") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "fn main() {\n"
-                                      "  _ := [0u8; 9999999999]\n"
+                                      "  _ := [0u8; 9999999999999999999]\n"
                                       "}\n"}});
   CHECK(setup);
   if (!setup) {
