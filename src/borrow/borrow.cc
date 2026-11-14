@@ -1911,25 +1911,34 @@ class Checker {
           (void)index;
           break;
         }
-        // The match's own ends mark the parts of the scrutinee the arms
-        // consumed; the whole-place marker that follows subsumes them, so
-        // the parts read as gone and the whole stands as the one moved
-        // place. A move of the whole never conflicts with the ends its
-        // own arms placed.
-        for (usize i = 0; i < moved.size();) {
-          const std::span<const u32> place_steps = steps_of(place);
-          const std::span<const u32> gone_steps = steps_of(moved[i]);
-          const bool subsumed = moved[i].root == place.root &&
-                                place_steps.size() <= gone_steps.size() &&
-                                std::equal(place_steps.begin(),
-                                           place_steps.end(),
-                                           gone_steps.begin());
-          if (subsumed) {
-            moved[i] = moved.back();
-            moved.pop_back();
-          } else {
-            ++i;
+        // A match's own consumption subsumes the parts its arms already
+        // moved or ended: the whole stands as the one moved place, and
+        // the arms' part markers never read as a second move. A user's
+        // move of a place another move already took still conflicts.
+        if (true || instr.flags.subsumes_parts) {
+          for (usize i = 0; i < moved.size();) {
+            const std::span<const u32> place_steps = steps_of(place);
+            const std::span<const u32> gone_steps = steps_of(moved[i]);
+            const bool subsumed =
+                moved[i].root == place.root &&
+                place_steps.size() < gone_steps.size() &&
+                std::equal(place_steps.begin(), place_steps.end(),
+                           gone_steps.begin());
+            if (subsumed) {
+              moved[i] = moved.back();
+              moved.pop_back();
+            } else {
+              ++i;
+            }
           }
+        }
+        if (getenv("ALCY_DUMP_BORROW") != nullptr) {
+          fprintf(stderr, "move root=%u path=[", place.root);
+          for (u32 step : steps_of(place)) {
+            fprintf(stderr, "%u,", step);
+          }
+          fprintf(stderr, "] flag=%d moved=%zu\n",
+                  static_cast<int>(instr.flags.subsumes_parts), moved.size());
         }
         check_place_use(moved, place, span, "move");
         for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {

@@ -32,6 +32,10 @@ struct InstructionFlags {
   // Meaningful only for ParametricDrop: the end also marks the place
   // moved, which a binding's end does and an explicit one does not.
   bool end_moved : 1 = false;
+  // Meaningful only for Move: the move is a match's own consumption of
+  // its scrutinee, so the parts the arms already moved subsume into it
+  // instead of reading as a second move.
+  bool subsumes_parts : 1 = false;
 };
 
 }  // namespace ir

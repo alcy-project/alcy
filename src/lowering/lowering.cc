@@ -674,7 +674,7 @@ void Lowerer::mark_move(Val v) {
   record_move_event(v);
 }
 
-void Lowerer::emit_move_marker(Val v) {
+void Lowerer::emit_move_marker(Val v, bool subsumes_parts) {
   if (!v.place || !v.address || is_copy(v.type)) {
     return;
   }
@@ -693,6 +693,7 @@ void Lowerer::emit_move_marker(Val v) {
   // type (ADR-0079).
   ir::InstructionFlags flags;
   flags.maybe_copy = ir::type_names_param(builder.state(), v.type);
+  flags.subsumes_parts = subsumes_parts;
   const ir::RegisterIdx marker = emit(ir::Opcode::Move, v.type, {v.op}, flags);
   (void)marker;
 }

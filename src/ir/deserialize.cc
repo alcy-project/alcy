@@ -639,6 +639,7 @@ bool read_instructions(Parsed& parsed, std::span<const u8> payload) {
     instruction_flags.inbounds = (flags & 0x08u) != 0;
     instruction_flags.maybe_copy = (flags & 0x10u) != 0;
     instruction_flags.end_moved = (flags & 0x20u) != 0;
+    instruction_flags.subsumes_parts = (flags & 0x40u) != 0;
     parsed.state.instrs.emplace_back(Instruction{
         .op = static_cast<Opcode>(op),
         .flags = instruction_flags,

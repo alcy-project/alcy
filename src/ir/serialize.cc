@@ -521,7 +521,9 @@ class Serializer {
       const u8 flags = static_cast<u8>(static_cast<u8>(instr.flags.rmw_op)) |
                        static_cast<u8>(instr.flags.inbounds ? 1u : 0u) << 3 |
                        static_cast<u8>(instr.flags.maybe_copy ? 1u : 0u) << 4 |
-                       static_cast<u8>(instr.flags.end_moved ? 1u : 0u) << 5;
+                       static_cast<u8>(instr.flags.end_moved ? 1u : 0u) << 5 |
+                       static_cast<u8>(instr.flags.subsumes_parts ? 1u : 0u)
+                           << 6;
       out.put_u8(flags);
       out.zeros(2);
       out.put_u32(instr.dst.is_valid() ? instr.dst.idx : NONE);
