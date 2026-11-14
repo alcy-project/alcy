@@ -58,7 +58,9 @@
 - Scope exit runs the destructors of the values that block declared,
   innermost first, and a `return` runs the destructors of everything
   still alive. A destructor that ends a value of a generic type is
-  resolved per instantiation.
+  resolved per instantiation; when the type came from a dependency
+  whose summary did not carry the destructor's body, ending the value
+  is refused rather than skipped (ADR-0079).
 - A type with no destructor of its own still ends what it holds: the
   compiler ends each destructible struct or tuple field, the live
   variant's destructible fields after a discriminant read, and each

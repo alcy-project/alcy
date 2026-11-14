@@ -75,8 +75,9 @@ function is one no backend ever receives.
 A body that is monomorphic is still not carried in a summary: the
 dependent links the library's object for it. A generic body is carried,
 in the parameterized form, because no concrete object can hold it. The
-summary's `needs_body` flag goes away with it: a row names a body or it
-names nothing.
+summary's `needs_body` flag narrows to what it was for: a row that
+names a carried body carries no flag, and an item whose body cannot
+cross keeps a declaration-only row with it (item 5).
 
 **One specialization mechanism.** The AST-level instantiation walk is
 deleted. In-package and cross-package generics go through the same
@@ -130,15 +131,16 @@ check.
    parameters: a dedicated pass binds each
    declared parameter to the `Param` node its index names, resolves
    the declaration's own signature under it, and checks the body
-   against that once. The walk visits every generic item the package
-   declares, instantiated or not, so a mistake in a generic nothing
+   against that once. The walk visits every generic item the package's
+   own modules declare, instantiated or not, so a mistake in a generic
+   nothing
    calls is still reported where it is written. A call the parameter's
    type decides resolves
    through the parameter's declared bounds (ADR-0080), and a call to a
    generic callee resolves only its signature, because each item is
    checked in its own context. The pass's records carry `PARAM_INST`,
-   which no concrete check and no lowering reads - the lowering leaves
-   any signature that names a parameter for the specialization pass.
+   the sentinel the lowering keys on to leave a definition-site body
+   for the specialization pass rather than lower it concretely.
    What cannot stand in yet stays per-instantiation: a value parameter,
    a `comp fn`, an owning `fn()` slot (ADR-0116), a parameter bounded
    by the `Fn` spec (`F: Fn<...>`, whose witness is a fact of the
@@ -166,9 +168,10 @@ check.
    would have used (ADR-0053). It rewrites each resolved call and
    substitutes the clone's types, names, and ends as it copies, and it
    runs before the borrow pass, so the borrow pass sees the clones and
-   no parametric body. What remains is the summary that carries the
-   body.
-4. Landed. The summary carries a generic body, and the flag goes. A
+   no parametric body. What remained then was the summary that carries
+   the body.
+4. Landed for the bodies that can cross. The summary carries a generic
+   body, and a row that names one carries no `needs_body` mark. A
    generic item's row names the definition-site body it lowered to, and
    the dependent spells the row's declaration: a `Param` node names its
    parameter by index, a generic nominal's declaration is spelled from
@@ -189,15 +192,22 @@ check.
    symbol, so the library's object stays the code that runs, and a
    library object now internalizes everything its surface does not
    name, which keeps a promoted symbol of a split build from meeting
-   another object's copy. A build therefore holds what its carried
-   bodies reach rather than the library's whole lowered storage, and
-   its reported count excludes what the library lowered and the
-   dependent does not reach.
+   another object's copy, and a request that names no surface at all -
+   a binary's relocatable object, a module emission - keeps every
+   symbol, because nothing says which ones are a surface. A build
+   therefore holds what its carried bodies reach rather than the
+   library's whole lowered storage, and its reported count excludes
+   what the library lowered and the dependent does not reach. An item
+   the once-check cannot stand in for (item 5) has no body the summary
+   can spell: its row keeps the `needs_body` mark and names only a
+   declaration, and a dependent that calls one is told the item is
+   unavailable rather than reading a body the library could not carry.
 5. Landed for the items the once-check stands in for. The pass runs
    before the concrete body checks, so a call site knows the body was
-   checked: it registers the item's signature and claims the
-   instantiation's numbering slot for the readers that key on it, and
-   runs no body check. A dispatch the body recorded resolves against
+   checked: it registers the item's signature and marks the entry - the
+   instantiation's slot, or `PARAM_INST` for a spec method - for the
+   readers that key on it, and runs no body check. A dispatch the body
+   recorded resolves against
    the receiver's own implementation - the concrete row, a
    definition-site row whose nominal is the receiver's, or the
    checked-impl table's declaration, whose method item the pass clones
