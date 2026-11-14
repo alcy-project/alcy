@@ -77,18 +77,13 @@ void Lowerer::unsupported(diag::Span span, std::string_view what) {
 }
 
 void Lowerer::internal(diag::Span span, std::string_view what) {
-  const u32 index =
-      bag.emit<i18n::Key::LowerInternalError>(DiagCode::Internal, span, what);
-  (void)index;
+  emit_internal_error(bag, span, what);
   failed = true;
 }
 
 void Lowerer::summary_drop_not_carried(diag::Span span, ir::TypeIdx type) {
-  const std::string name =
-      ir::type_name(builder.state(), strings, canonical_type(type));
-  const u32 index = bag.emit<i18n::Key::LowerSummaryDropNotCarried>(
-      DiagCode::SummaryDropNotCarried, span, name);
-  (void)index;
+  emit_summary_drop_not_carried(bag, builder.state(), strings, span,
+                                canonical_type(type));
   failed = true;
 }
 

@@ -399,9 +399,11 @@ class DropElaborator {
   // A construct the pass cannot lower: the detail names it, and the
   // build stops where the bag is read.
   void internal(diag::Span span, std::string_view what) {
-    const u32 index =
-        bag.emit<i18n::Key::LowerInternalError>(DiagCode::Internal, span, what);
-    (void)index;
+    emit_internal_error(bag, span, what);
+  }
+  // Whether ending a value of the type can run code (ADR-0079).
+  [[nodiscard]] bool may_end(ir::TypeIdx type) const {
+    return lowering::may_end(needs_drop, builder, type_origins_, type);
   }
 
   std::span<const u8> needs_drop;
@@ -498,13 +500,6 @@ void DropElaborator::run() {
     return;
   }
 
-  // Whether ending a value of the type runs code at all: a type that
-  // names a parameter may, once the substitution says what it stands
-  // for (ADR-0079).
-  const auto may_end = [&](ir::TypeIdx type) {
-    return runs_destructor(type) ||
-           lowering::type_names_param(builder.state(), type);
-  };
   // Everything this pass emits is a guard, a flag or a call for a value whose
   // type runs a destructor, so a function whose places are all copy types has
   // nothing to place.
@@ -953,11 +948,8 @@ void DropElaborator::run() {
       // The destructor's body did not cross with the type; the field
       // walk alone would leak what it owned, so the build stops and
       // names the type (ADR-0085).
-      const std::string name =
-          ir::type_name(builder.state(), strings, glue_type);
-      const u32 index = bag.emit<i18n::Key::LowerSummaryDropNotCarried>(
-          DiagCode::SummaryDropNotCarried, span, name);
-      (void)index;
+      emit_summary_drop_not_carried(bag, builder.state(), strings, span,
+                                    glue_type);
       return;
     }
     if (glue_type.idx < drop_glue.size()) {
@@ -1608,6 +1600,33 @@ bool runs_destructor(std::span<const u8> needs_drop,
     }
     default: return false;
   }
+}
+
+bool may_end(std::span<const u8> needs_drop,
+             const ir::StorageBuilder& builder,
+             const std::unordered_map<u32, u32>& type_origins,
+             ir::TypeIdx type) {
+  return runs_destructor(needs_drop, builder, type_origins, type) ||
+         ir::type_names_param(builder.state(), type);
+}
+
+void emit_internal_error(diag::DiagBag& bag,
+                         diag::Span span,
+                         std::string_view what) {
+  const u32 index =
+      bag.emit<i18n::Key::LowerInternalError>(DiagCode::Internal, span, what);
+  (void)index;
+}
+
+void emit_summary_drop_not_carried(diag::DiagBag& bag,
+                                   const ir::StorageState& state,
+                                   const ir::SymbolTable& strings,
+                                   diag::Span span,
+                                   ir::TypeIdx type) {
+  const std::string name = ir::type_display(state, strings, type);
+  const u32 index = bag.emit<i18n::Key::LowerSummaryDropNotCarried>(
+      DiagCode::SummaryDropNotCarried, span, name);
+  (void)index;
 }
 
 }  // namespace lowering

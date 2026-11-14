@@ -187,4 +187,27 @@ void elaborate_drops(const DropElaborationInputs& inputs);
     const std::unordered_map<u32, u32>& type_origins,
     ir::TypeIdx type);
 
+// Whether ending a value of the type can run code: an end the analyzer
+// measured, or a type that names a parameter, which the substitution
+// may turn into one (ADR-0079).
+[[nodiscard]] bool may_end(std::span<const u8> needs_drop,
+                           const ir::StorageBuilder& builder,
+                           const std::unordered_map<u32, u32>& type_origins,
+                           ir::TypeIdx type);
+
+// A construct the lowering cannot follow: the detail names it, and the
+// build stops where the bag is read.
+void emit_internal_error(diag::DiagBag& bag,
+                         diag::Span span,
+                         std::string_view what);
+
+// A carried body ends a value whose destructor body did not cross with
+// its summary: the end cannot run it and skipping it would leak, so the
+// build stops and names the type (ADR-0079, ADR-0085).
+void emit_summary_drop_not_carried(diag::DiagBag& bag,
+                                   const ir::StorageState& state,
+                                   const ir::SymbolTable& strings,
+                                   diag::Span span,
+                                   ir::TypeIdx type);
+
 }  // namespace lowering
