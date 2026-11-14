@@ -1280,6 +1280,119 @@ TEST_CASE("A summary's generic declaration and impl cross whole") {
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)
 }
 
+#if !BUILD_FLAG(IS_OS_ASMJS)
+TEST_CASE("Two libraries that reach one std function link into one image") {
+  // A package compiles the std it reaches into its own object, so two
+  // libraries whose bodies reach one std function each hold a copy of
+  // it. A library's object keeps only its surface external and
+  // internalizes every other definition, so the two copies cannot meet
+  // as one external symbol at the link (ADR-0078, ADR-0079). The bodies
+  // cross as generics here, so the library's surface names no function
+  // at all, and an empty export list must not read as "no surface".
+  io::TempDir dir = io::TempDir::create_unique("alcy_summary_shared_std_");
+  const bool depa_written = write_package(
+      dir, "depa",
+      "[package]\nname = \"depa\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "pub fn a<T>(x: T, s: str) -> usize {\n"
+        "  ret s.len_bytes()\n"
+        "}\n"}});
+  const bool depb_written = write_package(
+      dir, "depb",
+      "[package]\nname = \"depb\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"lib\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n\n"
+      "[lib]\npath = \"lib.al\"\n",
+      {{"lib.al",
+        "pub fn b<T>(x: T, s: str) -> usize {\n"
+        "  ret s.len_bytes()\n"
+        "}\n"}});
+  CHECK(depa_written);
+  CHECK(depb_written);
+  if (!depa_written || !depb_written) {
+    return;
+  }
+  for (const std::string_view name : {"depa", "depb"}) {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join(name));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::Object);
+    CHECK(built.is_ok());
+    const std::string stem = std::string(name) + "/out/" + std::string(name);
+    CHECK(io::is_file(dir.join(stem + ".o")));
+    CHECK(io::is_file(dir.join(stem + ".summary")));
+  }
+  // The libraries' sources are gone, so their summaries answer for them
+  // and the link holds their objects.
+  CHECK(io::remove_file(dir.join("depa/lib.al")));
+  CHECK(io::remove_file(dir.join("depb/lib.al")));
+  const bool app_written = write_package(
+      dir, "proj",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\"]\n\n"
+      "[dependencies]\n\"alcy/std/core\" = {}\n"
+      "depa = { path = \"../depa\" }\n"
+      "depb = { path = \"../depb\" }\n\n"
+      "[[bin]]\npath = \"main.al\"\n",
+      {{"main.al",
+        "use depa::a\nuse depb::b\n\nfn main() -> i32 {\n"
+        "  n := a(1i32, \"hello\")\n"
+        "  m := b(2i32, \"world\")\n"
+        "  ret (n + m - 10) as i32\n}\n"}});
+  CHECK(app_written);
+  if (!app_written) {
+    return;
+  }
+  {
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = codegen::Backend::Llvm;
+    base::Result<path::Path, path::PathError> root =
+        path::Path::from_native(dir.join("proj"));
+    CHECK(root.is_ok());
+    if (root.is_err()) {
+      return;
+    }
+    const path::Path root_path = std::move(root).unwrap();
+    base::Result<source::FileId, source::SourceError> manifest =
+        ctx.sources.load(root_path.join("alcy.toml").as_view());
+    CHECK(manifest.is_ok());
+    if (manifest.is_err()) {
+      return;
+    }
+    const base::Result<std::string, diag::Reported> built =
+        build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
+                      "", BuildPlan{}, EmitMode::Executable);
+    CHECK(built.is_ok());
+    CHECK(!ctx.bag.has_errors());
+    const std::string exe =
+        dir.join("proj/out/app" + std::string(exe_suffix()));
+    CHECK(io::is_file(exe));
+    base::Result<i32, SpawnError> ran = run_command({exe});
+    CHECK(ran.is_ok());
+    if (ran.is_ok()) {
+      CHECK(std::move(ran).unwrap() == 0);
+    }
+  }
+}
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
+
 TEST_CASE("A dependency a summary answers for is not read") {
   // A library's build leaves its surface beside the artifact; a
   // dependent checks against it, and the library's own sources can be
