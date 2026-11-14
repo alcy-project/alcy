@@ -105,6 +105,13 @@ class LineIndex {
     // Byte offset of every line start, ascending, or empty until the text
     // is asked about a second time.
     std::vector<u32> starts;
+    // The last place on a line that was asked about, and the column it sits
+    // at. A bag walks one line left to right, so the next question there
+    // continues from it instead of rescanning the line.
+    u32 cursor_start = 0;
+    u32 cursor_offset = 0;
+    u32 cursor_column = 1;
+    bool cursor_valid = false;
   };
 
   std::vector<Text> texts_;

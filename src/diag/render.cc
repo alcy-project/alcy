@@ -99,9 +99,12 @@ SnippetWindow snippet_window(std::string_view line, usize caret) {
   return {begin, end, begin > 0, end < line.size()};
 }
 
-// Display columns spanned by the bytes in [line_start, offset).
-u32 display_column(std::string_view bytes, u32 line_start, u32 offset) {
-  u32 col = 1;
+// Display columns spanned by the bytes in [line_start, offset), continuing
+// from the column already reached at line_start.
+u32 display_column(std::string_view bytes,
+                   u32 line_start,
+                   u32 offset,
+                   u32 col = 1) {
   for (u32 i = line_start; i < offset && i < bytes.size(); ++i) {
     // A UTF-8 continuation byte continues the character before it, so
     // it occupies no column of its own.
@@ -342,8 +345,20 @@ SourceLine LineIndex::line_at(source::FileId file_id,
     // The next line starts after a newline; the newline is not on this one.
     end = *after - 1;
   }
+  u32 column = 0;
+  if (found->cursor_valid && found->cursor_start == start &&
+      offset >= found->cursor_offset) {
+    column = display_column(bytes, found->cursor_offset, offset,
+                            found->cursor_column);
+  } else {
+    column = display_column(bytes, start, offset);
+  }
+  found->cursor_valid = true;
+  found->cursor_start = start;
+  found->cursor_offset = offset;
+  found->cursor_column = column;
   return {.number = static_cast<u32>(index),
-          .column = display_column(bytes, start, offset),
+          .column = column,
           .start = start,
           .text = bytes.substr(start, end - start)};
 }
