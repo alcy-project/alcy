@@ -16,6 +16,7 @@ commands are steps in.
     uv run ./tools/perf.py corpus --shape plain --modules 300
     uv run ./tools/perf.py scale --shape plain --sizes 300 600 1200
     uv run ./tools/perf.py ab out/perf/plain1200 old-alcy new-alcy
+    uv run ./tools/perf.py instructions out/perf/plain1200 old-alcy new-alcy
     uv run ./tools/perf.py costs out/perf/plain1200 --limit 25
 
 The corpora are packages of generated modules with the shape of a real one.
@@ -35,6 +36,17 @@ module. A cost that grows with the package shows there: per-module
 instructions that rise with the module count are work no single module asked
 for, because instructions do not grow from cache effects.
 
+`args` and `find` point at the linter's diagnostics rather than the
+checker's work: `args` declares each module's function so every finding
+it reports sits on the one line that names the parameters, and `find`
+spreads the same finding count over lines too short to measure twice.
+What the pair differs by is the text a finding is rendered against.
+
+`instructions` is `ab` scored on the count the tool trusts: the same
+interleaved order and minimum, read per binary against the first one
+named. `diff` reads two callgrind dumps of one shape at two sizes and
+ranks the functions by the self cost they added, which is how a cost
+only the larger run pays names itself.
 `profile` is the step that names the work: it records the same shape at two
 sizes, reads each symbol's self time from `perf report`, and reports it per
 module at both sizes. A symbol whose per-module cost rises is the one to read.
@@ -94,6 +106,8 @@ SHAPES = [
     "comp",
     "wide",
     "arms",
+    "args",
+    "find",
 ]
 
 # How many compile-time calls one module of the comp shape makes.
@@ -108,6 +122,16 @@ WIDE_WIDTH = 64
 # 64, coverage is settled on an index over the arms rather than on a scan of
 # them, and the shape covers the path a narrow enum never reaches.
 ARMS_WIDTH = 128
+
+# How many parameters the args shape's one function declares, all on the one
+# line that names them, one finding per parameter past the limit: the shape
+# exists to put every finding the linter reports on the same long line.
+ARGS_WIDTH = 400
+
+# How many lets the find shape's one function declares, one to a line: the
+# finding count grows with the function while the text a finding names
+# stays short, which is what the args shape holds fixed instead.
+FIND_WIDTH = 400
 
 INSTRUCTIONS = re.compile(r"^(\d+),,.*instructions")
 
@@ -151,7 +175,13 @@ def shape_width(shape: str, width: int | None) -> int:
     """The width a shape is built at: the count asked for, or its own."""
     if width is not None:
         return width
-    return ARMS_WIDTH if shape == "arms" else WIDE_WIDTH
+    if shape == "arms":
+        return ARMS_WIDTH
+    if shape == "args":
+        return ARGS_WIDTH
+    if shape == "find":
+        return FIND_WIDTH
+    return WIDE_WIDTH
 
 
 def module_source(shape: str, index: int, width: int) -> str:
@@ -352,22 +382,49 @@ pub fn wide{i}() -> i32 {{
 {names}{guards}  ret a0
 }}
 """
+    if shape == "args":
+        params = ", ".join(f"p{j}: i32" for j in range(width))
+        return f"""// One function whose parameters share the one line that
+// declares them. Every parameter past the limit is a finding, and
+// every finding renders against a line as long as the list.
+pub fn g{i}({params}) -> i32 {{
+  ret p0
+}}
+"""
+    if shape == "find":
+        lets = "".join(f"  v{j} := 1\n" for j in range(width))
+        return f"""// One finding per line, and no line longer than the last: the
+// finding count grows with the function while the text a finding
+// names stays short.
+pub fn f{i}() -> i32 {{
+{lets}  ret v0
+}}
+"""
     raise SystemExit(f"unknown shape: {shape}")
 
 
-def main_source(shape: str, modules: int, main_calls: int) -> str:
+def main_source(
+    shape: str, modules: int, main_calls: int, width: int | None = None
+) -> str:
     """The entry module, which names every module the corpus has."""
-    call = {
-        "plain": "  total = total + m{i}::describe{i}(m{i}::make{i}({k}))",
-        "drop": "  total = total + m{i}::describe{i}(m{i}::make{i}({k}))",
-        "generic": "  total = total + m{i}::use{i}({k})",
-        "comp": "  total = total + m{i}::use{i}({k})",
-        "adapt": "  total = total + m{i}::run{i}({k})",
-        "closure": "  total = total + m{i}::run{i}({k})",
-        "print": "  total = total + m{i}::say{i}({k})",
-        "wide": "  total = total + m{i}::wide{i}()",
-        "arms": "  total = total + m{i}::run{i}({k})",
-    }[shape]
+    if shape == "args":
+        # The call carries the whole parameter list, so main is as wide as
+        # the module it names.
+        argv = ", ".join("0" for _ in range(width if width else ARGS_WIDTH))
+        call = "  total = total + m{i}::g{i}(" + argv + ")"
+    else:
+        call = {
+            "plain": "  total = total + m{i}::describe{i}(m{i}::make{i}({k}))",
+            "drop": "  total = total + m{i}::describe{i}(m{i}::make{i}({k}))",
+            "generic": "  total = total + m{i}::use{i}({k})",
+            "comp": "  total = total + m{i}::use{i}({k})",
+            "adapt": "  total = total + m{i}::run{i}({k})",
+            "closure": "  total = total + m{i}::run{i}({k})",
+            "print": "  total = total + m{i}::say{i}({k})",
+            "wide": "  total = total + m{i}::wide{i}()",
+            "arms": "  total = total + m{i}::run{i}({k})",
+            "find": "  total = total + m{i}::f{i}()",
+        }[shape]
     calls = "\n".join(call.format(i=i % modules, k=i % 7) for i in range(main_calls))
     return f"""fn main() -> i32 {{
   mut total := 0
@@ -392,7 +449,7 @@ def manifest_source(shape: str, modules: int) -> str:
 "alcy/std/unicode" = {}
 "alcy/std/io" = {}
 """
-    elif shape not in ("plain", "wide", "arms"):
+    elif shape not in ("plain", "wide", "arms", "args", "find"):
         dependencies = """
 [dependencies]
 "alcy/std/core" = {}
@@ -420,7 +477,7 @@ def write_corpus(
     out.mkdir(parents=True, exist_ok=True)
     for i in range(modules):
         (out / f"m{i}.al").write_text(module_source(shape, i, width))
-    (out / "main.al").write_text(main_source(shape, modules, main_calls))
+    (out / "main.al").write_text(main_source(shape, modules, main_calls, width))
     (out / "alcy.toml").write_text(manifest_source(shape, modules))
     return out
 
@@ -849,6 +906,33 @@ def cmd_series(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_instructions(args: argparse.Namespace) -> int:
+    """Instruction counts of several binaries on one corpus, interleaved.
+
+    The order `ab` runs in, scored on the count the tool trusts instead of
+    the wall clock: each binary's number is the least of the runs it got,
+    and the deltas read against the first binary named.
+    """
+    corpus = corpus_dir(args.corpus)
+    binaries = [binary_for(name) for name in args.binaries]
+    best: dict[str, int] = {}
+    for _ in range(args.reps):
+        for binary in binaries:
+            count = instructions(binary, corpus, args.jobs, args.subcommand)
+            key = str(binary)
+            if key not in best or count < best[key]:
+                best[key] = count
+    run = "" if args.subcommand == DEFAULT_COMMAND else f"  run={args.subcommand}"
+    print(f"{corpus.name}, min of {args.reps}, interleaved, -j {args.jobs}{run}")
+    print(f"{'binary':<24} {'instructions':>14} {'delta':>9}")
+    base = best[str(binaries[0])]
+    for binary in binaries:
+        count = best[str(binary)]
+        delta = "-" if count == base else f"{(count - base) / base:+.2%}"
+        print(f"{binary.name:<24} {count:>14,} {delta:>9}")
+    return 0
+
+
 def cmd_ab(args: argparse.Namespace) -> int:
     corpus = corpus_dir(args.corpus)
     binaries = [binary_for(name) for name in args.binaries]
@@ -1190,6 +1274,44 @@ def cmd_costs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_diff(args: argparse.Namespace) -> int:
+    """What grew between two dumps of one shape taken at two sizes.
+
+    A function that only the larger run pays for is the one a cost that
+    scales with the input lives in, and the ranking is by the self cost
+    each function added, so the first row is where the next read starts.
+    """
+    for path in (args.before, args.after):
+        if not Path(path).is_file():
+            raise SystemExit(f"no callgrind dump at {path}")
+    before, _ = callgrind_costs(Path(args.before))
+    after, _ = callgrind_costs(Path(args.after))
+    total_before = sum(before.values())
+    total_after = sum(after.values())
+    if not total_before or not total_after:
+        raise SystemExit(
+            "a dump carries no self cost; take it against a binary that"
+            " still has its symbol table"
+        )
+    names = set(before) | set(after)
+    rows = []
+    for name in names:
+        now = after.get(name, 0)
+        if now / total_after < args.floor:
+            continue
+        was = before.get(name, 0)
+        rows.append((now - was, was, now, name))
+    print(
+        f"{total_before:,} -> {total_after:,} instructions"
+        f" ({(total_after - total_before) / total_before:+.1%})"
+    )
+    print(f"{'delta':>12} {'before':>12} {'after':>12} {'ratio':>7}  function")
+    for delta, was, now, name in sorted(rows, reverse=True)[: args.limit]:
+        ratio = f"{now / was:.2f}x" if was else "new"
+        print(f"{delta:>12,} {was:>12,} {now:>12,} {ratio:>7}  {name[:88]}")
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     # The compiler travels with every subcommand, before or after it: the
@@ -1209,8 +1331,8 @@ def parse_args() -> argparse.Namespace:
     width = dict(
         type=int,
         default=None,
-        help="names or variants a shape declares, as it has them (default:"
-        " the shape's own count; other shapes ignore it)",
+        help="what a shape's function holds: names, variants, parameters,"
+        " or lets (default: the shape's own count; other shapes ignore it)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -1312,6 +1434,19 @@ def parse_args() -> argparse.Namespace:
     ab.add_argument("--reps", type=int, default=5)
     ab.set_defaults(func=cmd_ab)
 
+    instructions_cmd = subparsers.add_parser(
+        "instructions",
+        parents=[common],
+        help="instruction-count A/B of binaries, interleaved, min of reps",
+    )
+    instructions_cmd.add_argument("corpus")
+    instructions_cmd.add_argument("binaries", nargs="+")
+    instructions_cmd.add_argument("--jobs", type=int, default=1)
+    instructions_cmd.add_argument("--reps", type=int, default=3)
+    instructions_cmd.add_argument(
+        "--subcommand", default=DEFAULT_COMMAND, help=subcommand_help
+    )
+    instructions_cmd.set_defaults(func=cmd_instructions)
     callers = subparsers.add_parser(
         "callers",
         parents=[common],
@@ -1370,6 +1505,21 @@ def parse_args() -> argparse.Namespace:
     )
     hotspots.set_defaults(func=cmd_hotspots)
 
+    diff = subparsers.add_parser(
+        "diff",
+        parents=[common],
+        help="per-function self cost added between two callgrind dumps",
+    )
+    diff.add_argument("before", help="the smaller run's callgrind dump")
+    diff.add_argument("after", help="the larger run's callgrind dump")
+    diff.add_argument("--limit", type=int, default=20, help="rows to show")
+    diff.add_argument(
+        "--floor",
+        type=float,
+        default=0.0,
+        help="skip functions under this share of the after run's cost",
+    )
+    diff.set_defaults(func=cmd_diff)
     determinism = subparsers.add_parser(
         "determinism",
         parents=[common],

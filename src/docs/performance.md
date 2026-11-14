@@ -623,9 +623,11 @@ half of the walk to read next.
 | `perf.py scale --shape plain --sizes 300 600 1200` | instructions per module, and the growth between sizes |
 | `perf.py profile A B --binary BIN` | per-module self cost at two sizes, from `perf report` |
 | `perf.py ab CORPUS BEFORE AFTER` | interleaved wall clock, minimum of N, with per-phase totals |
+| `perf.py instructions CORPUS A B` | instruction-count A/B, interleaved, each binary against the first |
 | `perf.py costs CORPUS` | per-function self instructions from callgrind, and the call edges around a symbol |
 | `perf.py hotspots CORPUS` | the same self instructions summed by module, or by function |
 | `perf.py rss --shape plain --sizes 300 1200` | peak RSS per module at several sizes |
+| `perf.py diff BEFORE.cg AFTER.cg` | per-function self cost added between two dumps, largest first |
 | `perf.py callers CORPUS --symbol NAME` | who reaches a symbol, and what runs under it |
 | `perf.py determinism CORPUS` | one emitted-IR hash across job counts and repeats |
 
