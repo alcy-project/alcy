@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 #include "analyzer/resolve.h"
@@ -108,6 +109,11 @@ struct LintContext {
   std::span<const ActiveRule> active_item;
   std::span<const ActiveRule> active_block;
 
+  // Per file, whether its text spells a suppression directive at all.
+  // Nine files in ten spell none, and such a file silences nothing, so
+  // its findings answer without reading the line they sit on.
+  std::unordered_map<source::FileId, bool> directive_files;
+
   [[nodiscard]] const ast::ItemNode& item_node(ast::ItemIdx id) const {
     return ast.items[id];
   }
@@ -142,6 +148,20 @@ struct LintContext {
     return *package.tree.modules[module];
   }
 
+  // Whether the file carries any suppression directive. The lookup is
+  // filled on the file's first finding, and the search for the marker is
+  // one pass over the bytes rather than the two line scans a finding
+  // would otherwise pay.
+  [[nodiscard]] bool spells_directive_at(source::FileId file) {
+    auto [entry, inserted] = directive_files.try_emplace(file, false);
+    if (inserted) {
+      const std::optional<std::string_view> bytes = sources.bytes(file);
+      entry->second = bytes.has_value() &&
+                      bytes->find("alcy-lint-ignore") != std::string_view::npos;
+    }
+    return entry->second;
+  }
+
   [[nodiscard]] RuleSetting setting() const {
     return config.setting(rule_index_value);
   }
@@ -163,7 +183,7 @@ struct LintContext {
     // A source-level directive silences the finding the same way an
     // allow does, so a rule that reports through here needs no
     // suppression code of its own and its label and fix go nowhere.
-    if (suppressed(sources, span, rule->id)) {
+    if (spells_directive_at(span.file) && suppressed(sources, span, rule->id)) {
       return bag.size();
     }
     // A denied rule is an error, and so is every finding when the run
