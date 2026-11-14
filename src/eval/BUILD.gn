@@ -1,0 +1,17 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The compile-time evaluator's census driver. A development tool rather
+# than a user command: tools/check_eval.py compiles the acceptance
+# corpus into the binary IR form and hands the packages here.
+executable("ir_eval") {
+  sources = [ "main.cc" ]
+
+  configs += [
+    "//src:alcy_config",
+    "//src:win_stack_reserve",
+    "//src:win_sys_libs",
+  ]
+
+  deps = [ "//src:alcy_lib" ]
+}

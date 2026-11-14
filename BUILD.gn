@@ -13,6 +13,12 @@ group("benchmarks") {
   deps = [ "//src/benchmarks" ]
 }
 
+# The compile-time evaluator's census driver: a development tool the
+# checks drive, not a command a program uses.
+group("eval") {
+  deps = [ "//src/eval:ir_eval" ]
+}
+
 # The playground's host API. On a wasm build this is the loadable
 # artifact (`alcy_playground.js`/`.wasm`); elsewhere it is the library
 # itself, so the API still compiles and its tests still run.
@@ -35,6 +41,7 @@ group("all") {
   deps = [
     ":benchmarks",
     ":default",
+    ":eval",
     ":tests",
     "//src/linter",
   ]
