@@ -83,10 +83,12 @@ skips value binding for any producer with an invalid `dst`.
 | `Alloca` | The allocated element type comes from the destination register's type; the operand is the array size. |
 | `Load` / `Store` | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register. |
 | `Memcopy` | `[dst_ptr, src_ptr, len(integer)]`, discarded value; bytewise copy. A reference operand promises its pointee's alignment; a bare pointer promises byte alignment only. |
+| `Memset` | `[dst_ptr, byte(u8), len(integer)]`, discarded value; fills `len` bytes at `dst_ptr` with `byte`. The alignment follows the destination's type. |
 | `GetElementPtr` | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site when there is one, and otherwise from the base pointer's register type. |
 | `ElemOffset` | `[base_ptr(register), integer index]`. The destination register carries the element reference, so the borrow checker extends the buffer's place with one element step. |
 | `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second). |
 | `TypeCast` | Determined by source/destination tags: integer resizing by width and signedness, int<->float, float resizing, int<->pointer. |
+| `FNeg` | `[a]`; the destination carries the operand's type, and the result is the operand's sign flip. |
 | Comparisons | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only. |
 | Atomics | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent. |
 | `Move` / `Drop` | Register alias / ownership marker; no code emitted. |
