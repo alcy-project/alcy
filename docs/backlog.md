@@ -3,16 +3,16 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
-- [ ] A pattern binding of a non-`Copy` payload double-frees when the
-  arm's test fails: the binding loads the payload out (the arm's test
-  block binds before it tests) and no event records where the load
-  read from, so the walk ends both the binding and the scrutinee's
-  field — the same buffer — at their scope exits. A guarded end on one
-  place now latches its flag after it runs, which fixed the shape where
-  the two ends shared one flag; the loaded-payload shape still owes the
-  event the load owes its source
-  (`e2e/cases/ok-pattern-binding-after-test` and
-  `exe/cases/exe-match-guard-discard` abort in the allocator).
+- [ ] A guarded arm that binds a non-`Copy` payload double-frees:
+  `match e { Wrapped::A(_) if false => ..., Wrapped::A(v) => ... }`
+  aborts in the allocator after the matching arm's body, and the
+  discarded scrutinee's destructor lands after the next arm's body
+  where the spec asks it at the arm. The unguarded and condition forms
+  are fixed — the binding records the move of the place it reads, and
+  an in-place end now consults the journal before walking fields, so
+  the field a binding moved out is skipped
+  (`e2e/cases/ok-pattern-binding-after-test` passes) — and the guard
+  form waits on tracing where its second end comes from.
 
 - [ ] A match whose pattern binds nothing refuses a program that moves
   nothing: `match s { S { items: _, tags: _ } => ... }` on an owned

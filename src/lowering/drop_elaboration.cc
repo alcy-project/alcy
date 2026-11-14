@@ -1490,8 +1490,21 @@ void DropElaborator::run() {
             const u32 owner = event.kind == OwnershipEvent::Kind::Discard
                                   ? base::INVALID_IDX
                                   : event.local;
+            // The end walks the fields the place still holds: a field a
+            // binding moved out is skipped the way the owner's own end
+            // skips it. A place no local names (a temporary) ends whole.
+            std::function<State(const std::vector<u32>&)> state_of_drop =
+                owned_path;
+            if (event.local != base::INVALID_IDX) {
+              state_of_drop = [&](const std::vector<u32>& child) {
+                std::vector<u32> full = event.path;
+                full.insert(full.end(), child.begin(), child.end());
+                return state_at(event.local, full, at(event.block),
+                                event.offset, event.seq);
+              };
+            }
             emit_end(out, owner, event.path, event.place_type, event.place,
-                     owned_path, event.span);
+                     state_of_drop, event.span);
             break;
           }
           case Action::Kind::StoreClear: {
