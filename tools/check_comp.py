@@ -8,7 +8,7 @@
 Lowering hands its IR to the backends and to the second engine
 (ADR-0054), and the corpus is where the two are asked to agree. Every
 case that compiles is written in the binary IR form and handed to the
-ir_eval driver, which runs each function the engine can start and fails
+comp_census driver, which runs each function the engine can start and fails
 while the engine reports a compiler bug or a refusal it has not
 declared. A case the front end rejects is the corpus's
 expected-rejection half and sits this check out, so a construct the
@@ -77,7 +77,7 @@ def main() -> int:
     parser.add_argument(
         "--build-subdir",
         default="build",
-        help="Subdirectory inside out/ holding the alcy and ir_eval binaries",
+        help="Subdirectory inside out/ holding the alcy and comp_census binaries",
     )
     parser.add_argument(
         "--jobs",
@@ -94,7 +94,7 @@ def main() -> int:
 
     out = project_root_dir / "out" / args.build_subdir
     tools = {}
-    for name in ("alcy", "ir_eval"):
+    for name in ("alcy", "comp_census"):
         binary = out / name
         if not binary.is_file():
             binary = binary.with_suffix(".exe")
@@ -134,11 +134,11 @@ def main() -> int:
         # verdict rather than one per case, and a summary line per case
         # still names where a refusal lives.
         proc = subprocess.run(
-            [str(tools["ir_eval"]), *[str(p) for p in packages]],
+            [str(tools["comp_census"]), *[str(p) for p in packages]],
             env=run_environment(),
         )
         print(
-            f"check_eval: {len(case_dirs)} cases, {len(packages)} compiled, "
+            f"check_comp: {len(case_dirs)} cases, {len(packages)} compiled, "
             f"{rejected} rejected by the front end"
         )
         return proc.returncode

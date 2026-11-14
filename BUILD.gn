@@ -15,8 +15,8 @@ group("benchmarks") {
 
 # The compile-time evaluator's census driver: a development tool the
 # checks drive, not a command a program uses.
-group("eval") {
-  deps = [ "//src/eval:ir_eval" ]
+group("census") {
+  deps = [ "//src/census:comp_census" ]
 }
 
 # The playground's host API. On a wasm build this is the loadable
@@ -40,8 +40,8 @@ group("fuzz") {
 group("all") {
   deps = [
     ":benchmarks",
+    ":census",
     ":default",
-    ":eval",
     ":tests",
     "//src/linter",
   ]

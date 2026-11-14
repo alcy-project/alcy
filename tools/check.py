@@ -172,7 +172,7 @@ def main() -> int:
     # the lowering emits that the engine refuses without declaring it
     # fails here. The refusal declarations are checked in a debug build,
     # so the census reads the debug binary.
-    tool("check_eval.py", f"--build-subdir={debug_subdir}")
+    tool("check_comp.py", f"--build-subdir={debug_subdir}")
 
     # The formatter's own check, over every source rather than a sample:
     # the tree is what it would write, formatting formatted output

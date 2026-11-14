@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 # The compile-time evaluator's census driver. A development tool rather
-# than a user command: tools/check_eval.py compiles the acceptance
+# than a user command: tools/check_comp.py compiles the acceptance
 # corpus into the binary IR form and hands the packages here.
-executable("ir_eval") {
+executable("comp_census") {
   sources = [ "main.cc" ]
 
   configs += [

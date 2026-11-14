@@ -187,7 +187,7 @@ void print_census(std::string_view path, const Census& census) {
 
 i32 main(i32 argc, char** argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "usage: ir_eval <package.irbc>...\n");
+    std::fprintf(stderr, "usage: comp_census <package.irbc>...\n");
     return 2;
   }
   bool ok = true;
@@ -209,7 +209,7 @@ i32 main(i32 argc, char** argv) {
     }
   }
   std::printf(
-      "ir_eval: %d package(s), %zu functions, %zu evaluated, %zu budget, "
+      "comp_census: %d package(s), %zu functions, %zu evaluated, %zu budget, "
       "%zu overflow, %zu external, %zu params, %zu declined\n",
       argc - 1, total.functions, total.evaluated, total.budget, total.overflow,
       total.external, total.params,
@@ -220,7 +220,7 @@ i32 main(i32 argc, char** argv) {
                 what.data());
   }
   if (!ok) {
-    std::fprintf(stderr, "ir_eval: the engine and the corpus disagree\n");
+    std::fprintf(stderr, "comp_census: the engine and the corpus disagree\n");
     return 1;
   }
   return 0;

@@ -29,7 +29,7 @@ uv run ./tools/check_exe.py
 uv run ./tools/check_stdlib_tests.py
 # The compile-time evaluator (ADR-0054) over the acceptance corpus: every
 # case that compiles is also evaluated function by function:
-uv run ./tools/check_eval.py
+uv run ./tools/check_comp.py
 # The .al sources are the formatter's own check: laid out as alcy fmt
 # writes them, idempotent under a second pass, unchanged in verdict.
 uv run ./tools/check_fmt.py
