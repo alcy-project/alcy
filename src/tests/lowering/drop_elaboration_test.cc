@@ -250,6 +250,150 @@ std::vector<u32> placed_calls(Fixture& fx,
 
 }  // namespace
 
+// Isolates the pass on the shape a match lowering journals: a shell with
+// one glue field, a binding that moved the field out, a wildcard arm's
+// commit that ends the shell in place, and a scope exit that owns the
+// binding's copy. The glue runs once, from the binding's end: the shell's
+// end skips what the binding moved, and the commit's end covers the rest.
+TEST_CASE("A match's consumption ends a moved field once") {
+  Fixture fx;
+  const ir::TypeIdx field = fx.drop_type(ir::TypeTag::U32, 0);
+  ir::TypeSeq field_types;
+  field_types.push(field);
+  const ir::TypeIdx struct_ty = fx.builder.struct_type(
+      fx.strings.intern("S"), field_types.finish(), ir::TypeIdxRange{});
+  const ir::RegisterIdx held = fx.builder.reg(
+      {.type = struct_ty, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+  const ir::RegisterIdx binding = fx.builder.reg(
+      {.type = field, .def_idx = ir::InstructionIdx(base::INVALID_IDX)});
+  // The operand naming the shell's address, which the in-place end's
+  // event journals as its place.
+  const ir::OperandIdx held_place =
+      fx.builder.operand(ir::Operand::from_register(held, struct_ty));
+
+  const std::vector<Local> locals{Local{"held", held, struct_ty},
+                                  Local{"v", binding, field}};
+  // A match bound the field out of the shell: the binding's move event
+  // names the field, and the wildcard arm's in-place end covers the
+  // shell at the arm's commit. The scope exit ends what is still owned:
+  // the binding's copy, and none of the shell.
+  const std::vector<OwnershipEvent> events{
+      OwnershipEvent{.kind = OwnershipEvent::Kind::Bind,
+                     .local = 0,
+                     .path = {},
+                     .block = ir::BlockIdx(0),
+                     .offset = 0,
+                     .seq = 0,
+                     .span = {}},
+      OwnershipEvent{.kind = OwnershipEvent::Kind::Move,
+                     .local = 0,
+                     .path = {},
+                     .block = ir::BlockIdx(0),
+                     .offset = 1,
+                     .seq = 1,
+                     .span = {}},
+      OwnershipEvent{.kind = OwnershipEvent::Kind::Move,
+                     .local = 0,
+                     .path = {0},
+                     .block = ir::BlockIdx(0),
+                     .offset = 1,
+                     .seq = 2,
+                     .span = {}},
+      OwnershipEvent{.kind = OwnershipEvent::Kind::Bind,
+                     .local = 1,
+                     .path = {},
+                     .block = ir::BlockIdx(0),
+                     .offset = 1,
+                     .seq = 2,
+                     .span = {}},
+      // The wildcard arm's commit ends the shell in place: the event
+      // covers the whole shell at the arm's commit.
+      OwnershipEvent{.kind = OwnershipEvent::Kind::DropInPlace,
+                     .local = 0,
+                     .path = {},
+                     .block = ir::BlockIdx(1),
+                     .offset = 1,
+                     .seq = 3,
+                     .span = {},
+                     .place = held_place,
+                     .place_type = struct_ty}};
+  const std::vector<EndSite> sites{EndSite{.block = ir::BlockIdx(2),
+                                           .offset = 0,
+                                           .seq = 4,
+                                           .locals = {0, 1},
+                                           .span = {}}};
+  fx.streams.emplace_back();
+  fx.blocks.emplace_back(0);
+  fx.streams.emplace_back();
+  fx.blocks.emplace_back(1);
+  fx.streams.emplace_back();
+  fx.blocks.emplace_back(2);
+  // The flow: the binding block falls into the commit block, which falls
+  // into the scope exit. The edges come from the streams' terminators.
+  const ir::TypeIdx void_ty = fx.builder.primitive(ir::TypeTag::Void);
+  const auto br = [&fx, void_ty](u32 from, u32 to) {
+    const ir::OperandIdx head =
+        ir::OperandIdx(static_cast<u32>(fx.builder.state().operands.size()));
+    fx.builder.operand(ir::Operand::from_block(ir::BlockIdx(to), void_ty));
+    const ir::InstructionIdx instr =
+        fx.builder.instr({.op = ir::Opcode::Br,
+                          .flags = {},
+                          .dst = ir::RegisterIdx(base::INVALID_IDX),
+                          .measure = ir::TypeIdx::invalid(),
+                          .operands = {head, 1}});
+    fx.instr_spans.push_back({});
+    fx.streams[from].push(instr);
+  };
+  br(0, 1);
+  br(1, 2);
+
+  u32 spawned = 3;
+  const std::vector<u32> expected{100};
+  const DropElaborationInputs inputs{
+      .needs_drop = fx.needs_drop,
+      .not_movable = {},
+      .drop_glue = fx.drop_glue,
+      .builder = fx.builder,
+      .bag = fx.bag,
+      .strings = fx.strings,
+      .locals = locals,
+      .ownership = events,
+      .end_sites = sites,
+      .instr_spans = fx.instr_spans,
+      .streams = fx.streams,
+      .blocks = fx.blocks,
+      .base = 0,
+      .type_origins = fx.type_origins,
+      .size_one = ir::OperandIdx(0),
+      .zero_i32 = ir::OperandIdx(0),
+      .width = ir::PointerWidth::W64,
+      .drop_method = [](u32,
+                        u32 method) { return ir::FunctionIdx(100 + method); },
+      .reserve_block = [&spawned] { return ir::BlockIdx(spawned++); },
+  };
+  elaborate_drops(inputs);
+
+  std::vector<u32> called;
+  for (ir::InstrSeq& stream : fx.streams) {
+    const base::IdxRange<ir::InstructionIdx> placed = stream.finish();
+    for (ir::InstructionIdx idx : placed) {
+      const ir::Instruction& instr = fx.builder.state().instrs[idx.idx];
+      if (instr.op != ir::Opcode::Call) {
+        continue;
+      }
+      for (ir::OperandIdx o : instr.operands) {
+        const ir::Operand& operand = fx.builder.state().operands[o.idx];
+        if (operand.is<ir::FunctionIdx>()) {
+          called.push_back(operand.as_function().idx);
+        }
+      }
+    }
+  }
+  // The glue runs once: the binding's end frees the buffer, and the
+  // shell's end skips the field the binding moved out.
+  CHECK(called == std::vector<u32>{100});
+}
+
 TEST_CASE("A tuple's fields end in declaration order") {
   Fixture fx;
   const ir::TypeIdx first = fx.drop_type(ir::TypeTag::U32, 0);
