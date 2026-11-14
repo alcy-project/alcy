@@ -440,6 +440,43 @@ a layout document (19%), the renderer that gives that document a width
 a node move copies 56 bytes; that is the shape a constant-factor change
 here has to act on.
 
+## What the diagnostics cost
+
+A run renders its findings once, at the end. On a corpus the pipeline
+checks cleanly that render is a fixed tail; on an input whose findings
+pile onto one line it was nearly the whole run, because two of the
+questions the path asks read the same line once per finding.
+
+Measuring a finding's display column walked its line from the first
+byte, so n findings on one line walked a growing prefix n times. The
+line index now remembers the line start, offset, and column of the
+last question put to a text, and a later question on the same line
+continues from where the answer stopped; a question that moves to
+another line, or back along this one, still starts at the line's
+first byte.
+
+Deciding whether a finding is suppressed scanned its line and the line
+above for a lint-ignore comment, and most files spell no directive; the
+context now answers that question once per file, and a file whose bytes
+contain no `alcy-lint-ignore` silences nothing without reading the line
+any finding sits on.
+
+What is left of the walk is bounded: a caret inside a rendered snippet
+seeks from the snippet's own start, and a snippet is capped at 240
+bytes.
+
+`lint` on a package whose functions declare their parameters on one
+line, one finding per parameter, instructions:
+
+| parameters | before | after | |
+| --- | --- | --- | --- |
+| 1600 | 360,642,974 | 88,088,382 | -75.6% |
+| 3200 | 1,246,200,296 | 118,393,216 | -90.5% |
+| 6400 | 4,797,689,620 | 179,741,357 | -96.25% |
+
+The same files under `check` were flat throughout: the diagnostics were
+the term that grew, not the pipeline that reported them.
+
 ## What did not pay
 
 Measured and rejected, so the next attempt starts from a number rather than
@@ -533,6 +570,16 @@ from the idea.
   are `0.55%` together. The lever is their size, not their shape: a function
   names a few dozen blocks and the package a hundred thousand, so the sizing
   writes an entry for every block no function in it reads.
+- **An index of the columns a line's bytes open.** Measuring a display
+  column walks a line once, and an index of the bytes that open a column
+  turns the walk into a search, which looks like the cheap half of the
+  trade. On `adapt300` the index costs `+0.74%` (`94,252,274` to
+  `94,953,066`): the index is built before any line is asked about, and
+  on lines walked once the build is the walk again under another name,
+  plus the search on top. The form that paid remembers where the
+  previous question on the line stopped and resumes from there: nothing
+  is built ahead of a question, and a line no finding asks about is
+  never read.
 
 ## Tracing
 
@@ -598,3 +645,11 @@ Generated corpora live under `out/perf/`, which is not tracked.
 - A shared machine is not a measurement instrument. Prefer the instruction
   count, and when timing is unavoidable, alternate the binaries and take the
   minimum rather than the mean.
+- A doubling ratio below two is not sub-linearity, and one rising toward
+  two is not super-linearity. Work that scales with the input under a
+  fixed base moves the total by `(F + 2p·n)/(F + p·n)` over a doubling,
+  which rises toward two from below as the base becomes small: the
+  formatter's shapes read 1.49 to 1.95 across their doublings while
+  their increments double exactly. Increments are the test; linear work
+  doubles its increment, and an increment that more than doubles is
+  where a term that scales with the square lives.
