@@ -3,25 +3,19 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
-- [ ] A guarded arm that binds a non-`Copy` payload double-frees:
-  `match e { Wrapped::A(_) if false => ..., Wrapped::A(v) => ... }`
-  aborts in the allocator after the matching arm's body, and the
-  discarded scrutinee's destructor lands after the next arm's body
-  where the spec asks it at the arm. The unguarded and condition forms
-  are fixed — the binding records the move of the place it reads, and
-  an in-place end now consults the journal before walking fields, so
-  the field a binding moved out is skipped
-  (`e2e/cases/ok-pattern-binding-after-test` passes) — and the guard
-  form waits on tracing where its second end comes from.
-
-- [ ] A match whose pattern binds nothing refuses a program that moves
-  nothing: `match s { S { items: _, tags: _ } => ... }` on an owned
-  non-`Copy` local answers `Use of moved` although the arms end the
-  fields in place. The arms' part ends mark the parts moved and the
-  join's whole-scrutinee marker then overlaps them; the enum-payload
-  form answers correctly, so the reconciliation is between the join
-  marker and the ends the arms emitted. The struct and tuple forms of
-  `exe-match-discard-end` wait on this one.
+- [ ] A wildcard arm leaves the match's scrutinee un-ended, and the
+  discarded scrutinee's end lands after the arm bodies: `match s {
+  _ if false => ..., _ => ... }` ends `s` after the matching arm's body
+  where the arm's commit should end it. The arm's commit ending the
+  scrutinee was tried twice and each half works alone: with the commit
+  end placed, `exe/cases/exe-match-guard-discard` passes outright (the
+  order and the leak), and the match's consumption marker at the join
+  then collides with the commit's own marker on the same whole place —
+  the borrow pass subsumes that collision behind a flag, which fixes
+  the all-wildcard refusal, but the corpus's own cleanup still
+  double-frees where a commit end meets an earlier binding's end. The
+  placement needs the walk's per-commit ends and the sweep's sites
+  reconciled on one state model.
 
 - [ ] Float `**` is refused while the integer one is repeated
   squaring: a fractional exponent needs `pow`, and the direct-wasm

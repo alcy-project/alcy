@@ -1932,14 +1932,6 @@ class Checker {
             }
           }
         }
-        if (getenv("ALCY_DUMP_BORROW") != nullptr) {
-          fprintf(stderr, "move root=%u path=[", place.root);
-          for (u32 step : steps_of(place)) {
-            fprintf(stderr, "%u,", step);
-          }
-          fprintf(stderr, "] flag=%d moved=%zu\n",
-                  static_cast<int>(instr.flags.subsumes_parts), moved.size());
-        }
         check_place_use(moved, place, span, "move");
         for (u32 id = 0; id < static_cast<u32>(loans.size()); ++id) {
           const Loan& loan = loans[id];
