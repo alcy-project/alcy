@@ -561,19 +561,13 @@ std::vector<u8> serialize_package_ir(PipelineContext& ctx,
              : std::span<const ir::SummaryEntry>();
   // Each row with code names the symbol a dependent links against.
   std::vector<ir::SummaryEntry> rows(summary.begin(), summary.end());
-  const std::vector<ir::FunctionIdx>& parametric =
-      package.storage->parametric_functions();
   for (ir::SummaryEntry& row : rows) {
     if (!row.function.is_valid()) {
       continue;
     }
     // A parametric body has no ABI to link by; a dependent clones it
     // from the carried storage instead (ADR-0079).
-    bool parametric_body = false;
-    for (const ir::FunctionIdx fn : parametric) {
-      parametric_body = parametric_body || fn.idx == row.function.idx;
-    }
-    if (parametric_body) {
+    if (package.storage->is_parametric(row.function)) {
       continue;
     }
     const std::string symbol = linkable_symbol(ctx, package, row);

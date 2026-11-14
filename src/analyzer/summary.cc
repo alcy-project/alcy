@@ -308,15 +308,7 @@ void remember_name(
 // Whether a row names a body the summary carries rather than code a
 // symbol links: the writer lists the parametric bodies (ADR-0079).
 bool is_carried_body(const ir::Storage& storage, ir::FunctionIdx function) {
-  if (!function.is_valid()) {
-    return false;
-  }
-  for (const ir::FunctionIdx candidate : storage.parametric_functions()) {
-    if (candidate.idx == function.idx) {
-      return true;
-    }
-  }
-  return false;
+  return function.is_valid() && storage.is_parametric(function);
 }
 
 std::optional<ast::Ident> spell_segment(const SpellContext& ctx,
