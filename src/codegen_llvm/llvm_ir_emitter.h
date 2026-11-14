@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -83,7 +84,8 @@ class LlvmIrEmitter {
                 ir::SymbolTable* interner,
                 const Target& target,
                 bool emit_entry,
-                std::span<const ir::FunctionIdx> exported_functions = {},
+                std::optional<std::span<const ir::FunctionIdx>>
+                    exported_functions = std::nullopt,
                 bool freestanding = false,
                 const overlay::Overlay* overlay = nullptr,
                 debug::Profiler* profiler = nullptr,
@@ -193,9 +195,9 @@ class LlvmIrEmitter {
   // Entry synthesis belongs to binaries; a library's `main` stays an
   // ordinary item, wrapped in nothing.
   bool emit_entry_;
-  // The functions a library's surface names; empty for a binary, which
-  // internalizes everything.
-  std::span<const ir::FunctionIdx> exported_functions_;
+  // The functions a library's surface names; nothing for a request
+  // that names no surface, which keeps every symbol.
+  std::optional<std::span<const ir::FunctionIdx>> exported_functions_;
   // Whether the entry is `_start`, ending through the exit syscall
   // instead of returning to a C runtime (ADR-0052).
   bool freestanding_ = false;

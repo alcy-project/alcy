@@ -95,11 +95,13 @@ struct EmitRequest {
   bool emit_entry = false;
   // The functions a library's surface names, and the only ones whose
   // symbols stay external: a dependent links by them, and every other
-  // definition is this object's own (ADR-0078). Empty means the request
-  // names no surface, and nothing is internalized for it; `emit_entry`
+  // definition is this object's own (ADR-0078). Nothing means the
+  // request names no surface - a binary's object, a relocatable module -
+  // and every symbol stays as it is; a surface that names no function is
+  // present and empty, and everything is internalized. `emit_entry`
   // still internalizes the whole image. A direct backend roots its own
   // reachability and reads this as the surface alone.
-  std::span<const ir::FunctionIdx> exported_functions;
+  std::optional<std::span<const ir::FunctionIdx>> exported_functions;
   // The build's arithmetic checks, parallel to the storage's
   // instructions; null when the build checks nothing (ADR-0068). A
   // backend reads an entry in place of the profile, which never reaches

@@ -344,6 +344,13 @@ struct Emission {
         exported_functions.push_back(row.function);
       }
     }
+    // A library's request names its surface, even when the surface is
+    // empty; a request that names none (a binary's object, a relocatable
+    // module) keeps every symbol (ADR-0078, ADR-0079).
+    const std::optional<std::span<const ir::FunctionIdx>> surface =
+        is_lib ? std::optional<std::span<const ir::FunctionIdx>>(
+                     exported_functions)
+               : std::nullopt;
     request = codegen::EmitRequest{
         .storage = std::move(package.storage),
         .instr_spans = package.instr_spans,
@@ -354,7 +361,7 @@ struct Emission {
         .bag = &ctx.bag,
         .target = ctx.target,
         .emit_entry = !is_lib,
-        .exported_functions = exported_functions,
+        .exported_functions = surface,
         .overlay = profile.overflow_checks ? &checks : nullptr,
         .kind = kind,
         .options =

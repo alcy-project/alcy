@@ -4,6 +4,7 @@
 #include "codegen_llvm/llvm_ir_emitter.h"
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -54,7 +55,7 @@ LlvmIrEmitter::LlvmIrEmitter(
     ir::SymbolTable* interner,
     const Target& target,
     bool emit_entry,
-    std::span<const ir::FunctionIdx> exported_functions,
+    std::optional<std::span<const ir::FunctionIdx>> exported_functions,
     bool freestanding,
     const overlay::Overlay* overlay,
     debug::Profiler* profiler,
@@ -329,9 +330,11 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   // Which functions a library's surface names: the only definitions a
   // dependent can reach by symbol. A binary internalizes everything.
   std::vector<bool> exported(storage_->functions().size(), false);
-  for (const ir::FunctionIdx function_idx : exported_functions_) {
-    if (function_idx.is_valid() && function_idx.idx < exported.size()) {
-      exported[function_idx.idx] = true;
+  if (exported_functions_.has_value()) {
+    for (const ir::FunctionIdx function_idx : *exported_functions_) {
+      if (function_idx.is_valid() && function_idx.idx < exported.size()) {
+        exported[function_idx.idx] = true;
+      }
     }
   }
 
@@ -370,7 +373,7 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
     // reached. A library keeps its surface external.
     if (emit_entry_) {
       llvm_function->setLinkage(llvm::GlobalValue::InternalLinkage);
-    } else if (!exported_functions_.empty() && !exported[function_idx.idx]) {
+    } else if (exported_functions_.has_value() && !exported[function_idx.idx]) {
       // A library's object carries code no dependent reaches by name:
       // only the surface stays external, so a symbol a split part
       // promotes cannot meet another object's copy of it (ADR-0078). A
