@@ -933,6 +933,11 @@ void DropElaborator::run() {
                    span);
     out.current = drop_index;
     body(out);
+    // The guarded end spends the value, so the flag latches: a later
+    // guard for the same place reads the latch and skips an end that
+    // would read what this one retired.
+    pass_emit_void(seq_of(out), ir::Opcode::Store,
+                   {bool_operand(true), to_operand(reg, i1)}, span);
     pass_emit_void(seq_of(out), ir::Opcode::Br,
                    {builder.operand(ir::Operand::from_block(
                        out.blocks[after_index].block, void_ty))},
