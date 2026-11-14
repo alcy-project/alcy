@@ -36,7 +36,6 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
-#include "ir/type_name.h"
 #include "ir/type_util.h"
 #include "lowering/diag_code.h"
 #include "lowering/drop_elaboration.h"
@@ -1299,6 +1298,35 @@ Val Lowerer::lower_kept_argument(ast::ExprIdx expr,
   return arg;
 }
 
+bool Lowerer::lower_call_arguments(std::span<const ast::ExprIdx> args,
+                                   std::span<const ir::TypeIdx> params,
+                                   std::span<const u32> skip,
+                                   std::optional<ast::ExprIdx> receiver_place,
+                                   std::vector<ir::OperandIdx>& ops) {
+  std::vector<ast::ExprIdx> borrowed_places;
+  if (receiver_place.has_value()) {
+    borrowed_places.push_back(*receiver_place);
+  }
+  std::vector<KeptValue> kept;
+  usize skip_at = 0;
+  for (usize i = 0; i < args.size(); ++i) {
+    if (skip_at < skip.size() && skip[skip_at] == i) {
+      ++skip_at;
+      continue;
+    }
+    Val arg = lower_kept_argument(args[i], params[i], borrowed_places, kept);
+    if (failed || terminated_cur()) {
+      return false;
+    }
+    ops.push_back(arg_for(arg, params[i]));
+  }
+  if (check_kept_values(kept, borrowed_places)) {
+    failed = true;
+    return false;
+  }
+  return true;
+}
+
 Val Lowerer::lower_call(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
@@ -1390,19 +1418,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     }
     // The places this call lends to the callee: a value it keeps can
     // land in any of them, so it has to outlive them (ADR-0135).
-    std::vector<ast::ExprIdx> borrowed_places;
-    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> args;
-    for (usize i = 0; i < call.args.size(); ++i) {
-      Val arg = lower_kept_argument(call.args[i], sig.params[i],
-                                    borrowed_places, kept);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      args.push_back(arg_for(arg, sig.params[i]));
-    }
-    if (check_kept_values(kept, borrowed_places)) {
-      failed = true;
+    if (!lower_call_arguments(call.args, sig.params, {}, std::nullopt, args)) {
       return stopped_value();
     }
     const ir::ParametricCalleeIdx callee = generic_callee(
@@ -1436,29 +1453,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       fn, builder.primitive(ir::TypeTag::Function))));
   // The places this call lends to the callee: a value it keeps can land
   // in any of them, so it has to outlive them.
-  std::vector<ast::ExprIdx> borrowed_places;
-  for (usize i = 0; i < call.args.size(); ++i) {
-    if (can_write_through(tag_of(sig.params[i])) &&
-        is_rooted_place(call.args[i])) {
-      borrowed_places.push_back(call.args[i]);
-    }
-  }
-  std::vector<KeptValue> kept;
-  usize comp_at = 0;
-  for (usize i = 0; i < call.args.size(); ++i) {
-    if (comp_at < comp.size() && comp[comp_at] == i) {
-      ++comp_at;
-      continue;
-    }
-    Val arg =
-        lower_kept_argument(call.args[i], sig.params[i], borrowed_places, kept);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    ops.push_back(arg_for(arg, sig.params[i]));
-  }
-  if (check_kept_values(kept, borrowed_places)) {
-    failed = true;
+  if (!lower_call_arguments(call.args, sig.params, comp, std::nullopt, ops)) {
     return stopped_value();
   }
   if (tag_of(sig.ret) == ir::TypeTag::Never) {
@@ -1536,19 +1531,8 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
       internal(call.span, "call arity");
       return Val{size_one, error_type(), false, false};
     }
-    std::vector<ast::ExprIdx> borrowed_places;
-    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> ops;
-    for (usize i = 0; i < args.size(); ++i) {
-      Val arg =
-          lower_kept_argument(args[i], info.params[i], borrowed_places, kept);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      ops.push_back(arg_for(arg, info.params[i]));
-    }
-    if (check_kept_values(kept, borrowed_places)) {
-      failed = true;
+    if (!lower_call_arguments(args, info.params, {}, std::nullopt, ops)) {
       return stopped_value();
     }
     std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
@@ -1588,28 +1572,7 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   std::vector<ir::OperandIdx> ops;
   ops.push_back(builder.operand(ir::Operand::from_function(
       fn, builder.primitive(ir::TypeTag::Function))));
-  std::vector<ast::ExprIdx> borrowed_places;
-  for (usize i = 0; i < args.size(); ++i) {
-    if (can_write_through(tag_of(info.params[i])) && is_rooted_place(args[i])) {
-      borrowed_places.push_back(args[i]);
-    }
-  }
-  std::vector<KeptValue> kept;
-  usize comp_at = 0;
-  for (usize i = 0; i < args.size(); ++i) {
-    if (comp_at < comp.size() && comp[comp_at] == i) {
-      ++comp_at;
-      continue;
-    }
-    Val arg =
-        lower_kept_argument(args[i], info.params[i], borrowed_places, kept);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    ops.push_back(arg_for(arg, info.params[i]));
-  }
-  if (check_kept_values(kept, borrowed_places)) {
-    failed = true;
+  if (!lower_call_arguments(args, info.params, comp, std::nullopt, ops)) {
     return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {
@@ -1804,8 +1767,6 @@ Val Lowerer::lower_carried_call(ast::ExprIdx expr,
   }
   // The places this call lends to the callee: a value it keeps can land
   // in any of them, so it has to outlive them (ADR-0135).
-  std::vector<ast::ExprIdx> borrowed_places;
-  std::vector<KeptValue> kept;
   std::vector<ir::OperandIdx> ops;
   ops.reserve(settled.size());
   usize at = 0;
@@ -1813,16 +1774,9 @@ Val Lowerer::lower_carried_call(ast::ExprIdx expr,
     ops.push_back(arg_for(*receiver, settled[0]));
     at = 1;
   }
-  for (usize i = 0; i < args.size(); ++i) {
-    Val arg =
-        lower_kept_argument(args[i], settled[at + i], borrowed_places, kept);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    ops.push_back(arg_for(arg, settled[at + i]));
-  }
-  if (check_kept_values(kept, borrowed_places)) {
-    failed = true;
+  if (!lower_call_arguments(args,
+                            std::span<const ir::TypeIdx>(settled).subspan(at),
+                            {}, std::nullopt, ops)) {
     return stopped_value();
   }
   return emit_parametric_call(ops, settled, settled_ret, callee, node.span);
@@ -3444,30 +3398,16 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
     if (failed) {
       return stopped_value();
     }
-    std::vector<ast::ExprIdx> borrowed_places;
-    if (can_write_through(tag_of(info.params[0])) &&
-        is_rooted_place(receiver_expr)) {
-      borrowed_places.push_back(receiver_expr);
-    }
-    for (usize i = 0; i < method_args.size(); ++i) {
-      if (can_write_through(tag_of(info.params[i + 1])) &&
-          is_rooted_place(method_args[i])) {
-        borrowed_places.push_back(method_args[i]);
-      }
-    }
-    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> ops;
     ops.push_back(arg_for(receiver, info.params[0]));
-    for (usize i = 0; i < method_args.size(); ++i) {
-      Val arg = lower_kept_argument(method_args[i], info.params[i + 1],
-                                    borrowed_places, kept);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      ops.push_back(arg_for(arg, info.params[i + 1]));
-    }
-    if (check_kept_values(kept, borrowed_places)) {
-      failed = true;
+    const std::optional<ast::ExprIdx> receiver_place =
+        can_write_through(tag_of(info.params[0])) &&
+                is_rooted_place(receiver_expr)
+            ? std::optional<ast::ExprIdx>(receiver_expr)
+            : std::nullopt;
+    if (!lower_call_arguments(
+            method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
+            {}, receiver_place, ops)) {
       return stopped_value();
     }
     return emit_parametric_call(ops, info.params, info.ret, callee,
@@ -3543,37 +3483,23 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   ops.push_back(arg_for(receiver, info.params[0]));
   // The places this call lends to the callee. A value the callee keeps
   // can land in any of them, so it has to outlive them.
-  std::vector<ast::ExprIdx> borrowed_places;
-  if (can_write_through(tag_of(info.params[0])) &&
-      is_rooted_place(receiver_expr)) {
-    borrowed_places.push_back(receiver_expr);
+  std::vector<u32> arg_comp;
+  arg_comp.reserve(comp.size());
+  for (const u32 pos : comp) {
+    arg_comp.push_back(pos - 1);
   }
-  for (usize i = 0; i < method_args.size(); ++i) {
-    if (can_write_through(tag_of(info.params[i + 1])) &&
-        is_rooted_place(method_args[i])) {
-      borrowed_places.push_back(method_args[i]);
-    }
-  }
-  std::vector<KeptValue> kept;
-  usize comp_at = 0;
-  for (usize i = 0; i < method_args.size(); ++i) {
-    if (comp_at < comp.size() && comp[comp_at] == i + 1) {
-      ++comp_at;
-      continue;
-    }
-    Val arg = lower_kept_argument(method_args[i], info.params[i + 1],
-                                  borrowed_places, kept);
-    if (failed || terminated_cur()) {
-      return stopped_value();
-    }
-    ops.push_back(arg_for(arg, info.params[i + 1]));
-  }
+  const std::optional<ast::ExprIdx> receiver_place =
+      can_write_through(tag_of(info.params[0])) &&
+              is_rooted_place(receiver_expr)
+          ? std::optional<ast::ExprIdx>(receiver_expr)
+          : std::nullopt;
   // A type parameter accepts the value into storage the callee owns, so
   // its signature does not say whether the value is kept: `Vec::push`
   // writes its element into the buffer (ADR-0135). The instance's type
   // arguments are the parameters the callee called its own.
-  if (check_kept_values(kept, borrowed_places)) {
-    failed = true;
+  if (!lower_call_arguments(
+          method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
+          arg_comp, receiver_place, ops)) {
     return stopped_value();
   }
   if (tag_of(info.ret) == ir::TypeTag::Void) {

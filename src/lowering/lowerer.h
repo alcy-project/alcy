@@ -347,6 +347,18 @@ class Lowerer {
                           ir::TypeIdx param,
                           std::vector<ast::ExprIdx>& borrowed_places,
                           std::vector<KeptValue>& kept);
+  // Lowers every argument a call site spells into `ops`, in order: the
+  // places the callee may write through are recorded, the values it may
+  // keep are lowered and checked against them (ADR-0135), and `skip`
+  // names the compile-time positions that lower no value. `params`
+  // pairs with `args`, and `receiver_place` is a receiver expression
+  // the callee may write through, recorded like an argument. False when
+  // the build failed or the lowering terminated.
+  bool lower_call_arguments(std::span<const ast::ExprIdx> args,
+                            std::span<const ir::TypeIdx> params,
+                            std::span<const u32> skip,
+                            std::optional<ast::ExprIdx> receiver_place,
+                            std::vector<ir::OperandIdx>& ops);
   // Applies the extent rule to the values a call may keep: the callee
   // owns storage and can leave one there, so the value's loans have to
   // outlive the places `borrowed_places` names, which are the places
