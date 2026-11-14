@@ -702,6 +702,10 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
         failed = true;
         return;
       }
+      // A by-value binding reads the place out, so the move event lands
+      // here, where the place is known: the place's owner ends nothing
+      // of what the binding now owns.
+      record_move_event(init, node.span);
       const Val material = materialize(init);
       const ir::RegisterIdx addr =
           emit(ir::Opcode::Alloca, init.type, {size_one});
@@ -4702,6 +4706,16 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         switch_to(body_block);
         return;
       }
+      // A by-value binding reads the place out, so the move event lands
+      // before the load: the place's owner ends nothing of what the
+      // binding now owns, on this path and on the one a failed test
+      // takes.
+      record_move_event(scrut_addr, span);
+      // A by-value binding reads the place out, so the move event lands
+      // before the load: the place's owner ends nothing of what the
+      // binding now owns, on this path and on the one a failed test
+      // takes.
+      record_move_event(scrut_addr, span);
       bind_pattern(pattern, materialize(scrut_addr));
       if (failed) {
         return;
@@ -4842,9 +4856,18 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
             record_drop_in_place(to_operand(addr, fields[i]), fields[i], span);
             continue;
           }
-          Val field = load_payload_field(scrut_addr, scrut_type, variant,
-                                         static_cast<u32>(i));
-          bind_pattern(elements[i], field);
+          const ir::RegisterIdx payload = enum_field_addr(
+              scrut_addr, scrut_type, variant, static_cast<u32>(i));
+          // A by-value binding reads the payload out, so the move event
+          // lands before the load: the enum's own end skips what the
+          // binding now owns.
+          record_move_event(Val{to_operand(payload, fields[i]), fields[i], true,
+                                scrut_addr.place},
+                            span);
+          const ir::RegisterIdx loaded = emit(ir::Opcode::Load, fields[i],
+                                              {to_operand(payload, fields[i])});
+          bind_pattern(elements[i], Val{to_operand(loaded, fields[i]),
+                                        fields[i], false, false});
         }
         return;
       }
