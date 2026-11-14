@@ -674,7 +674,14 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
       // destructor. A wildcard parameter keeps the value for the
       // function's own scope exit.
       if (!binding_param_ && init.address && may_end(init.type)) {
-        record_drop_in_place(init.op, init.type, node.span);
+        // A guard runs after the pattern's discards would, so a discard
+        // under a guard waits for the arm's commit: a false guard falls
+        // through with the value whole for the next arm to take.
+        if (guard_arm_) {
+          guarded_discards_.push_back(init);
+        } else {
+          record_drop_in_place(init.op, init.type, node.span);
+        }
       }
       break;
     case ast::PatternKind::Ident:
@@ -4850,10 +4857,19 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
           if (ast.patterns[elements[i]].kind == ast::PatternKind::Wildcard &&
               may_end(fields[i])) {
             // The arm discards this payload: end it in place rather than
-            // loading a copy nothing owns.
+            // loading a copy nothing owns. Under a guard the end waits
+            // for the arm's commit, the way the bindings a false guard
+            // leaves do.
             const ir::RegisterIdx addr = enum_field_addr(
                 scrut_addr, scrut_type, variant, static_cast<u32>(i));
-            record_drop_in_place(to_operand(addr, fields[i]), fields[i], span);
+            if (guard_arm_) {
+              guarded_discards_.push_back(Val{to_operand(addr, fields[i]),
+                                              fields[i], true,
+                                              scrut_addr.place});
+            } else {
+              record_drop_in_place(to_operand(addr, fields[i]), fields[i],
+                                   span);
+            }
             continue;
           }
           const ir::RegisterIdx payload = enum_field_addr(
@@ -5166,6 +5182,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     const ir::BlockIdx matched = has_guard ? guard_blocks[i] : bodies[i];
     const bool saved_guard_arm = guard_arm_;
     guard_arm_ = has_guard;
+    guarded_discards_.clear();
     lower_arm_test(patterns[i], addr, scrut_type, matched, next);
     guard_arm_ = saved_guard_arm;
     if (failed) {
@@ -5191,6 +5208,13 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     // Arm testing always leaves lowering at the body block.
     switch_to(bodies[i]);
+    // A discard a guarded arm's pattern deferred lands at the commit: the
+    // guard's true edge is where the arm takes what it discards, and the
+    // false edge left the value whole for the next arm.
+    for (const Val& place : guarded_discards_) {
+      record_drop_in_place(place.op, place.type, node.span);
+    }
+    guarded_discards_.clear();
     Val produced = lower_expr(arm_bodies[i], expected);
     if (failed) {
       return Val{size_one, error_type(), false, false};
@@ -5237,7 +5261,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   // here, after the reads. A scrutinee read through a reference stays
   // its owner.
   if (!borrowed) {
-    emit_move_marker(addr);
+    emit_move_marker(addr, true);
   }
   if (has_slot) {
     return materialize(slot);

@@ -303,7 +303,7 @@ class Lowerer {
   // before the read that consumes it: a match's arms read the
   // payload, so its move has to land after them for the borrow pass
   // and before them for the drop walk.
-  void emit_move_marker(Val v);
+  void emit_move_marker(Val v, bool subsumes_parts = false);
   void record_move_event(Val v);
   // The same event, reported at the span of the construct that moved the
   // place rather than at the read that lowered last.
@@ -1040,6 +1040,10 @@ class Lowerer {
   // stays the owner to end, and a wildcard must not touch it.
   bool scrutinee_borrowed(ast::ExprIdx expr) const;
   bool arm_borrowed_ = false;
+  // The in-place ends a guarded arm's pattern deferred: a discard under
+  // a guard waits for the arm's commit, so a false guard leaves the
+  // value whole for the next arm to take.
+  std::vector<Val> guarded_discards_;
   // Whether the arm being tested carries a guard: a by-value binding of
   // a non-`Copy` value would be taken before the guard runs, and a
   // false guard falls through with it gone.
