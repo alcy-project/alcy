@@ -32,8 +32,13 @@ constexpr u32 NO_INST = 0xFFFFFFFFu;
 
 // Sentinel for the definition-site check's instantiation key: a
 // generic body checked once against its parameters records under this
-// key (ADR-0079), which no concrete check and no lowering reads.
+// key (ADR-0079), and a later pass keys on it to leave the body to the
+// specialization pass.
 constexpr u32 PARAM_INST = 0xFFFFFFFEu;
+
+// The compiler-owned wrapper that lets storage hold an uninitialized
+// value: its spelling is how the checker and the lowering recognize it.
+constexpr std::string_view MAYBE_UNINIT_NAME = "MaybeUninit";
 
 // Sentinel for an inherent method: `MethodInfo::spec` carries the
 // index of the implemented spec in the checker's spec table, and

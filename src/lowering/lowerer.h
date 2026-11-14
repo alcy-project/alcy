@@ -517,10 +517,8 @@ class Lowerer {
   ir::RegisterIdx clone_register(ir::RegisterIdx source,
                                  ir::TypeIdx type,
                                  CloneState& state);
-  // The function a generic item's body specializes to for `args`,
-  // cloned on first need.
-  // The clone of one parametric body under the type arguments a use
-  // settled, memoized by (body, arguments) (ADR-0079).
+  // The function a generic item's body specializes to for `args`, cloned
+  // on first need and memoized by (body, arguments) (ADR-0079).
   ir::FunctionIdx specialize_body(ir::FunctionIdx source,
                                   const std::vector<ir::TypeIdx>& args,
                                   diag::Span instantiation_span);
@@ -770,13 +768,11 @@ class Lowerer {
   Val lower_str_from_parts_intrinsic(ast::ExprIdx expr,
                                      const analyzer::CheckedModule::FnSig& sig,
                                      const std::vector<ir::TypeIdx>& type_args);
-  // An `extern "C"` call: the declaration names the symbol, arguments
-  // pass by value, and the opt-in was checked at the call site.
-  // The summary module that declares the item, or `U32_MAX` when none:
-  // a generic instantiation records its signature in the calling
-  // module, so the item's own module is what says a summary carries its
-  // body (ADR-0079).
-  u32 summary_module_of(ast::ItemIdx item) const;
+  // The summary module that declares the item, or nothing when none: a
+  // generic instantiation records its signature in the calling module,
+  // so the item's own module is what says a summary carries its body
+  // (ADR-0079).
+  std::optional<u32> summary_module_of(ast::ItemIdx item) const;
   // A call into a package a summary answers for: its code lives in the
   // dependency's own artifact, so the call names the symbol the
   // dependency's build wrote for it (ADR-0078). A method's receiver is
@@ -801,6 +797,8 @@ class Lowerer {
                          std::optional<Val> receiver,
                          const std::vector<ir::TypeIdx>& type_args,
                          const analyzer::SummarySymbol& entry);
+  // An `extern "C"` call: the declaration names the symbol, arguments
+  // pass by value, and the opt-in was checked at the call site.
   Val lower_extern_call(ast::ExprIdx expr,
                         const analyzer::CheckedModule::FnSig& sig);
   // Merges a summary dependency's storage into this build, once per

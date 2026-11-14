@@ -1358,10 +1358,10 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_intrinsic_call(
         expr, sig, fn_instance_args(target->module, target->index));
   }
-  const u32 summary = summary_module_of(sig.item);
-  if (summary != U32_MAX) {
+  const std::optional<u32> summary = summary_module_of(sig.item);
+  if (summary.has_value()) {
     return lower_summary_call(expr, sig.name, sig.params, sig.ret, sig.item,
-                              summary, call.args, std::nullopt,
+                              *summary, call.args, std::nullopt,
                               fn_instance_args(target->module, target->index));
   }
   if (sig.is_extern) {
@@ -1490,14 +1490,14 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   }
   const std::span<const ast::ExprIdx> args =
       call.payload.get<ast::ExprCall>().args;
-  const u32 summary = summary_module_of(info.item);
-  if (summary != U32_MAX) {
+  const std::optional<u32> summary = summary_module_of(info.item);
+  if (summary.has_value()) {
     std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
     for (const ir::TypeIdx arg : info.method_args) {
       type_args.push_back(arg);
     }
     return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
-                              summary, args, std::nullopt, type_args);
+                              *summary, args, std::nullopt, type_args);
   }
   if (!info.item.is_valid()) {
     // An associated function a bound names: the parametric form knows
@@ -3493,43 +3493,29 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
     if (failed) {
       return stopped_value();
     }
-    std::vector<ast::ExprIdx> borrowed_places;
-    if (can_write_through(tag_of(info.params[0])) &&
-        is_rooted_place(receiver_expr)) {
-      borrowed_places.push_back(receiver_expr);
-    }
-    for (usize i = 0; i < method_args.size(); ++i) {
-      if (can_write_through(tag_of(info.params[i + 1])) &&
-          is_rooted_place(method_args[i])) {
-        borrowed_places.push_back(method_args[i]);
-      }
-    }
-    std::vector<KeptValue> kept;
     std::vector<ir::OperandIdx> ops;
     ops.push_back(arg_for(receiver, info.params[0]));
-    for (usize i = 0; i < method_args.size(); ++i) {
-      Val arg = lower_kept_argument(method_args[i], info.params[i + 1],
-                                    borrowed_places, kept);
-      if (failed || terminated_cur()) {
-        return stopped_value();
-      }
-      ops.push_back(arg_for(arg, info.params[i + 1]));
-    }
-    if (check_kept_values(kept, borrowed_places)) {
-      failed = true;
+    const std::optional<ast::ExprIdx> receiver_place =
+        can_write_through(tag_of(info.params[0])) &&
+                is_rooted_place(receiver_expr)
+            ? std::optional<ast::ExprIdx>(receiver_expr)
+            : std::nullopt;
+    if (!lower_call_arguments(
+            method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
+            {}, receiver_place, ops)) {
       return stopped_value();
     }
     return emit_parametric_call(ops, info.params, info.ret, callee,
                                 method.span);
   }
-  const u32 summary = summary_module_of(info.item);
-  if (summary != U32_MAX) {
+  const std::optional<u32> summary = summary_module_of(info.item);
+  if (summary.has_value()) {
     std::vector<ir::TypeIdx> type_args = receiver_type_args(info.self_type);
     for (const ir::TypeIdx arg : info.method_args) {
       type_args.push_back(arg);
     }
     return lower_summary_call(expr, info.name, info.params, info.ret, info.item,
-                              summary, method_args, receiver, type_args);
+                              *summary, method_args, receiver, type_args);
   }
   const std::vector<u32> comp = comp_positions(info.item);
   if (!comp.empty() && comp[0] == 0) {

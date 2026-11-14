@@ -105,7 +105,7 @@ void Checker::register_nominals() {
       bool duplicate = find_nominal(m, name) != nullptr;
       const bool staged = tree.modules[m]->is_staged;
       if (!duplicate &&
-          (name == "MaybeUninit" || (name == "Anchor" && !staged))) {
+          (name == MAYBE_UNINIT_NAME || (name == "Anchor" && !staged))) {
         // The wrapper is compiler-owned; a declaration under the same
         // name would make the spelling resolve two ways.
         const u32 index = bag.emit<i18n::Key::AnalyzerBuiltinType>(
@@ -1250,7 +1250,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
           (void)index;
           return error_type();
         }
-        if (name == "MaybeUninit") {
+        if (name == MAYBE_UNINIT_NAME) {
           const auto& args = node.payload.get<ast::TypePath>().args;
           if (args.size() != 1) {
             const u32 index = bag.emit<i18n::Key::AnalyzerMaybeUninitArity>(
@@ -3640,7 +3640,7 @@ Checker::DeclaredBinding Checker::declared_binding(
   }
   const ast::TypePath& type_path = declared.payload.get<ast::TypePath>();
   const ast::Path& path = ast.paths[type_path.path];
-  if (path.segments.size() == 1 && path.segments[0].name == "MaybeUninit" &&
+  if (path.segments.size() == 1 && path.segments[0].name == MAYBE_UNINIT_NAME &&
       type_path.args.size() == 1) {
     // `MaybeUninit<T>` pins `T` from the wrapper's payload.
     const DeclaredBinding inner =
@@ -4942,7 +4942,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   Checker checker{tree,    width,   ast,
                   bag,     strings, std::span<const StdHint>(usable_hints),
                   profiler};
-  checker.uninit_name_id = checker.intern_name("MaybeUninit");
+  checker.uninit_name_id = checker.intern_name(MAYBE_UNINIT_NAME);
   if (checker.uninit_name_id == str::INVALID_STRING_POOL_ID) {
     return base::make_err(diag::Reported{});
   }

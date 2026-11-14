@@ -277,7 +277,7 @@ void Lowerer::complete_traits() {
         case ir::TypeTag::Struct: {
           const ir::StructType& shape =
               builder.state().struct_types[node.as_struct()];
-          if (strings.get(shape.name) == "MaybeUninit") {
+          if (strings.get(shape.name) == analyzer::MAYBE_UNINIT_NAME) {
             for (const ir::TypeIdx field : shape.fields) {
               absorb(field, false);
             }
@@ -724,13 +724,12 @@ bool Lowerer::runs_destructor(ir::TypeIdx type) const {
 }
 
 bool Lowerer::may_end(ir::TypeIdx type) const {
-  return runs_destructor(type) ||
-         lowering::type_names_param(builder.state(), type);
+  return lowering::may_end(pkg.needs_drop, builder, type_origins_, type);
 }
 
-u32 Lowerer::summary_module_of(ast::ItemIdx item) const {
+std::optional<u32> Lowerer::summary_module_of(ast::ItemIdx item) const {
   if (!item.is_valid()) {
-    return U32_MAX;
+    return std::nullopt;
   }
   for (u32 m = 0; m < static_cast<u32>(pkg.tree.modules.size()); ++m) {
     const analyzer::ModuleNode& module = *pkg.tree.modules[m];
@@ -754,7 +753,7 @@ u32 Lowerer::summary_module_of(ast::ItemIdx item) const {
       }
     }
   }
-  return U32_MAX;
+  return std::nullopt;
 }
 
 void Lowerer::merge_summary_module(u32 module) {
