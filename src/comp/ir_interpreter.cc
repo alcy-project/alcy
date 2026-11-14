@@ -3,6 +3,7 @@
 
 #include "comp/ir_interpreter.h"
 
+#include <algorithm>
 #include <cstring>
 #include <optional>
 #include <span>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "comp/comp_value.h"
+#include "debug/dcheck.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -110,6 +112,9 @@ class Interpreter {
   bool fail(IrRunError::Kind kind,
             ir::InstructionIdx instr,
             std::string_view what) {
+    if (kind == IrRunError::Kind::Unsupported) {
+      DCHECK(declared_refusal(what));
+    }
     if (!error_.has_value()) {
       error_ = IrRunError{kind, instr, what};
     }
@@ -1424,6 +1429,10 @@ base::Result<CompVal, IrRunError> interpret_function(
     u32& depth) {
   Interpreter interpreter(storage, strings, width, quota, depth);
   return interpreter.run(function, args);
+}
+
+std::span<const std::string_view> unsupported_refusals() {
+  return UNSUPPORTED_REFUSALS;
 }
 
 }  // namespace comp

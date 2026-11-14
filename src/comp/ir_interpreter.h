@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <span>
 #include <string_view>
 
@@ -60,6 +61,65 @@ inline constexpr u64 COMP_BRANCH_QUOTA = 1'000'000;
 // Recursion beyond this depth is refused before it can exhaust the
 // machine stack, which the quota alone would not prevent.
 inline constexpr u32 COMP_MAX_CALL_DEPTH = 64;
+
+// Every wording a refusal (`IrRunError::Kind::Unsupported`) can carry,
+// declared in one place. What the engine does not carry is a decision
+// (ADR-0054), so a case that refuses points at a wording this list owns,
+// and a debug build refuses to report one the list does not declare.
+inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
+    "aggregate argument in comp evaluation",
+    "aggregate extraction in comp evaluation",
+    "aggregate insertion in comp evaluation",
+    "aggregate load in comp evaluation",
+    "aggregate result in comp evaluation",
+    "aggregate store in comp evaluation",
+    "aggregate value in comp evaluation",
+    "allocation in comp evaluation",
+    "arithmetic on a non-integer in comp evaluation",
+    "atomic operation in comp evaluation",
+    "bit reverse on a non-integer in comp evaluation",
+    "bitwise not on a non-integer in comp evaluation",
+    "call to a function that is not lowered yet",
+    "call to a runtime function in comp evaluation",
+    "call to panic in comp evaluation",
+    "call to print in comp evaluation",
+    "cast between a reference and an integer in comp evaluation",
+    "cast between these types in comp evaluation",
+    "cast of a fat reference in comp evaluation",
+    "comp argument is not an integer",
+    "comparison of a non-integer in comp evaluation",
+    "deallocation in comp evaluation",
+    "division by zero in comp evaluation",
+    "element offset in comp evaluation",
+    "fat reference load in comp evaluation",
+    "fat reference store in comp evaluation",
+    "fence in comp evaluation",
+    "float argument in comp evaluation",
+    "float arithmetic in comp evaluation",
+    "float cast in comp evaluation",
+    "float comparison in comp evaluation",
+    "float load in comp evaluation",
+    "float result in comp evaluation",
+    "float store in comp evaluation",
+    "float value in comp evaluation",
+    "function that is not lowered yet",
+    "getelementptr through a non-aggregate in comp evaluation",
+    "indirect call in comp evaluation",
+    "non-integer constant in comp evaluation",
+    "ordering of references in comp evaluation",
+    "reference argument in comp evaluation",
+    "reference result in comp evaluation",
+    "switch in comp evaluation",
+    "type query in comp evaluation",
+};
+
+inline bool declared_refusal(std::string_view what) {
+  return std::find(std::begin(UNSUPPORTED_REFUSALS),
+                   std::end(UNSUPPORTED_REFUSALS),
+                   what) != std::end(UNSUPPORTED_REFUSALS);
+}
+
+std::span<const std::string_view> unsupported_refusals();
 
 // Runs `function` with `args` bound to its entry parameters. `quota`
 // and `depth` are the run's budget, spent in place: a caller seeds them
