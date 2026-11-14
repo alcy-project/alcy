@@ -167,6 +167,13 @@ def main() -> int:
     # rather than a corpus it reads.
     tool("check_stdlib_tests.py", f"--build-subdir={debug_subdir}")
 
+    # The second engine (ADR-0054) over the acceptance corpus: every case
+    # that compiles is evaluated function by function, and a construct
+    # the lowering emits that the engine refuses without declaring it
+    # fails here. The refusal declarations are checked in a debug build,
+    # so the census reads the debug binary.
+    tool("check_eval.py", f"--build-subdir={debug_subdir}")
+
     # The formatter's own check, over every source rather than a sample:
     # the tree is what it would write, formatting formatted output
     # changes nothing, and the compiler's verdict about a file survives
