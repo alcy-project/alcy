@@ -1147,10 +1147,10 @@ TEST_CASE("A summary carries a generic body the dependent instantiates") {
     const std::string exe =
         dir.join("proj/out/app" + std::string(exe_suffix()));
     CHECK(io::is_file(exe));
-    base::Result<i32, SpawnError> ran = run_command({exe});
+    base::Result<SpawnOutcome, SpawnError> ran = run_command({exe});
     CHECK(ran.is_ok());
     if (ran.is_ok()) {
-      CHECK(std::move(ran).unwrap() == 0);
+      CHECK(std::move(ran).unwrap().code == 0);
     }
   }
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)
@@ -1271,10 +1271,10 @@ TEST_CASE("A summary's generic declaration and impl cross whole") {
     const std::string exe =
         dir.join("proj/out/app" + std::string(exe_suffix()));
     CHECK(io::is_file(exe));
-    base::Result<i32, SpawnError> ran = run_command({exe});
+    base::Result<SpawnOutcome, SpawnError> ran = run_command({exe});
     CHECK(ran.is_ok());
     if (ran.is_ok()) {
-      CHECK(std::move(ran).unwrap() == 0);
+      CHECK(std::move(ran).unwrap().code == 0);
     }
   }
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)
@@ -1384,10 +1384,10 @@ TEST_CASE("Two libraries that reach one std function link into one image") {
     const std::string exe =
         dir.join("proj/out/app" + std::string(exe_suffix()));
     CHECK(io::is_file(exe));
-    base::Result<i32, SpawnError> ran = run_command({exe});
+    base::Result<SpawnOutcome, SpawnError> ran = run_command({exe});
     CHECK(ran.is_ok());
     if (ran.is_ok()) {
-      CHECK(std::move(ran).unwrap() == 0);
+      CHECK(std::move(ran).unwrap().code == 0);
     }
   }
 }
