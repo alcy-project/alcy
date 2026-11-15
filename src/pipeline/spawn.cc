@@ -19,10 +19,10 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #if BUILD_FLAG(IS_OS_APPLE)
 #include <crt_externs.h>
 #else
-#include <unistd.h>
 extern char** environ;
 #endif
 #endif
