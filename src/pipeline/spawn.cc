@@ -90,7 +90,7 @@ base::Result<SpawnOutcome, SpawnError> finish_wait(HANDLE process) {
                                     .signaled = code >= 0xC0000000u});
 }
 
-#else
+#elif !BUILD_FLAG(IS_OS_ASMJS)
 
 std::vector<char*> child_argv(const std::vector<std::string>& argv) {
   std::vector<char*> args;
