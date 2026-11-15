@@ -611,6 +611,32 @@ bool Lowerer::place_of_register(u32 reg,
   }
   const ir::Instruction& instr =
       state.instrs[state.registers[ir::RegisterIdx(reg)].def_idx];
+  // An enum payload is a constant variant and field from the place it
+  // sits in; the path names both so a payload binding's move event can
+  // point at it.
+  if (instr.op == ir::Opcode::EnumFieldAddr && instr.operands.size() == 3) {
+    const ir::Operand& base = state.operands[instr.operands.head()];
+    const ir::Operand& variant =
+        state.operands[ir::OperandIdx(instr.operands.head().idx + 1)];
+    const ir::Operand& field =
+        state.operands[ir::OperandIdx(instr.operands.head().idx + 2)];
+    if (!base.is<ir::RegisterIdx>() || !variant.is<ir::ImmutableIdx>() ||
+        !field.is<ir::ImmutableIdx>()) {
+      return false;
+    }
+    const ir::Immutable& v_slot = state.immutables[variant.as_immutable()];
+    const ir::Immutable& f_slot = state.immutables[field.as_immutable()];
+    if (tag_of(v_slot.type) != ir::TypeTag::I32 ||
+        tag_of(f_slot.type) != ir::TypeTag::I32) {
+      return false;
+    }
+    if (!place_of_register(base.as_register().idx, local_out, path)) {
+      return false;
+    }
+    path.push_back(static_cast<u32>(v_slot.data.i32_value));
+    path.push_back(static_cast<u32>(f_slot.data.i32_value));
+    return true;
+  }
   // A field or tuple slot is a constant-index GEP from the place it sits
   // in; anything else (a dynamic index, a load) names no tracked path.
   if (instr.op != ir::Opcode::GetElementPtr || instr.operands.size() != 3) {

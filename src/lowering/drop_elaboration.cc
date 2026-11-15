@@ -1093,15 +1093,19 @@ void DropElaborator::run() {
             continue;
           }
           // The address carries the field's own type; the offsets are
-          // the backend's (ADR-0087).
+          // the backend's (ADR-0087). The payload's place is the shell's
+          // path with the variant and the field on it, so an end consults
+          // the state the journal recorded for that payload.
+          std::vector<u32> payload_path = path;
+          payload_path.push_back(v);
+          payload_path.push_back(fi);
           const ir::RegisterIdx field_addr =
               pass_emit(seq_of(out), ir::Opcode::EnumFieldAddr, field,
                         {place, imm_from_u64(ir::TypeTag::I32, i32_ty, v),
                          index_operand(fi)},
                         span);
-          emit_end(
-              out, local, path, field, to_operand(field_addr, field),
-              [](const std::vector<u32>&) { return State::Owned; }, span);
+          emit_end(out, local, payload_path, field,
+                   to_operand(field_addr, field), state_of, span);
         }
         pass_emit_void(seq_of(out), ir::Opcode::Br,
                        {builder.operand(ir::Operand::from_block(
