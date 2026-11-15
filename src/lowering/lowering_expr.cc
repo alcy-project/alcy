@@ -6163,7 +6163,9 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
   }
 }
 
-Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
+Val Lowerer::lower_block(ast::BlockIdx block,
+                         const ir::TypeIdx* expected,
+                         bool scope_record) {
   if (nesting_.exhausted()) {
     report_nesting(ast.blocks[block].span);
     failed = true;
@@ -6242,7 +6244,7 @@ Val Lowerer::lower_block(ast::BlockIdx block, const ir::TypeIdx* expected) {
     if (node.value.is_valid()) {
       value = lower_expr(node.value, expected);
     }
-    if (!failed && !terminated_cur()) {
+    if (!failed && !terminated_cur() && scope_record) {
       record_end(mark, node.span);
     }
   } else if (!reachable && node.value.is_valid()) {

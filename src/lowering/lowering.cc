@@ -2030,7 +2030,10 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   if (failed) {
     return;
   }
-  Val body = lower_block(fn.body, nullptr);
+  // The function's own scope exit ends everything the body's block
+  // declares, so the block's scope exit would place the same ends twice
+  // at the same position.
+  Val body = lower_block(fn.body, nullptr, /*scope_record=*/false);
   if (failed) {
     return;
   }

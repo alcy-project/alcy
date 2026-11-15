@@ -1231,7 +1231,9 @@ class Lowerer {
   Val lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_literal_zero(ir::TypeIdx type, diag::Span span);
   void lower_stmt(ast::StmtIdx stmt);
-  Val lower_block(ast::BlockIdx block, const ir::TypeIdx* expected);
+  Val lower_block(ast::BlockIdx block,
+                  const ir::TypeIdx* expected,
+                  bool scope_record = true);
   std::vector<OwnershipEvent> ownership_;
   std::vector<EndSite> end_sites_;
   u32 record_seq_ = 0;
