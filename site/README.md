@@ -98,8 +98,12 @@ nowhere earlier.
   route, never in the shell.
 - **Sizes are budgeted.** `site.py budget` holds the pages, the shell,
   the catalogs, and the guide's two modules to byte counts, and `build`
-  runs the same check. The numbers are raw bytes, so they do not drift
-  with what a proxy chooses to compress.
+  runs the same check. The numbers are the bytes a reader downloads,
+  gzipped the way the server sends them, so they do not drift with what
+  a proxy chooses. A CI run publishes the table to its step summary. The
+  compiler module is the exception: its size belongs to the compiler, so
+  it is held to a ceiling that catches a change in its size class rather
+  than a ratchet that trips on every compiler feature.
 - **One catalog per tree, one copy of the assets.** `i18n.ts` is the
   source; the build writes `i18n.<lang>.js` and stamps each tree's
   modules to import its own, so a page never carries the other

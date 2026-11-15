@@ -156,9 +156,11 @@ jobs:
 
       # `build` holds the budgets itself, but a named step reports a
       # regression as a weight failure rather than as an assembly one.
+      # `--format=markdown` puts the table on stdout for the run's summary,
+      # while the per-asset log stays on stderr.
       - name: Hold the Weight Budgets
         shell: bash
-        run: uv run ./tools/site.py budget
+        run: uv run ./tools/site.py budget --format=markdown >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the Site
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9

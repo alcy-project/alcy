@@ -157,18 +157,26 @@ GUIDE_COPY_BUDGET = 3_000
 # can decline by not pressing the button.
 GUIDE_EDIT_BUDGET = 3_000
 
-# The heaviest files the playground can fetch, though only on demand:
-# `tree-sitter-alcy` for the editor's colors and the compiler for Check
-# and Run. The compiler's module is the one number on the site that
-# matters most, so it is budgeted rather than watched.
+# The heaviest files the playground can fetch on demand: `tree-sitter-alcy`
+# for the editor's colors, and the binding that loads it. A page that is only
+# read fetches neither.
 ASSET_BUDGETS = (
-    Budget(
-        "playground/compiler/alcy_playground.wasm",
-        620_000,
-        "the compiler module, compressed",
-    ),
     Budget("playground/grammar/tree-sitter-alcy.wasm", 64_000, "the grammar"),
     Budget("playground/vendor/web-tree-sitter.js", 40_000, "the binding"),
+)
+
+# The compiler module is a ceiling, not a ratchet. Its size belongs to the
+# compiler: it grows with the language, and a ratchet would make every compiler
+# feature trip a job that has nothing to say about it. What the site owes the
+# reader is that the module stays in its size class, so the number sits where
+# the module would have to change by a large factor to cross it. It catches an
+# LLVM-linked module in a build that carries no LLVM, a debug module shipped by
+# mistake, and a dependency that arrives with more than the compiler. The
+# reader pays for it once, on the first Check or Run, and the worker keeps it.
+COMPILER_MODULE_CEILING = Budget(
+    "playground/compiler/alcy_playground.wasm",
+    1_000_000,
+    "the compiler module, compressed",
 )
 
 
@@ -184,34 +192,67 @@ def measured(path: Path) -> int:
         return len(gzip.compress(handle.read(), 9))
 
 
-def check_budget(dist_dir: Path, budget: Budget, errors: list[str]) -> None:
+@dataclass(frozen=True)
+class Weighing:
+    path: str
+    size: int
+    budget: int
+
+
+def weigh(dist_dir: Path, budget: Budget, errors: list[str]) -> Weighing | None:
     path = dist_dir / budget.path
     if not path.is_file():
         errors.append(f"{budget.path}: missing ({budget.note})")
-        return
+        return None
     size = measured(path)
-    log(f"budget: {budget.path} {size} / {budget.bytes}")
     if size > budget.bytes:
         errors.append(
             f"{budget.path}: {size} bytes is over the {budget.bytes} budget "
             f"({budget.note})"
         )
+    return Weighing(budget.path, size, budget.bytes)
 
 
-def check_guide_scripts(dist_dir: Path, errors: list[str]) -> None:
+def weigh_guide_scripts(dist_dir: Path, errors: list[str]) -> list[Weighing]:
     """Holds both halves of the guide's script to their budgets."""
+    rows: list[Weighing] = []
     for path, budget, note in (
         ("guide-copy.js", GUIDE_COPY_BUDGET, "every code page's buttons"),
         ("guide-run.js", GUIDE_SCRIPT_BUDGET, "a runnable block's Run"),
         ("guide-edit.js", GUIDE_EDIT_BUDGET, "the editor, fetched on first Edit"),
     ):
         compressed = measured(dist_dir / "shared" / path)
-        log(f"budget: shared/{path} {compressed} / {budget}")
         if compressed > budget:
             errors.append(
                 f"shared/{path}: {compressed} bytes is over the {budget} "
                 f"budget ({note})"
             )
+        rows.append(Weighing(f"shared/{path}", compressed, budget))
+    return rows
+
+
+def measure_budgets(dist_dir: Path, errors: list[str]) -> list[Weighing]:
+    """Measures every budget, recording the ones past their number."""
+    weighed = (
+        weigh(dist_dir, budget, errors)
+        for budget in PAGE_BUDGETS + ASSET_BUDGETS + (COMPILER_MODULE_CEILING,)
+    )
+    rows = [row for row in weighed if row is not None]
+    return rows + weigh_guide_scripts(dist_dir, errors)
+
+
+def log_weights(rows: list[Weighing], stream: io.TextIOBase | None = None) -> None:
+    destination = sys.stdout if stream is None else stream
+    for row in rows:
+        print(f"site: budget: {row.path} {row.size} / {row.budget}", file=destination)
+
+
+def budget_markdown(rows: list[Weighing]) -> str:
+    """The weights as the table a step summary renders."""
+    lines = ["### Site weight", "", "| Asset | Size | Budget |", "| :-- | --: | --: |"]
+    for row in rows:
+        lines.append(f"| `{row.path}` | {row.size:,} | {row.budget:,} |")
+    return "\n".join(lines)
 
 
 def command_budget(args: argparse.Namespace) -> int:
@@ -219,14 +260,20 @@ def command_budget(args: argparse.Namespace) -> int:
     if not (dist_dir / "index.html").is_file():
         return fail(f"{dist_dir} has no index.html; run `site.py build` first")
     errors: list[str] = []
-    for budget in PAGE_BUDGETS + ASSET_BUDGETS:
-        check_budget(dist_dir, budget, errors)
-    check_guide_scripts(dist_dir, errors)
+    rows = measure_budgets(dist_dir, errors)
+    if args.format == "markdown":
+        # The table is what this command prints, so a workflow can send it
+        # wherever the run keeps its summary; the log stays on stderr.
+        log_weights(rows, sys.stderr)
+        print(budget_markdown(rows))
+    else:
+        log_weights(rows)
     if errors:
         for message in errors:
             print(f"site: {message}", file=sys.stderr)
         return 1
-    log("budgets held")
+    if args.format == "text":
+        log("budgets held")
     return 0
 
 
@@ -750,9 +797,7 @@ def command_build(args: argparse.Namespace) -> int:
     check_page_catalogs(dist_dir)
 
     errors: list[str] = []
-    for budget in PAGE_BUDGETS + ASSET_BUDGETS:
-        check_budget(dist_dir, budget, errors)
-    check_guide_scripts(dist_dir, errors)
+    log_weights(measure_budgets(dist_dir, errors))
     if errors:
         for message in errors:
             print(f"site: {message}", file=sys.stderr)
@@ -893,6 +938,12 @@ def main() -> int:
         "budget", help="check the assembled site against its weight budgets"
     )
     budget_parser.add_argument("--dist", type=Path, default=DEFAULT_DIST_DIR)
+    budget_parser.add_argument(
+        "--format",
+        choices=("text", "markdown"),
+        default="text",
+        help="text logs the weights; markdown prints the table for a summary",
+    )
     budget_parser.set_defaults(handler=command_budget)
 
     serve_parser = subparsers.add_parser("serve", help="serve the assembled site")
