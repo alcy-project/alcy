@@ -370,6 +370,6 @@ jobs:
   summary:
     needs: [changes, debug, release, wasm-debug, wasm-release]
     if: always() && needs.changes.outputs.code == 'true'
-    uses: ./.github/workflows/generate-summary.yaml
+    uses: ./.github/workflows/artifacts-summary.yaml
     with:
       artifact_pattern: "*"

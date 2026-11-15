@@ -1,10 +1,10 @@
-name: Generate Summary
+name: Artifacts Summary
 
 on:
   workflow_call:
     inputs:
       artifact_pattern:
-        description: "Pattern to match checksum artifact names"
+        description: "Pattern to match artifact names"
         type: string
         required: false
         default: "*"
@@ -14,11 +14,11 @@ permissions:
 
 jobs:
   summary:
-    name: Generate Summary
+    name: Artifacts Summary
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Download All Checksum Artifacts
+      - name: Download All Artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: ${{ inputs.artifact_pattern }}
@@ -27,22 +27,23 @@ jobs:
 
       - name: Write Summary
         run: |
-          echo "### 📦 Build Artifacts & SHA-256 Checksums" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           shopt -s nullglob
           files=(*.sha256)
 
           if [ ${#files[@]} -eq 0 ]; then
-            echo "⚠️ No checksum artifacts were generated." >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No artifacts were generated." >> $GITHUB_STEP_SUMMARY
             exit 0
           fi
 
-          echo "| Filename | SHA-256 Checksum |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact | Size | SHA-256 Checksum |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | ---: | :--- |" >> $GITHUB_STEP_SUMMARY
 
           for f in "${files[@]}"; do
             HASH=$(awk '{print $1}' "$f")
             FILENAME="${f%.sha256}"
-            echo "| \`$FILENAME\` | \`$HASH\` |" >> $GITHUB_STEP_SUMMARY
+            SIZE=$(stat -c%s "$FILENAME" 2>/dev/null || echo "-")
+            echo "| \`$FILENAME\` | $SIZE | \`$HASH\` |" >> $GITHUB_STEP_SUMMARY
           done
