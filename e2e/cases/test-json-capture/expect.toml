@@ -2,5 +2,8 @@ exit = 0
 subcommand = "test"
 args = ["--json"]
 # The document is the only thing on standard output: the test's own bytes
-# are captured and counted rather than written through it.
-contains = ['"output_bytes":18', '"outcome":"tested"']
+# are captured and counted rather than written through it. The test writes
+# no newline, which a Windows pipe would turn into two bytes, so the count
+# is the same on every host.
+contains = ['"output_bytes":17', '"outcome":"tested"']
+not_contains = ["hello from a test"]

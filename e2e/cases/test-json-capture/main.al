@@ -1,4 +1,4 @@
-use io::print::println;
+use io::print::print;
 
 fn main() -> i32 {
   ret 0
@@ -6,6 +6,6 @@ fn main() -> i32 {
 
 test {
   test prints() {
-    println("hello from a test")
+    print("hello from a test")
   }
 }
