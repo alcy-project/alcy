@@ -6,6 +6,7 @@
 #include <functional>
 #include <initializer_list>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -344,10 +345,51 @@ class Lowerer {
     ast::ExprIdx expr;
     ir::TypeIdx type;
     usize sources_from;
+    // The callee and the parameter position the argument lands in: the
+    // kept-value check reads the callee's disposition for it.
+    ast::ItemIdx callee;
+    u32 param_index;
     // The callee borrows this argument for the call instead of taking
     // ownership of it.
     bool borrowed_parameter;
   };
+  // One place a call hands a view argument to a user function, held until
+  // the callee's kept-parameter summary is known (ADR-0135).
+  struct KeptCheck {
+    ast::ItemIdx callee;
+    u32 param_index;
+    ir::TypeIdx type;
+    diag::Span span;
+    // The destination local and the argument's loan sources, captured
+    // where the check ran so the deferred pass needs no per-function
+    // state.
+    u32 target_index;
+    std::vector<std::pair<u32, std::string>> sources;
+  };
+  // A call through which a parameter's view reaches a caller-owned place:
+  // if the callee keeps its parameter, so does this function.
+  struct KeptEdge {
+    u32 callee_item;
+    u32 callee_param;
+    u32 caller_item;
+    u32 caller_param;
+  };
+  // The function being lowered and which parameter each of its parameter
+  // slots came from, so a call can tell that an argument names a
+  // parameter of the body (ADR-0135's kept disposition).
+  ast::ItemIdx cur_item_ = ast::ItemIdx::invalid();
+  std::unordered_map<u32, u32> param_of_local_;
+  // The files of the staged prelude's modules: an item declared there is
+  // the library's, whatever instantiation it was recorded under.
+  std::unordered_set<u32> staged_files_;
+  // Which parameters each function's body keeps, and the calls through
+  // which one function's keep implies another's. The fixpoint over the
+  // edges runs once every body has been lowered.
+  std::unordered_map<u32, std::set<u32>> kept_params_;
+  std::vector<KeptEdge> keep_edges_;
+  // Call sites that handed a view to a user function: resolved once the
+  // summaries settle.
+  std::vector<KeptCheck> pending_kept_checks_;
   // Lowers one argument a call may keep, in the callee's parameter
   // type: the places it lends to the callee and the loans the value
   // carries are recorded for the kept-value check, which asks that the
@@ -435,6 +477,19 @@ class Lowerer {
   // call. A type parameter accepts a value into storage the callee owns,
   // so the type it instantiates to does not decide this.
   bool declares_borrow(ast::ItemIdx item, usize index, ir::TypeIdx param) const;
+  // Whether the callee belongs to the staged prelude.
+  bool item_is_staged(ast::ItemIdx item) const;
+  // Whether the callee's body stores the parameter's view where it
+  // outlives the call. Staged callees answer from their declaration; a
+  // user callee from the fixed-point summary.
+  bool keeps_parameter(ast::ItemIdx item, usize index, ir::TypeIdx param) const;
+  // Finds the parameter of the body being lowered that `expr` names.
+  bool parameter_of(ast::ExprIdx expr, u32& out) const;
+  // Records the keep edges a call site implies.
+  void record_keep_edges(const std::vector<KeptValue>& values,
+                         const std::vector<ast::ExprIdx>& borrowed_places);
+  // Resolves the deferred checks after every body has been lowered.
+  void finish_kept_checks();
   static void comp_key_into(std::string& key, const CompValue& value);
   // The identity of one specialization: the declaration, the type
   // arguments it clones under. It is written into `key` so a caller can

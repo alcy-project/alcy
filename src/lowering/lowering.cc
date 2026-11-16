@@ -1174,17 +1174,42 @@ bool Lowerer::check_kept_values(
     return false;
   }
   for (const KeptValue& value : values) {
-    // A parameter written as a view or a reference is borrowed for the
-    // call, so what it hands over is a pointee rather than a place of
-    // the callee's.
-    if (value.borrowed_parameter) {
-      continue;
-    }
     bool is_place = false;
     for (ast::ExprIdx place : borrowed_places) {
       is_place = is_place || place == value.expr;
     }
     if (is_place) {
+      continue;
+    }
+    // A parameter written as a view or a reference is borrowed for the
+    // call, so what it hands over is a pointee rather than a place of
+    // the callee's. A user callee's view parameter may still be stored
+    // where it outlives the call, which the callee's body settles; that
+    // check waits for every body to have been lowered.
+    if (value.borrowed_parameter) {
+      if (value.callee.is_valid() && !item_is_staged(value.callee) &&
+          carries_borrow(value.type)) {
+        std::vector<std::pair<u32, std::string>> sources;
+        for (usize i = value.sources_from; i < borrow_sources.size(); ++i) {
+          const u32 source = borrow_sources[i];
+          if (source >= locals.size()) {
+            continue;
+          }
+          sources.emplace_back(source, std::string(locals[source].name));
+        }
+        if (!sources.empty()) {
+          for (ast::ExprIdx place : borrowed_places) {
+            const Local* target = rooted_local(place);
+            if (target == nullptr) {
+              continue;
+            }
+            pending_kept_checks_.push_back(
+                KeptCheck{value.callee, value.param_index, value.type,
+                          ast.exprs[value.expr].span,
+                          static_cast<u32>(target - locals.data()), sources});
+          }
+        }
+      }
       continue;
     }
     for (ast::ExprIdx place : borrowed_places) {
@@ -1321,6 +1346,115 @@ bool Lowerer::declares_borrow(ast::ItemIdx item,
   // type, names the shape its parameter takes directly.
   const ir::TypeTag tag = tag_of(param);
   return is_ref_tag(tag) || tag == ir::TypeTag::Str;
+}
+
+bool Lowerer::item_is_staged(ast::ItemIdx item) const {
+  if (!item.is_valid()) {
+    return false;
+  }
+  return staged_files_.contains(static_cast<u32>(ast.items[item].span.file));
+}
+
+bool Lowerer::keeps_parameter(ast::ItemIdx item,
+                              usize index,
+                              ir::TypeIdx param) const {
+  if (item_is_staged(item)) {
+    // The library's own declarations decide: a str parameter it reads
+    // or copies is not kept, a type parameter it stores by value is.
+    return !declares_borrow(item, index, param);
+  }
+  const auto found = kept_params_.find(item.idx);
+  return found != kept_params_.end() &&
+         found->second.count(static_cast<u32>(index)) != 0;
+}
+
+bool Lowerer::parameter_of(ast::ExprIdx expr, u32& out) const {
+  const Local* local = rooted_local(expr);
+  if (local == nullptr || !local->is_param) {
+    return false;
+  }
+  const auto found =
+      param_of_local_.find(static_cast<u32>(local - locals.data()));
+  if (found == param_of_local_.end()) {
+    return false;
+  }
+  out = found->second;
+  return true;
+}
+
+void Lowerer::record_keep_edges(
+    const std::vector<KeptValue>& values,
+    const std::vector<ast::ExprIdx>& borrowed_places) {
+  if (!cur_item_.is_valid()) {
+    return;
+  }
+  // The store outlives the call only where the callee writes into the
+  // caller's storage, which a parameter-rooted place is.
+  bool destination_escapes = false;
+  for (ast::ExprIdx place : borrowed_places) {
+    u32 ignored = 0;
+    destination_escapes = destination_escapes || parameter_of(place, ignored);
+  }
+  if (!destination_escapes) {
+    return;
+  }
+  for (const KeptValue& value : values) {
+    if (!carries_borrow(value.type)) {
+      continue;
+    }
+    u32 caller_param = 0;
+    if (!parameter_of(value.expr, caller_param)) {
+      continue;
+    }
+    if (item_is_staged(value.callee)) {
+      if (!declares_borrow(value.callee, value.param_index, value.type)) {
+        kept_params_[cur_item_.idx].insert(caller_param);
+      }
+    } else if (value.callee.is_valid()) {
+      keep_edges_.push_back(
+          {value.callee.idx, value.param_index, cur_item_.idx, caller_param});
+    }
+  }
+}
+
+void Lowerer::finish_kept_checks() {
+  // A call into a user function may keep its argument; the callee's own
+  // body is what settles it, and a keep propagates through every call
+  // that stores it into caller-owned storage.
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (const KeptEdge& edge : keep_edges_) {
+      const auto found = kept_params_.find(edge.callee_item);
+      if (found == kept_params_.end() ||
+          found->second.count(edge.callee_param) == 0) {
+        continue;
+      }
+      if (kept_params_[edge.caller_item].insert(edge.caller_param).second) {
+        changed = true;
+      }
+    }
+  }
+  for (const KeptCheck& check : pending_kept_checks_) {
+    if (!keeps_parameter(check.callee, check.param_index, check.type)) {
+      continue;
+    }
+    for (const auto& entry : check.sources) {
+      if (entry.first <= check.target_index) {
+        continue;
+      }
+      if (entry.second.empty()) {
+        bag.emit<i18n::Key::LowerTemporaryReferenceEscapes>(
+            DiagCode::TemporaryReferenceEscapes, check.span);
+      } else {
+        bag.emit<i18n::Key::LowerBlockReferenceEscapes>(
+            DiagCode::BlockReferenceEscapes, check.span, entry.second);
+      }
+      break;
+    }
+  }
+  pending_kept_checks_.clear();
+  keep_edges_.clear();
 }
 
 void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
@@ -1955,6 +2089,8 @@ void Lowerer::begin_body() {
   break_targets_.clear();
   continue_targets_.clear();
   pending_params_.clear();
+  cur_item_ = ast::ItemIdx::invalid();
+  param_of_local_.clear();
 }
 
 void Lowerer::lower_fn(const FnEntry& entry) {
@@ -1966,6 +2102,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   module = mod;
   cur_inst_ = entry.inst;
   begin_body();
+  cur_item_ = entry.item;
 
   const ast::ItemNode& item = ast.items[entry.item];
   const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
@@ -2043,6 +2180,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
     // return that ends the frame (ADR-0135).
     for (usize slot = params_at; slot < locals.size(); ++slot) {
       locals[slot].is_param = true;
+      param_of_local_[static_cast<u32>(slot)] = static_cast<u32>(i);
     }
   }
   pending_params_.clear();
@@ -2411,6 +2549,22 @@ bool Lowerer::Fmt::emit_scalar_display(diag::Span span,
 
 void Lowerer::run() {
   block_next_ = static_cast<u32>(builder.state().blocks.size());
+  // The staged modules' files name the library's declarations: a
+  // synthesized instantiation carries its declaration's span, so the
+  // file is what tells a library item from the program's.
+  for (const analyzer::ModuleNode* node : pkg.tree.modules) {
+    if ((!node->is_staged && !node->is_prelude) ||
+        node->file == source::UNKNOWN_FILE) {
+      continue;
+    }
+    staged_files_.insert(static_cast<u32>(node->file));
+    for (ast::ItemIdx item : node->items) {
+      const source::FileId file = ast.items[item].span.file;
+      if (file != source::UNKNOWN_FILE) {
+        staged_files_.insert(static_cast<u32>(file));
+      }
+    }
+  }
   // Seed one-time operands before any function body runs.
   {
     const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
@@ -2697,6 +2851,11 @@ void Lowerer::run() {
       materialize(fns[lowered.fn], lowered.blocks);
     }
     lowered_upto = worklist_.size();
+  }
+  if (!failed) {
+    // Every body has been lowered, so the kept-parameter summaries are
+    // complete and the deferred call-site checks can run (ADR-0135).
+    finish_kept_checks();
   }
 }
 

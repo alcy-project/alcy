@@ -114,3 +114,21 @@ extent compared there would answer a different question.
 - The rule is an extent rule, not a lifetime analysis: loans are still
   liveness-checked by the borrow pass, and a reference that never meets a
   store of a shallower binding is unaffected.
+
+## Amendments
+
+**A callee's kept-parameter disposition is a summary of its body.** The
+decision left "a callee that stores the view it was handed" to a
+disposition per parameter; it is now the callee's kept-parameter summary
+rather than a declaration. Lowering a body records, for each call that
+hands a borrow-carrying parameter into caller-owned storage, that the
+parameter is kept when the callee keeps it. The relation runs to a fixed
+point over the call graph, and a staged callee answers from its
+declaration instead: a `str` parameter it reads or copies is not kept,
+a type parameter it stores by value is. A caller may be lowered before
+its callee, so a user callee's call site holds its check until the
+bodies have all been lowered and the lowering order does not decide the
+answer. An explicit mutable-reference argument now lends its pointee the
+way a method receiver does, which is what puts the free-function form on
+the same footing as `Vec::push`
+(`err-kept-view-into-caller-container`).

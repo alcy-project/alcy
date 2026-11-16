@@ -1326,15 +1326,25 @@ Val Lowerer::lower_kept_argument(ast::ExprIdx expr,
                                  usize index,
                                  std::vector<ast::ExprIdx>& borrowed_places,
                                  std::vector<KeptValue>& kept) {
-  if (can_write_through(tag_of(param)) && is_rooted_place(expr)) {
-    borrowed_places.push_back(expr);
+  if (can_write_through(tag_of(param))) {
+    // An explicit borrow lends the place it points at, so a mutable
+    // reference argument lends its pointee the way a method receiver
+    // does.
+    ast::ExprIdx place = expr;
+    if (ast.exprs[place].kind == ast::ExprKind::Borrow) {
+      place = ast.exprs[place].payload.get<ast::ExprBorrow>().inner;
+    }
+    if (is_rooted_place(place)) {
+      borrowed_places.push_back(place);
+    }
   }
   const usize sources_from = borrow_sources.size();
   Val arg = lower_moved(expr, &param);
   if (failed || terminated_cur()) {
     return arg;
   }
-  kept.push_back(KeptValue{expr, arg.type, sources_from,
+  kept.push_back(KeptValue{expr, arg.type, sources_from, callee,
+                           static_cast<u32>(index),
                            declares_borrow(callee, index, param)});
   return arg;
 }
@@ -1364,6 +1374,7 @@ bool Lowerer::lower_call_arguments(std::span<const ast::ExprIdx> args,
     }
     ops.push_back(arg_for(arg, params[i]));
   }
+  record_keep_edges(kept, borrowed_places);
   if (check_kept_values(kept, borrowed_places)) {
     failed = true;
     return false;
