@@ -491,6 +491,9 @@ class Lowerer {
   bool declares_borrow(ast::ItemIdx item, usize index, ir::TypeIdx param) const;
   // Whether the callee belongs to the staged prelude.
   bool item_is_staged(ast::ItemIdx item) const;
+  // Whether the item's body keeps its parameter at `index`, unioned
+  // over a spec declaration's implementations.
+  bool item_keeps_parameter(u32 item_index, u32 index) const;
   // Whether the callee's body stores the parameter's view where it
   // outlives the call. Staged callees answer from their declaration; a
   // user callee from the fixed-point summary.

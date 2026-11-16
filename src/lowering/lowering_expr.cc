@@ -1858,9 +1858,11 @@ Val Lowerer::lower_carried_call(ast::ExprIdx expr,
     ops.push_back(arg_for(*receiver, settled[0]));
     at = 1;
   }
-  if (!lower_call_arguments(
-          args, std::span<const ir::TypeIdx>(settled).subspan(at), {},
-          std::nullopt, ops, ast::ItemIdx::invalid(), at)) {
+  // The declaration the summary named: a dispatch keeps what its
+  // implementations keep, and the caller's summary asks by this item.
+  if (!lower_call_arguments(args,
+                            std::span<const ir::TypeIdx>(settled).subspan(at),
+                            {}, std::nullopt, ops, entry.item, at)) {
     return stopped_value();
   }
   return emit_parametric_call(ops, settled, settled_ret, callee, node.span);
@@ -3489,9 +3491,17 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
                 is_rooted_place(receiver_expr)
             ? std::optional<ast::ExprIdx>(receiver_expr)
             : std::nullopt;
+    // A dispatch names no implementation yet, so the keep summary is
+    // asked of the spec declaration, which answers for its
+    // implementations.
+    const ast::ItemIdx dispatch_item =
+        info.item.is_valid()
+            ? info.item
+            : (info.spec < pkg.specs.size() ? pkg.specs[info.spec].item
+                                            : ast::ItemIdx::invalid());
     if (!lower_call_arguments(
             method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
-            {}, receiver_place, ops, info.item, 1)) {
+            {}, receiver_place, ops, dispatch_item, 1)) {
       return stopped_value();
     }
     return emit_parametric_call(ops, info.params, info.ret, callee,

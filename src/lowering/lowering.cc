@@ -1390,9 +1390,33 @@ bool Lowerer::keeps_parameter(ast::ItemIdx item,
     // or copies is not kept, a type parameter it stores by value is.
     return !declares_borrow(item, index, param);
   }
-  const auto found = kept_params_.find(item.idx);
-  return found != kept_params_.end() &&
-         found->second.count(static_cast<u32>(index)) != 0;
+  return item_keeps_parameter(item.idx, static_cast<u32>(index));
+}
+
+bool Lowerer::item_keeps_parameter(u32 item_index, u32 index) const {
+  const auto found = kept_params_.find(item_index);
+  if (found != kept_params_.end() && found->second.count(index) != 0) {
+    return true;
+  }
+  // A dispatch through a spec bound may reach any implementation, so the
+  // declaration keeps what any of them keeps.
+  for (u32 s = 0; s < static_cast<u32>(pkg.specs.size()); ++s) {
+    if (pkg.specs[s].item.idx != item_index) {
+      continue;
+    }
+    for (const analyzer::CheckedModule& mod : pkg.modules) {
+      for (const analyzer::CheckedModule::MethodInfo& method : mod.methods) {
+        if (method.spec != s || !method.item.is_valid()) {
+          continue;
+        }
+        const auto impl = kept_params_.find(method.item.idx);
+        if (impl != kept_params_.end() && impl->second.count(index) != 0) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 bool Lowerer::parameter_of(ast::ExprIdx expr, u32& out) const {
@@ -1491,9 +1515,7 @@ void Lowerer::finish_kept_checks() {
   while (changed) {
     changed = false;
     for (const KeptEdge& edge : keep_edges_) {
-      const auto found = kept_params_.find(edge.callee_item);
-      if (found == kept_params_.end() ||
-          found->second.count(edge.callee_param) == 0) {
+      if (!item_keeps_parameter(edge.callee_item, edge.callee_param)) {
         continue;
       }
       if (kept_params_[edge.caller_item].insert(edge.caller_param).second) {
