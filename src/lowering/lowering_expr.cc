@@ -1118,24 +1118,26 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
   // reference capture borrows is recorded here, where it is still in
   // scope: the body's keep check needs that place's extent, not the
   // capture list's order.
+  const u64 closure_key = (static_cast<u64>(expr.idx) << 32) | cur_inst_;
+  closure_body_depth_[closure_key] = frame_depth_ + 1;
   if (!captures.empty()) {
     std::vector<u32> outer;
     outer.reserve(captures.size());
     for (const Capture& capture : captures) {
       const Local* local = lookup_local(capture.name);
-      u32 outer_index = ~0u;
+      u32 place = ~0u;
       if (local != nullptr && capture.mode != ast::CaptureMode::Move) {
-        // A capture of an enclosing closure names the place that
-        // closure's own borrow names, so the chain reaches the outer
-        // place rather than stopping at this frame's slot.
-        outer_index = local->outer_index != ~0u
-                          ? local->outer_index
-                          : static_cast<u32>(local - locals.data());
+        // A capture that borrows another closure's capture names the
+        // same place; a local of this frame packs this frame's depth and
+        // the local's index, so a deeper frame sorts after it.
+        place = local->outer_index != ~0u
+                    ? local->outer_index
+                    : ((frame_depth_ << 24) |
+                       static_cast<u32>(local - locals.data()));
       }
-      outer.push_back(outer_index);
+      outer.push_back(place);
     }
-    closure_capture_outer_[(static_cast<u64>(expr.idx) << 32) | cur_inst_] =
-        std::move(outer);
+    closure_capture_outer_[closure_key] = std::move(outer);
   }
   const ir::TypeIdx env_ref_ty = captures.empty()
                                      ? ir::TypeIdx::invalid()

@@ -1132,13 +1132,15 @@ bool Lowerer::escapes_referent(ir::TypeIdx type,
   // store it would receive.
   const auto target_index = static_cast<usize>(target - locals.data());
   // A borrowed capture names an outer place, so its extent is that
-  // place's: the comparison orders (frame, index) pairs, and a slot of
-  // this frame sorts after every outer place.
+  // place's: the comparison orders (frame depth, index) pairs, and a
+  // deeper frame lives less long than a shallower one.
   const auto rank = [&](usize index) {
     const Local& local = locals[index];
-    return local.outer_index == ~0u
-               ? std::pair<u32, u32>{1, static_cast<u32>(index)}
-               : std::pair<u32, u32>{0, local.outer_index};
+    if (local.outer_index != ~0u) {
+      return std::pair<u32, u32>{local.outer_index >> 24,
+                                 local.outer_index & 0xffffffu};
+    }
+    return std::pair<u32, u32>{frame_depth_, static_cast<u32>(index)};
   };
   const std::pair<u32, u32> target_rank = rank(target_index);
   for (u32 source : sources) {
@@ -2167,6 +2169,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   cur_inst_ = entry.inst;
   begin_body();
   cur_item_ = entry.item;
+  frame_depth_ = 0;
 
   const ast::ItemNode& item = ast.items[entry.item];
   const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
@@ -2303,8 +2306,12 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   }
   switch_to(reserve_block());
   cur_span_ = ast.exprs[entry.closure].span;
-  const auto outer_found = closure_capture_outer_.find(
-      (static_cast<u64>(entry.closure.idx) << 32) | entry.inst);
+  const u64 closure_key =
+      (static_cast<u64>(entry.closure.idx) << 32) | entry.inst;
+  const auto depth_found = closure_body_depth_.find(closure_key);
+  frame_depth_ =
+      depth_found == closure_body_depth_.end() ? 0 : depth_found->second;
+  const auto outer_found = closure_capture_outer_.find(closure_key);
   const std::vector<u32>* outer_captures =
       outer_found == closure_capture_outer_.end() ? nullptr
                                                   : &outer_found->second;

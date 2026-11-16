@@ -391,10 +391,17 @@ class Lowerer {
   // summaries settle.
   std::vector<KeptCheck> pending_kept_checks_;
   // The outer local each reference capture of a closure names, keyed by
-  // the closure expression and its instantiation. The closure body's
-  // keep check compares those outer places, not the capture list's
-  // order.
+  // the closure expression and its instantiation. A place is packed as
+  // (frame depth, index); the closure body's keep check compares those,
+  // not the capture list's order.
   std::unordered_map<u64, std::vector<u32>> closure_capture_outer_;
+  // The frame depth a closure body lowers at: the enclosing frame's plus
+  // one. A place of a deeper frame lives less long than one of a
+  // shallower frame.
+  std::unordered_map<u64, u32> closure_body_depth_;
+  // The frame the function being lowered belongs to: 0 for a body, one
+  // more for each closure it nests in.
+  u32 frame_depth_ = 0;
   // Lowers one argument a call may keep, in the callee's parameter
   // type: the places it lends to the callee and the loans the value
   // carries are recorded for the kept-value check, which asks that the
