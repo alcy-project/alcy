@@ -402,6 +402,10 @@ class Lowerer {
   // The frame the function being lowered belongs to: 0 for a body, one
   // more for each closure it nests in.
   u32 frame_depth_ = 0;
+  // The lowered item of each spec implementation's parametric body, by
+  // spec index: a method reached through a generic impl carries no item
+  // a summary could key on, so the body's own item answers for it.
+  std::unordered_map<u32, std::vector<u32>> spec_body_items_;
   // Lowers one argument a call may keep, in the callee's parameter
   // type: the places it lends to the callee and the loans the value
   // carries are recorded for the kept-value check, which asks that the

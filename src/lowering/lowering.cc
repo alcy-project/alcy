@@ -169,6 +169,20 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
   for (const analyzer::ParametricBody& body : pkg.parametric_bodies) {
     parametric_body_items_.insert(body.item.idx);
   }
+  // A method reached through a generic impl carries no item the checked
+  // method table names, so the spec table is what points at its body:
+  // an impl's methods hang on the impl item.
+  for (const auto& impl : pkg.spec_impls) {
+    if (!impl.item.is_valid() ||
+        ast.items[impl.item].kind != ast::ItemKind::Impl) {
+      continue;
+    }
+    const ast::ItemImpl& shape =
+        ast.items[impl.item].payload.get<ast::ItemImpl>();
+    for (ast::ItemIdx method : shape.methods) {
+      spec_body_items_[impl.spec].push_back(method.idx);
+    }
+  }
 }
 
 void Lowerer::index_fn_insts() {
@@ -1403,6 +1417,15 @@ bool Lowerer::item_keeps_parameter(u32 item_index, u32 index) const {
   for (u32 s = 0; s < static_cast<u32>(pkg.specs.size()); ++s) {
     if (pkg.specs[s].item.idx != item_index) {
       continue;
+    }
+    const auto bodies = spec_body_items_.find(s);
+    if (bodies != spec_body_items_.end()) {
+      for (u32 body_item : bodies->second) {
+        const auto impl = kept_params_.find(body_item);
+        if (impl != kept_params_.end() && impl->second.count(index) != 0) {
+          return true;
+        }
+      }
     }
     for (const analyzer::CheckedModule& mod : pkg.modules) {
       for (const analyzer::CheckedModule::MethodInfo& method : mod.methods) {

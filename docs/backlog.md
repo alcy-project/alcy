@@ -185,18 +185,6 @@ replaced. The foundations are in `roadmap.md`.
   green, and a narrow result is canonicalized per operation rather than
   at one destination rule.
 
-- [ ] A keep summary does not reach a generic spec implementation. A
-  dispatch through a bound records its edge against the spec
-  declaration, and the declaration's summary unions the implementations
-  it can name by item, but a method of a generic impl carries no item,
-  so `impl<T> Sink for Box2<T> { fn put(mut self: &mut Self, s: str) {
-  self.v.push(s) } }` leaves the keep lost and
-  `fn store<T: Sink>(mut v: &mut T, s: str) { v.put(s) }` accepts a
-  view of a block-scoped buffer stored into the caller's container. The
-  implementation body's own item is what a summary should be asked for,
-  so the fix is to register a parametric impl body against the spec it
-  implements.
-
 - [ ] A closure's environment is the closure's own address, so the
   value is self-referential and cannot be moved: a store of the address
   of a moved place is refused, and a closure that owns
