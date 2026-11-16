@@ -1,0 +1,15 @@
+[package]
+name = "app"
+version = "0.1.0"
+license = ""
+
+[[bin]]
+name = "app"
+path = "main.al"
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+"dep" = { path = "dep" }

@@ -1,0 +1,2 @@
+exit = "non-zero"
+contains = ["Reference to local 'buf' escapes the block that declares it"]
