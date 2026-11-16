@@ -150,7 +150,7 @@ jobs:
         run: uv run ast-grep test
 
       - name: Scan the Compiler with the Rules
-        run: uv run ast-grep scan --error compiler
+        run: uv run ast-grep scan --error src
 
       - name: Check the Python Tools
         run: |
