@@ -238,6 +238,17 @@ replaced. The foundations are in `roadmap.md`.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
 
+- [ ] A callee that stores its `str` parameter reaches the caller's
+  buffer: `fn store(mut v: &mut Vec<str>, s: str) { v.push(s) }` called
+  as `store(&mut v, x.as_str())` compiles, and the container keeps a
+  view of the buffer past its end. The call site cannot tell whether
+  the view was kept or copied: `Vec::push` stores the view while
+  `String::push_str` copies the bytes, and no per-parameter
+  disposition separates them (ADR-0135 defers it here). The fix is that
+  disposition - inferred from the callee's effects or declared on the
+  parameter - so the store's destination and the view's source can be
+  ordered.
+
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the
   compiler's version string does not identify the binary that wrote an
