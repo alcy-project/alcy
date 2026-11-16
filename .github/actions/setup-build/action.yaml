@@ -85,7 +85,7 @@ runs:
       if: inputs.nix != 'true'
       uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       with:
-        enable-cache: true
+        enable-cache: false
 
     - name: Setup Python virtual environment
       if: inputs.nix != 'true'

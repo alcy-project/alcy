@@ -180,7 +180,8 @@ Notes:
 - **Comments:** English only. Write comments sparingly-only for design rationale, invariants or
   safety explanations, non-obvious code, or `TODO`s. Do not restate code that is already clear.
 - **Tooling is authoritative:** `.clang-format`, `.clang-tidy`, `CPPLINT.cfg`, `taplo.toml`,
-  `.rumdl.toml`, `sgconfig.yml`, and `pyproject.toml` (ruff) enforce repository style. Use
+  `.rumdl.toml`, `sgconfig.yml`, and `pyproject.toml` (ruff, jactionlint) enforce
+  repository style. Use
   `format.py` and `lint.py --fix`, then the fixes listed above, to correct most issues
   automatically. The ast-grep rules under `tools/ast-grep/rules/` state the conventions the
   other linters cannot: fixed-width type aliases, owned memory, and the constructs the project

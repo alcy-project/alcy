@@ -22,4 +22,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
-dev = ["ast-grep-cli>=0.45.3", "ruff>=0.16.10", "rumdl>=0.2.78"]
+dev = ["ast-grep-cli>=0.45.3", "jactionlint>=2.6.0", "ruff>=0.16.10", "rumdl>=0.2.78"]

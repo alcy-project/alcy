@@ -56,11 +56,14 @@ jobs:
 
     env:
       COLORTERM: 256color
+      BUILD_TYPE: ${{ inputs.build_type }}
+      ROLE: ${{ inputs.role }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          persist-credentials: false
           submodules: recursive
           fetch-depth: 1
 
@@ -79,7 +82,7 @@ jobs:
 
       - name: Build All
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/build.py --target=all --mode="$BUILD_TYPE" --build-subdir=build
 
       - name: Package & Generate Checksum
         shell: bash
@@ -90,8 +93,8 @@ jobs:
           ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/package.py \
             --plat="${{ matrix.plat }}" \
             --arch="${{ matrix.arch }}" \
-            --mode="${{ inputs.build_type }}" \
-            --role="${{ inputs.role }}" \
+            --mode="$BUILD_TYPE" \
+            --role="$ROLE" \
             --archive="${{ matrix.archive }}" \
             --verify \
             ${{ matrix.nix && '--nix' || '' }}
@@ -121,7 +124,7 @@ jobs:
 
       - name: Run Tests
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode="$BUILD_TYPE" --build-subdir=build
 
       # A corpus whose cases link a program or run one is a question the
       # platform answers: what the linker names the objects, what the frame

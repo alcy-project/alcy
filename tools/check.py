@@ -205,9 +205,11 @@ def main() -> int:
         run(*py, "rumdl", "check", ".")
         run(*py, "ruff", "check", "tools")
         run(*py, "ruff", "format", "--check", "tools")
+        run(*py, "jactionlint")
     else:
         print(
-            "note: uv not found, so the rule, Markdown and Python checks did not run",
+            "note: uv not found, so the rule, Markdown, "
+            "Python and workflow checks did not run",
             file=sys.stderr,
         )
 

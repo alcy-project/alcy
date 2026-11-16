@@ -25,11 +25,14 @@ jobs:
 
     env:
       COLORTERM: 256color
+      BUILD_TYPE: ${{ inputs.build_type }}
+      ROLE: ${{ inputs.role }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          persist-credentials: false
           submodules: recursive
           fetch-depth: 1
 
@@ -76,7 +79,7 @@ jobs:
 
       - name: Build All
         shell: bash
-        run: uv run ./tools/build.py --target=all --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
+        run: uv run ./tools/build.py --target=all --mode="$BUILD_TYPE" --build-subdir=build --target-os=emscripten
 
       # The playground build carries no LLVM, so it is its own configure
       # rather than more of the one above; it comes before packaging
@@ -84,7 +87,7 @@ jobs:
       # the whole path: launcher, C ABI, compiler, emitted module.
       - name: Build Playground
         shell: bash
-        run: uv run ./tools/build.py --target=playground --mode=${{ inputs.build_type }} --build-subdir=playground --target-os=emscripten --gn-arg='alcy_backends=[]'
+        run: uv run ./tools/build.py --target=playground --mode="$BUILD_TYPE" --build-subdir=playground --target-os=emscripten --gn-arg='alcy_backends=[]'
 
       - name: Run Playground Smoke
         shell: bash
@@ -98,8 +101,8 @@ jobs:
           uv run ./tools/package.py \
             --plat=wasm \
             --arch=wasm32 \
-            --mode="${{ inputs.build_type }}" \
-            --role="${{ inputs.role }}" \
+            --mode="$BUILD_TYPE" \
+            --role="$ROLE" \
             --archive=tar.zst \
             --verify
 
@@ -115,4 +118,4 @@ jobs:
 
       - name: Run Tests
         shell: bash
-        run: uv run ./tools/run.py --target=tests --mode=${{ inputs.build_type }} --build-subdir=build --target-os=emscripten
+        run: uv run ./tools/run.py --target=tests --mode="$BUILD_TYPE" --build-subdir=build --target-os=emscripten

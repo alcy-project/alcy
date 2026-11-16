@@ -28,10 +28,7 @@ on:
     paths: *site_paths
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 
 # One deployment at a time; a queued run waits rather than cancels so the
 # site never lands in a half-published state. A pull request deploys
@@ -55,10 +52,14 @@ jobs:
     name: Build & Upload Site
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      pages: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          persist-credentials: false
           submodules: recursive
           fetch-depth: 1
 
@@ -75,7 +76,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
-          enable-cache: true
+          enable-cache: false
 
       - name: Setup Python Virtual Environment
         run: |
@@ -103,8 +104,10 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: ${{ steps.bun.outputs.version }}
+          no-cache: true
 
       - name: Cache the Compiler Build
+        if: github.ref_type != 'tag'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
@@ -113,6 +116,7 @@ jobs:
           key: ${{ runner.os }}-site-wasm32-release-build-dir-${{ hashFiles('config.toml', '**/*.gn', 'src/**', 'lib/**') }}
 
       - name: Cache tree-sitter's Wasm Toolchain
+        if: github.ref_type != 'tag'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/tree-sitter
@@ -174,6 +178,10 @@ jobs:
     # is ever published.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

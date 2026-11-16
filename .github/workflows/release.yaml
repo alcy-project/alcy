@@ -6,6 +6,11 @@ on:
       - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
 permissions:
   contents: read
 
@@ -36,18 +41,27 @@ jobs:
       - name: Download All Workflow Artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
 
+      # The runner already carries the gh CLI, so the release step needs
+      # no third-party action. If the draft exists the release is left
+      # as it is and its assets are replaced; a published release is
+      # never turned back into a draft by a re-run.
       - name: Upload Artifacts to Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
-        with:
-          files: |
-            */*.tar.gz
-            */*.tar.zst
-            */*.zip
-            */*.sha256
-          draft: true
-          generate_release_notes: false
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          shopt -s nullglob
+          files=(*/*.tar.gz */*.tar.zst */*.zip */*.sha256)
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::no release artifacts were found to upload"
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber "${files[@]}"
+          else
+            gh release create "$TAG" --draft --verify-tag "${files[@]}"
+          fi
 
   summary:
     needs: publish
