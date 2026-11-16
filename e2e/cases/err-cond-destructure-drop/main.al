@@ -13,7 +13,9 @@ impl Payload {
 
 fn main() {
   q := Payload { id: 5 }
-  if Payload { id: x } := q {
+  if Payload {
+    id: x
+  } := q {
     println("x {}", x)
   }
   println("after")

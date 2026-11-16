@@ -1,0 +1,6 @@
+exit = 0
+stdout = """
+p 1
+DROP 1
+after
+"""

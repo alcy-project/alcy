@@ -1,0 +1,2 @@
+exit = "non-zero"
+contains = ["A guard cannot bind 's' by value"]
