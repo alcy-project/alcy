@@ -343,11 +343,9 @@ replaced. The foundations are in `roadmap.md`.
   `--execution=single-thread` exists for the second because a debugger
   needs it, not because a suite does.
 
-- [ ] The per-case package cache answers stale artifacts when the
-  compiler's lowering changes between builds without the version string
-  moving: the verification runs of the match-binding fixes above
-  flip-flopped between passing and aborting until each case's cached
-  directory was removed by hand. The key carries the compiler version,
-  which is computed at generation time from the commit and the dirty
-  digest — the gap to close is what else the key must name so a
-  behavior-only change invalidates on its own.
+- [ ] The per-case package cache can answer a compile from an older
+  build: the key names the compiler's version string, which moves only
+  when the commit or the working tree moves, so a behavior-only change
+  to the lowering keeps the old key and an old answer. The key needs an
+  input that moves with compiler behavior, or the entries need an
+  invalidation that does not depend on the version string.
