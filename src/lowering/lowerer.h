@@ -485,6 +485,10 @@ class Lowerer {
   bool keeps_parameter(ast::ItemIdx item, usize index, ir::TypeIdx param) const;
   // Finds the parameter of the body being lowered that `expr` names.
   bool parameter_of(ast::ExprIdx expr, u32& out) const;
+  // Adds every parameter whose borrow `expr` carries, looking through
+  // the aggregates it builds: a tuple or struct holding a parameter's
+  // view hands the same loan over.
+  void parameter_loans(ast::ExprIdx expr, std::vector<u32>& out);
   // Records the keep edges a call site implies.
   void record_keep_edges(const std::vector<KeptValue>& values,
                          const std::vector<ast::ExprIdx>& borrowed_places);

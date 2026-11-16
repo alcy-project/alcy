@@ -1397,6 +1397,45 @@ bool Lowerer::parameter_of(ast::ExprIdx expr, u32& out) const {
   return true;
 }
 
+void Lowerer::parameter_loans(ast::ExprIdx expr, std::vector<u32>& out) {
+  const ir::TypeIdx type = expr_type(expr);
+  if (!type.is_valid() || !carries_borrow(type)) {
+    return;
+  }
+  u32 param = 0;
+  if (parameter_of(expr, param)) {
+    if (std::find(out.begin(), out.end(), param) == out.end()) {
+      out.push_back(param);
+    }
+    return;
+  }
+  const ast::ExprNode& node = ast.exprs[expr];
+  switch (node.kind) {
+    case ast::ExprKind::Tuple:
+      for (ast::ExprIdx element : node.payload.get<ast::ExprTuple>().elements) {
+        parameter_loans(element, out);
+      }
+      return;
+    case ast::ExprKind::Array: {
+      const ast::ExprArray& array = node.payload.get<ast::ExprArray>();
+      for (ast::ExprIdx element : array.elements) {
+        parameter_loans(element, out);
+      }
+      if (array.repeat.is_valid()) {
+        parameter_loans(array.repeat, out);
+      }
+      return;
+    }
+    case ast::ExprKind::Struct:
+      for (const ast::ExprFieldInit& field :
+           node.payload.get<ast::ExprStruct>().init) {
+        parameter_loans(field.value, out);
+      }
+      return;
+    default: return;
+  }
+}
+
 void Lowerer::record_keep_edges(
     const std::vector<KeptValue>& values,
     const std::vector<ast::ExprIdx>& borrowed_places) {
@@ -1417,17 +1456,17 @@ void Lowerer::record_keep_edges(
     if (!carries_borrow(value.type)) {
       continue;
     }
-    u32 caller_param = 0;
-    if (!parameter_of(value.expr, caller_param)) {
-      continue;
-    }
-    if (item_is_staged(value.callee)) {
-      if (!declares_borrow(value.callee, value.param_index, value.type)) {
-        kept_params_[cur_item_.idx].insert(caller_param);
+    std::vector<u32> caller_params;
+    parameter_loans(value.expr, caller_params);
+    for (u32 caller_param : caller_params) {
+      if (item_is_staged(value.callee)) {
+        if (!declares_borrow(value.callee, value.param_index, value.type)) {
+          kept_params_[cur_item_.idx].insert(caller_param);
+        }
+      } else if (value.callee.is_valid()) {
+        keep_edges_.push_back(
+            {value.callee.idx, value.param_index, cur_item_.idx, caller_param});
       }
-    } else if (value.callee.is_valid()) {
-      keep_edges_.push_back(
-          {value.callee.idx, value.param_index, cur_item_.idx, caller_param});
     }
   }
 }
