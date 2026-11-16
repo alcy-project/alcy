@@ -3,14 +3,6 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
-- [ ] A wildcard arm's commit ends the scrutinee, and the match's own
-  consumption marker skips at the join. That mechanism makes
-  `exe/cases/exe-match-guard-discard` pass, and the corpus's case
-  double-frees while it is applied, because every binding value's drop
-  lands twice. Done when the mechanism is in and
-  `exe-match-guard-discard` and `ok-pattern-binding-after-test` both
-  exit zero.
-
 - [ ] Float `**` is refused while the integer one is repeated
   squaring: a fractional exponent needs `pow`, and the direct-wasm
   target imports no libm and has no instruction for it, so admitting
@@ -245,31 +237,6 @@ replaced. The foundations are in `roadmap.md`.
   ADR-0012 records as the work that replaces this.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
-
-- [ ] A callee written to take its argument as a `str` can store the
-  view it was handed: `fn store(mut v: &mut Vec<str>, s: str) {
-  v.push(s) }` called as `store(&mut v, x.as_str())` puts a view of
-  the caller's slot into the caller's container, and the program then
-  prints the dropped buffer. The caller cannot see it, because `str` is
-  the spelling a copying callee uses too (`String::push_str`,
-  `Map::insert` and `Set::insert` all copy the bytes), so the
-  declaration separates nothing: what separates them is a disposition
-  per parameter - kept or copied - which is the region a loan carries
-  (ADR-0012) read off the reasoned list of the std surface (ADR-0131).
-  The extent rule covers the rest of the shape: a container declared
-  before the view's buffer is refused inside one frame
-  (`err-kept-view-inner-block`, `kept/str-view-from-inner-block`) and
-  accepted when the buffer is declared first
-  (`kept/str-view-from-outer-block`), a place that kept a view of a
-  slot ending with its block is refused when the block hands it out
-  (`kept/str-view-in-block-value`) and when the frame returns it
-  (`kept/str-view-returned`,
-  `returned/borrowed-element-in-container`), and the same view of a
-  parameter or a call result is accepted
-  (`kept/str-view-of-parameter-returned`,
-  `returned/borrowed-element-from-parameter`). The copying receivers
-  stay accepted: `ok-mini-pipeline` and `ok-grouping` pass views to
-  them.
 
 - [ ] The cache is consulted after the frontend has parsed and
   resolved, so a hit cannot skip the work that dominates, and the
