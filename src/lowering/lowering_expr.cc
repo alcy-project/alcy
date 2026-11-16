@@ -1123,9 +1123,16 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
     outer.reserve(captures.size());
     for (const Capture& capture : captures) {
       const Local* local = lookup_local(capture.name);
-      outer.push_back(local != nullptr && capture.mode != ast::CaptureMode::Move
-                          ? static_cast<u32>(local - locals.data())
-                          : ~0u);
+      u32 outer_index = ~0u;
+      if (local != nullptr && capture.mode != ast::CaptureMode::Move) {
+        // A capture of an enclosing closure names the place that
+        // closure's own borrow names, so the chain reaches the outer
+        // place rather than stopping at this frame's slot.
+        outer_index = local->outer_index != ~0u
+                          ? local->outer_index
+                          : static_cast<u32>(local - locals.data());
+      }
+      outer.push_back(outer_index);
     }
     closure_capture_outer_[(static_cast<u64>(expr.idx) << 32) | cur_inst_] =
         std::move(outer);
