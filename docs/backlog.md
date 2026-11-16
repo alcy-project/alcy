@@ -337,9 +337,9 @@ replaced. The foundations are in `roadmap.md`.
   `--execution=single-thread` exists for the second because a debugger
   needs it, not because a suite does.
 
-- [ ] The per-case package cache can answer a compile from an older
-  build: the key names the compiler's version string, which moves only
-  when the commit or the working tree moves, so a behavior-only change
-  to the lowering keeps the old key and an old answer. The key needs an
-  input that moves with compiler behavior, or the entries need an
-  invalidation that does not depend on the version string.
+- [ ] An e2e run once answered nineteen err-cases with the resolution
+  error that precedes the diagnostic each case expects, and later runs
+  answered every case. The compiler's version string moves with every
+  source change (verified), so the cache key moves with it and the
+  staleness theory does not hold; reproducing the run with its build
+  state and case caches preserved is the next step.
