@@ -1114,6 +1114,22 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
   const std::vector<Capture>& captures =
       lit == nullptr ? no_captures : lit->captures;
   const ir::TypeIdx env_ty = closure_env_type(captures);
+  // The closure body is lowered on its own, so the outer place each
+  // reference capture borrows is recorded here, where it is still in
+  // scope: the body's keep check needs that place's extent, not the
+  // capture list's order.
+  if (!captures.empty()) {
+    std::vector<u32> outer;
+    outer.reserve(captures.size());
+    for (const Capture& capture : captures) {
+      const Local* local = lookup_local(capture.name);
+      outer.push_back(local != nullptr && capture.mode != ast::CaptureMode::Move
+                          ? static_cast<u32>(local - locals.data())
+                          : ~0u);
+    }
+    closure_capture_outer_[(static_cast<u64>(expr.idx) << 32) | cur_inst_] =
+        std::move(outer);
+  }
   const ir::TypeIdx env_ref_ty = captures.empty()
                                      ? ir::TypeIdx::invalid()
                                      : builder.reference_type(env_ty, false);

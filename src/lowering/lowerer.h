@@ -390,6 +390,11 @@ class Lowerer {
   // Call sites that handed a view to a user function: resolved once the
   // summaries settle.
   std::vector<KeptCheck> pending_kept_checks_;
+  // The outer local each reference capture of a closure names, keyed by
+  // the closure expression and its instantiation. The closure body's
+  // keep check compares those outer places, not the capture list's
+  // order.
+  std::unordered_map<u64, std::vector<u32>> closure_capture_outer_;
   // Lowers one argument a call may keep, in the callee's parameter
   // type: the places it lends to the callee and the loans the value
   // carries are recorded for the kept-value check, which asks that the

@@ -42,6 +42,10 @@ struct Local {
   // A parameter's slot holds the caller's value, so its storage outlives
   // the return that ends every other slot of the frame (ADR-0135).
   bool is_param = false;
+  // The outer local a reference capture borrows, or the same sentinel
+  // when the slot is this frame's own. A borrowed capture's place has
+  // the outer slot's extent, not the capture list's position.
+  u32 outer_index = ~0u;
   // The locals a reference held here may point into: `p := &n` names n,
   // and a binding from an alias copies what the alias named. Empty when
   // the reference came from a parameter or from a call that kept its

@@ -1131,8 +1131,18 @@ bool Lowerer::escapes_referent(ir::TypeIdx type,
   // the destination's block or deeper, so its slot cannot outlive the
   // store it would receive.
   const auto target_index = static_cast<usize>(target - locals.data());
+  // A borrowed capture names an outer place, so its extent is that
+  // place's: the comparison orders (frame, index) pairs, and a slot of
+  // this frame sorts after every outer place.
+  const auto rank = [&](usize index) {
+    const Local& local = locals[index];
+    return local.outer_index == ~0u
+               ? std::pair<u32, u32>{1, static_cast<u32>(index)}
+               : std::pair<u32, u32>{0, local.outer_index};
+  };
+  const std::pair<u32, u32> target_rank = rank(target_index);
   for (u32 source : sources) {
-    if (source >= locals.size() || source <= target_index) {
+    if (source >= locals.size() || rank(source) <= target_rank) {
       continue;
     }
     const std::string_view name = locals[source].name;
@@ -2293,6 +2303,11 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
   }
   switch_to(reserve_block());
   cur_span_ = ast.exprs[entry.closure].span;
+  const auto outer_found = closure_capture_outer_.find(
+      (static_cast<u64>(entry.closure.idx) << 32) | entry.inst);
+  const std::vector<u32>* outer_captures =
+      outer_found == closure_capture_outer_.end() ? nullptr
+                                                  : &outer_found->second;
   // Entry block parameters arrive in declaration order: the
   // environment first, then the closure's parameters. Checking
   // bound every name already, so this only wires registers.
@@ -2340,6 +2355,11 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
       const ir::RegisterIdx ref =
           emit(ir::Opcode::Load, field_ty, {to_operand(field, field_ty)});
       locals.emplace_back(capture.name, ref, capture.type);
+      // A reference capture names an outer place, so its extent is that
+      // place's, whatever position the capture list gave it.
+      if (outer_captures != nullptr && i < outer_captures->size()) {
+        locals.back().outer_index = (*outer_captures)[i];
+      }
       addr_names_.push_back({ref, capture.name, false, true});
     }
   }

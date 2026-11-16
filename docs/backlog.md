@@ -185,16 +185,6 @@ replaced. The foundations are in `roadmap.md`.
   green, and a narrow result is canonicalized per operation rather than
   at one destination rule.
 
-- [ ] A closure's capture order decides whether a stored view is
-  refused: `[&a, &mut holder]() -> { holder.push(a.as_str()) }` is
-  accepted while `[&mut holder, &a]` is refused, and the accepted one
-  stores a view of a block-scoped buffer into a container that outlives
-  it. The keep check inside the closure compares the captures' own
-  slots - whose order is the capture list - not the outer places the
-  borrows name, though a capture that borrows an outer place has that
-  place's extent. The check needs the outer place each reference
-  capture names.
-
 - [ ] A closure's environment is the closure's own address, so the
   value is self-referential and cannot be moved: a store of the address
   of a moved place is refused, and a closure that owns
