@@ -4729,11 +4729,6 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       // binding now owns, on this path and on the one a failed test
       // takes.
       record_move_event(scrut_addr, span);
-      // A by-value binding reads the place out, so the move event lands
-      // before the load: the place's owner ends nothing of what the
-      // binding now owns, on this path and on the one a failed test
-      // takes.
-      record_move_event(scrut_addr, span);
       bind_pattern(pattern, materialize(scrut_addr));
       if (failed) {
         return;
@@ -5183,6 +5178,9 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   }
   const bool saved_borrowed = arm_borrowed_;
   arm_borrowed_ = borrowed || through_ref;
+  // A wildcard arm ends the whole scrutinee at its own commit, so the
+  // join's marker would land a second end on the same place.
+  bool wildcard_commit = false;
   for (usize i = 0; i < patterns.size() && !failed; ++i) {
     // The arm's pattern bindings end at the arm's own exit, or the sweep
     // would place their drops where their slots do not dominate.
@@ -5216,6 +5214,13 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       switch_to(guard_fail);
       record_end(arm_mark, node.span);
       emit_br(next);
+    }
+    if (ast.patterns[patterns[i]].kind == ast::PatternKind::Wildcard) {
+      // A wildcard discards the whole scrutinee, so the commit is where
+      // its drop lands: the guard's true edge takes it, and the false
+      // edge leaves the value whole for the next arm.
+      guarded_discards_.push_back(addr);
+      wildcard_commit = true;
     }
     // Arm testing always leaves lowering at the body block.
     switch_to(bodies[i]);
@@ -5271,7 +5276,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   // event was recorded before the arms, and the borrow marker lands
   // here, after the reads. A scrutinee read through a reference stays
   // its owner.
-  if (!borrowed) {
+  if (!borrowed && !wildcard_commit) {
     emit_move_marker(addr, true);
   }
   if (has_slot) {

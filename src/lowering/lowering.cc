@@ -637,6 +637,21 @@ bool Lowerer::place_of_register(u32 reg,
     path.push_back(static_cast<u32>(f_slot.data.i32_value));
     return true;
   }
+  // A relabel of an address is the same place: a reference cast of an
+  // enum payload keeps the payload's path, so a move event recorded
+  // through the reference still names what it moved.
+  if (instr.op == ir::Opcode::TypeCast && instr.operands.size() == 1) {
+    const ir::TypeTag result =
+        tag_of(state.registers[ir::RegisterIdx(reg)].type);
+    if (!is_ref_tag(result) && !ir::is_raw_ptr_type(result)) {
+      return false;
+    }
+    const ir::Operand& inner = state.operands[instr.operands.head()];
+    if (!inner.is<ir::RegisterIdx>()) {
+      return false;
+    }
+    return place_of_register(inner.as_register().idx, local_out, path);
+  }
   // A field or tuple slot is a constant-index GEP from the place it sits
   // in; anything else (a dynamic index, a load) names no tracked path.
   if (instr.op != ir::Opcode::GetElementPtr || instr.operands.size() != 3) {

@@ -458,6 +458,20 @@ class DropElaborator {
   [[nodiscard]] bool may_end(ir::TypeIdx type) const {
     return lowering::may_end(needs_drop, builder, type_origins_, type);
   }
+  // The state of a place at one point, as the dataflow solved it.
+  using StateAt =
+      std::function<State(u32, const std::vector<u32>&, u32, u32, u32)>;
+  [[nodiscard]] u32 place_index(u32 local, const std::vector<u32>& path) const;
+  // Marks every destructible place under (local, path) that a decision
+  // point sees as maybe, recursively: a place a later path may have
+  // moved needs its own run-time flag.
+  void mark_maybe(const StateAt& state_at,
+                  u32 local,
+                  const std::vector<u32>& path,
+                  ir::TypeIdx type,
+                  u32 block,
+                  u32 offset,
+                  u32 seq);
 
   std::span<const u8> needs_drop;
   std::span<const u8> not_movable;
@@ -546,6 +560,64 @@ void DropElaborator::pass_copy(ir::InstrSeq& seq, ir::InstructionIdx idx) {
                                                  .operands = old.operands});
   seq.push(copy);
   instr_spans_.push_back(instr_spans_[idx.idx]);
+}
+
+u32 DropElaborator::place_index(u32 local, const std::vector<u32>& path) const {
+  for (u32 i = 0; i < static_cast<u32>(tables_.places.size()); ++i) {
+    if (tables_.places[i].local == local && tables_.places[i].path == path) {
+      return i;
+    }
+  }
+  return base::INVALID_IDX;
+}
+
+void DropElaborator::mark_maybe(const StateAt& state_at,
+                                u32 local,
+                                const std::vector<u32>& path,
+                                ir::TypeIdx type,
+                                u32 block,
+                                u32 offset,
+                                u32 seq) {
+  const State state = state_at(local, path, block, offset, seq);
+  if (state == State::Moved) {
+    return;
+  }
+  if (state == State::Maybe) {
+    const u32 pi = place_index(local, path);
+    if (pi != base::INVALID_IDX) {
+      tables_.flag_needed[pi] = true;
+    }
+  }
+  const ir::TypeNode& node = builder.types()[type];
+  u32 children = 0;
+  if (node.tag == ir::TypeTag::Struct) {
+    children = builder.struct_types()[node.as_struct()].fields.size();
+  } else if (node.tag == ir::TypeTag::Tuple) {
+    children = builder.tuple_types()[node.as_tuple()].elements.size();
+  }
+  for (u32 i = 0; i < children; ++i) {
+    std::vector<u32> child = path;
+    child.push_back(i);
+    mark_maybe(state_at, local, child,
+               step_type(builder, type_origins_, type, i), block, offset, seq);
+  }
+  // An enum payload is a place a path can move out, so its state is
+  // asked for by the variant and field the path names.
+  if (node.tag == ir::TypeTag::Enum) {
+    const ir::EnumType& shape = builder.enum_types()[node.as_enum()];
+    for (u32 v = 0; v < shape.variants.size(); ++v) {
+      const ir::TypeIdxRange fields = variant_fields(type, v);
+      for (u32 fi = 0; fi < fields.size(); ++fi) {
+        if (!may_end(fields[fi])) {
+          continue;
+        }
+        std::vector<u32> child = path;
+        child.push_back(v);
+        child.push_back(fi);
+        mark_maybe(state_at, local, child, fields[fi], block, offset, seq);
+      }
+    }
+  }
 }
 
 void DropElaborator::run() {
@@ -817,14 +889,6 @@ void DropElaborator::run() {
     }
   }
 
-  auto place_index = [&](u32 local, const std::vector<u32>& path) -> u32 {
-    for (u32 i = 0; i < place_count; ++i) {
-      if (places[i].local == local && places[i].path == path) {
-        return i;
-      }
-    }
-    return base::INVALID_IDX;
-  };
   auto state_at = [&](u32 local, const std::vector<u32>& path, u32 block,
                       u32 offset, u32 seq) -> State {
     const u32 pi = place_index(local, path);
@@ -853,44 +917,14 @@ void DropElaborator::run() {
   std::vector<ir::RegisterIdx>& flag = tables_.flag;
   flag_needed.assign(place_count, false);
   flag.assign(place_count, ir::RegisterIdx(base::INVALID_IDX));
-  std::function<void(u32, const std::vector<u32>&, ir::TypeIdx, u32, u32, u32)>
-      mark_maybe;
-  mark_maybe = [&](u32 local, const std::vector<u32>& path, ir::TypeIdx type,
-                   u32 block, u32 offset, u32 seq) {
-    const State state = state_at(local, path, block, offset, seq);
-    if (state == State::Moved) {
-      return;
-    }
-    if (state == State::Maybe) {
-      const u32 pi = place_index(local, path);
-      if (pi != base::INVALID_IDX) {
-        flag_needed[pi] = true;
-      }
-    }
-    // A struct field and a tuple slot are places of their own, which a
-    // path can move out and so leave maybe. An array's slots end through
-    // one loop over the whole array and no path moves one out.
-    const ir::TypeNode& node = builder.types()[type];
-    u32 children = 0;
-    if (node.tag == ir::TypeTag::Struct) {
-      children = builder.struct_types()[node.as_struct()].fields.size();
-    } else if (node.tag == ir::TypeTag::Tuple) {
-      children = builder.tuple_types()[node.as_tuple()].elements.size();
-    }
-    for (u32 i = 0; i < children; ++i) {
-      std::vector<u32> child = path;
-      child.push_back(i);
-      mark_maybe(local, child, step_type(builder, type_origins_, type, i),
-                 block, offset, seq);
-    }
-  };
+  const StateAt state_at_fn = state_at;
   for (const EndSite& site : end_sites_) {
     for (u32 local : site.locals) {
       if (!may_end(locals[local].type)) {
         continue;
       }
-      mark_maybe(local, {}, locals[local].type, at(site.block), site.offset,
-                 site.seq);
+      mark_maybe(state_at_fn, local, {}, locals[local].type, at(site.block),
+                 site.offset, site.seq);
     }
   }
   for (const OwnershipEvent& event : ownership_) {
@@ -902,8 +936,8 @@ void DropElaborator::run() {
     if (!may_end(type)) {
       continue;
     }
-    mark_maybe(event.local, event.path, type, at(event.block), event.offset - 1,
-               event.seq);
+    mark_maybe(state_at_fn, event.local, event.path, type, at(event.block),
+               event.offset - 1, event.seq);
   }
 
   // Emit the ends. Each block rebuilds its instruction list with the
@@ -1099,11 +1133,27 @@ void DropElaborator::run() {
           std::vector<u32> payload_path = path;
           payload_path.push_back(v);
           payload_path.push_back(fi);
+          // A payload an earlier path moved out is not this variant's to
+          // end; one a path may have moved ends behind its own flag.
+          const State payload_state = state_of(payload_path);
+          if (payload_state == State::Moved) {
+            continue;
+          }
           const ir::RegisterIdx field_addr =
               pass_emit(seq_of(out), ir::Opcode::EnumFieldAddr, field,
                         {place, imm_from_u64(ir::TypeTag::I32, i32_ty, v),
                          index_operand(fi)},
                         span);
+          if (payload_state == State::Maybe) {
+            const u32 pi = place_index(local, payload_path);
+            if (pi != base::INVALID_IDX && flag[pi].is_valid()) {
+              emit_guard(out, flag[pi], span, [&](Output& drop_out) {
+                emit_end(drop_out, local, payload_path, field,
+                         to_operand(field_addr, field), state_of, span);
+              });
+              continue;
+            }
+          }
           emit_end(out, local, payload_path, field,
                    to_operand(field_addr, field), state_of, span);
         }
