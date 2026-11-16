@@ -5215,10 +5215,12 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
       record_end(arm_mark, node.span);
       emit_br(next);
     }
-    if (ast.patterns[patterns[i]].kind == ast::PatternKind::Wildcard) {
+    if (!borrowed && !through_ref &&
+        ast.patterns[patterns[i]].kind == ast::PatternKind::Wildcard) {
       // A wildcard discards the whole scrutinee, so the commit is where
       // its drop lands: the guard's true edge takes it, and the false
-      // edge leaves the value whole for the next arm.
+      // edge leaves the value whole for the next arm. A scrutinee the
+      // match reads through a reference stays its owner's to end.
       guarded_discards_.push_back(addr);
       wildcard_commit = true;
     }
