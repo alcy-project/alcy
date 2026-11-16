@@ -319,6 +319,12 @@ class Lowerer {
   // The name of the type that declares the `drop` a value of `type` ends
   // with, or nothing when no `impl` block declares one for it.
   std::optional<std::string_view> custom_drop_name(ir::TypeIdx type) const;
+  // Whether a pattern is taking apart a value whose type declares a
+  // destructor, which the destructor's whole-value receiver forbids.
+  // Answers true after reporting, the destructor's own body exempt.
+  bool destructure_refused(ir::TypeIdx type,
+                           ir::OperandIdx op,
+                           diag::Span span);
   ir::TypeIdx type_at_path(ir::TypeIdx type, std::span<const u32> path);
   ir::OperandIdx use_value(Val v);
   const Local* lookup_local(std::string_view name) const;

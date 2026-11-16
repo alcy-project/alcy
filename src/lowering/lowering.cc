@@ -717,6 +717,30 @@ std::optional<std::string_view> Lowerer::custom_drop_name(
   return std::nullopt;
 }
 
+bool Lowerer::destructure_refused(ir::TypeIdx type,
+                                  ir::OperandIdx op,
+                                  diag::Span span) {
+  const std::optional<std::string_view> holder = custom_drop_name(type);
+  if (!holder.has_value()) {
+    return false;
+  }
+  // The destructor body is the one scope that may take its own receiver
+  // apart (ADR-0137): its fields end where the body moves them.
+  u32 local = 0;
+  std::vector<u32> path;
+  const ir::Operand& operand = builder.state().operands[op.idx];
+  if (operand.is<ir::RegisterIdx>() &&
+      place_of_register(operand.as_register().idx, local, path) &&
+      local == end_exempt_) {
+    return false;
+  }
+  const u32 index = bag.emit<i18n::Key::LowerMoveOutOfDestructor>(
+      DiagCode::MoveOutOfDestructor, span, *holder);
+  (void)index;
+  failed = true;
+  return true;
+}
+
 ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
   return lowering::type_at_path(builder, type_origins_, type, path);
 }

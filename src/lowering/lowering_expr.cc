@@ -728,6 +728,9 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
         unsupported(node.span, "variant pattern in lowering");
         return;
       }
+      if (init.place && destructure_refused(init.type, init.op, node.span)) {
+        return;
+      }
       Val base = address_of(init);
       if (failed) {
         return;
@@ -748,6 +751,9 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
       return;
     }
     case ast::PatternKind::Struct: {
+      if (init.place && destructure_refused(init.type, init.op, node.span)) {
+        return;
+      }
       Val base = address_of(init);
       if (failed) {
         return;
@@ -4732,6 +4738,15 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       scrut_type = pointee;
     }
   }
+  // A value whose type declares a destructor cannot be taken apart by a
+  // by-value pattern: the destructor consumes the whole value. A
+  // reference scrutinee binds by reference and moves nothing.
+  if (!arm_borrowed_ &&
+      (node.kind == ast::PatternKind::Struct ||
+       node.kind == ast::PatternKind::Tuple) &&
+      destructure_refused(scrut_type, scrut_addr.op, span)) {
+    return;
+  }
   switch (node.kind) {
     case ast::PatternKind::Wildcard:
       emit_br(body_block);
@@ -6071,6 +6086,14 @@ void Lowerer::lower_stmt(ast::StmtIdx stmt) {
       const usize sources_before = borrow_sources.size();
       Val init = lower_moved(decl.init, nullptr);
       if (failed || terminated_cur()) {
+        return;
+      }
+      // A destructuring binding takes the value apart, which a declared
+      // destructor forbids. The destructor's own body is exempt.
+      const ast::PatternKind bound_kind = ast.patterns[decl.pattern].kind;
+      if ((bound_kind == ast::PatternKind::Struct ||
+           bound_kind == ast::PatternKind::Tuple) &&
+          init.place && destructure_refused(init.type, init.op, node.span)) {
         return;
       }
       if (ast.patterns[decl.pattern].kind == ast::PatternKind::Wildcard &&
