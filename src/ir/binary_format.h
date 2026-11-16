@@ -13,7 +13,10 @@ namespace ir::binary {
 // One place for both writers of the form: the reader lives in
 // deserialize.h and names the same constants.
 inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
-inline constexpr u16 MAJOR = 5;
+// Major 6 sets bit 6 of the instruction flags (subsumes_parts); a
+// reader that predates it must refuse the file rather than guess at a
+// flag it never read.
+inline constexpr u16 MAJOR = 6;
 // Minor 1 adds the specialization and synthetic function lists.
 // Minor 2 adds the per-type trait tables.
 inline constexpr u16 MINOR = 2;
