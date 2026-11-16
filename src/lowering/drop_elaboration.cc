@@ -188,42 +188,20 @@ DropWorkingSet::~DropWorkingSet() = default;
 
 void Lowerer::reset_locals() {
   locals.clear();
-  dropping_.clear();
-  dropping_built_for_ = 0;
-}
-
-void Lowerer::sync_dropping() {
-  for (usize i = dropping_built_for_; i < locals.size(); ++i) {
-    if (runs_destructor(locals[i].type)) {
-      dropping_.push_back(static_cast<u32>(i));
-    }
-  }
-  dropping_built_for_ = locals.size();
 }
 
 void Lowerer::record_end(u32 mark, diag::Span span) {
   if (failed || mark >= locals.size()) {
     return;
   }
-  sync_dropping();
   const u32 seq = record_seq_++;
-  // The pass reads a site's list for the locals whose type ends with code,
-  // so the site carries those and not every local declared since the mark:
-  // an end over a function's copy types would otherwise hold the whole
-  // table and pay for all of it.
-  usize from = dropping_.size();
-  while (from > 0 && dropping_[from - 1] >= mark) {
-    --from;
-  }
-  if (from == dropping_.size()) {
-    return;
-  }
   EndSite site;
   site.block = cur_;
   site.offset = streams_[at(cur_)].size();
   site.seq = seq;
-  site.locals.assign(dropping_.data() + from,
-                     dropping_.data() + dropping_.size());
+  for (u32 i = mark; i < locals.size(); ++i) {
+    site.locals.push_back(i);
+  }
   site.span = span;
   end_sites_.push_back(std::move(site));
 }
@@ -384,7 +362,7 @@ class DropElaborator {
  public:
   DropElaborator(const DropElaborationInputs& inputs,
                  DropWorkingSet::Tables& tables)
-      : drops_(inputs.drops),
+      : drops_(inputs.needs_drop, inputs.builder, inputs.type_origins),
         not_movable(inputs.not_movable),
         summary_drops(inputs.summary_drops),
         drop_glue(inputs.drop_glue),
@@ -408,6 +386,12 @@ class DropElaborator {
         reserve_block_(inputs.reserve_block) {}
 
   void run();
+  // Predecessors, from each block's terminator, in the same arena shape
+  // the point tables use: a tally per block, then the fills at their
+  // windows. The caller hands the tally and the write cursor columns.
+  void build_predecessors(u32 block_count,
+                          std::span<u32> preds_per_block,
+                          std::span<u32> write_cursor);
   // Fills the place-to-point index: for every place, the points that can
   // change its state, in (block, offset, seq) order.
   void build_place_points(std::span<const u32> place_head,
@@ -494,7 +478,7 @@ class DropElaborator {
   }
   // Whether ending a value of the type can run code (ADR-0079).
   [[nodiscard]] bool may_end(ir::TypeIdx type) const {
-    return lowering::may_end(needs_drop, builder, type_origins_, type);
+    return drops_.runs(type) || ir::type_names_param(builder.state(), type);
   }
   // The state of a place at one point, as the dataflow solved it.
   using StateAt =
@@ -511,7 +495,7 @@ class DropElaborator {
                   u32 offset,
                   u32 seq);
 
-  const DestructorQuery& drops_;
+  DestructorQuery drops_;
   std::span<const u8> not_movable;
   std::span<const u8> summary_drops;
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
@@ -706,6 +690,56 @@ void DropElaborator::build_place_points(std::span<const u32> place_head,
   }
 }
 
+void DropElaborator::build_predecessors(u32 block_count,
+                                        std::span<u32> preds_per_block,
+                                        std::span<u32> write_cursor) {
+  std::vector<u32>& pred_blocks = tables_.pred_blocks;
+  pred_blocks.clear();
+  std::vector<Window>& preds = tables_.preds;
+  preds.assign(block_count, Window{});
+  for (u32 b = 0; b < block_count; ++b) {
+    const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
+    if (range.size() == 0) {
+      continue;
+    }
+    const ir::InstructionIdx last = range[range.size() - 1];
+    for (ir::OperandIdx o : builder.state().instrs[last.idx].operands) {
+      const ir::Operand& operand = builder.state().operands[o.idx];
+      if (operand.is<ir::BlockIdx>()) {
+        const u32 target = at(operand.as_block());
+        if (target < block_count) {
+          ++preds_per_block[target];
+        }
+      }
+    }
+  }
+  u32 head = 0;
+  for (u32 b = 0; b < block_count; ++b) {
+    preds[b] = Window{head, preds_per_block[b]};
+    head += preds_per_block[b];
+  }
+  pred_blocks.resize(head);
+  for (u32 b = 0; b < block_count; ++b) {
+    write_cursor[b] = preds[b].head;
+  }
+  for (u32 b = 0; b < block_count; ++b) {
+    const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
+    if (range.size() == 0) {
+      continue;
+    }
+    const ir::InstructionIdx last = range[range.size() - 1];
+    for (ir::OperandIdx o : builder.state().instrs[last.idx].operands) {
+      const ir::Operand& operand = builder.state().operands[o.idx];
+      if (operand.is<ir::BlockIdx>()) {
+        const u32 target = at(operand.as_block());
+        if (target < block_count) {
+          pred_blocks[write_cursor[target]++] = b;
+        }
+      }
+    }
+  }
+}
+
 void DropElaborator::run() {
   if (ownership_.empty() && end_sites_.empty()) {
     return;
@@ -857,57 +891,7 @@ void DropElaborator::run() {
   }
 
   // Predecessors, from each block's terminator, in the same arena shape.
-  std::vector<u32>& pred_blocks = tables_.pred_blocks;
-  pred_blocks.clear();
-  std::vector<Window>& preds = tables_.preds;
-  preds.assign(block_count, Window{});
-  {
-    const std::span<u32> preds_per_block = column(3);
-    for (u32 b = 0; b < block_count; ++b) {
-      const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
-      if (range.size() == 0) {
-        continue;
-      }
-      const ir::InstructionIdx last = range[range.size() - 1];
-      for (ir::OperandIdx o : builder.state().instrs[last.idx].operands) {
-        const ir::Operand& operand = builder.state().operands[o.idx];
-        if (operand.is<ir::BlockIdx>()) {
-          const u32 target = at(operand.as_block());
-          if (target < block_count) {
-            ++preds_per_block[target];
-          }
-        }
-      }
-    }
-    u32 head = 0;
-    for (u32 b = 0; b < block_count; ++b) {
-      preds[b] = Window{head, preds_per_block[b]};
-      head += preds_per_block[b];
-    }
-    pred_blocks.resize(head);
-  }
-  {
-    const std::span<u32> cursor = column(4);
-    for (u32 b = 0; b < block_count; ++b) {
-      cursor[b] = preds[b].head;
-    }
-    for (u32 b = 0; b < block_count; ++b) {
-      const base::IdxRange<ir::InstructionIdx> range = streams_[b].finish();
-      if (range.size() == 0) {
-        continue;
-      }
-      const ir::InstructionIdx last = range[range.size() - 1];
-      for (ir::OperandIdx o : builder.state().instrs[last.idx].operands) {
-        const ir::Operand& operand = builder.state().operands[o.idx];
-        if (operand.is<ir::BlockIdx>()) {
-          const u32 target = at(operand.as_block());
-          if (target < block_count) {
-            pred_blocks[cursor[target]++] = b;
-          }
-        }
-      }
-    }
-  }
+  build_predecessors(block_count, column(3), column(4));
 
   build_place_points(place_head, place_next, place_count);
   const std::vector<u32>& place_point_head = tables_.place_point_head;
@@ -978,13 +962,13 @@ void DropElaborator::run() {
           ++own;
         }
         State state = State::Moved;
-        const Window pred_window = preds[b];
+        const Window pred_window = tables_.preds[b];
         if (pred_window.len != 0) {
-          const u32 first = pred_blocks[pred_window.head];
+          const u32 first = tables_.pred_blocks[pred_window.head];
           state = out[row(pi, first)];
           for (u32 k = 1; k < pred_window.len; ++k) {
-            state = join_state(state,
-                               out[row(pi, pred_blocks[pred_window.head + k])]);
+            state = join_state(
+                state, out[row(pi, tables_.pred_blocks[pred_window.head + k])]);
           }
         }
         if (state != in[row(pi, b)]) {
@@ -1733,7 +1717,7 @@ void Lowerer::place_ends() {
     return;
   }
   const DropElaborationInputs inputs{
-      .drops = drops_,
+      .needs_drop = pkg.needs_drop,
       .not_movable = pkg.not_movable,
       .summary_drops = summary_drops_,
       .drop_glue = pkg.drop_glue,
@@ -1806,8 +1790,6 @@ ir::TypeIdx type_at_path(ir::StorageBuilder& builder,
   }
   return current;
 }
-
-namespace {
 
 bool walks_destructor(std::span<const u8> needs_drop,
                       const ir::StorageBuilder& builder,
@@ -1895,17 +1877,6 @@ void emit_summary_drop_not_carried(diag::DiagBag& bag,
   const u32 index = bag.emit<i18n::Key::LowerSummaryDropNotCarried>(
       DiagCode::SummaryDropNotCarried, span, name);
   (void)index;
-}  // namespace
-
-bool DestructorQuery::walks(ir::TypeIdx type) const {
-  const usize slot = type.idx - needs_drop_.size();
-  if (slot >= interned_.size()) {
-    interned_.resize(std::max(slot + 1, interned_.size() * 2), 0);
-  }
-  const bool answer =
-      walks_destructor(needs_drop_, builder_, type_origins_, type);
-  interned_[slot] = answer ? 2 : 1;
-  return answer;
 }
 
 }  // namespace lowering

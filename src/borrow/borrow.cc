@@ -2833,9 +2833,8 @@ class Checker {
     }
     for (ir::FunctionIdx fidx(0); fidx.idx < storage.functions().size();
          ++fidx) {
-      if (parametric[fidx.idx] ||
-          (needs_body_check_[fidx.idx] == 0 &&
-           may_return_loan_[fidx.idx] == 0)) {
+      if (parametric[fidx.idx] || (needs_body_check_[fidx.idx] == 0 &&
+                                   may_return_loan_[fidx.idx] == 0)) {
         continue;
       }
       const ir::Function& fn = storage.functions()[fidx];

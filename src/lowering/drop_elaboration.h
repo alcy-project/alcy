@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <span>
@@ -96,6 +97,15 @@ struct EndSite {
   diag::Span span;
 };
 
+// Whether a type's own structure ends with code, for a type the
+// analyzer's table does not size: a walk of the type's shape. A storage
+// copy follows the copy back to the declaration the analyzer measured.
+[[nodiscard]] bool walks_destructor(
+    std::span<const u8> needs_drop,
+    const ir::StorageBuilder& builder,
+    const std::unordered_map<u32, u32>& type_origins,
+    ir::TypeIdx type);
+
 // Whether a value of a type ends with code: the analyzer's table
 // answers for the types it sized, and a type the lowering interned
 // answers only from its structure, following a storage copy back to
@@ -128,7 +138,16 @@ class DestructorQuery {
  private:
   // The answer for a type past the end of the analyzer's table: read from
   // the type's structure once and kept.
-  [[nodiscard]] bool walks(ir::TypeIdx type) const;
+  [[nodiscard]] bool walks(ir::TypeIdx type) const {
+    const usize slot = type.idx - needs_drop_.size();
+    if (slot >= interned_.size()) {
+      interned_.resize(std::max(slot + 1, interned_.size() * 2), 0);
+    }
+    const bool answer =
+        walks_destructor(needs_drop_, builder_, type_origins_, type);
+    interned_[slot] = answer ? 2 : 1;
+    return answer;
+  }
 
   std::span<const u8> needs_drop_;
   const ir::StorageBuilder& builder_;
@@ -144,9 +163,9 @@ class DestructorQuery {
 // the solving; the caller owns the bookkeeping that the block numbers
 // and the instruction spans need.
 struct DropElaborationInputs {
-  // Whether a type ends with code, kept across the functions the caller
-  // lowers.
-  const DestructorQuery& drops;
+  // Whether a type ends with code: a fresh span of the caller's table,
+  // which the pass reads through its own per-type memo.
+  std::span<const u8> needs_drop;
   // Types that are never moved (ADR-0085): their end only ends.
   std::span<const u8> not_movable;
   // Parallel to the type table: whether a type a summary brought in

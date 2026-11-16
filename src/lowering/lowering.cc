@@ -137,8 +137,7 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
                                  pkg.type_origins, pkg.fn_insts},
             ast,
             builder,
-            width),
-      drops_(pkg.needs_drop, builder, type_origins_) {
+            width) {
   // The checker's answers are compared too; then this pass records its
   // own through the same recorder.
   comp_calls_ = std::move(pkg.comp_calls);
@@ -933,10 +932,8 @@ void Lowerer::merge_summary_module(u32 module) {
     return true;
   };
   const auto drop_answer = [&](ir::TypeIdx type) -> u8 {
-    return lowering::runs_destructor(pkg.needs_drop, builder, type_origins_,
-                                     type)
-               ? 1
-               : 0;
+    return walks_destructor(pkg.needs_drop, builder, type_origins_, type) ? 1
+                                                                          : 0;
   };
   const auto anchor_answer = [&](ir::TypeIdx type) -> u8 {
     const auto origin = [this](ir::TypeIdx idx) { return canonical_type(idx); };
@@ -976,14 +973,6 @@ ir::FunctionIdx Lowerer::merge_summary_function(u32 module,
     return ir::FunctionIdx::invalid();
   }
   return ir::FunctionIdx(map[function.idx]);
-}
-
-ir::OperandIdx Lowerer::use_value(Val v) {
-  // Reading the value out is the read the move authorizes, so it has
-  // to be emitted before the marker that moves the place.
-  const ir::OperandIdx value = materialize(v).op;
-  mark_move(v);
-  return value;
 }
 
 // The one report a spent name table gets, and the failed run that follows it.
@@ -1867,10 +1856,10 @@ static bool mentions_param_slow(const ir::StorageState& state,
 }
 
 static bool signature_names_param(const ir::StorageState& state,
-                                     const std::vector<ir::TypeIdx>& params,
-                                     ir::TypeIdx ret,
-                                     ir::TypeIdx owner,
-                                     std::vector<u8>& memo) {
+                                  const std::vector<ir::TypeIdx>& params,
+                                  ir::TypeIdx ret,
+                                  ir::TypeIdx owner,
+                                  std::vector<u8>& memo) {
   if (mentions_param(state, ret, memo) || mentions_param(state, owner, memo)) {
     return true;
   }
@@ -1908,8 +1897,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   // means the isolation broke: the failure is loud rather than a Param
   // type at a backend.
   if (!parametric &&
-      signature_names_param(builder.state(), params, ret, owner,
-                            param_memo_)) {
+      signature_names_param(builder.state(), params, ret, owner, param_memo_)) {
     internal(diag::Span{}, "a parametric signature reached lowering");
     return ir::FunctionIdx(base::INVALID_IDX);
   }
@@ -3115,9 +3103,7 @@ void Lowerer::run() {
     for (usize w = lowered_upto; w < worklist_.size() && !failed; ++w) {
       const u32 fn = worklist_[w];
       const FnEntry entry = fns[fn];
-      std::vector<ir::BlockIdx> blocks;
-      lower_and_publish(entry, blocks);
-      extra.push_back({fn, std::move(blocks)});
+      extra.push_back({fn, lower_and_publish(entry)});
     }
     if (failed) {
       return;
@@ -3458,6 +3444,7 @@ ir::TypeIdx generic_declaration_type(const ir::StorageState& state,
 // the declaration-shaped instance for a generic impl, the interned one
 // for a concrete impl (ADR-0079).
 ir::TypeIdx impl_owner_of(const analyzer::CheckedPackage& pkg,
+                          const std::vector<ModuleDecls>& decls,
                           const ast::AstArena& ast,
                           const ir::StorageState& state,
                           ir::SymbolTable& strings,
@@ -3497,7 +3484,7 @@ ir::TypeIdx impl_owner_of(const analyzer::CheckedPackage& pkg,
         is_struct ? node.payload.get<ast::ItemStruct>().name.name
                   : node.payload.get<ast::ItemEnum>().name.name;
     if (declared == name) {
-      return nominal_type_of(pkg, mod, item, is_struct);
+      return nominal_type_of(pkg, decls, mod, item, is_struct);
     }
   }
   return ir::TypeIdx(base::INVALID_IDX);
@@ -3566,9 +3553,10 @@ std::vector<ir::SummaryEntry> collect_summary(
         .function = entry.idx,
         .name = entry.name_id,
         .path = strings.intern(pkg.tree.modules[entry.mod]->path),
-        .owner = entry.kind == ir::SymbolKind::Free
-                     ? ir::TypeIdx(base::INVALID_IDX)
-                     : method_owner_of(pkg, decls, entry.mod, entry.item, state),
+        .owner =
+            entry.kind == ir::SymbolKind::Free
+                ? ir::TypeIdx(base::INVALID_IDX)
+                : method_owner_of(pkg, decls, entry.mod, entry.item, state),
         .kind = summary_kind_of(entry.kind)});
   }
   for (u32 mod = 0; mod < pkg.tree.modules.size(); ++mod) {
@@ -3655,7 +3643,7 @@ std::vector<ir::SummaryEntry> collect_summary(
             .function = body,
             .name = strings.intern(fn.name.name),
             .path = path,
-            .owner = impl_owner_of(pkg, ast, state, strings, mod, item),
+            .owner = impl_owner_of(pkg, decls, ast, state, strings, mod, item),
             .kind = takes_receiver(ast, fn) ? ir::SummaryKind::Method
                                             : ir::SummaryKind::Assoc,
             .needs_body = !body.is_valid()});

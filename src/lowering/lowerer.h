@@ -411,7 +411,7 @@ class Lowerer {
   // payload, so its move has to land after them for the borrow pass
   // and before them for the drop walk.
   [[gnu::always_inline]] void emit_move_marker(Val v,
-                                                bool subsumes_parts = false) {
+                                               bool subsumes_parts = false) {
     if (!v.place || !v.address || is_copy(v.type)) {
       return;
     }
@@ -1517,8 +1517,7 @@ class Lowerer {
   void record_end(u32 mark, diag::Span span);
   // The locals whose type ends with code, ascending by local, folded in as
   // the table grows: an end site lists the ones above its mark.
-  std::vector<u32> dropping_;
-  usize dropping_built_for_ = 0;
+
   void reset_locals();
   void sync_dropping();
   void record_event(OwnershipEvent::Kind kind,
@@ -1573,7 +1572,7 @@ class Lowerer {
   void compact_instrs();
 
   [[gnu::always_inline]] bool runs_destructor(ir::TypeIdx type) const {
-    return drops_.runs(type);
+    return walks_destructor(pkg.needs_drop, builder, type_origins_, type);
   }
   // Whether ending a value of the type can run code. A type that names
   // a parameter may once the substitution says what it stands for, so
@@ -1597,8 +1596,6 @@ class Lowerer {
   // Where each type copy came from, and where each struct's shape is
   // recorded, both answered by table.
   std::unordered_map<u32, u32> type_origins_;
-  // Whether a type ends with code, answered once per type.
-  DestructorQuery drops_;
   std::unordered_map<u32, const analyzer::CheckedModule::StructInfo*> structs_;
   // An enumeration's shape and where a path's variant was recorded, by what a
   // caller knows when it asks. Each was a walk over every module in the
