@@ -529,8 +529,11 @@ test {
     assert(1.0f64 / zero < 0.0f64, "and the reciprocal is negative, so the sign survived")
   }
 
-  test an_exponent_is_not_read() {
-    assert(f64::parse("1e10").is_none(), "the exponent is not part of a decimal reading")
+  test an_exponent_is_read() {
+    assert(
+      f64::parse("1e10").or_panic_with_message("1e10 is a number") == 1e10f64,
+      "the exponent form the formatter writes reads back",
+    )
   }
 
   test digits_past_the_significand_round_once() {
