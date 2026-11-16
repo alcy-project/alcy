@@ -1915,7 +1915,7 @@ class Checker {
         // moved or ended: the whole stands as the one moved place, and
         // the arms' part markers never read as a second move. A user's
         // move of a place another move already took still conflicts.
-        if (true || instr.flags.subsumes_parts) {
+        if (instr.flags.subsumes_parts) {
           for (usize i = 0; i < moved.size();) {
             const std::span<const u32> place_steps = steps_of(place);
             const std::span<const u32> gone_steps = steps_of(moved[i]);
