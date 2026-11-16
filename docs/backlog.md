@@ -3,19 +3,13 @@
 Peripheral work, unordered. When every item is checked the list is
 replaced. The foundations are in `roadmap.md`.
 
-- [ ] A wildcard arm leaves the match's scrutinee un-ended, and the
-  discarded scrutinee's end lands after the arm bodies: `match s {
-  _ if false => ..., _ => ... }` ends `s` after the matching arm's body
-  where the arm's commit should end it. The arm's commit ending the
-  scrutinee was tried twice and each half works alone: with the commit
-  end placed, `exe/cases/exe-match-guard-discard` passes outright (the
-  order and the leak), and the match's consumption marker at the join
-  then collides with the commit's own marker on the same whole place —
-  the borrow pass subsumes that collision behind a flag, which fixes
-  the all-wildcard refusal, but the corpus's own cleanup still
-  double-frees where a commit end meets an earlier binding's end. The
-  placement needs the walk's per-commit ends and the sweep's sites
-  reconciled on one state model.
+- [ ] A wildcard arm's commit ends the scrutinee, and the match's own
+  consumption marker skips at the join. That mechanism makes
+  `exe/cases/exe-match-guard-discard` pass, and the corpus's case
+  double-frees while it is applied, because every binding value's drop
+  lands twice. Done when the mechanism is in and
+  `exe-match-guard-discard` and `ok-pattern-binding-after-test` both
+  exit zero.
 
 - [ ] Float `**` is refused while the integer one is repeated
   squaring: a fractional exponent needs `pow`, and the direct-wasm
