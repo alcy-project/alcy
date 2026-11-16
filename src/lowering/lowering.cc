@@ -1402,20 +1402,6 @@ std::vector<u32> Lowerer::comp_positions(ast::ItemIdx item) const {
   return positions;
 }
 
-bool Lowerer::item_is_prelude(ast::ItemIdx item) const {
-  if (!item.is_valid()) {
-    return false;
-  }
-  for (const analyzer::ModuleNode* node : pkg.tree.modules) {
-    for (ast::ItemIdx i : node->items) {
-      if (i == item) {
-        return node->is_prelude;
-      }
-    }
-  }
-  return false;
-}
-
 bool Lowerer::declares_borrow(ast::ItemIdx item,
                               usize index,
                               ir::TypeIdx param) const {
@@ -1424,17 +1410,7 @@ bool Lowerer::declares_borrow(ast::ItemIdx item,
         ast.items[item].payload.get<ast::ItemFn>().params;
     if (index < params.size() && params[index].type.is_valid()) {
       const ast::TypeKind kind = ast.types[params[index].type].kind;
-      if (kind == ast::TypeKind::Ref) {
-        return true;
-      }
-      if (kind == ast::TypeKind::Str) {
-        // A `str` parameter keeps the view it was handed, unless the
-        // callee is the standard library, whose `str` parameters copy
-        // the bytes (ADR-0131's audit: the library copies, so a view it
-        // takes cannot escape into a container the caller owns).
-        return !item_is_prelude(item);
-      }
-      return false;
+      return kind == ast::TypeKind::Ref || kind == ast::TypeKind::Str;
     }
   }
   // A callee the tree does not declare, such as a closure's function
