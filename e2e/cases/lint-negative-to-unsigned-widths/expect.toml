@@ -1,0 +1,6 @@
+subcommand = "lint"
+exit = 0
+# The narrower unsigned type wraps the same way, and the finding names
+# the type it wraps in.
+contains = ["warning[negative-to-unsigned]", "wraps when cast to u8"]
+not_contains = ["did you mean", "0xfe"]

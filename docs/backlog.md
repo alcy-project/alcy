@@ -297,3 +297,10 @@ replaced. The foundations are in `roadmap.md`.
   either one process per test or one process for all of them, and
   `--execution=single-thread` exists for the second because a debugger
   needs it, not because a suite does.
+
+- [ ] The linter's `negative-to-unsigned` rule states the wrap without
+  prescribing a spelling. Once the language has associated constants
+  (`uN::MAX`), a cast of a negative literal whose magnitude is one
+  wraps to exactly that constant and the finding can name it; every
+  other magnitude wraps to a value no name spells, so those stay
+  report-only. The rule carries the same TODO beside its struct.

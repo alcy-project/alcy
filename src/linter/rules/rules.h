@@ -160,6 +160,20 @@ struct BoolComparison {
   static void check_expr(LintContext& ctx, ast::ExprIdx expr);
 };
 
+struct NegativeToUnsigned {
+  static constexpr std::string_view ID = "negative-to-unsigned";
+  static constexpr LintLevel DEFAULT_LEVEL = LintLevel::Warn;
+  static constexpr LintCode CODE = LintCode::NegativeToUnsigned;
+  static constexpr std::string_view SUMMARY =
+      "a negative literal cast to an unsigned type";
+  static constexpr u64 EXPR_KINDS = expr_kinds<ast::ExprKind::Cast>();
+  static void check_expr(LintContext& ctx, ast::ExprIdx expr);
+  // TODO(lint): once associated constants land, a cast of a negative
+  // literal whose magnitude is one wraps to exactly `uN::MAX`, and the
+  // finding can name it; every other magnitude wraps to a value no name
+  // spells, so those stay report-only (docs/backlog.md).
+};
+
 // Rules over item declarations.
 struct MissingDocs {
   static constexpr std::string_view ID = "missing-docs";

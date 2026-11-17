@@ -383,6 +383,47 @@ TEST_CASE("useless-cast reports a cast of a prefixed bool literal") {
   }
 }
 
+TEST_CASE(
+    "negative-to-unsigned reports a negative literal cast to an unsigned "
+    "type") {
+  Run run;
+  run("fn main() -> i32 {\n  k := -1 as u32\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "negative-to-unsigned") == 1);
+  // The wrap is defined behavior the reader may have meant, so the
+  // finding prescribes no spelling.
+  CHECK(fix_for(run.ctx.bag, "negative-to-unsigned") == nullptr);
+}
+
+TEST_CASE("negative-to-unsigned reports a narrow target too") {
+  Run run;
+  run("fn main() -> i32 {\n  k := -128 as u8\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "negative-to-unsigned") == 1);
+}
+
+TEST_CASE("negative-to-unsigned leaves a signed target alone") {
+  Run run;
+  run("fn main() -> i32 {\n  k := -1 as isize\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "negative-to-unsigned") == 0);
+}
+
+TEST_CASE("negative-to-unsigned leaves a zero magnitude alone") {
+  Run run;
+  run("fn main() -> i32 {\n  a := -00 as u32\n  b := -0x0 as u32\n"
+      "  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "negative-to-unsigned") == 0);
+}
+
+TEST_CASE("negative-to-unsigned leaves a positive literal alone") {
+  Run run;
+  run("fn main() -> i32 {\n  k := 1 as u32\n  ret 0\n}\n",
+      default_config(run.ctx));
+  CHECK(findings_for(run.ctx.bag, "negative-to-unsigned") == 0);
+}
+
 TEST_CASE("float-equality is off until it is asked for") {
   Run run;
   const std::string_view source =

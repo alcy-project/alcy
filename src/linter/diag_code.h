@@ -42,6 +42,10 @@ enum class LintCode : u8 {
   NeedlessBool = 29,
   UnreachablePattern = 30,
   UnusedVariant = 31,
+  // A negative literal wraps when cast to an unsigned type. The wrap is
+  // defined behavior the reader may have meant, so the finding states
+  // it and prescribes no spelling.
+  NegativeToUnsigned = 32,
 };
 
 }  // namespace linter

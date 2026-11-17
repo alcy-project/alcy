@@ -38,7 +38,8 @@ constexpr auto RULES = rule_table<rules::UnusedVariable,
                                   rules::UnusedField,
                                   rules::NeedlessBool,
                                   rules::UnreachablePattern,
-                                  rules::UnusedVariant>();
+                                  rules::UnusedVariant,
+                                  rules::NegativeToUnsigned>();
 
 }  // namespace
 

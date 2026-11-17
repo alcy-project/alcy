@@ -239,6 +239,90 @@ void check_lossy_cast(LintContext& ctx, ast::ExprIdx expr) {
                                        ir::type_to_str(to->tag));
 }
 
+constexpr bool is_unsigned_tag(ir::TypeTag tag) {
+  return tag == ir::TypeTag::U8 || tag == ir::TypeTag::U16 ||
+         tag == ir::TypeTag::U32 || tag == ir::TypeTag::U64;
+}
+
+// Whether a magnitude's spelling names zero, however it is written:
+// an optional base prefix, then digits that are all zeros with `_`
+// separators, then an optional type suffix. `-0`, `-00`, `-0x0`, and
+// `-0u32` all wrap to zero, which is not a mistake to report.
+bool spells_zero(std::string_view spelling) {
+  usize at = 0;
+  if (spelling.size() >= 2 && spelling[0] == '0' &&
+      (spelling[1] == 'x' || spelling[1] == 'X' || spelling[1] == 'b' ||
+       spelling[1] == 'B' || spelling[1] == 'o' || spelling[1] == 'O')) {
+    at = 2;
+  }
+  bool zero = false;
+  for (; at < spelling.size(); ++at) {
+    const char c = spelling[at];
+    if (c == '_') {
+      continue;
+    }
+    if (c == '0') {
+      zero = true;
+      continue;
+    }
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+      // A trailing type suffix ends the digits.
+      break;
+    }
+    return false;
+  }
+  return zero;
+}
+
+// A cast of a negative integer literal to an unsigned type, e.g.
+// `-1 as u32`: the value wraps, and the arithmetic beside it panics on
+// overflow, so the cast is the one place a wrap happens without a
+// word. The finding states that; the spelling the reader meant is
+// theirs to choose, and the wrap is defined behavior they may have
+// meant exactly as written.
+void check_negative_to_unsigned(LintContext& ctx, ast::ExprIdx expr) {
+  const ast::ExprNode& node = ctx.ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Cast) {
+    return;
+  }
+  const ast::ExprCast& cast = node.payload.get<ast::ExprCast>();
+  if (!cast.inner.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& inner = ctx.ast.exprs[cast.inner];
+  if (inner.kind != ast::ExprKind::Unary) {
+    return;
+  }
+  const ast::ExprUnary& unary = inner.payload.get<ast::ExprUnary>();
+  if (unary.op != ast::UnaryOp::Neg || !unary.inner.is_valid()) {
+    return;
+  }
+  const ast::ExprNode& literal_node = ctx.ast.exprs[unary.inner];
+  if (literal_node.kind != ast::ExprKind::Literal) {
+    return;
+  }
+  const ast::Literal& literal =
+      ctx.ast.literals[literal_node.payload.get<ast::ExprLiteral>().value];
+  if (literal.kind != ast::LiteralKind::Integer) {
+    return;
+  }
+  if (spells_zero(literal.spelling)) {
+    // `- 0`, `-00`, `-0x0`: the wrap is zero either way, which is not a
+    // mistake to report.
+    return;
+  }
+  const std::optional<ir::TypeIdx> to_type = expression_type(ctx, expr);
+  if (!to_type.has_value()) {
+    return;
+  }
+  const ir::TypeNode* to = type_node(ctx, *to_type);
+  if (to == nullptr || !is_unsigned_tag(to->tag)) {
+    return;
+  }
+  ctx.report<i18n::Key::LintNegativeToUnsigned>(node.span,
+                                                ir::type_to_str(to->tag));
+}
+
 // The value a bool literal spells, or nullopt for anything else.
 std::optional<bool> bool_literal(const LintContext& ctx, ast::ExprIdx expr) {
   if (!expr.is_valid()) {
@@ -326,6 +410,10 @@ void NeedlessBorrow::check_expr(LintContext& ctx, ast::ExprIdx expr) {
 
 void LossyCast::check_expr(LintContext& ctx, ast::ExprIdx expr) {
   check_lossy_cast(ctx, expr);
+}
+
+void NegativeToUnsigned::check_expr(LintContext& ctx, ast::ExprIdx expr) {
+  check_negative_to_unsigned(ctx, expr);
 }
 
 void BoolComparison::check_expr(LintContext& ctx, ast::ExprIdx expr) {

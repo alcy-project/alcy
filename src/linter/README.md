@@ -139,6 +139,7 @@ one that runs them all.
 | `float-equality` | allow | an equality test on floating-point values |
 | `needless-borrow` | warn | a borrow of a dereference that is the reference |
 | `lossy-cast` | allow | a cast that narrows the value's scalar type |
+| `negative-to-unsigned` | warn | a negative literal cast to an unsigned type |
 | `bool-comparison` | warn | a bool compared with a true or false literal |
 | `dead-code` | allow | a function no call in the package reaches |
 | `unused-field` | allow | a struct field no expression reads |
@@ -214,7 +215,12 @@ reference, a cast from a wider integer or float, and a bool compared
 with a true or false literal are the findings. A literal has no type
 of its own and a `-` or `~` it wears passes a cast's target down to
 the digits, so `5 as isize` and `-5 as isize` write the type rather
-than convert the value and neither is reported. `double-negation`,
+than convert the value and neither is reported. `negative-to-unsigned`
+reports the counterpart: `-1 as u32` wraps, and the arithmetic beside
+it panics on overflow, so the cast is the one place a wrap happens
+without a word. The wrap is defined behavior the reader may have meant
+exactly as written, so the finding states it and prescribes no
+spelling. `double-negation`,
 `useless-cast`, `needless-borrow`, and `bool-comparison` also offer a
 machine-applicable repair (`ctx.fix`) when the expression they would
 put in place binds tightly enough that the regrouping cannot change
