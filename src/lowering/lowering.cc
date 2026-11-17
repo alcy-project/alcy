@@ -1202,9 +1202,15 @@ bool Lowerer::escapes_referent(ir::TypeIdx type,
 // so the place would outlive a view it still names (ADR-0135).
 bool Lowerer::kept_view_escapes(ast::ExprIdx expr,
                                 diag::Span span,
-                                usize first) const {
+                                usize first) {
   // A read through a reference returns the pointee, not the frame slot
-  // that holds it, and a place of a plain type cannot keep a view.
+  // that holds it, and a place of a plain type cannot keep a view. The
+  // expression's own type is what the caller hands out: indexing a
+  // slice answers a plain element even though the slice root carries a
+  // borrow.
+  if (!carries_borrow(expr_type(expr))) {
+    return false;
+  }
   const Local* target = rooted_local(expr, /*through_deref=*/false);
   if (target == nullptr || !carries_borrow(target->type)) {
     return false;

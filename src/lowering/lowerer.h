@@ -451,7 +451,7 @@ class Lowerer {
   // the place does: what the place kept a view of is a slot the block
   // that declares it ends. `first` is the first local the handing out
   // ends; parameters outlive every block of the frame (ADR-0135).
-  bool kept_view_escapes(ast::ExprIdx expr, diag::Span span, usize first) const;
+  bool kept_view_escapes(ast::ExprIdx expr, diag::Span span, usize first);
   // Records on the places a call borrowed the locals the views it kept
   // name, so handing one of those places out of its block sees them
   // (ADR-0135).
