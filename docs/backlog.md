@@ -193,17 +193,6 @@ replaced. The foundations are in `roadmap.md`.
   loan are what `exe-closure-capture-mut` expects. The environment
   belongs outside the value, or beside the call as its own operand.
 
-- [ ] ADR-0076 says the region inference is total, and the backlog
-  holds a program that reads dead storage and compiles: a fixed array's
-  `as_slice` composes the view through a raw-pointer cast inside the
-  std body, so no loan reaches the returned register and
-  `fn f() -> &[i32] { a := [7, 8, 9]; ret a.as_slice() }` compiles while
-  `ret &a` is refused; the program reads the dead frame and aborts. The
-  Vec and `str` paths refuse (their loans are real), so the hole is the
-  view composed past an untracked pointer. Until the solver exists,
-  that record is a claim the code does not make, and a checker that
-  accepts incorrect code is worse than one that refuses correct code.
-
 - [ ] A summary identifies a nominal by comparing two type graphs, so
   two declarations with the same shape are the same type: the matcher
   walks both graphs with a pair budget, and a declaration past it, or

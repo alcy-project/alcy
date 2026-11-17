@@ -950,8 +950,36 @@ class Checker {
         if (!operand_reg(0, place_reg) || !instr.dst.is_valid()) {
           break;
         }
+        // A borrow of a raw pointer composed from a reference names the
+        // place that reference holds: `&*(r as *T)` is a view of what
+        // `r` names, which is how the std's view constructors hand a
+        // place back. Writes through the raw pointer stay untracked
+        // (ADR-0050); only the safe reborrow reads back into the region
+        // system, and the summary of a body that returns such a view
+        // records the parameter it derives from.
+        for (u32 hops = 0; home[place_reg] == NO_ROOT && hops < 8; ++hops) {
+          if (place_reg >= home.size()) {
+            break;
+          }
+          const ir::InstructionIdx def = storage.registers()[place_reg].def_idx;
+          if (!def.is_valid()) {
+            break;
+          }
+          const ir::Instruction& cast = instr_at(def);
+          if (cast.op != ir::Opcode::TypeCast || cast.operands.empty()) {
+            break;
+          }
+          const ir::Operand& src = storage.operands()[cast.operands.head()];
+          if (!src.is<ir::RegisterIdx>()) {
+            break;
+          }
+          place_reg = src.as_register().idx;
+        }
         Place place;
-        if (place_of(storage.operands()[instr.operands.head()], place)) {
+        if (place_reg < home.size() && home[place_reg] != NO_ROOT) {
+          place.root = home[place_reg];
+          place.head = path_head[place_reg];
+          place.len = path_len[place_reg];
           const bool exclusive = tag_of(storage.registers()[instr.dst].type) ==
                                  ir::TypeTag::MutRef;
           // A reborrow stands behind the loans already reaching the place
