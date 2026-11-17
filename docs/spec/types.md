@@ -26,10 +26,17 @@
   float `**` is undefined - the operator is declared for integers only.
 - `-x` on a float flips its sign bit, so `-(0.0)` is `-0.0` and a
   NaN keeps its payload; on an integer it is the checked `0 - x` above.
-- Casts: a cast between a float and an integer truncates toward zero,
-  and a value the destination cannot hold saturates - its minimum below
+- Casts: between two integers, the answer is the value the bit
+  pattern names in the destination - a narrower destination keeps the
+  low bits, a wider one extends a signed source by its sign and an
+  unsigned source by zeros, and one of the same width reads the pattern
+  as it stands, so `(-1 as isize) as usize` is the largest `usize`. A
+  cast between a float and an integer truncates toward zero, and a
+  value the destination cannot hold saturates - its minimum below
   the destination's range and its maximum above it, with NaN becoming
-  zero (ADR-0077). A cast is never undefined and never traps.
+  zero (ADR-0077). A cast is never undefined and never traps, and a
+  constant expression answers the value the program would read (ADR-0065
+  reserves errors for the checked arithmetic, not for casts).
 
 ## Tuples
 
