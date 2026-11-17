@@ -12,28 +12,34 @@ extend-exclude = [
 ]
 
 [default.extend-words]
+# GN's restat attribute on ninja actions (build/toolchains/*.gni): a keyword,
+# not a misspelling.
 restat = "restat"
+# LLVM opcode FCMP_OLT, split by the checker at the underscore.
 OLT = "OLT"
-# LLVM API name (llvm::IRBuilderBase::CreateMemCpy)
+# LLVM API name (llvm::IRBuilderBase::CreateMemCpy).
 Cpy = "Cpy"
-# Windows API: _O_WRONLY
+# Errno offset name e_acces (EACCES) and Windows API O_WRONLY: the errno
+# map names its slots after the signal's short name.
 WRONLY = "WRONLY"
-# Misspellings under test: the suggestion tests feed the matcher typos
-# on purpose (src/tests/cli/*suggest*, parse_args_test,
-# parse_output_test), and per-file scopes do not apply in this typos
-# version, so these stand down globally.
+acces = "acces"
+# Misspellings under test, fed to the matcher on purpose by
+# src/tests/cli/{parse_args_test,parse_output_test,suggest_test}.cc and
+# src/tests/lsp/workspace_symbols_test.cc. This version of typos
+# (1.48.0) has no per-file word keys, and a directory-scoped
+# `_typos.toml` replaces the whole configuration for that subtree rather
+# than merging with this one (verified against the file's own docs), so
+# the words stay global.
 buid = "buid"
 buil = "buil"
 comiple = "comiple"
 chek = "chek"
 outpu = "outpu"
-abd = "abd"
 halp = "halp"
-# The `String::truncate` and `strip_suffix` cases cut "hello" short.
+abd = "abd"
+# The String::truncate and strip_suffix cases cut "hello" short.
 hel = "hel"
 # The workspace_symbols subsequence test queries "pn" ("Point").
 pn = "pn"
-# Errno table variants: e_acces (EACCES), etc.
-acces = "acces"
 # The ELF relocation section, .rela.dyn.
 rela = "rela"
