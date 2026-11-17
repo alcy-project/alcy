@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <new>
 
@@ -111,6 +112,10 @@ void deallocate(void* payload) noexcept {
   }
   auto* header = static_cast<Header*>(payload) - 1;
   const std::uint32_t class_index = header->class_index;
+  if (class_index != kSystem && class_index >= kClasses) {
+    std::fprintf(stderr, "delete of a block this allocator never carved\n");
+    std::abort();
+  }
   if (class_index == kSystem) {
     // ast-grep-ignore: no-c-heap
     std::free(header);
@@ -130,6 +135,18 @@ void* operator new[](std::size_t size) {
   return allocate(size);
 }
 
+// With exceptions off, libc++'s nothrow forms call std::malloc directly
+// instead of the throwing forms, so leaving them to the library pairs a
+// malloc'd block with this allocator's delete. Every form this binary can
+// pair must route through the same allocate/deallocate.
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+  return allocate(size);
+}
+
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+  return allocate(size);
+}
+
 void operator delete(void* payload) noexcept {
   deallocate(payload);
 }
@@ -145,6 +162,14 @@ void operator delete(void* payload, std::size_t size) noexcept {
 
 void operator delete[](void* payload, std::size_t size) noexcept {
   static_cast<void>(size);
+  deallocate(payload);
+}
+
+void operator delete(void* payload, const std::nothrow_t&) noexcept {
+  deallocate(payload);
+}
+
+void operator delete[](void* payload, const std::nothrow_t&) noexcept {
   deallocate(payload);
 }
 
