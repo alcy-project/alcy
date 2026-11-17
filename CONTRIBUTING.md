@@ -249,6 +249,12 @@ The subject is imperative and lowercase, with no trailing period: what the chang
 what was done. `fix: report two at_mut results as a receiver conflict`, not
 `Fixed the at_mut issue`.
 
+Conventional Commits sets no line widths, so this project borrows the
+conventions around it: aim for 72 columns in the subject and in every
+line of the body, and never exceed 100. The target is what `git log`
+renders well; the cap is what the standard commitlint configuration
+enforces, so a written rule and a future check cannot disagree.
+
 A `feat` or `fix` may carry a `BREAKING CHANGE:` footer, one per blank line after the body, for
 a change that invalidates previous behaviour. The tree is young enough that none has been needed
 yet, which is a reason to be sure before spending the one.
