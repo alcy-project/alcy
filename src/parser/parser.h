@@ -190,6 +190,12 @@ class Parser {
   // The nth significant token after the cursor (0 is the cursor
   // itself), skipping what `skip_insignificant` skips.
   lexer::TokenKind peek_kind(usize ahead) const;
+  // Whether the token at `pos` and the one after it are adjacent in the
+  // source text. The adjacency is between the two operator tokens, so
+  // `i--` and `i -- i` write the pair tight and read as an increment,
+  // while `i - -i` spaces the two operators apart and stays the
+  // subtraction it always was.
+  bool doubled_text(usize pos) const;
   lexer::Token peek() const { return tokens_[pos_]; }
   lexer::Token previous() const { return tokens_[pos_ - 1]; }
   void advance() {

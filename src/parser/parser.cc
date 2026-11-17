@@ -173,6 +173,15 @@ void Parser::skip_insignificant() {
   }
 }
 
+bool Parser::doubled_text(usize pos) const {
+  if (pos + 1 >= tokens_.size()) {
+    return false;
+  }
+  const diag::Span first = tokens_[pos].span;
+  const diag::Span second = tokens_[pos + 1].span;
+  return first.offset + first.length == second.offset;
+}
+
 void Parser::report_unexpected(std::string_view what) {
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedFoundEndOfFile>(

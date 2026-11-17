@@ -1943,6 +1943,41 @@ TEST_CASE("A macro call reports once") {
   CHECK(f.bag.error_count() == 1);
 }
 
+TEST_CASE("An increment or decrement reports the alcy spelling") {
+  struct Case {
+    std::string_view source;
+  };
+  // The postfix forms report where the operator sits; the prefix forms
+  // report before --i could read as negation twice.
+  const Case cases[] = {
+      {"fn main() {\n  mut i := 0\n  i++\n}\n"},
+      {"fn main() {\n  mut i := 0\n  i--;\n}\n"},
+      {"fn main() {\n  mut i := 0\n  ++i\n}\n"},
+      {"fn main() {\n  mut i := 0\n  --i\n}\n"},
+      {"fn main() {\n  mut i := 0\n  i -- i\n}\n"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    const ParseResult result = parse(c.source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag,
+                      "alcy has no `++` or `--`; write `x += 1` or "
+                      "`x -= 1` instead"));
+  }
+}
+
+TEST_CASE("Subtraction of a negation is not an increment") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn main() {\n  i := 3\n  j := i - -i\n"
+      "  _ := j\n}\n",
+      f);
+  CHECK(result.ok);
+  CHECK(!has_message(f.bag,
+                     "alcy has no `++` or `--`; write `x += 1` or "
+                     "`x -= 1` instead"));
+}
+
 TEST_CASE("A spelled item reports the alcy form once") {
   struct Case {
     std::string_view source;

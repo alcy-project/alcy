@@ -253,6 +253,23 @@ ast::ExprIdx Parser::parse_unary() {
   }
   const base::NestingScope scope(nesting_);
   const usize mark = pos_;
+  // An increment or decrement written in prefix position is a
+  // neighboring language's spelling (ADR-0061); the message names the
+  // statement alcy writes. `--i` would otherwise read as negation
+  // twice, which parses and means something else.
+  if ((check(lexer::TokenKind::Plus) || check(lexer::TokenKind::Minus)) &&
+      peek_kind() == peek_kind(1) && doubled_text(pos_)) {
+    const diag::Span span = span_from(pos_);
+    (void)bag_.emit<i18n::Key::ParserIncrementSpelling>(DiagCode::Spelling,
+                                                        span);
+    advance();
+    advance();
+    ast::ExprIdx operand = parse_unary();
+    if (!operand.is_valid()) {
+      return ast::ExprIdx::invalid();
+    }
+    return operand;
+  }
   ast::UnaryOp op = ast::UnaryOp::Neg;
   switch (peek_kind()) {
     case lexer::TokenKind::Minus: op = ast::UnaryOp::Neg; break;
@@ -472,6 +489,22 @@ ast::ExprIdx Parser::parse_postfix() {
           .inner = base,
       });
       base = ast_.exprs.push_back(question_node);
+    } else if (check(lexer::TokenKind::Plus) ||
+               check(lexer::TokenKind::Minus)) {
+      // A postfix increment or decrement is the same neighboring
+      // spelling; the message names the statement alcy writes, and the
+      // tokens are consumed so the walk continues. A site is one
+      // doubled pair, so a chain (`i++ ++`) reports at each pair the
+      // reader wrote.
+      if (peek_kind() == peek_kind(1) && doubled_text(pos_)) {
+        const diag::Span span = span_from(mark);
+        (void)bag_.emit<i18n::Key::ParserIncrementSpelling>(DiagCode::Spelling,
+                                                            span);
+        advance();
+        advance();
+        continue;
+      }
+      return base;
     } else {
       return base;
     }

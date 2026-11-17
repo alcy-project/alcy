@@ -76,6 +76,7 @@
   F(ParserMacroCallSpelling, Error, Parser, "alcy has no macros; call `name(...)`") \
   F(ParserModuleFromManifest, Error, Parser, "modules are declared in `alcy.toml`; there is no `mod`") \
   F(ParserMutDeclarationSpelling, Error, Parser, "a mutable declaration is `mut x := ...`; `=` only reassigns") \
+  F(ParserIncrementSpelling, Error, Parser, "alcy has no `++` or `--`; write `x += 1` or `x -= 1` instead") \
   F(ParserNameAlreadyBound, Error, Parser, "Name `{}` is already bound in this scope") \
   F(ParserNestingTooDeep, Error, Parser, "Nesting is deeper than the limit of {}") \
   F(AnalyzerNestingTooDeep, Error, Analyzer, "Nesting is deeper than the limit of {}") \
