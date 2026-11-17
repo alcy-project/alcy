@@ -362,7 +362,7 @@ TEST_CASE("useless-cast leaves the type of a prefixed literal to the cast") {
   // The target reaches the digits through the `-` and the `~`, so both
   // casts state the type rather than convert the value.
   run("fn main() -> i32 {\n  a: isize := -5 as isize\n  b := ~0 as u32\n"
-      "  if a == 0i64 && b == 0u32 {\n    ret 1\n  }\n  ret 0\n}\n",
+      "  if a != 0 && b != 0 {\n    ret 1\n  }\n  ret 0\n}\n",
       default_config(run.ctx));
   CHECK(findings_for(run.ctx.bag, "useless-cast") == 0);
   CHECK(fix_for(run.ctx.bag, "useless-cast") == nullptr);
