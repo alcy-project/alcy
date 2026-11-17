@@ -336,8 +336,12 @@ TEST_CASE("A freestanding runtime provides the memory primitives") {
   // Nothing declares these: the code generator reaches them for the
   // copies and fills the program never named, so they exist whether or
   // not a declaration would have asked for them.
-  add_runtime_definitions(module, target_of(ir::PointerWidth::W64),
-                          /*freestanding=*/true);
+  // The syscall sequence belongs to an architecture, so this case
+  // names the x86-64 Linux one, as the libc-free case above does;
+  // a wasm test build's host is none of the three.
+  const codegen_llvm::Target linux_x64{"x86_64-unknown-linux-gnu",
+                                       ir::PointerWidth::W64};
+  add_runtime_definitions(module, linux_x64, /*freestanding=*/true);
 
   CHECK(!llvm::verifyModule(module));
   check_definition(module, target_of(ir::PointerWidth::W64), "memcpy",
