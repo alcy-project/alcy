@@ -48,6 +48,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from utils import log
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -602,6 +603,7 @@ def main():
             "on their children rather than on each other."
         ),
     )
+    log.add_verbose(parser)
     args = parser.parse_args()
 
     if args.sanitize and SYSTEM_CLANG is None:
@@ -668,28 +670,15 @@ def main():
             continue
         selected_dirs.append(case_dir)
 
-    def checked(case_dir: Path):
-        try:
-            return run_case(alcy, case_dir, args.sanitize, args.direct_wasm)
-        except Exception as e:  # noqa: BLE001 - a harness bug is a case failure
-            return False, f"the harness raised: {e!r}"
-
-    failures = 0
-    ran = 0
+    result = build_result(alcy, selected_dirs, args, jobs)
+    logger = log.Logger(args.verbose)
     skipped = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        for case_dir, (ok, detail) in zip(
-            selected_dirs, pool.map(checked, selected_dirs), strict=True
-        ):
-            if ok is None:
-                skipped += 1
-                print(f"SKIP {case_dir.name}: {detail}")
-                continue
-            ran += 1
-            print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
-            if not ok:
-                failures += 1
-                print(detail)
+    for name, ok, detail in result.cases:
+        if ok is None:
+            skipped += 1
+            print(f"SKIP {name}: {detail}")
+            continue
+        logger.case(name, ok, detail)
     sys.stdout.flush()
     if selected_out:
         print(
@@ -698,8 +687,27 @@ def main():
         )
     if skipped:
         print(f"note: {skipped} case(s) skipped: the backend cannot build them")
-    print(f"exe: {ran - failures}/{ran} passed")
-    return 1 if failures else 0
+    return logger.summary(result.label)
+
+
+def build_result(alcy: Path, selected_dirs, args, jobs: int) -> log.CheckResult:
+    """Runs the cases and returns the verdicts, before any printing.
+    A skipped case rides the same list with a None verdict, so the
+    report keeps the SKIP lines and the notes beside the verdicts."""
+
+    def checked(case_dir: Path):
+        try:
+            return run_case(alcy, case_dir, args.sanitize, args.direct_wasm)
+        except Exception as e:  # noqa: BLE001 - a harness bug is a case failure
+            return False, f"the harness raised: {e!r}"
+
+    result = log.CheckResult("exe")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        for case_dir, (ok, detail) in zip(
+            selected_dirs, pool.map(checked, selected_dirs), strict=True
+        ):
+            result.record(case_dir.name, ok, detail)
+    return result
 
 
 if __name__ == "__main__":

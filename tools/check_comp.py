@@ -24,6 +24,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from utils import log
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -90,6 +91,7 @@ def main() -> int:
             "on each other."
         ),
     )
+    log.add_verbose(parser)
     args = parser.parse_args()
 
     out = project_root_dir / "out" / args.build_subdir
@@ -99,12 +101,11 @@ def main() -> int:
         if not binary.is_file():
             binary = binary.with_suffix(".exe")
         if not binary.is_file():
-            print(
+            return log.die(
                 f"{name} binary not found in out/{args.build_subdir}/; "
                 "run tools/build.py --target=all --mode=debug "
                 f"--build-subdir={args.build_subdir} first"
             )
-            return -1
         tools[name] = binary
 
     case_dirs = collect_cases()
@@ -131,12 +132,26 @@ def main() -> int:
                     packages.append(path)
 
         # One driver process reads every package, so the census is one
-        # verdict rather than one per case, and a summary line per case
-        # still names where a refusal lives.
+        # verdict rather than one per case. The driver's census lines run
+        # to thousands for the whole corpus and name no problem while the
+        # engine agrees, so they are captured and shown only for a
+        # failure or under --verbose; its failures report on standard
+        # error, and those always print.
         proc = subprocess.run(
             [str(tools["comp_census"]), *[str(p) for p in packages]],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
             env=run_environment(),
         )
+        if proc.returncode != 0:
+            if proc.stderr:
+                print(proc.stderr, end="")
+            if proc.stdout:
+                print(proc.stdout, end="")
+        elif args.verbose:
+            print(proc.stdout, end="")
         print(
             f"check_comp: {len(case_dirs)} cases, {len(packages)} compiled, "
             f"{rejected} rejected by the front end"

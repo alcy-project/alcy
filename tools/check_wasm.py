@@ -37,6 +37,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from utils import log
 from utils.paths import project_root_dir
 
 WASM_TARGET = "wasm32-unknown-emscripten"
@@ -172,6 +173,7 @@ def main():
         default="",
         help="Comma-separated case names to run (default: all)",
     )
+    log.add_verbose(parser)
     args = parser.parse_args()
 
     alcy = project_root_dir / "out" / args.build_subdir / "alcy"
@@ -195,17 +197,20 @@ def main():
         case_dirs = [p for p in case_dirs if p.name in selected]
 
     shim = project_root_dir / "tools" / "wasm_run.mjs"
-    failures = 0
-    ran = 0
+    result = build_result(alcy, shim, case_dirs)
+    logger = log.Logger(args.verbose)
+    for name, ok, detail in result.cases:
+        logger.case(name, ok, detail)
+    return logger.summary(result.label)
+
+
+def build_result(alcy: Path, shim: Path, case_dirs) -> log.CheckResult:
+    """Runs the cases and returns the verdicts, before any printing."""
+    result = log.CheckResult("wasm")
     for case_dir in case_dirs:
-        ran += 1
         ok, detail = run_case(alcy, shim, case_dir)
-        print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
-        if not ok:
-            failures += 1
-            print(detail)
-    print(f"wasm: {ran - failures}/{ran} passed")
-    return 1 if failures else 0
+        result.record(case_dir.name, ok, detail)
+    return result
 
 
 if __name__ == "__main__":

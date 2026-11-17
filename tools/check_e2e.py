@@ -32,6 +32,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from utils import log
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -205,14 +206,14 @@ def main():
             "other."
         ),
     )
+    log.add_verbose(parser)
     args = parser.parse_args()
 
     alcy = project_root_dir / "out" / args.build_subdir / "alcy"
     if not alcy.is_file():
         alcy = alcy.with_suffix(".exe")
     if not alcy.is_file():
-        print(f"alcy binary not found in out/{args.build_subdir}/")
-        return -1
+        return log.die(f"alcy binary not found in out/{args.build_subdir}/")
 
     cases_root = project_root_dir / "e2e" / "cases"
     selected = (
@@ -235,20 +236,30 @@ def main():
         except Exception as e:  # noqa: BLE001 - a harness bug is a case failure
             return False, f"the harness raised: {e!r}"
 
-    failures = 0
-    ran = 0
+    result = build_result(alcy, case_dirs, jobs)
+    logger = log.Logger(args.verbose)
+    for name, ok, detail in result.cases:
+        logger.case(name, ok, detail)
+    sys.stdout.flush()
+    return logger.summary(result.label)
+
+
+def build_result(alcy: Path, case_dirs, jobs: int) -> log.CheckResult:
+    """Runs the cases and returns what happened, before any printing."""
+
+    def checked(case_dir: Path):
+        try:
+            return run_case(alcy, case_dir)
+        except Exception as e:  # noqa: BLE001 - a harness bug is a case failure
+            return False, f"the harness raised: {e!r}"
+
+    result = log.CheckResult("e2e")
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         for case_dir, (ok, detail) in zip(
             case_dirs, pool.map(checked, case_dirs), strict=True
         ):
-            ran += 1
-            print(f"{'PASS' if ok else 'FAIL'} {case_dir.name}")
-            if not ok:
-                failures += 1
-                print(detail)
-    sys.stdout.flush()
-    print(f"e2e: {ran - failures}/{ran} passed")
-    return 1 if failures else 0
+            result.record(case_dir.name, ok, detail)
+    return result
 
 
 if __name__ == "__main__":

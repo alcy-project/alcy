@@ -27,6 +27,7 @@ import os
 import subprocess
 import sys
 
+from utils import log
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -146,11 +147,12 @@ def main():
         default=0,
         help="Packages to run concurrently (default: the core count)",
     )
+    log.add_verbose(parser)
     args = parser.parse_args()
 
     alcy = alcy_binary(args.build_subdir)
     if not alcy.is_file():
-        sys.exit(f"alcy binary not found in out/{args.build_subdir}/")
+        sys.exit(log.die(f"alcy binary not found in out/{args.build_subdir}/"))
 
     selected = packages()
     if args.package:
@@ -161,33 +163,41 @@ def main():
             sys.exit("no such package: " + ", ".join(sorted(missing)))
 
     jobs = args.jobs or min(8, os.cpu_count() or 1)
-    results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = [pool.submit(check_package, alcy, path) for path in selected]
-        for future in futures:
-            results.append(future.result())
+    results = run_packages(alcy, selected, jobs)
 
-    failures = 0
+    logger = log.Logger(args.verbose)
     total = 0
     for package, count, names, problem in results:
-        if problem is None:
-            if count == 0:
-                print(f"PASS {package.name}: no test, and {names[0]}")
-            else:
-                print(f"PASS {package.name}: {count} tests")
-            total += count
-        else:
-            print(f"FAIL {package.name}")
-            for line in problem.splitlines():
-                print("  " + line)
-            failures += 1
-
-    if failures:
-        sys.exit(
-            f"stdlib tests: {len(results) - failures}/{len(results)} packages passed"
+        if problem is not None:
+            logger.case(package.name, False, problem)
+            continue
+        # A package that names no test passes by declaring why, so the
+        # reason rides the line the verbose report shows.
+        logger.case(
+            f"{package.name}: no test, and {names[0]}"
+            if count == 0
+            else f"{package.name}: {count} tests",
+            True,
         )
-    print(f"stdlib tests: {total} tests in {len(results)} packages passed")
+        total += count
+    # The suite's summary counts the tests the packages carry, not the
+    # packages the check ran, so the line keeps its old shape.
+    ran = logger.passed + logger.failed
+    print(
+        f"stdlib tests: {total} tests in {ran} packages passed"
+        if logger.failed == 0
+        else f"stdlib tests: {logger.passed}/{ran} packages passed"
+    )
+    return 1 if logger.failed else 0
+
+
+def run_packages(alcy, selected, jobs: int):
+    """Checks every package and returns the verdicts, before printing."""
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = [pool.submit(check_package, alcy, path) for path in selected]
+        return [future.result() for future in futures]
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
