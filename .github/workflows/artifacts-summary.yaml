@@ -27,23 +27,23 @@ jobs:
 
       - name: Write Summary
         run: |
-          echo "### 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Build Artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
           shopt -s nullglob
           files=(*.sha256)
 
           if [ ${#files[@]} -eq 0 ]; then
-            echo "⚠️ No artifacts were generated." >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No artifacts were generated." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          echo "| Artifact | Size | SHA-256 Checksum |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | ---: | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact | Size | SHA-256 Checksum |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| :--- | ---: | :--- |" >> "$GITHUB_STEP_SUMMARY"
 
           for f in "${files[@]}"; do
             HASH=$(awk '{print $1}' "$f")
             FILENAME="${f%.sha256}"
             SIZE=$(stat -c%s "$FILENAME" 2>/dev/null || echo "-")
-            echo "| \`$FILENAME\` | $SIZE | \`$HASH\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| \`$FILENAME\` | $SIZE | \`$HASH\` |" >> "$GITHUB_STEP_SUMMARY"
           done

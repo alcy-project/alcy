@@ -57,16 +57,16 @@ runs:
       if: inputs.nix != 'true' && inputs.toolchain == 'true'
       shell: bash
       run: |
-        echo "${{ env.LLVM_PATH }}/bin" >> $GITHUB_PATH
+        echo "${{ env.LLVM_PATH }}/bin" >> "$GITHUB_PATH"
         if [[ "${{ runner.os }}" != "Windows" ]]; then
-          echo "LIBCXX_INCLUDE_DIR=${{ env.LLVM_PATH }}/include/c++/v1" >> $GITHUB_ENV
+          echo "LIBCXX_INCLUDE_DIR=${{ env.LLVM_PATH }}/include/c++/v1" >> "$GITHUB_ENV"
         fi
 
         if [[ "${{ runner.os }}" == "Linux" ]]; then
           TARGET_INC=$(echo "${{ env.LLVM_PATH }}/include/"*linux*/c++/v1)
-          echo "LIBCXX_TARGET_INCLUDE_DIR=$TARGET_INC" >> $GITHUB_ENV
+          echo "LIBCXX_TARGET_INCLUDE_DIR=$TARGET_INC" >> "$GITHUB_ENV"
           LIB_DIR=$(echo "${{ env.LLVM_PATH }}/lib/"*linux*)
-          echo "LIBCXX_LIB_DIR=$LIB_DIR" >> $GITHUB_ENV
+          echo "LIBCXX_LIB_DIR=$LIB_DIR" >> "$GITHUB_ENV"
         elif [[ "${{ runner.os }}" == "macOS" ]]; then
           LIB_DIR="${{ env.LLVM_PATH }}/lib"
           LIBCXX_DIR="$LIB_DIR/libc++/v1"
@@ -76,9 +76,9 @@ runs:
           if [ ${#FILES[@]} -gt 0 ]; then
             cp "${FILES[@]}" "$LIBCXX_DIR/"
           fi
-          echo "LIBCXX_LIB_DIR=$LIBCXX_DIR" >> $GITHUB_ENV
+          echo "LIBCXX_LIB_DIR=$LIBCXX_DIR" >> "$GITHUB_ENV"
         else
-          echo "LIBCXX_LIB_DIR=${{ env.LLVM_PATH }}/lib" >> $GITHUB_ENV
+          echo "LIBCXX_LIB_DIR=${{ env.LLVM_PATH }}/lib" >> "$GITHUB_ENV"
         fi
 
     - name: Install uv
@@ -93,4 +93,4 @@ runs:
       run: |
         uv python install
         uv sync --frozen
-        echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"

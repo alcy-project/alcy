@@ -60,7 +60,7 @@ jobs:
         run: |
           uv python install
           uv sync --frozen
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Check the Specification
         shell: bash
@@ -101,7 +101,7 @@ jobs:
         run: |
           uv python install
           uv sync --frozen
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Check the Grammar
         shell: bash
@@ -131,7 +131,7 @@ jobs:
         run: |
           uv python install
           uv sync --frozen
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Read the pinned taplo
         id: versions
