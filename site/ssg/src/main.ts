@@ -42,6 +42,7 @@ import {
   catalogMap,
   GUIDE_TREE,
   REFERENCE_TREE,
+  TOOLS_TREE,
   renderGuidePage,
   renderNotFound,
   renderTreeIndex,
@@ -51,6 +52,7 @@ import {
 } from "./render.js";
 import type { Stamp, Tree } from "./render.js";
 import { discoverSpec, discoverSpecAssets } from "./spec.js";
+import { discoverTools } from "./tools.js";
 import { renderSettings } from "./shell.js";
 import { stampTemplate } from "./templates.js";
 import type { TemplateValues } from "./templates.js";
@@ -59,6 +61,7 @@ import { canonicalUrl, pageLinks, SITE_URL, socialMeta } from "./urls.js";
 interface Options {
   docs: string;
   spec: string;
+  tools: string;
   dist: string;
   site: string;
   repoRoot: string;
@@ -93,6 +96,7 @@ function usage(): never {
   process.stderr.write(
     "usage: main.js --docs <dir> --dist <dir> --repo-root <dir> --alcy <wrapper>\n" +
       "               [--site <dir>] [--glue <js>]\n" +
+      "               [--tools <dir>] [--spec <dir>]\n" +
       "               [--grammar <wasm> --highlights <scm> --tree-sitter <js>]\n",
   );
   process.exit(64);
@@ -118,6 +122,7 @@ function parseArgs(argv: string[]): Options {
   const options: Options = {
     docs,
     spec: values.get("--spec") ?? join(repoRoot, "docs", "spec"),
+    tools: values.get("--tools") ?? join(repoRoot, "docs", "tools"),
     dist,
     site: values.get("--site") ?? join(repoRoot, "site"),
     repoRoot,
@@ -430,11 +435,15 @@ async function main(): Promise<void> {
   if (specSources.length === 0) {
     throw new Error(`${options.spec} has no specification pages`);
   }
+  const toolsSources = discoverTools(options.tools);
+  if (toolsSources.length === 0) {
+    throw new Error(`${options.tools} has no tools pages`);
+  }
 
   const compiler = await loadCompiler(options);
   // The reference answers to the same check as the guide: a fence the
   // compiler refuses is a build failure, whichever tree it came from.
-  const fences = validateFences([...sources, ...specSources], compiler);
+  const fences = validateFences([...sources, ...specSources, ...toolsSources], compiler);
   const highlighter = await loadHighlighter(options);
   const highlighted = new Map<string, string>();
   const highlight = (code: string): string => {
@@ -451,6 +460,9 @@ async function main(): Promise<void> {
   const allSpecPages = LANGUAGES.flatMap((language) =>
     pagesForLanguage(specSources, language),
   );
+  const allToolsPages = LANGUAGES.flatMap((language) =>
+    pagesForLanguage(toolsSources, language),
+  );
   // Every route this build will write. The audit asks whether a target
   // exists, and a page's link is satisfied by another page in the same
   // build, whether or not that page has been written yet -- so the answer
@@ -458,9 +470,10 @@ async function main(): Promise<void> {
   const planned = new Set([
     ...allPages.map((page) => page.route),
     ...allSpecPages.map((page) => page.route),
+    ...allToolsPages.map((page) => page.route),
   ]);
   const checker = createLinkChecker({
-    pages: [...allPages, ...allSpecPages],
+    pages: [...allPages, ...allSpecPages, ...allToolsPages],
     siteExists: (route) => planned.has(route) || siteExists(options.dist, route),
     repoExists: (path) => existsSync(join(options.repoRoot, path)),
   });
@@ -482,6 +495,7 @@ async function main(): Promise<void> {
   const trees: readonly TreePages[] = [
     { tree: GUIDE_TREE, pages: allPages },
     { tree: REFERENCE_TREE, pages: allSpecPages },
+    { tree: TOOLS_TREE, pages: allToolsPages },
   ];
 
   // The templates and the contents pages first: they create the routes
@@ -491,7 +505,13 @@ async function main(): Promise<void> {
   writeSpecAssets(options);
   writeArticles({ options, trees, boot, stamp, highlight, checker });
 
-  writeSiteRootFiles(options, allPages, boot, stamp, highlight);
+  writeSiteRootFiles(
+    options,
+    [...allPages, ...allSpecPages, ...allToolsPages],
+    boot,
+    stamp,
+    highlight,
+  );
 
   const errors = [...fences.errors, ...checker.errors];
   if (errors.length > 0) {
@@ -502,7 +522,7 @@ async function main(): Promise<void> {
     return;
   }
   process.stdout.write(
-    `guide: ${sources.length} guide and ${specSources.length} reference pages × ` +
+    `guide: ${sources.length} guide, ${specSources.length} reference, ${toolsSources.length} tools pages × ` +
       `${LANGUAGES.length} languages, ${fences.count} alcy fences compiled\n`,
   );
 }

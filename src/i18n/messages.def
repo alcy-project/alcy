@@ -189,8 +189,8 @@
   F(AnalyzerIfWithoutElse, Error, Analyzer, "If without else yields '()'") \
   F(AnalyzerImportNotQualified, Error, Analyzer, "Imports must be module-qualified (`self::foo`)") \
   F(AnalyzerInherentImplNeedsNominalType, Error, Analyzer, "Inherent impl requires a nominal type") \
-  F(AnalyzerUnmovableParameter, Error, Analyzer, "A parameter or return is Movable, and this type holds an anchor (ADR-0085)") \
-  F(AnalyzerUnmovableTypeArgument, Error, Analyzer, "A type argument is Movable, and this one holds an anchor (ADR-0085)") \
+  F(AnalyzerUnmovableParameter, Error, Analyzer, "A parameter or return is Movable, and this type holds an anchor")\
+  F(AnalyzerUnmovableTypeArgument, Error, Analyzer, "A type argument is Movable, and this one holds an anchor")\
   F(AnalyzerBuiltinImplOutsideItsSuite, Error, Analyzer, "A builtin type belongs to the staged suite: '{}' cannot be implemented here") \
   F(AnalyzerImplOutsideItsHome, Error, Analyzer, "An implementation lives where the type or the spec lives: '{}' is declared in package '{}' and '{}' in package '{}'") \
   F(AnalyzerImplParameterNotInTarget, Error, Analyzer, "Impl parameter '{}' does not appear in the impl's target type") \
@@ -349,7 +349,7 @@
   F(BorrowConflict, Error, Borrow, "Conflicting borrows of '{}'") \
   F(BorrowMoveInvalidatesBorrow, Error, Borrow, "Move of '{}' invalidates an outstanding borrow") \
   F(BorrowMoveOutOfBorrow, Error, Borrow, "Cannot move out of '{}'; it is borrowed") \
-  F(BorrowUnmovableMoved, Error, Borrow, "A value holding an anchor is never moved: '{}' lives where it was built (ADR-0085)") \
+  F(BorrowUnmovableMoved, Error, Borrow, "A value holding an anchor is never moved: '{}' lives where it was built")\
   F(BorrowReturnsLocalReference, Error, Borrow, "Returns reference to local '{}'") \
   F(BorrowUseAfterMove, Error, Borrow, "Use of moved '{}' in {}") \
   /* codegen */ \
@@ -515,9 +515,9 @@
   F(CliFunctionSingular, Note, Pipeline, "function") \
   F(CliInitAbout, Note, Pipeline, "Create a package in an existing directory") \
   F(CliInvalidConfiguration, Note, Pipeline, "Invalid configuration") \
-  F(CliJsonHelp, Note, Pipeline, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, check, and lint.") \
+  F(CliJsonHelp, Note, Pipeline, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, check, lint, and test.") \
   F(CliJobsHelp, Note, Pipeline, "How many threads read the source at once. Reading files is the only part of a run spread over them; everything after it is one thread. One by default, because a threaded read leaves the passes that read what it built to find nodes in an order that costs them more than the read saves.") \
-  F(CliJsonOnlyForResultVerbs, Note, Pipeline, "`--json` only means anything for `build`, `compile`, `check`, and `lint`") \
+  F(CliJsonOnlyForResultVerbs, Note, Pipeline, "`--json` only means anything for `build`, `compile`, `check`, `lint`, and `test`") \
   F(CliLangHelp, Note, Pipeline, "Language for every message this run prints. Taken from this flag alone: the locale the shell exports is not consulted, so the same command line reports the same text on every machine.") \
   F(CliLinkArgsOverrideHelp, Note, Pipeline, "Argument for the link driver, after the objects. Repeatable, one argument each; overrides .alcy/toolchain.toml.") \
   F(CliLinkerOverrideHelp, Note, Pipeline, "System linker driver for executable builds. Overrides .alcy/toolchain.toml.") \

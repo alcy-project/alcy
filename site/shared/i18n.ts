@@ -35,6 +35,8 @@ export const en = {
   "guide.openTitle": "Open this program in the playground",
   "site.reference": "Reference",
   "meta.reference": "The alcy language specification",
+  "site.tools": "Tools",
+  "meta.tools": "the alcy command line",
   "guide.onThisPage": "On this page",
   // The outline's tally of runnable programs, counting one and many
   // apart because English has no other way to say it.
@@ -130,6 +132,8 @@ const ja = {
   "guide.programs.other": "{count} 個のプログラム",
   "site.reference": "リファレンス",
   "meta.reference": "alcy の言語仕様",
+  "site.tools": "ツール",
+  "meta.tools": "alcy のコマンドライン",
   "guide.onThisPage": "このページの内容",
   "meta.guide": "alcy ガイド",
   "noscript.playground": "プレイグラウンドの実行には JavaScript が必要です。",

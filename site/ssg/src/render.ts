@@ -48,6 +48,12 @@ export const REFERENCE_TREE: Tree = {
   summary: "meta.reference",
 };
 
+export const TOOLS_TREE: Tree = {
+  segment: "tools",
+  label: "site.tools",
+  summary: "meta.tools",
+};
+
 export interface PageOptions {
   pages: readonly GuidePage[];
   tree: Tree;
@@ -114,6 +120,7 @@ function header(
       <nav class="site-nav" aria-label="${t("site.nav")}">
         <a href="${home}guide/"${current(GUIDE_TREE)}>${t("site.guide")}</a>
         <a href="${home}reference/"${current(REFERENCE_TREE)}>${t("site.reference")}</a>
+        <a href="${home}tools/"${current(TOOLS_TREE)}>${t("site.tools")}</a>
         <a href="${home}playground/">${t("site.playground")}</a>
         <button type="button" class="site-search-open" data-action="search">${t("site.search")}</button>
       </nav>
@@ -368,7 +375,7 @@ export function catalogMap(assets: string, language: Language): string {
 
 // The guide and the reference are written in English in every tree: a
 // translation is a translated source beside the English one, not a
-// property of the tree (ADR-0058). The tree's language therefore governs
+// property of the tree. The tree's language therefore governs
 // the chrome and the labels, while the prose says its own, so a screen
 // reader announcing Japanese furniture does not also read the article in
 // Japanese. A translated tree drops this attribute on the region it
