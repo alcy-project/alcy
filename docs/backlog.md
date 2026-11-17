@@ -297,10 +297,3 @@ replaced. The foundations are in `roadmap.md`.
   either one process per test or one process for all of them, and
   `--execution=single-thread` exists for the second because a debugger
   needs it, not because a suite does.
-
-- [ ] An e2e run once answered nineteen err-cases with the resolution
-  error that precedes the diagnostic each case expects, and later runs
-  answered every case. The compiler's version string moves with every
-  source change (verified), so the cache key moves with it and the
-  staleness theory does not hold; reproducing the run with its build
-  state and case caches preserved is the next step.
