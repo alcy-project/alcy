@@ -52,14 +52,14 @@ test("a page link becomes the built html in the same tree", () => {
 });
 
 test("a repository markdown link becomes a GitHub URL", () => {
-  const links = checker({ repo: ["docs/spec/01-lexical.md", ""] });
+  const links = checker({ repo: ["docs/spec/01-lexical.md"] });
   equal(
     links.resolve("../spec/01-lexical.md", intro),
     "https://github.com/alcy-project/alcy/blob/main/docs/spec/01-lexical.md",
   );
   equal(
-    links.resolve("#decision", gettingStarted),
-    "https://github.com/alcy-project/alcy/blob/main/#decision",
+    links.resolve("../spec/01-lexical.md#decision", gettingStarted),
+    "https://github.com/alcy-project/alcy/blob/main/docs/spec/01-lexical.md#decision",
   );
   deepEqual(links.errors, []);
 });
