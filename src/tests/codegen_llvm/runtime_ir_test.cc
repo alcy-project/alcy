@@ -344,9 +344,22 @@ TEST_CASE("A freestanding runtime provides the memory primitives") {
   add_runtime_definitions(module, linux_x64, /*freestanding=*/true);
 
   CHECK(!llvm::verifyModule(module));
-  check_definition(module, target_of(ir::PointerWidth::W64), "memcpy",
+  check_definition(module, linux_x64, "memcpy",
                    signature(pointer, {pointer, pointer, usize}));
-  check_definition(module, target_of(ir::PointerWidth::W64), "memset",
+  check_definition(module, linux_x64, "memset",
+                   signature(pointer, {pointer, i8, usize}));
+  // The primitives are discardable like everything else the runtime
+  // defines, so a COFF build needs the same comdat the other definitions
+  // get; naming a COFF target keeps the format's contract checked on
+  // every host.
+  llvm::Module coff("runtime_ir_test", context);
+  const codegen_llvm::Target coff_x64{"x86_64-pc-windows-msvc",
+                                      ir::PointerWidth::W64};
+  add_runtime_definitions(coff, coff_x64, /*freestanding=*/true);
+  CHECK(!llvm::verifyModule(coff));
+  check_definition(coff, coff_x64, "memcpy",
+                   signature(pointer, {pointer, pointer, usize}));
+  check_definition(coff, coff_x64, "memset",
                    signature(pointer, {pointer, i8, usize}));
   // A host build leaves both to the libc it links.
   llvm::Module hosted("runtime_ir_test", context);
