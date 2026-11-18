@@ -346,7 +346,6 @@ allocation behavior predictable.
 - **Explicit ownership**: Ownership and lifetime relationships between
   compiler data structures must remain clear across module boundaries.
   Non-owning views must not outlive the storage they reference.
-
 - **The process allocator is the compiler's**: `src/base/allocator.cc`
   replaces the global `operator new` with a per-thread size-class
   cache. Classes step 16 bytes to 256 and 64 bytes to 4 KiB; a block
@@ -354,8 +353,13 @@ allocation behavior predictable.
   largest class falls through to the system allocator with the same
   header, and free lists and chunks are per thread and never handed
   back. Sanitizer builds keep the system allocator, and over-aligned
-  requests use its aligned pair. The change sits below the arenas and
-  containers, which keep their interfaces.
+  requests use its aligned pair. The wasm build keeps the system allocator
+  as well: its allocator contract was measured only against the native one,
+  and a bounded nothrow-interface mismatch there once surfaced as an
+  invalid size-class read on free, so the override is compiled out of the
+  wasm build the way the sanitizer builds are and the suite runs there on
+  the system allocator. The change sits below the arenas and containers,
+  which keep their interfaces.
 
 The allocation model is an architectural contract on hot paths. New
 allocating mechanisms in lower-level infrastructure require explicit

@@ -5,13 +5,12 @@
 #include <cstdlib>
 #include <new>
 
+#include "config/build_config.h"
 #include "fpag/base/numeric.h"
 
-// A sanitizer build keeps the system allocator: each sanitizer tracks the size
-// and the lifetime of the block it handed out, and the recycled blocks a size
-// class holds would hide that.
+// Sanitizer and wasm builds keep the system allocator.
 #if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) && \
-    !defined(__SANITIZE_MEMORY__)
+    !defined(__SANITIZE_MEMORY__) && !BUILD_FLAG(IS_OS_ASMJS)
 
 namespace {
 
