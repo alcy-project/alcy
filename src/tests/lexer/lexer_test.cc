@@ -3,6 +3,7 @@
 
 #include "lexer/lexer.h"
 
+
 #include <span>
 #include <string_view>
 #include <vector>
@@ -41,6 +42,12 @@ std::vector<TokenKind> kinds_of(const std::vector<Token>& tokens) {
     kinds.push_back(token.kind);
   }
   return kinds;
+}
+
+// A token stream test feeds the lexer raw bytes; the harness's own
+// escapes cannot write a byte that does not fit a `char`.
+std::string raw(std::initializer_list<u8> bytes) {
+  return {reinterpret_cast<const char*>(bytes.begin()), bytes.size()};
 }
 
 bool check_kinds(std::string_view bytes,
@@ -246,6 +253,51 @@ TEST_CASE("Lexer handles block comments and doc comments") {
   CHECK(!f.bag.has_errors());
 
   CHECK(check_kinds("/* oops", f.bag, {TokenKind::Error, TokenKind::Eof}));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Lexer accepts a scalar in a string body") {
+  Fixture f;
+  // The scalar is part of a valid literal: three ordinary code points
+  // ride through the lexer.
+  const std::string bytes =
+      raw({'s', ' ', ':', '=', ' ', '"', '\\', 'u', '{', '0', '3', '0',
+           '8', '}', 'a', 'b', 'c', 0xC2, 0xA2, 0xE6, 0x97, 0xA5, '"', '\n'});
+  CHECK(check_kinds(bytes, f.bag,
+                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::String,
+                     TokenKind::Eof}));
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Lexer rejects a stray continuation byte in a string") {
+  Fixture f;
+  // A raw 0x80 inside a literal rode through before: the raw bytes
+  // are validated like the rest of the source now.
+  const std::string bytes =
+      raw({'s', ' ', ':', '=', ' ', '"', 'a', 0x80, 'b', '"', '\n'});
+  CHECK(check_kinds(bytes, f.bag,
+                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::Error,
+                     TokenKind::String, TokenKind::Eof}));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Lexer rejects an overlong encoding in a string") {
+  Fixture f;
+  const std::string bytes =
+      raw({'s', ' ', ':', '=', ' ', '"', 'a', 0xC0, 0xAF, '"', '\n'});
+  CHECK(check_kinds(bytes, f.bag,
+                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::Error,
+                     TokenKind::String, TokenKind::Eof}));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("Lexer rejects a surrogate in a string") {
+  Fixture f;
+  const std::string bytes =
+      raw({'s', ' ', ':', '=', ' ', '"', 'a', 0xED, 0xA0, 0x80, '"', '\n'});
+  CHECK(check_kinds(bytes, f.bag,
+                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::Error,
+                     TokenKind::String, TokenKind::Eof}));
   CHECK(f.bag.has_errors());
 }
 

@@ -31,8 +31,8 @@ code search that answered for both would answer for neither.
 Assigned in build-flow order, and the flow is what a reader needs to know
 a code's provenance, so `src/docs/architecture.md` carries the same
 order. The first letters go to the components that report most, and a
-component that gains its first error does not renumber: `A` is the lexer
-partly because UTF-8 validation is coming and it should not have to move.
+component that gains its first error does not renumber: `A` is the lexer,
+the component every consumer of the front end reports through.
 
 | Letter | Component | Directory | Notes |
 | --- | --- | --- | --- |

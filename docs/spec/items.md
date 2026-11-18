@@ -73,6 +73,17 @@
   immutable and readable wherever a value is; `const x := expr` in
   declaration position is the same thing for a local. See `comp.md`.
 
+## The staged suite's `str` APIs
+
+- The standard library's `str` functions return byte offsets that
+  always lie on scalar boundaries - `find`, `rfind`, `contains`,
+  `split`, `split_whitespace`, `trim*`, `lines`, and the predicates
+  built on them. A slice named by one of those offsets never crosses
+  a character, so `str_slice` at such an offset panics only on
+  out-of-bounds, not on a half code point.
+- `char` comes only from a checked decode, and the byte-level validity
+  predicate lives on `[u8]`.
+
 ## Intrinsic declarations (Bootstrap)
 
 - `intrinsic fn name(params) (-> ret)?;` declares a compiler-provided

@@ -55,6 +55,111 @@ bool is_digit(char c) {
   return c >= '0' && c <= '9';
 }
 
+// The byte length of the scalar starting at `at` in a valid UTF-8
+// sequence, or zero where the bytes are not one: a stray continuation,
+// a lead the alphabet does not spell, an overlong form, a surrogate, or
+// one past the last scalar.
+usize utf8_scalar_length(std::string_view bytes, usize at) {
+  const auto lead = [&](usize i) { return static_cast<u8>(bytes[i]); };
+  const u8 c = lead(at);
+  if (c < 0x80) {
+    return 1;
+  }
+  const auto continuation = [&](usize i) {
+    return i < bytes.size() && (lead(i) & 0xC0) == 0x80;
+  };
+  switch (c) {
+    case 0xC2:
+    case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
+    case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD:
+    case 0xCE: case 0xCF: case 0xD0: case 0xD1: case 0xD2: case 0xD3:
+    case 0xD4: case 0xD5: case 0xD6: case 0xD7: case 0xD8: case 0xD9:
+    case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF: {
+      if (!continuation(at + 1)) {
+        return 0;
+      }
+      return 2;
+    }
+    case 0xE0: {
+      if (!continuation(at + 1) || !continuation(at + 2)) {
+        return 0;
+      }
+      if ((lead(at + 1) & 0xE0) != 0xA0) {
+        return 0;
+      }
+      return 3;
+    }
+    case 0xED: {
+      if (!continuation(at + 1) || !continuation(at + 2)) {
+        return 0;
+      }
+      if ((lead(at + 1) & 0xE0) != 0x80) {
+        return 0;  // a surrogate
+      }
+      return 3;
+    }
+    case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6:
+    case 0xE7: case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC:
+    case 0xEE: case 0xEF: {
+      if (!continuation(at + 1) || !continuation(at + 2)) {
+        return 0;
+      }
+      return 3;
+    }
+    case 0xF0: {
+      if (!continuation(at + 1) || !continuation(at + 2) ||
+          !continuation(at + 3)) {
+        return 0;
+      }
+      if ((lead(at + 1) & 0xF0) != 0x90) {
+        return 0;
+      }
+      return 4;
+    }
+    case 0xF4: {
+      if (!continuation(at + 1) || !continuation(at + 2) ||
+          !continuation(at + 3)) {
+        return 0;
+      }
+      if ((lead(at + 1) & 0xF0) != 0x80) {
+        return 0;
+      }
+      return 4;
+    }
+    case 0xF1: case 0xF2: case 0xF3: {
+      if (!continuation(at + 1) || !continuation(at + 2) ||
+          !continuation(at + 3)) {
+        return 0;
+      }
+      return 4;
+    }
+    default: return 0;
+  }
+}
+
+// The length to skip past a broken byte run: the promise of the lead
+// byte where it holds, and one otherwise.
+usize invalid_byte_length(std::string_view bytes, usize at) {
+  const u8 lead = static_cast<u8>(bytes[at]);
+  usize promise = 1;
+  if ((lead & 0xE0) == 0xC0) {
+    promise = 2;
+  } else if ((lead & 0xF0) == 0xE0) {
+    promise = 3;
+  } else if ((lead & 0xF8) == 0xF0) {
+    promise = 4;
+  }
+  usize scalar = 1;
+  while (scalar < promise && at + scalar < bytes.size() &&
+         (static_cast<u8>(bytes[at + scalar]) & 0xC0) == 0x80) {
+    ++scalar;
+  }
+  if (at + scalar > bytes.size()) {
+    scalar = bytes.size() - at;
+  }
+  return scalar;
+}
+
 // `else` is the only identifier that changes the answer the newline rule
 // asks for, and four bytes and the one after them settle it. Scanning the
 // identifier to compare the whole spelling read bytes the lexer reads
@@ -722,6 +827,21 @@ void Lexer::lex_string(std::vector<Token>& out) {
       advance(2);
       continue;
     }
+    if (static_cast<u8>(c) >= 0x80) {
+      // Raw bytes in the literal are checked like the rest of the
+      // source: a file that is not valid UTF-8 does not compile.
+      const usize seq = utf8_scalar_length(bytes_, pos_);
+      if (seq == 0) {
+        const usize start = pos_;
+        const usize skip = invalid_byte_length(bytes_, pos_);
+        emit_error<i18n::Key::LexerInvalidCharacter>(out, start, skip,
+                                                     DiagCode::InvalidChar);
+        advance(skip);
+        continue;
+      }
+      advance(seq);
+      continue;
+    }
     advance();
   }
   if (!terminated) {
@@ -785,6 +905,20 @@ void Lexer::lex_char(std::vector<Token>& out) {
         continue;
       }
       advance(2);
+      empty = false;
+      continue;
+    }
+    if (static_cast<u8>(c) >= 0x80) {
+      const usize seq = utf8_scalar_length(bytes_, pos_);
+      if (seq == 0) {
+        const usize start = pos_;
+        const usize skip = invalid_byte_length(bytes_, pos_);
+        emit_error<i18n::Key::LexerInvalidCharacter>(out, start, skip,
+                                                     DiagCode::InvalidChar);
+        advance(skip);
+        continue;
+      }
+      advance(seq);
       empty = false;
       continue;
     }

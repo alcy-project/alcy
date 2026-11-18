@@ -208,18 +208,19 @@
 
 ## Text (staged)
 
-- The compiler-known text type is `str`: byte sequences backing
-  string literals. Nothing validates them - not a literal, not a
-  `String`'s byte API, not a foreign function's bytes - so every
-  operation on `str` is total over arbitrary bytes.
-- `len_bytes` is the byte count. `count_chars` counts scalar values,
-  where an ill-formed subsequence counts as one replacement unit, the
-  way Unicode's decoding algorithms consume the maximal subpart of
-  one; `count_graphemes` arrives with the segmentation tables.
-- Whether bytes are valid UTF-8 is a query - `unicode`'s
-  `utf8::valid` - and a `char` comes only from a checked decode.
-  Validating literals is a strictness decision of its own and is
-  reserved.
+- The compiler-known text type is `str`: a view over valid UTF-8
+  bytes. A source file is UTF-8 (a byte sequence that does not spell
+  one valid scalar is a diagnostic, inside a literal as anywhere
+  else), so a literal is well-formed; a `str` taken from bytes comes
+  from a checked construction, never from an unchecked one. An
+  `unsafe str_from_parts` promises its bytes are well-formed the same
+  way an aliasing reference promises exclusivity: a view over anything
+  else is undefined behaviour.
+- `len_bytes` is the byte count. `count_chars` counts scalar values.
+  `count_graphemes` arrives with the segmentation tables.
+- Whether bytes are valid UTF-8 is a query over `[u8]`, the way a
+  comment parser asks: the predicate lives with the byte API. A `char`
+  comes only from a checked decode.
 - `char` (a Unicode scalar value), grapheme segmentation, and width
   live outside this document for now; the names are reserved. Baremetal
   targets without core use `u8`/`u32` directly.

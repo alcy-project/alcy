@@ -75,7 +75,9 @@ stands; reserved forms are rejected with guidance diagnostics.
   zero, the nearest value it holds there, and stays a literal.
 - String escapes: `\n \t \r \\ \" \0 \u{HEX}`. The `\u{...}` value
   must name a Unicode scalar value: `\u{110000}` is past the last one,
-  and a surrogate such as `\u{D800}` is not one. `'x'` character
+  and a surrogate such as `\u{D800}` is not one. Raw bytes in the
+  literal follow the same rule: a byte sequence that spells no scalar
+  is the same diagnostic as an escape that spells one. `'x'` character
   syntax exists but resolves only with core (see `types.md`).
 - Longest-match lexing applies throughout.
 
