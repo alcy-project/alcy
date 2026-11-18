@@ -70,7 +70,7 @@ bool is_scalar_operator_tag(ir::TypeTag tag) {
 // The longest list of names walked rather than searched: below it a walk
 // reads a handful of entries, above it a table of a name order pays for
 // itself.
-constexpr std::size_t K_NAME_WALK_LIMIT = 8;
+constexpr usize K_NAME_WALK_LIMIT = 8;
 
 }  // namespace
 

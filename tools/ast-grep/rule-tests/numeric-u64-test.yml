@@ -5,3 +5,4 @@ invalid:
   - "unsigned long value = 0;"
   - "unsigned long long value = 0;"
   - "uint64_t value = 0;"
+  - "std::uint64_t value = 0;"

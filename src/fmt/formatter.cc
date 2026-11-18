@@ -946,7 +946,7 @@ Doc Printer::print_brace_body(const cst::Node& group) {
     const usize end = trailing_eol_start(chunks[0]);
     std::vector<const cst::Node*> code(
         chunks[0].nodes.begin(),
-        chunks[0].nodes.begin() + static_cast<std::ptrdiff_t>(end));
+        chunks[0].nodes.begin() + static_cast<isize>(end));
     std::vector<Doc> inner_parts;
     inner_parts.reserve(2);
     inner_parts.push_back(doc_line());
@@ -1435,8 +1435,7 @@ Doc Printer::chunk_line(const Chunk& chunk, Doc terminator) {
   }
   const usize end = trailing_eol_start(chunk);
   std::vector<const cst::Node*> code(
-      chunk.nodes.begin(),
-      chunk.nodes.begin() + static_cast<std::ptrdiff_t>(end));
+      chunk.nodes.begin(), chunk.nodes.begin() + static_cast<isize>(end));
   std::vector<Doc> parts;
   parts.reserve(chunk.nodes.size() - end + 4);
   parts.push_back(print_line(code));
@@ -1518,7 +1517,7 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
     const usize end = trailing_eol_start(chunks[k]);
     std::vector<const cst::Node*> code(
         chunks[k].nodes.begin(),
-        chunks[k].nodes.begin() + static_cast<std::ptrdiff_t>(end));
+        chunks[k].nodes.begin() + static_cast<isize>(end));
     bool next_suppresses = false;
     for (usize j = k + 1; j < chunks.size(); ++j) {
       if (chunks[j].is_comment) {

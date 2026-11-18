@@ -5,3 +5,4 @@ invalid:
   - "long value = 0;"
   - "long long value = 0;"
   - "int64_t value = 0;"
+  - "std::int64_t value = 0;"

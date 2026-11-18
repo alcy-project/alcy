@@ -1,5 +1,12 @@
 id: numeric-u8
 snapshots:
+  std::uint8_t value = 0;:
+    fixed: u8 value = 0;
+    labels:
+    - source: std::uint8_t
+      style: primary
+      start: 0
+      end: 12
   uint8_t value = 0;:
     fixed: u8 value = 0;
     labels:

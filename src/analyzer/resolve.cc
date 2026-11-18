@@ -710,7 +710,7 @@ class Resolver {
         return;
       }
       module_imports[module].erase(module_imports[module].begin() +
-                                   static_cast<std::ptrdiff_t>(i));
+                                   static_cast<isize>(i));
       break;
     }
     module_imports[module].push_back(

@@ -4,3 +4,4 @@ valid:
 invalid:
   - "signed char value = 0;"
   - "int8_t value = 0;"
+  - "std::int8_t value = 0;"

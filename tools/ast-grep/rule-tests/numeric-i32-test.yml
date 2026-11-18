@@ -5,3 +5,4 @@ invalid:
   - "int value = 0;"
   - "signed value = 0;"
   - "int32_t value = 0;"
+  - "std::int32_t value = 0;"

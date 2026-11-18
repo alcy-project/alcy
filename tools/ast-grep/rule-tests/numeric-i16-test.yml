@@ -5,3 +5,4 @@ invalid:
   - "short value = 0;"
   - "signed short value = 0;"
   - "int16_t value = 0;"
+  - "std::int16_t value = 0;"

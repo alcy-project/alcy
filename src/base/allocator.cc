@@ -1,11 +1,11 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+
+#include "fpag/base/numeric.h"
 
 // A sanitizer build keeps the system allocator: each sanitizer tracks the size
 // and the lifetime of the block it handed out, and the recycled blocks a size
@@ -19,19 +19,19 @@ namespace {
 // matched to the size class whose free list it belongs on, and the alignment
 // arithmetic stays a single subtraction. Blocks above the largest class come
 // straight from the system allocator.
-constexpr std::size_t kAlign = 16;
-constexpr std::size_t kSmallLimit = 256;
-constexpr std::size_t kSmallStep = 16;
-constexpr std::size_t kLargeLimit = 4096;
-constexpr std::size_t kLargeStep = 64;
-constexpr std::size_t kSmallClasses = kSmallLimit / kSmallStep;
-constexpr std::size_t kClasses =
+constexpr usize kAlign = 16;
+constexpr usize kSmallLimit = 256;
+constexpr usize kSmallStep = 16;
+constexpr usize kLargeLimit = 4096;
+constexpr usize kLargeStep = 64;
+constexpr usize kSmallClasses = kSmallLimit / kSmallStep;
+constexpr usize kClasses =
     kSmallClasses + (kLargeLimit - kSmallLimit) / kLargeStep;
-constexpr std::size_t kChunk = std::size_t{64} << 10;
-constexpr std::uint32_t kSystem = 0xFFFFFFFFu;
+constexpr usize kChunk = usize{64} << 10;
+constexpr u32 kSystem = 0xFFFFFFFFu;
 
 struct alignas(kAlign) Header {
-  std::uint32_t class_index;
+  u32 class_index;
 };
 
 static_assert(sizeof(Header) == kAlign);
@@ -43,28 +43,26 @@ thread_local void* free_lists[kClasses];
 thread_local char* bump = nullptr;
 thread_local char* bump_end = nullptr;
 
-std::uint32_t class_of(std::size_t size) {
+u32 class_of(usize size) {
   if (size <= kSmallLimit) {
-    return static_cast<std::uint32_t>((size - 1) / kSmallStep);
+    return static_cast<u32>((size - 1) / kSmallStep);
   }
-  return static_cast<std::uint32_t>(kSmallClasses +
-                                    (size - kSmallLimit - 1) / kLargeStep);
+  return static_cast<u32>(kSmallClasses +
+                          (size - kSmallLimit - 1) / kLargeStep);
 }
 
-std::size_t block_size(std::uint32_t class_index) {
+usize block_size(u32 class_index) {
   if (class_index < kSmallClasses) {
-    return (std::size_t{class_index} + 1) * kSmallStep;
+    return (usize{class_index} + 1) * kSmallStep;
   }
-  return kSmallLimit +
-         (std::size_t{class_index} - kSmallClasses + 1) * kLargeStep;
+  return kSmallLimit + (usize{class_index} - kSmallClasses + 1) * kLargeStep;
 }
 
 // A free list answers most requests, so the two paths behind it - a fresh
 // block from the bump region and a block the system owns - stay out of the
 // allocating function: no register it saves outlives the fast path, and the
 // region refill it rarely takes is not competing for the cache lines it reads.
-[[gnu::noinline, gnu::cold]] Header* carve(std::uint32_t class_index,
-                                           std::size_t size) {
+[[gnu::noinline, gnu::cold]] Header* carve(u32 class_index, usize size) {
   if (class_index == kSystem) {
     // A block above the largest class is owned by the system allocator and
     // handed back by the matching free below.
@@ -76,8 +74,8 @@ std::size_t block_size(std::uint32_t class_index) {
     header->class_index = kSystem;
     return header;
   }
-  const std::size_t span = block_size(class_index) + kAlign;
-  if (bump == nullptr || static_cast<std::size_t>(bump_end - bump) < span) {
+  const usize span = block_size(class_index) + kAlign;
+  if (bump == nullptr || static_cast<usize>(bump_end - bump) < span) {
     // ast-grep-ignore: no-c-heap
     bump = static_cast<char*>(std::malloc(kChunk));
     if (bump == nullptr) {
@@ -91,14 +89,14 @@ std::size_t block_size(std::uint32_t class_index) {
   return header;
 }
 
-void* allocate(std::size_t size) {
+void* allocate(usize size) {
   if (size == 0) {
     size = 1;
   }
   if (size > kLargeLimit) {
     return carve(kSystem, size) + 1;
   }
-  const std::uint32_t class_index = class_of(size);
+  const u32 class_index = class_of(size);
   if (void* block = free_lists[class_index]; block != nullptr) {
     free_lists[class_index] = *static_cast<void**>(block);
     return block;
@@ -111,7 +109,7 @@ void deallocate(void* payload) noexcept {
     return;
   }
   auto* header = static_cast<Header*>(payload) - 1;
-  const std::uint32_t class_index = header->class_index;
+  const u32 class_index = header->class_index;
   if (class_index != kSystem && class_index >= kClasses) {
     std::fprintf(stderr, "delete of a block this allocator never carved\n");
     std::abort();
@@ -127,11 +125,11 @@ void deallocate(void* payload) noexcept {
 
 }  // namespace
 
-void* operator new(std::size_t size) {
+void* operator new(usize size) {
   return allocate(size);
 }
 
-void* operator new[](std::size_t size) {
+void* operator new[](usize size) {
   return allocate(size);
 }
 
@@ -139,11 +137,11 @@ void* operator new[](std::size_t size) {
 // instead of the throwing forms, so leaving them to the library pairs a
 // malloc'd block with this allocator's delete. Every form this binary can
 // pair must route through the same allocate/deallocate.
-void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+void* operator new(usize size, const std::nothrow_t&) noexcept {
   return allocate(size);
 }
 
-void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+void* operator new[](usize size, const std::nothrow_t&) noexcept {
   return allocate(size);
 }
 
@@ -155,12 +153,12 @@ void operator delete[](void* payload) noexcept {
   deallocate(payload);
 }
 
-void operator delete(void* payload, std::size_t size) noexcept {
+void operator delete(void* payload, usize size) noexcept {
   static_cast<void>(size);
   deallocate(payload);
 }
 
-void operator delete[](void* payload, std::size_t size) noexcept {
+void operator delete[](void* payload, usize size) noexcept {
   static_cast<void>(size);
   deallocate(payload);
 }

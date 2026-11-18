@@ -7,3 +7,10 @@ snapshots:
       style: primary
       start: 0
       end: 6
+  std::size_t value = 0;:
+    fixed: usize value = 0;
+    labels:
+    - source: std::size_t
+      style: primary
+      start: 0
+      end: 11

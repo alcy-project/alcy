@@ -14,3 +14,10 @@ snapshots:
       style: primary
       start: 0
       end: 11
+  std::int8_t value = 0;:
+    fixed: i8 value = 0;
+    labels:
+    - source: std::int8_t
+      style: primary
+      start: 0
+      end: 11

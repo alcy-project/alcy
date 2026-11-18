@@ -20,6 +20,8 @@ rule:
       regex: ^signed char$
     - kind: primitive_type
       regex: ^int8_t$
+    - kind: qualified_identifier
+      regex: ^std::int8_t$
 fix: i8
 ---
 id: numeric-u8
@@ -32,6 +34,8 @@ rule:
       regex: ^unsigned char$
     - kind: primitive_type
       regex: ^uint8_t$
+    - kind: qualified_identifier
+      regex: ^std::uint8_t$
 fix: u8
 ---
 id: numeric-i16
@@ -44,6 +48,8 @@ rule:
       regex: ^(short|short int|signed short|signed short int)$
     - kind: primitive_type
       regex: ^int16_t$
+    - kind: qualified_identifier
+      regex: ^std::int16_t$
 fix: i16
 ---
 id: numeric-u16
@@ -56,6 +62,8 @@ rule:
       regex: ^(unsigned short|unsigned short int)$
     - kind: primitive_type
       regex: ^uint16_t$
+    - kind: qualified_identifier
+      regex: ^std::uint16_t$
 fix: u16
 ---
 id: numeric-i32
@@ -73,6 +81,8 @@ rule:
           kind: sized_type_specifier
     - kind: primitive_type
       regex: ^int32_t$
+    - kind: qualified_identifier
+      regex: ^std::int32_t$
 fix: i32
 ---
 id: numeric-u32
@@ -85,6 +95,8 @@ rule:
       regex: ^(unsigned|unsigned int)$
     - kind: primitive_type
       regex: ^uint32_t$
+    - kind: qualified_identifier
+      regex: ^std::uint32_t$
 fix: u32
 ---
 id: numeric-i64
@@ -97,6 +109,8 @@ rule:
       regex: ^(long|long int|signed long|signed long int|long long|long long int|signed long long|signed long long int)$
     - kind: primitive_type
       regex: ^int64_t$
+    - kind: qualified_identifier
+      regex: ^std::int64_t$
 fix: i64
 ---
 id: numeric-u64
@@ -109,6 +123,8 @@ rule:
       regex: ^(unsigned long|unsigned long int|unsigned long long|unsigned long long int)$
     - kind: primitive_type
       regex: ^uint64_t$
+    - kind: qualified_identifier
+      regex: ^std::uint64_t$
 fix: u64
 ---
 id: numeric-f32
@@ -137,8 +153,11 @@ language: Cpp
 severity: error
 message: Use usize from fpag/base/numeric.h instead of size_t.
 rule:
-  kind: primitive_type
-  regex: ^(std::)?size_t$
+  any:
+    - kind: primitive_type
+      regex: ^size_t$
+    - kind: qualified_identifier
+      regex: ^std::size_t$
 fix: usize
 ---
 id: numeric-isize
@@ -146,6 +165,9 @@ language: Cpp
 severity: error
 message: Use isize from fpag/base/numeric.h instead of ptrdiff_t.
 rule:
-  kind: primitive_type
-  regex: ^(std::)?ptrdiff_t$
+  any:
+    - kind: primitive_type
+      regex: ^ptrdiff_t$
+    - kind: qualified_identifier
+      regex: ^std::ptrdiff_t$
 fix: isize

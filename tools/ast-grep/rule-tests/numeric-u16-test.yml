@@ -4,3 +4,4 @@ valid:
 invalid:
   - "unsigned short value = 0;"
   - "uint16_t value = 0;"
+  - "std::uint16_t value = 0;"

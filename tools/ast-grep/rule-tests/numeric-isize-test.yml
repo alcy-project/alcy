@@ -3,3 +3,4 @@ valid:
   - "isize value = 0;"
 invalid:
   - "ptrdiff_t value = 0;"
+  - "std::ptrdiff_t value = 0;"

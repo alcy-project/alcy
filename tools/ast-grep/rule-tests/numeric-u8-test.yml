@@ -4,3 +4,4 @@ valid:
 invalid:
   - "unsigned char value = 0;"
   - "uint8_t value = 0;"
+  - "std::uint8_t value = 0;"
