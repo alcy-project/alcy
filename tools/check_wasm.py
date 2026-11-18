@@ -150,9 +150,12 @@ def run_case(alcy: Path, shim: Path, case_dir: Path):
         bun = shutil.which("bun")
         if bun is None:
             return False, "bun is not on PATH; needed to run the wasm cases"
+        # EOF is the runner's input contract: a case that reads stdin
+        # sees the end, never whatever teed data the harness has.
         ran = subprocess.run(
             [bun, str(shim), str(module_path)],
             capture_output=True,
+            stdin=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
             timeout=60,

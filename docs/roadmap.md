@@ -199,7 +199,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   system can express them as methods; that door is named, not
   promised.
 
-- [ ] Bytes-first input.
+- [x] Bytes-first input.
   Over `sys` and `Parse`: `io::BufReader` (one-call `fill`,
   `read_byte`, `read_line` with the CRLF rule and no UTF-8 validation,
   `read_to_end`; `EINTR` retried here and only here) and
