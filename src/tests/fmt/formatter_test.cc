@@ -369,6 +369,25 @@ TEST_CASE("A gap a dropped semicolon leaves does not break the line") {
   CHECK(idempotent(source, narrow));
 }
 
+TEST_CASE("A literal the source never closed keeps its statement's semi") {
+  // The newline after an unterminated literal terminates the statement
+  // the literal sits in, so the insertion writes the semi the spelled
+  // one wrote: the pass over the layout reads two chunks where the
+  // source had two, and the line the source fit stays on one line.
+  // Without it the layout's second pass read one chunk, the pinned gap
+  // carried the blank line into the flow as hardlines, and the group
+  // broke into an indented layout the first pass never wrote.
+  const std::string source = std::string("=-=='#\n;\xdd");
+  const std::string formatted = once(source);
+  CHECK(formatted == std::string("= -= ='#\n\n\xdd\n"));
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, default_format_config()));
+  CHECK(idempotent(source, narrow));
+  CHECK(idempotent(formatted, default_format_config()));
+}
+
 TEST_CASE("Code an error precedes across a newline keeps its indent") {
   // The error's span eats the layout's break and indent, so the
   // semicolon the next pass inserts there is not the one this pass saw,

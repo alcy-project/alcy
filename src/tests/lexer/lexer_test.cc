@@ -202,7 +202,8 @@ TEST_CASE("Lexer reads strings and reports unterminated ones") {
   CHECK(!f.bag.has_errors());
 
   CHECK(check_kinds("\"oops\nnext", f.bag,
-                    {TokenKind::Error, TokenKind::Ident, TokenKind::Eof}));
+                    {TokenKind::Error, TokenKind::Semicolon, TokenKind::Ident,
+                     TokenKind::Eof}));
   CHECK(check_kinds("\"bad\\q\"", f.bag, {TokenKind::Error, TokenKind::Eof}));
   CHECK(f.bag.has_errors());
 }
@@ -273,12 +274,14 @@ TEST_CASE("Lexer accepts a scalar in a string body") {
 TEST_CASE("Lexer rejects a stray continuation byte in a string") {
   Fixture f;
   // A raw 0x80 inside a literal rode through before: the raw bytes
-  // are validated like the rest of the source now.
+  // are validated like the rest of the source now. The diagnostic
+  // stands alone and the literal's token carries the bytes, so the
+  // stream holds one token per byte.
   const std::string bytes =
       raw({'s', ' ', ':', '=', ' ', '"', 'a', 0x80, 'b', '"', '\n'});
   CHECK(check_kinds(bytes, f.bag,
-                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::Error,
-                     TokenKind::String, TokenKind::Eof}));
+                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::String,
+                     TokenKind::Eof}));
   CHECK(f.bag.has_errors());
 }
 
@@ -287,8 +290,8 @@ TEST_CASE("Lexer rejects an overlong encoding in a string") {
   const std::string bytes =
       raw({'s', ' ', ':', '=', ' ', '"', 'a', 0xC0, 0xAF, '"', '\n'});
   CHECK(check_kinds(bytes, f.bag,
-                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::Error,
-                     TokenKind::String, TokenKind::Eof}));
+                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::String,
+                     TokenKind::Eof}));
   CHECK(f.bag.has_errors());
 }
 
@@ -297,8 +300,8 @@ TEST_CASE("Lexer rejects a surrogate in a string") {
   const std::string bytes =
       raw({'s', ' ', ':', '=', ' ', '"', 'a', 0xED, 0xA0, 0x80, '"', '\n'});
   CHECK(check_kinds(bytes, f.bag,
-                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::Error,
-                     TokenKind::String, TokenKind::Eof}));
+                    {TokenKind::Ident, TokenKind::ColonEq, TokenKind::String,
+                     TokenKind::Eof}));
   CHECK(f.bag.has_errors());
 }
 
@@ -339,6 +342,22 @@ TEST_CASE("A statement an unterminated comment ends still gets its semi") {
   CHECK(check_kinds("a\n/*x", f.bag,
                     {TokenKind::Ident, TokenKind::Semicolon, TokenKind::Error,
                      TokenKind::Eof}));
+  CHECK(f.bag.has_errors());
+}
+
+TEST_CASE("A statement an unterminated literal ends still gets its semi") {
+  Fixture f;
+  // The same holds for a literal the source never closed: the error
+  // stands where the literal would have stood, so the newline after it
+  // terminates the statement and the insertion writes the semi. A
+  // literal that stops at the newline is where the lexer stopped it,
+  // not the end of the file.
+  CHECK(check_kinds("x = '\ny", f.bag,
+                    {TokenKind::Ident, TokenKind::Eq, TokenKind::Error,
+                     TokenKind::Semicolon, TokenKind::Ident, TokenKind::Eof}));
+  CHECK(check_kinds("x = \"\ny", f.bag,
+                    {TokenKind::Ident, TokenKind::Eq, TokenKind::Error,
+                     TokenKind::Semicolon, TokenKind::Ident, TokenKind::Eof}));
   CHECK(f.bag.has_errors());
 }
 

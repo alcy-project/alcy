@@ -805,6 +805,12 @@ void Lexer::lex_number(std::vector<Token>& out) {
 void Lexer::lex_string(std::vector<Token>& out) {
   const usize start = pos_;
   advance();  // Opening quote.
+  // The literal is the significant token from here on, whatever comes of
+  // it: an error stands where the literal would have stood, and the
+  // semicolon-insertion rule has to see it, or a statement the newline
+  // after a literal the source never closed materializes no `;` and the
+  // formatter's fixed point reads two different token streams.
+  last_significant_ = TokenKind::String;
   bool terminated = false;
   bool bad_escape = false;
   while (!at_end()) {
@@ -866,13 +872,16 @@ void Lexer::lex_string(std::vector<Token>& out) {
     }
     if (static_cast<u8>(c) >= 0x80) {
       // Raw bytes in the literal are checked like the rest of the
-      // source: a file that is not valid UTF-8 does not compile.
+      // source: a file that is not valid UTF-8 does not compile. The
+      // diagnostic stands alone: the literal's own token carries these
+      // bytes, and a second token over the same span would print them
+      // twice, growing the layout by the copy on every pass.
       const usize seq = utf8_scalar_length(bytes_, pos_);
       if (seq == 0) {
-        const usize start = pos_;
+        const usize at = pos_;
         const usize skip = invalid_byte_length(bytes_, pos_);
-        emit_error<i18n::Key::LexerInvalidCharacter>(out, start, skip,
-                                                     DiagCode::InvalidChar);
+        (void)bag_.emit<i18n::Key::LexerInvalidCharacter>(DiagCode::InvalidChar,
+                                                          span_at(at, skip));
         advance(skip);
         continue;
       }
@@ -899,6 +908,12 @@ void Lexer::lex_string(std::vector<Token>& out) {
 void Lexer::lex_char(std::vector<Token>& out) {
   const usize start = pos_;
   advance();  // Opening quote.
+  // The literal is the significant token from here on, whatever comes of
+  // it: an error stands where the literal would have stood, and the
+  // semicolon-insertion rule has to see it, or a statement the newline
+  // after a literal the source never closed materializes no `;` and the
+  // formatter's fixed point reads two different token streams.
+  last_significant_ = TokenKind::Char;
   bool terminated = false;
   bool empty = true;
   bool bad_escape = false;
@@ -946,12 +961,14 @@ void Lexer::lex_char(std::vector<Token>& out) {
       continue;
     }
     if (static_cast<u8>(c) >= 0x80) {
+      // As in the string body: the diagnostic stands alone, and the
+      // literal's own token carries the bytes.
       const usize seq = utf8_scalar_length(bytes_, pos_);
       if (seq == 0) {
-        const usize start = pos_;
+        const usize at = pos_;
         const usize skip = invalid_byte_length(bytes_, pos_);
-        emit_error<i18n::Key::LexerInvalidCharacter>(out, start, skip,
-                                                     DiagCode::InvalidChar);
+        (void)bag_.emit<i18n::Key::LexerInvalidCharacter>(DiagCode::InvalidChar,
+                                                          span_at(at, skip));
         advance(skip);
         continue;
       }
