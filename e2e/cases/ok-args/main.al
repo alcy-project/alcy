@@ -5,7 +5,7 @@ fn main() -> i32 {
   }
   match arg_at(0) {
     Option::Some(name) => {
-      if name.len_bytes() < 1 {
+      if name.len() < 1 {
         ret 2
       }
     }
@@ -13,8 +13,14 @@ fn main() -> i32 {
       ret 3
     }
   }
-  if arg_at(9999).is_some() {
+  if arg_at_str(0).or_panic_with_message("the program name is in the arguments").len_bytes() < 1 {
     ret 4
+  }
+  if arg_at(9999).is_some() {
+    ret 5
+  }
+  if arg_at_str(9999).is_some() {
+    ret 6
   }
   ret 0
 }

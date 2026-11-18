@@ -42,6 +42,9 @@ constexpr std::string_view ARG_COUNT = "arg_count";
 constexpr std::string_view ARG = "arg";
 constexpr std::string_view STR_LEN = "str_len";
 constexpr std::string_view STR_BYTE = "str_byte";
+constexpr std::string_view STR_FROM_PARTS = "str_from_parts";
+constexpr std::string_view SLICE_LEN = "slice_len";
+constexpr std::string_view SLICE_AT = "slice_at";
 // The write a single-thread driver performs to say which test it is about
 // to run; a multi-process driver never declares it.
 constexpr std::string_view SYS_WRITE = "sys_write";
@@ -93,14 +96,29 @@ void append_argument_intrinsics(std::string& out) {
   out += "() -> i64;\n";
   out += "unsafe intrinsic fn ";
   out += ARG;
-  out += "(i: i64) -> str;\n";
+  out += "(i: i64) -> &[u8];\n";
+  out += "unsafe intrinsic fn ";
+  out += STR_FROM_PARTS;
+  out += "(ptr: &u8, len: usize) -> str;\n";
+  out += "intrinsic fn ";
+  out += SLICE_LEN;
+  out += "<T>(s: &[T]) -> usize;\n";
+  out += "unsafe intrinsic fn ";
+  out += SLICE_AT;
+  out += "<T>(s: &[T], i: usize) -> &T;\n";
   out += "intrinsic fn ";
   out += STR_LEN;
   out += "(s: str) -> usize;\n";
   out += "intrinsic fn ";
   out += STR_BYTE;
   out += "(s: str, i: usize) -> u8;\n\n";
-  out += "fn alcy_test_index(text: str) -> i64 {\n";
+  out += "fn alcy_test_index(bytes: &[u8]) -> i64 {\n";
+  out += "  if slice_len(bytes) == 0 {\n";
+  out += "    ret 0\n";
+  out += "  }\n";
+  out +=
+      "  text := unsafe { str_from_parts(slice_at(bytes, 0), slice_len(bytes)) "
+      "}\n";
   out += "  mut value := 0 as i64;\n";
   out += "  mut at := 0 as usize;\n";
   out += "  while at < ";
@@ -215,7 +233,8 @@ bool driver_item_name(std::string_view name, Execution execution) {
   if (name.starts_with(PREFIX)) {
     return true;
   }
-  if (name == ARG_COUNT || name == ARG || name == STR_LEN || name == STR_BYTE) {
+  if (name == ARG_COUNT || name == ARG || name == STR_LEN || name == STR_BYTE ||
+      name == STR_FROM_PARTS || name == SLICE_LEN || name == SLICE_AT) {
     return true;
   }
   return execution == Execution::SingleThread && name == SYS_WRITE;

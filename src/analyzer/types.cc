@@ -1722,8 +1722,10 @@ bool Checker::check_intrinsic_signature(u32 module,
   } else if (name == "arg_count") {
     expected_ret = builder.primitive(ir::TypeTag::I64);
   } else if (name == "arg") {
+    // `arg(i: i64) -> &[u8]`, the raw bytes of the process's argument.
+    const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
     expected.push_back(builder.primitive(ir::TypeTag::I64));
-    expected_ret = str;
+    expected_ret = builder.reference_type(builder.slice_type(u8_ty), false);
   } else {
     return wrong();
   }

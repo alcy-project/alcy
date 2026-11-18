@@ -3,6 +3,7 @@
 
 #include "testgen/driver.h"
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,7 +59,7 @@ TEST_CASE("A multi-process driver calls one test by the index it was given") {
         std::string::npos);
   // The index arrives as text, because there is no standard library in the
   // tree the driver joins to parse it.
-  CHECK(source.find("fn alcy_test_index(text: str) -> i64 {") !=
+  CHECK(source.find("fn alcy_test_index(bytes: &[u8]) -> i64 {") !=
         std::string::npos);
   CHECK(source.find("if unsafe { arg_count() } < 2 {\n    ret ") !=
         std::string::npos);
@@ -132,6 +133,12 @@ TEST_CASE("driver_item_name reserves the driver's own items") {
   CHECK(testgen::driver_item_name("str_len", testgen::Execution::MultiProcess));
   CHECK(
       testgen::driver_item_name("str_byte", testgen::Execution::MultiProcess));
+  CHECK(testgen::driver_item_name("str_from_parts",
+                                  testgen::Execution::MultiProcess));
+  CHECK(
+      testgen::driver_item_name("slice_len", testgen::Execution::MultiProcess));
+  CHECK(
+      testgen::driver_item_name("slice_at", testgen::Execution::MultiProcess));
   CHECK_FALSE(
       testgen::driver_item_name("main", testgen::Execution::MultiProcess));
   CHECK_FALSE(testgen::driver_item_name("alcy_testing",
@@ -167,7 +174,11 @@ std::vector<std::string> declared_names(const std::string& source) {
     if (line.starts_with("fn ") || line.starts_with("intrinsic fn ") ||
         line.starts_with("unsafe intrinsic fn ")) {
       name_at = line.find("fn ") + 3;
-      name_end = line.find('(', name_at);
+      const usize paren = line.find('(', name_at);
+      const usize angle = line.find('<', name_at);
+      name_end = angle == std::string_view::npos   ? paren
+                 : paren == std::string_view::npos ? angle
+                                                   : std::min(angle, paren);
     } else if (line.starts_with("use ")) {
       const usize as_at = line.find(" as ");
       if (as_at != std::string_view::npos) {

@@ -2285,23 +2285,21 @@ Val Lowerer::lower_arg_intrinsic(
     internal(node.span, "intrinsic arity");
     return Val{size_one, error_type(), false, false};
   }
-  const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
-  const ir::TypeIdx i64_ty = builder.primitive(ir::TypeTag::I64);
   Val index = lower_expr(call.args[0], &sig.params[0]);
   if (failed || terminated_cur()) {
     return stopped_value();
   }
   const ir::ExternalFunctionIdx ext =
-      declare_external("alcy_arg", str_ty, {i64_ty});
+      declare_external("alcy_arg", sig.ret, {sig.params[0]});
   const ir::RegisterIdx dst =
-      emit(ir::Opcode::Call, str_ty,
+      emit(ir::Opcode::Call, sig.ret,
            {builder.operand(ir::Operand::from_external_function(
                 ext, builder.primitive(ir::TypeTag::Function))),
             arg_for(index, sig.params[0])});
   if (failed) {
     return Val{size_one, error_type(), false, false};
   }
-  return Val{to_operand(dst, str_ty), str_ty, false, false};
+  return Val{to_operand(dst, sig.ret), sig.ret, false, false};
 }
 
 Val Lowerer::lower_arg_count_intrinsic(

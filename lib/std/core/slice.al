@@ -19,6 +19,94 @@ pub unsafe intrinsic fn slice_at<T>(s: &[T], i: usize) -> &T;
 // The mutable element at `i`; in bounds exactly when `i < slice_len(s)`.
 pub unsafe intrinsic fn slice_at_mut<T>(s: &mut [T], i: usize) -> &mut T;
 
+// Search over the raw bytes, for the cases the generic interface does
+// not answer: a needle and a trim, spelled over `&[u8]` directly.
+// The byte offset where `needle` first appears, or `None`. An
+// empty needle is at offset zero.
+pub fn find(bytes: &[u8], needle: &[u8]) -> Option<usize> {
+  n := needle.len()
+  m := bytes.len()
+  if n == 0 {
+    ret Option::Some(0 as usize)
+  }
+  if n > m {
+    ret Option::None
+  }
+  mut i := 0 as usize
+  while i <= m - n {
+    mut k := 0 as usize
+    while k < n {
+      if bytes[i + k] != needle[k] {
+        break
+      }
+      k = k + 1
+    }
+    if k == n {
+      ret Option::Some(i)
+    }
+    i = i + 1
+  }
+  ret Option::None
+}
+
+// The byte offset where `needle` last appears, or `None`. An
+// empty needle is at the length.
+pub fn rfind(bytes: &[u8], needle: &[u8]) -> Option<usize> {
+  n := needle.len()
+  m := bytes.len()
+  if n == 0 {
+    ret Option::Some(m)
+  }
+  if n > m {
+    ret Option::None
+  }
+  mut i := m - n
+  while i > 0 {
+    mut k := 0 as usize
+    while k < n {
+      if bytes[i + k] != needle[k] {
+        break
+      }
+      k = k + 1
+    }
+    if k == n {
+      ret Option::Some(i)
+    }
+    i = i - 1
+  }
+  mut k := 0 as usize
+  while k < n {
+    if bytes[k] != needle[k] {
+      ret Option::None
+    }
+    k = k + 1
+  }
+  ret Option::Some(0 as usize)
+}
+
+// The bytes with the leading and trailing ASCII whitespace removed.
+pub fn trim_ascii(bytes: &[u8]) -> &[u8] {
+  mut lo := 0 as usize
+  mut hi := bytes.len()
+  while lo < hi {
+    b := bytes[lo]
+    if b == 0x20u8 || b == 0x09u8 || b == 0x0au8 || b == 0x0du8 {
+      lo = lo + 1
+      continue
+    }
+    break
+  }
+  while hi > lo {
+    b := bytes[hi - 1]
+    if b == 0x20u8 || b == 0x09u8 || b == 0x0au8 || b == 0x0du8 {
+      hi = hi - 1
+      continue
+    }
+    break
+  }
+  ret bytes[lo..<hi]
+}
+
 impl<T>[T] {
   // The element count.
   pub fn len(self: &Self) -> usize {
@@ -662,5 +750,87 @@ test {
     if !ok {
       panic(what)
     }
+  }
+}
+
+test {
+  test starts_with_compares_a_prefix() {
+    b :=
+      [0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8, 0x20u8, 0x77u8, 0x6fu8, 0x72u8, 0x6cu8, 0x64u8]
+      .as_slice()
+    assert(b.starts_with(&[0u8; 0]), "the empty prefix matches anything")
+    assert(
+      b.starts_with([0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8].as_slice()),
+      "a matching prefix answers true",
+    )
+    assert(
+      !b.starts_with([0x77u8, 0x6fu8, 0x72u8, 0x6cu8, 0x64u8].as_slice()),
+      "a non-matching prefix answers false",
+    )
+    long :=
+      [
+        0x68u8,
+        0x65u8,
+        0x6cu8,
+        0x6cu8,
+        0x6fu8,
+        0x20u8,
+        0x77u8,
+        0x6fu8,
+        0x72u8,
+        0x6cu8,
+        0x64u8,
+        0x78u8,
+        0x74u8,
+        0x78u8,
+      ]
+      .as_slice()
+    assert(!b.starts_with(long), "a longer prefix does not fit")
+  }
+
+  test ends_with_compares_a_suffix() {
+    b :=
+      [0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8, 0x20u8, 0x77u8, 0x6fu8, 0x72u8, 0x6cu8, 0x64u8]
+      .as_slice()
+    assert(b.ends_with(&[0u8; 0]), "the empty suffix matches anything")
+    assert(
+      b.ends_with([0x77u8, 0x6fu8, 0x72u8, 0x6cu8, 0x64u8].as_slice()),
+      "a matching suffix answers true",
+    )
+    assert(
+      !b.ends_with([0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8].as_slice()),
+      "a non-matching suffix answers false",
+    )
+    the_world := [0x74u8, 0x68u8, 0x65u8, 0x20u8, 0x77u8, 0x6fu8, 0x72u8, 0x6cu8, 0x64u8].as_slice()
+    assert(!b.ends_with(the_world), "a longer suffix does not fit")
+  }
+
+  test find_locates_the_first_occurrence() {
+    b := [0x62u8, 0x61u8, 0x6eu8, 0x61u8, 0x6eu8, 0x61u8].as_slice()
+    assert(find(b, [0x61u8].as_slice()) == Option::Some(1 as usize), "the first match is at one")
+    assert(find(b, [0x6eu8].as_slice()) == Option::Some(2 as usize), "the first match is at two")
+    assert(find(b, &[0u8; 0]) == Option::Some(0 as usize), "an empty needle is at zero")
+    assert(find(b, [0x7au8, 0x7au8, 0x7au8].as_slice()).is_none(), "a missing needle is none")
+    needle := [0x62u8, 0x61u8, 0x6eu8, 0x61u8, 0x6eu8, 0x61u8, 0x20u8].as_slice()
+    assert(find(b, needle).is_none(), "an oversized needle is none")
+  }
+
+  test rfind_locates_the_last_occurrence() {
+    b := [0x62u8, 0x61u8, 0x6eu8, 0x61u8, 0x6eu8, 0x61u8].as_slice()
+    assert(rfind(b, [0x61u8].as_slice()) == Option::Some(5 as usize), "the last match is at five")
+    assert(rfind(b, [0x6eu8].as_slice()) == Option::Some(4 as usize), "the last match is at four")
+    assert(rfind(b, &[0u8; 0]) == Option::Some(6 as usize), "an empty needle is at the length")
+    assert(rfind(b, [0x7au8, 0x7au8, 0x7au8].as_slice()).is_none(), "a missing needle is none")
+  }
+
+  test trim_ascii_drops_space_and_controls() {
+    arr := [0x20u8, 0x20u8, 0x20u8, 0x68u8, 0x69u8, 0x09u8]
+    out := trim_ascii(arr.as_slice())
+    assert(out.len() == 2, "leading and trailing whitespace are gone")
+    target := [0x20u8, 0x20u8, 0x20u8, 0x61u8, 0x20u8, 0x62u8, 0x09u8]
+    assert(trim_ascii(target.as_slice())[0] == 0x61u8, "the first byte after the trim is a letter")
+    assert(trim_ascii(&[0u8; 0]).len() == 0, "an empty slice stays empty")
+    tabbed := [0x09u8, 0x20u8, 0x78u8, 0x20u8, 0x0au8]
+    assert(trim_ascii(tabbed.as_slice()).len() == 1, "a tab at each end is removed")
   }
 }
