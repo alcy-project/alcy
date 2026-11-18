@@ -1,16 +1,17 @@
-// A string inserts a byte in the middle, at the front, and at the end.
+// A string inserts a single-byte run in the middle, at the front,
+// and at the end.
 fn main() -> i32 {
   mut s := format("ab")
-  s.insert_byte(1, 0x58u8)
+  s.insert_str(1, "X").or_panic_with_message("offset 1 is a boundary")
   if s.as_str() != "aXb" {
     ret 1
   }
-  s.insert_byte(0, 0x59u8)
+  s.insert_str(0, "Y").or_panic_with_message("offset 0 is a boundary")
   if s.as_str() != "YaXb" {
     ret 2
   }
   n := s.len_bytes()
-  s.insert_byte(n, 0x5au8)
+  s.insert_str(n, "Z").or_panic_with_message("the end of the text is a boundary")
   if s.as_str() != "YaXbZ" {
     ret 3
   }

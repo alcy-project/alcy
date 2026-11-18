@@ -17,12 +17,12 @@ fn is_space(b: u8) -> bool {
   ret b == 0x20u8 || b == 0x09u8 || b == 0x0du8 || b == 0x0au8
 }
 
-// The token cursor. The reader is owned and the scratch string is
+// The token cursor. The reader is owned and the scratch buffer is
 // reused, so a typed read allocates only when the token outgrows the
 // scratch.
 pub struct Scanner {
   reader: BufReader,
-  token: String,
+  token: Vec<u8>,
 }
 
 impl Scanner {
@@ -32,7 +32,7 @@ impl Scanner {
   }
 
   pub fn over(reader: BufReader) -> Scanner {
-    ret Scanner { reader: reader, token: String::with_capacity(64) }
+    ret Scanner { reader: reader, token: Vec::<u8>::with_capacity(64) }
   }
 
   // The next token, copied out; `End` when the input runs out first.
@@ -46,9 +46,14 @@ impl Scanner {
         ret Result::Err(ScanError::Io(e))
       }
     }
-    mut copy := String::with_capacity(self.token.len_bytes())
-    copy.push_str(self.token.as_str())
-    ret Result::Ok(copy)
+    match from_utf8(self.token.as_slice()) {
+      Result::Ok(text) => {
+        ret Result::Ok(String::from(text))
+      }
+      Result::Err(_) => {
+        ret Result::Err(ScanError::Parse(String::new()))
+      }
+    }
   }
 
   // The next token parsed as `T`; the end of input before a token is
@@ -63,14 +68,19 @@ impl Scanner {
         ret Result::Err(ScanError::Io(e))
       }
     }
-    match T::parse(self.token.as_str()) {
-      Option::Some(v) => {
-        ret Result::Ok(v)
+    match from_utf8(self.token.as_slice()) {
+      Result::Ok(text) => {
+        match T::parse(text) {
+          Option::Some(v) => {
+            ret Result::Ok(v)
+          }
+          Option::None => {
+            ret Result::Err(ScanError::Parse(String::from(text)))
+          }
+        }
       }
-      Option::None => {
-        mut found := String::with_capacity(self.token.len_bytes())
-        found.push_str(self.token.as_str())
-        ret Result::Err(ScanError::Parse(found))
+      Result::Err(_) => {
+        ret Result::Err(ScanError::Parse(String::new()))
       }
     }
   }
@@ -94,8 +104,9 @@ impl Scanner {
     ret Result::Ok(out)
   }
 
-  // One line from the same input, for the line-oriented mix.
-  pub fn next_line(mut self: &mut Self) -> Result<Option<String>, OsError> {
+  // One line from the same input, for the line-oriented mix. The
+  // bytes are the line and nothing is validated.
+  pub fn next_line(mut self: &mut Self) -> Result<Option<Vec<u8>>, OsError> {
     ret self.reader.read_line()
   }
 

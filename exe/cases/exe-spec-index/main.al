@@ -39,12 +39,13 @@ fn main() -> i32 {
     ret 6
   }
 
-  mut s := String::new()
-  s.push_str("hi")
+  mut s := Vec::<u8>::new()
+  s.push(104u8)
+  s.push(105u8)
   if s[0] as i32 != 104 {
     ret 7
   }
-  s[1] = 105
+  s[1] = 105u8
   if s[1] as i32 != 105 {
     ret 8
   }

@@ -109,21 +109,18 @@ impl String {
   }
 
   // Keeps the first `n` bytes, dropping the rest. A byte has no
-  // destructor, so the length is the only thing to change.
-  pub fn truncate(mut self: &mut Self, n: usize) {
-    if n >= self.len {
-      ret
-    }
-    self.len = n
-  }
-
-  // Removes and answers the last byte, or `None` when empty.
-  pub fn pop_byte(mut self: &mut Self) -> Option<u8> {
-    if self.len == 0 {
+  // destructor, so the length is the only thing to change. `n` must
+  // land on a scalar boundary; anything else answers `None` and the
+  // string stays as it was.
+  pub fn truncate(mut self: &mut Self, n: usize) -> Option<()> {
+    if n > self.len {
       ret Option::None
     }
-    self.len = self.len - 1
-    ret Option::Some(unsafe { *uninit_assume(elem_ptr(self.buf, self.len)) })
+    if n != self.len && !self.as_str().is_char_boundary(n) {
+      ret Option::None
+    }
+    self.len = n
+    ret Option::Some(())
   }
 
   pub fn capacity(self: &Self) -> usize {
@@ -155,32 +152,19 @@ impl String {
     self.len = self.len + n
   }
 
-  // Inserts `b` at `at`, shifting the bytes after it up one. `at` must
-  // not pass the length; a position past it panics before the run is
-  // moved, so the string is untouched when the report lands.
-  pub fn insert_byte(mut self: &mut Self, at: usize, b: u8) {
-    if at > self.len {
-      panic("String insert out of bounds")
-    }
-    self.push(0)
-    mut i := self.len - 1
-    while i > at {
-      self[i] = self[i - 1]
-      i = i - 1
-    }
-    self[at] = b
-  }
-
   // Inserts every byte of `s` at `at`, shifting the bytes after it up
   // by its length. `at` must not pass the length, and must fall on a
   // scalar boundary: a spelling that split a scalar would leave the
   // bytes ill-formed, so it panics instead.
-  pub fn insert_str(mut self: &mut Self, at: usize, s: str) {
+  // Inserts every byte of `s` at `at`. `at` must fall on a scalar
+  // boundary no past the length; anything else answers `None` and
+  // leaves the string untouched.
+  pub fn insert_str(mut self: &mut Self, at: usize, s: str) -> Option<()> {
     if at > self.len {
-      panic("String insert out of bounds")
+      ret Option::None
     }
     if !self.as_str().is_char_boundary(at) {
-      panic("String insert splits a character")
+      ret Option::None
     }
     n := str_len(s)
     self.reserve(n)
@@ -198,21 +182,7 @@ impl String {
       k = k + 1
     }
     self.len = self.len + n
-  }
-
-  // Keeps the bytes `keep` accepts, compacting them in place.
-  pub fn retain(mut self: &mut Self, keep: (u8) -> bool) {
-    mut write := 0 as usize
-    mut read := 0 as usize
-    while read < self.len {
-      b := self[read]
-      if keep(b) {
-        self[write] = b
-        write = write + 1
-      }
-      read = read + 1
-    }
-    self.len = write
+    ret Option::Some(())
   }
 
   // Reserves room for `extra` more bytes.
@@ -267,15 +237,18 @@ impl String {
     ret s
   }
 
-  // A new string holding a copy of the bytes in `bytes`.
-  pub fn from_slice(bytes: &[u8]) -> String {
-    mut s := String::with_capacity(slice_len(bytes))
-    mut i := 0 as usize
-    while i < slice_len(bytes) {
-      s.push(*bytes.at(i).or_panic_with_message("the byte index is within the slice"))
-      i = i + 1
+  // A new string holding a copy of the bytes in `bytes`, or `None`
+  // when they spell no scalars — the bytes are checked like any bytes
+  // that cross into the type.
+  pub fn from_slice(bytes: &[u8]) -> Option<String> {
+    match from_utf8(bytes) {
+      Result::Ok(text) => {
+        ret Option::Some(String::from(text))
+      }
+      Result::Err(_) => {
+        ret Option::None
+      }
     }
-    ret s
   }
 
   // The byte at `at`; `at` must be below the length.
@@ -283,9 +256,9 @@ impl String {
     ret self.as_str().byte(at)
   }
 
-  // The view over the bytes in `[start, end)`, clamped the way
-  // `str::byte_slice` clamps.
-  pub fn byte_slice(self: &Self, start: usize, end: usize) -> str {
+  // The view over the bytes in `[start, end)`, or `None` when a bound
+  // is out of range or cuts a scalar.
+  pub fn byte_slice(self: &Self, start: usize, end: usize) -> Option<str> {
     ret self.as_str().byte_slice(start, end)
   }
 
@@ -293,24 +266,32 @@ impl String {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
-  // The unused bytes after the length, for a call that fills them. The
-  // length is not changed; `set_len` records how many were written.
-  pub fn spare_capacity_mut(mut self: &mut Self) -> &mut [u8] {
+  // The unused bytes after the length, for a call that fills them — a
+  // reader over a descriptor, say. The caller must keep the bytes in
+  // scalar order: the ones below the length stay the text they were,
+  // and the ones past it are undefined until `set_len` records them,
+  // so a write that crosses a scalar straddle leaves a binary blob
+  // this type must not hold. The length is not changed; `set_len`
+  // records how many were written.
+  pub unsafe fn spare_capacity_mut(mut self: &mut Self) -> &mut [u8] {
     ret unsafe {
       slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, self.len)), self.cap - self.len,)
     }
   }
 
-  // Records `n` written bytes. `n` must not pass the capacity and the
-  // bytes below it must be initialized.
+  // Records `n` written bytes. `n` must not pass the capacity; the
+  // bytes below it must be initialized, and must spell scalars from
+  // zero — a caller whose bytes cross from somewhere outside the type
+  // validates them first.
   pub unsafe fn set_len(mut self: &mut Self, n: usize) {
     self.len = n
   }
 
   // The bytes as an exclusive view over the current length. Growing
   // while it is live reallocates under it, so the checker reports the
-  // conflict.
-  pub fn as_mut_slice(mut self: &mut Self) -> &mut [u8] {
+  // conflict. The caller keeps the bytes in scalar order; a write that
+  // rewrites the middle of the text must keep it well-formed.
+  pub unsafe fn as_mut_slice(mut self: &mut Self) -> &mut [u8] {
     ret unsafe { slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, 0)), self.len) }
   }
 
@@ -354,7 +335,7 @@ impl String {
     ret self.as_str().lines()
   }
 
-  pub fn split_at(self: &Self, at: usize) -> (str, str) {
+  pub fn split_at(self: &Self, at: usize) -> Option<(str, str)> {
     ret self.as_str().split_at(at)
   }
 
@@ -444,15 +425,6 @@ impl Index < usize, u8 > for String {
       panic("String index out of bounds")
     }
     ret uninit_ref(unsafe { elem_ref(self.buf, i) })
-  }
-}
-
-impl IndexMut < usize, u8 > for String {
-  fn index_mut(mut self: &mut Self, i: usize) -> &mut u8 {
-    if i >= self.len {
-      panic("String index out of bounds")
-    }
-    ret unsafe { uninit_assume(elem_ptr(self.buf, i)) }
   }
 }
 
@@ -594,18 +566,11 @@ test {
     assert(s.capacity() >= s.len_bytes(), "after growing past the empty room")
     s.push_str("abcdefghijklmnopqrstuvwxyz")
     assert(s.capacity() >= s.len_bytes(), "after growing again")
-    s.push(0x21u8)
+    s.push_str("!")
     assert(s.capacity() >= s.len_bytes(), "after one more byte")
   }
 
   // push, push_str, and the growth path.
-
-  test push_appends_one_byte() {
-    mut s := String::from("ab")
-    s.push(0x63u8)
-    assert_text(s.as_str(), "abc", "the byte lands after the last one")
-    assert_count(s.len_bytes(), 3, "one byte was added")
-  }
 
   test push_str_appends_the_whole_text() {
     mut s := String::from("wid")
@@ -621,16 +586,17 @@ test {
     assert_count(s.len_bytes(), 3, "the length is untouched")
   }
 
-  test a_string_grown_one_byte_at_a_time_keeps_every_byte() {
+  test a_string_built_piece_by_piece_keeps_every_byte() {
     text := "abcdefghij"
     mut s := String::new()
     mut i := 0 as usize
     while i < str_len(text) {
-      s.push(str_byte(text, i))
+      piece := str_slice(text, i, i + 1)
+      s.push_str(piece)
       i = i + 1
     }
     assert_text(s.as_str(), text, "each byte landed after the previous one")
-    assert_count(s.len_bytes(), 10, "ten bytes were pushed")
+    assert_count(s.len_bytes(), 10, "ten bytes were added")
   }
 
   test a_run_pushed_past_the_room_keeps_the_prefix() {
@@ -652,81 +618,29 @@ test {
     assert_count(s.len_bytes(), 3, "reserving changes no length")
   }
 
-  // pop_byte
-
-  test pop_byte_answers_the_last_byte() {
-    mut s := String::from("ab")
-    b := s.pop_byte().or_panic_with_message("the string held a byte")
-    assert_byte(b, 0x62u8, "the last byte is the one removed")
-    assert_text(s.as_str(), "a", "only the last byte was removed")
-    assert_count(s.len_bytes(), 1, "the length dropped by one")
-  }
-
-  test pop_byte_on_an_empty_string_answers_none() {
-    mut s := String::new()
-    assert(s.pop_byte().is_none(), "an empty string has no byte to remove")
-    assert_count(s.len_bytes(), 0, "a failed pop changes no length")
-  }
-
-  test popping_every_byte_empties_the_string() {
-    mut s := String::from("abc")
-    _ := s.pop_byte()
-    _ := s.pop_byte()
-    _ := s.pop_byte()
-    assert(s.is_empty(), "three pops take a three-byte string to empty")
-    assert_text(s.as_str(), "", "the view is empty too")
-  }
-
-  test pop_byte_removes_one_byte_of_a_multibyte_scalar() {
-    mut s := String::from("日")
-    assert_count(s.len_bytes(), 3, "the scalar is three bytes")
-    b := s.pop_byte().or_panic_with_message("the string held a byte")
-    assert_byte(b, 0xa5u8, "pop removes the last byte, not the last scalar")
-    assert_count(s.len_bytes(), 2, "two bytes remain")
-  }
-
-  // insert_byte and insert_str at each end and in the middle.
-
-  test insert_byte_at_the_start_shifts_the_rest() {
-    mut s := String::from("bc")
-    s.insert_byte(0, 0x61u8)
-    assert_text(s.as_str(), "abc", "the new byte is first")
-  }
-
-  test insert_byte_at_the_end_appends() {
-    mut s := String::from("ab")
-    s.insert_byte(2, 0x63u8)
-    assert_text(s.as_str(), "abc", "inserting at the length appends")
-  }
-
-  test insert_byte_in_the_middle_shifts_the_tail() {
-    mut s := String::from("ac")
-    s.insert_byte(1, 0x62u8)
-    assert_text(s.as_str(), "abc", "the bytes from the position up moved one place")
-    assert_count(s.len_bytes(), 3, "the length grew by one")
-  }
+  // insert_str at each end and in the middle.
 
   test insert_str_at_the_start_prefixes_the_text() {
     mut s := String::from("world")
-    s.insert_str(0, "hello ")
+    s.insert_str(0, "hello ").or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "hello world", "the run is now the prefix")
   }
 
   test insert_str_between_two_halves() {
     mut s := String::from("ac")
-    s.insert_str(1, "b")
+    s.insert_str(1, "b").or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "abc", "the halves stay on their sides of the run")
   }
 
   test insert_str_at_the_end_appends() {
     mut s := String::from("ab")
-    s.insert_str(2, "cd")
+    s.insert_str(2, "cd").or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "abcd", "inserting at the length appends")
   }
 
   test insert_str_into_an_empty_string() {
     mut s := String::new()
-    s.insert_str(0, "hi")
+    s.insert_str(0, "hi").or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "hi", "an empty string takes the run whole")
     assert_count(s.len_bytes(), 2, "two bytes arrived")
   }
@@ -734,14 +648,14 @@ test {
   test insert_str_into_a_full_buffer_shifts_past_the_room() {
     mut s := String::with_capacity(2)
     s.push_str("ab")
-    s.insert_str(1, "XYZ")
+    s.insert_str(1, "XYZ").or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "aXYZb", "the tail moved past the end of the old room")
     assert_count(s.len_bytes(), 5, "the length grew by the run")
   }
 
   test insert_str_of_no_text_changes_nothing() {
     mut s := String::from("abc")
-    s.insert_str(1, "")
+    s.insert_str(1, "").or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "abc", "an empty run moves nothing")
     assert_count(s.len_bytes(), 3, "the length is untouched")
   }
@@ -750,36 +664,36 @@ test {
 
   test truncate_keeps_the_first_bytes() {
     mut s := String::from("abcdef")
-    s.truncate(3)
+    s.truncate(3).or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "abc", "the kept prefix is the first bytes")
     assert_count(s.len_bytes(), 3, "the length is the new one")
   }
 
   test truncate_to_zero_empties_the_string() {
     mut s := String::from("abc")
-    s.truncate(0)
+    s.truncate(0).or_panic_with_message("the offset is a boundary")
     assert(s.is_empty(), "nothing is left")
     assert_text(s.as_str(), "", "the view is empty")
   }
 
   test truncate_to_the_length_changes_nothing() {
     mut s := String::from("abc")
-    s.truncate(3)
+    s.truncate(3).or_panic_with_message("the offset is a boundary")
     assert_text(s.as_str(), "abc", "the length is already n")
     assert_count(s.len_bytes(), 3, "the length is unchanged")
   }
 
-  test truncate_past_the_length_changes_nothing() {
+  test truncate_past_the_length_answers_none() {
     mut s := String::from("abc")
-    s.truncate(99)
+    assert(s.truncate(99).is_none(), "a longer n is refused")
     assert_text(s.as_str(), "abc", "a longer n keeps everything")
     assert_count(s.len_bytes(), 3, "the length is unchanged")
   }
 
   test a_byte_pushed_after_truncate_lands_at_the_new_end() {
     mut s := String::from("abcd")
-    s.truncate(2)
-    s.push(0x58u8)
+    s.truncate(2).or_panic_with_message("the offset is a boundary")
+    s.push_str("X")
     assert_text(s.as_str(), "abX", "the byte replaced the first dropped one")
     assert_count(s.len_bytes(), 3, "the length is the truncated one plus the push")
   }
@@ -821,20 +735,27 @@ test {
 
   test as_mut_slice_spans_the_length_bytes() {
     mut s := String::from("abc")
-    assert_count(s.as_mut_slice().len(), 3, "the view stops at the length")
+    assert_count(unsafe { s.as_mut_slice().len() }, 3, "the view stops at the length")
   }
 
   test spare_capacity_mut_offers_the_room_past_the_length() {
     mut s := String::with_capacity(8)
-    assert_count(s.spare_capacity_mut().len(), 8, "a fresh buffer is all spare")
+    assert_count(unsafe { s.spare_capacity_mut().len() }, 8, "a fresh buffer is all spare")
     s.push_str("abc")
-    assert_count(s.spare_capacity_mut().len(), 5, "the used bytes are no longer spare")
+    assert_count(unsafe { s.spare_capacity_mut().len() }, 5, "the used bytes are no longer spare")
   }
 
-  test byte_slice_clamps_to_the_length() {
+  test byte_slice_past_the_end_is_none() {
     s := String::from("abc")
-    assert_text(s.byte_slice(1, 100), "bc", "an end past the last byte clamps to it")
-    assert_text(s.byte_slice(0, 0), "", "an empty span reads no bytes")
+    assert(s.byte_slice(1, 100).is_none(), "an end past the last byte is refused")
+    match s.byte_slice(0, 2) {
+      Option::Some(view) => {
+        assert_text(view, "ab", "the view lands at the start")
+      }
+      Option::None => {
+        panic("offsets 0 and 2 are boundaries")
+      }
+    }
   }
 
   // Comparison.
@@ -947,26 +868,6 @@ test {
     assert_text(s.repeat(3).as_str(), "ababab", "each repetition follows the previous one")
   }
 
-  test retain_keeps_the_bytes_the_predicate_accepts() {
-    mut s := String::from("a1b2c3")
-    s.retain((b: u8) -> b >= 0x30u8 && b <= 0x39u8)
-    assert_text(s.as_str(), "123", "only the digits are kept, in order")
-    assert_count(s.len_bytes(), 3, "the length is the kept count")
-  }
-
-  test retain_rejecting_every_byte_empties_the_string() {
-    mut s := String::from("abcd")
-    s.retain((b: u8) -> false)
-    assert(s.is_empty(), "nothing was kept")
-    assert_text(s.as_str(), "", "the view is empty")
-  }
-
-  test retain_accepting_every_byte_keeps_the_text() {
-    mut s := String::from("abcd")
-    s.retain((b: u8) -> true)
-    assert_text(s.as_str(), "abcd", "compacting with every byte kept changes nothing")
-  }
-
   test extend_appends_another_string() {
     mut s := String::from("ab")
     s.extend(String::from("cd"))
@@ -999,15 +900,27 @@ test {
 
   test from_slice_holds_the_given_bytes() {
     source := String::from("abc")
-    copy := String::from_slice(source.as_bytes())
-    assert_text(copy.as_str(), "abc", "each byte was copied")
-    assert_count(copy.len_bytes(), 3, "the length is the byte count")
+    match String::from_slice(source.as_bytes()) {
+      Option::Some(copy) => {
+        assert_text(copy.as_str(), "abc", "each byte was copied")
+        assert_count(copy.len_bytes(), 3, "the length is the byte count")
+      }
+      Option::None => {
+        panic("UTF-8 bytes are well-formed")
+      }
+    }
   }
 
   test from_slice_of_no_bytes_is_empty() {
     source := String::new()
-    copy := String::from_slice(source.as_bytes())
-    assert(copy.is_empty(), "an empty slice builds an empty string")
+    match String::from_slice(source.as_bytes()) {
+      Option::Some(copy) => {
+        assert(copy.is_empty(), "an empty slice builds an empty string")
+      }
+      Option::None => {
+        panic("no bytes decode")
+      }
+    }
   }
 
   // The view the accessors hand out is the whole text, in bytes.
@@ -1038,9 +951,15 @@ test {
 
   test split_at_answers_both_halves() {
     s := String::from("abcd")
-    (left, right) := s.split_at(2)
-    assert_text(left, "ab", "the left half ends at the position")
-    assert_text(right, "cd", "the right half starts there")
+    match s.split_at(2) {
+      Option::Some((left, right)) => {
+        assert_text(left, "ab", "the left half ends at the position")
+        assert_text(right, "cd", "the right half starts there")
+      }
+      Option::None => {
+        panic("offset 2 is a boundary")
+      }
+    }
   }
 
   test eq_ignore_ascii_case_ignores_case() {

@@ -22,7 +22,8 @@ fn main() -> i32 {
   if str_len(GREETING.trim()) != 5 {
     ret 1
   }
-  if !(GREETING.byte_slice(1, 4) == "hel") {
+  slice := GREETING.byte_slice(1, 4).or_panic_with_message("boundaries are within the literal")
+  if !(slice == "hel") {
     ret 2
   }
   if ORIGIN.sum() != 7 {

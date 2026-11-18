@@ -3,7 +3,7 @@
 fn main() -> i32 {
   mut s := format("abc")
   {
-    b := s.as_mut_slice()
+    b := unsafe { s.as_mut_slice() }
     if b.len() != 3 {
       ret 1
     }

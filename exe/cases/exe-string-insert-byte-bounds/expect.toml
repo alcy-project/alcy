@@ -1,2 +1,1 @@
-exit = "non-zero"
-stderr_contains = ["String insert out of bounds"]
+exit = 0

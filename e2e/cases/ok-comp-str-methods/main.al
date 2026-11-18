@@ -6,6 +6,17 @@ comp fn ordered(a: str, b: str) -> bool {
   ret a < b
 }
 
+comp fn first_two(s: str) -> str {
+  match s.byte_slice(1, 3) {
+    Option::Some(v) => {
+      ret v
+    }
+    Option::None => {
+      ret ""
+    }
+  }
+}
+
 fn main() -> i32 {
   if comp { "aébc".len_bytes() } != 5usize {
     ret 1
@@ -16,7 +27,7 @@ fn main() -> i32 {
   if comp { "abc".byte(1) } != 98u8 {
     ret 3
   }
-  if comp { "abcdef".byte_slice(1, 3) } != "bc" {
+  if comp { first_two("abcdef") } != "bc" {
     ret 4
   }
   if !comp { "abc" < "abd" } {

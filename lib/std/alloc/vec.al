@@ -113,6 +113,32 @@ impl<T> Vec<T> {
     ret unsafe { slice_from_parts(uninit_ref(elem_ref(self.buf, 0)), self.len) }
   }
 
+  // The unused elements after the length, for a call that fills them
+  // — a reader over a descriptor, say. The length is not changed;
+  // `set_len` records how many were written.
+  pub unsafe fn spare_capacity_mut(mut self: &mut Self) -> &mut [T] {
+    ret unsafe {
+      slice_from_parts_mut(uninit_assume(elem_ptr(self.buf, self.len)), self.cap - self.len)
+    }
+  }
+
+  // Records `n` written elements. `n` must not pass the capacity; the
+  // elements below it must be initialized.
+  pub unsafe fn set_len(mut self: &mut Self, n: usize) {
+    self.len = n
+  }
+
+  // A new vector holding a copy of `source`.
+  pub fn from_slice(source: &[T]) -> Vec<T> {
+    mut out := Vec::<T>::with_capacity(source.len())
+    mut i := 0 as usize
+    while i < source.len() {
+      out.push(source[i])
+      i = i + 1
+    }
+    ret out
+  }
+
   // The whole buffer as an exclusive view. Growing while it is live
   // reallocates under it, so the checker reports the conflict.
   pub fn as_mut_slice(mut self: &mut Self) -> &mut [T] {

@@ -1,10 +1,15 @@
-// A byte insert past the length panics before the run past the
-// position moves, and the string keeps the bytes it held.
+// A byte insert past the length answers `None`, and the string keeps
+// the bytes it held.
 fn main() -> i32 {
   mut s := format("ab")
-  s.insert_byte(5, 0x58u8)
+  match s.insert_str(5, "X") {
+    Option::Some(_) => {
+      ret 1
+    }
+    Option::None => {}
+  }
   if s.as_str() != "ab" {
-    ret 1
+    ret 2
   }
   ret 0
 }

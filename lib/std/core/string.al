@@ -149,22 +149,21 @@ impl str {
     ret str_len(*self) == 0
   }
 
-  // The view over the bytes in `[start, end)`. An index past the end
-  // clamps, so a span read never leaves the source.
-  pub fn byte_slice(self: &Self, start: usize, end: usize) -> str {
+  // The view over the bytes in `[start, end)`. The two positions must
+  // land on scalar boundaries and stay within the view; anything else
+  // answers `None` rather than slicing into the middle of a scalar.
+  pub fn byte_slice(self: &Self, start: usize, end: usize) -> Option<str> {
     m := str_len(*self)
-    mut lo := start
-    mut hi := end
-    if lo > m {
-      lo = m
+    if start > m || end > m || start > end {
+      ret Option::None
     }
-    if hi > m {
-      hi = m
+    if start != end && !self.is_char_boundary(start) {
+      ret Option::None
     }
-    if lo > hi {
-      hi = lo
+    if start != end && !self.is_char_boundary(end) {
+      ret Option::None
     }
-    ret str_slice(*self, lo, hi)
+    ret Option::Some(str_slice(*self, start, end))
   }
 
   // The byte at `at`; in bounds exactly when `at < self.len_bytes()`.
@@ -594,10 +593,18 @@ impl str {
     ret SplitWhitespace { rest: self }
   }
 
-  // The bytes before and after `at`. The caller knows `at` is a
-  // boundary it chose; a byte offset is accepted as given.
-  pub fn split_at(self: str, at: usize) -> (str, str) {
-    ret (str_slice(self, 0, at), str_slice(self, at, str_len(self)))
+  // The bytes before and after `at`. The offset must land on a scalar
+  // boundary within the view; anything else answers `None` rather than
+  // cut a scalar in half.
+  pub fn split_at(self: str, at: usize) -> Option<(str, str)> {
+    m := str_len(self)
+    if at > m {
+      ret Option::None
+    }
+    if at != 0 && at != m && !self.is_char_boundary(at) {
+      ret Option::None
+    }
+    ret Option::Some((str_slice(self, 0, at), str_slice(self, at, m)))
   }
 
   // A cursor over the lines, `\n`-separated, with a trailing `\r`
@@ -806,13 +813,13 @@ test {
     assert("abc".byte(2) == 0x63u8, "the last byte of a three-byte view sits at two")
   }
 
-  test byte_slice_past_the_end_clamps_to_the_end() {
-    assert("abc".byte_slice(1, 99) == "bc", "an end past the view stops at the view")
-    assert("abc".byte_slice(99, 100) == "", "a start past the view leaves nothing")
+  test byte_slice_past_the_end_is_none() {
+    assert("abc".byte_slice(1, 99).is_none(), "an end past the end is refused")
+    assert("abc".byte_slice(99, 100).is_none(), "a start past the end is refused")
   }
 
-  test byte_slice_with_the_ends_swapped_is_empty() {
-    assert("abc".byte_slice(2, 1) == "", "an end before the start names no bytes")
+  test byte_slice_with_the_ends_swapped_is_none() {
+    assert("abc".byte_slice(2, 1).is_none(), "an end before the start names nothing")
   }
 
   test is_char_boundary_accepts_the_start_and_the_end() {
@@ -1161,21 +1168,44 @@ test {
   }
 
   test split_at_reports_the_bytes_either_side() {
-    (head, tail) := "abcdef".split_at(3)
-    assert(head == "abc", "the head runs up to the offset")
-    assert(tail == "def", "the tail starts at the offset")
+    match "abcdef".split_at(3) {
+      Option::Some((head, tail)) => {
+        assert(head == "abc", "the head runs up to the offset")
+        assert(tail == "def", "the tail starts at the offset")
+      }
+      Option::None => {
+        panic("offset 3 is a boundary")
+      }
+    }
   }
 
   test split_at_zero_puts_the_whole_text_in_the_tail() {
-    (head, tail) := "abcdef".split_at(0)
-    assert(head == "", "no byte precedes zero")
-    assert(tail == "abcdef", "the tail is the whole view")
+    match "abcdef".split_at(0) {
+      Option::Some((head, tail)) => {
+        assert(head == "", "no byte precedes zero")
+        assert(tail == "abcdef", "the tail is the whole view")
+      }
+      Option::None => {
+        panic("offset 0 is a boundary")
+      }
+    }
   }
 
   test split_at_the_end_puts_the_whole_text_in_the_head() {
-    (head, tail) := "abcdef".split_at(6)
-    assert(head == "abcdef", "the head is the whole view")
-    assert(tail == "", "no byte follows the end")
+    match "abcdef".split_at(6) {
+      Option::Some((head, tail)) => {
+        assert(head == "abcdef", "the head is the whole view")
+        assert(tail == "", "no byte follows the end")
+      }
+      Option::None => {
+        panic("offset 6 is a boundary")
+      }
+    }
+  }
+
+  test split_at_inside_a_scalar_is_none() {
+    assert("日本".split_at(1).is_none(), "the cut lands inside a scalar")
+    assert("日本".split_at(4).is_none(), "the cut lands inside a scalar")
   }
 
   test count_reports_each_occurrence() {

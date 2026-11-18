@@ -21,7 +21,10 @@ test {
   }
 
   test multibyte_is_valid() {
-    assert(valid(&[0xe6u8, 0x97u8, 0xa5u8, 0xe6u8, 0x9cu8, 0xacu8, 0xe8u8, 0xa9u8, 0x9eu8]), "three scalars of three bytes each")
+    assert(
+      valid(&[0xe6u8, 0x97u8, 0xa5u8, 0xe6u8, 0x9cu8, 0xacu8, 0xe8u8, 0xa9u8, 0x9eu8]),
+      "three scalars of three bytes each",
+    )
   }
 
   test a_truncated_sequence_is_not_valid() {

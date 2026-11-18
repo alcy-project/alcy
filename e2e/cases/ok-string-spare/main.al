@@ -2,7 +2,7 @@
 fn main() -> i32 {
   mut s := String::with_capacity(8)
   {
-    b := s.spare_capacity_mut()
+    b := unsafe { s.spare_capacity_mut() }
     if b.len() < 8 {
       ret 1
     }
@@ -16,7 +16,7 @@ fn main() -> i32 {
   if s.len_bytes() != 2 {
     ret 3
   }
-  s.push(0x43u8)
+  s.push_str("C")
   if s.as_str() != "ABC" {
     ret 4
   }

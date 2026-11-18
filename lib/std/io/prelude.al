@@ -19,6 +19,7 @@ pub use package::print::eprintln;
 pub use package::reader::BufReader;
 pub use package::scanner::ScanError;
 pub use package::scanner::Scanner;
+pub use package::file::read_bytes;
 pub use package::file::read_file;
 pub use package::file::write_file;
 pub use package::args::args_len;

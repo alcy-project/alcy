@@ -14,7 +14,7 @@ const DEFAULT_CAPACITY: usize = 8192
 // `fill` performs one underlying read and reports it as itself
 pub struct BufReader {
   fd: Fd,
-  buf: String,
+  buf: Vec<u8>,
   pos: usize,
   len: usize,
 }
@@ -33,7 +33,7 @@ impl BufReader {
     }
     // The buffer's bytes exist from the start, so a read borrows a
     // real slice and no uninitialized storage crosses the boundary.
-    mut buf := String::with_capacity(cap)
+    mut buf := Vec::<u8>::with_capacity(cap)
     mut i := 0 as usize
     while i < cap {
       buf.push(0u8)
@@ -49,7 +49,7 @@ impl BufReader {
     self.pos = 0
     self.len = 0
     loop {
-      match read(self.fd, self.buf.as_mut_slice()) {
+      match read(self.fd, unsafe { self.buf.as_mut_slice() }) {
         Result::Ok(n) => {
           self.len = n
           ret Result::Ok(n)
@@ -81,9 +81,9 @@ impl BufReader {
         ret Result::Ok(Option::None)
       }
     }
-    b := self.buf.byte(self.pos)
+    b := self.buf.at(self.pos).or_panic_with_message("the byte is within the buffer")
     self.pos = self.pos + 1
-    ret Result::Ok(Option::Some(b))
+    ret Result::Ok(Option::Some(*b))
   }
 
   // The next byte without consuming it, or `None` at the end.
@@ -99,14 +99,16 @@ impl BufReader {
         ret Result::Ok(Option::None)
       }
     }
-    ret Result::Ok(Option::Some(self.buf.byte(self.pos)))
+    ret Result::Ok(
+      Option::Some(*self.buf.at(self.pos).or_panic_with_message("the byte is within the buffer"))
+    )
   }
 
   // One line, with one trailing `\n` (and one `\r` before it)
-  // dropped. The bytes are the text and nothing is validated
-  //. `None` when the end of input arrives before any byte.
-  pub fn read_line(mut self: &mut Self) -> Result<Option<String>, OsError> {
-    mut out := String::with_capacity(64)
+  // dropped. The bytes are the input and nothing is validated.
+  // `None` when the end of input arrives before any byte.
+  pub fn read_line(mut self: &mut Self) -> Result<Option<Vec<u8>>, OsError> {
+    mut out := Vec::<u8>::with_capacity(64)
     mut got := false
     loop {
       next_byte := match self.read_byte() {
@@ -131,8 +133,8 @@ impl BufReader {
     if !got {
       ret Result::Ok(Option::None)
     }
-    if out.len_bytes() > 0 && out.byte(out.len_bytes() - 1) == 0x0du8 {
-      _ := out.pop_byte()
+    if out.len() > 0 && out[out.len() - 1] == 0x0du8 {
+      out.truncate(out.len() - 1)
     }
     ret Result::Ok(Option::Some(out))
   }
@@ -164,16 +166,16 @@ impl BufReader {
 test {
   test a_reader_holds_its_capacity_as_bytes_from_the_start() {
     r := BufReader::new(Fd::from_raw(-1), 4)
-    assert(r.buf.len_bytes() == 4, "four bytes exist to read into")
-    assert(r.buf.byte(0) == 0u8, "the first is zeroed")
-    assert(r.buf.byte(3) == 0u8, "the last is zeroed")
+    assert(r.buf.len() == 4, "four bytes exist to read into")
+    assert(r.buf[0] == 0u8, "the first is zeroed")
+    assert(r.buf[3] == 0u8, "the last is zeroed")
     assert(r.pos == 0, "nothing is consumed")
     assert(r.len == 0, "nothing is read")
   }
 
   test a_zero_capacity_still_holds_one_byte() {
     r := BufReader::new(Fd::from_raw(-1), 0)
-    assert(r.buf.len_bytes() == 1, "a read always has a byte to land in")
+    assert(r.buf.len() == 1, "a read always has a byte to land in")
   }
 
   test read_byte_consumes_the_buffered_bytes_in_order() {
@@ -223,7 +225,12 @@ test {
   // without a descriptor, so `fill` is never reached.
   fn buffered(bytes: str) -> BufReader {
     n := bytes.len_bytes()
-    buf := String::from(bytes)
+    mut buf := Vec::<u8>::with_capacity(n)
+    mut i := 0 as usize
+    while i < n {
+      buf.push(str_byte(bytes, i))
+      i = i + 1
+    }
     ret BufReader { fd: Fd::from_raw(-1), buf: buf, pos: 0, len: n }
   }
 
@@ -271,8 +278,15 @@ test {
     match r.read_line() {
       Result::Ok(v) => {
         match v {
-          Option::Some(s) => {
-            ret s
+          Option::Some(bytes) => {
+            match String::from_slice(bytes.as_slice()) {
+              Option::Some(s) => {
+                ret s
+              }
+              Option::None => {
+                panic("the test line is ASCII")
+              }
+            }
           }
           Option::None => {
             panic("a buffered line was expected")

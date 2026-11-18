@@ -64,7 +64,10 @@ fn report(src: str, tokens: &Vec<Token>, known: &Map<i32>) -> Option<String> {
   while i < tokens.len() {
     t := tokens.at(i).or_panic_with_message("expected a value")
     if t.kind == 1 {
-      word := src.byte_slice(t.span.start, t.span.end)
+      word :=
+        src
+        .byte_slice(t.span.start, t.span.end)
+        .or_panic_with_message("spans lie on scalar boundaries")
       if !known.contains(word) {
         text := format("unknown {}\n", word)
         out.push_str(text.as_str())

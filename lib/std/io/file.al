@@ -18,23 +18,37 @@ pub unsafe intrinsic fn read_file_into(path: str, out: &mut u8, out_len: usize) 
 // temporary slot and an existing file is truncated.
 pub unsafe intrinsic fn write_file_all(path: str, data: str) -> i64;
 
-// The whole file at `path`, or `None` when it cannot be read.
-pub fn read_file(path: str) -> Option<String> {
+// The whole file at `path` as bytes, or `None` when it cannot be
+// read.
+pub fn read_bytes(path: str) -> Option<Vec<u8>> {
   n := unsafe { file_size(path) }
   if n < 0 {
     ret Option::None
   }
-  mut s := String::with_capacity(n as usize)
+  mut buf := Vec::<u8>::with_capacity(n as usize)
   {
-    spare := s.spare_capacity_mut()
+    spare := unsafe { buf.spare_capacity_mut() }
     len := spare.len()
     m := unsafe { read_file_into(path, slice_at_mut(spare, 0), len) }
     if m < 0 {
       ret Option::None
     }
-    unsafe { s.set_len(m as usize) }
+    unsafe { buf.set_len(m as usize) }
   }
-  ret Option::Some(s)
+  ret Option::Some(buf)
+}
+
+// The whole file at `path` as a string, or `None` when it cannot be
+// read or its bytes are not well-formed UTF-8.
+pub fn read_file(path: str) -> Option<String> {
+  match read_bytes(path) {
+    Option::Some(bytes) => {
+      ret String::from_slice(bytes.as_slice())
+    }
+    Option::None => {
+      ret Option::None
+    }
+  }
 }
 
 // Writes `contents` to the file at `path`, answering whether it could.

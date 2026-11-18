@@ -11,7 +11,7 @@ struct Token {
 }
 
 fn slice_of(src: str, span: Span) -> str {
-  ret src.byte_slice(span.start, span.end)
+  ret src.byte_slice(span.start, span.end).or_panic_with_message("spans lie on scalar boundaries")
 }
 
 fn main() -> i32 {
