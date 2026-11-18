@@ -189,3 +189,9 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
+
+      # The run's summary names what this run published, and the URL comes
+      # from the deployment, not from a constant.
+      - name: Record the Deployment
+        shell: bash
+        run: echo "Deployed to ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
