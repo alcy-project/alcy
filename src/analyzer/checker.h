@@ -611,8 +611,9 @@ class Checker {
   const PackagePolicy* policy_of(std::string_view package) const;
   // Whether `module` writes inside the staged suite: a staged source,
   // or a module of the root package when that package is a member a
-  // test run stages in place of its embedded copy. A dependency's package carries the suite it was loaded
-  // from, and that alone does not put its code inside the suite.
+  // test run stages in place of its embedded copy. A dependency's package
+  // carries the suite it was loaded from, and that alone does not put its code
+  // inside the suite.
   bool in_staged_suite(u32 module) const;
   // A spec visible from `module`: declared there, imported, or
   // injected from a prelude facade. Mirrors the type-namespace walk.
