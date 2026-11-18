@@ -234,7 +234,7 @@ bool read_types(Parsed& parsed, std::span<const u8> payload) {
   }
   // The pre-interned tags are positions, not a table: the emitters
   // resolve them by index, so a file that shuffles them is refused.
-  if (count < PRIMITIVE_TYPE_COUNT + 1) {
+  if (count < PRE_INTERNED_COUNT) {
     return false;
   }
   Cursor cursor(payload);
@@ -259,6 +259,14 @@ bool read_types(Parsed& parsed, std::span<const u8> payload) {
       }
     } else if (i == PRIMITIVE_TYPE_COUNT) {
       if (tag != static_cast<u8>(TypeTag::Function)) {
+        return false;
+      }
+    } else if (i == ISIZE_POS) {
+      if (tag != static_cast<u8>(TypeTag::Isize)) {
+        return false;
+      }
+    } else if (i == USIZE_POS) {
+      if (tag != static_cast<u8>(TypeTag::Usize)) {
         return false;
       }
     }

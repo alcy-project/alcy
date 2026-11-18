@@ -25,6 +25,8 @@ inline constexpr bool is_integer_type(TypeTag tag) {
     case T::U16:
     case T::U32:
     case T::U64:
+    case T::Isize:
+    case T::Usize:
       // case T::U128:
       return true;
     default: return false;
@@ -39,7 +41,20 @@ inline constexpr bool is_signed_integer_type(TypeTag tag) {
     case T::I8:
     case T::I16:
     case T::I32:
-    case T::I64: return true;
+    case T::I64:
+    case T::Isize: return true;
+    default: return false;
+  }
+}
+
+inline constexpr bool is_unsigned_integer_type(TypeTag tag) {
+  using T = TypeTag;
+  switch (tag) {
+    case T::U8:
+    case T::U16:
+    case T::U32:
+    case T::U64:
+    case T::Usize: return true;
     default: return false;
   }
 }
@@ -94,5 +109,20 @@ inline constexpr TypeTag unsigned_integer_type(TypeTag tag) {
                                     TypeIdx type,
                                     std::vector<u32>& path);
 [[nodiscard]] bool type_names_param(const StorageState& state, TypeIdx type);
+
+// The fixed width a pointer-width spelling is served by on `width`:
+// `usize` shares its layout with `u64` on a 64-bit target and with
+// `u32` on a 32-bit one; `isize` does the same with the signed
+// spellings. Every other tag answers itself.
+[[nodiscard]] constexpr TypeTag pointer_width_tag(TypeTag tag,
+                                                  PointerWidth width) {
+  switch (tag) {
+    case TypeTag::Usize:
+      return width == PointerWidth::W64 ? TypeTag::U64 : TypeTag::U32;
+    case TypeTag::Isize:
+      return width == PointerWidth::W64 ? TypeTag::I64 : TypeTag::I32;
+    default: return tag;
+  }
+}
 
 }  // namespace ir

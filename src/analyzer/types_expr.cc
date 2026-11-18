@@ -436,6 +436,8 @@ bool Checker::type_comp_known_visit(ir::TypeIdx type,
     case ir::TypeTag::U16:
     case ir::TypeTag::U32:
     case ir::TypeTag::U64:
+    case ir::TypeTag::Isize:
+    case ir::TypeTag::Usize:
     case ir::TypeTag::Str: break;
     case ir::TypeTag::Array:
       known = type_comp_known_visit(

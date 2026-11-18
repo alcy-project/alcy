@@ -444,6 +444,8 @@ ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type) {
     case ir::TypeTag::U16: return primitive(ast::PrimitiveKind::U16);
     case ir::TypeTag::U32: return primitive(ast::PrimitiveKind::U32);
     case ir::TypeTag::U64: return primitive(ast::PrimitiveKind::U64);
+    case ir::TypeTag::Isize: return primitive(ast::PrimitiveKind::Isize);
+    case ir::TypeTag::Usize: return primitive(ast::PrimitiveKind::Usize);
     case ir::TypeTag::F32: return primitive(ast::PrimitiveKind::F32);
     case ir::TypeTag::F64: return primitive(ast::PrimitiveKind::F64);
     case ir::TypeTag::Ref:

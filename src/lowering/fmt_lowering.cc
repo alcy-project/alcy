@@ -1699,6 +1699,12 @@ Val Lowerer::Fmt::lower_print(ast::ExprIdx expr,
       case ir::TypeTag::U32: bound += 10; break;
       case ir::TypeTag::I64:
       case ir::TypeTag::U64: bound += 20; break;
+      case ir::TypeTag::Isize:
+        bound += owner_.width == ir::PointerWidth::W64 ? 20 : 11;
+        break;
+      case ir::TypeTag::Usize:
+        bound += owner_.width == ir::PointerWidth::W64 ? 20 : 10;
+        break;
       default: bounded = false; break;
     }
     if (!bounded) {

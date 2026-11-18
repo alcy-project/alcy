@@ -60,6 +60,11 @@ enum class TypeTag : u8 {
   // const_type creates one. It sits after the pre-interned tags so
   // their table positions stay stable.
   Const,
+  // The pointer-width spellings, a type of their own: what the source
+  // wrote stays what the checker reads, and a backend maps each to the
+  // fixed width of the target (the layout is the word either way).
+  Isize,
+  Usize,
   // A type parameter of the item the node belongs to: the payload is
   // the parameter's index, counting the item's own type parameters.
   // A body that has not been specialized still names the types it was
@@ -81,13 +86,26 @@ enum class PointerWidth : u8 {
 // table lookup. The Function tag is pre-interned right after them; Struct
 // and Array nodes are only created via their factories.
 constexpr u32 PRIMITIVE_TYPE_COUNT = static_cast<u32>(TypeTag::Struct);
+// The pre-interned positions right after `Function`: the pointer-width
+// spellings ride after it, which is where a pre-interned tag goes when its
+// tag value is above the fixed block.
+constexpr u32 ISIZE_POS = PRIMITIVE_TYPE_COUNT + 1;
+constexpr u32 USIZE_POS = PRIMITIVE_TYPE_COUNT + 2;
+constexpr u32 PRE_INTERNED_COUNT = USIZE_POS + 1;
 
 // Resolves a pre-interned primitive tag to its table index without a lookup.
 // StorageBuilder pre-interns these in TypeTag order (plus Function right
-// after), so this mapping must stay in sync with intern_primitives().
+// after, then the pointer-width spellings), so this mapping must stay in
+// sync with intern_primitives().
 constexpr TypeIdx primitive_idx(TypeTag tag) {
   if (tag == TypeTag::Function) {
     return TypeIdx(PRIMITIVE_TYPE_COUNT);
+  }
+  if (tag == TypeTag::Isize) {
+    return TypeIdx(ISIZE_POS);
+  }
+  if (tag == TypeTag::Usize) {
+    return TypeIdx(USIZE_POS);
   }
   return TypeIdx(static_cast<u32>(tag));
 }
@@ -238,6 +256,8 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::U16: return "u16";
     case T::U32: return "u32";
     case T::U64: return "u64";
+    case T::Isize: return "isize";
+    case T::Usize: return "usize";
     // case T::U128: return "u128";
     // case T::F16: return "f16";
     case T::F32: return "f32";

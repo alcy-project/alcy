@@ -58,14 +58,20 @@ constexpr BinaryOp BINARY_OPS[] = {
     {ir::Opcode::LogicalShiftRight, 0x76, 0x88, 0, 0},
 };
 
-bool is_wide_int(ir::TypeTag tag) {
-  return tag == ir::TypeTag::I64 || tag == ir::TypeTag::U64;
+// A pointer-width spelling is wide only on a wide target; a 32-bit one
+// serves it as a word.
+bool is_wide_int(ir::TypeTag tag, ir::PointerWidth width) {
+  if (tag == ir::TypeTag::I64 || tag == ir::TypeTag::U64) {
+    return true;
+  }
+  return width == ir::PointerWidth::W64 &&
+         (tag == ir::TypeTag::Isize || tag == ir::TypeTag::Usize);
 }
 
 // Whether a tag rides a 32-bit word, pointers included: casts between
 // them and integers are the identity the LLVM emitter also treats them as.
-bool is_word_int(ir::TypeTag tag) {
-  return ir::is_integer_type(tag) && !is_wide_int(tag);
+bool is_word_int(ir::TypeTag tag, ir::PointerWidth width) {
+  return ir::is_integer_type(tag) && !is_wide_int(tag, width);
 }
 
 u8 compare_opcode(ir::Opcode op, bool is_signed, bool wide) {
@@ -98,7 +104,7 @@ u8 float_compare_opcode(ir::Opcode op, bool wide) {
   }
 }
 // The width a shift count is checked against.
-u32 integer_bits(ir::TypeTag tag) {
+u32 integer_bits(ir::TypeTag tag, ir::PointerWidth width) {
   switch (tag) {
     case ir::TypeTag::I8:
     case ir::TypeTag::U8: return 8;
@@ -106,6 +112,9 @@ u32 integer_bits(ir::TypeTag tag) {
     case ir::TypeTag::U16: return 16;
     case ir::TypeTag::I32:
     case ir::TypeTag::U32: return 32;
+    case ir::TypeTag::Isize:
+    case ir::TypeTag::Usize:
+      return width == ir::PointerWidth::W64 ? 64 : 32;
     default: return 64;
   }
 }
@@ -181,7 +190,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
     const ir::TypeTag tag = storage_.types()[lhs.type].tag;
     u8 opcode = 0;
     if (ir::is_integer_type(tag)) {
-      opcode = is_wide_int(tag) ? entry.i64 : entry.i32;
+      opcode = is_wide_int(tag, target_.width) ? entry.i64 : entry.i32;
     } else if (ir::is_float_type(tag)) {
       opcode = tag == ir::TypeTag::F32 ? entry.f32 : entry.f64;
     }
@@ -197,7 +206,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
     // 127, a left shift past the byte, and a compare against the
     // value the language answers then reads them apart. The checked
     // form canonicalizes on its own; this is the path a release takes.
-    if (ir::is_integer_type(tag) && !is_wide_int(tag) &&
+    if (ir::is_integer_type(tag) && !is_wide_int(tag, target_.width) &&
         tag != ir::TypeTag::I32 && tag != ir::TypeTag::U32) {
       canonicalize(body_, tag);
     }
@@ -220,7 +229,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         // `true` into 0xFFFFFFFF, still true to every branch; `i32.eqz`
         // is the logical not and stays canonical.
         op(0x45);  // i32.eqz
-      } else if (is_wide_int(tag)) {
+      } else if (is_wide_int(tag, target_.width)) {
         i64_const(-1);
         op(0x85);  // i64.xor
       } else {
@@ -256,7 +265,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
       u8 opcode = 0;
       if (ir::is_integer_type(tag)) {
         opcode = compare_opcode(instr.op, ir::is_signed_integer_type(tag),
-                                is_wide_int(tag));
+                                is_wide_int(tag, target_.width));
       } else if (ir::is_float_type(tag)) {
         opcode = float_compare_opcode(instr.op, tag == ir::TypeTag::F64);
       } else if (is_thin_pointer(tag)) {
@@ -294,17 +303,17 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
       if (push_operand(src).is_err()) {
         return base::make_err(codegen::EmitError::Unsupported);
       }
-      if (is_word_int(src_tag) && is_word_int(dst_tag)) {
+      if (is_word_int(src_tag, target_.width) && is_word_int(dst_tag, target_.width)) {
         canonicalize(body_, dst_tag);
-      } else if (is_word_int(src_tag) && is_wide_int(dst_tag)) {
+      } else if (is_word_int(src_tag, target_.width) && is_wide_int(dst_tag, target_.width)) {
         op(ir::is_signed_integer_type(src_tag) ? 0xAC : 0xAD);  // extend_i32
-      } else if (is_wide_int(src_tag) && is_wide_int(dst_tag)) {
+      } else if (is_wide_int(src_tag, target_.width) && is_wide_int(dst_tag, target_.width)) {
         // Same width; nothing to encode.
-      } else if (is_wide_int(src_tag) && is_word_int(dst_tag)) {
+      } else if (is_wide_int(src_tag, target_.width) && is_word_int(dst_tag, target_.width)) {
         op(0xA7);  // i32.wrap_i64
         canonicalize(body_, dst_tag);
       } else if (ir::is_integer_type(src_tag) && ir::is_float_type(dst_tag)) {
-        const bool wide = is_wide_int(src_tag);
+        const bool wide = is_wide_int(src_tag, target_.width);
         if (dst_tag == ir::TypeTag::F32) {
           op(ir::is_signed_integer_type(src_tag) ? (wide ? 0xB4 : 0xB2)
                                                  : (wide ? 0xB5 : 0xB3));
@@ -317,7 +326,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         // destination takes its end. The trapping form this used to
         // write answered something else from LLVM's undefined fptosi,
         // which rule does not allow.
-        const u32 index = (is_wide_int(dst_tag) ? 4u : 0u) +
+        const u32 index = (is_wide_int(dst_tag, target_.width) ? 4u : 0u) +
                           (src_tag == ir::TypeTag::F64 ? 2u : 0u) +
                           (ir::is_signed_integer_type(dst_tag) ? 0u : 1u);
         body_.byte(codegen::wasm::TRUNC_SAT[index][0]);
@@ -325,14 +334,14 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         // The conversion lands in a 32-bit word, so a narrower
         // destination clamps to its own ends - the range the LLVM
         // intrinsic saturates at directly.
-        if (!is_wide_int(dst_tag) && dst_tag != ir::TypeTag::I32 &&
+        if (!is_wide_int(dst_tag, target_.width) && dst_tag != ir::TypeTag::I32 &&
             dst_tag != ir::TypeTag::U32) {
           const bool is_signed = ir::is_signed_integer_type(dst_tag);
           // Bool saturates at its one bit; `integer_bits` names the
           // width a shift count is checked against, where a `bool` is
           // a word.
           const u32 bits =
-              dst_tag == ir::TypeTag::I1 ? 1u : integer_bits(dst_tag);
+              dst_tag == ir::TypeTag::I1 ? 1u : integer_bits(dst_tag, target_.width);
           const i32 low = is_signed ? -(1 << (bits - 1)) : 0;
           const i32 high = is_signed ? (1 << (bits - 1)) - 1
                                      : static_cast<i32>((1u << bits) - 1u);
@@ -364,17 +373,17 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         } else {
           op(0xBB);  // f64.promote_f32
         }
-      } else if (is_word_int(src_tag) && is_thin_pointer(dst_tag)) {
+      } else if (is_word_int(src_tag, target_.width) && is_thin_pointer(dst_tag)) {
         canonicalize(body_, dst_tag);
       } else if (rides_as_address(src_tag) && rides_as_address(dst_tag)) {
         // Relabelling: the address is unchanged, and the destination
         // names what it points at, or the words that live there.
       } else if (is_thin_pointer(src_tag) && ir::is_integer_type(dst_tag)) {
-        if (is_wide_int(dst_tag)) {
+        if (is_wide_int(dst_tag, target_.width)) {
           op(0xAD);  // i64.extend_i32_u: the address zero-extends.
         }
         canonicalize(body_, dst_tag);
-      } else if (is_wide_int(src_tag) && is_thin_pointer(dst_tag)) {
+      } else if (is_wide_int(src_tag, target_.width) && is_thin_pointer(dst_tag)) {
         op(0xA7);  // i32.wrap_i64
       } else {
         return unsupported(current_span_,
@@ -450,7 +459,7 @@ Emitter::EmitResult Emitter::emit_checked_overflow(
   const ir::Operand& lhs = storage_.operands()[instr.operands.head()];
   const ir::Operand& rhs = storage_.operands()[instr.operands.head() + 1];
   const ir::TypeTag tag = storage_.types()[lhs.type].tag;
-  const bool wide = is_wide_int(tag);
+  const bool wide = is_wide_int(tag, target_.width);
   const bool word32 =
       !wide && (tag == ir::TypeTag::I32 || tag == ir::TypeTag::U32);
   const bool narrow = !wide && !word32;
@@ -612,7 +621,7 @@ Emitter::EmitResult Emitter::emit_check_prelude(const ir::Instruction& instr,
                                                 const overlay::Entry& entry) {
   const ir::Operand& lhs = storage_.operands()[instr.operands.head()];
   const ir::TypeTag tag = storage_.types()[lhs.type].tag;
-  const bool wide = is_wide_int(tag);
+  const bool wide = is_wide_int(tag, target_.width);
   switch (entry.kind) {
     case overlay::Check::ShiftRange: {
       if (push_operand(storage_.operands()[entry.operand]).is_err()) {
@@ -622,7 +631,7 @@ Emitter::EmitResult Emitter::emit_check_prelude(const ir::Instruction& instr,
         i64_const(64);
         op(0x5A);  // i64.ge_u
       } else {
-        i32_const(static_cast<i32>(integer_bits(tag)));
+        i32_const(static_cast<i32>(integer_bits(tag, target_.width)));
         op(0x4F);  // i32.ge_u
       }
       emit_check_call(CHECK_SHIFT, entry.site);

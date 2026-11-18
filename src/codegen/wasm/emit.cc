@@ -341,6 +341,11 @@ std::optional<ValueShape> Emitter::shape_of(ir::TypeIdx type) const {
     case T::Function: return ValueShape{ValType::I32, 1};
     case T::I64:
     case T::U64: return ValueShape{ValType::I64, 1};
+    case T::Isize:
+    case T::Usize:
+      return target_.width == ir::PointerWidth::W64
+                 ? ValueShape{ValType::I64, 1}
+                 : ValueShape{ValType::I32, 1};
     case T::F32: return ValueShape{ValType::F32, 1};
     case T::F64: return ValueShape{ValType::F64, 1};
     case T::Str:
@@ -964,7 +969,9 @@ Emitter::EmitResult Emitter::emit_switch(const ir::Instruction& instr) {
 
   const ir::Operand& value = storage_.operands()[ops.head()];
   const ir::TypeTag tag = storage_.types()[value.type].tag;
-  const bool wide = tag == ir::TypeTag::I64 || tag == ir::TypeTag::U64;
+  const bool wide = tag == ir::TypeTag::I64 || tag == ir::TypeTag::U64 ||
+                    (target_.width == ir::PointerWidth::W64 &&
+                     (tag == ir::TypeTag::Isize || tag == ir::TypeTag::Usize));
   const ir::BlockIdx fallback = storage_.operands()[ops.head() + 1].as_block();
   set_state(case_of(fallback));
 
@@ -1255,7 +1262,10 @@ Emitter::EmitResult Emitter::push_immutable(const ir::Immutable& immutable,
   const ir::TypeTag tag = storage_.types()[immutable.type].tag;
   if (ir::is_integer_type(tag)) {
     const u64 raw = immutable.as_u64_integer(tag);
-    if (word == 0 && (tag == ir::TypeTag::I64 || tag == ir::TypeTag::U64)) {
+    if (word == 0 &&
+        (tag == ir::TypeTag::I64 || tag == ir::TypeTag::U64 ||
+         (target_.width == ir::PointerWidth::W64 &&
+          (tag == ir::TypeTag::Isize || tag == ir::TypeTag::Usize)))) {
       i64_const(static_cast<i64>(raw));
     } else {
       i32_const(static_cast<i32>(static_cast<u32>(raw)));

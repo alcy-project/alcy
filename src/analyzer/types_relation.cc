@@ -51,7 +51,9 @@ bool Checker::is_integer_tag(ir::TypeTag tag) const {
     case ir::TypeTag::U8:
     case ir::TypeTag::U16:
     case ir::TypeTag::U32:
-    case ir::TypeTag::U64: return true;
+    case ir::TypeTag::U64:
+    case ir::TypeTag::Isize:
+    case ir::TypeTag::Usize: return true;
     default: return false;
   }
 }

@@ -177,6 +177,8 @@ class TextWriter {
       case TypeTag::U16: out_ += "u16"; break;
       case TypeTag::U32: out_ += "u32"; break;
       case TypeTag::U64: out_ += "u64"; break;
+      case TypeTag::Isize: out_ += "isize"; break;
+      case TypeTag::Usize: out_ += "usize"; break;
       case TypeTag::F32: out_ += "f32"; break;
       case TypeTag::F64: out_ += "f64"; break;
       case TypeTag::Str: out_ += "str"; break;
@@ -915,6 +917,14 @@ class TextWriter {
                        immutable.data.u32_value);
         break;
       case TypeTag::U64:
+        fmt::format_to(std::back_inserter(out_), "{}",
+                       immutable.data.u64_value);
+        break;
+      case TypeTag::Isize:
+        fmt::format_to(std::back_inserter(out_), "{}",
+                       immutable.data.i64_value);
+        break;
+      case TypeTag::Usize:
         fmt::format_to(std::back_inserter(out_), "{}",
                        immutable.data.u64_value);
         break;

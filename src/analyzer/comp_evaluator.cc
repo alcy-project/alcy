@@ -51,8 +51,7 @@ CompEvaluator::CompEvaluator(CompInputs inputs,
 }
 
 ir::TypeIdx CompEvaluator::usize_type() {
-  return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
-                                                          : ir::TypeTag::U32);
+  return builder.primitive(ir::TypeTag::Usize);
 }
 
 ir::TypeIdx CompEvaluator::type_origin(ir::TypeIdx type) const {

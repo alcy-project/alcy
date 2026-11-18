@@ -39,7 +39,7 @@ struct Access {
   u32 store_align = 0;
 };
 
-std::optional<Access> access_for(ir::TypeTag tag) {
+std::optional<Access> access_for(ir::TypeTag tag, ir::PointerWidth width) {
   using T = ir::TypeTag;
   switch (tag) {
     case T::I1: return Access{0x2D, 0, 0x3A, 0};  // load8_u / store8
@@ -51,6 +51,11 @@ std::optional<Access> access_for(ir::TypeTag tag) {
     case T::U32: return Access{0x28, 2, 0x36, 2};
     case T::I64:
     case T::U64: return Access{0x29, 3, 0x37, 3};
+    case T::Isize:
+    case T::Usize:
+      // The word access the target's width spells.
+      return width == ir::PointerWidth::W64 ? Access{0x29, 3, 0x37, 3}
+                                            : Access{0x28, 2, 0x36, 2};
     case T::F32: return Access{0x2A, 2, 0x38, 2};
     case T::F64: return Access{0x2B, 3, 0x39, 3};
     case T::Ptr:
@@ -183,7 +188,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
         return base::make_ok();
       }
 
-      const std::optional<Access> access = access_for(tag);
+      const std::optional<Access> access = access_for(tag, target_.width);
       if (!access.has_value()) {
         return unsupported(current_span_, ir::type_to_str(tag));
       }
@@ -252,7 +257,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       }
 
       const std::optional<Access> access =
-          access_for(is_address ? ir::TypeTag::Ptr : tag);
+          access_for(is_address ? ir::TypeTag::Ptr : tag, target_.width);
       if (!access.has_value()) {
         return unsupported(current_span_, ir::type_to_str(tag));
       }
@@ -344,7 +349,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       } else {
         // The discriminant is the payload's spare pattern :
         // pick the variant index the spell names.
-        const std::optional<Access> byte = access_for(ir::TypeTag::I1);
+        const std::optional<Access> byte = access_for(ir::TypeTag::I1, target_.width);
         if (!byte.has_value()) {
           return unsupported(current_span_, "this enum");
         }
@@ -386,7 +391,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       // The fieldless spell for the fieldless variant; the carrying
       // variant's payload follows, so a zero stands where it lands.
       const bool thin = niche.slot == niche.payload;
-      const std::optional<Access> byte = access_for(ir::TypeTag::I1);
+      const std::optional<Access> byte = access_for(ir::TypeTag::I1, target_.width);
       if (!thin && !byte.has_value()) {
         return unsupported(current_span_, "this enum");
       }
@@ -673,7 +678,8 @@ Emitter::EmitResult Emitter::emit_field_load(const ir::Operand& aggregate,
   const std::optional<ValueShape> shape = shape_of(cur);
   const u32 base = reg_base_[instr.dst.idx];
   if (shape.has_value() && shape->words == 1) {
-    const std::optional<Access> access = access_for(storage_.types()[cur].tag);
+    const std::optional<Access> access =
+        access_for(storage_.types()[cur].tag, target_.width);
     if (!access.has_value()) {
       return unsupported(current_span_, "this extraction");
     }

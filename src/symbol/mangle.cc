@@ -71,6 +71,8 @@ constexpr char TAG_U32 = 'U';
 constexpr char TAG_U64 = 'L';
 constexpr char TAG_F32 = 'f';
 constexpr char TAG_F64 = 'F';
+constexpr char TAG_ISIZE = 'V';
+constexpr char TAG_USIZE = 'W';
 constexpr char TAG_STR = 'z';
 constexpr char TAG_PTR = 'p';
 constexpr char TAG_REF = 'r';
@@ -105,6 +107,7 @@ constexpr Primitive PRIMITIVES[] = {
     {TAG_BOOL, "bool"}, {TAG_I8, "i8"},   {TAG_I16, "i16"}, {TAG_I32, "i32"},
     {TAG_I64, "i64"},   {TAG_U8, "u8"},   {TAG_U16, "u16"}, {TAG_U32, "u32"},
     {TAG_U64, "u64"},   {TAG_F32, "f32"}, {TAG_F64, "f64"},
+    {TAG_ISIZE, "isize"}, {TAG_USIZE, "usize"},
 };
 
 std::string_view primitive_spelling(char tag) {
@@ -129,6 +132,8 @@ char primitive_tag(ir::TypeTag tag) {
     case ir::TypeTag::U64: return TAG_U64;
     case ir::TypeTag::F32: return TAG_F32;
     case ir::TypeTag::F64: return TAG_F64;
+    case ir::TypeTag::Isize: return TAG_ISIZE;
+    case ir::TypeTag::Usize: return TAG_USIZE;
     default: return '\0';
   }
 }
@@ -211,6 +216,8 @@ class Encoder {
       case ir::TypeTag::U16:
       case ir::TypeTag::U32:
       case ir::TypeTag::U64:
+      case ir::TypeTag::Isize:
+      case ir::TypeTag::Usize:
       case ir::TypeTag::F32:
       case ir::TypeTag::F64: break;
       case ir::TypeTag::Str: out_.push_back(TAG_STR); return;

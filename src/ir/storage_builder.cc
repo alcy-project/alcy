@@ -239,6 +239,8 @@ struct Reached {
       case T::U16:
       case T::U32:
       case T::U64:
+      case T::Isize:
+      case T::Usize:
       case T::F32:
       case T::F64:
       case T::Str:

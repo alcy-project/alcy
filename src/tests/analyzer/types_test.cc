@@ -979,10 +979,13 @@ TEST_CASE("Check maps pointer widths for sized integers") {
   const ir::StructType& wide_struct =
       wide_result.package->types->struct_types()
           [wide_result.package->types->types()[wide_w->type].as_struct()];
+  // The pointer-width spellings keep their own type on every target:
+  // the fixed width is what the layout and the backends answer with,
+  // not what the checker reports.
   CHECK(narrow_result.package->types->types()[narrow_struct.fields[0]].tag ==
-        ir::TypeTag::I32);
+        ir::TypeTag::Isize);
   CHECK(wide_result.package->types->types()[wide_struct.fields[0]].tag ==
-        ir::TypeTag::I64);
+        ir::TypeTag::Isize);
 }
 
 // A size is the offset a pointer carries, so the same shape is a size on
@@ -5100,7 +5103,7 @@ TEST_CASE("Check interns value arguments by their values") {
     if (shape.fields.size() != 2) {
       return nullptr;
     }
-    CHECK(types.types()[shape.fields[1]].tag == ir::TypeTag::U64);
+    CHECK(types.types()[shape.fields[1]].tag == ir::TypeTag::Usize);
     const ir::TypeIdx data = shape.fields[0];
     if (types.types()[data].tag != ir::TypeTag::Array) {
       return nullptr;
@@ -5627,7 +5630,7 @@ TEST_CASE("Check instantiates inherent methods over value parameters") {
   for (const CheckedModule::MethodInfo* method : gets) {
     CHECK(method->receiver == CheckedModule::ReceiverKind::Shared);
     CHECK(method->params.size() == 2);
-    CHECK(types.types()[method->params[1]].tag == ir::TypeTag::U64);
+    CHECK(types.types()[method->params[1]].tag == ir::TypeTag::Usize);
     CHECK(types.types()[method->ret].tag == ir::TypeTag::I32);
   }
   for (const CheckedModule::MethodInfo* method : pushes) {
@@ -5712,7 +5715,7 @@ TEST_CASE("Check reads a value parameter as an ordinary value") {
   }
   CHECK(capacities[0]->self_type.idx != capacities[1]->self_type.idx);
   for (const CheckedModule::MethodInfo* method : capacities) {
-    CHECK(types.types()[method->ret].tag == ir::TypeTag::U64);
+    CHECK(types.types()[method->ret].tag == ir::TypeTag::Usize);
   }
   for (const CheckedModule::MethodInfo* method : fulls) {
     CHECK(types.types()[method->ret].tag == ir::TypeTag::I1);
@@ -5757,11 +5760,11 @@ TEST_CASE("Check reads a value parameter as an ordinary value") {
   }
   for (const CheckedModule::ValueSplice* splice : first) {
     CHECK(splice->value == first[0]->value);
-    CHECK(types.types()[splice->type].tag == ir::TypeTag::U64);
+    CHECK(types.types()[splice->type].tag == ir::TypeTag::Usize);
   }
   for (const CheckedModule::ValueSplice* splice : second) {
     CHECK(splice->value == second[0]->value);
-    CHECK(types.types()[splice->type].tag == ir::TypeTag::U64);
+    CHECK(types.types()[splice->type].tag == ir::TypeTag::Usize);
   }
   const bool both_counts = (first[0]->value == 4 && second[0]->value == 8) ||
                            (first[0]->value == 8 && second[0]->value == 4);
@@ -6255,7 +6258,7 @@ TEST_CASE("Check reports a const initializer error once") {
   CHECK(f.bag.has_errors());
   CHECK(count_messages(
             f.bag,
-            "Type mismatch in boolean literal: expected 'u64', found 'bool'") ==
+            "Type mismatch in boolean literal: expected 'usize', found 'bool'") ==
         1);
   CHECK(count_messages(f.bag,
                        "Array length must be a constant integer value") == 0);

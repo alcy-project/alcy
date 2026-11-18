@@ -199,11 +199,9 @@ struct DropElaborationInputs {
   u32 base = 0;
   // Where each type copy came from (the lowering's origin links).
   const std::unordered_map<u32, u32>& type_origins;
-  // Values the caller already interned: its `1` and `0` operands and
-  // the pointer width the target chose.
+  // Values the caller already interned: its `1` and `0` operands.
   ir::OperandIdx size_one;
   ir::OperandIdx zero_i32;
-  ir::PointerWidth width;
   // The function the lowering interns for a destructor method; the
   // pass names the module and method the glue table recorded.
   std::function<ir::FunctionIdx(u32 module, u32 method)> drop_method;

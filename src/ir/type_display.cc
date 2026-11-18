@@ -58,6 +58,8 @@ std::string type_display_at(const StorageState& state,
     case TypeTag::U16: return "u16";
     case TypeTag::U32: return "u32";
     case TypeTag::U64: return "u64";
+    case TypeTag::Isize: return "isize";
+    case TypeTag::Usize: return "usize";
     case TypeTag::F32: return "f32";
     case TypeTag::F64: return "f64";
     case TypeTag::Str: return "str";

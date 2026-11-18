@@ -51,6 +51,8 @@ struct Immutable {
       case TypeTag::U16: return static_cast<u64>(data.u16_value);
       case TypeTag::U32: return static_cast<u64>(data.u32_value);
       case TypeTag::U64: return static_cast<u64>(data.u64_value);
+      case TypeTag::Isize: return static_cast<u64>(data.i64_value);
+      case TypeTag::Usize: return static_cast<u64>(data.u64_value);
       default: UNREACHABLE();
     }
   }

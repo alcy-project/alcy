@@ -114,7 +114,7 @@ bool Checker::classify_suffix(std::string_view spelling,
     bool is_float;
   };
   constexpr Suffix SUFFIXES[] = {
-      {"isize", TT::I64, false}, {"usize", TT::U64, false},
+      {"isize", TT::Isize, false}, {"usize", TT::Usize, false},
       {"i8", TT::I8, false},     {"i16", TT::I16, false},
       {"i32", TT::I32, false},   {"i64", TT::I64, false},
       {"u8", TT::U8, false},     {"u16", TT::U16, false},
@@ -126,11 +126,6 @@ bool Checker::classify_suffix(std::string_view spelling,
       continue;
     }
     tag = known.tag;
-    if (known.text == "isize") {
-      tag = width == ir::PointerWidth::W64 ? TT::I64 : TT::I32;
-    } else if (known.text == "usize") {
-      tag = width == ir::PointerWidth::W64 ? TT::U64 : TT::U32;
-    }
     is_float = known.is_float;
     return true;
   }

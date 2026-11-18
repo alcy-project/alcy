@@ -241,7 +241,8 @@ void check_lossy_cast(LintContext& ctx, ast::ExprIdx expr) {
 
 constexpr bool is_unsigned_tag(ir::TypeTag tag) {
   return tag == ir::TypeTag::U8 || tag == ir::TypeTag::U16 ||
-         tag == ir::TypeTag::U32 || tag == ir::TypeTag::U64;
+         tag == ir::TypeTag::U32 || tag == ir::TypeTag::U64 ||
+         tag == ir::TypeTag::Usize;
 }
 
 // Whether a magnitude's spelling names zero, however it is written:

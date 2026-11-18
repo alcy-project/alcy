@@ -296,6 +296,8 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::I64:
     case TypeTag::U64:
     case TypeTag::F64: return {8, 8};
+    case TypeTag::Isize:
+    case TypeTag::Usize: return {word, word};
     // Fat pointer: {bytes, len}, with the length riding the target.
     case TypeTag::Str: return {2 * word, word};
     case TypeTag::Slice: return {2 * word, word};
@@ -533,6 +535,8 @@ inline bool is_copy_type(const StorageState& state,
     case TypeTag::U16:
     case TypeTag::U32:
     case TypeTag::U64:
+    case TypeTag::Isize:
+    case TypeTag::Usize:
     case TypeTag::F32:
     case TypeTag::F64:
     case TypeTag::Str:

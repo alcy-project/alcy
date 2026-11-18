@@ -312,7 +312,7 @@ class StorageBuilder {
   // scans start past the pre-interned block, whose placeholder payloads must
   // never match.
   TypeIdx slice_type(TypeIdx element) {
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
       if (node.tag != TypeTag::Slice) {
@@ -332,7 +332,7 @@ class StorageBuilder {
   }
 
   TypeIdx array_type(TypeIdx element, u64 count) {
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
       if (node.tag != TypeTag::Array) {
@@ -440,7 +440,7 @@ class StorageBuilder {
     if (never_.is_valid()) {
       return never_;
     }
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
          ++idx) {
       if (state_.types[idx].tag == TypeTag::Never) {
         never_ = idx;
@@ -457,7 +457,7 @@ class StorageBuilder {
     if (error_.is_valid()) {
       return error_;
     }
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
          ++idx) {
       if (state_.types[idx].tag == TypeTag::Error) {
         error_ = idx;
@@ -557,6 +557,12 @@ class StorageBuilder {
     TypeNode func{};
     func.tag = TypeTag::Function;
     state_.types.emplace_back(func);
+    TypeNode isize{};
+    isize.tag = TypeTag::Isize;
+    state_.types.emplace_back(isize);
+    TypeNode usize{};
+    usize.tag = TypeTag::Usize;
+    state_.types.emplace_back(usize);
   }
 
   // A tuple's elements as one key. The count leads so that a prefix cannot
@@ -598,7 +604,7 @@ class StorageBuilder {
     raw_ptr_by_pointee_.clear();
     raw_mut_ptr_by_pointee_.clear();
     param_by_index_.clear();
-    for (TypeIdx idx(PRIMITIVE_TYPE_COUNT + 1); idx.idx < state_.types.size();
+    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
       if (node.tag == TypeTag::Param) {

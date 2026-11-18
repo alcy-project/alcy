@@ -126,6 +126,59 @@ impl Parse for u32 {
   }
 }
 
+// The pointer-width spelling of the unsigned integer: `usize` is its
+// own type with the fixed width beside it, so its sign side and its
+// range text bound both move with the target. The bound matches what
+// the target's fixed width accepts: u32 on a 32-bit target, u64 on a
+// 64-bit one.
+impl Parse for usize {
+  fn parse(text: str) -> Option<usize> {
+    if size_of::<usize>() == 4 {
+      match u32::parse(text) {
+        Option::Some(v) => {
+          ret Option::Some(v as usize)
+        }
+        Option::None => {
+          ret Option::None
+        }
+      }
+    }
+    match u64::parse(text) {
+      Option::Some(v) => {
+        ret Option::Some(v as usize)
+      }
+      Option::None => {
+        ret Option::None
+      }
+    }
+  }
+}
+
+// The pointer-width spelling of the signed integer, handled the same
+// way as its unsigned twin.
+impl Parse for isize {
+  fn parse(text: str) -> Option<isize> {
+    if size_of::<isize>() == 4 {
+      match i32::parse(text) {
+        Option::Some(v) => {
+          ret Option::Some(v as isize)
+        }
+        Option::None => {
+          ret Option::None
+        }
+      }
+    }
+    match i64::parse(text) {
+      Option::Some(v) => {
+        ret Option::Some(v as isize)
+      }
+      Option::None => {
+        ret Option::None
+      }
+    }
+  }
+}
+
 // The count of bits a value needs: 0 for zero, one past the index of
 // its highest set bit otherwise.
 fn u64_bit_count(value: u64) -> i32 {

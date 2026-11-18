@@ -9,6 +9,6 @@
 // out lazily grants it, and the program then ends without a panic.
 
 fn main() -> i32 {
-  v := Vec::<u8>::with_capacity(4611686018427387904u64)
+  v := Vec::<u8>::with_capacity(4611686018427387904usize)
   ret v.len() as i32
 }

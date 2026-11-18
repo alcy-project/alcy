@@ -381,7 +381,6 @@ class DropElaborator {
         type_origins_(inputs.type_origins),
         size_one(inputs.size_one),
         zero_i32(inputs.zero_i32),
-        width(inputs.width),
         drop_method_(inputs.drop_method),
         reserve_block_(inputs.reserve_block) {}
 
@@ -439,8 +438,7 @@ class DropElaborator {
     return canonical_origin(type_origins_, type);
   }
   [[nodiscard]] ir::TypeIdx usize_type() const {
-    return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
-                                                            : ir::TypeTag::U32);
+    return builder.primitive(ir::TypeTag::Usize);
   }
   [[nodiscard]] ir::TypeIdxRange variant_fields(ir::TypeIdx enum_type,
                                                 u32 variant) const {
@@ -521,7 +519,6 @@ class DropElaborator {
   const std::unordered_map<u32, u32>& type_origins_;
   ir::OperandIdx size_one = ir::OperandIdx(0);
   ir::OperandIdx zero_i32 = ir::OperandIdx(0);
-  ir::PointerWidth width = ir::PointerWidth::W64;
   std::function<ir::FunctionIdx(u32, u32)> drop_method_;
   std::function<ir::BlockIdx()> reserve_block_;
 };
@@ -1734,7 +1731,6 @@ void Lowerer::place_ends() {
       .type_origins = type_origins_,
       .size_one = size_one,
       .zero_i32 = zero_i32,
-      .width = width,
       .drop_method =
           [this](u32 mod, u32 method) {
             const analyzer::CheckedModule& def = pkg.modules[mod];

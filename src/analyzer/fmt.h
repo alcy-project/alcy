@@ -9,6 +9,7 @@
 
 #include "fpag/base/numeric.h"
 #include "ir/type.h"
+#include "ir/type_util.h"
 #include "text/unescape.h"
 
 namespace analyzer {
@@ -143,7 +144,7 @@ inline FmtTemplate parse_format_string(const std::string& bytes) {
 inline bool is_formattable_tag(ir::TypeTag tag) {
   return tag == ir::TypeTag::I1 || tag == ir::TypeTag::Str ||
          tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64 ||
-         (tag >= ir::TypeTag::I8 && tag <= ir::TypeTag::U64);
+         (ir::is_integer_type(tag) && tag != ir::TypeTag::I1);
 }
 
 // A `{:.N}` precision applies to floats only: no other convertible

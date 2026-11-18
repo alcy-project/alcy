@@ -4,6 +4,10 @@
 
 - Integers `i8`-`i64`, `u8`-`u64`, `isize`/`usize`; floats `f32`/`f64`;
   `bool`. `f16`, 128-bit integers, posits, and decimals are deferred.
+- `isize` and `usize` are their own types, not spellings of a
+  fixed width: a signature declares `usize`, a caller supplies `usize`,
+  and a cast is the only spelling of the change. Each carries the
+  layout of the target word and its own implementation of a spec.
 - Literals: decimal, `0b`/`0o`/`0x`, type suffixes (`42i32`, `1.5f64`),
   `_` separators.
 - Overflow: the source arithmetic is checked when the build's

@@ -149,6 +149,27 @@ impl PartialEq for u64 {
 impl Eq for u64 {
 }
 
+// The pointer-width spellings are their own types: the fixed width a
+// spelling shares a layout with has the same comparison, but a spelling
+// declares its own implementation.
+impl PartialEq for isize {
+  fn eq(self: &Self, other: &Self) -> bool {
+    ret *self == *other
+  }
+}
+
+impl Eq for isize {
+}
+
+impl PartialEq for usize {
+  fn eq(self: &Self, other: &Self) -> bool {
+    ret *self == *other
+  }
+}
+
+impl Eq for usize {
+}
+
 impl PartialEq for bool {
   fn eq(self: &Self, other: &Self) -> bool {
     ret *self == *other
@@ -418,6 +439,54 @@ impl PartialOrd for u64 {
 }
 
 impl Ord for u64 {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for isize {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for isize {
+  fn cmp(self: &Self, other: &Self) -> Ordering {
+    if *self < *other {
+      ret Ordering::Less
+    }
+    if *self > *other {
+      ret Ordering::Greater
+    }
+    ret Ordering::Equal
+  }
+}
+
+impl PartialOrd for usize {
+  fn partial_cmp(self: &Self, other: &Self) -> Option<Ordering> {
+    if *self < *other {
+      ret Option::Some(Ordering::Less)
+    }
+    if *self > *other {
+      ret Option::Some(Ordering::Greater)
+    }
+    ret Option::Some(Ordering::Equal)
+  }
+}
+
+impl Ord for usize {
   fn cmp(self: &Self, other: &Self) -> Ordering {
     if *self < *other {
       ret Ordering::Less

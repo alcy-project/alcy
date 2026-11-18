@@ -1549,6 +1549,8 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       case ir::TypeTag::U16:
       case ir::TypeTag::U32:
       case ir::TypeTag::U64:
+      case ir::TypeTag::Isize:
+      case ir::TypeTag::Usize:
       case ir::TypeTag::F32:
       case ir::TypeTag::F64: break;
       default: {

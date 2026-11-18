@@ -63,6 +63,21 @@ TEST_CASE("Layout follows the target pointer width") {
   CHECK(layout_of(state, str, PointerWidth::W32).size == 8);
 }
 
+TEST_CASE("Layout reads the pointer-width spellings against the width") {
+  StorageBuilder builder;
+  const TypeIdx usize_ty = builder.primitive(TypeTag::Usize);
+  const TypeIdx isize_ty = builder.primitive(TypeTag::Isize);
+  Storage storage = std::move(builder).build().unwrap().unwrap();
+  const StorageState& state = storage.state();
+
+  CHECK(layout_of(state, usize_ty, PointerWidth::W64).size == 8);
+  CHECK(layout_of(state, usize_ty, PointerWidth::W64).align == 8);
+  CHECK(layout_of(state, usize_ty, PointerWidth::W32).size == 4);
+  CHECK(layout_of(state, usize_ty, PointerWidth::W32).align == 4);
+  CHECK(layout_of(state, isize_ty, PointerWidth::W64).size == 8);
+  CHECK(layout_of(state, isize_ty, PointerWidth::W32).size == 4);
+}
+
 TEST_CASE("Layout pads a struct to its strictest field") {
   StorageBuilder builder;
   const TypeIdx i8_ty = builder.primitive(TypeTag::I8);

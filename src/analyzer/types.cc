@@ -508,16 +508,12 @@ ir::TypeIdx Checker::primitive_type(ast::PrimitiveKind kind, diag::Span span) {
     case PK::I16: return builder.primitive(TT::I16);
     case PK::I32: return builder.primitive(TT::I32);
     case PK::I64: return builder.primitive(TT::I64);
-    case PK::Isize:
-      return builder.primitive(width == ir::PointerWidth::W64 ? TT::I64
-                                                              : TT::I32);
+    case PK::Isize: return builder.primitive(TT::Isize);
     case PK::U8: return builder.primitive(TT::U8);
     case PK::U16: return builder.primitive(TT::U16);
     case PK::U32: return builder.primitive(TT::U32);
     case PK::U64: return builder.primitive(TT::U64);
-    case PK::Usize:
-      return builder.primitive(width == ir::PointerWidth::W64 ? TT::U64
-                                                              : TT::U32);
+    case PK::Usize: return builder.primitive(TT::Usize);
     case PK::F32: return builder.primitive(TT::F32);
     case PK::F64: return builder.primitive(TT::F64);
     case PK::Bool: return builder.primitive(TT::I1);
@@ -1480,10 +1476,8 @@ bool Checker::check_intrinsic_signature(u32 module,
   }
   const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
   const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
-  const ir::TypeIdx usize_ty = builder.primitive(
-      width == ir::PointerWidth::W64 ? ir::TypeTag::U64 : ir::TypeTag::U32);
-  const ir::TypeIdx isize_ty = builder.primitive(
-      width == ir::PointerWidth::W64 ? ir::TypeTag::I64 : ir::TypeTag::I32);
+  const ir::TypeIdx usize_ty = builder.primitive(ir::TypeTag::Usize);
+  const ir::TypeIdx isize_ty = builder.primitive(ir::TypeTag::Isize);
   std::vector<ir::TypeIdx> expected;
   ir::TypeIdx expected_ret = builder.primitive(ir::TypeTag::Void);
   const auto wrong = [&]() {
@@ -2307,12 +2301,10 @@ ir::TypeIdx Checker::primitive_by_name(std::string_view name) {
   }
   // The pointer-width spellings name the target's width.
   if (name == "isize") {
-    return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::I64
-                                                            : ir::TypeTag::I32);
+    return builder.primitive(ir::TypeTag::Isize);
   }
   if (name == "usize") {
-    return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::U64
-                                                            : ir::TypeTag::U32);
+    return builder.primitive(ir::TypeTag::Usize);
   }
   return error_type();
 }
