@@ -11,6 +11,102 @@ pub intrinsic fn str_slice(s: str, start: usize, end: usize) -> str;
 
 pub unsafe intrinsic fn str_from_parts(ptr: &u8, len: usize) -> str;
 
+// The byte length of the scalar at `at`, or zero where the bytes do
+// not form one: a stray continuation, a lead the alphabet does not
+// grant, an overlong form, a surrogate, or one past the last scalar.
+fn utf8_scalar_length(bytes: &[u8], at: usize) -> usize {
+  mut want := 0 as usize
+  mut lo := 0x80u8
+  mut hi := 0xBFu8
+  mut i := at
+  b := bytes[i]
+  n := bytes.len()
+  if b < 0x80u8 {
+    ret 1
+  }
+  if b >= 0xC2u8 && b <= 0xDFu8 {
+    want = 2
+  } else if b == 0xE0u8 {
+    want = 3
+    lo = 0xA0u8
+  } else if b >= 0xE1u8 && b <= 0xECu8 {
+    want = 3
+  } else if b == 0xEDu8 {
+    want = 3
+    hi = 0x9Fu8
+  } else if b >= 0xEEu8 && b <= 0xEFu8 {
+    want = 3
+  } else if b == 0xF0u8 {
+    want = 4
+    lo = 0x90u8
+  } else if b >= 0xF1u8 && b <= 0xF3u8 {
+    want = 4
+  } else if b == 0xF4u8 {
+    want = 4
+    hi = 0x8Fu8
+  }
+  if want == 0 {
+    ret 0
+  }
+  mut k := 1 as usize
+  while k < want {
+    if i + k >= n {
+      ret 0
+    }
+    c := bytes[i + k]
+    mut fits := c >= 0x80u8 && c <= 0xBFu8
+    if k == 1 {
+      fits = c >= lo && c <= hi
+    }
+    if !fits {
+      ret 0
+    }
+    k = k + 1
+  }
+  ret want
+}
+
+// The offset of the first byte that breaks a scalar, or `None` when
+// the bytes are well-formed.
+fn utf8_scan(bytes: &[u8]) -> Option<Utf8Error> {
+  mut i := 0 as usize
+  while i < bytes.len() {
+    seq := utf8_scalar_length(bytes, i)
+    if seq == 0 {
+      ret Option::Some(Utf8Error { valid_up_to: i })
+    }
+    i = i + seq
+  }
+  ret Option::None
+}
+
+// The failure a UTF-8 check reports: the offset of the first byte
+// that did not decode.
+pub struct Utf8Error {
+  pub valid_up_to: usize,
+}
+
+// Whether the bytes are well-formed UTF-8: every slot decodes, no
+// surrogate is encoded, and no sequence is overlong or truncated.
+pub fn is_utf8(bytes: &[u8]) -> bool {
+  ret utf8_scan(bytes).is_none()
+}
+
+// The view over `bytes`, or the first offset that did not decode.
+pub fn from_utf8(bytes: &[u8]) -> Result<str, Utf8Error> {
+  match utf8_scan(bytes) {
+    Option::Some(e) => {
+      ret Result::Err(e)
+    }
+    Option::None => {}
+  }
+  n := bytes.len()
+  if n == 0 {
+    ret Result::Ok("")
+  }
+  ret Result::Ok(unsafe { str_from_parts(slice_at(bytes, 0), n) })
+}
+
 // An ASCII letter folded to lower case; other bytes pass through.
 fn ascii_lower(b: u8) -> u8 {
   if b >= 0x41u8 && b <= 0x5au8 {
@@ -649,6 +745,48 @@ impl Iterator < str > for SplitIter {
 // A module's own tests: 'alcy test' splices the block into a driver and
 // runs each entry as a process of its own.
 test {
+  test is_utf8_accepts_ascii_and_multibyte() {
+    bytes := &[0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8]
+    assert(is_utf8(bytes), "ASCII is well-formed")
+    japanese := &[0xe6u8, 0x97u8, 0xa5u8, 0xe6u8, 0x9cu8, 0xacu8, 0xe8u8, 0xa9u8, 0x9eu8]
+    assert(is_utf8(japanese), "three scalars of three bytes are well-formed")
+  }
+
+  test is_utf8_rejects_stray_continuation() {
+    assert(!is_utf8(&[0x80u8]), "a continuation with no lead is none")
+    assert(!is_utf8(&[0xa5u8, 0xe6u8, 0x97u8, 0xa5u8]), "a continuation can never lead")
+  }
+
+  test is_utf8_rejects_overlong_and_surrogate() {
+    assert(!is_utf8(&[0xf0u8, 0x80u8, 0x80u8]), "an overlong form is none")
+    assert(!is_utf8(&[0xedu8, 0xa0u8, 0x80u8]), "a surrogate is none")
+    assert(!is_utf8(&[0xf4u8, 0x90u8, 0x80u8, 0x80u8]), "one past the last scalar is none")
+  }
+
+  test from_utf8_hands_back_the_text_when_valid() {
+    bytes := &[0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8]
+    match from_utf8(bytes) {
+      Result::Ok(text) => {
+        assert(text == "hello", "the view rides the bytes back")
+      }
+      Result::Err(_) => {
+        panic("an ASCII byte string is well-formed")
+      }
+    }
+  }
+
+  test from_utf8_names_the_first_bad_offset() {
+    bytes := &[0x68u8, 0x65u8, 0xffu8, 0x6cu8]
+    match from_utf8(bytes) {
+      Result::Ok(_) => {
+        panic("a stray 0xff cannot decode")
+      }
+      Result::Err(e) => {
+        assert(e.valid_up_to == 2, "the offset names the byte that broke")
+      }
+    }
+  }
+
   test an_empty_text_holds_no_bytes() {
     assert("".len_bytes() == 0, "there are no bytes to count")
     assert("".is_empty(), "a view of no bytes is empty")
