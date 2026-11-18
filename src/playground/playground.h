@@ -5,10 +5,11 @@
 
 #include "fpag/base/numeric.h"
 
-// The playground host API: check, compile, and format one source buffer, with
-// no filesystem and no command line behind it. A host that embeds the compiler
-// -- the browser page first -- calls these four; the CLI is not built on them,
-// because a command has more to say than a result struct can carry.
+// The playground host API: check, compile, format, and lint one source buffer,
+// with no filesystem and no command line behind it. A host that embeds the
+// compiler -- the browser page first -- calls these four; the CLI is not
+// built on them, because a command has more to say than a result struct can
+// carry.
 //
 // The functions have C linkage so a host binds them by name, which is
 // what makes them the wasm module's exports. The types are the project's
@@ -54,6 +55,12 @@ i32 alcy_compile(const u8* src, usize len, AlcyResult* out);
 // grammar rejects, so the call answers 1 unless it could not allocate;
 // the canonical text is in `text`. `out` is always filled.
 i32 alcy_format(const u8* src, usize len, AlcyResult* out);
+
+// Lints `src` the way `alcy lint` does, with every rule at its default
+// level. Findings ride in `diagnostics` beside anything the analysis
+// itself refused, and the counts describe the run; a warning still
+// answers 1, while a denied finding or a failed analysis answers 0.
+i32 alcy_lint(const u8* src, usize len, AlcyResult* out);
 
 // Frees what a call allocated and zeroes the result. Releasing a result
 // twice, or one that was never filled, is safe.

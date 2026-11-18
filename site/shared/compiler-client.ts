@@ -86,7 +86,10 @@ export interface RunErrorMessage {
 export type RunnerMessage = RunResultMessage | RunErrorMessage;
 
 export interface CompilerClient {
-  request(op: "check" | "compile" | "format", source: string): Promise<CompilerResponse>;
+  request(
+    op: "check" | "compile" | "format" | "lint",
+    source: string,
+  ): Promise<CompilerResponse>;
   dispose(): void;
 }
 

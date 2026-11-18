@@ -137,8 +137,8 @@ PAGE_BUDGETS = (
     Budget("shared/site.css", 6_000, "the shell's stylesheet"),
     Budget("shared/site.js", 3_000, "theme, prefetch, the service worker"),
     Budget("shared/shell.js", 1_200, "every guide page's own module"),
-    Budget("shared/i18n.en.js", 2_400, "the English catalog every page loads"),
-    Budget("shared/i18n.ja.js", 2_900, "the Japanese catalog, loaded by its tree"),
+    Budget("shared/i18n.en.js", 2_600, "the English catalog every page loads"),
+    Budget("shared/i18n.ja.js", 3_000, "the Japanese catalog, loaded by its tree"),
     Budget("playground/app.js", 4_000, "the playground's wiring"),
     Budget("playground/style.css", 6_000, "the playground's layout"),
 )

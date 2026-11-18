@@ -22,6 +22,7 @@
 #include "fpag/base/result.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
+#include "linter/lint.h"
 #include "overlay/overlay.h"
 #include "pipeline/backend_emit.h"
 #include "pipeline/call_sites.h"
@@ -203,6 +204,28 @@ extern "C" i32 alcy_format(const u8* src, usize len, AlcyResult* out) {
   out->text = copy_bytes(formatted.data(), formatted.size());
   out->text_len = formatted.size();
   out->ok = out->text != nullptr || formatted.empty();
+  return out->ok;
+}
+
+extern "C" i32 alcy_lint(const u8* src, usize len, AlcyResult* out) {
+  if (out == nullptr) {
+    return 0;
+  }
+  reset(out);
+  pipeline::PipelineContext ctx{LANGUAGE};
+  prepare(ctx);
+  const std::string_view source(reinterpret_cast<const char*>(src), len);
+  base::Result<linter::LintOutcome, diag::Reported> result =
+      linter::lint_source(ctx, SOURCE_NAME, source, linter::LintConfig{});
+  if (result.is_ok()) {
+    const linter::LintOutcome counts = std::move(result).unwrap();
+    out->file_count = static_cast<u32>(counts.file_count);
+    out->module_count = counts.module_count;
+  }
+  // A finding at warn leaves the run a success, the way the command
+  // line's exit code reads the bag; a denied finding does not.
+  out->ok = result.is_ok() && !ctx.bag.has_errors() ? 1 : 0;
+  fill_diagnostics(ctx, out);
   return out->ok;
 }
 

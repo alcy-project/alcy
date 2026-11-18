@@ -12,7 +12,7 @@ importScripts("wasm-api.js");
 interface CompilerRequest {
   type: "request";
   id: number;
-  op: "check" | "compile" | "format";
+  op: "check" | "compile" | "format" | "lint";
   source: string;
 }
 
@@ -21,6 +21,7 @@ const ENTRY = {
   check: "alcy_check",
   compile: "alcy_compile",
   format: "alcy_format",
+  lint: "alcy_lint",
 } as const;
 
 const decoder = new TextDecoder("utf-8");

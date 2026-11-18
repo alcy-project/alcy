@@ -140,6 +140,7 @@ export async function createPlayground({ factory }) {
     check: (source) => call(Module, "alcy_check", source),
     compile: (source) => call(Module, "alcy_compile", source),
     format: (source) => call(Module, "alcy_format", source),
+    lint: (source) => call(Module, "alcy_lint", source),
     run,
   };
 }

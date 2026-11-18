@@ -64,6 +64,7 @@ function init(): void {
   elements.copyLink.addEventListener("click", copyLink);
   elements.download.addEventListener("click", () => void runtime.runDownload());
   elements.format.addEventListener("click", () => void runtime.runFormat());
+  elements.lint.addEventListener("click", () => void runtime.runLint());
   runtime.warmOnIntent();
 
   // A reader who stays is likely to try something. Idle time is free

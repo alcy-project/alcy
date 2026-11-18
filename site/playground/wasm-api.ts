@@ -111,7 +111,7 @@ interface WorkerGlobalScope {
 
     constructor(module: EmscriptenModule) {
       this.module = module;
-      this.missing = ["_alcy_check", "_alcy_compile", "_alcy_format"].filter(
+      this.missing = ["_alcy_check", "_alcy_compile", "_alcy_format", "_alcy_lint"].filter(
         (name) => typeof module[name] !== "function",
       );
     }

@@ -66,5 +66,24 @@ if (!broken.ok || broken.text === null) {
   process.exit(9);
 }
 
+// The linter answers beside the compiler's own check: a program the
+// compiler accepts lints clean, and one it refuses comes back as
+// errors through the same diagnostics.
+const clean = alcy.lint('fn main() {\n  println("hello, playground")\n}\n');
+if (!clean.ok) {
+  console.error("lint refused a program the compiler accepts:");
+  console.error(JSON.stringify(clean.diagnostics, null, 2));
+  process.exit(10);
+}
+const denied = alcy.lint("fn main() {\n  missing()\n}\n");
+if (denied.ok) {
+  console.error("lint accepted a program that does not resolve");
+  process.exit(11);
+}
+if (!denied.diagnostics.some((entry) => entry.severity === "error")) {
+  console.error("lint rejected without an error diagnostic");
+  process.exit(12);
+}
+
 // Set rather than exit: the module's output may still be buffered.
 process.exitCode = ran.exitCode;

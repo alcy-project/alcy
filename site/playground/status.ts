@@ -64,6 +64,7 @@ export function setRunning(running: boolean): void {
   elements.check.disabled = running;
   elements.download.disabled = running;
   elements.format.disabled = running;
+  elements.lint.disabled = running;
   elements.run.classList.toggle("busy", running);
   renderRunButton();
 }

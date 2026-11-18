@@ -10,44 +10,51 @@
 # A header is named from the src root (linter/lint.h), which the shared
 # alcy_config carries, so dependents - the cli, the tests - include the
 # same spelling every module uses.
+
+# The sources both entry points compile, named once so the two cannot
+# drift.
+linter_sources = [
+  "bindings.cc",
+  "bindings.h",
+  "config.cc",
+  "config.h",
+  "context.cc",
+  "context.h",
+  "diag_code.cc",
+  "diag_code.h",
+  "engine.cc",
+  "engine.h",
+  "fix.cc",
+  "fix.h",
+  "level.cc",
+  "level.h",
+  "lint.cc",
+  "lint.h",
+  "rule.cc",
+  "rule.h",
+  "rules/bindings_rules.cc",
+  "rules/control_flow_rules.cc",
+  "rules/dead_code_rules.cc",
+  "rules/expression_rules.cc",
+  "rules/field_rules.cc",
+  "rules/import_rules.cc",
+  "rules/item_rules.cc",
+  "rules/rules.cc",
+  "rules/rules.h",
+  "rules/type_rules.cc",
+  "rules/variant_rules.cc",
+  "types.cc",
+  "types.h",
+  "usage.cc",
+  "usage.h",
+  "walk.cc",
+  "walk.h",
+]
+
+# The entry the cli and the tests link: the sources over the archive
+# that already carries every compiler module.
 source_set("linter") {
-  sources = [
-    "bindings.cc",
-    "bindings.h",
-    "config.cc",
-    "config.h",
-    "context.cc",
-    "context.h",
-    "diag_code.cc",
-    "diag_code.h",
-    "engine.cc",
-    "engine.h",
-    "fix.cc",
-    "fix.h",
-    "level.cc",
-    "level.h",
-    "lint.cc",
-    "lint.h",
-    "rule.cc",
-    "rule.h",
-    "rules/bindings_rules.cc",
-    "rules/control_flow_rules.cc",
-    "rules/dead_code_rules.cc",
-    "rules/expression_rules.cc",
-    "rules/field_rules.cc",
-    "rules/import_rules.cc",
-    "rules/item_rules.cc",
-    "rules/rules.cc",
-    "rules/rules.h",
-    "rules/type_rules.cc",
-    "rules/variant_rules.cc",
-    "types.cc",
-    "types.h",
-    "usage.cc",
-    "usage.h",
-    "walk.cc",
-    "walk.h",
-  ]
+  sources = linter_sources
 
   configs += [ "//src:alcy_config" ]
   public_configs = [ "//src:alcy_config" ]
@@ -59,6 +66,31 @@ source_set("linter") {
   # include this module makes directly.
   deps = [
     "//src:alcy_lib",
+    "//third_party/toml",
+  ]
+}
+
+# The entry a host inside the compiler's own graph links -- the
+# playground, which the archive itself archives -- over the modules
+# named directly, so the dependency does not close a cycle through
+# alcy_lib.
+source_set("linter_standalone") {
+  sources = linter_sources
+
+  configs += [ "//src:alcy_config" ]
+  public_configs = [ "//src:alcy_config" ]
+
+  deps = [
+    "//src:base_modules",
+    "//src/analyzer",
+    "//src/ast",
+    "//src/diag",
+    "//src/i18n",
+    "//src/ir",
+    "//src/path",
+    "//src/pipeline",
+    "//src/pkg",
+    "//src/source",
     "//third_party/toml",
   ]
 }

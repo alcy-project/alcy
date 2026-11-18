@@ -70,14 +70,14 @@ export function warmOnIntent(): void {
     window.clearTimeout(state.warmTimer);
     state.warmTimer = window.setTimeout(warmCompiler, WARM_DELAY_MS);
   };
-  for (const button of [elements.run, elements.check, elements.download]) {
+  for (const button of [elements.run, elements.check, elements.download, elements.lint]) {
     button.addEventListener("pointerenter", warm, { passive: true });
   }
   elements.source.addEventListener("focus", warm, { passive: true });
 }
 
 function callCompiler(
-  op: "check" | "compile" | "format",
+  op: "check" | "compile" | "format" | "lint",
   source: string,
 ): Promise<CompilerResponse> {
   return compiler().request(op, source);
@@ -291,6 +291,31 @@ export async function runFormat(): Promise<void> {
       replaceBuffer(response.text);
     }
     setStatus("status.formatted");
+  } catch (error) {
+    applyCompilerState("error", error instanceof Error ? error.message : String(error));
+  }
+}
+
+// The linter runs beside the compiler's own check, and its findings are
+// diagnostics in the same shape, so they land in the same list. A clean
+// buffer says so in one line and leaves the pane where it was.
+export async function runLint(): Promise<void> {
+  if (state.running) {
+    return;
+  }
+  try {
+    const response = await callCompiler("lint", normalizedSource());
+    if (response.error !== undefined) {
+      setStatus("status.compilerUnavailable");
+      return;
+    }
+    renderDiagnostics(response.diagnostics);
+    if (response.diagnostics.length === 0) {
+      setStatus("status.lintClean");
+      return;
+    }
+    showTab("problems");
+    setStatus("status.lintFound", { count: response.diagnostics.length });
   } catch (error) {
     applyCompilerState("error", error instanceof Error ? error.message : String(error));
   }
