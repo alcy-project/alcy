@@ -57,9 +57,7 @@ it is implemented.
 - String literal patterns, slice patterns.
 - Struct variants for enums; tuple struct declarations.
 - `async`, parallel constructs, `union` types, `register` operations.
-- `From`-style error conversion; `Debug` printing; the combinators
-  (`map`, `and_then`, `or`) on `Result` (they landed on
-  `Option`).
+- `From`-style error conversion; `Debug` printing.
 - A test entry with a return type, and above all one that returns
   `Result` and fails by yielding a value: an entry reports success by
   returning, so an expectation that does not hold has no value to hand

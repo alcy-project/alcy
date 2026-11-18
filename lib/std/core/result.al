@@ -46,6 +46,30 @@ impl<T, E> Result<T, E> {
     }
   }
 
+  // Applies `f` to the contained value, leaving a failure alone.
+  pub fn map<U>(self: Self, f: (T) -> U) -> Result<U, E> {
+    ret match self {
+      Result::Ok(v) => Result::Ok(f(v)),
+      Result::Err(e) => Result::Err(e),
+    }
+  }
+
+  // Applies `f` to the failure, leaving a success alone.
+  pub fn map_err<F>(self: Self, f: (E) -> F) -> Result<T, F> {
+    ret match self {
+      Result::Ok(v) => Result::Ok(v),
+      Result::Err(e) => Result::Err(f(e)),
+    }
+  }
+
+  // Chains a `Result<U, E>`-returning `f`; an error stays an error.
+  pub fn and_then<U>(self: Self, f: (T) -> Result < U, E >) -> Result<U, E> {
+    ret match self {
+      Result::Ok(v) => f(v),
+      Result::Err(e) => Result::Err(e),
+    }
+  }
+
   // Yields the contained value or `default` on failure.
   pub fn or(self: Self, default: T) -> T {
     ret match self {
@@ -147,6 +171,57 @@ test {
     a: Result<i32, str> := Result::Ok(7)
     b: Result<i32, str> := Result::Ok(8)
     assert(a != b, "different payloads make unequal results")
+  }
+
+  test map_applies_f_to_the_value_of_an_ok() {
+    ok: Result<i32, str> := Result::Ok(7)
+    mapped := ok.map((v: i32) -> v + 1)
+    want: Result<i32, str> := Result::Ok(8)
+    assert(mapped == want, "the value reaches f")
+  }
+
+  test map_leaves_an_err_alone() {
+    bad: Result<i32, str> := Result::Err("bad")
+    mapped := bad.map((v: i32) -> v + 1)
+    want: Result<i32, str> := Result::Err("bad")
+    assert(mapped == want, "a failure stays a failure")
+  }
+
+  test map_err_applies_f_to_the_error_of_an_err() {
+    bad: Result<i32, str> := Result::Err("bad")
+    erring := bad.map_err((e: str) -> str_len(e))
+    three: usize := 3
+    want: Result<i32, usize> := Result::Err(three)
+    assert(erring == want, "the error reaches f")
+  }
+
+  test map_err_leaves_an_ok_alone() {
+    ok: Result<i32, str> := Result::Ok(7)
+    erring := ok.map_err((e: str) -> str_len(e))
+    want: Result<i32, usize> := Result::Ok(7)
+    assert(erring == want, "a success stays a success")
+  }
+
+  test and_then_chains_a_result_returning_f() {
+    ok: Result<i32, str> := Result::Ok(7)
+    half: (i32) -> Result<i32, str> := (v: i32) -> match v {
+      0 => Result::Err("zero"),
+      _ => Result::Ok(v / 2),
+    }
+    chained := ok.and_then::<i32>(half)
+    want: Result<i32, str> := Result::Ok(3)
+    assert(chained == want, "the value reaches f")
+    zero: Result<i32, str> := Result::Ok(0)
+    blocked := zero.and_then::<i32>(half)
+    want_err: Result<i32, str> := Result::Err("zero")
+    assert(blocked == want_err, "f's error stands in for the chain")
+  }
+
+  test and_then_leaves_an_err_alone() {
+    bad: Result<i32, str> := Result::Err("bad")
+    chained := bad.and_then::<i32>((v: i32) -> Result::Ok(v + 1))
+    want: Result<i32, str> := Result::Err("bad")
+    assert(chained == want, "a failure stays a failure")
   }
 
   test two_errs_with_equal_errors_are_equal() {
