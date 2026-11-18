@@ -142,7 +142,7 @@ enum class TokenKind : u8 {
   RBracket,
   Question,
   Semicolon,
-  Hash,        // Reserved for future attributes; rejected with guidance.
+  Hash,        // `#[attribute(...)]`; the known attribute is `when`.
   Underscore,  // Wildcard patterns and explicit discards.
 
   // Identifiers.

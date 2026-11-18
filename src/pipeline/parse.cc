@@ -29,6 +29,7 @@
 #include "i18n/messages.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
+#include "parser/attribute.h"
 #include "parser/desugar.h"
 #include "parser/parser.h"
 #include "path/path.h"
@@ -87,9 +88,11 @@ bool parse_one(PipelineContext& ctx,
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "tokenize", "frontend");
     lexer.tokenize(tokens);
   }
+  const parser::TargetFacts facts =
+      parser::target_facts(ctx.target.triple, ctx.freestanding);
   parser::Parser parser(
       std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
-      file.id, ctx.ast, bag);
+      file.id, ctx.ast, bag, facts);
   base::Result<std::span<const ast::ItemIdx>, diag::Reported> parsed = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "parse", "frontend");
     return parser.parse();

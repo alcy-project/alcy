@@ -16,6 +16,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "lexer/token.h"
+#include "parser/attribute.h"
 #include "source/source.h"
 
 namespace parser {
@@ -164,7 +165,8 @@ class Parser {
          std::string_view bytes,
          source::FileId file,
          ast::AstArena& arena,
-         diag::DiagBag& bag);
+         diag::DiagBag& bag,
+         TargetFacts facts = TargetFacts{});
 
   // Parses a whole file into items. The token stream is verified on
   // entry, so a caller receives items the token stream accounted for;
@@ -206,6 +208,25 @@ class Parser {
     }
   }
   void skip_insignificant();
+  // An attribute list at the top of an item: `#[name(...)]` repeats on
+  // its own lines. Each one is evaluated on this target as it is
+  // parsed; `true` comes back when any `when` gate evaluated to false.
+  // What one `#[...]` contributed on top of the item: the target
+  // facts the `when` gate evaluated, and the `repr(C)` marker.
+  struct Attributes {
+    bool when_false = false;
+    bool repr_c = false;
+    diag::Span repr_span;
+  };
+
+  Attributes parse_attribute_list();
+  // One `#[name(...)]` starting at `#`. Returns what it contributed.
+  Attributes parse_attribute();
+  // `#[repr(C)]`, starting at the first argument.
+  Attributes parse_repr_attribute(diag::Span name_span);
+  // Skips to the end of an attribute on a malformed spelling, tracking
+  // nesting so an inner `]` never ends the skip.
+  void synchronize_attribute();
   bool check(lexer::TokenKind kind) const {
     return !at_end() && tokens_[pos_].kind == kind;
   }
@@ -389,6 +410,7 @@ class Parser {
   std::vector<diag::Span> pending_docs_;
   std::string_view bytes_;
   source::FileId file_;
+  TargetFacts facts_;
   ast::AstArena& ast_;
   diag::DiagBag& bag_;
   usize pos_ = 0;

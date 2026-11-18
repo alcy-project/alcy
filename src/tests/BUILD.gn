@@ -74,6 +74,7 @@ executable("tests") {
     "lsp/workspace_symbols_test.cc",
     "opt/opt_test.cc",
     "overlay/overlay_test.cc",
+    "parser/attribute_test.cc",
     "parser/desugar_test.cc",
     "parser/parser_test.cc",
     "path/path_test.cc",

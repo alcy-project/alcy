@@ -21,10 +21,31 @@ file        = { item } ;
 
 (* Items *)
 
-item        = [ vis ] , ( fn_item | intrinsic_fn_item | extern_item
+item        = { attribute } , [ vis ] , ( fn_item | intrinsic_fn_item | extern_item
                         | struct_item | enum_item | impl_item
                         | spec_item | static_item | const_item | use_item
                         | test_item ) ;
+attribute   = "#" , "[" , ident , [ "(" , ( when_expr | repr_arg ) , ")" ] , "]" ;
+              (* The closed set of attributes today: `when`, an item gate
+                 evaluated on the target — an item whose gate is false is
+                 not part of the module — and `repr(C)`, an FFI-layout
+                 marker on a struct. A gated item is still parsed: an
+                 error in its body is reported; analysis and emission
+                 never see it. See items.md, "The `when` gate", and
+                 ffi.md, "Layout and statics". Other names are rejected
+                 with guidance rather than read past. *)
+repr_arg    = "C" ;              (* Only `C` is accepted today. *)
+when_expr   = when_or ;
+when_or     = when_and , { "||" , when_and } ;
+when_and    = when_cmp , { "&&" , when_cmp } ;
+when_cmp    = when_unary , [ ( "==" | "!=" ) , when_unary ] ;
+              (* A comparison binds looser than `!` and binds one pair at
+                 most; operands must agree in kind, and a string literal
+                 compared against `target.<key>` must name a value the
+                 key knows. *)
+when_unary  = "!" , when_unary | when_primary ;
+when_primary = "(" , when_or , ")" | string | "true" | "false" | target_key ;
+target_key  = "target" , "." , ( "os" | "arch" | "freestanding" ) ;
 vis         = "pub" ;
 fn_item     = [ "unsafe" ] , [ "comp" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
             , [ "->" , type ] , block ;

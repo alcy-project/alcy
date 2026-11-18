@@ -60,7 +60,9 @@ assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`
 `!=` `>` `<` `>=` `<=`; `->` `=>` `:` `::` `,` `.` `..` `..=` `..<`
 (a range end is spelled `..=` or `..<`; bare `..` names no end, see
 `types.md`) `(` `)` `{` `}` `[` `]` `?` (error propagation),
-`_` (wildcard), `#` (reserved for future attributes). `;` separates
-multiple statements on one line only.
+`_` (wildcard), `#` (attributes: `#[when(...)]` gates an item on the
+target; a gate evaluates to a boolean expression over the `target`
+descriptor, and the attribute sits on the line above the item. See
+`items.md`). `;` separates multiple statements on one line only.
 
 Comments: `//`, `/* */`, `///` (only one doc-comment style exists).

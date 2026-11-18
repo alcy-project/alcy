@@ -44,10 +44,17 @@ checkable contracts here.
   std executor.
 - Macros of any kind: compile-time work is `comp`-marked code,
   checked by the ordinary type system.
-- Optional features or conditional compilation: a package has one
-  configuration; the manifest's dependencies, the target, and the
-  toolchain decide the build. Optional capability is selected as
-  separate packages, or paid for always.
+- User-defined feature flags and conditional compilation of packages:
+  a package has one configuration per target. The manifest's
+  dependencies, the target, and the toolchain decide the build, and
+  the toolchain selects items by the `#[when]` attribute on a closed
+  platform axis (os, arch, freestanding) before compilation. The axis
+  is not a general mechanism: it is chosen from a set the toolchain
+  owns, a dependency names no value of its own, and one
+  graph serves each binary; a Cargo-style boolean axis in which every
+  package declares its own flags would make every consumer a different
+  program. Optional capability is selected as separate packages, or
+  paid for always.
 - Unsafe code, raw pointers, FFI (reserved; see `ffi.md`). The typed
   heap intrinsics are the one place pointers exist: they are checked
   against the intrinsic set's canonical shapes, and user code reaches

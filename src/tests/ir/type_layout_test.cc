@@ -355,4 +355,58 @@ TEST_CASE("unsigned_integer_type keeps the width") {
   CHECK(unsigned_integer_type(T::Str) == T::Str);
 }
 
+TEST_CASE("field_offset places each field at the offset its alignment allows") {
+  StorageBuilder builder;
+  const TypeIdx i64_ty = builder.primitive(TypeTag::I64);
+  const TypeIdx i32_ty = builder.primitive(TypeTag::I32);
+  const TypeIdx i8_ty = builder.primitive(TypeTag::I8);
+
+  // i64, u8, u8: the byte fields sit at 8 and 9, and the struct pads
+  // to 16.
+  TypeSeq mixed;
+  mixed.push(builder.ref_type(i64_ty));
+  mixed.push(builder.ref_type(i8_ty));
+  mixed.push(builder.ref_type(i8_ty));
+  const TypeIdx mixed_struct = builder.struct_type(
+      str::INVALID_STRING_POOL_ID, mixed.finish(), TypeIdxRange{});
+
+  // u8, i32, i64: the i32 sits at 4, the i64 at 8, and the struct
+  // pads to 24.
+  TypeSeq ordered;
+  ordered.push(builder.ref_type(i8_ty));
+  ordered.push(builder.ref_type(i32_ty));
+  ordered.push(builder.ref_type(i64_ty));
+  const TypeIdx ordered_struct = builder.struct_type(
+      str::INVALID_STRING_POOL_ID, ordered.finish(), TypeIdxRange{});
+
+  Storage storage = std::move(builder).build().unwrap().unwrap();
+  const StorageState& state = storage.state();
+
+  CHECK(field_offset(
+            state,
+            state.struct_types[state.types[mixed_struct].as_struct()].fields, 0,
+            PointerWidth::W64) == 0);
+  CHECK(field_offset(
+            state,
+            state.struct_types[state.types[mixed_struct].as_struct()].fields, 1,
+            PointerWidth::W64) == 8);
+  CHECK(field_offset(
+            state,
+            state.struct_types[state.types[mixed_struct].as_struct()].fields, 2,
+            PointerWidth::W64) == 9);
+  CHECK(field_offset(
+            state,
+            state.struct_types[state.types[ordered_struct].as_struct()].fields,
+            0, PointerWidth::W64) == 0);
+  CHECK(field_offset(
+            state,
+            state.struct_types[state.types[ordered_struct].as_struct()].fields,
+            1, PointerWidth::W64) == 4);
+  CHECK(field_offset(
+            state,
+            state.struct_types[state.types[ordered_struct].as_struct()].fields,
+            2, PointerWidth::W64) == 8);
+  CHECK(layout_of(state, mixed_struct, PointerWidth::W64).size == 16);
+  CHECK(layout_of(state, ordered_struct, PointerWidth::W64).size == 16);
+}
 }  // namespace ir

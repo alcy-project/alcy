@@ -19,6 +19,7 @@
 #include "i18n/messages.h"
 #include "lexer/lexer.h"
 #include "lexer/token.h"
+#include "parser/attribute.h"
 #include "parser/diag_code.h"
 #include "source/source.h"
 
@@ -121,10 +122,12 @@ Parser::Parser(std::span<const lexer::Token> tokens,
                std::string_view bytes,
                source::FileId file,
                ast::AstArena& ast,
-               diag::DiagBag& bag)
+               diag::DiagBag& bag,
+               TargetFacts facts)
     : tokens_(tokens),
       bytes_(bytes),
       file_(file),
+      facts_(facts),
       ast_(ast),
       bag_(bag),
       previous_span_({file, 0, 0}) {
@@ -171,6 +174,180 @@ void Parser::skip_insignificant() {
     }
     break;
   }
+}
+
+Parser::Attributes Parser::parse_attribute_list() {
+  Attributes attributes;
+  while (peek_kind() == lexer::TokenKind::Hash) {
+    const Attributes one = parse_attribute();
+    attributes.when_false = attributes.when_false || one.when_false;
+    if (one.repr_c) {
+      attributes.repr_c = true;
+      attributes.repr_span = one.repr_span;
+    }
+    // A newline after `#[...]` lexes as `;`; it terminates the
+    // attribute's line, not the item, so the item sits on its own.
+    while (match(lexer::TokenKind::Semicolon)) {}
+  }
+  return attributes;
+}
+
+void Parser::synchronize_attribute() {
+  i32 depth = 0;
+  while (!at_end()) {
+    const lexer::TokenKind kind = peek_kind();
+    if (kind == lexer::TokenKind::LBracket ||
+        kind == lexer::TokenKind::LParen) {
+      ++depth;
+      advance();
+      continue;
+    }
+    if (kind == lexer::TokenKind::RBracket) {
+      if (depth == 0) {
+        advance();
+        return;
+      }
+      --depth;
+      advance();
+      continue;
+    }
+    if (kind == lexer::TokenKind::RParen) {
+      if (depth > 0) {
+        --depth;
+      }
+      advance();
+      continue;
+    }
+    if (kind == lexer::TokenKind::Semicolon && depth == 0) {
+      return;
+    }
+    advance();
+  }
+}
+
+Parser::Attributes Parser::parse_attribute() {
+  Attributes nothing;
+  // The cursor rests on `#`.
+  const lexer::Token hash = peek();
+  advance();
+  if (!match(lexer::TokenKind::LBracket)) {
+    const u32 index = bag_.emit<i18n::Key::ParserWhenMalformed>(
+        DiagCode::WhenMalformed, hash.span);
+    (void)index;
+    synchronize_attribute();
+    return nothing;
+  }
+  const lexer::Token name = peek();
+  if (name.kind != lexer::TokenKind::Ident) {
+    const u32 index = bag_.emit<i18n::Key::ParserWhenMalformed>(
+        DiagCode::WhenMalformed, peek().span);
+    (void)index;
+    synchronize_attribute();
+    return nothing;
+  }
+  const std::string_view attr_name =
+      bytes_.substr(name.span.offset, name.span.length);
+  advance();
+  if (attr_name == "repr") {
+    return parse_repr_attribute(name.span);
+  }
+  if (attr_name != "when") {
+    const u32 index = bag_.emit<i18n::Key::ParserUnknownAttribute>(
+        DiagCode::UnknownAttribute, name.span, attr_name);
+    (void)index;
+    synchronize_attribute();
+    return nothing;
+  }
+  if (!expect(lexer::TokenKind::LParen, "`(` after `when`")) {
+    synchronize_attribute();
+    return nothing;
+  }
+  // The inside of the argument list, from the token after `(` to the
+  // matching `)`. Parentheses nest, so a plain index walk with a depth
+  // count finds the end.
+  const usize start = pos_;
+  i32 depth = 0;
+  while (!at_end()) {
+    const lexer::TokenKind kind = peek_kind();
+    if (kind == lexer::TokenKind::LParen) {
+      ++depth;
+      advance();
+      continue;
+    }
+    if (kind == lexer::TokenKind::RParen) {
+      if (depth == 0) {
+        break;
+      }
+      --depth;
+      advance();
+      continue;
+    }
+    advance();
+  }
+  const usize end = pos_;
+  (void)hash;
+  if (!expect(lexer::TokenKind::RParen, "`)` ending `when(...)`")) {
+    synchronize_attribute();
+    return nothing;
+  }
+  if (!match(lexer::TokenKind::RBracket)) {
+    const lexer::Token here = peek();
+    const u32 index = bag_.emit<i18n::Key::ParserWhenMalformed>(
+        DiagCode::WhenMalformed, here.span);
+    (void)index;
+    synchronize_attribute();
+    return nothing;
+  }
+  const std::span<const lexer::Token> inside(tokens_.data() + start,
+                                             end - start);
+  const parser::GateOutcome outcome =
+      evaluate_when(inside, bytes_, facts_, bag_);
+  Attributes result;
+  result.when_false = outcome == GateOutcome::Drop;
+  return result;
+}
+
+Parser::Attributes Parser::parse_repr_attribute(diag::Span name_span) {
+  Attributes out;
+  if (!expect(lexer::TokenKind::LParen, "`(` after `repr`")) {
+    synchronize_attribute();
+    return out;
+  }
+  const lexer::Token arg = peek();
+  if (arg.kind != lexer::TokenKind::Ident) {
+    const u32 index = bag_.emit<i18n::Key::ParserReprMalformed>(
+        DiagCode::ReprMalformed, arg.span);
+    (void)index;
+    synchronize_attribute();
+    return out;
+  }
+  const std::string_view spelling =
+      bytes_.substr(arg.span.offset, arg.span.length);
+  if (spelling != "C") {
+    const u32 index = bag_.emit<i18n::Key::ParserReprUnknown>(
+        DiagCode::ReprUnknown, arg.span, spelling);
+    (void)index;
+    synchronize_attribute();
+    return out;
+  }
+  advance();  // `C`
+  if (!match(lexer::TokenKind::RParen)) {
+    const u32 index = bag_.emit<i18n::Key::ParserReprMalformed>(
+        DiagCode::ReprMalformed, peek().span);
+    (void)index;
+    synchronize_attribute();
+    return out;
+  }
+  if (!match(lexer::TokenKind::RBracket)) {
+    const u32 index = bag_.emit<i18n::Key::ParserReprMalformed>(
+        DiagCode::ReprMalformed, peek().span);
+    (void)index;
+    synchronize_attribute();
+    return out;
+  }
+  out.repr_c = true;
+  out.repr_span = name_span;
+  return out;
 }
 
 bool Parser::doubled_text(usize pos) const {
@@ -370,6 +547,11 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
       synchronize();
       continue;
     }
+    if (ast_.items[item].when_false) {
+      // The gate evaluated to false on this target: the item is not
+      // present for anything downstream.
+      continue;
+    }
     items.push_back(item);
   }
   return base::make_ok(
@@ -459,13 +641,37 @@ ast::ItemIdx Parser::parse_item() {
   if (ast_.exhausted()) {
     return ast::ItemIdx::invalid();
   }
+  Attributes attributes;
+  if (peek_kind() == lexer::TokenKind::Hash) {
+    attributes = parse_attribute_list();
+  }
+  const auto finish = [&](ast::ItemIdx item) {
+    if (item.is_valid()) {
+      ast::ItemNode& node = ast_.items[item];
+      node.when_false = attributes.when_false;
+      if (attributes.repr_c) {
+        if (node.kind != ast::ItemKind::Struct) {
+          const u32 index = bag_.emit<i18n::Key::ParserReprNotOnStruct>(
+              DiagCode::ReprNotOnStruct, attributes.repr_span);
+          (void)index;
+        } else if (node.payload.get<ast::ItemStruct>().fields.empty()) {
+          const u32 index = bag_.emit<i18n::Key::ParserReprEmpty>(
+              DiagCode::ReprEmpty, attributes.repr_span);
+          (void)index;
+        } else {
+          node.repr_c = true;
+        }
+      }
+    }
+    return item;
+  };
   const lexer::Token pub_token = peek();
   const bool is_pub = match(lexer::TokenKind::Pub);
   if (is_pub && in_test_block()) {
     const u32 index = bag_.emit<i18n::Key::ParserTestItemNotPublic>(
         DiagCode::UnexpectedToken, pub_token.span);
     (void)index;
-    return ast::ItemIdx::invalid();
+    return finish(ast::ItemIdx::invalid());
   }
   const bool is_unsafe = match(lexer::TokenKind::Unsafe);
   // `comp` in item position marks a free function ; a
@@ -477,26 +683,26 @@ ast::ItemIdx Parser::parse_item() {
     const u32 index = bag_.emit<i18n::Key::ParserCompUnsafeCombination>(
         DiagCode::UnexpectedToken, comp_token.span);
     (void)index;
-    return ast::ItemIdx::invalid();
+    return finish(ast::ItemIdx::invalid());
   };
   if (is_unsafe && is_comp) {
-    return refuse_comp_unsafe();
+    return finish(refuse_comp_unsafe());
   }
   if (is_comp && peek_kind() == lexer::TokenKind::Unsafe) {
     advance();
-    return refuse_comp_unsafe();
+    return finish(refuse_comp_unsafe());
   }
   // An item keyword from a neighboring language is parsed as the item
   // it meant.
   if (const std::optional<ast::ItemIdx> spelled =
           parse_spelled_item(is_pub, is_unsafe, is_comp)) {
-    return *spelled;
+    return finish(*spelled);
   }
   if (is_comp && peek_kind() != lexer::TokenKind::Fn) {
     const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnFunctions>(
         DiagCode::UnexpectedToken, comp_token.span);
     (void)index;
-    return ast::ItemIdx::invalid();
+    return finish(ast::ItemIdx::invalid());
   }
   // `unsafe` marks an operation, and only functions declare one, so
   // it is refused anywhere else rather than read past.
@@ -510,32 +716,44 @@ ast::ItemIdx Parser::parse_item() {
     return false;
   };
   switch (peek_kind()) {
-    case lexer::TokenKind::Fn: return parse_fn(is_pub, is_unsafe, is_comp);
+    case lexer::TokenKind::Fn:
+      return finish(parse_fn(is_pub, is_unsafe, is_comp));
     case lexer::TokenKind::Intrinsic:
-      return parse_intrinsic_fn(is_pub, is_unsafe);
+      return finish(parse_intrinsic_fn(is_pub, is_unsafe));
     case lexer::TokenKind::Extern: {
       only_functions();
-      return parse_extern(is_pub);
+      return finish(parse_extern(is_pub));
     }
     case lexer::TokenKind::Struct:
       only_functions();
-      return parse_struct(is_pub);
-    case lexer::TokenKind::Enum: only_functions(); return parse_enum(is_pub);
-    case lexer::TokenKind::Impl: only_functions(); return parse_impl(is_pub);
-    case lexer::TokenKind::Spec: only_functions(); return parse_spec(is_pub);
+      return finish(parse_struct(is_pub));
+    case lexer::TokenKind::Enum:
+      only_functions();
+      return finish(parse_enum(is_pub));
+    case lexer::TokenKind::Impl:
+      only_functions();
+      return finish(parse_impl(is_pub));
+    case lexer::TokenKind::Spec:
+      only_functions();
+      return finish(parse_spec(is_pub));
     case lexer::TokenKind::Static:
       only_functions();
-      return parse_static(is_pub);
-    case lexer::TokenKind::Const: only_functions(); return parse_const(is_pub);
-    case lexer::TokenKind::Use: only_functions(); return parse_use(is_pub);
-    case lexer::TokenKind::Test: return parse_test_item(is_pub, is_unsafe);
+      return finish(parse_static(is_pub));
+    case lexer::TokenKind::Const:
+      only_functions();
+      return finish(parse_const(is_pub));
+    case lexer::TokenKind::Use:
+      only_functions();
+      return finish(parse_use(is_pub));
+    case lexer::TokenKind::Test:
+      return finish(parse_test_item(is_pub, is_unsafe));
     default: break;
   }
   if (at_end()) {
     const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFoundEndOfFile>(
         DiagCode::UnexpectedToken, span_from(pos_));
     (void)index;
-    return ast::ItemIdx::invalid();
+    return finish(ast::ItemIdx::invalid());
   }
   const diag::Span span = peek().span;
   const u32 index = bag_.emit<i18n::Key::ParserExpectedItemFound>(
@@ -598,6 +816,11 @@ ast::ItemIdx Parser::parse_test_block() {
         break;
       }
       synchronize();
+      continue;
+    }
+    // A gate that evaluated to false on this target excludes the entry
+    // or helper before the run sees it, the way it excludes any item.
+    if (ast_.items[item].when_false) {
       continue;
     }
     // A block holds entries and helpers, so every item it names is one
@@ -1310,6 +1533,18 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
     }
+    // `#[when(...)]` gates a method the same way it gates a free item:
+    // a gate that evaluates to false on this target removes the method
+    // from the block before anything downstream sees it.
+    Attributes attributes;
+    if (peek_kind() == lexer::TokenKind::Hash) {
+      attributes = parse_attribute_list();
+      if (attributes.repr_c) {
+        const u32 index = bag_.emit<i18n::Key::ParserReprNotOnStruct>(
+            DiagCode::ReprNotOnStruct, attributes.repr_span);
+        (void)index;
+      }
+    }
     // The two `match`es read the one token stream in order, so they are
     // statements and not arguments: a build that evaluates arguments
     // right to left reads `unsafe` while it is still at `pub`, and the
@@ -1321,7 +1556,9 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
       synchronize();
       continue;
     }
-    methods.push_back(method);
+    if (!attributes.when_false) {
+      methods.push_back(method);
+    }
   }
   if (!expect(lexer::TokenKind::RBrace, "`}`")) {
     return ast::ItemIdx::invalid();

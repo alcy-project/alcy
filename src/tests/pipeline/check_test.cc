@@ -9,12 +9,14 @@
 #include <utility>
 
 #include "analyzer/resolve.h"
+#include "codegen/target.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/type.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -343,6 +345,69 @@ TEST_CASE("A suite source checked alone is the member it is") {
       CHECK(std::move(outcome).unwrap().module_count == 2);
     }
   }
+}
+
+namespace {
+
+constexpr std::string_view WHEN_MANIFEST =
+    "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+    "[[bin]]\npath = \"main.al\"\n";
+
+constexpr std::string_view WHEN_MAIN =
+    "#[when(target.os == \"linux\")]\nfn arm() -> i32 { ret 1 }\n"
+    "#[when(target.os == \"windows\")]\nfn arm() -> i32 { ret 2 }\n"
+    "fn main() -> i32 { ret arm() }\n";
+
+base::Result<CheckOutcome, diag::Reported> check_when(PipelineContext& ctx,
+                                                      std::string_view triple) {
+  io::TempDir dir = io::TempDir::create_unique("alcy_check_when_test_");
+  ctx.target = codegen::Target{std::string(triple), ir::PointerWidth::W64};
+  if (!dir.write_file("proj/alcy.toml", WHEN_MANIFEST) ||
+      !dir.write_file("proj/main.al", WHEN_MAIN)) {
+    return base::make_err(diag::Reported{});
+  }
+  base::Result<path::Path, path::PathError> root =
+      path::Path::from_native(dir.join("proj"));
+  if (root.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  const path::Path root_path = std::move(root).unwrap();
+  base::Result<source::FileId, source::SourceError> manifest =
+      ctx.sources.load(root_path.join("alcy.toml").as_view());
+  if (manifest.is_err()) {
+    return base::make_err(diag::Reported{});
+  }
+  return check_package(ctx, root_path, std::move(manifest).unwrap(),
+                       "alcy.toml");
+}
+
+}  // namespace
+
+TEST_CASE("A false when gate removes the arm before resolution") {
+  // Both arms define the same name; on either target exactly one is
+  // present. Without the drop, both configurations would report a
+  // duplicate definition on both OSes.
+  PipelineContext linux_ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> linux =
+      check_when(linux_ctx, "x86_64-unknown-linux-gnu");
+  CHECK(linux.is_ok());
+  CHECK(!linux_ctx.bag.has_errors());
+
+  PipelineContext windows_ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> windows =
+      check_when(windows_ctx, "x86_64-pc-windows-msvc");
+  CHECK(windows.is_ok());
+  CHECK(!windows_ctx.bag.has_errors());
+}
+
+TEST_CASE("No arms for a name leave the reference unresolved") {
+  // A target matching neither arm finds no definition, and the
+  // unresolved reference is the diagnostic the run reports.
+  PipelineContext ctx{i18n::Language::EnUs};
+  base::Result<CheckOutcome, diag::Reported> result =
+      check_when(ctx, "x86_64-apple-darwin");
+  CHECK(ctx.bag.has_errors());
+  (void)result;
 }
 
 }  // namespace pipeline

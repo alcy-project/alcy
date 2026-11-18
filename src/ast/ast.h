@@ -1058,6 +1058,15 @@ struct ItemNode {
   ItemKind kind;
   diag::Span span;
   bool is_pub;
+  // The `#[when(...)]` gate on the item, if any, failed on this target:
+  // the item is kept nowhere, so the pipeline drops it before resolution
+  // sees it. The parser sets the flag; the driver reads it.
+  bool when_false = false;
+  // The `#[repr(C)]` marker on a struct: the struct's shape is the
+  // platform's C layout, fixed by that declaration whatever the
+  // default was to spell and whatever it may become. Only meaningful
+  // on a struct item.
+  bool repr_c = false;
   // The doc comments written above the item, in source order, as spans
   // into the same bytes the item's span names. Empty when it carries
   // none; the parser is what collects them, and the site generator is

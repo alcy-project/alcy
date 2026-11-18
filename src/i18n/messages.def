@@ -84,6 +84,18 @@
   F(ParserRangeEndNeedsBound, Error, Parser, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
   F(ParserRefSelfParameter, Error, Parser, "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)") \
   F(ParserReservedName, Error, Parser, "Name `{}` is reserved for future use") \
+  F(ParserUnknownAttribute, Error, Parser, "Unknown attribute `{}`; the known attributes are `when` and `repr`") \
+  F(ParserWhenUnknownTarget, Error, Parser, "Unknown `target` argument `{}`; the known arguments are `os`, `arch`, and `freestanding`") \
+  F(ParserWhenUnknownValue, Error, Parser, "Unknown value `{}` for `target.{}`; the known values are {}") \
+  F(ParserWhenNotBoolean, Error, Parser, "`when` expects a boolean expression") \
+  F(ParserWhenUnexpectedToken, Error, Parser, "Unexpected `{}` in `when(...)`") \
+  F(ParserWhenMalformed, Error, Parser, "Malformed attribute; `#` introduces `#[when(...)]`") \
+  F(ParserReprNotOnStruct, Error, Parser, "`repr(C)` applies to structs") \
+  F(ParserReprUnknown, Error, Parser, "Unknown repr `{}`; the known repr is `C`") \
+  F(ParserReprMalformed, Error, Parser, "`repr` takes one argument: `C`") \
+  F(ParserReprEmpty, Error, Parser, "`repr(C)` does not apply to a struct with no fields") \
+  F(ParserWhenTargetIsBoolean, Error, Parser, "`target.freestanding` is a boolean; compare it to `true` or `false`") \
+  F(ParserWhenTargetIsString, Error, Parser, "`target.{}` is a string; compare it to one of the known values") \
   F(ParserReturnSpelling, Error, Parser, "`ret` returns; write `ret ...`") \
   F(ParserSpecItemSpelling, Error, Parser, "`spec` declares a capability; `impl Spec for Type` opts a type in") \
   F(ParserTestBlockHoldsTestsAndHelpers, Error, Parser, "a `test` block holds tests and helpers; move this item outside the block") \

@@ -364,6 +364,7 @@ class Printer {
       const std::vector<const cst::Node*>& nodes,
       usize i);
   static bool chunk_is_use(const Chunk& chunk);
+  static bool chunk_is_attribute(const Chunk& chunk);
 
   std::string_view source_;
   FormatConfig config_;
@@ -1238,6 +1239,19 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
   return chunks;
 }
 
+// Whether a chunk is an `#[attribute(...)]` on its own line, the piece a
+// module-level item's attribute occupies. The item reads glued to it, so
+// the blank line between chunks is suppressed there.
+bool Printer::chunk_is_attribute(const Chunk& chunk) {
+  for (const cst::Node* node : chunk.nodes) {
+    if (node->kind != cst::NodeKind::Token) {
+      return false;
+    }
+    return node->token == lexer::TokenKind::Hash;
+  }
+  return false;
+}
+
 // Whether a run of nodes is one the lexer would end a statement after, so
 // the newline that replaces a spelled-out semicolon reads back as one.
 bool Printer::ends_like_statement(const std::vector<const cst::Node*>& nodes) {
@@ -1497,6 +1511,8 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
           blank = chunks[k].newlines_before >= 2;
         } else if (prev_comment) {
           blank = chunks[k].newlines_before >= 2;
+        } else if (chunk_is_attribute(chunks[k - 1])) {
+          blank = false;
         } else if (cur_comment) {
           blank = true;
         } else {

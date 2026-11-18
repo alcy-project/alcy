@@ -35,6 +35,18 @@ enum class DiagCode : u8 {
   // neighboring language spells it; the shape is recognized and the
   // message names the alcy spelling.
   Spelling = 9,
+  UnknownAttribute = 10,
+  WhenUnknownTarget = 11,
+  WhenUnknownValue = 12,
+  WhenNotBoolean = 13,
+  WhenUnexpectedToken = 14,
+  WhenMalformed = 15,
+  ReprNotOnStruct = 16,
+  ReprUnknown = 17,
+  ReprMalformed = 18,
+  ReprEmpty = 19,
+  WhenTargetIsBoolean = 20,
+  WhenTargetIsString = 21,
 };
 
 }  // namespace parser

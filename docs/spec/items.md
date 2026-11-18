@@ -84,6 +84,65 @@
 - `char` comes only from a checked decode, and the byte-level validity
   predicate lives on `[u8]`.
 
+## Item attributes
+
+The names are a closed set, and each one names its own section or
+ruler: `when(EXPR)` on an item gates it on the target descriptor,
+`repr(C)` on a `struct` fixes its FFI layout. Other names are
+rejected with guidance naming the known set; they are not read past
+or remembered silently. Both attributes sit on the line above the
+item and may repeat without interaction.
+
+## The `when` gate
+
+- `#[when(EXPR)]` on an item states a compile-time-known condition
+  over the `target` descriptor. If `EXPR` is true the item is part of
+  the module; if it is false the item does not exist there: it is
+  never resolved, checked, or emitted, and its absence is not
+  diagnosed. The gate is evaluated when the file is read, and it is
+  the only mechanism that selects items.
+- `EXPR` is a boolean expression over the `target` descriptor —
+  `target.os`, `target.arch`, `target.freestanding` — with `==`,
+  `!=`, `&&`, `||`, `!`, and parentheses. The descriptor's values are
+  the ones the toolchain knows, and the toolchain knows all of them:
+
+  | key | values |
+  | --- | --- |
+  | `target.os` | `linux`, `darwin`, `windows`, `wasi`, `unknown` |
+  | `target.arch` | `x86_64`, `aarch64`, `riscv64`, `wasm32`, `unknown` |
+  | `target.freestanding` | boolean |
+
+  The `wasi` value is reserved for a `wasm32-wasi` target and is not
+  produced by any target the toolchain ships today; the current wasm
+  target answers `unknown`, matching what its triple spells. A unit
+  test can still select `wasi` for the evaluator with an explicit
+  descriptor, so the arm is exercised wherever the suite runs.
+
+  `unknown` is the value for a target the toolchain does not know, so
+  an unrecognized target answers the comparisons with `unknown` and
+  loses no arm silently. A value outside the known set of the key is a
+  diagnostic that lists the set; a value that is a string where a
+  boolean belongs, or the reverse, is a diagnostic of its own.
+- A `when` gate closed on a name is a promise that the name exists on
+  the other platform arms too: one arm per OS, all spelling the same
+  signature. An arm the gate excludes completely must not be named
+  from anywhere else on that target, which is what makes OS-typed code
+  in `sys` and `path` possible without a separate package per OS.
+- Multiple `when` attributes on one item are a conjunction: every
+  gate must pass. Tests inside `test { }` blocks may be gated the
+  same way and are gone from a run where their gate fails.
+- The `use`, `static`, and `const` forms take a gate, so a facade
+  may re-export the arm that belongs to this target and drop the
+  others. `impl` blocks may gate as well, and so may the methods
+  inside them; a `spec` block may gate as one item, and its method
+  signatures cannot gate individually.
+- A gate on a test entry excludes it from the run entirely: never
+  compiled, never executed, never counted in the test list.
+- Unknown attribute names are rejected with guidance; expressions that
+  are not boolean are rejected; comparisons of operands of different
+  kinds are rejected. Item gates do not exist on statements or
+  expressions, only on items.
+
 ## Intrinsic declarations (Bootstrap)
 
 - `intrinsic fn name(params) (-> ret)?;` declares a compiler-provided
@@ -244,5 +303,7 @@
   for one compiler version and target, not across them.
 - The only stable boundary is a declaration in the C convention
   (`extern "C"`), whose scalar parameters and returns map to the
-  platform's C ABI. A struct or enum crossing that boundary waits for
-  `repr(C)`, and the internal calling convention is not a promise.
+  platform's C ABI. A struct crossing it does so under `#[repr(C)]`,
+  which fixes its layout. An enum cannot: its discriminant's width
+  and placement are the compiler's choice, and no item fixes them.
+  The internal calling convention is not a promise.

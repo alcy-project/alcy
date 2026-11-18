@@ -3,6 +3,8 @@
 
 source_set("parser") {
   sources = [
+    "attribute.cc",
+    "attribute.h",
     "desugar.cc",
     "desugar.h",
     "diag_code.h",
@@ -18,6 +20,7 @@ source_set("parser") {
     "//src/i18n",
     "//src/lexer",
     "//src/source",
+    "//src/text",
   ]
   configs += [ "//src:alcy_config" ]
 }

@@ -100,9 +100,20 @@ foreclose the baremetal story.
 
 ## Layout and statics
 
-- Default struct layout is compiler-chosen. `#[repr(C)]` is the
-  reserved form for FFI-shared structs; the attribute system as a
-  whole arrives later. C fixed-width integer types are intended to be
+- Default struct layout is compiler-chosen. `#[repr(C)]` on a `struct`
+  item fixes the struct's layout to the platform's C layout: fields in
+  declaration order, each at the next offset its own alignment allows,
+  with tail padding to the struct's own alignment, and nothing else.
+  The default layout alcy gives structs already satisfies the rule;
+  the attribute is a contract with FFI, not a different layout, so the
+  shape stays put whatever the compiler-chosen default becomes, and a
+  C declaration and the alcy `struct` it names keep sharing offsets
+  across compiler versions and platforms (subject to each field's own
+  C alignment on the target). The attribute applies to structs only
+  and refuses a struct with no fields, mirroring C, which has no empty
+  struct. `#[when]`, the item gate on the platform axis, poses no
+  interaction with `repr(C)`: both may appear, one is a build decision
+  and the other a shape. C fixed-width integer types are intended to be
   bit-compatible with alcy integer types.
 - `static` items MUST NOT contain `&mut`. Shared references to static
   storage are permitted. Mutable statics do not exist, and adding
