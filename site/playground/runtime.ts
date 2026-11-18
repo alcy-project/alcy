@@ -70,7 +70,7 @@ export function warmOnIntent(): void {
     window.clearTimeout(state.warmTimer);
     state.warmTimer = window.setTimeout(warmCompiler, WARM_DELAY_MS);
   };
-  for (const button of [elements.run, elements.check]) {
+  for (const button of [elements.run, elements.check, elements.download]) {
     button.addEventListener("pointerenter", warm, { passive: true });
   }
   elements.source.addEventListener("focus", warm, { passive: true });
@@ -233,5 +233,38 @@ export async function run(): Promise<void> {
     setStatus("status.compilerError");
   } finally {
     setRunning(false);
+  }
+}
+
+// The module a compile answers is the artifact a bug report or an
+// embedding host wants. The browser saves the bytes of a fresh compile,
+// so the file always matches the buffer it was asked for.
+export async function runDownload(): Promise<void> {
+  if (state.running) {
+    return;
+  }
+  try {
+    const response = await callCompiler("compile", normalizedSource());
+    if (response.error !== undefined) {
+      setStatus("status.compilerUnavailable");
+      return;
+    }
+    renderDiagnostics(response.diagnostics);
+    if (!response.ok || response.wasm === null) {
+      showTab("problems");
+      setStatus("status.compileFailed");
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([response.wasm], { type: "application/wasm" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "program.wasm";
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatus("status.downloaded");
+  } catch (error) {
+    applyCompilerState("error", error instanceof Error ? error.message : String(error));
   }
 }

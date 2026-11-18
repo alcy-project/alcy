@@ -62,6 +62,7 @@ function init(): void {
     void runtime.runCheck({ automatic: false });
   });
   elements.copyLink.addEventListener("click", copyLink);
+  elements.download.addEventListener("click", () => void runtime.runDownload());
   runtime.warmOnIntent();
 
   // A reader who stays is likely to try something. Idle time is free
