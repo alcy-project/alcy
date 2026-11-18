@@ -938,6 +938,54 @@ TEST_CASE("Check lets user code define Result and Option") {
   CHECK(result.package.has_value());
 }
 
+TEST_CASE("Check accepts an inherent impl on a scalar in the staged suite") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "fn main() -> i32 {\n"
+                                      "  ret 7i64.twice() as i32\n"
+                                      "}\n"},
+                                     {"grit.al",
+                                      "impl i64 {\n"
+                                      "  pub fn twice(self: i64) -> i64 {\n"
+                                      "    ret self * 2\n"
+                                      "  }\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"grit", "grit.al"}});
+  CHECK(result.package.has_value());
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE(
+    "Check refuses an inherent impl on a scalar outside the staged suite") {
+  VirtualDir dir;
+  const bool setup = write_all(dir, {{"main.al",
+                                      "impl i64 {\n"
+                                      "  pub fn twice(self: i64) -> i64 {\n"
+                                      "    ret self * 2\n"
+                                      "  }\n"
+                                      "}\n"
+                                      "fn main() -> i32 {\n"
+                                      "  ret 0\n"
+                                      "}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.package.has_value());
+  CHECK(count_messages(f.bag,
+                       "A builtin type belongs to the staged suite: 'i64' "
+                       "cannot be implemented here") == 1);
+}
+
 TEST_CASE("Check maps pointer widths for sized integers") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
@@ -6256,10 +6304,11 @@ TEST_CASE("Check reports a const initializer error once") {
   const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
-  CHECK(count_messages(
-            f.bag,
-            "Type mismatch in boolean literal: expected 'usize', found 'bool'") ==
-        1);
+  CHECK(
+      count_messages(
+          f.bag,
+          "Type mismatch in boolean literal: expected 'usize', found 'bool'") ==
+      1);
   CHECK(count_messages(f.bag,
                        "Array length must be a constant integer value") == 0);
 }

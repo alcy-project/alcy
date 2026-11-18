@@ -104,10 +104,11 @@ struct Primitive {
 };
 
 constexpr Primitive PRIMITIVES[] = {
-    {TAG_BOOL, "bool"}, {TAG_I8, "i8"},   {TAG_I16, "i16"}, {TAG_I32, "i32"},
-    {TAG_I64, "i64"},   {TAG_U8, "u8"},   {TAG_U16, "u16"}, {TAG_U32, "u32"},
-    {TAG_U64, "u64"},   {TAG_F32, "f32"}, {TAG_F64, "f64"},
-    {TAG_ISIZE, "isize"}, {TAG_USIZE, "usize"},
+    {TAG_BOOL, "bool"},   {TAG_I8, "i8"},   {TAG_I16, "i16"},
+    {TAG_I32, "i32"},     {TAG_I64, "i64"}, {TAG_U8, "u8"},
+    {TAG_U16, "u16"},     {TAG_U32, "u32"}, {TAG_U64, "u64"},
+    {TAG_F32, "f32"},     {TAG_F64, "f64"}, {TAG_ISIZE, "isize"},
+    {TAG_USIZE, "usize"},
 };
 
 std::string_view primitive_spelling(char tag) {

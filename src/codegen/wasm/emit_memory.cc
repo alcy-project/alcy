@@ -349,7 +349,8 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       } else {
         // The discriminant is the payload's spare pattern :
         // pick the variant index the spell names.
-        const std::optional<Access> byte = access_for(ir::TypeTag::I1, target_.width);
+        const std::optional<Access> byte =
+            access_for(ir::TypeTag::I1, target_.width);
         if (!byte.has_value()) {
           return unsupported(current_span_, "this enum");
         }
@@ -391,7 +392,8 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       // The fieldless spell for the fieldless variant; the carrying
       // variant's payload follows, so a zero stands where it lands.
       const bool thin = niche.slot == niche.payload;
-      const std::optional<Access> byte = access_for(ir::TypeTag::I1, target_.width);
+      const std::optional<Access> byte =
+          access_for(ir::TypeTag::I1, target_.width);
       if (!thin && !byte.has_value()) {
         return unsupported(current_span_, "this enum");
       }

@@ -2090,6 +2090,23 @@ void Checker::process_module(u32 module) {
           }
           self_type = builder.primitive(ir::TypeTag::Str);
           self_ok = true;
+        } else if (self_node.kind == ast::TypeKind::Primitive) {
+          // A scalar is a builtin: the staged suite owns the methods on
+          // one, the same way it owns `impl str`.
+          self_type = resolve_type(
+              module, node.payload.get<ast::ItemImpl>().type, nullptr);
+          if (!in_staged_suite(module)) {
+            const std::string display =
+                is_error(self_type)
+                    ? std::string("that scalar")
+                    : std::string(pretty_tag(tag_of(self_type)));
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
+                    DiagCode::ImplOutsideItsHome, self_node.span, display);
+            (void)index;
+            break;
+          }
+          self_ok = !is_error(self_type);
         } else if (self_node.kind == ast::TypeKind::Slice ||
                    self_node.kind == ast::TypeKind::Array) {
           // A slice or array is a builtin too: the staged suite owns

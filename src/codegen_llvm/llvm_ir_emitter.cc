@@ -151,9 +151,9 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
     case T::I64:
     case T::U64: return builder_->getInt64Ty();
     case T::Isize:
-    case T::Usize: return width_ == ir::PointerWidth::W64
-                         ? builder_->getInt64Ty()
-                         : builder_->getInt32Ty();
+    case T::Usize:
+      return width_ == ir::PointerWidth::W64 ? builder_->getInt64Ty()
+                                             : builder_->getInt32Ty();
     // case T::I128: return builder_->getInt128Ty();
     case T::F32: return builder_->getFloatTy();
     case T::F64: return builder_->getDoubleTy();

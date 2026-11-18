@@ -39,7 +39,8 @@
   type's package. There are no covered types, so `impl MySpec for
   Vec<MyType>` is accepted only where `MySpec` is declared. A builtin
   type (`str`, a slice, an array, a scalar) belongs to the staged
-  suite, and only its packages implement for one. See `grammar.md`.
+  suite, and only its packages implement for one — in a spec impl or
+  an inherent block alike. See `grammar.md`.
 - A spec may be sealed to its suite: the declaring package's manifest
   names it in `[spec] suite-only`, and only that package or a package
   of its suite may then implement it. A spec the list does not name

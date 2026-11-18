@@ -113,8 +113,7 @@ u32 integer_bits(ir::TypeTag tag, ir::PointerWidth width) {
     case ir::TypeTag::I32:
     case ir::TypeTag::U32: return 32;
     case ir::TypeTag::Isize:
-    case ir::TypeTag::Usize:
-      return width == ir::PointerWidth::W64 ? 64 : 32;
+    case ir::TypeTag::Usize: return width == ir::PointerWidth::W64 ? 64 : 32;
     default: return 64;
   }
 }
@@ -303,13 +302,17 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
       if (push_operand(src).is_err()) {
         return base::make_err(codegen::EmitError::Unsupported);
       }
-      if (is_word_int(src_tag, target_.width) && is_word_int(dst_tag, target_.width)) {
+      if (is_word_int(src_tag, target_.width) &&
+          is_word_int(dst_tag, target_.width)) {
         canonicalize(body_, dst_tag);
-      } else if (is_word_int(src_tag, target_.width) && is_wide_int(dst_tag, target_.width)) {
+      } else if (is_word_int(src_tag, target_.width) &&
+                 is_wide_int(dst_tag, target_.width)) {
         op(ir::is_signed_integer_type(src_tag) ? 0xAC : 0xAD);  // extend_i32
-      } else if (is_wide_int(src_tag, target_.width) && is_wide_int(dst_tag, target_.width)) {
+      } else if (is_wide_int(src_tag, target_.width) &&
+                 is_wide_int(dst_tag, target_.width)) {
         // Same width; nothing to encode.
-      } else if (is_wide_int(src_tag, target_.width) && is_word_int(dst_tag, target_.width)) {
+      } else if (is_wide_int(src_tag, target_.width) &&
+                 is_word_int(dst_tag, target_.width)) {
         op(0xA7);  // i32.wrap_i64
         canonicalize(body_, dst_tag);
       } else if (ir::is_integer_type(src_tag) && ir::is_float_type(dst_tag)) {
@@ -334,14 +337,15 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         // The conversion lands in a 32-bit word, so a narrower
         // destination clamps to its own ends - the range the LLVM
         // intrinsic saturates at directly.
-        if (!is_wide_int(dst_tag, target_.width) && dst_tag != ir::TypeTag::I32 &&
-            dst_tag != ir::TypeTag::U32) {
+        if (!is_wide_int(dst_tag, target_.width) &&
+            dst_tag != ir::TypeTag::I32 && dst_tag != ir::TypeTag::U32) {
           const bool is_signed = ir::is_signed_integer_type(dst_tag);
           // Bool saturates at its one bit; `integer_bits` names the
           // width a shift count is checked against, where a `bool` is
           // a word.
-          const u32 bits =
-              dst_tag == ir::TypeTag::I1 ? 1u : integer_bits(dst_tag, target_.width);
+          const u32 bits = dst_tag == ir::TypeTag::I1
+                               ? 1u
+                               : integer_bits(dst_tag, target_.width);
           const i32 low = is_signed ? -(1 << (bits - 1)) : 0;
           const i32 high = is_signed ? (1 << (bits - 1)) - 1
                                      : static_cast<i32>((1u << bits) - 1u);
@@ -373,7 +377,8 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         } else {
           op(0xBB);  // f64.promote_f32
         }
-      } else if (is_word_int(src_tag, target_.width) && is_thin_pointer(dst_tag)) {
+      } else if (is_word_int(src_tag, target_.width) &&
+                 is_thin_pointer(dst_tag)) {
         canonicalize(body_, dst_tag);
       } else if (rides_as_address(src_tag) && rides_as_address(dst_tag)) {
         // Relabelling: the address is unchanged, and the destination
@@ -383,7 +388,8 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
           op(0xAD);  // i64.extend_i32_u: the address zero-extends.
         }
         canonicalize(body_, dst_tag);
-      } else if (is_wide_int(src_tag, target_.width) && is_thin_pointer(dst_tag)) {
+      } else if (is_wide_int(src_tag, target_.width) &&
+                 is_thin_pointer(dst_tag)) {
         op(0xA7);  // i32.wrap_i64
       } else {
         return unsupported(current_span_,

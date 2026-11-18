@@ -115,11 +115,11 @@ bool Checker::classify_suffix(std::string_view spelling,
   };
   constexpr Suffix SUFFIXES[] = {
       {"isize", TT::Isize, false}, {"usize", TT::Usize, false},
-      {"i8", TT::I8, false},     {"i16", TT::I16, false},
-      {"i32", TT::I32, false},   {"i64", TT::I64, false},
-      {"u8", TT::U8, false},     {"u16", TT::U16, false},
-      {"u32", TT::U32, false},   {"u64", TT::U64, false},
-      {"f32", TT::F32, true},    {"f64", TT::F64, true},
+      {"i8", TT::I8, false},       {"i16", TT::I16, false},
+      {"i32", TT::I32, false},     {"i64", TT::I64, false},
+      {"u8", TT::U8, false},       {"u16", TT::U16, false},
+      {"u32", TT::U32, false},     {"u64", TT::U64, false},
+      {"f32", TT::F32, true},      {"f64", TT::F64, true},
   };
   for (const Suffix& known : SUFFIXES) {
     if (suffix != known.text) {

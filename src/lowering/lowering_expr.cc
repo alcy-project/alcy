@@ -58,8 +58,7 @@ u32 integer_bits(ir::TypeTag tag, ir::PointerWidth width) {
     case ir::TypeTag::I32:
     case ir::TypeTag::U32: return 32;
     case ir::TypeTag::Isize:
-    case ir::TypeTag::Usize:
-      return width == ir::PointerWidth::W64 ? 64 : 32;
+    case ir::TypeTag::Usize: return width == ir::PointerWidth::W64 ? 64 : 32;
     default: return 64;
   }
 }
@@ -192,12 +191,12 @@ ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
     ir::TypeTag tag;
   };
   constexpr SuffixTag SUFFIXES[] = {
-      {"f32", ir::TypeTag::F32},   {"f64", ir::TypeTag::F64},
+      {"f32", ir::TypeTag::F32},     {"f64", ir::TypeTag::F64},
       {"isize", ir::TypeTag::Isize}, {"usize", ir::TypeTag::Usize},
-      {"i8", ir::TypeTag::I8},     {"i16", ir::TypeTag::I16},
-      {"i32", ir::TypeTag::I32},   {"i64", ir::TypeTag::I64},
-      {"u8", ir::TypeTag::U8},     {"u16", ir::TypeTag::U16},
-      {"u32", ir::TypeTag::U32},   {"u64", ir::TypeTag::U64},
+      {"i8", ir::TypeTag::I8},       {"i16", ir::TypeTag::I16},
+      {"i32", ir::TypeTag::I32},     {"i64", ir::TypeTag::I64},
+      {"u8", ir::TypeTag::U8},       {"u16", ir::TypeTag::U16},
+      {"u32", ir::TypeTag::U32},     {"u64", ir::TypeTag::U64},
   };
   for (const SuffixTag& entry : SUFFIXES) {
     if (lit.spelling.size() > entry.suffix.size() &&
@@ -586,8 +585,7 @@ Val Lowerer::checked_index_addr(Val base, Val position, diag::Span span) {
   }
   const ir::TypeIdx count_ty = usize_ty;
   ir::Immutable imm{.type = count_ty, .data = {}};
-  if (ir::pointer_width_tag(tag_of(count_ty), width) ==
-      ir::TypeTag::U64) {
+  if (ir::pointer_width_tag(tag_of(count_ty), width) == ir::TypeTag::U64) {
     imm.data.u64_value = shape.count;
   } else {
     imm.data.u32_value = static_cast<u32>(shape.count);
@@ -2751,8 +2749,7 @@ Val Lowerer::build_slice_value(ir::OperandIdx base,
 ir::OperandIdx Lowerer::const_usize(u64 value) {
   const ir::TypeIdx usize_ty = usize_type();
   ir::Immutable imm{.type = usize_ty, .data = {}};
-  if (ir::pointer_width_tag(tag_of(usize_ty), width) ==
-      ir::TypeTag::U64) {
+  if (ir::pointer_width_tag(tag_of(usize_ty), width) == ir::TypeTag::U64) {
     imm.data.u64_value = value;
   } else {
     imm.data.u32_value = static_cast<u32>(value);
@@ -3289,8 +3286,7 @@ ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
       }
       const ir::TypeIdx usize_ty = usize_type();
       ir::Immutable imm{.type = usize_ty, .data = {}};
-      if (ir::pointer_width_tag(tag_of(usize_ty), width) ==
-      ir::TypeTag::U64) {
+      if (ir::pointer_width_tag(tag_of(usize_ty), width) == ir::TypeTag::U64) {
         imm.data.u64_value = shape.count;
       } else {
         imm.data.u32_value = static_cast<u32>(shape.count);
@@ -3321,7 +3317,7 @@ ir::OperandIdx Lowerer::arg_for(Val arg, ir::TypeIdx param) {
         const ir::TypeIdx usize_ty = usize_type();
         ir::Immutable imm{.type = usize_ty, .data = {}};
         if (ir::pointer_width_tag(tag_of(usize_ty), width) ==
-      ir::TypeTag::U64) {
+            ir::TypeTag::U64) {
           imm.data.u64_value = shape.count;
         } else {
           imm.data.u32_value = static_cast<u32>(shape.count);
@@ -4285,8 +4281,9 @@ ir::Opcode Lowerer::int_binop(ast::BinaryOp op, ir::TypeTag tag) {
     case ast::BinaryOp::BitXor: return ir::Opcode::Xor;
     case ast::BinaryOp::Shl: return ir::Opcode::ShiftLeft;
     case ast::BinaryOp::Shr:
-      return ir::is_unsigned_integer_type(tag) ? ir::Opcode::LogicalShiftRight
-                                               : ir::Opcode::ArithmeticShiftRight;
+      return ir::is_unsigned_integer_type(tag)
+                 ? ir::Opcode::LogicalShiftRight
+                 : ir::Opcode::ArithmeticShiftRight;
     default: return ir::Opcode::Noop;
   }
 }
@@ -4518,10 +4515,9 @@ Val Lowerer::lower_scalar_binary(diag::Span span,
   // A shift count rides modulo the type's width, so an overshift has
   // one result instead of a backend-defined one.
   if (op == ast::BinaryOp::Shl || op == ast::BinaryOp::Shr) {
-    const ir::RegisterIdx amount =
-        emit(ir::Opcode::And, lhs.type,
-             {use_value(rhs),
-              int_operand(integer_bits(tag, width) - 1, lhs.type)});
+    const ir::RegisterIdx amount = emit(
+        ir::Opcode::And, lhs.type,
+        {use_value(rhs), int_operand(integer_bits(tag, width) - 1, lhs.type)});
     const ir::RegisterIdx dst =
         emit(int_binop(op, tag), lhs.type,
              {use_value(lhs), to_operand(amount, lhs.type)});
