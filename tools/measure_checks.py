@@ -6,13 +6,13 @@
 """Times every check in the repository and reports each as a multiple of lint.
 
 A repository that says in prose which check is slow is a repository whose
-prose is wrong within a release. Two claims in this tree were:
-called the coverage ratchet the slowest check in `check.sh`, and
+prose is wrong within a release. Two claims in this tree were: the
+coverage ratchet is the slowest check in `check.sh`, and
 `CONTRIBUTING.md` repeated it. Lint is about 1.7x the ratchet, so both
 were wrong by the largest factor they had a number for, and nothing
 noticed because nothing measured the pair.
 
-This measures the pair. It is a report and never a check:  refuses
+This measures the pair. It is a report and never a check: it refuses
 to judge a timing because a shared runner is not a quiet machine, and
 that reasoning applies to how long a check took at least as much as it
 applies to how fast the compiler is. A machine that reported a check as
@@ -56,9 +56,8 @@ BUDGET = 1.2
 # the check's own ordering rather than as a sorted table. The TOML,
 # Markdown, rule and Python checks are seconds each and live inside
 # `format` and `lint` here, which is where `check.sh` reaches them too.
-# `fuzz` is not here: it is corpus-dependent development tooling
-#, asked in CI as a bounded smoke rather than a check this
-# report ranks.
+# `fuzz` is not here: it is corpus-dependent development tooling,
+# asked in CI as a bounded smoke rather than a check this report ranks.
 CHECKS = [
     ("typos", ["typos"]),
     (
