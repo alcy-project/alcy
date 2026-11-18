@@ -27,8 +27,8 @@ namespace {
 //
 // The oracle is deliberately weak: it cannot tell a *correct* answer
 // from a merely non-crashing one. What it does guarantee is the
-// invariant  states and nothing
-// enforced until now - invalid
+// invariant the spec states, and nothing
+// implemented until now - invalid
 // source produces diagnostics, never a signal or an assertion. A wrong
 // diagnostic is a bug, but it is a bug that answers, so it belongs to
 // the property tests rather than here.

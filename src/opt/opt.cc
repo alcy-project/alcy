@@ -358,7 +358,7 @@ base::Result<ir::VerifiedStorage, ir::VerificationError> optimize(
   ir::Storage plain = std::move(storage).unwrap();
   // What a checked build aborts on, read from the IR the passes receive:
   // the profile decides whether the checks exist, so the passes cannot
-  // consult it  and keep every operation that could carry one.
+  // consult it, and keep every operation that could carry one.
   overlay::Checks checks = overlay::checked_instructions(plain);
   StorageState state = std::move(plain).take_state();
   DCHECK_EQ(checks.kinds.size(), state.instrs.size());

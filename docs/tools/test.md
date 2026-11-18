@@ -95,7 +95,9 @@ sets `test_ended_early: true`.
 | --- | --- |
 | 0 | every selected test passed |
 | 1 | a test failed, or the command line was rejected |
-| 3 | the package was not a program `alcy test` can accept |
+| 4 | the package was not a program `alcy test` can accept (a freestanding or check target) |
+
+`e2e/cases/err-test-target-unrunnable` pins this: a package built `freestanding = true` cannot start a test process, so the runner refuses it with `Cannot run tests for target` and exit code 4.
 
 ## See also
 

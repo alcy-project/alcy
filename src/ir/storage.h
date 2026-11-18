@@ -181,7 +181,7 @@ inline EnumNiche enum_niche(const StorageState& state, TypeIdx idx) {
   if (payload_tag == TypeTag::Ref || payload_tag == TypeTag::MutRef) {
     // Only a thin reference has a spare null pattern. A reference to a
     // slice is fat - a data pointer and a length - and a fieldless
-    // variant would have to spell a null pair, which  does not
+    // variant would have to spell a null pair, which no thin reference does not
     // promise and the lowering does not build. Such an enum carries a
     // discriminant like any other.
     const TypeNode& payload_node = state.types[niche.payload];

@@ -337,7 +337,7 @@ def main() -> int:
         )
     print(
         "Nothing here is a check. A timing that fails is a machine's opinion, "
-        "and  is why a machine's "
+        "and variability is why a machine's "
         "opinion is not evidence."
     )
     return 0

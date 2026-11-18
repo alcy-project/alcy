@@ -25,7 +25,8 @@ include = [
   "ops",
   "hash",
 ]
-# The public surface, in the form  specifies. Nothing
+# The public surface, spelled as the manifest package sees it.
+# Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
 export = [
@@ -49,7 +50,7 @@ export = [
 # Specs only this suite may implement. Indexing and
 # equality are operators, so their capabilities are the compiler's,
 # not a user's; arithmetic joins them, and so does calling
-#.
+# the `Fn` spec.
 [spec]
 suite-only = [
   "Index",

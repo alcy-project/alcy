@@ -109,7 +109,7 @@ command gets its own value.
 | 0 | success | The command ran to completion |
 | 1 | parse error / test failed | The command line was rejected, or a `test` run saw a test fail |
 | 3 | build failed | `build` or `compile` could not produce its output |
-| 4 | check failed | `check` found errors |
+| 4 | check failed / test unrunnable | `check` found errors, or the package was not a program `test` can accept |
 | 5 | new failed | `new` or `init` could not create the package |
 | 6 | run failed | `run` could not build or the program was not accepted |
 | 7 | fmt failed | `fmt` could not read or write a file |

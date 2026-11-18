@@ -80,7 +80,7 @@ analyzer::ParsedModule parsed_module(const ParsedFiles& parsed,
 // `analyzer::resolve_modules` per target, so the files are read once.
 // `dependencies` are the path dependencies the package loads from
 // source, whose files parse alongside the inputs'; `package_policies`
-// are the spec seal rows  the tree checks implementations
+// are the spec seal rows the tree checks implementations
 // against.
 base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     PipelineContext& ctx,

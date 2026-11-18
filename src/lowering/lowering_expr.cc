@@ -449,7 +449,7 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
 // signature is `unsafe`: only those hand out a reference to storage
 // the caller owns, which is what lets the allocator's accessors be
 // read as a move. An ordinary `unsafe fn` returns a borrow like any
-// other, and  keeps the move rule for it.
+// other, and the `unsafe` opt-in keeps the move rule for it.
 bool Lowerer::unsafe_call_result(ast::ExprIdx expr) const {
   // An `unsafe { ... }` block is a spelling of the same call, so the
   // rule sees through it.

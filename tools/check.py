@@ -167,7 +167,7 @@ def main() -> int:
     # rather than a corpus it reads.
     tool("check_stdlib_tests.py", f"--build-subdir={debug_subdir}")
 
-    # The second engine  over the acceptance corpus: every case
+    # The second engine, over the acceptance corpus: every case
     # that compiles is evaluated function by function, and a construct
     # the lowering emits that the engine refuses without declaring it
     # fails here. The refusal declarations are checked in a debug build,
