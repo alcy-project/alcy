@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Specialization (ADR-0079): every parametric callee a lowered body
+// Specialization: every parametric callee a lowered body
 // carries is replaced by the monomorphic function its arguments decide.
 // The definition-site body is cloned once per (item, arguments) pair, its
 // `Param` nodes substituted, and the clone's own records resolved in
@@ -57,7 +57,7 @@ struct BuiltinOperator {
 
 // A capability a scalar satisfies without an implementation. A nominal
 // type reaches its own implementation instead, and the specialization
-// resolves that call (ADR-0079).
+// resolves that call.
 std::optional<BuiltinOperator> builtin_operator(std::string_view spec,
                                                 std::string_view method,
                                                 ir::TypeTag tag) {
@@ -317,7 +317,7 @@ ir::TypeIdx Lowerer::mint_nominal(ir::TypeIdx generic_type,
   // A nominal minted from a summary shape takes what the declaration
   // measured: the tables grow parallel to the type table, and the
   // destructor marker stays visible so ending the instance refuses a
-  // body that did not cross (ADR-0085).
+  // body that did not cross.
   const auto inherit_summary = [&](ir::TypeIdx minted) {
     ensure_traits_parallel();
     const u8 needs = generic_type.idx < pkg.needs_drop.size()
@@ -628,7 +628,7 @@ ir::FunctionIdx Lowerer::specialize_body(ir::FunctionIdx source_idx,
   // clone by key while the body is still being built.
   specialization_by_key_.emplace(specialization_key_scratch_, clone.idx);
   // A clone of a staged item is no source function either, and a
-  // reported count excludes it (ADR-0079). A body carried from a
+  // reported count excludes it. A body carried from a
   // summary has no entry here; its clone counts with the dependent's
   // own functions.
   if (source_idx.idx < fns.size()) {
@@ -699,7 +699,7 @@ void Lowerer::translate_instruction(ir::InstructionIdx source,
         if (tag_of(operand.type) == ir::TypeTag::Param) {
           // A literal whose width the substitution settles: an integer
           // re-encodes to the named width, a float from its IEEE bits to
-          // the named kind (ADR-0079).
+          // the named kind.
           const ir::TypeTag target = tag_of(type);
           if (target == ir::TypeTag::F32 || target == ir::TypeTag::F64) {
             const f64 value = std::bit_cast<f64>(immutable.data.u64_value);
@@ -736,7 +736,6 @@ void Lowerer::translate_instruction(ir::InstructionIdx source,
                        : ir::TypeIdx::invalid();
   // A body carried from a summary has no spans: its instructions name
   // the call that instantiated it, which is where a reader can look
-  // (ADR-0079).
   staged.span = source.idx < instr_spans_.size() &&
                         instr_spans_[source.idx].file != source::UNKNOWN_FILE
                     ? instr_spans_[source.idx]
@@ -865,7 +864,7 @@ void Lowerer::resolve_parametric_drop(const ir::Operand& place,
     return;
   }
   // A summary type's destructor body does not cross with the type
-  // (ADR-0085): the end cannot run it here, and skipping it would
+  // : the end cannot run it here, and skipping it would
   // leak, so the build stops and names what did not cross.
   const ir::TypeIdx marker = canonical_type(type);
   if (marker.idx < summary_drops_.size() && summary_drops_[marker.idx] != 0) {
@@ -879,7 +878,6 @@ void Lowerer::resolve_parametric_drop(const ir::Operand& place,
   // function that takes the value: a clone's blocks are fixed before
   // its body is translated, so the walk cannot be emitted in place, and
   // one spelling keeps the glue call and the field walk together
-  // (ADR-0079).
   const ir::FunctionIdx drop_fn = drop_fn_for(type);
   if (!drop_fn.is_valid()) {
     failed = true;
@@ -1022,7 +1020,7 @@ ir::FunctionIdx Lowerer::resolve_dispatch(str::StringPoolId spec,
   }
   const std::string_view method_name = strings.get(method);
   // A nominal's name, so a declaration can stand for an instantiation
-  // no call checked (ADR-0079).
+  // no call checked.
   const auto nominal_name = [&](ir::TypeIdx type) -> str::StringPoolId {
     const ir::TypeIdx at = canonical_type(type);
     if (!at.is_valid() || at.idx >= builder.state().types.size()) {
@@ -1067,7 +1065,7 @@ ir::FunctionIdx Lowerer::resolve_dispatch(str::StringPoolId spec,
   }
   // A generic impl registers no signature until a call names it: the
   // spec table names the impl, and the checked body hangs on its method
-  // item (ADR-0079).
+  // item.
   if (receiver_name != str::INVALID_STRING_POOL_ID) {
     const std::string_view receiver_spelling = strings.get(receiver_name);
     for (const auto& impl : pkg.spec_impls) {
@@ -1104,8 +1102,8 @@ ir::FunctionIdx Lowerer::resolve_dispatch(str::StringPoolId spec,
     }
   }
   // A builtin convertible satisfies `Display` without an implementation
-  // (ADR-0053): the dispatch answers with the inline expansion for the
-  // type, synthesized once (ADR-0079).
+  // : the dispatch answers with the inline expansion for the
+  // type, synthesized once.
   if (spec_name == "Display" && method_name == "display" &&
       analyzer::is_formattable_tag(tag_of(receiver))) {
     return display_fn_for(receiver);

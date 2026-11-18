@@ -11,7 +11,7 @@
 namespace ir {
 
 // The lowered package in the binary form `--emit=ir-bc` writes, defined
-// by `src/docs/ir-format.md` (ADR-0056). The same input serializes
+// by `src/docs/ir-format.md`. The same input serializes
 // to the same bytes, and `deserialize` rebuilds verified IR from them.
 [[nodiscard]] std::vector<u8> serialize(const WriteInput& input);
 

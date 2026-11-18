@@ -848,7 +848,7 @@ TEST_CASE("Lowering refuses a package past its function budget") {
 
 // A constant expression the compiler evaluates overflows its type: the
 // program is refused with the check's own code rather than a
-// not-supported report (ADR-0065).
+// not-supported report.
 TEST_CASE("Lowering reports an overflow in a constant") {
   VirtualDir dir;
   write_all(dir, {{"main.al",
@@ -925,7 +925,7 @@ TEST_CASE("Lowering ends a path at a diverging value") {
 TEST_CASE("A generic body lowers once in its parametric form") {
   // The definition-site check's body is emitted once with `Param`
   // types and listed, while concrete instantiations keep their own
-  // lowering (ADR-0079). A call inside it to another generic item is
+  // lowering. A call inside it to another generic item is
   // recorded, not resolved.
   VirtualDir dir;
   write_all(dir, {{"main.al",
@@ -984,7 +984,7 @@ TEST_CASE("A generic body lowers once in its parametric form") {
 TEST_CASE("A generic item called per argument has one specialization each") {
   // The pass clones the definition-site body under the type arguments a
   // call resolved and points the call at the clone, memoized by
-  // (item, arguments) (ADR-0079).
+  // (item, arguments).
   VirtualDir dir;
   write_all(dir, {{"main.al",
                    "fn id<T>(x: T) -> T {\n"
@@ -1032,7 +1032,6 @@ TEST_CASE("A parametric body records the dispatch it waits on") {
   // A method a parameter's bound declares: the body cannot name the
   // implementation, so it records the spec and the method by their
   // names, and the specialization resolves them for the concrete type
-  // (ADR-0080).
   VirtualDir dir;
   write_all(dir, {{"main.al",
                    "spec Mark {\n"
@@ -1097,7 +1096,7 @@ TEST_CASE("The specialization resolves a dispatch to a generic impl") {
   // A generic impl registers no row until a call names it, and its
   // method was checked once: the pass reaches the declaration through
   // the checked-impl table and clones the method under the receiver's
-  // arguments (ADR-0079, ADR-0080).
+  // arguments.
   VirtualDir dir;
   write_all(dir, {{"main.al",
                    "spec Mark {\n"

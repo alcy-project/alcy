@@ -269,7 +269,7 @@ class Parser {
   ast::ItemIdx parse_test_entry();
   // An item spelled like a neighboring language's keyword (`func`,
   // `trait`, `import`) is parsed as the item it meant; `mod` has no alcy
-  // form and is reported and skipped (ADR-0061).
+  // form and is reported and skipped.
   std::optional<ast::ItemIdx> parse_spelled_item(bool is_pub,
                                                  bool is_unsafe,
                                                  bool is_comp);
@@ -281,7 +281,7 @@ class Parser {
   ast::ItemIdx parse_extern(bool is_pub);
   bool parse_fn_params(std::vector<ast::ItemFnParam>& params);
   // Rust's `&self` / `&mut self` receiver, which alcy spells as the
-  // binding and its reference type (ADR-0061).
+  // binding and its reference type.
   bool ref_self_parameter_shape() const;
   ast::TypeIdx ref_self_type(bool is_mut, diag::Span span);
   ast::ItemIdx parse_struct(bool is_pub);
@@ -346,7 +346,7 @@ class Parser {
   ast::StmtIdx parse_stmt();
   // A line spelled like a neighboring language's declaration or return
   // is parsed as the construct it meant, so the report is the spelling
-  // and not a cascade (ADR-0061). Nothing means the line is not that
+  // and not a cascade. Nothing means the line is not that
   // shape and is parsed normally.
   std::optional<ast::StmtIdx> parse_spelled_declaration(usize mark);
   std::optional<ast::StmtIdx> parse_spelled_return(usize mark);
@@ -378,7 +378,7 @@ class Parser {
   bool parse_turbofish(std::vector<ast::TypeIdx>& type_args);
   ast::CondIdx parse_cond();
   // Rust's `if let PAT = EXPR`, which alcy spells `if PAT := EXPR`
-  // (ADR-0061). Nothing means an ordinary condition.
+  //. Nothing means an ordinary condition.
   std::optional<ast::CondIdx> parse_spelled_condition();
   bool consume_gt();
 

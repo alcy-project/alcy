@@ -91,7 +91,7 @@ struct PlannedArtifact {
 // The front half of a target's lifecycle: the cache lookup, the compile
 // that stores the unoptimized package when the build was quiet, and the
 // summary a library leaves beside its artifact before optimization
-// (ADR-0078). A build and a run both start here; `check` names no
+//. A build and a run both start here; `check` names no
 // artifact and stops earlier.
 base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
     PipelineContext& ctx,
@@ -118,7 +118,7 @@ base::Result<std::string, diag::Reported> build_package(
 
 // Builds every member of the suite at `root`, each through its own
 // manifest and into its own directory under the suite's `out/`
-// (ADR-0057). Success names that directory; `-o` is refused because it
+//. Success names that directory; `-o` is refused because it
 // cannot name more than one member's artifact.
 base::Result<std::string, diag::Reported> build_suite(
     PipelineContext& ctx,

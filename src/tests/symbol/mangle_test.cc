@@ -91,7 +91,7 @@ TEST_CASE("Mangle distinguishes signatures that share a source name") {
 
 TEST_CASE("Mangle carries a type parameter") {
   // A body that has not been specialized names its parameters, and a
-  // symbol that carries one decodes back (ADR-0079).
+  // symbol that carries one decodes back.
   Fixture f;
   const TypeIdx param = f.builder.param_type(0);
   symbol::Signature sig = signature("m", "get", symbol::Signature::Kind::Free);

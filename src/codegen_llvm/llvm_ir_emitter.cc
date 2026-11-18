@@ -228,7 +228,7 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
     case T::Enum: {
       // A niche-carrying enum is its payload: the discriminant lives in
       // the payload's spare pattern and takes no room of its own
-      // (ADR-0087). The layout check below holds the two against each
+      //. The layout check below holds the two against each
       // other, so a missing branch here fails the build.
       const ir::EnumNiche niche = ir::enum_niche(storage_->state(), idx);
       if (niche.has) {
@@ -322,7 +322,7 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   }
 
   // A parametric function never reaches a backend: the specialization
-  // pass clones it per instantiation (ADR-0079), and its types would
+  // pass clones it per instantiation, and its types would
   // not build here.
   std::vector<bool> parametric(storage_->functions().size(), false);
   for (const ir::FunctionIdx function_idx : storage_->parametric_functions()) {
@@ -377,7 +377,7 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
     } else if (exported_functions_.has_value() && !exported[function_idx.idx]) {
       // A library's object carries code no dependent reaches by name:
       // only the surface stays external, so a symbol a split part
-      // promotes cannot meet another object's copy of it (ADR-0078). A
+      // promotes cannot meet another object's copy of it. A
       // request that names no surface - a relocatable module, a test -
       // keeps every symbol as it is.
       llvm_function->setLinkage(llvm::GlobalValue::InternalLinkage);
@@ -444,7 +444,7 @@ void LlvmIrEmitter::emit_function(llvm::Function* llvm_function,
   // names a slot for the result ahead of the parameters, and passes each
   // large argument as its slot, so the entry block copies what it was
   // handed into a slot of its own and every later block reaches a join
-  // parameter through the slot the branch fills (ADR-0140).
+  // parameter through the slot the branch fills.
   const bool indirect_ret = in_memory_aggregate(function.meta.return_type);
   return_slot_ = indirect_ret ? llvm_function->getArg(0) : nullptr;
   u32 arg_no = indirect_ret ? 1 : 0;
@@ -678,7 +678,7 @@ void LlvmIrEmitter::emit_instruction(ir::InstructionIdx instr_idx,
     emit_sited_call(instr_idx, instr);
     return;
   }
-  // The build's checks (ADR-0068): an overflow entry replaces the
+  // The build's checks: an overflow entry replaces the
   // operation's own emission with the with-overflow form, and the other
   // kinds emit their condition and the runtime call before it runs.
   if (const overlay::Entry* entry = overlay_entry(instr_idx);
@@ -786,7 +786,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       // operands[1..N] are the incoming values in parameter order. A
       // large aggregate parameter has no phi: its register names a slot
       // the branch fills, so the value reaches every successor that
-      // joins through this block (ADR-0140).
+      // joins through this block.
       u32 position = 0;
       for (const ir::BlockParamIdx param_idx : target_block.block_params) {
         const ir::BlockParam& param = storage_->block_params()[param_idx];
@@ -859,7 +859,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
         llvm::Value* env = builder_->CreateExtractValue(closure, {1u});
         // The signature the call site spells must match the one the
         // synthetic function declares, result slot and argument slots
-        // included (ADR-0140).
+        // included.
         llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> param_types;
         const bool indirect_ret = in_memory_aggregate(sig.ret);
         param_types.reserve(sig.params.size() + 2);
@@ -896,7 +896,7 @@ void LlvmIrEmitter::emit_control(const ir::Instruction& instr) {
       }
       llvm::Function* callee_func = resolve_operand_function(callee_op);
       // An external declaration keeps the ABI it names: it takes scalars
-      // and pointers only, and answers no slot (ADR-0051).
+      // and pointers only, and answers no slot.
       const bool own_abi = callee_op.is<ir::FunctionIdx>();
 
       llvm::SmallVector<llvm::Value*, FUNCTION_ARGS_SOO_SIZE> args;
@@ -1117,7 +1117,7 @@ llvm::Function* LlvmIrEmitter::create_function(
   //      interner_->get(function_meta.name), function_meta.param_types.size());
 
   // A result past the direct limit crosses in a slot the caller names
-  // first, and the signature returns void there (ADR-0140).
+  // first, and the signature returns void there.
   const bool indirect_ret = in_memory_aggregate(function_meta.return_type);
   if (indirect_ret) {
     parameter_types.emplace_back(builder_->getPtrTy());
@@ -1253,7 +1253,7 @@ llvm::Value* LlvmIrEmitter::resolve_operand_value(const ir::Operand& op) {
     case Payload::TagOf<ir::RegisterIdx>: {
       const ir::RegisterIdx reg = op.as_register();
       // A register that names a slot holds bytes, not a value: reading it
-      // is the load the register's type spells (ADR-0140). The selector
+      // is the load the register's type spells. The selector
       // bounds the width of the values it takes, so a consumer of a shape
       // past IN_MEMORY_AGGREGATE_BYTES goes through operand_slot for the
       // address rather than reading the register.
@@ -1298,7 +1298,7 @@ void LlvmIrEmitter::setup_immutables() {
     if (tag == ir::TypeTag::Param) {
       // A parameter widens where the substitution names the type, so a
       // parametric body is the only holder of one, and no body the
-      // emitter walks reaches it (ADR-0079).
+      // emitter walks reaches it.
       continue;
     }
     if (ir::is_integer_type(tag)) {
@@ -1399,7 +1399,7 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
         module_->getOrInsertGlobal("alcy_argv", builder_->getPtrTy()));
   }
   // A result past the direct limit crosses in a slot the wrapper owns,
-  // so the exit code reads it out of memory (ADR-0140).
+  // so the exit code reads it out of memory.
   llvm::AllocaInst* result_slot = nullptr;
   llvm::Value* result = nullptr;
   if (in_memory_aggregate(entry_return)) {

@@ -13,8 +13,8 @@ stale one is worse than no one, so the boundary is checked rather than
 remembered.
 
 What is rejected is an implementation *file* and an implementation
-*symbol*. A link to a document is not: the specification cites the ADR
-behind a rule, and the deferred list points at the plan for the rest.
+*symbol*. A link to a document is not: the specification cites the
+specification behind a rule, and the deferred list points at the plan for the rest.
 """
 
 import re
@@ -24,7 +24,7 @@ from utils.paths import project_root_dir
 
 SPEC_DIR = project_root_dir / "docs" / "spec"
 
-# A path to a source file or a build tree. `docs/adr/0007-....md` and
+# A path to a source file or a build tree. `docs/spec/ownership.md` and
 # `src/docs/architecture.md` are documents and are left alone.
 PATTERNS = {
     "a source or build path": re.compile(

@@ -91,7 +91,7 @@ bool needs_slot(const ir::Instruction& instr) {
 // memory could not grow to satisfy the request.
 constexpr std::string_view ALLOC_FAILURE = "allocation failed";
 // The checked arithmetic's aborts; the message matches the LLVM
-// runtime's (ADR-0068).
+// runtime's.
 constexpr std::string_view OVERFLOW_FAILURE = "integer overflow";
 constexpr std::string_view SHIFT_FAILURE = "shift out of range";
 // The shadow stack crossing its reserve would land on the heap, so the
@@ -225,7 +225,7 @@ void Emitter::declare_runtime() {
   const u32 alloc =
       builder_.add_type(FuncType{{ValType::I32, ValType::I32}, {ValType::I32}});
   // The faithful descriptor calls answer the bytes or the negated errno
-  // in an i64 (ADR-0128).
+  // in an i64.
   const u32 sys_io = builder_.add_type(
       FuncType{{ValType::I32, ValType::I32, ValType::I32}, {ValType::I64}});
   const u32 error_kind =
@@ -284,7 +284,7 @@ Emitter::EmitResult Emitter::choose_roots() {
     // A library has no entry to prune from, so every free function is part
     // of its surface. The exported subset narrows when visibility reaches
     // the IR. A parametric function is no part of it: the specialization
-    // clones it per instantiation (ADR-0079).
+    // clones it per instantiation.
     std::vector<bool> parametric(storage_.functions().size(), false);
     for (const ir::FunctionIdx index : storage_.parametric_functions()) {
       parametric[index.idx] = true;
@@ -386,7 +386,7 @@ std::optional<ValueShape> Emitter::shape_of_definition(
   }
   // A move aliases its operand, and an ownership marker's operand is
   // the place's address: the local follows what the operand holds, not
-  // the type the destination names (ADR-0079).
+  // the type the destination names.
   if (instr.op == ir::Opcode::Move && !instr.operands.empty()) {
     const ir::Operand& operand = storage_.operands()[instr.operands.head()];
     if (operand.is<ir::RegisterIdx>()) {
@@ -1436,7 +1436,7 @@ void Emitter::emit_runtime_bodies() {
   }
   {
     // alcy_sys_write(fd, ptr, len) -> i64: one fd_write, answering the
-    // bytes written or the negated errno (ADR-0128).
+    // bytes written or the negated errno.
     begin_body(3);
     const u32 errno_local = allocate_local(ValType::I32);
     i32_const(static_cast<i32>(scratch_));

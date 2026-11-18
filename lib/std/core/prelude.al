@@ -7,8 +7,7 @@
 // package's implicit surface. The modules beside this one hold the
 // definitions and are reachable by path.
 //
-// Core is the one package of the suite with no dependencies; see
-// docs/adr/0016-suites-and-the-std-split.md.
+// Core is the one package of the suite with no dependencies.
 
 pub use package::anchor::Anchor;
 pub use package::callable::Fn;

@@ -1,5 +1,5 @@
 // `Set` equality compares membership only: insertion order does not
-// matter, and lengths and keys must match (ADR-0053).
+// matter, and lengths and keys must match.
 fn main() -> i32 {
   mut a := Set::new()
   _ := a.insert("x")

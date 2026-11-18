@@ -1,5 +1,5 @@
 // A destructor's body moves a field of its receiver into a binding, and
-// the binding ends what it took (docs/spec/values.md, ADR-0137).
+// the binding ends what it took (docs/spec/values.md).
 
 struct Payload {
   id: i32,

@@ -1113,7 +1113,7 @@ TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
 // A method row recorded at the definition site names no instantiation:
 // its body was checked against declared parameters, so a reader that
 // reaches one falls back to the receiver's key instead of trusting the
-// row (ADR-0079).
+// row.
 TEST_CASE("The AST engine falls back from a definition-site method row") {
   VirtualDir dir;
   Fixture fixture;

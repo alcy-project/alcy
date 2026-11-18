@@ -46,7 +46,7 @@ struct Digest128 {
   friend bool operator==(const Digest128&, const Digest128&) = default;
 };
 
-// The project's one hash (ADR-0073). `xxh3.h` is included only here,
+// The project's one hash. `xxh3.h` is included only here,
 // so no other module names a third-party header to hash.
 [[nodiscard]] [[gnu::always_inline]] inline u64 hash64(
     std::span<const u8> data) {

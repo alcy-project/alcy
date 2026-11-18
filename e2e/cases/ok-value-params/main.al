@@ -1,6 +1,6 @@
 // Value parameters instantiate a declaration per value: the count is
 // part of the type, so `ArrayVec<i32, 4>` and a `const` naming 4 are
-// one instance while 8 is another (ADR-0054).
+// one instance while 8 is another.
 
 struct ArrayVec<T, N: usize> {
   data: [T; N],

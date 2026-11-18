@@ -64,7 +64,7 @@ std::optional<u64> integer_constant(const ir::Storage& storage,
 }
 
 // The operand holding the count the source wrote for a shift. Lowering
-// masks the count before the shift (ADR-0066), so the mask's own first
+// masks the count before the shift, so the mask's own first
 // operand is the count the overshift check is about; a shift without
 // the mask shape checks its operand.
 ir::OperandIdx raw_shift_count(const ir::Storage& storage,
@@ -93,7 +93,7 @@ ir::OperandIdx raw_shift_count(const ir::Storage& storage,
 }
 
 // The operand holding the divisor the source wrote for a signed
-// division. Lowering replaces a `-1` divisor with one (ADR-0066), so the
+// division. Lowering replaces a `-1` divisor with one, so the
 // replace select's false arm is the divisor the check is about; a
 // division without that shape checks its operand.
 ir::OperandIdx raw_divisor(const ir::Storage& storage,
@@ -149,7 +149,7 @@ u64 signed_minimum(ir::TypeTag tag) {
 // Whether a checked build can abort on this operation. A check whose
 // values the IR knows can be ruled out here; a value it does not know
 // keeps the abort possible, because the profile is the build's and not
-// the passes' to read (ADR-0067).
+// the passes' to read.
 bool aborts(const ir::Storage& storage,
             const ir::Instruction& instr,
             const Entry& entry) {

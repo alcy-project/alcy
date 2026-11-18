@@ -262,7 +262,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
       } else if (ir::is_float_type(src_tag) && ir::is_integer_type(dst_tag)) {
         // A cast saturates: NaN becomes zero and a value past the
         // destination takes its end, so every backend answers one
-        // value (ADR-0066). A bare `fptosi` answers poison.
+        // value. A bare `fptosi` answers poison.
         const llvm::Intrinsic::ID id = ir::is_signed_integer_type(dst_tag)
                                            ? llvm::Intrinsic::fptosi_sat
                                            : llvm::Intrinsic::fptoui_sat;
@@ -371,7 +371,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
     case Op::Move:
     case Op::Borrow: {
       // Register alias; no code emitted. A slot aliases as the slot
-      // itself, so both registers name the same bytes (ADR-0140).
+      // itself, so both registers name the same bytes.
       DCHECK(ops.size() == 1);
       if (i.dst.is_valid()) {
         const ir::Operand& src = storage_->operands()[ops.head()];
@@ -399,7 +399,7 @@ void LlvmIrEmitter::emit_compute(const ir::Instruction& instr) {
   }
 }
 
-// The overflow form of `+`, `-`, and `*` (ADR-0068): LLVM answers the
+// The overflow form of `+`, `-`, and `*` : LLVM answers the
 // wrapped value and the condition in one pair, and the runtime check
 // aborts when the condition is set and returns otherwise, so the caller
 // keeps its block and answers the operation's value.

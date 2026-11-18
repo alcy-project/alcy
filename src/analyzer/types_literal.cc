@@ -223,7 +223,7 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
           tag_of(*expected) == ir::TypeTag::Param) {
         // The parameter stands for an integer type the instantiation
         // chooses: the definition-site check adopts it, and the width
-        // settles where the argument is known (ADR-0079).
+        // settles where the argument is known.
         return *expected;
       }
       if (!has_suffix && expected != nullptr &&
@@ -271,7 +271,7 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
           tag_of(*expected) == ir::TypeTag::Param) {
         // The parameter stands for a float type the instantiation
         // chooses: the definition-site check adopts it, as an integer
-        // literal's does (ADR-0079).
+        // literal's does.
         return *expected;
       }
       // A position that names a float fixes an unsuffixed literal's

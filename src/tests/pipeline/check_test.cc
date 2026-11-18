@@ -65,7 +65,7 @@ base::Result<CheckOutcome, diag::Reported> check_dir(PipelineContext& ctx,
 }
 
 // A suite with one member whose identity it inherits: the member
-// spells the markers instead of values (ADR-0057).
+// spells the markers instead of values.
 constexpr std::string_view SUITE_MANIFEST =
     "[suite]\nname = \"tools\"\nowner = \"acme\"\nversion = \"1.2.3\"\n"
     "license = \"MIT\"\npackages = [\"cli\"]\n";

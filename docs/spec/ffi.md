@@ -11,7 +11,6 @@ foreclose the baremetal story.
   lexical: an operation it covers may appear only inside such a
   block, and an `unsafe fn` body is not one implicitly, so a reader
   sees which act is unsafe rather than merely that the function is.
-  See `docs/adr/0050-unsafe-is-an-opt-in-on-operations.md`.
 - `unsafe { ... }` is an expression whose value is the block's, and
   everything inside is checked as it was outside: the opt-in changes
   what is allowed, never what is inferred, borrowed, or moved.
@@ -74,7 +73,6 @@ foreclose the baremetal story.
   declaration is not mangled. `"C"` is the only convention accepted;
   another string is a diagnostic. The block is one item for
   visibility, so `pub extern "C"` exports every declaration in it.
-  See `docs/adr/0051-extern-c-for-a-minimal-abi.md`.
 - Calling a declared function is an operation the opt-in covers, so
   the call names `unsafe { ... }` and an extern function is refused
   in value position until unsafe function types land. There is no
@@ -91,8 +89,7 @@ foreclose the baremetal story.
   compiler emits `_start`, calls the program's `main`, and ends
   through the target's exit syscall, so an `i32` main is the process
   status, `()` is zero, and an enum main is nonzero on any variant
-  but the first. See
-  `docs/adr/0052-freestanding-is-a-link-mode.md`.
+  but the first.
 - A runtime piece is defined only when the program declares it, so a
   freestanding program carries only what it uses. The pieces reach
   the kernel through raw syscalls: `print`, `println`, and `panic`
@@ -113,5 +110,5 @@ foreclose the baremetal story.
 
 ## Mangling
 
-- alcy-convention symbols carry the per-signature `_A` encoding of
-  `docs/adr/0011-symbol-mangling.md`; `extern "C"` names are unmangled.
+- alcy-convention symbols are mangled per signature and start `_A`;
+  `extern "C"` names are unmangled (see `modules.md`).

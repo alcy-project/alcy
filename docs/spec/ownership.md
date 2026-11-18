@@ -6,7 +6,7 @@
 - `&mut T` (exclusive reference): at most one live at a time, and no
   `&T` to the same place may be live while it is.
 - Both rules are promises the optimizer may use, not only checking
-  rules (ADR-0089): the pointee of a shared borrow is unchanged for
+  rules: the pointee of a shared borrow is unchanged for
   the borrow's life, and the pointee of an exclusive borrow is reached
   through no other path, which is what lets a backend mark that
   parameter `noalias`.
@@ -16,7 +16,7 @@
   borrows of the wrapper grant only what its methods offer.
 - A raw pointer carries no promise - it may alias - and building a
   reference from one inside `unsafe` accepts the reference's promise.
-- A call's exclusive receiver is a reservation (ADR-0012): the borrow
+- A call's exclusive receiver is a reservation: the borrow
   is taken before the arguments evaluate, reads of the place in that
   window are admitted, and the call itself activates it, where any
   other loan still live on the place conflicts. `v.push(v.len())` and
@@ -54,11 +54,18 @@
   either: an array ends its elements whole, so a move out of one is
   refused until the drop walk can name an element. A value without a
   destructor is read out by ordinary copy.
+- A reference's promises end at a thread boundary. `&T` and
+  `&mut T` say nothing about values crossing threads; the across-thread
+  story arrives with the first concurrency package that needs it,
+  and it is derived structurally, never asserted by hand. Memory
+  shared outside the process is outside the types entirely; the
+  package that offers it states its own contract as an opt-in
+  operation.
 - A non-`Copy` value cannot be moved out of a value whose type declares a
   destructor: the method would run on a value with a hole where the field
   was. A field of the destructor's own receiver is the exception, because
-  the body is that method and decides what its receiver still holds (see
-  `values.md`, and ADR-0137).
+  the body is that method and decides what its receiver still holds
+  (see `values.md`).
 - A non-`Copy` value cannot be moved out of a reference: reading `*r`
   as a value, taking a field out of the referent, and moving a pattern's
   payload out are all refused. A pattern over a borrowed value reads the
@@ -69,7 +76,7 @@
   compiler's own `unsafe` intrinsics hands out - the allocator's
   accessors - names storage the caller owns, so reading through one is
   a move; an ordinary `unsafe` function returns a borrow like any
-  other, and ADR-0050 keeps the move rule for it.
+  other, and the `unsafe` opt-in keeps the move rule for it.
 - A closure's capture list declares what its environment holds: a
   bare name by value (a move, or a copy for a Copy type), `&name` as
   a shared borrow, and `&mut name` as an exclusive borrow. The

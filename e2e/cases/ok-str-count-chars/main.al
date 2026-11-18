@@ -1,5 +1,5 @@
 // `count_chars` counts scalar values and never fails: an ill-formed
-// subsequence counts as one replacement unit (ADR-0091).
+// subsequence counts as one replacement unit.
 fn main() -> i32 {
   if "abc".count_chars() != 3 {
     ret 1

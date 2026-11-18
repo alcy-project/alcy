@@ -34,7 +34,7 @@ namespace analyzer {
 void Checker::validate_generic_annotations() {
   // A parameter's annotation is a value type (`N: usize`) or a bound
   // (`T: Display + PartialEq`). The first is a primitive integer; every
-  // other annotation has to name a spec (ADR-0028).
+  // other annotation has to name a spec.
   const auto check = [&](u32 module,
                          std::span<const ast::GenericParam> params) {
     for (const ast::GenericParam& param : params) {
@@ -136,7 +136,7 @@ bool Checker::is_expanded_variadic(ast::ItemIdx item) const {
   return false;
 }
 
-// Only a compiler-expanded function may declare `args: ..` (ADR-0055):
+// Only a compiler-expanded function may declare `args:..` :
 // the expansion gives the slot its meaning, and a declaration without
 // one would be a function nobody could call.
 
@@ -313,7 +313,7 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
   if (params.empty()) {
     return intern_nominal(nominals[nominal]);
   }
-  // ADR-0085: a type argument is Movable. This is where both a
+  // : a type argument is Movable. This is where both a
   // spelled turbofish and an instantiated type annotation arrive.
   for (usize i = 0; i < args.size(); ++i) {
     if (is_value_param(ast, params[i])) {
@@ -620,7 +620,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
   // A field's type is a storage copy of the declared type, so a method or
   // operator reached through a field follows the copy back to its origin.
   self = type_origin(self);
-  // A method on a type parameter is the bound's (ADR-0080): the
+  // A method on a type parameter is the bound's: the
   // parameter's declared bounds are what its body may call, so the
   // dispatch resolves through them rather than through a nominal.
   if (tag_of(self) == ir::TypeTag::Param) {
@@ -760,7 +760,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
         continue;
       }
       // The impl's bounds have to hold for this instantiation before
-      // its body specializes (ADR-0028): the refusal names the type
+      // its body specializes: the refusal names the type
       // the caller passed rather than a line inside the library.
       if (!check_declared_bounds(entry.module, impl.params, scope, span)) {
         continue;
@@ -781,7 +781,7 @@ const CheckedModule::MethodInfo* Checker::lookup_method(
       if (!args_ok) {
         return nullptr;
       }
-      // ADR-0085: a type argument is Movable, the spec method's own
+      // : a type argument is Movable, the spec method's own
       // included.
       if (!check_type_args_movable(method_args, span)) {
         return nullptr;
@@ -904,7 +904,7 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
     const ast::Ident name =
         mint_name("__fn" + std::to_string(next_own_fn_++), span);
     // The parameter is bounded by the spec its spelling names
-    // (ADR-0116): `fn(A, B) -> R` is `Fn<(A, B), R>`, with the
+    // : `fn(A, B) -> R` is `Fn<(A, B), R>`, with the
     // parameters as one tuple so one spec covers every arity.
     const ast::Ident spec_name{"Fn", span};
     const std::vector<ast::Ident> spec_segments{spec_name};
@@ -950,7 +950,7 @@ void Checker::desugar_own_fn_params(ast::ItemIdx item) {
     rewrite(param_type, sig, false, display);
   }
   // A return-position spelling waits for the body to name its witness
-  // (ADR-0075), so the declaration is the check and the diagnostic
+  //, so the declaration is the check and the diagnostic
   // shows the function it answers for.
   const ast::TypeIdx ret = fn.return_type;
   if (ret.is_valid() && ast.types[ret].kind == ast::TypeKind::OwnFunc) {
@@ -999,7 +999,7 @@ bool Checker::bind_fn_slots(u32 module,
     return false;
   }
   // A closure literal's own type is its nominal, whose signature is the
-  // function type the literal recorded (ADR-0064); a function type
+  // function type the literal recorded ; a function type
   // carries its own. Either way the return slot reads the signature.
   ir::TypeIdx sig = actual;
   if (tag_of(actual) != ir::TypeTag::Func) {
@@ -1141,7 +1141,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   }
   // An intrinsic's shape is its own check, and a definition-site
   // argument that names a parameter cannot pass it: the concrete type
-  // is the instantiation's (each one checks it there). ADR-0079.
+  // is the instantiation's (each one checks it there)..
   bool parametric_intrinsic = false;
   if (is_intrinsic && parametric_mode()) {
     for (const ir::TypeIdx param : sig_params) {
@@ -1173,7 +1173,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // The definition-site check records under its own key: no numbering
   // slot is claimed and no body is checked here - each generic item's
-  // own pass checks its body once, in its own context (ADR-0079).
+  // own pass checks its body once, in its own context.
   if (parametric_mode()) {
     modules[module].functions[sig_index].inst = PARAM_INST;
     push_fn_instance(item, module, args, digest, sig_index, PARAM_INST);
@@ -1192,7 +1192,7 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
 
   // A body the definition-site check stood in for is not walked again:
   // the call instantiates the signature, and the specialization pass
-  // clones the checked body (ADR-0079).
+  // clones the checked body.
   if (!is_intrinsic && !once_checked_items.contains(item.idx)) {
     const ir::TypeIdx saved_ret = fn_ret;
     const u32 saved_loop = loop_depth;
@@ -1350,7 +1350,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   const std::span<const ast::GenericParam> params = fn_generic_params(item);
   // A synthetic parameter of an owning `fn(...)` spelling takes its
   // witness from an argument or the body, so a turbofish spells only
-  // the parameters the declaration writes (ADR-0075).
+  // the parameters the declaration writes.
   usize spelled = 0;
   for (const ast::GenericParam& param : params) {
     if (own_fn_slot(param.name.name) == nullptr) {
@@ -1410,7 +1410,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   // A return-position `fn()` spelling pins nothing on its own: the
   // body's first `ret` names its witness, so the signature resolves
   // with a stand-in and the body's answer replaces it after the check
-  // (ADR-0075). A witness an earlier call recorded answers directly.
+  //. A witness an earlier call recorded answers directly.
   std::vector<usize> return_slots;
   for (usize i = 0; i < params.size() && i < bound.size(); ++i) {
     if (bound[i].is_valid()) {
@@ -1427,7 +1427,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       continue;
     }
     if (parametric_mode()) {
-      // The witness belongs to an instantiation (ADR-0116): the
+      // The witness belongs to an instantiation: the
       // definition-site check leaves the slot at the error type and
       // the instantiation checks stay the authority for such items.
       bound[i] = error_type();
@@ -1459,7 +1459,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
       return nullptr;
     }
   }
-  // ADR-0085: a type argument is Movable, whether the turbofish spelled
+  // : a type argument is Movable, whether the turbofish spelled
   // it or the arguments were inferred, and a function instantiation
   // binds its own rather than passing through the nominal path.
   if (!check_type_args_movable(bound, span)) {
@@ -1467,7 +1467,7 @@ const CheckedModule::FnSig* Checker::resolve_generic_fn(
   }
   // A compile-time value the parameters decide cannot stand in: the
   // call is answered once the argument is known, so the body that
-  // makes it stays checked at its calls (ADR-0079).
+  // makes it stays checked at its calls.
   if (parametric_mode() && param_record_ != nullptr &&
       (comp_eval_depth > 0 || comp_argument_depth_ > 0)) {
     for (const ir::TypeIdx arg : bound) {
@@ -1591,7 +1591,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_method(
     CheckedModule::MethodInfo* entry = &modules[impl_module].methods.back();
     entry->method_args.assign(method_args.begin(), method_args.end());
     // The definition-site check records under its own key: no
-    // numbering slot is claimed and no body is checked here (ADR-0079).
+    // numbering slot is claimed and no body is checked here.
     if (parametric_mode()) {
       entry->method_inst = PARAM_INST;
       type_params = std::move(outer_scope);
@@ -1676,7 +1676,7 @@ bool Checker::parametric_mode() const {
 
 // Whether the declared parameters can stand in for the item's types: a
 // value parameter has no symbolic node, and an owning `fn()` slot's
-// witness is per instantiation (ADR-0116), so an item that declares
+// witness is per instantiation, so an item that declares
 // either stays checked at its calls.
 
 bool Checker::parametric_scope_ok(
@@ -1701,7 +1701,7 @@ bool Checker::parametric_scope_ok(
 // receiver resolves with them, and the records carry PARAM_INST, so
 // nothing outside the pass reads what it writes. The per-instantiation
 // checks keep their own records and stay the authority until the
-// specialization pass consumes these bodies instead (ADR-0079).
+// specialization pass consumes these bodies instead.
 
 Checker::StandIn Checker::check_generic_body(
     u32 module,
@@ -1741,7 +1741,7 @@ Checker::StandIn Checker::check_generic_body(
   type_params = std::move(saved_types);
   value_params = std::move(saved_values);
   // A body the pass could not stand in for keeps its per-instantiation
-  // check (ADR-0079), and the call sites have to know that.
+  // check, and the call sites have to know that.
   return recorded ? StandIn::Once : StandIn::PerInstantiation;
 }
 
@@ -1769,7 +1769,6 @@ void Checker::check_generic_bodies() {
       // The impl's spec, by the declaration it names: the checked-impl
       // table is not built until the concrete bodies run, so both
       // passes resolve the written path through the same lookup
-      // (ADR-0079).
       u32 spec_index = U32_MAX;
       if (impl.spec.is_valid() &&
           ast.types[impl.spec].kind == ast::TypeKind::Path) {

@@ -126,7 +126,7 @@ struct Envelope {
   // Size of what the command wrote, or zero when it wrote nothing to
   // measure: the artifact's size for a build or a compile, and the bytes a
   // test run captured from its tests when the run's own output was a
-  // document (ADR-0020). The two never meet, because a command is one
+  // document. The two never meet, because a command is one
   // verb; a test run's text report captures nothing and reports zero.
   u64 output_bytes = 0;
   // Wall time of the whole invocation, measured by the caller with a

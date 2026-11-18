@@ -219,7 +219,7 @@ TEST_CASE("Layout gives a referencing option the payload's shape") {
   Storage storage = std::move(builder).build().unwrap().unwrap();
 
   // The discriminant lives in the reference's spare null pattern, so
-  // the enum is the reference (ADR-0087).
+  // the enum is the reference.
   const TypeLayout payload = layout_of(storage.state(), ref, PointerWidth::W64);
   const TypeLayout layout =
       layout_of(storage.state(), option, PointerWidth::W64);
@@ -247,7 +247,7 @@ TEST_CASE("Layout gives an option over a slice reference a tag") {
   Storage storage = std::move(builder).build().unwrap().unwrap();
 
   // A slice reference is fat, and the null pattern of its data pointer is
-  // not the compiler's to promise (ADR-0087): the enum carries a
+  // not the compiler's to promise: the enum carries a
   // discriminant, so it is a tag and the padded payload rather than the
   // payload alone.
   const TypeLayout payload = layout_of(storage.state(), ref, PointerWidth::W64);
@@ -275,7 +275,7 @@ TEST_CASE("Layout gives a bool option a byte") {
   Storage storage = std::move(builder).build().unwrap().unwrap();
 
   // A bit has no third state, so the slot is a byte: zero or one is the
-  // payload and two is the fieldless variant (ADR-0087).
+  // payload and two is the fieldless variant.
   const TypeLayout layout =
       layout_of(storage.state(), option, PointerWidth::W64);
   CHECK(layout.align == 1);

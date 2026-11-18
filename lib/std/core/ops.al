@@ -6,7 +6,7 @@
 // A nominal type implements the operators its arithmetic supports; a
 // scalar uses the backend's own operators and needs no implementation.
 // The operands pass by value, so `a + b` consumes both, which for a
-// `Copy` type reads as a copy (ADR-0053).
+// `Copy` type reads as a copy.
 pub spec Add {
   fn add(self: Self, other: Self) -> Self;
 }

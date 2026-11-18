@@ -139,7 +139,7 @@ base::Result<T, diag::Reported> manifest_field_error(diag::DiagBag& bag,
 
 // Whether a node is exactly `{ suite = true }` (the dotted
 // `field.suite = true` parses the same), the spelling that takes the
-// suite's value (ADR-0057).
+// suite's value.
 bool is_suite_marker(const toml::node& node) {
   const toml::table* const table = node.as_table();
   if (table == nullptr || table->size() != 1) {
@@ -375,7 +375,7 @@ base::Result<Dependency, diag::Reported> parse_dependency(
     // requirement rather than its spelling: one `Equal` bound is a pin
     // and cannot drift, whatever it was written as, and every other
     // requirement that admits a pre-1.0 version warns. Both spellings
-    // parse either way, and the advice belongs to the lint (ADR-0057).
+    // parse either way, and the advice belongs to the lint.
     const bool pinned =
         version_req.count == 1 && version_req.bounds[0].op == VersionOp::Equal;
     bool pre_minor = false;
@@ -617,7 +617,6 @@ base::Result<void, SuiteError> verify_suite_manifest(
   }
   // A member's address is its package name, the last segment of its
   // path, so a path has to end in one and names are unique
-  // (ADR-0057).
   for (u32 i = 0; i < manifest.package_count; ++i) {
     const std::string_view path = manifest.packages[i];
     if (path.empty()) {
@@ -996,7 +995,7 @@ base::Result<PackageManifest, diag::Reported> parse_manifest(
   }
 
   // The [spec] table names the specs this package seals to its suite,
-  // so only packages of that suite may implement them (ADR-0053).
+  // so only packages of that suite may implement them.
   // `implement` is the implementing side's reserved key; until its
   // slice accepts it, naming it is an error rather than a no-op.
   const std::string_view* suite_only = nullptr;

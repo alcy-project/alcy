@@ -12,7 +12,6 @@ const DEFAULT_CAPACITY: usize = 8192
 // A reader over a descriptor. It owns its buffer and not the
 // descriptor, so the standard input can be wrapped and never closed;
 // `fill` performs one underlying read and reports it as itself
-// (ADR-0129).
 pub struct BufReader {
   fd: Fd,
   buf: String,
@@ -45,7 +44,7 @@ impl BufReader {
 
   // One read(2) into the buffer, answering the bytes gained; zero is
   // the end of input. An interrupted call is retried here, and only
-  // here (ADR-0129); the raw layer keeps it visible.
+  // here ; the raw layer keeps it visible.
   pub fn fill(mut self: &mut Self) -> Result<usize, OsError> {
     self.pos = 0
     self.len = 0
@@ -105,7 +104,7 @@ impl BufReader {
 
   // One line, with one trailing `\n` (and one `\r` before it)
   // dropped. The bytes are the text and nothing is validated
-  // (ADR-0091). `None` when the end of input arrives before any byte.
+  //. `None` when the end of input arrives before any byte.
   pub fn read_line(mut self: &mut Self) -> Result<Option<String>, OsError> {
     mut out := String::with_capacity(64)
     mut got := false

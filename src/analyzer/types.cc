@@ -46,7 +46,7 @@ namespace analyzer {
 
 // Whether a path head is one the module walk owns: the two relative
 // forms and the two neighbor-language spellings that get their own
-// message (ADR-0060).
+// message.
 bool module_walk_head(std::string_view head) {
   return head == "package" || head == "self" || head == "super" ||
          head == "crate";
@@ -705,7 +705,7 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
       is_struct ? builder.reserve_struct(name) : builder.reserve_enum(name);
   entry.started = true;
   // The anchor is the one type a declaration makes unmovable; anything
-  // holding one derives that (ADR-0085).
+  // holding one derives that.
   if (entry.name == "Anchor" && tree.modules[entry.module]->is_staged) {
     if (not_movable_.size() <= entry.type.idx) {
       not_movable_.resize(entry.type.idx + 1, 0);
@@ -769,7 +769,7 @@ ir::TypeIdx Checker::storage_copy(ir::TypeIdx type) {
   }
   type_origins_by_index_[copy.idx] = type.idx;
   // A copy stands for the declaration it came from, so it carries the
-  // mark too: a walk over field slots sees copies (ADR-0085).
+  // mark too: a walk over field slots sees copies.
   if (type.idx < not_movable_.size() && not_movable_[type.idx] != 0) {
     if (not_movable_.size() <= copy.idx) {
       not_movable_.resize(copy.idx + 1, 0);
@@ -823,7 +823,7 @@ bool Checker::walk_module_prefix(u32 module,
   u32 opened_root = analyzer::NO_PACKAGE_ROOT;
   if (head == "package") {
     // The root of the package this module belongs to, not the goal:
-    // each package's modules hang under their own root (ADR-0060).
+    // each package's modules hang under their own root.
     current = module;
     while (parents[current] != NO_MODULE) {
       current = parents[current];
@@ -1173,7 +1173,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
   }
   const base::NestingScope scope(nesting_);
   const ast::TypeNode& node = ast.types[type];
-  // Owning function types parse but wait for their slice (ADR-0075):
+  // Owning function types parse but wait for their slice :
   // refuse them here rather than let one reach lowering as a view.
   if (node.kind == ast::TypeKind::OwnFunc) {
     const u32 index = bag.emit<i18n::Key::AnalyzerOwnFunctionUnsupported>(
@@ -1413,7 +1413,7 @@ ir::TypeIdx Checker::resolve_type(u32 module,
 
 // Closed compiler-known intrinsic set (see docs/spec/items.md).
 // `panic` stays callable without a declaration; `print`/`println` are
-// declared by io and expanded by package (ADR-0055); `memcopy`
+// declared by io and expanded by package ; `memcopy`
 // requires a declaration.
 bool Checker::is_known_intrinsic(std::string_view name) {
   return name == "memcopy" || name == "panic" || name == "str_len" ||
@@ -1434,7 +1434,7 @@ bool Checker::is_known_intrinsic(std::string_view name) {
 }
 
 // The intrinsics whose preconditions the compiler cannot check
-// (ADR-0050): the declaration must carry `unsafe` and a call needs
+// : the declaration must carry `unsafe` and a call needs
 // the opt-in. Every other intrinsic is safe whatever its arguments.
 static bool intrinsic_is_unsafe(std::string_view name) {
   return name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
@@ -1448,7 +1448,7 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "arg_count" || name == "arg";
 }
 
-// What may cross a C boundary in the first ABI slice (ADR-0051):
+// What may cross a C boundary in the first ABI slice :
 // scalars, raw pointers, and `()` as a return. Everything else is
 // refused rather than lowered optimistically.
 static bool extern_abi_type_ok(ir::TypeTag tag, bool is_return) {
@@ -1861,7 +1861,6 @@ void Checker::process_module(u32 module) {
         // Generic functions register per instantiation at their call
         // sites; eager registration cannot bind their parameters. An
         // owning `fn(...)` parameter makes the item generic first
-        // (ADR-0075).
         desugar_own_fn_params(item);
         register_fn_signature(module, item);
         break;
@@ -1935,7 +1934,7 @@ void Checker::process_module(u32 module) {
         break;
       }
       case ast::ItemKind::Extern: {
-        // ADR-0051: a declaration names a symbol the linker resolves,
+        // : a declaration names a symbol the linker resolves,
         // calling it is an operation the opt-in covers, and the ABI is
         // scalars, raw pointers, and `()` so every shape the compiler
         // cannot lower honestly is refused here.
@@ -2021,7 +2020,7 @@ void Checker::process_module(u32 module) {
           break;
         }
         // An owning `fn(...)` parameter desugars before any method of
-        // the block registers (ADR-0075); the method path infers the
+        // the block registers ; the method path infers the
         // witness from the call's arguments like a free function's.
         for (ast::ItemIdx method_item :
              node.payload.get<ast::ItemImpl>().methods) {
@@ -2061,7 +2060,7 @@ void Checker::process_module(u32 module) {
                                       ast.items[entry->item].is_pub,
                                       self_node.span, target_name);
               target_known = true;
-              // ADR-0090: an inherent implementation lives where the
+              // : an inherent implementation lives where the
               // type does.
               if (package_of(module) != package_of(entry->module)) {
                 const u32 index =
@@ -2087,7 +2086,7 @@ void Checker::process_module(u32 module) {
           }
         } else if (self_node.kind == ast::TypeKind::Str) {
           // `impl str`: the string view is a builtin, and the staged
-          // suite owns the methods on it (ADR-0090).
+          // suite owns the methods on it.
           if (!in_staged_suite(module)) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
@@ -2100,7 +2099,7 @@ void Checker::process_module(u32 module) {
         } else if (self_node.kind == ast::TypeKind::Slice ||
                    self_node.kind == ast::TypeKind::Array) {
           // A slice or array is a builtin too: the staged suite owns
-          // the methods on one (ADR-0090).
+          // the methods on one.
           if (!in_staged_suite(module)) {
             const u32 index =
                 bag.emit<i18n::Key::AnalyzerBuiltinImplOutsideItsSuite>(
@@ -2306,7 +2305,7 @@ ir::TypeIdx Checker::primitive_by_name(std::string_view name) {
       return builder.primitive(spell.tag);
     }
   }
-  // The pointer-width spellings name the target's width (ADR-0132).
+  // The pointer-width spellings name the target's width.
   if (name == "isize") {
     return builder.primitive(width == ir::PointerWidth::W64 ? ir::TypeTag::I64
                                                             : ir::TypeTag::I32);
@@ -2734,7 +2733,7 @@ void Checker::precheck_called_method(const CheckedModule::MethodInfo& method) {
   // the bodies sweep. An array receiver is compound and has no nominal
   // to look its instance up by, so the instantiation key is the record
   // that the body was checked; a parametric body owns its checks
-  // itself (ADR-0079).
+  // itself.
   if (parametric_mode() || inst_index(method.self_type) != NO_INST) {
     return;
   }
@@ -3248,7 +3247,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
     std::vector<ir::TypeIdx> method_args;
     {
       // A turbofish spells only the parameters the declaration writes
-      // (ADR-0075): a synthetic `fn(...)` slot takes its witness from
+      // : a synthetic `fn(...)` slot takes its witness from
       // an argument or from the body, never from a spelling.
       usize spelled_count = 0;
       for (const ast::GenericParam& param : method_fn.generic) {
@@ -3338,7 +3337,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
         return nullptr;
       }
       // A return-position spelling waits for the body's first `ret`,
-      // the way a free function's does (ADR-0075); a witness an
+      // the way a free function's does ; a witness an
       // earlier call recorded answers directly.
       for (usize i = 0; i < inferred.size(); ++i) {
         if (inferred[i].is_valid()) {
@@ -3372,13 +3371,13 @@ const CheckedModule::MethodInfo* Checker::instantiate_generic_method(
       }
       method_args = std::move(inferred);
     }
-    // ADR-0085: a type argument is Movable, and a method instantiation
+    // : a type argument is Movable, and a method instantiation
     // binds its own arguments the way a free function's does.
     if (!check_type_args_movable(method_args, span)) {
       return nullptr;
     }
     // The method's own bounds have to hold for the arguments it was
-    // spelled with, the way a free function's do (ADR-0028).
+    // spelled with, the way a free function's do.
     std::vector<std::pair<std::string_view, ir::TypeIdx>> method_bounds;
     for (usize i = 0; i < method_fn.generic.size() && i < method_args.size();
          ++i) {
@@ -3560,7 +3559,7 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
         continue;
       }
       // The impl's bounds have to hold for this instantiation before
-      // its body specializes (ADR-0028): the refusal names the type
+      // its body specializes: the refusal names the type
       // the caller passed rather than a line inside the library.
       if (!check_declared_bounds(m, impl.params, scope, span)) {
         continue;
@@ -3601,7 +3600,7 @@ const CheckedModule::MethodInfo* Checker::lookup_inherent_method(
   return nullptr;
 }
 
-// The method a type parameter's declared bounds provide (ADR-0080): a
+// The method a type parameter's declared bounds provide: a
 // bound's spec declares it, its signature resolves with the bound's
 // arguments and `Self` at the parameter, and the row it registers
 // carries the parameter as its self type, so the call site answers
@@ -3640,7 +3639,7 @@ const CheckedModule::MethodInfo* Checker::lookup_param_method(
     const u32 spec = bound.spec;
     const ast::TypePath& path = bound.path;
     // The bound's spec provides the method, or one it refines does
-    // (`Ord` answers through `PartialOrd`, ADR-0028): walk the chain
+    // (`Ord` answers through `PartialOrd`): walk the chain
     // for the node that declares the name and meets the scope the call
     // asked for.
     u32 dispatch = U32_MAX;
@@ -3697,7 +3696,7 @@ const CheckedModule::MethodInfo* Checker::lookup_param_method(
     for (CheckedModule::MethodInfo& existing : modules[module].methods) {
       // The bound's arguments are part of the key: two parameters share
       // an index across items, and their bounds are what says which
-      // call the row answers (ADR-0080).
+      // call the row answers.
       if (existing.spec == dispatch && existing.self_type.idx == param.idx &&
           existing.name == name &&
           std::ranges::equal(existing.method_args, method_args) &&
@@ -3943,7 +3942,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     }
     // The declaration's bounds hold whatever the implementation wrote
     // down: an implementation may leave a bound out, and the call still
-    // owes it (ADR-0028).
+    // owes it.
     const bool bounds_ok =
         check_spec_method_bounds(spec, name, spec_args, method_args, span);
     if (!bounds_ok) {
@@ -3996,7 +3995,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
                       spec,
                       {method_args.begin(), method_args.end()}});
     // The definition-site check records under its own key: no
-    // numbering slot is claimed and no body is checked here (ADR-0079).
+    // numbering slot is claimed and no body is checked here.
     if (parametric_mode()) {
       entry->method_inst = PARAM_INST;
       type_params = std::move(outer_scope);
@@ -4005,7 +4004,7 @@ const CheckedModule::MethodInfo* Checker::instantiate_spec_method(
     }
     const u32 inst = inst_index(self_type);
     // A body the definition-site check stood in for is not walked
-    // again (ADR-0079).
+    // again.
     if (once_checked_items.contains(method_item.idx)) {
       type_params = std::move(outer_scope);
       value_params = std::move(outer_values);
@@ -4537,9 +4536,8 @@ bool Checker::resolve_value_path_impl(u32 module,
     }
     // A scalar or a bound type parameter as the prefix: `i64::parse`
     // and `T::parse` reach an associated function or a spec's
-    // receiverless member (ADR-0133). A bound parameter sees the
+    // receiverless member. A bound parameter sees the
     // instantiation's implementation, the way its receiver calls do
-    // (ADR-0063).
     const ir::TypeIdx head_type = head_named_type(head);
     if (!is_error(head_type)) {
       if (const CheckedModule::MethodInfo* method =
@@ -4824,7 +4822,7 @@ void Checker::FnStateScope::restore(Checker& checker) {
 bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const ast::ItemNode& node = ast.items[fn];
   // The definition-site check records the signature it resolved, so
-  // lowering can emit the parametric function (ADR-0079). A body check
+  // lowering can emit the parametric function. A body check
   // can nest - the const pre-pass checks a called function while an
   // enclosing body is mid-check - and the nested one is not the
   // once-check's own, so only the outer check touches the record.
@@ -4858,7 +4856,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   if (recording) {
     record.ret = fn_ret;
   }
-  // ADR-0085: a parameter and a return is Movable. A destructor's
+  // : a parameter and a return is Movable. A destructor's
   // receiver is the exception: the value ends in place.
   const bool is_destructor =
       self != nullptr && node.payload.get<ast::ItemFn>().name.name == "drop";
@@ -4883,7 +4881,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   for (const ast::ItemFnParam& param : node.payload.get<ast::ItemFn>().params) {
     // A variadic slot has no type to resolve and no pattern to bind;
     // only the compiler-expanded call reads the collected arguments
-    // (ADR-0055), and the declared body guards with panic.
+    //, and the declared body guards with panic.
     if (param.is_variadic) {
       continue;
     }
@@ -4912,7 +4910,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     // A unit body keeps the expectation, so a non-`()` trailing value
     // is still the explicit-discard error it was; a value-returning
     // body gets no expectation, because a non-unit return is spelled,
-    // not inferred, and the body's own type has to diverge (ADR-0059).
+    // not inferred, and the body's own type has to diverge.
     // `ret` inside unifies against `fn_ret` on its own either way.
     const ir::TypeIdx type =
         check_block(module, body, is_void(fn_ret) ? &fn_ret : nullptr);
@@ -4945,7 +4943,6 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   if (recording) {
     // A body the pass cannot stand in for stays checked at its calls:
     // a compile-time value it reads depends on the instantiation
-    // (ADR-0079).
     if (!record.per_instantiation) {
       record.self_type = self != nullptr ? *self : ir::TypeIdx::invalid();
       record.param_count = static_cast<u32>(type_params.size());
@@ -4981,8 +4978,7 @@ void Checker::check_main(u32 module, ast::ItemIdx fn) {
   }
   // An enum return is accepted structurally: the first variant must
   // carry exactly one `()` payload, so the entry thunk can map the
-  // first discriminant to exit code 0. See
-  // docs/adr/0009-result-option-library-enums.md.
+  // first discriminant to exit code 0.
   if (tag == ir::TypeTag::Enum) {
     const ir::EnumType shape =
         builder.enum_types()[builder.types()[ret].as_enum()];
@@ -5119,7 +5115,7 @@ void Checker::check_bodies() {
   }
 }
 
-// --- The definition-site check (ADR-0079) -------------------------------
+// --- The definition-site check  -------------------------------
 
 CheckedModule Checker::empty_module(u32 module) {
   CheckedModule checked;
@@ -5276,11 +5272,11 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   if (checker.name_table_exhausted_) {
     return base::make_err(diag::Reported{});
   }
-  // ADR-0053: super-specs resolve, form no cycle, and every
+  // : super-specs resolve, form no cycle, and every
   // implementation owes an implementation of its super for the same
   // target.
   checker.check_superspecs();
-  // ADR-0053: every name a manifest seals must resolve to a spec its
+  // : every name a manifest seals must resolve to a spec its
   // package declares; a name that resolves to nothing would seal
   // nothing, which is what the list exists to prevent.
   for (const PackagePolicy& policy : tree.package_policies) {
@@ -5304,7 +5300,7 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   // The definition-site check runs first: it binds each declared
   // parameter to the `Param` node its index names and checks the body
   // once, so a call site only instantiates a signature and knows the
-  // body needs no AST walk of its own (ADR-0079).
+  // body needs no AST walk of its own.
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(checker.profiler, "generic bodies",
                                              "analyze");

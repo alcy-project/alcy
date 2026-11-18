@@ -1,5 +1,5 @@
 // The one signed division that overflows: a checked build aborts on
-// MIN / -1 (ADR-0068); `--release` wraps it (ADR-0066).
+// MIN / -1 ; `--release` wraps it.
 fn main() -> i32 {
   a := -128i8
   b := -1i8

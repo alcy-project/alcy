@@ -25,7 +25,7 @@ inline constexpr u16 MINOR = 2;
 inline constexpr u32 FLAG_LITTLE_ENDIAN = 1;
 // Sections start on this boundary.
 inline constexpr usize SECTION_ALIGN = 8;
-// One parametric-callee row (ADR-0079): a kind byte, three reserved
+// One parametric-callee row: a kind byte, three reserved
 // bytes, the function or the spec and method, and the argument range.
 // The section's record count divides by it, so the writer's row and the
 // reader's stride must move together.
@@ -67,29 +67,29 @@ enum class Section : u8 {
   // 16 bytes. A file written before this kind existed has none.
   Identity = 24,
   // The package's public surface, so a dependent can resolve against it
-  // without the source (ADR-0078). Rows: a u32 count, then per row a
+  // without the source. Rows: a u32 count, then per row a
   // function index (invalid for a declaration with no code), a string
   // index for the source name, the symbol kind, one flags byte, and two
   // reserved bytes. Absent means the package carries no summary.
   Summary = 25,
-  // The callees a parametric body cannot name (ADR-0079, ADR-0080).
+  // The callees a parametric body cannot name.
   // Rows: a u32 count, then per row a kind byte, three reserved bytes,
   // the function (Generic) or the spec (Dispatch), the method's string
   // index (Dispatch), and the argument range. Absent means none.
   ParametricCallees = 26,
-  // The functions emitted once in their parametric form (ADR-0079).
+  // The functions emitted once in their parametric form.
   // Rows: a u32 count, then that many function indexes. Absent means
   // none.
   ParametricFunctions = 27,
-  // The specializations of staged items (ADR-0079). Rows: a u32 count,
+  // The specializations of staged items. Rows: a u32 count,
   // then that many function indexes. Absent means none.
   PreludeSpecializations = 28,
-  // The bodies the specialization pass synthesized (ADR-0079). Rows: a
+  // The bodies the specialization pass synthesized. Rows: a
   // u32 count, then that many function indexes. Absent means none.
   SyntheticFunctions = 29,
   // The per-type tables the drop and borrow passes read, aligned with
   // the type table: whether ending a value of the type runs code, and
-  // whether one is never moved (ADR-0085, ADR-0079). Rows: a u32
+  // whether one is never moved. Rows: a u32
   // needs_drop length and that many bytes, then a u32 not_movable
   // length and that many bytes. A dependent's merge copies the entries
   // its carried types reached into its own tables. Absent means the

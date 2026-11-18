@@ -1021,7 +1021,7 @@ TEST_CASE("A generic item a summary cannot spell is named for what it is") {
 
 TEST_CASE("A summary carries a generic body the dependent instantiates") {
   // The summary names a generic item's definition-site body, and a
-  // dependent's call clones it beside its own code (ADR-0079).
+  // dependent's call clones it beside its own code.
   io::TempDir dir =
       io::TempDir::create_unique("alcy_summary_generic_body_test_");
   const bool written = write_package(
@@ -1160,7 +1160,7 @@ TEST_CASE("A summary carries a generic body the dependent instantiates") {
 TEST_CASE("A summary's generic declaration and impl cross whole") {
   // A generic struct's declaration, a generic impl's methods, and a
   // free generic that names them all cross in one summary, and a
-  // dependent instantiates each beside its own code (ADR-0079).
+  // dependent instantiates each beside its own code.
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_generic_full_");
   const bool written = write_package(
       dir, "dep",
@@ -1287,7 +1287,7 @@ TEST_CASE("Two libraries that reach one std function link into one image") {
   // libraries whose bodies reach one std function each hold a copy of
   // it. A library's object keeps only its surface external and
   // internalizes every other definition, so the two copies cannot meet
-  // as one external symbol at the link (ADR-0078, ADR-0079). The bodies
+  // as one external symbol at the link. The bodies
   // cross as generics here, so the library's surface names no function
   // at all, and an empty export list must not read as "no surface".
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_shared_std_");
@@ -1397,7 +1397,7 @@ TEST_CASE("Two libraries that reach one std function link into one image") {
 TEST_CASE("A dependency a summary answers for is not read") {
   // A library's build leaves its surface beside the artifact; a
   // dependent checks against it, and the library's own sources can be
-  // gone when it does (ADR-0078).
+  // gone when it does.
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_dep_test_");
   const bool written = write_package(
       dir, "dep",
@@ -1516,7 +1516,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
   }
   // Put the right call back: the dependent links the library's object,
   // named by the symbol the summary carried, and it spells the
-  // library's struct from the surface (ADR-0078).
+  // library's struct from the surface.
   CHECK(dir.write_file(
       "proj/main.al",
       "use dep::Line\nuse dep::Pair\nuse dep::double\nuse dep::left_of\n"
@@ -1563,7 +1563,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
 TEST_CASE("A summary import carries what a carried body reaches") {
   // A dependent holds the generic bodies a summary carries and the
   // concrete code those bodies call, not the library's whole lowered
-  // storage (ADR-0079).
+  // storage.
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_reach_test_");
   const bool written = write_package(
       dir, "dep",
@@ -1694,7 +1694,6 @@ TEST_CASE("A package's storage merges once for all of its modules") {
   // Every module of a summary dependency shares one artifact storage,
   // so the merge copies a reached entry once, however many modules name
   // it: one module's generic calling another's crosses as one body
-  // (ADR-0079).
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_shared_test_");
   const bool written = write_package(
       dir, "dep",
@@ -1809,7 +1808,7 @@ TEST_CASE("A summary destructor the carrier did not cross is refused") {
   // A carried body's end waits for the substitution, and a type the
   // library ends through a destructor crosses as structure alone: the
   // drop cannot run in the dependent, so the build stops rather than
-  // leak what the destructor owned (ADR-0085, ADR-0079).
+  // leak what the destructor owned.
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_drop_refused_");
   const bool written = write_package(
       dir, "dep",
@@ -1884,7 +1883,7 @@ TEST_CASE("A summary destructor the carrier did not cross is refused") {
                     "", BuildPlan{}, EmitMode::IrBinary);
   CHECK(built.is_err());
   // The refusal carries its own code, names the type, and points at the
-  // call the body was instantiated from (ADR-0079).
+  // call the body was instantiated from.
   constexpr std::string_view app_source =
       "use dep::outer\n\nfn main() -> i32 {\n  ret outer(3) - 3\n}\n";
   base::Result<source::FileId, source::SourceError> main_file =
@@ -1918,7 +1917,7 @@ TEST_CASE("A summary destructor the carrier did not cross is refused") {
 TEST_CASE("A carried body ends a summary type the library did not arm") {
   // The other side of the boundary: a type with no destructor crosses
   // as structure, and ending a value of it runs nothing in the
-  // dependent, so the drop is a plain no-op (ADR-0085, ADR-0079).
+  // dependent, so the drop is a plain no-op.
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_drop_plain_");
   const bool written = write_package(
       dir, "dep",
@@ -1997,7 +1996,7 @@ TEST_CASE("A carried body ends a summary type the library did not arm") {
 TEST_CASE("A carried body ends a generic aggregate once per element") {
   // The substitution reaches an element through storage copies, and
   // the end still runs the destructor the declaration measured: a copy
-  // of a copy resolves past both (ADR-0079, ADR-0085).
+  // of a copy resolves past both.
   io::TempDir dir = io::TempDir::create_unique("alcy_summary_tuple_drop_");
   const bool written = write_package(
       dir, "dep",

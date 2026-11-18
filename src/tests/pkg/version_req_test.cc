@@ -39,7 +39,7 @@ TEST_CASE("A wildcard expands to the series it names") {
         bounds({{VersionOp::GreaterEqual, {1, 0, 0}},
                 {VersionOp::Less, {2, 0, 0}}}));
   // `0.x` is a major series like any other; whether it is worth
-  // discouraging is a manifest lint's question (ADR-0057).
+  // discouraging is a manifest lint's question.
   CHECK(parse_version_req("0.x").unwrap() ==
         bounds({{VersionOp::GreaterEqual, {0, 0, 0}},
                 {VersionOp::Less, {1, 0, 0}}}));

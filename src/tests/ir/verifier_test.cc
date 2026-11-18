@@ -1167,7 +1167,7 @@ TEST_CASE("Verify function instantiation arguments") {
 
 TEST_CASE("Verify a parametric callee's function") {
   // A Generic row names the parametric function its call clones; a row
-  // whose index leaves the table could not be resolved (ADR-0079).
+  // whose index leaves the table could not be resolved.
   StorageBuilder builder;
   (void)builder.parametric_callee({.kind = ParametricCalleeKind::Generic,
                                    .function = FunctionIdx(99999),
@@ -1203,7 +1203,7 @@ TEST_CASE("Verify the parametric function list") {
 TEST_CASE("Verify a parametric end outside a parametric body") {
   // Only the specialization pass rewrites a ParametricDrop, and it
   // walks the listed bodies: one in a body it already resolved would
-  // reach a backend as an opcode it does not know (ADR-0079).
+  // reach a backend as an opcode it does not know.
   const auto build = [](bool parametric) {
     StorageBuilder builder;
     InstrSeq instrs;
@@ -1245,7 +1245,7 @@ TEST_CASE("Verify a parametric end outside a parametric body") {
 TEST_CASE("Verify an unresolved callee outside a parametric body") {
   // The specialization pass rewrites a callee record into the function
   // its arguments instantiate; a record left in a body it resolved
-  // would reach a backend as an operand it cannot name (ADR-0079).
+  // would reach a backend as an operand it cannot name.
   const auto build = [](bool parametric) {
     StorageBuilder builder;
     InstrSeq instrs;
@@ -1291,7 +1291,6 @@ TEST_CASE("Verify an unresolved callee outside a parametric body") {
 TEST_CASE("Verify a type parameter outside a parametric body") {
   // A resolved body names no parameter: every type a clone holds was
   // substituted, and a parameter has no layout any reader could answer
-  // (ADR-0079).
   const auto build = [](bool parametric) {
     StorageBuilder builder;
     InstrSeq instrs;
@@ -1323,7 +1322,7 @@ TEST_CASE("Verify a type parameter outside a parametric body") {
 TEST_CASE("Verify a parameter inside a composite outside a parametric body") {
   // The refusal reads a type's parts: a tuple holding a parameter names
   // one just as a bare parameter does, whether the body carries it in a
-  // signature or in a block (ADR-0079).
+  // signature or in a block.
   const auto build = [](bool parametric) {
     StorageBuilder builder;
     TypeSeq elements;

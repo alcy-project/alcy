@@ -263,7 +263,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
   // An unsuffixed literal whose slot is a type parameter: the checker
   // adopted the parameter, so the value rides as canonical 64 bits - the
   // integer itself, or a float's IEEE pattern - and the specialization
-  // re-encodes it for the type the substitution names (ADR-0079).
+  // re-encodes it for the type the substitution names.
   if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Param &&
       (lit.kind == ast::LiteralKind::Integer ||
        lit.kind == ast::LiteralKind::Float) &&
@@ -297,7 +297,7 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     return Val{to_operand(imm, type), type, false, false};
   }
   if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
-    // The digits round once, to the literal's own type (ADR-0134): a
+    // The digits round once, to the literal's own type: a
     // value read through `f64` and cast rounds twice, and the second
     // rounding can land on the neighbour of the one the digits name.
     ir::Immutable imm{.type = type, .data = {}};
@@ -449,7 +449,7 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
 // signature is `unsafe`: only those hand out a reference to storage
 // the caller owns, which is what lets the allocator's accessors be
 // read as a move. An ordinary `unsafe fn` returns a borrow like any
-// other, and ADR-0050 keeps the move rule for it.
+// other, and  keeps the move rule for it.
 bool Lowerer::unsafe_call_result(ast::ExprIdx expr) const {
   // An `unsafe { ... }` block is a spelling of the same call, so the
   // rule sees through it.
@@ -934,7 +934,7 @@ Val Lowerer::lower_path(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     const ir::TypeIdx enum_ty = use->enum_type;
     const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, enum_ty, {size_one});
     // The representation - a discriminant, or the payload's spare
-    // pattern - belongs to the backend (ADR-0087): the place is the
+    // pattern - belongs to the backend: the place is the
     // enum and this names the variant it holds.
     emit_void(ir::Opcode::EnumTagSet,
               {to_operand(addr, enum_ty), disc_operand(use->variant)});
@@ -1100,7 +1100,6 @@ Val Lowerer::lower_variant_construct(
 // The address of a payload field: the place names the enum and the
 // variant and field say what is wanted, while the representation - a
 // niche's spare pattern or the area after a tag - is the backend's
-// (ADR-0087).
 ir::RegisterIdx Lowerer::enum_field_addr(Val place,
                                          ir::TypeIdx enum_type,
                                          u32 variant,
@@ -1137,7 +1136,7 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
   // A literal's own type is the nominal whose one field is its
   // environment; a context that wants a bare function type gets the
   // view, which borrows the value. A coerced named function has no
-  // environment at all (ADR-0064).
+  // environment at all.
   const bool as_view = tag_of(type) == ir::TypeTag::Func;
   // A closure literal has a checked record with its captures; a
   // coerced named function has none, because it captures nothing.
@@ -1284,7 +1283,7 @@ Val Lowerer::lower_closure(ast::ExprIdx expr) {
     // carries, and borrowing the slot itself is what keeps the closure
     // from outliving the frame. An environment that owns anything
     // becomes a named local, so the drop pass ends it with the scope
-    // the closure was written in (ADR-0064).
+    // the closure was written in.
     const ir::RegisterIdx slot = emit(ir::Opcode::Alloca, env_ty, {size_one});
     if (failed) {
       return Val{size_one, error_type(), false, false};
@@ -1328,7 +1327,7 @@ Val Lowerer::lower_indirect_call(ast::ExprIdx expr) {
     return stopped_value();
   }
   // A closure value's implementation is the function the lowering
-  // registered for its literal (ADR-0116). A view would carry the
+  // registered for its literal. A view would carry the
   // value's own address as its environment; the direct call hands that
   // address over as the first argument instead, so a call on a closure
   // nominal has no view and no indirect call.
@@ -1548,13 +1547,13 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       parametric_fn_by_item_.contains(sig.item.idx)) {
     // The callee is a generic item: the call records the arguments the
     // definition-site check resolved, and the specialization
-    // instantiates it (ADR-0079).
+    // instantiates it.
     if (call.args.size() != sig.params.size()) {
       internal(node.span, "call arity");
       return Val{size_one, error_type(), false, false};
     }
     // The places this call lends to the callee: a value it keeps can
-    // land in any of them, so it has to outlive them (ADR-0135).
+    // land in any of them, so it has to outlive them.
     std::vector<ir::OperandIdx> args;
     if (!lower_call_arguments(call.args, sig.params, {}, std::nullopt, args,
                               sig.item, 0)) {
@@ -1636,7 +1635,7 @@ Val Lowerer::lower_associated_call(ast::ExprIdx expr) {
   if (!info.item.is_valid()) {
     // An associated function a bound names: the parametric form knows
     // the spec and the name, and the specialization resolves the
-    // implementation (ADR-0080).
+    // implementation.
     if (args.size() != info.params.size()) {
       internal(call.span, "call arity");
       return Val{size_one, error_type(), false, false};
@@ -1787,7 +1786,7 @@ ir::RegisterIdx Lowerer::emit_heap_alloc(ir::TypeIdx elem,
 // A call into a package a summary answers for: the callee's code lives
 // in the dependency's own artifact, so the call names a symbol the
 // linker resolves, and only the surface's own types - primitives and
-// references over them - pass this way (ADR-0078).
+// references over them - pass this way.
 
 Val Lowerer::lower_summary_call(ast::ExprIdx expr,
                                 std::string_view name,
@@ -1821,7 +1820,7 @@ Val Lowerer::lower_summary_call(ast::ExprIdx expr,
     }
   }
   // A body the summary carries: the call clones the definition-site
-  // body the pass merges from the dependency's storage (ADR-0079). A
+  // body the pass merges from the dependency's storage. A
   // row with a symbol is concrete code the linker resolves instead.
   if (match != nullptr && match->function.is_valid() &&
       match->symbol == str::INVALID_STRING_POOL_ID) {
@@ -1876,7 +1875,6 @@ Val Lowerer::lower_summary_call(ast::ExprIdx expr,
 // definition-site form the pass merges from the dependency's storage,
 // and the call records the body with the arguments the use settled, so
 // the specialization clones it beside this package's own code
-// (ADR-0079).
 Val Lowerer::lower_carried_call(ast::ExprIdx expr,
                                 std::span<const ir::TypeIdx> params,
                                 ir::TypeIdx ret,
@@ -1907,7 +1905,7 @@ Val Lowerer::lower_carried_call(ast::ExprIdx expr,
     return stopped_value();
   }
   // The places this call lends to the callee: a value it keeps can land
-  // in any of them, so it has to outlive them (ADR-0135).
+  // in any of them, so it has to outlive them.
   std::vector<ir::OperandIdx> ops;
   ops.reserve(settled.size());
   usize at = 0;
@@ -1927,7 +1925,7 @@ Val Lowerer::lower_carried_call(ast::ExprIdx expr,
 
 // An `extern "C"` call: the declaration names the symbol the linker
 // resolves, arguments pass by value, and the opt-in was checked at the
-// call site (ADR-0051).
+// call site.
 Val Lowerer::lower_extern_call(ast::ExprIdx expr,
                                const analyzer::CheckedModule::FnSig& sig) {
   const ast::ExprNode& node = ast.exprs[expr];
@@ -2794,7 +2792,7 @@ bool Lowerer::is_range_type(ir::TypeIdx type) {
 // unconditionally, and `Unbounded` discards the payload with a `select`
 // rather than a branch, since its slot is never written. Exactly one of
 // the endpoint's value and its limit carries the `+1` that inclusion
-// needs; both are the compiler's own glue and wrap (ADR-0065), so a
+// needs; both are the compiler's own glue and wrap, so a
 // checked build never aborts on the slot an `Unbounded` endpoint leaves
 // unwritten.
 bool Lowerer::run_bounds(Val range,
@@ -3242,7 +3240,7 @@ Val Lowerer::lower_panic(ast::ExprIdx expr) {
 
   // `panic` is the one name-based fallback left: it aborts through the
   // runtime. `print` and `println` are io's declarations, expanded by
-  // package (ADR-0055).
+  // package.
   emit_panic_registers(call.span, bytes, len);
   return Val{size_one, builder.never_type(), false, false};
 }
@@ -3526,7 +3524,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   if (!info.item.is_valid()) {
     // A call on a type parameter: the parametric form knows the bound's
     // spec and the method, and the specialization resolves the
-    // implementation (ADR-0080).
+    // implementation.
     const usize expected = info.params.empty() ? 0 : info.params.size() - 1;
     if (method_args.size() != expected) {
       internal(method.span, "call arity");
@@ -3569,7 +3567,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
       (info.item.is_valid() &&
        parametric_fn_by_item_.contains(info.item.idx))) {
     // The method is a generic item: the call records it with the
-    // arguments the receiver's instantiation resolved (ADR-0079).
+    // arguments the receiver's instantiation resolved.
     const usize expected = info.params.empty() ? 0 : info.params.size() - 1;
     if (method_args.size() != expected) {
       internal(method.span, "call arity");
@@ -3646,7 +3644,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
           : std::nullopt;
   // A type parameter accepts the value into storage the callee owns, so
   // its signature does not say whether the value is kept: `Vec::push`
-  // writes its element into the buffer (ADR-0135). The instance's type
+  // writes its element into the buffer. The instance's type
   // arguments are the parameters the callee called its own.
   if (!lower_call_arguments(
           method_args, std::span<const ir::TypeIdx>(info.params).subspan(1),
@@ -3689,7 +3687,7 @@ Val Lowerer::lower_spec_index(ast::ExprIdx expr,
        parametric_fn_by_item_.contains(info.item.idx))) {
     // Indexing a type parameter or a generic item: the parametric form
     // records the call, and the specialization resolves it to the
-    // concrete method (ADR-0079, ADR-0080).
+    // concrete method.
     Val arg = lower_expr(index.index, &info.params[1]);
     if (failed) {
       return Val{size_one, error_type(), as_place, false};
@@ -3769,7 +3767,7 @@ Val Lowerer::emit_spec_call(const analyzer::CheckedModule::CallTarget* target,
        parametric_fn_by_item_.contains(info.item.idx))) {
     // An operator on a type parameter or a generic item: the call is
     // recorded and the specialization resolves it, with the receiver
-    // and the argument carried (ADR-0079, ADR-0080).
+    // and the argument carried.
     ir::ParametricCalleeIdx callee = ir::ParametricCalleeIdx::invalid();
     if (!info.item.is_valid()) {
       const str::StringPoolId spec_name =
@@ -5276,7 +5274,7 @@ Val Lowerer::lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   emit_br(tests.front());
   // One epilogue per live arm; it closes the arm's path into the join.
   // The ends of the enclosing scope's values are the drop pass's to
-  // place (ADR-0062).
+  // place.
   std::vector<ir::BlockIdx> epilogues;
   std::vector<bool> arm_live(patterns.size(), false);
   epilogues.reserve(patterns.size());
@@ -5413,7 +5411,7 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
 
   // Ends one arm: the result lands where it belongs and the arm's own
   // bindings end. The ends of the enclosing scope's values are the drop
-  // pass's to place (ADR-0062).
+  // pass's to place.
   auto arm_tail = [&](Val produced, u32 arm_mark, ir::BlockIdx epilogue,
                       bool& live_out) {
     if (has_slot && !terminated_cur()) {
@@ -6066,7 +6064,7 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
           return stopped_value();
         }
         // The frame ends with the return, so a view the result kept of
-        // one of its locals would reach a slot that has ended (ADR-0135).
+        // one of its locals would reach a slot that has ended.
         if (kept_view_escapes(ret.value, node.span, 0)) {
           failed = true;
           return stopped_value();
@@ -6364,7 +6362,7 @@ Val Lowerer::lower_block(ast::BlockIdx block,
   }
   // A place whose storage kept a view of a local this block declares
   // cannot be the block's value either: handing it out outlives the
-  // slot the view reaches (ADR-0135).
+  // slot the view reaches.
   if (!failed && reachable && !terminated_cur() && node.value.is_valid() &&
       kept_view_escapes(node.value, node.span, mark)) {
     failed = true;

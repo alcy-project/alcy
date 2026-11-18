@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/io`: the token domain over a buffered reader (ADR-0129).
+// `alcy/std/io`: the token domain over a buffered reader.
 
 // The failure a read reports: the end of input arrived where a token
 // was expected, a token did not parse (it is carried), or the

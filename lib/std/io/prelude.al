@@ -10,7 +10,7 @@
 // The compiler recognises `print`, `println`, `eprint`, and `eprintln`
 // by this package rather than by their names; all are expanded at
 // compile time and none of the declared bodies executes. The `e` forms
-// write stderr. See docs/adr/0016-suites-and-the-std-split.md.
+// write stderr.
 
 pub use package::print::print;
 pub use package::print::println;

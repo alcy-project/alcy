@@ -17,7 +17,7 @@ expect.toml:
 exactly when present; `*_contains` lists must all appear in the
 respective stream. `walk_stderr_contains` is asserted where the host's
 panic walk runs: the walk reads the x86-64 SysV and AArch64 frame
-layout, and Windows x64's frame pointer is not that layout (ADR-0070).
+layout, and Windows x64's frame pointer is not that layout.
 An optional `args` list is passed to the alcy build itself, so a
 single-file case can select what a package case declares in its own
 files.
@@ -69,7 +69,7 @@ def parse_expect(path: Path):
     stderr_contains = data.get("stderr_contains", [])
     walk_stderr_contains = data.get("walk_stderr_contains", [])
     # What the program reads from standard input, so a case can cover
-    # the input layer (ADR-0129).
+    # the input layer.
     expected_input = data.get("input")
     if expected_input is not None and not isinstance(expected_input, str):
         sys.exit(f"{path}: 'input' must be a string")
@@ -199,7 +199,7 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
 def is_freestanding(case_dir: Path) -> bool:
     """Whether the goal package links without a C runtime.
 
-    The toolchain file says so (ADR-0052); a freestanding program owns
+    The toolchain file says so ; a freestanding program owns
     its `_start`, so the sanitizer's crt and libraries cannot join it.
     """
     toolchain = case_dir / ".alcy" / "toolchain.toml"
@@ -211,7 +211,7 @@ def is_freestanding(case_dir: Path) -> bool:
 
 
 def host_walks_frames() -> bool:
-    """Whether the host's panic walk runs (ADR-0070).
+    """Whether the host's panic walk runs.
 
     The walk reads the x86-64 SysV and AArch64 frame layout; Windows
     x64's frame pointer is an RSP-relative point in the fixed frame by
@@ -378,7 +378,6 @@ def run_case(
     # The walk is a property of the runtime the program runs on. The
     # direct wasm backend writes the message and its site and exits, so a
     # module owes no frame even on a host whose frame pointer is a chain
-    # (ADR-0070).
     if host_walks_frames() and not direct_wasm:
         stderr_contains = [*stderr_contains, *walk_stderr_contains]
     if direct_wasm:

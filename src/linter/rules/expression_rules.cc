@@ -138,7 +138,7 @@ std::optional<std::string_view> source_of(const LintContext& ctx,
 // Whether the bytes between two offsets of a span a repair rewrites
 // are blank: whitespace and the braces a block is written with. The
 // repair owns the whole span, so a comment among them would leave with
-// the bytes the replacement drops (ADR-0111 - a repair is the rule's
+// the bytes the replacement drops (- a repair is the rule's
 // assertion that it knows the bytes it replaces).
 bool only_blank_between(const LintContext& ctx,
                         diag::Span span,

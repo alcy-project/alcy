@@ -10,7 +10,7 @@ does with them.
   travels between manifests only when spelled: `version.suite = true`
   (and the same for `owner` and `license`) takes the suite's value,
   and `inherit_from_suite` fills those markers before
-  `verify_manifest` runs (ADR-0057). Parsing reports through the bag;
+  `verify_manifest` runs. Parsing reports through the bag;
   `verify_manifest` and `verify_suite_manifest` are the pure
   structural checks (names present and valid, a resolved version,
   targets well-formed, unique member paths and names) that every
@@ -22,7 +22,7 @@ does with them.
   binary and what arguments it is given.
 - `profile` parses `.alcy/profile.toml`: the named build profiles the
   goal package declares, and the keys that override the built-in
-  `debug` and `release` profiles (ADR-0069).
+  `debug` and `release` profiles.
 
 Nothing here opens a file, walks a directory, or decides which sources
 are modules. The bytes are the caller's, which is what keeps the parser
@@ -39,7 +39,7 @@ Path dependencies load from source (`pipeline/dependencies`):
 a build resolves the package it was pointed at and every path
 dependency its manifest names, each read through its own manifest
 and staged behind its own package root, which is
-`docs/adr/0038-library-packages-loaded-by-source.md`. Lockfiles
+. Lockfiles
 are not implemented: the models for them were written and removed
 rather than left tested-but-unreachable; they come back with the
 fetcher that uses them.

@@ -158,7 +158,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
     return base::make_ok();
   };
 
-  // The build's checks (ADR-0068): an overflow entry takes the checked
+  // The build's checks: an overflow entry takes the checked
   // form of the operation, and the other kinds run their condition and
   // the runtime call before the operation does.
   if (const overlay::Entry* entry = overlay_entry(instr_idx);
@@ -316,7 +316,7 @@ Emitter::EmitResult Emitter::emit_compute(ir::InstructionIdx instr_idx,
         // A cast saturates: NaN becomes zero and a value past the
         // destination takes its end. The trapping form this used to
         // write answered something else from LLVM's undefined fptosi,
-        // which ADR-0066's rule does not allow.
+        // which rule does not allow.
         const u32 index = (is_wide_int(dst_tag) ? 4u : 0u) +
                           (src_tag == ir::TypeTag::F64 ? 2u : 0u) +
                           (ir::is_signed_integer_type(dst_tag) ? 0u : 1u);

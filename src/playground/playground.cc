@@ -151,7 +151,7 @@ extern "C" i32 alcy_compile(const u8* src, usize len, AlcyResult* out) {
   out->function_count = package.function_count;
 
   // The playground checks the arithmetic, the way a default build does
-  // (ADR-0068): one walk beside the IR, with the sites the aborts name.
+  // : one walk beside the IR, with the sites the aborts name.
   std::vector<str::StringPoolId> sites =
       pipeline::render_instr_sites(ctx, package.package.instr_spans);
   overlay::Overlay checks =

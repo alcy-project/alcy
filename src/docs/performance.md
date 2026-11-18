@@ -9,9 +9,8 @@ loop they are steps in.
 Retired instructions. `perf stat -e instructions` prints the work a program
 did: the same number on every run, on a quiet machine and on a busy one, and a
 cache miss adds cycles to a run rather than instructions. Wall clock moves with
-the machine, so it answers the second question and not the first; ADR-0021
-records why a timing is a report rather than a check
-(`docs/adr/0021-benchmark-measurement.md`).
+the machine, so it answers the second question and not the first; a
+timing is a report rather than a check, and never a gate.
 
 Two questions, two measurements:
 
@@ -264,7 +263,7 @@ cost found this way so far was one of these:
   the corpus in four steps, each one byte-identical in the emitted IR.
 
 The tables are asked and never walked, so the order a run reports does not
-change (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`).
+change.
 
 ### 4. Verify
 
@@ -322,7 +321,7 @@ larger corpora for anything but start-up.
 ## What verification costs
 
 Three boundary checks run on every package, in the release binary as well as
-the debug one (`docs/adr/0015-boundary-validation.md`, decision 4): the token
+the debug one: the token
 stream, the syntax tree, and the IR storage. Their share of `plain1200`:
 
 | call | instructions | share | runs |
@@ -340,8 +339,9 @@ names the entry that calls each.
 
 This is the largest cost left in the run and the one the loop cannot take.
 Decision 4 makes the call at the boundary the guarantee, so a release build
-that skips it changes what the compiler promises; that is an amendment to
-ADR-0015, not a commit that deletes three lines.
+that skips it changes what the compiler promises; that is an amendment
+to the boundary-validation decision, not a commit that deletes three
+lines.
 
 ## What the loader costs
 
@@ -411,7 +411,8 @@ That makes the default a trade of 4 to 7% of the run's instructions for a few
 percent of its latency, taken for a user who is not waiting on this compiler
 alone. It is the right trade for an interactive run and the wrong one for a
 measurement: every number in this document is `-j 1`, which is also the shape
-ADR-0048 makes byte-identical to the parallel one, so the two can be compared.
+the determinism rule makes byte-identical to the parallel one, so the two
+can be compared.
 
 ## What the formatter costs
 
@@ -517,8 +518,7 @@ from the idea.
 - **Spreading `analyze` and `lower` instead**, where the serial time actually
   is, is not the same move. Both append to the IR as they go, so the type,
   function, and instruction tables would end up ordered by whichever thread
-  arrived first, and that order is part of the output
-  (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`). Those phases
+  arrived first, and that order is part of the output. Those phases
   need per-module storage merged in module order, which is a design of its own
   rather than a loop to mark parallel.
 - **Sorting the drop-elaboration place table.** Building that table by

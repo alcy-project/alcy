@@ -41,7 +41,7 @@ struct StagedMember {
 std::optional<StagedMember> staged_member(std::string_view path,
                                           const StdSelection& selection);
 
-// The spec policy rows of the selected members (ADR-0053), each in the
+// The spec policy rows of the selected members, each in the
 // embedded suite and carrying the seals its manifest declares. A
 // package build reads these from the loaded manifests; a single-file
 // compilation has none, so the rows come from the embedded table.

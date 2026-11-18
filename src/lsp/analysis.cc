@@ -59,7 +59,7 @@ std::optional<ir::TypeIdx> checked_expr_type(
     const analyzer::CheckedPackage& package,
     ast::ExprIdx expr) {
   // The plain answer first: the keyed query the checker maintains
-  // answers for the spelling the source wrote (ADR-0109).
+  // answers for the spelling the source wrote.
   for (const analyzer::CheckedModule& module : package.modules) {
     if (const analyzer::CheckedModule::ExprType* entry =
             module.expr_type_of(expr, analyzer::NO_INST)) {

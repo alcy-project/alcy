@@ -6,7 +6,7 @@
 // `print` and `println` are compiler-expanded like `fmt::format`: the
 // format string is comp-known, the call's remaining arguments are
 // collected at compile time, and the declared body never runs
-// (ADR-0055). `println` writes one newline after the expansion.
+//. `println` writes one newline after the expansion.
 
 pub fn print(comp fmt: str, args: ..) {
   panic("io::print must expand")

@@ -661,7 +661,6 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
     case Opcode::ParametricDrop:
       // The specialization rewrites every one to a concrete end before
       // evaluation; a parametric body never reaches the interpreter
-      // (ADR-0079).
       return fail(IrRunError::Kind::Unsupported, instr,
                   "parametric drop in comp evaluation");
     case Opcode::EnumTagLoad: {
@@ -687,7 +686,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
         }
       } else {
         // The discriminant lives in the payload's spare pattern
-        // (ADR-0087): ask whether the slot holds the fieldless spell.
+        // : ask whether the slot holds the fieldless spell.
         Slot payload;
         if (!read(niche.slot, place.address, instr, payload)) {
           return false;

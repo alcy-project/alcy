@@ -363,7 +363,7 @@ impl String {
   }
 
   // The value read from the string's text; the capability is the
-  // type's (ADR-0133).
+  // type's.
   pub fn parse<T: Parse>(self: &Self) -> Option<T> {
     ret T::parse(self.as_str())
   }

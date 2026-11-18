@@ -5,7 +5,7 @@ pub spec Tagged {
 }
 
 // The spec lives here, so this package may implement it for a type
-// that belongs to another package (ADR-0090).
+// that belongs to another package.
 impl Tagged for Thing {
   fn tag(self: &Self) -> i32 {
     ret self.n

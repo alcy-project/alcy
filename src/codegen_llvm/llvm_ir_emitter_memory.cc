@@ -114,7 +114,7 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
         break;
       }
       if (in_memory_aggregate(dst_reg.type)) {
-        // The load is the copy into the destination's slot (ADR-0140).
+        // The load is the copy into the destination's slot.
         llvm::AllocaInst* slot = frame_slot(load_ty);
         builder_->CreateMemCpy(
             slot, llvm::MaybeAlign(), resolve_operand_value(ptr_op),
@@ -142,7 +142,7 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
         break;
       }
       if (in_memory_aggregate(lhs.type)) {
-        // The store is the copy out of the value's slot (ADR-0140).
+        // The store is the copy out of the value's slot.
         llvm::CallInst* copy = builder_->CreateMemCpy(
             resolve_operand_value(rhs), llvm::MaybeAlign(),
             operand_slot(lhs, stored_ty), llvm::MaybeAlign(),
@@ -248,7 +248,7 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     case Op::EnumTagLoad: {
       // operands = [place]. The representation is the enum's: a niche
       // synthesizes the discriminant from the payload's spare pattern
-      // (ADR-0087), a plain enum reads its tag slot.
+      //, a plain enum reads its tag slot.
       DCHECK(ops.size() == 1);
       if (!i.dst.is_valid()) {
         break;
@@ -468,7 +468,7 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
     }
     case Op::ParametricDrop: {
       // The specialization rewrites every one to a concrete end before
-      // emission; a parametric body never reaches a backend (ADR-0079).
+      // emission; a parametric body never reaches a backend.
       UNREACHABLE();
     }
     default: {

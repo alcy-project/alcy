@@ -57,7 +57,7 @@ chain per lookup.
 - The table is keyed, not ordered, and is not walked. It has no erase and no
   iteration because no caller has needed either, and a phase that would need
   its table's order cannot use this one: the probe sequence is not the order
-  a document was read in (`docs/adr/0048-output-does-not-depend-on-the-job-count.md`).
+  a document was read in.
 
 ## Removed
 

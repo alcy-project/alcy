@@ -1,5 +1,5 @@
 // `comp fn` calls happen during compilation; the result splices into
-// the surrounding code (ADR-0054).
+// the surrounding code.
 
 comp fn twice(x: i32) -> i32 {
   ret x * 2

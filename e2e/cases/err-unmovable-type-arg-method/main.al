@@ -1,6 +1,5 @@
 // A type argument is Movable, and a generic method's instantiation
 // checks its own rather than passing through the nominal path
-// (ADR-0085).
 struct Pinned {
   held: Anchor,
 }

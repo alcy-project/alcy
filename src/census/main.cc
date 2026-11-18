@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // The compile-time evaluator against compiled packages. Lowering hands
-// its IR to the backends and to the second engine (ADR-0054), and the
+// its IR to the backends and to the second engine, and the
 // acceptance corpus is where the two are asked to agree. This driver
 // loads each package the compiler wrote in the binary IR form, runs
 // every function the engine can start, and fails while the engine

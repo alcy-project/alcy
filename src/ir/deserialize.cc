@@ -750,7 +750,7 @@ bool read_immutables(Parsed& parsed, std::span<const u8> payload) {
         break;
       case TypeTag::Param:
         // Canonical 64 bits; the specialization re-encodes them once
-        // the substitution names the type (ADR-0079).
+        // the substitution names the type.
         immutable.data.u64_value = value;
         break;
       default: immutable.data.ptr = value; break;

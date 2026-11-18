@@ -112,7 +112,7 @@ ResultCode run_build(const CliConfig& config,
   resolve_backend_options(config, ctx, selected);
   const pipeline::BuildPlan plan{.profile = selected, .link = link};
   // A suite directory builds every member; a package directory builds
-  // itself (ADR-0057).
+  // itself.
   const std::optional<std::string_view> manifest_bytes =
       ctx.sources.bytes(found.manifest);
   const bool suite =

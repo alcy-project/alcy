@@ -81,8 +81,7 @@ Deliberately out of scope:
 
 - Parallel or incremental compilation.
 - Language-server functionality in the compiler pipeline; the language
-  server is a toolchain module beside the compiler, not a stage in it
-  (see ADR-0083).
+  server is a toolchain module beside the compiler, not a stage in it.
 - Build-system dependency tracking.
 - A direct x86 backend; the direct wasm backend is.
 
@@ -107,7 +106,7 @@ two are kept apart: what a program is written against lives at the root, and
 what implements it lives in `src/`.
 
 - `docs/` - the language's own documentation: the specification
-  (`docs/spec/`), the decision log (`docs/adr/`), the user-facing guide
+  (`docs/spec/`), the user-facing guide
   (`docs/guide/`), and where the language is going (`principles.md`,
   `roadmap.md`, `backlog.md`).
 - `src/` - the toolchain. One directory per module, each with a
@@ -122,16 +121,16 @@ what implements it lives in `src/`.
   and both lean on the compiler's lexer alone. `alcy fmt` reaches the
   formatter from the command line,
   and `tools/check_fmt.py` asks its properties of every source in the
-  tree (see ADR-0081). `src/linter/` is the static analyzer, `alcy lint`,
+  tree. `src/linter/` is the static analyzer, `alcy lint`,
   over the frontend: no compiler target depends on it, the cli does, and
   its rules, configuration, and entry points are documented in
-  `src/linter/README.md` (see ADR-0082). `src/lsp/` is the language
+  `src/linter/README.md`. `src/lsp/` is the language
   server, `alcy lsp`: it publishes the linter's diagnostics, the
   formatter's edit, the checked struct layouts, the compiler AST's
   outline, and the CST's folds over JSON-RPC, and re-implements none of
   the analysis behind them, and definition and references read the
-  checker's recorded resolutions rather than resolving a name again
-  (see ADR-0083, ADR-0084, ADR-0085). `src/fuzz/` holds
+  checker's recorded resolutions rather than resolving a name again.
+  `src/fuzz/` holds
   the fuzz targets, which need libFuzzer and are therefore outside
   `all`.
   The toolchain's own documentation is in `src/docs/`.
@@ -155,8 +154,7 @@ what implements it lives in `src/`.
 - `treesitter/` - the language's tree-sitter grammar, a second reading of
   `docs/spec/` for editors. It is not a GN target and shares no build with
   the compiler; `tools/check_treesitter.py` checks it against the
-  specification's corpus and against the compiler itself. See
-  `docs/adr/0041-alcy-treesitter-grammar.md`.
+  specification's corpus and against the compiler itself.
 - `site/` - the published site: one page tree per language (English at
   the site root, `/ja/` beside it), the shared shell under
   `site/shared/`, and the browser playground under `site/playground/`;
@@ -165,7 +163,6 @@ what implements it lives in `src/`.
   which also stamps the landing and playground templates per language. `tools/site.py` builds it into `site/dist/`, combining
   those sources with the grammar and the compiler's wasm module;
   `.github/workflows/site.yaml` deploys that directory to GitHub Pages.
-  See `docs/adr/0058-the-site-its-generator-and-the-guide.md`.
 
 ## Compiler modules
 
@@ -183,10 +180,10 @@ state between stages beyond the data explicitly passed along.
 | `analyzer`                | Name resolution and type checking on the AST: module imports, types, and bodies. Ownership is `borrow`'s, over lowered IR.                            | No heap allocation on hot paths; operates over immutable views where possible.  |
 | `lowering`                | AST-to-IR lowering: a checked package becomes verifier-ready IR storage, reusing the checked type table in place.                                     | Borrows the caller's arena, sources, and interner; owns the storage it returns. |
 | `borrow`                  | Ownership checking over lowered IR: use-after-move, borrow exclusivity, assignment to borrowed places, and reference escape.                          | No heap allocation; per-block states live in the pass's own frames.             |
-| `opt`                     | The release IR passes: over verified lowered storage, rebuilt through the verifier (ADR-0067).                                                        | One rebuilt storage per run; release builds only.                               |
-| `overlay`                 | The build's arithmetic checks beside the shared IR: one walk turns the profile's policy into per-instruction entries the backends realize (ADR-0068). | One entry table per build; the IR is borrowed, never copied.                    |
+| `opt`                     | The release IR passes: over verified lowered storage, rebuilt through the verifier.                                                        | One rebuilt storage per run; release builds only.                               |
+| `overlay`                 | The build's arithmetic checks beside the shared IR: one walk turns the profile's policy into per-instruction entries the backends realize. | One entry table per build; the IR is borrowed, never copied.                    |
 | `pipeline`                | Project-level build flow: package discovery, source loading, and per-file stage orchestration. It calls every stage; none calls the next.             | Explicit phase boundaries and arena resets.                                     |
-| `pipeline/test`           | The test run: the package under test spliced into one module tree, compiled to one executable, and executed a process per test (ADR-0139).            | One executable per run in a scratch directory; owned argument strings.          |
+| `pipeline/test`           | The test run: the package under test spliced into one module tree, compiled to one executable, and executed a process per test.            | One executable per run in a scratch directory; owned argument strings.          |
 | `testgen`                 | Stands for test generation. The tree a run enters through: `test` blocks spliced into free functions and a driver `main` calling them.                | Owned source text for the driver; AST nodes come from the pipeline's arena.     |
 | `cli/test_command`        | The `alcy test` verb: what it refuses (a suite, a target that cannot start a process), the selection, the listing, and the per-test report.           | Standard allocation; setup-time work only.                                      |
 | `pkg`                     | Stands for `package`. Package manifests (`alcy.toml`) and the toolchain file: parsed bytes, never a file opened.                                      | Arena-backed views; no heap allocation in the model itself.                     |
@@ -300,6 +297,31 @@ Key design points:
   built with `SeqBuilder`, which enforces contiguity; blocks requiring forward
   references use explicit backpatch setters.
 
+Two representation decisions sit beside these points:
+
+- **Large aggregates live in memory, not in a value.** A type whose
+  size reaches `IN_MEMORY_AGGREGATE_BYTES` (4096) is never an SSA
+  value: its register holds the address of a frame slot, a read
+  materializes the load, and a call passes the slot - a parameter
+  crosses as a pointer to the caller's slot, and a result crosses in
+  a slot the caller names as argument zero. The threshold is a
+  compiler decision rather than a target's: past a bound, one
+  target's instruction selector cannot build the value and the
+  compiler died inside it, and 4096 keeps the memory path one shape
+  while the values that stay in registers stay small.
+- **An ownership end is placed per place, per CFG path.** Lowering
+  journals an end site for each place that leaves scope and records
+  `Move` markers and stores; the drop pass solves ownership per place
+  over the CFG - owned, moved, or maybe - appends an end where every
+  path owns, splits edges where the paths differ, and decides a
+  still-maybe state at run time behind a per-place flag. A place is a
+  local plus a path of steps (a field index, a tuple slot, or an
+  enum's variant and payload field), and the journal, the drop walk,
+  and the borrow pass read the same path back. A match's
+  whole-scrutinee move carries `subsumes_parts`, the one flag that
+  lets a whole move subsume the part moves its arms placed; lowering
+  sets it there and nowhere else.
+
 The detailed IR construction contract, opcode conventions, and storage layout
 are documented in [ir.md](ir.md).
 
@@ -325,6 +347,16 @@ allocation behavior predictable.
   compiler data structures must remain clear across module boundaries.
   Non-owning views must not outlive the storage they reference.
 
+- **The process allocator is the compiler's**: `src/base/allocator.cc`
+  replaces the global `operator new` with a per-thread size-class
+  cache. Classes step 16 bytes to 256 and 64 bytes to 4 KiB; a block
+  carries a 16-byte header naming its class, a request above the
+  largest class falls through to the system allocator with the same
+  header, and free lists and chunks are per thread and never handed
+  back. Sanitizer builds keep the system allocator, and over-aligned
+  requests use its aligned pair. The change sits below the arenas and
+  containers, which keep their interfaces.
+
 The allocation model is an architectural contract on hot paths. New
 allocating mechanisms in lower-level infrastructure require explicit
 consideration of their effect on these contracts.
@@ -347,7 +379,7 @@ consideration of their effect on these contracts.
 
 Validation happens at trust boundaries - the public API of each module -
 and nowhere else by default. The contract (decided in
-[`docs/adr/0015-boundary-validation.md`](../../docs/adr/0015-boundary-validation.md)) is:
+) is:
 
 - **Public API is checked-only.** Every public entry point that accepts
   externally supplied or independently constructible data returns
@@ -375,8 +407,7 @@ and nowhere else by default. The contract (decided in
   builds `CliConfig`, dispatches, and maps exit codes; it performs no
   semantic validation of source, manifests, module graphs, or IR.
   Pipeline entries validate their raw request once and pass validated
-  targets down, so the same check is never implemented twice
-  (`docs/adr/0042-the-pipeline-resolves-the-target.md`).
+  targets down, so the same check is never implemented twice.
 
 ## Pipeline & data flow
 
@@ -439,8 +470,7 @@ that happens to read them.
    lowers alcy IR operations to LLVM IR. The program runtime — `alcy_alloc`,
    `alcy_dealloc`, `alcy_print`, `alcy_println`, `alcy_panic`, and
    `alcy_sys_write`, over libc — is defined in that same module, so a build
-   spawns no compiler for it and it is optimized with the program
-   ([`docs/adr/0023-program-runtime-in-process.md`](../../docs/adr/0023-program-runtime-in-process.md)).
+   spawns no compiler for it and it is optimized with the program.
 
 A test run walks the same stages over a different tree, and it is the only
 mode in which the items a stage reads are not the ones the package's files
@@ -448,8 +478,7 @@ declare. Before name resolution, `pipeline` resolves the package's `test`
 blocks: each entry and each helper becomes a free function of the module that
 wrote it, the module the run enters through keeps its items and not its entry
 point, and a generated module supplies the entry point that calls the selected
-tests in order
-([`docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`](../../docs/adr/0139-a-test-is-an-item-the-test-command-owns.md)).
+tests in order.
 Nothing below that step changes, which is the point: a test resolves its
 module's siblings and dependencies exactly as that module does, so it is
 resolved, lowered, and emitted by the same code as the program it belongs to.
@@ -473,7 +502,7 @@ declare it, and the trace is what says whether it is still being walked.
 
 The frontend's stages are the unit of work for parallelism, one function per
 thread, in the order that makes each one independent of the one before it:
-[`docs/adr/0046-the-frontend-cost-is-per-function.md`](../../docs/adr/0046-the-frontend-cost-is-per-function.md)
+
 records the measurements that put the stages in that order and the one whose
 blocker is a data structure rather than scratch. A target without threads
 runs each of those units inline, which is why none of them needs a second
@@ -482,7 +511,7 @@ path.
 ## LLVM integration
 
 The compiler links against a private LLVM fork
-(`third_party/llvm`, see [`docs/adr/0002-llvm-fork-prebuilt.md`](../../docs/adr/0002-llvm-fork-prebuilt.md)).
+(`third_party/llvm`; see [build.md](build.md)).
 The LLVM dependency is an implementation detail of the active code-generation
 backend; compiler IR must remain independent of LLVM-specific types and
 policies.
@@ -496,8 +525,8 @@ with a from-source fallback. Build and platform details are documented in
 
 Verification is layered by bug class, and no layer substitutes for another. A
 compiler can be memory-safe, crash-free, and still lower a program to the wrong
-value, so each layer names what it can see. The rationale and the rejected
-alternatives are in [`docs/adr/0017-verification-strategy.md`](../../docs/adr/0017-verification-strategy.md); the
+value, so each layer names what it can see. The rationale is the layer table below, and the
+rejected alternatives are the layers it does not list; the
 contributor-facing rules are in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#testing-rules).
 
@@ -518,8 +547,8 @@ cost. The fuzzer's answer depends on where its corpus has got to, so a
 per-push run would mostly re-verify what it already knows.
 
 CI runs `tools/check.sh` as a job, so the check a contributor runs is the check
-the server runs; `docs/adr/0040-checks-live-beside-the-builds.md` records which
-job each check lives in and why.
+the server runs, and which job each check lives in is recorded
+beside the workflow definitions.
 `tools/measure_checks.py` times every check against lint, the largest, and is a
 report rather than a check.
 
@@ -579,7 +608,7 @@ for testing the filesystem or writing an output artifact.
   is built: targets, dependencies, and package identity. `.alcy/` beside
   it holds how the goal package is built on this machine: the link
   driver and its arguments in `toolchain.toml`, and the named build
-  profiles in `profile.toml` (ADR-0069); a dependency's `.alcy/` is
+  profiles in `profile.toml`; a dependency's `.alcy/` is
   never read. CLI flags carry invocation-scoped, user-specific
   configuration: presentation (`--color`, `--lang`, verbosity), local
   paths, parallelism, and the selection of a build profile, whose
@@ -608,6 +637,16 @@ for testing the filesystem or writing an output artifact.
 - **No untracked allocation**: New allocating utilities in low-level
   infrastructure must be evaluated against the zero-allocation contracts of
   the hot-path stages.
+
+- **The wasm shadow stack is sized by the program, not pinned**: the
+  direct wasm backend runs every function on a shadow stack placed
+  between the data segment and the heap. The reserve is the sum of the
+  frames the emitted functions take plus the entry wrapper's result
+  slot, rounded to 16 bytes, never below 64 KiB and never above
+  64 MiB, and every bump - a frame prologue, the entry wrapper's
+  result slot, a variable-length `Alloca` - compares against it and
+  panics with `stack overflow`. A program whose frames fit natively
+  therefore runs identically on wasm.
 
 ## Scope beyond the current compiler
 

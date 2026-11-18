@@ -9,7 +9,7 @@
 //
 // The containers with lookup algorithms, `Map` and `Set`. The heap is
 // `alloc`'s, the string `text`'s, and the buffer `Vec` is `alloc`'s
-// too; see docs/adr/0016-suites-and-the-std-split.md.
+// too.
 
 pub use package::map::Map;
 pub use package::map::MapEntryIter;

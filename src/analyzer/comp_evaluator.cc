@@ -228,7 +228,7 @@ u32 CompEvaluator::callee_inst(const CheckedModule::CallTarget* target) const {
     // A method with its own type arguments carries the instantiation its
     // body was checked under; a plain method's is its receiver's. The
     // definition-site key the generic pass writes names no instantiation
-    // (ADR-0079), so it falls back rather than reading a body that was
+    //, so it falls back rather than reading a body that was
     // recorded against declared parameters as if it were a value.
     if (info.method_inst != NO_INST && info.method_inst != PARAM_INST) {
       return info.method_inst;

@@ -50,7 +50,7 @@ pub spec PartialOrd {
 
 // A total order: every pair compares, so `partial_cmp` never returns
 // `None` and `cmp` names the single answer. `Ord` requires
-// `PartialOrd` for the same type (ADR-0053).
+// `PartialOrd` for the same type.
 pub spec Ord: PartialOrd {
   fn cmp(self: &Self, other: &Self) -> Ordering;
 }
@@ -65,7 +65,7 @@ pub spec PartialEq {
 
 // Reflexivity: `a == a` always holds. The spec declares no method of
 // its own; an implementation is the promise, and it requires a
-// `PartialEq` implementation for the same type (ADR-0053).
+// `PartialEq` implementation for the same type.
 pub spec Eq: PartialEq {
 }
 

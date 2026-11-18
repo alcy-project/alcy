@@ -8,7 +8,7 @@
 // sides: the parity case pins the published vectors. Every multiply
 // and add wraps explicitly, because a hash's arithmetic is defined to
 // wrap while a program's is checked. `Map` hashes its keys through
-// `xxh3_64`; see `docs/adr/0074-the-stds-hash-lives-in-core.md`.
+// `xxh3_64`.
 
 const PRIME_1: u64 = 0x9e3779b185ebca87u64
 

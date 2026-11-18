@@ -15,8 +15,7 @@
 namespace pkg {
 
 // Build profiles for the goal package. The file is optional; absent
-// means the built-in profiles and nothing else. See
-// docs/adr/0069-build-settings-live-in-named-profiles.md.
+// means the built-in profiles and nothing else.
 constexpr std::string_view PROFILE_FILE_NAME = "profile.toml";
 
 // What a panic does before it ends the program: write its message, or

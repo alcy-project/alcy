@@ -31,7 +31,7 @@ enum class DiagCode : u8 {
   ProfileSemanticError = 6,
   // A dependency requires a pre-1.0 version as a range: the grammar
   // accepts it, and a minor may break, so the advice is a lint
-  // (ADR-0057) rather than a parse error.
+  //  rather than a parse error.
   PreMinorRequirement = 7,
 };
 

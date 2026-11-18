@@ -1,6 +1,6 @@
 // A destructor's body moves a field of its receiver into a binding and
 // ends another in place: each value ends once, and the binding ends what
-// it took where the body's scope exits (docs/spec/values.md, ADR-0137).
+// it took where the body's scope exits (docs/spec/values.md).
 
 struct Res {
   buf: &mut MaybeUninit<u8>,

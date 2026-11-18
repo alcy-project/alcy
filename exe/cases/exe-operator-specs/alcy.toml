@@ -8,7 +8,7 @@ include = ["main"]
 
 # The implementing side of the seal: the arithmetic specs live with
 # the operators they name, so a package outside the standard library
-# lists the ones it implements (ADR-0053).
+# lists the ones it implements.
 [spec]
 implement = ["Add", "Sub", "Mul", "Div", "Rem", "Neg"]
 

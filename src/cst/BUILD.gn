@@ -4,7 +4,7 @@
 # The lossless front end that reads source the way it was written: the
 # compiler's lexer supplies the tokens, this layer adds back the comments
 # it treats as trivia and nests delimiters into a tree that keeps every
-# byte. The formatter consumes it (ADR-0081); the linter that comes will
+# byte. The formatter consumes it ; the linter that comes will
 # too, which is why it is a module of its own and not the formatter's
 # private half. It is the tools' counterpart to ast/: one tree per kind
 # of reader.

@@ -30,7 +30,7 @@ enum class DiagCode : u8 {
   // A move consumed a place reached through a reference, which
   // would leave the referent owned by two places at once.
   MoveOutOfBorrow = 5,
-  // A move consumed a value whose type holds an anchor (ADR-0085).
+  // A move consumed a value whose type holds an anchor.
   UnmovableMoved = 6,
 };
 

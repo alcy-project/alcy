@@ -274,7 +274,7 @@ struct PackageSources {
   std::vector<analyzer::DependencyPackage> dependencies;
   // Every package's spec policy: the root's, each path dependency's,
   // and each selected staged member's, in that order. The tree borrows
-  // the rows while it is checked (ADR-0053).
+  // the rows while it is checked.
   std::vector<analyzer::PackagePolicy> policies;
   usize file_count = 0;
 };
@@ -466,7 +466,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   for (const LoadedDependency& dependency : dependencies) {
     // A package a summary answers for spells its surface once, after the
     // tree's own sources were parsed, and each of its modules takes the
-    // items the surface holds for it (ADR-0078).
+    // items the surface holds for it.
     std::optional<analyzer::SummarySurface> surface;
     if (dependency.artifact.has_value()) {
       surface = analyzer::spell_summary_surface(
@@ -505,7 +505,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
       spelled.summary_generic_names = generic_names;
       if (dependency.artifact.has_value()) {
         // The artifact lives in the run's dependency table, so the
-        // tree may borrow its storage and interner (ADR-0079).
+        // tree may borrow its storage and interner.
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
         const ir::LoadedIr& artifact = *dependency.artifact;
         spelled.summary_storage = &*artifact.storage;
@@ -666,7 +666,7 @@ base::Result<Artifact, diag::Reported> resolve_target(
   target.tree = std::move(tree).unwrap();
   target.file_count = sources.file_count;
   // A dependency a summary answered for contributes its own object to
-  // the link (ADR-0078).
+  // the link.
   for (const analyzer::DependencyPackage& dependency : sources.dependencies) {
     if (!dependency.object.empty()) {
       target.linked_objects.emplace_back(dependency.object);
@@ -836,7 +836,7 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     }
   }
   // A member's artifacts belong to the suite: one out/ for the whole
-  // suite, one directory per member (ADR-0057).
+  // suite, one directory per member.
   path::Path output_dir = root.join(path::DEFAULT_OUT_DIR);
   const std::optional<EnclosingSuite>& suite = package.suite;
   if (suite.has_value() && package.member) {

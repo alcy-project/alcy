@@ -701,7 +701,7 @@ class Resolver {
         continue;
       }
       // An explicit import shadows the facade's; two explicit imports
-      // under one name are still an ambiguity (ADR-0016's two
+      // under one name are still an ambiguity (two
       // surfaces: the facade is a default, not a lock).
       if (!prior.injected) {
         const u32 index = bag.emit<i18n::Key::AnalyzerDuplicateImport>(
@@ -808,7 +808,7 @@ class Resolver {
     if (head == "package") {
       // The root of the package this module belongs to: each package's
       // modules hang under their own root, so the top of the parent
-      // chain is that root (ADR-0060).
+      // chain is that root.
       current = module;
       while (parents[current] != NO_MODULE) {
         current = parents[current];
@@ -830,7 +830,7 @@ class Resolver {
       }
       if (current == NO_MODULE) {
         // `super` and `crate` are habits from neighboring languages and
-        // name nothing here; say what the root is (ADR-0060).
+        // name nothing here; say what the root is.
         if (head == "super" || head == "crate") {
           const u32 index = bag.emit<i18n::Key::AnalyzerPathHeadNotSupported>(
               DiagCode::SpellingSuggestion, path.segments[0].span, head);
@@ -1066,7 +1066,7 @@ class Resolver {
     }
     // A selected standard-library member is a package root: a `use`
     // head names one (`sys::raw::write`), from the user's package and
-    // from a member beside it (ADR-0016's follow-up). Reachability is
+    // from a member beside it (follow-up). Reachability is
     // not trimmed to a member's `[modules] export` yet, and a member's
     // facade stays the only implicit surface.
     for (const PackagePolicy& policy : package_policies_) {

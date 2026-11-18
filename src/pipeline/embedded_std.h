@@ -41,7 +41,7 @@ extern const usize STD_PACKAGE_COUNT;
 // (`[spec] suite-only` in its manifest), by member name. Generated the
 // way the dependency table is, and for the same reason: the compiler
 // never parses a staged member's manifest, so this table is where its
-// seal is read (ADR-0053); see tools/embed_std.py.
+// seal is read ; see tools/embed_std.py.
 struct StdPackageSeals {
   const char* name;
   const std::string_view* suite_only;

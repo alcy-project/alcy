@@ -1,6 +1,6 @@
 // A value parameter's count is part of the instance: the storage has
 // that many elements, writes stay inside it, and distinct counts are
-// distinct types (ADR-0054).
+// distinct types.
 
 struct ArrayVec<T, N: usize> {
   data: [T; N],

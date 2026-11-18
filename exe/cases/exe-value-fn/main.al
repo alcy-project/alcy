@@ -1,6 +1,6 @@
 // Generic functions with value parameters run: each turbofish count is
 // its own instance, arrays keep that many elements, and a value
-// parameter may shape only the signature (ADR-0054).
+// parameter may shape only the signature.
 
 fn first<T, N: usize>(a: [T; N]) -> T {
   ret a[0]

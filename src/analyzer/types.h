@@ -32,7 +32,7 @@ constexpr u32 NO_INST = 0xFFFFFFFFu;
 
 // Sentinel for the definition-site check's instantiation key: a
 // generic body checked once against its parameters records under this
-// key (ADR-0079), and a later pass keys on it to leave the body to the
+// key, and a later pass keys on it to leave the body to the
 // specialization pass.
 constexpr u32 PARAM_INST = 0xFFFFFFFEu;
 
@@ -46,7 +46,7 @@ constexpr std::string_view MAYBE_UNINIT_NAME = "MaybeUninit";
 constexpr u32 NO_SPEC = 0xFFFFFFFFu;
 
 // One `comp fn` call an engine answered, kept whole so the other
-// engine can be asked the same question (ADR-0054): the declaration,
+// engine can be asked the same question: the declaration,
 // the instantiation, the evaluated arguments, and the result.
 // `comp_args` are the actuals of the callee's `comp` parameters, the
 // ones the specialization key is made of; `args` are every argument,
@@ -104,16 +104,15 @@ struct CheckedModule {
     // functions only, whatever order the declarations appear in.
     bool is_method = false;
     // Calling this function is an operation that needs an unsafe
-    // block (ADR-0050).
+    // block.
     bool is_unsafe = false;
     // A `comp fn`: the call is evaluated during compilation only
-    // (ADR-0054).
     bool is_comp = false;
-    // An `extern "C"` declaration (ADR-0051): the name is the symbol
+    // An `extern "C"` declaration: the name is the symbol
     // the linker resolves, and the body lives outside the program.
     bool is_extern = false;
     // A parameter written `args: ..` collects the call's remaining
-    // arguments (ADR-0055). Only the compiler-expanded functions carry
+    // arguments. Only the compiler-expanded functions carry
     // one, and the slot is not part of `params`.
     bool is_variadic = false;
   };
@@ -332,7 +331,7 @@ struct CheckedModule {
     u32 inst = NO_INST;
     // The nominal type this literal interned: a one-field struct whose
     // field is the environment tuple. The value owns its captures, and
-    // its `Copy`-ness is the environment's (ADR-0064).
+    // its `Copy`-ness is the environment's.
     ir::TypeIdx self_type = ir::TypeIdx::invalid();
     // The bare function type the literal coerces to. The view of a
     // nominal borrows the value's environment, so both forms share one
@@ -447,7 +446,7 @@ struct FnInstance {
 };
 
 // One generic item whose body the definition-site check checked once
-// (ADR-0079): the signature it resolved under the item's own type
+// : the signature it resolved under the item's own type
 // parameters, which the lowering emits as the parametric function.
 struct ParametricBody {
   u32 module = 0;
@@ -463,7 +462,7 @@ struct ParametricBody {
   u32 param_count = 0;
   // A body whose compile-time values read a parameter's layout: the
   // value is the instantiation's to answer, so the item stays checked
-  // at its calls (ADR-0079).
+  // at its calls.
   bool per_instantiation = false;
 };
 
@@ -481,7 +480,7 @@ struct CheckedPackage {
   // same instantiation order as the signature they registered.
   std::vector<FnInstance> fn_insts;
   // The generic items the definition-site check checked once, in the
-  // order it reached them (ADR-0079).
+  // order it reached them.
   std::vector<ParametricBody> parametric_bodies;
   // Maps a struct/enum field storage copy back to the type it was
   // copied from, as (copy, origin) pairs. Lowering follows these so a
@@ -495,10 +494,10 @@ struct CheckedPackage {
   std::vector<CheckedModule::DropGlue> drop_glue;
   std::vector<u8> needs_drop;
   // Comp fn calls the checker's evaluator answered, for the IR engine's
-  // differential run after lowering built the storage (ADR-0054). The
+  // differential run after lowering built the storage. The
   // checker's own reader has no lowered IR to offer while it runs.
   std::vector<CompCallRecord> comp_calls;
-  // Types that are never moved (ADR-0085): the anchor and anything
+  // Types that are never moved: the anchor and anything
   // holding one. Parallel to the type table.
   std::vector<u8> not_movable;
   // One spec declaration, in checker order. A MethodInfo's spec field
@@ -567,7 +566,6 @@ std::vector<ir::TypeIdx> witness_key(std::span<const ir::TypeIdx> args,
 
 // Whether a path head is one the module walk owns: the two relative forms
 // and the two neighbor-language spellings that get their own message
-// (ADR-0060).
 bool module_walk_head(std::string_view head);
 
 // Whether a type position mentions any of a declaration's type parameters.

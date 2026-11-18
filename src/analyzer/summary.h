@@ -19,7 +19,7 @@ namespace analyzer {
 // A summarized library spelled into the syntax arena: the modules its
 // surface names and the items each holds. The items carry no bodies, so
 // nothing in the package is lowered, and the checker registers them the
-// way it registers a source dependency (ADR-0078). The caller keeps
+// way it registers a source dependency. The caller keeps
 // `summary` alive for as long as the tree uses the names it spells.
 struct SummarySurface {
   // The identity a `use` spells for the package.

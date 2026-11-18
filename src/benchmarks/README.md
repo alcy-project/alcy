@@ -3,8 +3,8 @@
 The measurement engine: a runner over pluggable fixtures, a statistics
 pool, and the cases themselves. What a number from each case means, and
 which cases exist, are the contract in
-[`benchmarks/README.md`](../../benchmarks/README.md); `docs/adr/0021` is
-the design.
+[`benchmarks/README.md`](../../benchmarks/README.md); the design notes
+that engine chose live in the release history.
 
 - `runner.cc` measures one case under a policy (iterations or a time
   budget), rejecting noise rather than averaging it away.

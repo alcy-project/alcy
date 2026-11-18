@@ -145,7 +145,7 @@ TEST_CASE("A package created in a suite joins it") {
         std::string::npos);
   const std::string member = io::read_file(dir.join("tools/cli/alcy.toml"));
   // A member takes the suite's identity by spelling the inheritance;
-  // nothing travels between manifests otherwise (ADR-0057).
+  // nothing travels between manifests otherwise.
   CHECK(member.find("version.suite = true") != std::string::npos);
   CHECK(member.find("license.suite = true") != std::string::npos);
   // The suite root owns the build output its members share, so the

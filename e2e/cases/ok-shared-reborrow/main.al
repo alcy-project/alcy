@@ -1,6 +1,6 @@
 // A shared receiver already hands out borrows of its fields, and the
 // place stays readable afterwards. What the borrow checker cannot model
-// is a place whose type is itself a reference; see docs/adr/0012-reborrow-on-reference-read.md.
+// is a place whose type is itself a reference.
 struct Cell {
   n: i32,
   tag: i32,

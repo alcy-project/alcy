@@ -1,5 +1,5 @@
 // `Map` equality compares live entries: the same keys with values that
-// compare through `PartialEq` (ADR-0053).
+// compare through `PartialEq`.
 
 fn main() -> i32 {
   mut a := Map::<i32>::new()

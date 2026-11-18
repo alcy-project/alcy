@@ -43,7 +43,6 @@ struct SpellContext {
   // The dependency's identity: a spelled path opens its package by the
   // name a `use` writes, so a signature resolves in the module that
   // holds the item and in a dependent that reads the declaration
-  // (ADR-0079).
   std::string_view identity;
   // The artifact's interner, which every row's ids resolve in.
   const ir::SymbolTable& artifact_strings;
@@ -306,7 +305,7 @@ void remember_name(
 }
 
 // Whether a row names a body the summary carries rather than code a
-// symbol links: the writer lists the parametric bodies (ADR-0079).
+// symbol links: the writer lists the parametric bodies.
 bool is_carried_body(const ir::Storage& storage, ir::FunctionIdx function) {
   return function.is_valid() && storage.is_parametric(function);
 }
@@ -316,7 +315,7 @@ std::optional<ast::Ident> spell_segment(const SpellContext& ctx,
 ast::TypeIdx spell_type(const SpellContext& ctx, ir::TypeIdx type);
 
 // The names a declaration's parameters carry, by the index the node
-// records: the spelling a signature uses to name one (ADR-0079).
+// records: the spelling a signature uses to name one.
 bool spell_declared_params(const SpellContext& ctx,
                            ir::TypeIdxRange params,
                            std::vector<ast::GenericParam>& out) {
@@ -381,7 +380,7 @@ std::optional<ast::TypeIdx> spell_nominal_path(const SpellContext& ctx,
   }
   segments.push_back(*last);
   // A nominal's own arguments ride with the path: a generic declaration
-  // reference names what its parameters stand for (ADR-0079).
+  // reference names what its parameters stand for.
   std::vector<ast::TypeIdx> args;
   if (args_type.is_valid() && args_type.idx < ctx.storage.types().size()) {
     const ir::TypeNode& node = ctx.storage.types()[args_type];
@@ -594,7 +593,7 @@ bool spell_function(const SpellContext& ctx,
   }
   const ir::FunctionMeta& meta = storage.functions()[function_index].meta;
   // A method's parameters start with its impl's, which the impl
-  // declares; only the rest belong to the method (ADR-0079).
+  // declares; only the rest belong to the method.
   u32 impl_params = 0;
   if (meta.owner.is_valid() && meta.owner.idx < storage.types().size()) {
     const ir::TypeNode& owner = storage.types()[meta.owner];

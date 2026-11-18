@@ -1,7 +1,6 @@
 # The IR format
 
-alcy's lowered IR has two written forms, decided in
-[ADR-0056](../../docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md):
+alcy's lowered IR has two written forms:
 
 - **text** (`--emit=ir`, `.ir`) is a view for people. It is write-only:
   there is no parser, and nothing reads it back.
@@ -186,7 +185,7 @@ prints as a bare number.
 
 The arithmetic opcodes carry the language's operations, whose overflow
 behavior is the build's: a debug profile lowers them with checks, a
-release profile without (ADR-0065). The `*Wrap` opcodes are the
+release profile without. The `*Wrap` opcodes are the
 program's explicit wrapping forms, so they wrap in every profile; a
 compiler-generated step that must wrap says so through them rather
 than through a source operator.
@@ -245,7 +244,7 @@ the writer are not preserved and MUST NOT be written.
 **TYPES**: `count` × `{ tag u8, pad u8[3], payload u32 }`. `payload`
 is the row in the tag's composite table, or 0 for a primitive tag. A
 type parameter's payload is the parameter's index instead: a parameter
-is not a row in a table (ADR-0079).
+is not a row in a table.
 
 **STRUCTS**: `{ name u32 (string), fields_head u32, fields_size u32,
 params_head u32, params_size u32 }`.
@@ -325,7 +324,7 @@ none, and a reader answers empty for those.
 
 **SUMMARY**: `count` × `{ function u32, type u32, name u32, path u32,
 symbol u32, owner u32, kind u8, flags u8, reserved u8[2] }`, the package's
-public surface for a dependent to resolve against (ADR-0078). A row names
+public surface for a dependent to resolve against. A row names
 one of two things: a function row puts the `FUNCTIONS` row whose signature
 carries the item in `function`, and a nominal row puts the `TYPES` row it
 declares in `type`. The field the kind does not use is `U32_MAX`, so an
@@ -350,7 +349,7 @@ carries none.
 
 **PARAMETRIC_CALLEES**: `count` × `{ kind u8, pad u8[3], function u32,
 spec u32, method u32, args_head u32, args_size u32 }`, the callees a
-parametric body cannot name (ADR-0079, ADR-0080). A `Generic` row puts
+parametric body cannot name. A `Generic` row puts
 the generic item's parametric function in `function`; a `Dispatch` row
 puts the spec's `TYPES` row in `spec` and the method's name in `method`.
 `args` is the type-argument range the definition-site check resolved, and
@@ -358,20 +357,20 @@ the field the kind does not use is `U32_MAX`. Absent means none.
 
 **PARAMETRIC_FUNCTIONS**: `count` × `function u32`, the functions emitted
 once in their parametric form; the specialization pass clones them per
-instantiation and no backend receives them (ADR-0079). Absent means none.
+instantiation and no backend receives them. Absent means none.
 
 **PRELUDE_SPECIALIZATIONS**: `count` × `function u32`, the
 specializations of staged items a build lowered; a reported count
-excludes them (ADR-0079). Absent means none.
+excludes them. Absent means none.
 
 **SYNTHETIC_FUNCTIONS**: `count` × `function u32`, the bodies the
 specialization pass synthesized (`drop$`, `display$`); a reported count
-excludes them (ADR-0079). Absent means none.
+excludes them. Absent means none.
 
 **TYPE_TRAITS**: `u32 needs_drop_size, u8[needs_drop_size], u32
 not_movable_size, u8[not_movable_size]`, one byte per type of the
 storage's type table: whether ending a value of the type runs code, and
-whether one is never moved (ADR-0085). A dependent's merge copies the
+whether one is never moved. A dependent's merge copies the
 entries its carried types reached, so a destructor or an anchor the
 writer measured crosses with them. Absent means the writer measured
 neither.

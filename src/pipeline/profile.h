@@ -23,7 +23,7 @@ struct BuildProfile {
   bool optimize = false;
   pkg::OnPanic on_panic = pkg::OnPanic::Abort;
   // Whether the source arithmetic's checks are materialized; `debug` and
-  // a profile the file defines say on, `release` says off (ADR-0068).
+  // a profile the file defines say on, `release` says off.
   bool overflow_checks = true;
 };
 

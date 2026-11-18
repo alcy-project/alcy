@@ -10,8 +10,7 @@ it is implemented.
   variant after a discriminant read, and an array's elements in a loop.
   A move out of a type with its own `drop` is refused, except for a field
   of the destructor's own receiver, and `Vec::grow` moves elements rather
-  than ending them. See
-  `docs/adr/0013-destructors-consume-their-value.md`.
+  than ending them.
 - Generic structs, generic enums, generic free functions, and generic
   intrinsics are not deferred: they intern per instantiation,
   and `impl<T> Name<T>` methods specialize per instantiation. A generic
@@ -31,9 +30,9 @@ it is implemented.
   and the intersection a struct composes by, which today hold because a
   reborrow carries its parent's loans rather than because the relation
   is solved. Region-annotated captures solve it by inference, with no
-  written lifetimes; see `docs/adr/0076-region-annotated-captures.md`.
+  written lifetimes.
   Each rule is stated as a case the
-  conformance suite runs. See `docs/adr/0012-reborrow-on-reference-read.md`.
+  conformance suite runs.
 - `spec` (trait) bounds on type parameters, `where` clauses, and
   monomorphization beyond today's per-instantiation interning (enums,
   structs, free functions, methods, and spec methods where the impl is
@@ -64,19 +63,22 @@ it is implemented.
 - A test entry with a return type, and above all one that returns
   `Result` and fails by yielding a value: an entry reports success by
   returning, so an expectation that does not hold has no value to hand
-  back and aborts the process instead. See
-  `docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`.
+  back and aborts the process instead.
 - `break` with a value; `main` returning richer types.
 - `pub(...)` restricted visibility; glob imports.
 - `f16`, 128-bit integers, posit, and decimal types; `char`/`Ascii`/
   grapheme semantics in core (see `types.md`).
 - Interior mutability; mutable statics; `const`-position extensions.
+- The across-thread markers (`Send`/`Sync`), structural and derived
+  like `Movable`, land with the first concurrency package that needs
+  them. Memory shared outside the process is outside the language's
+  types and is a contract each owning package documents per operation.
 - Attribute system in full (`#[repr(C)]` and beyond).
 
 ## Toolchain
 
-- The `alcy/std` suite is selected per manifest and staged in pieces
-  (`docs/adr/0016-suites-and-the-std-split.md`): `[dependencies]` names members or the whole suite, the
+- The `alcy/std` suite is selected per manifest and staged in pieces:
+  `[dependencies]` names members or the whole suite, the
   closure is required rather than pulled in, and only the selected
   members become prelude facades. What remains is `[modules] export`
   enforcement for standard-library members, cross-package `use`

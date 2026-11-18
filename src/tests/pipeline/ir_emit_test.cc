@@ -256,8 +256,7 @@ TEST_CASE("The ir mode answers a release build the same artifact") {
                                   .link = LinkOptions{}},
                         EmitMode::Ir, full_std_selection());
   // The unoptimized IR form is the cacheable artifact and does not
-  // follow the profile, so a release build is answered, not refused
-  // (ADR-0067, amended).
+  // follow the profile, so a release build is answered, not refused.
   CHECK(built.is_ok());
 
   PipelineContext binary_ctx{i18n::Language::EnUs};
@@ -272,8 +271,7 @@ TEST_CASE("The ir mode answers a release build the same artifact") {
 TEST_CASE("An ir-binary build carries the summary only for a library") {
   // A dependent reads a library's summary and never a bin's: the build
   // names the library's public surface, carries a generic body a
-  // dependent instantiates, and skips what is private (ADR-0078,
-  // ADR-0079).
+  // dependent instantiates, and skips what is private.
   io::TempDir dir = io::TempDir::create_unique("alcy_ir_summary_test_");
   const bool setup =
       dir.write_file(

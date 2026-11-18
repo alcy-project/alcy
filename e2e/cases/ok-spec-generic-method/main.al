@@ -1,7 +1,7 @@
 // A specification's method may declare type parameters of its own, and a
 // concrete record reaches it: the arguments the declaration's bounds are
 // compared with are the implementation's, which are the specification's,
-// not the record's, which carries none (ADR-0028).
+// not the record's, which carries none.
 spec Named {
   fn name(self: &Self) -> i32;
 }

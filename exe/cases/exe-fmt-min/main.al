@@ -1,6 +1,6 @@
 // The digits of the smallest value of a signed type: the formatter
 // takes the magnitude by a wrapping subtraction, so the checked build
-// does not abort on a value the signed range cannot hold (ADR-0066's
+// does not abort on a value the signed range cannot hold (
 // rule that nothing is undefined).
 fn main() -> i32 {
   a: i32 := -2147483648i32

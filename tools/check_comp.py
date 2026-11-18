@@ -6,7 +6,7 @@
 """The compile-time evaluator's census over the acceptance corpus.
 
 Lowering hands its IR to the backends and to the second engine
-(ADR-0054), and the corpus is where the two are asked to agree. Every
+, and the corpus is where the two are asked to agree. Every
 case that compiles is written in the binary IR form and handed to the
 comp_census driver, which runs each function the engine can start and fails
 while the engine reports a compiler bug or a refusal it has not

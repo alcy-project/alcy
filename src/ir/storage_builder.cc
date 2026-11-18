@@ -74,7 +74,7 @@ std::vector<u32> index_map(const std::vector<bool>& marked) {
 // marked entry marks what it names, and the walk repeats until nothing
 // new is marked. The copy that follows moves only these, so a dependent
 // holds what its carried bodies reach rather than the library's whole
-// lowered storage (ADR-0079).
+// lowered storage.
 struct Reached {
   enum class Kind : u8 {
     Type,

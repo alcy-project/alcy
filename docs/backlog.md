@@ -37,7 +37,7 @@ replaced. The foundations are in `roadmap.md`.
   where the time goes inside `llvm.memset` expansion at `-O0` is
   unmeasured.
 
-- [ ] The closure's parametric half (ADR-0116, ADR-0079 slice two):
+- [ ] The closure's parametric half (slice two):
   the spelling is bound to `core`'s `Fn` by identity, a hand-spelled
   `Fn` bound instantiates, and a call on a closure nominal is a direct
   call to the function its literal registered. What remains is the
@@ -45,7 +45,7 @@ replaced. The foundations are in `roadmap.md`.
   declaration's type parameters, the return slot binds once instead of
   per instantiation, the stand-in and the per-instantiation witness
   record retire, and a call the parameter's type decides records a
-  dispatch the specialization resolves (ADR-0080).
+  dispatch the specialization resolves.
 
 - [ ] The IR resolves its semantic operations in place, step by step
   (the multi-level direction, MLIR-like without rebuilds): a construct
@@ -53,9 +53,8 @@ replaced. The foundations are in `roadmap.md`.
   knows them - dispatch and drops for the specialization pass - and
   later passes patch what they resolve instead of rebuilding the IR.
   Enum projections and a copy's alignment already resolve at emission;
-  that is the boundary's first shape. The decision
-  (`docs/adr/0079-a-generic-item-crosses-as-its-checked-body.md`)
-  started the boundary informally. Generalize it, and decide whether
+  that is the boundary's first shape. The decision that opened it was
+  written informally. Generalize it, and decide whether
   the borrow pass moves to the semantic side and whether fine-grained
   in-place patching needs more than `take_state` + `StorageBuilder`,
   when the profile asks.
@@ -74,13 +73,13 @@ replaced. The foundations are in `roadmap.md`.
   a loan's place or a conservative rule worth keeping.
 
 - [ ] The embedded linker beyond this host: startup discovery hard-codes
-  Linux paths, only the ELF driver is embedded, and ADR-0049's M3 (the
+  Linux paths, only the ELF driver is embedded, and M3 (the
   wasm lld driver and the portable full compiler) is unstarted.
 
 - [ ] IR cache shared across profiles and machines. The lowered IR is
   one artifact per pointer width: a test lowers one source under two
   64-bit triples and compares the bytes (`pipeline/ir_emit_test.cc`),
-  the release passes run after this boundary (ADR-0067), and the
+  the release passes run after this boundary, and the
   serialized form states the width in its header. The cache itself —
   a store keyed by package digest, dependency closure, format
   version, and pointer width, serving debug and release and every
@@ -106,11 +105,11 @@ replaced. The foundations are in `roadmap.md`.
 - [ ] Borrow-pass scratch sized by the program, not the function: the
   arrays are allocated at package size and each function clears only the
   entries it names. The final pass's per-worker memory cost is why
-  spreading it lost by measurement (ADR-0047), so the sizing waits for a
+  spreading it lost by measurement, so the sizing waits for a
   reason to spread it.
 
 - [ ] Two handles over one exclusive loan: a closure that owns nothing
-  is not moved (its captures are borrows, ADR-0064), so `h := g` on a
+  is not moved (its captures are borrows), so `h := g` on a
   closure holding a `&mut` capture gives two handles that share one
   loan, which `exe-closure-capture-mut` expects; whether both may write
   through it is the borrow checker's question rather than the move
@@ -129,14 +128,14 @@ replaced. The foundations are in `roadmap.md`.
   floor of about sixteen significant digits stands meanwhile.
 
 - [ ] The direct-wasm stack budget: recursion deeper than the reserve
-  holds panics with "stack overflow" (ADR-0141), a per-target limit
+  holds panics with "stack overflow", a per-target limit
   native does not share and no spec states. The frame a statement with a
   slot or a constant-count alloca takes is never returned either, so a
   function's frame grows with the statements it spells, and the reserve
   it feeds is the sum over the whole program rather than its deepest
   chain.
 
-- [ ] Owning function types (ADR-0075) beyond parameters and returns:
+- [ ] Owning function types beyond parameters and returns:
   a method's `fn(...)` parameter infers from its arguments, a turbofish
   spells only the parameters a declaration writes, and the return
   position takes its witness from the body's first `ret` - free
@@ -227,8 +226,7 @@ replaced. The foundations are in `roadmap.md`.
   a `Copy` element survives (`ok-borrow-owned-element`) and an owning
   one keeps reading as borrowed from the container
   (`err-borrow-live-owned` pins the `push` conflict); handing it back
-  needs the region a loan carries rather than a fixed range, which
-  ADR-0012 records as the work that replaces this.
+  needs the region a loan carries rather than a fixed range, which the region model records as the work that replaces this.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
 
@@ -238,14 +236,14 @@ replaced. The foundations are in `roadmap.md`.
   entry: two builds of one dirty tree share every key.
 
 - [ ] A reference to a slice is fat, so an option over one carries a
-  discriminant (ADR-0087 promises no niche there). The data pointer's
+  discriminant (the specification promises no niche there). The data pointer's
   null pattern is still spare: teach the niche a fat null - a null pair
   as the fieldless spell, and the discriminant read through the data
   pointer - and `Option<&[T]>` is two words again.
 
 - [ ] Compile-time reflection, read-only: the blocker for the struct
   flavor of input, a clap-like argument parser, and serde-like
-  (de)serialization (ADR-0129, ADR-0130). Its record lands with the
+  (de)serialization. Its record lands with the
   design, after expansion; the floor is read-only and comp-only, with
   no runtime type information and no generative types.
 
@@ -261,7 +259,7 @@ replaced. The foundations are in `roadmap.md`.
   from one that broke. An entry with a return type - `Result<(), E>`, the
   form the entry point already takes - would let a run report `Err` as a
   failure in the error's own words, and let a test keep the error it
-  expects rather than aborting on it. ADR-0009 keeps `Result` an ordinary
+  expects rather than aborting on it. The language keeps `Result` an ordinary
   `core` enum, so the run would have to read a type it does not own, and
   a package that shadows the name would change what the run reads.
 

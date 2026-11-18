@@ -61,7 +61,7 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
   lowering::LoweredPackage package_ir = std::move(lowered).unwrap();
   // Reported counts exclude the parametric bodies, the specializations
   // of staged items, and the bodies the pass synthesized: no source
-  // function stands for one (ADR-0079). The storage's lists are the
+  // function stands for one. The storage's lists are the
   // authority, so a loaded package counts what a freshly lowered one
   // does.
   const usize hidden = package_ir.prelude_functions +

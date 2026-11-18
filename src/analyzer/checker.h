@@ -38,7 +38,7 @@ namespace analyzer {
 
 // Whether a parameter's annotation makes it a value parameter: exactly
 // one annotation, and that annotation a primitive scalar (`N: usize`).
-// A `+` list and every other annotation are bounds (ADR-0028), so a
+// A `+` list and every other annotation are bounds, so a
 // declaration's `T: Display` is a bounded type parameter.
 inline bool is_value_param(const ast::AstArena& ast,
                            const ast::GenericParam& param) {
@@ -66,7 +66,7 @@ inline bool is_value_param(const ast::AstArena& ast,
 
 // Whether a parameter's annotation is the owning-function bound
 // spelling (`F: Fn<...>`), written or desugared. Its witness is a fact
-// of the instantiation (ADR-0116), so an item that declares one stays
+// of the instantiation, so an item that declares one stays
 // checked at its calls.
 inline bool is_fn_bound(const ast::AstArena& ast,
                         const ast::GenericParam& param) {
@@ -239,14 +239,14 @@ class Checker {
   // The last instance minted for each (module, item, argument digest), so
   // a request walks only the instances that can answer it.
   std::unordered_map<u64, u32> fn_instance_head_;
-  // The definition-site check's bodies (ADR-0079), and the record the
+  // The definition-site check's bodies, and the record the
   // check in progress fills. A nested body check - a const dependency
   // reached from inside one - must not touch it: only the check_fn the
   // once-check called records.
   std::vector<ParametricBody> parametric_bodies;
   // The items a body was checked once for: a call instantiates their
   // signature and the lowering clones the body, so no per-instantiation
-  // AST walk runs (ADR-0079).
+  // AST walk runs.
   std::unordered_set<u32> once_checked_items;
   ParametricBody* param_record_ = nullptr;
   // Shared instantiation numbering that keys lowering side tables.
@@ -336,7 +336,7 @@ class Checker {
   std::vector<u32> copy_inside_;
   // Comp fn calls the const pre-pass answered, carried on the checked
   // package so lowering can compare them against the IR engine once the
-  // storage exists (ADR-0054).
+  // storage exists.
   std::vector<CompCallRecord> comp_calls_;
   // Interned name every `MaybeUninit` wrapper carries.
   str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
@@ -372,7 +372,7 @@ class Checker {
   // The declared parameters of the item the definition-site check is
   // in, by the index an `ir::TypeTag::Param` node carries: a method's
   // scope is the receiver's impl parameters first, then the item's
-  // own (ADR-0079). Pushed only by `check_generic_bodies`.
+  // own. Pushed only by `check_generic_bodies`.
   std::vector<const ast::GenericParam*> param_scope_;
   // Every spec's direct super, by index, or U32_MAX; filled with the
   // rest of the super-spec walk before bounds are checked.
@@ -425,7 +425,7 @@ class Checker {
     bool comp_known = false;
     // Whether the binding's declared type is an owning function type:
     // the witness its instantiation fixed is the one value the slot
-    // holds, so the place cannot be reassigned (ADR-0075).
+    // holds, so the place cannot be reassigned.
     bool own_fn = false;
     // Index into the innermost closure's capture list when this local
     // is a capture binding, or NO_CAPTURE otherwise.
@@ -501,7 +501,7 @@ class Checker {
 
   std::vector<LocalScope> scopes;
   // Nonzero inside an `unsafe { ... }` block: the operations the opt-in
-  // covers may appear there (ADR-0050). A closure literal written
+  // covers may appear there. A closure literal written
   // inside the block inherits it, because the rule is lexical.
   u32 unsafe_depth = 0;
   // One declared capture while its closure's body is checked: the
@@ -549,7 +549,7 @@ class Checker {
   // boundary a `ret` may not cross.
   u32 comp_depth = 0;
   // Nonzero while checking an argument a comp parameter takes: the
-  // argument is a compile-time value the callee reads (ADR-0054).
+  // argument is a compile-time value the callee reads.
   u32 comp_argument_depth_ = 0;
   // Verifies comp-known-ness while block scopes are still alive
   // (comp blocks and their nested bodies).
@@ -560,11 +560,11 @@ class Checker {
   // value, so the annotation must resolve to an integer.
   void validate_generic_annotations();
   // Only a compiler-expanded function may declare `args: ..`
-  // (ADR-0055); the expansion is what gives the slot meaning.
+  // ; the expansion is what gives the slot meaning.
   void validate_variadic_parameters();
   bool is_expanded_variadic(ast::ItemIdx item) const;
   // The recorder the const pre-pass's evaluator reports through; the
-  // records ride the checked package to lowering (ADR-0054).
+  // records ride the checked package to lowering.
   static void record_comp_call(void* context, const CompCallRecord& record);
   NominalEntry* find_nominal(u32 module, std::string_view name);
   NominalEntry* find_nominal_wide(u32 module, std::string_view name);
@@ -573,7 +573,7 @@ class Checker {
   // The package `module` belongs to, by the identity a `use` spells:
   // the root package's name, a dependency's, or a staged member's.
   std::string_view package_of(u32 module) const;
-  // Whether a value of the type may be moved (ADR-0085): the walk
+  // Whether a value of the type may be moved: the walk
   // normalizes storage copies through the checker's origin links.
   bool is_movable(ir::TypeIdx type);
   // Whether a value of the type may be copied. Copy is structural
@@ -581,7 +581,7 @@ class Checker {
   // makes the type move-only, so the walk answers with the destructor
   // walk the drop phase would run.
   bool is_copy(ir::TypeIdx type);
-  // ADR-0085: a type argument is Movable. A nominal checks its argument
+  // : a type argument is Movable. A nominal checks its argument
   // list where it instantiates; a function's or a method's arguments
   // bind on paths of their own, so each instantiation asks this before
   // it proceeds. A value argument carries a `Const` type and is not a
@@ -611,8 +611,7 @@ class Checker {
   const PackagePolicy* policy_of(std::string_view package) const;
   // Whether `module` writes inside the staged suite: a staged source,
   // or a module of the root package when that package is a member a
-  // test run stages in place of its embedded copy (ADR-0090,
-  // ADR-0139). A dependency's package carries the suite it was loaded
+  // test run stages in place of its embedded copy. A dependency's package carries the suite it was loaded
   // from, and that alone does not put its code inside the suite.
   bool in_staged_suite(u32 module) const;
   // A spec visible from `module`: declared there, imported, or
@@ -622,7 +621,6 @@ class Checker {
   // `find_spec_in_scope`, a qualified one through the module it walks
   // to. The concrete check and the definition-site pass both resolve
   // through here, so one spelling cannot bind two declarations
-  // (ADR-0079).
   SpecEntry* find_spec_path(u32 module, ast::PathIdx path);
   // Whether `spec` answers method calls from `module`: declared
   // there, imported under any local name, or injected from a facade.
@@ -632,7 +630,7 @@ class Checker {
   // parameters, which arrive with bounds.
   void register_spec(u32 module, ast::ItemIdx item);
   // Verifies a staged compiler-owned spec against the canonical table
-  // (ADR-0053, ADR-0116); true for every other spec.
+  // ; true for every other spec.
   bool check_operator_spec(const ast::ItemSpec& declaration);
   // Whether every parameter an impl block declares is named by its
   // target type, which is where a block's parameters bind; false when
@@ -676,7 +674,7 @@ class Checker {
   // that never named it. U32_MAX when no spec carries the name.
   u32 bound_spec(u32 module, std::string_view name);
   // Whether `type` implements `spec`, directly or through a refined
-  // spec (`Eq` carries `PartialEq`, ADR-0028). `spec_args` are the
+  // spec (`Eq` carries `PartialEq`). `spec_args` are the
   // bound's arguments, empty when it names none.
   bool implements_spec(ir::TypeIdx type,
                        u32 spec,
@@ -712,7 +710,7 @@ class Checker {
   // The bounds a specification's method declaration states, checked
   // against the arguments a call spelled for it. An implementation may
   // leave a bound out, so the declaration is the only place that says
-  // what the call owes (ADR-0028). Answers false when the declaration
+  // what the call owes. Answers false when the declaration
   // names no such method, and false when a bound fails.
   bool check_spec_method_bounds(u32 spec,
                                 std::string_view name,
@@ -729,7 +727,7 @@ class Checker {
   std::string type_display_at(ir::TypeIdx type, usize depth) const;
   // Resolves every declared super-spec, rejects cycles, and requires an
   // implementation of each ancestor beside every implementation of a
-  // spec (ADR-0053). Runs after every module's signatures registered,
+  // spec. Runs after every module's signatures registered,
   // so a super declared later still resolves.
   void check_superspecs();
   // Synthesizes one spec method entry for a generic instantiation
@@ -766,7 +764,7 @@ class Checker {
   ir::TypeIdx intern_uninit(ir::TypeIdx payload);
 
   // The nominal type a closure literal interns: a one-field struct
-  // whose field is its environment tuple (ADR-0064). Every literal
+  // whose field is its environment tuple. Every literal
   // gets its own, because the code a value calls is the literal's.
   ir::TypeIdx intern_closure(ir::TypeIdx env);
   // One anonymous nominal per method type parameter, so a declaration
@@ -788,8 +786,8 @@ class Checker {
   // Declared type parameters of a function or method item.
   std::span<const ast::GenericParam> fn_generic_params(ast::ItemIdx item) const;
   // An owning function type in parameter or return position
-  // (ADR-0075): the spelling desugars to a synthetic generic parameter
-  // bounded by the `Fn` spec its signature names (ADR-0116), and this
+  // : the spelling desugars to a synthetic generic parameter
+  // bounded by the `Fn` spec its signature names, and this
   // record is what the desugar keeps: the synthetic name, the spelled
   // signature the return position checks its body's answer against,
   // and the name a diagnostic shows. Storage keeps spans and names
@@ -863,7 +861,7 @@ class Checker {
   // Whether `type` answers a call with exactly `params` and `ret`: a
   // closure nominal's recorded signature, or a function view's own.
   // The comparison the `Fn` bound's satisfaction and the return
-  // position's witness check share (ADR-0116).
+  // position's witness check share.
   bool is_callable_with(ir::TypeIdx type,
                         std::span<const ir::TypeIdx> params,
                         ir::TypeIdx ret);
@@ -879,7 +877,7 @@ class Checker {
   // Whether calling the function or intrinsic item is an operation
   // that needs an unsafe block.
   bool fn_is_unsafe(ast::ItemIdx item) const;
-  // Whether the function item carries the `comp fn` marker (ADR-0054).
+  // Whether the function item carries the `comp fn` marker.
   bool fn_is_comp(ast::ItemIdx item) const;
   // A type parameter a declared parameter type pins on its own. The
   // flags say where in the argument the bound type sits: `through_ref`
@@ -1043,7 +1041,7 @@ class Checker {
   // nominal instance's arguments, a reference's pointee, a
   // sequence's element, a tuple's parts. Fields are not walked: an
   // instance names its parameters through its arguments, and every
-  // layout it has follows from them (ADR-0079).
+  // layout it has follows from them.
   bool layout_names_param(ir::TypeIdx type) const;
   // Whether the type is a reference to an unsized value, or a tuple or
   // array holding one. Such a reference is a two-word aggregate, so the
@@ -1054,7 +1052,7 @@ class Checker {
   ir::TypeIdx primitive_by_name(std::string_view name);
   // The type a two-segment value path's head names when it is a scalar
   // spelling or a bound type parameter; an error type when it is
-  // neither (ADR-0133).
+  // neither.
   ir::TypeIdx head_named_type(std::string_view name);
   static const char* pretty_tag(ir::TypeTag tag);
   bool types_equal(ir::TypeIdx a, ir::TypeIdx b);
@@ -1286,7 +1284,7 @@ class Checker {
   // The compiler-owned operator spec `name` declared in staged core, or
   // U32_MAX when the standard library is not staged or declares none.
   u32 operator_spec(std::string_view name) const;
-  // The closure capability `core` declares (ADR-0116): compiler-owned
+  // The closure capability `core` declares: compiler-owned
   // the way the operators are, so a closure's implementation is known
   // by identity and needs no `use`.
   u32 fn_spec() const;
@@ -1295,7 +1293,7 @@ class Checker {
   bool spec_refines(u32 declared, u32 required) const;
   // The spec the `fmt` package declares under `name`, or U32_MAX when
   // the package is not staged or declares none. `Display` is known by
-  // identity, the way `write` and `format` are (ADR-0055), so a
+  // identity, the way `write` and `format` are, so a
   // placeholder needs no `use` of the package.
   u32 fmt_spec(std::string_view name) const;
   // Whether `type` formats through `fmt`'s `Display` spec: the method
@@ -1601,14 +1599,13 @@ class Checker {
                          ast::ExprIdx expr,
                          const ir::TypeIdx* expected);
   // A callee reached through a resolved signature: an unsafe one needs
-  // an `unsafe { ... }` block at the call site (ADR-0050).
+  // an `unsafe {... }` block at the call site.
   void check_unsafe_call(const CheckedModule::FnSig* fn, diag::Span span);
   // A `comp fn` call happens during compilation only; outside comp
-  // evaluation it is an error (ADR-0054).
+  // evaluation it is an error.
   void check_comp_fn_call(const CheckedModule::FnSig* fn, diag::Span span);
   // An operation the opt-in covers must spell it: with no enclosing
   // `unsafe { ... }` block, the diagnostic names the operation
-  // (ADR-0050).
   void require_unsafe(diag::Span span, std::string_view what);
   // A closure literal: parameters bind from annotations or the
   // expected function type, the body checks as a function body,
@@ -1785,7 +1782,7 @@ class Checker {
   ir::TypeIdx check_stmt(u32 module, ast::StmtIdx stmt);
   bool contains_mut_ref(ir::TypeIdx idx, std::vector<u32>& visited);
   // Answers whether the definition-site check recorded a body a call
-  // may stand in for (ADR-0079): false for a nested or concrete
+  // may stand in for: false for a nested or concrete
   // check, and for a body that keeps its per-instantiation check.
   bool check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self);
   // Appends one function instance with the digest of its arguments and
@@ -1818,7 +1815,7 @@ class Checker {
   };
   void check_main(u32 module, ast::ItemIdx fn);
   void check_bodies();
-  // Checks every generic body once, against its parameters (ADR-0079):
+  // Checks every generic body once, against its parameters :
   // a dedicated pass whose type-parameter scope is the Param nodes and
   // whose records carry PARAM_INST, so no other check and no lowering
   // reads them. An item whose parameters cannot stand in yet - a value
@@ -1831,7 +1828,7 @@ class Checker {
   // false for a value parameter or an owning `fn()` slot.
   bool parametric_scope_ok(std::span<const ast::GenericParam> impl_params,
                            std::span<const ast::GenericParam> own) const;
-  // What the definition-site check did for one item's body (ADR-0079):
+  // What the definition-site check did for one item's body :
   // a call instantiates a once-checked body and the lowering clones it,
   // while anything else keeps its per-instantiation check.
   enum class StandIn : u8 { Once, PerInstantiation };
@@ -1845,13 +1842,13 @@ class Checker {
   // Whether the record a check is making belongs to the definition-
   // site pass: calls then resolve signatures without checking callee
   // bodies, and a receiver naming a parameter dispatches through its
-  // declared bounds (ADR-0080).
+  // declared bounds.
   bool parametric_mode() const;
   // Whether a type names a type parameter, directly or behind one
   // reference: such a value's operators dispatch through the
   // parameter's declared bounds.
   bool is_param_value(ir::TypeIdx type) const;
-  // A call through a value whose type is a type parameter (ADR-0080):
+  // A call through a value whose type is a type parameter :
   // the parameter's `Fn` bound provides `call`, and the call's
   // arguments are the elements of the bound's tuple.
   ir::TypeIdx check_param_call(u32 module,
@@ -1886,7 +1883,7 @@ class Checker {
                        std::vector<DeclaredBound>& out);
   // Whether the parameter's declared bounds include `spec` over
   // `spec_args`: the implication a parametric call checks in place of
-  // an implementation (ADR-0080).
+  // an implementation.
   bool param_declares_bound(u32 index,
                             u32 spec,
                             std::span<const ir::TypeIdx> spec_args,

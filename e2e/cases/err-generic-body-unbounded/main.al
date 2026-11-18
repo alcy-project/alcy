@@ -1,5 +1,5 @@
 // A call on an unbounded type parameter is refused at the definition
-// (ADR-0080): the body may only use what its bounds declare, and this
+// : the body may only use what its bounds declare, and this
 // one declares nothing.
 struct Counter {
   n: i32,

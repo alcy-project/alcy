@@ -1,5 +1,4 @@
 // A parameter is Movable, and a value holding an anchor is not
-// (ADR-0085).
 struct Pinned {
   held: Anchor,
 }

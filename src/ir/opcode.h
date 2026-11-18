@@ -106,7 +106,7 @@ enum class Opcode : u8 {
   // or a payload field, and the representation - a tag slot or a
   // niche's spare pattern, the payload's offsets - belongs to the
   // backend, because a body whose type arguments are not known yet
-  // cannot commit to a layout (ADR-0079's landing).
+  // cannot commit to a layout (landing).
   // The discriminant at an enum place, as i32: operands = [place].
   EnumTagLoad,
   // Makes an enum place hold a variant: operands = [place, tag(i32)].
@@ -122,7 +122,6 @@ enum class Opcode : u8 {
   // may be an address. A parametric body cannot know whether the place
   // runs a destructor, so the end waits for the specialization, which
   // rewrites it to the concrete end or drops it. No backend meets one
-  // (ADR-0079).
   ParametricDrop,
 
   // Fills `len` bytes at `dst` with `byte` repeated:

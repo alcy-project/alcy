@@ -1,4 +1,4 @@
-// A sequence ends the elements it drops from first to last (ADR-0086).
+// A sequence ends the elements it drops from first to last.
 
 struct D {
   id: i32,

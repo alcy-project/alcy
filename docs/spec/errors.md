@@ -5,7 +5,7 @@
 - `Result<T, E>` and `Option<T>` are ordinary generic enums defined in
   the `alcy/std/core` prelude. The compiler holds no knowledge of
   their names, shapes, or methods; a user module may shadow either
-  name. See `docs/adr/0009-result-option-library-enums.md`.
+  name.
 - `Result` has variants `Ok(T)` and `Err(E)`; `Option` has `Some(T)`
   and `None`. Both compose as ordinary algebraic types for region
   purposes (field intersection and projection apply unchanged).
@@ -13,7 +13,7 @@
   `or_panic_with_message`, `or_panic_with`), the predicates (`is_some`,
   `is_none`, `is_ok`, `is_err`), and the closure combinators (`map`,
   `and_then`, `filter`, `ok_or`) as ordinary `impl` methods. No method
-  named `unwrap` or `expect` exists, and none may be added (ADR-0088):
+  named `unwrap` or `expect` exists, and none may be added:
   a name that can abort says so.
 
 ## The `?` operator
@@ -38,7 +38,7 @@
   not localized; only compiler diagnostics follow `--lang`.
 - A profile with `on-panic = "backtrace"` additionally prints one
   indented `at <name>` line per program frame the panic walked through,
-  innermost first, before aborting (see `docs/adr/0070-a-panic-can-carry-a-backtrace.md`).
+  innermost first, before aborting.
   A frame with a known call site appends it: `at f (main.al:6:3)`.
   An optimized build shows the frames that survived inlining, which can
   be just `main`; a target whose frame pointer is not that chain -
@@ -71,7 +71,6 @@
   the module already declares, a name a second block item takes, and
   `main` are each refused: the first two put one name in one namespace
   twice, and the third takes the entry point a test run supplies itself.
-  See `docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`.
 - A test fails by panicking, and a panic is all a test can fail with:
   there is no error value and no unwinding, so an expectation is an
   ordinary expression that panics when it does not hold, and the

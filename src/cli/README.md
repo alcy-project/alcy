@@ -34,7 +34,7 @@ answer: the result line, the time-trace summary, `--help`, `--version`,
 and the whole `--json` document. A `--json` test run captures the bytes
 its tests write to standard output and counts them as
 `stats.output_bytes`, so the document stays the only thing on the
-channel. `docs/adr/0033-errors-on-stderr-results-on-stdout.md`
+channel.
 has the reasoning; `Interruption` is the split for an invocation that
 stopped before a command ran.
 

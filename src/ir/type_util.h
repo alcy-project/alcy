@@ -88,7 +88,7 @@ inline constexpr TypeTag unsigned_integer_type(TypeTag tag) {
 // instance's arguments or fields, a reference's pointee, a sequence's
 // element, a tuple's parts, or a function's signature. A signature that
 // names one has no layout to lower; the specialization pass is what
-// settles it (ADR-0079). `path` is the visit stack, so a recursive type
+// settles it. `path` is the visit stack, so a recursive type
 // reaches itself once.
 [[nodiscard]] bool type_names_param(const StorageState& state,
                                     TypeIdx type,

@@ -61,7 +61,7 @@ bool Checker::is_float_tag(ir::TypeTag tag) const {
 }
 
 // Whether the backend compares the type directly. A nominal type or
-// `str` compares through `PartialEq` (ADR-0053); a tuple or array does
+// `str` compares through `PartialEq` ; a tuple or array does
 // so when each element can be compared directly, because the builtin
 // comparison is element-wise.
 
@@ -92,7 +92,7 @@ bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
   return false;
 }
 
-// Whether a type's layout depends on a parameter (ADR-0079).
+// Whether a type's layout depends on a parameter.
 bool Checker::layout_names_param(ir::TypeIdx type) const {
   if (!type.is_valid() || type.idx >= builder.types().size()) {
     return false;
@@ -297,7 +297,7 @@ bool Checker::types_equal_inner(ir::TypeIdx a,
     case ir::TypeTag::Param: {
       // The index is the identity: one node serves every item's
       // position with that index, and each item's own scope says what
-      // the position means (ADR-0079).
+      // the position means.
       return builder.types()[a].as_param().value ==
              builder.types()[b].as_param().value;
     }
@@ -473,7 +473,7 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
     return actual;
   }
   // A closure value coerces to the function type its environment fits:
-  // the view borrows the environment the value owns (ADR-0064).
+  // the view borrows the environment the value owns.
   if (const ClosureSig* closure = closure_sig_of_type(actual);
       closure != nullptr && tag_of(expected) == ir::TypeTag::Func) {
     const ir::FuncType shape =

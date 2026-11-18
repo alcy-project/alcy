@@ -33,7 +33,7 @@ namespace analyzer {
 
 // Whether an operand of an operator reaches a spec: a nominal
 // dispatches through its implementation and a type parameter through
-// its declared bounds (ADR-0080).
+// its declared bounds.
 static bool operator_dispatch_tag(ir::TypeTag tag) {
   return tag == ir::TypeTag::Struct || tag == ir::TypeTag::Enum ||
          tag == ir::TypeTag::Param;
@@ -859,7 +859,7 @@ bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
 }
 
 // A standard-output write of the staged `io` package: recognized by the
-// package its item is declared in, like fmt's (ADR-0055).
+// package its item is declared in, like fmt's.
 bool Checker::is_io_print(const CheckedModule::FnSig* fn) const {
   if (fn->name != "print" && fn->name != "println" && fn->name != "eprint" &&
       fn->name != "eprintln") {
@@ -971,7 +971,7 @@ ir::TypeIdx Checker::check_path_expr(u32 module,
         return error_type();
       }
       // A `comp fn` value outside comp evaluation is a deferred call
-      // that compilation cannot produce (ADR-0054).
+      // that compilation cannot produce.
       if (fn->is_comp && comp_eval_depth == 0) {
         check_comp_fn_call(fn, span);
         return error_type();
@@ -1163,7 +1163,7 @@ ir::TypeIdx Checker::check_fmt_write(u32 module,
     return error_type();
   }
   // Every argument after the buffer is a format argument; they are the
-  // tuple the expansion builds (ADR-0055). A nominal argument formats
+  // tuple the expansion builds. A nominal argument formats
   // through `Display`, and the call is recorded on the argument so
   // lowering can reach it.
   std::vector<ir::TypeIdx> elements;
@@ -1225,7 +1225,7 @@ ir::TypeIdx Checker::check_fmt_format(u32 module,
     return error_type();
   }
   // Every argument after the format string is a format argument; they
-  // are the tuple the expansion builds (ADR-0055).
+  // are the tuple the expansion builds.
   std::vector<ir::TypeIdx> elements;
   elements.reserve(args.size() - 1);
   for (usize i = 1; i < args.size(); ++i) {
@@ -1486,7 +1486,7 @@ ir::TypeIdx Checker::check_closure(u32 module,
       builder.func_type(seq.finish(), storage_copy(ret));
   // The literal's own type is the nominal whose one field is the
   // environment; a context that wants a bare function type gets the
-  // view, which lowering builds as a borrow of the value (ADR-0064).
+  // view, which lowering builds as a borrow of the value.
   // A literal checked twice keeps the type it interned first.
   ir::TypeIdx self_type = ir::TypeIdx::invalid();
   for (const CheckedModule::ClosureLit& prior : modules[module].closures) {
@@ -1538,7 +1538,7 @@ ir::TypeIdx Checker::check_closure(u32 module,
   return self_type;
 }
 
-// A call through a value whose type is a type parameter (ADR-0080):
+// A call through a value whose type is a type parameter :
 // the `Fn` bound the parameter declares provides `call`, its `args`
 // parameter is the arguments as one tuple, and the call spells them
 // out. The definition-site check's records key PARAM_INST.
@@ -1649,7 +1649,7 @@ ir::TypeIdx Checker::check_indirect_call(u32 module,
 
 // Calling an unsafe function is an operation the opt-in covers: the call
 // site must be inside an `unsafe { ... }` block, and an unsafe
-// function's own body is not one implicitly (ADR-0050).
+// function's own body is not one implicitly.
 void Checker::check_unsafe_call(const CheckedModule::FnSig* fn,
                                 diag::Span span) {
   if (fn == nullptr || !fn->is_unsafe || unsafe_depth > 0) {
@@ -1982,7 +1982,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   const CheckedModule::MethodInfo* method = lookup_method(
       nominal, name, module, node.span, spec_only, U32_MAX, method_type_args);
   // The fallback does not rescue a refusal a bound already reported
-  // (ADR-0080): the definition-site dispatch named the parameter, and
+  // : the definition-site dispatch named the parameter, and
   // the generic message would only repeat it.
   if (method == nullptr && !spec_only && !bound_failure_) {
     bound_failure_ = false;
@@ -1991,7 +1991,7 @@ ir::TypeIdx Checker::check_method_call(u32 module,
         node.payload.get<ast::ExprMethodCall>().args, span);
   }
   // A method whose declaration is `unsafe` needs the opt-in at its call
-  // site, the way a free function does (ADR-0050).
+  // site, the way a free function does.
   if (method != nullptr && method->item.is_valid() &&
       fn_is_unsafe(method->item) && unsafe_depth == 0) {
     const u32 index = bag.emit<i18n::Key::AnalyzerUnsafeCall>(
@@ -2344,7 +2344,6 @@ ir::TypeIdx Checker::check_struct_expr(u32 module,
 // `?` propagates within one enum type: the scrutinee and the enclosing
 // return type must be the same type. The first variant yields its
 // first payload; any other variant returns the scrutinee unchanged.
-// See docs/adr/0009-result-option-library-enums.md.
 ir::TypeIdx Checker::check_question(u32 module,
                                     ast::ExprIdx expr,
                                     const ir::TypeIdx* expected) {
@@ -3267,7 +3266,7 @@ bool Checker::patterns_cover(std::span<const ir::TypeIdx> types,
   }
   // A column whose type is a type parameter cannot be reasoned about:
   // the parameter stands for a type the body has not been specialized
-  // against, so the arms may well cover it (ADR-0079). Leaving it
+  // against, so the arms may well cover it. Leaving it
   // alone is the answer that does not refuse a correct program.
   for (const ir::TypeIdx type : types) {
     if (type.is_valid() &&
@@ -4096,7 +4095,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       // reference would need a second reference alive, so the
       // mutability of the operand is preserved. A raw pointer names
       // the same kind of place, but dereferencing one is an operation
-      // the opt-in covers (ADR-0050).
+      // the opt-in covers.
       const ir::TypeIdx inner =
           check_expr(module, node.payload.get<ast::ExprDeref>().inner, nullptr);
       if (is_error(inner)) {
@@ -4165,7 +4164,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
           const bool comparable = is_builtin_comparable(operands);
           if (!comparable) {
             // A nominal type compares through the sealed `PartialEq`
-            // spec (ADR-0053); `str` does too, byte comparison the core
+            // spec ; `str` does too, byte comparison the core
             // suite declares. Everything else has no comparison.
             if (operator_dispatch_tag(tag) || tag == ir::TypeTag::Str) {
               return check_spec_equality(module, expr, operands, expected);
@@ -4361,7 +4360,7 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
         const ast::ExprIdx returned = node.payload.get<ast::ExprReturn>().value;
         // A return-position `fn()` declaration has no argument to bind
         // it: the value this `ret` names is the witness, and the
-        // signature takes it from here (ADR-0075). The anchor sticks
+        // signature takes it from here. The anchor sticks
         // once named: a declared return type never drifts, while an
         // error slot takes the first return it sees so later returns
         // and the trailing value have something to meet. Only broken
@@ -4672,7 +4671,7 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           const std::string_view name = segments[0].name;
           // Nothing answers to the name, so the line is almost
           // certainly a declaration that wrote `=` for `:=`
-          // (ADR-0061); report that instead of the unresolved value
+          // ; report that instead of the unresolved value
           // the place check would add.
           if (lookup_local(name) == nullptr && value_param(name) == nullptr &&
               lookup_static(module, name) == nullptr &&
@@ -4687,7 +4686,7 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
           }
           if (const Local* local = lookup_local(segments[0].name)) {
             // The slot holds the one witness its instantiation fixed,
-            // so a second value cannot take the place (ADR-0075).
+            // so a second value cannot take the place.
             if (local->own_fn) {
               const u32 index =
                   bag.emit<i18n::Key::AnalyzerOwnFunctionReassign>(

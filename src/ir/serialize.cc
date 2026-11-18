@@ -331,7 +331,7 @@ class Serializer {
       case TypeTag::F64: return std::bit_cast<u64>(immutable.data.f64_value);
       // A parameter's literal keeps canonical 64 bits - an integer's
       // value or a float's IEEE pattern - until the substitution names
-      // the type (ADR-0079).
+      // the type.
       case TypeTag::Param: return immutable.data.u64_value;
       default: return immutable.data.ptr;
     }

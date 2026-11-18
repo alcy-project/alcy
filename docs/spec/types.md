@@ -14,13 +14,13 @@
   modulo the type's width, and `MIN / -1` wraps. Division or
   remainder by zero always panics, `MIN % -1` is zero, and no
   arithmetic operation is undefined. The policy belongs to the build,
-  not to the module (ADR-0065, ADR-0068), so one lowered program
+  not to the module, so one lowered program
   serves every profile; `wrapping_add`, `wrapping_sub`, and
   `wrapping_mul` name the wrapping forms for code that wants them in
   every profile. A constant expression is evaluated at compile time
   and never follows the profile: an overflow in `+`, `-`, and `*` and
   a zero divisor are errors there, while an overshift and a signed
-  `MIN / -1` keep the defined results above (ADR-0065).
+  `MIN / -1` keep the defined results above.
 - `a ** b` is integer-only, repeated squaring under `*`'s checks: a
   negative exponent panics, `x ** 0` is one (`0 ** 0` included), and a
   float `**` is undefined - the operator is declared for integers only.
@@ -34,9 +34,10 @@
   cast between a float and an integer truncates toward zero, and a
   value the destination cannot hold saturates - its minimum below
   the destination's range and its maximum above it, with NaN becoming
-  zero (ADR-0077). A cast is never undefined and never traps, and a
-  constant expression answers the value the program would read (ADR-0065
-  reserves errors for the checked arithmetic, not for casts).
+  zero. A cast is never undefined and never traps, and a
+  constant expression answers the value the program would read
+  (the arithmetic rules reserve errors for checked arithmetic, not
+  for casts).
 
 ## Tuples
 
@@ -62,7 +63,7 @@
 ## Sizes
 
 - Every value's size is known at compile time, and a type without a
-  size has no values: it appears only as a borrow's pointee (ADR-0083).
+  size has no values: it appears only as a borrow's pointee.
   A parameter, return, local, field, array element, and type argument
   is a sized type, so layout, moves, and ABI lowering are total over
   everything a function can name.
@@ -76,7 +77,7 @@
   derives a type's size from its shape the way it derives `Copy`.
 - A size fits the target's `isize`: an array is its element's size
   times its length, and an aggregate is its fields laid out in order. A
-  shape whose size does not fit is refused (ADR-0136), so every size
+  shape whose size does not fit is refused, so every size
   the compiler reports is one a pointer can be offset by.
 - A type argument is sized: a slice or a trait object is never a type
   argument, and generic code that wants one spells a borrow (`&[T]`).
@@ -114,7 +115,7 @@
   indexing does. `a[i] = v` and `&mut a[i]` resolve through
   `IndexMut`; `&a[i]` reads through `Index`. Arrays and slices keep
   their builtin indexing, and a nominal type with no implementation is
-  not indexable. See `docs/adr/0053-operators-are-sealed-specs.md`.
+  not indexable.
 - The standard containers implement the pair: `Vec<T>` with `usize`
   and `T`, `String` with `usize` and `u8`, and `Map<V>` with `str` and
   `V`. The specs are sealed to the `alcy/std` suite, so the operator
@@ -127,8 +128,7 @@
   spec, and `!=` is its negation; a type with no implementation has no
   equality. Scalars and addresses keep their builtin comparison, and a
   tuple or array compares element-wise when every element is itself
-  builtin comparable. See
-  `docs/adr/0053-operators-are-sealed-specs.md`.
+  builtin comparable.
 - `Eq` is the reflexivity marker over `PartialEq` and declares no
   method of its own: implementing it requires a `PartialEq`
   implementation for the same type. `String` implements both; floats
@@ -136,7 +136,7 @@
 - `Vec<T>` compares lengths and then elements through `PartialEq` in
   turn, and `String` compares its bytes. The element's capability is
   the implementation's `PartialEq` bound, checked at each use, and the
-  body itself is checked once at its definition (ADR-0079): comparing
+  body itself is checked once at its definition: comparing
   a vector of a type without `PartialEq` names that use rather than a
   line inside the implementation.
 
@@ -151,7 +151,7 @@
   `Greater`), and `Ord` is the total-order spec over `PartialOrd`:
   `fn cmp(self: &Self, other: &Self) -> Ordering` never answers
   "incomparable", and implementing it requires a `PartialOrd`
-  implementation for the same type (ADR-0053).
+  implementation for the same type.
 - The seal works like the other operators': the standard library
   implements the specs, and a package outside the suite lists the ones
   it implements in `[spec] implement = [...]` (see `modules.md`).
@@ -168,7 +168,6 @@
   The refusal names the caller's type at the call rather than a line
   inside the library, which is where an unbounded body's failure used
   to surface. Multiple bounds join with `+`; `where` stays reserved.
-  See `docs/adr/0028-spec-system.md`.
 - An annotation is a value parameter's type when it is a single
   primitive integer (`N: usize`); every other annotation is a bound,
   and a declaration validates that each one names a spec.
@@ -195,8 +194,7 @@
   operands by value (`fn add(self: Self, other: Self) -> Self`), so an
   operator consumes them, which for a `Copy` type reads as a copy.
   Scalars keep their builtin arithmetic, and a nominal type with no
-  implementation has no operator. See
-  `docs/adr/0053-operators-are-sealed-specs.md`.
+  implementation has no operator.
 - `x op= y` runs the binary spec and stores its result back into the
   place, so a nominal place reaches `Add` and its siblings through the
   same implementation.
@@ -209,7 +207,7 @@
 - The compiler-known text type is `str`: byte sequences backing
   string literals. Nothing validates them - not a literal, not a
   `String`'s byte API, not a foreign function's bytes - so every
-  operation on `str` is total over arbitrary bytes (ADR-0091).
+  operation on `str` is total over arbitrary bytes.
 - `len_bytes` is the byte count. `count_chars` counts scalar values,
   where an ill-formed subsequence counts as one replacement unit, the
   way Unicode's decoding algorithms consume the maximal subpart of

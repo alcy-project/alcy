@@ -66,12 +66,12 @@ enum class DiagCode : u8 {
   // The shared name table a checker and a lowerer intern into was
   // sized for fewer names than this package declares.
   NameTableExhausted = 35,
-  // An operation that needs the opt-in (ADR-0050) sits in safe code: a
+  // An operation that needs the opt-in  sits in safe code: a
   // call to an unsafe function or intrinsic, or a raw pointer
   // dereference, with no enclosing `unsafe { ... }` block.
   UnsafeOperation = 36,
   // An implementation of a spec its package seals to a suite
-  // (ADR-0053) comes from outside that package and suite.
+  //  comes from outside that package and suite.
   SpecSealed = 37,
   // A package's manifest seals a name that is not a spec the package
   // declares, so the seal would cover nothing.
@@ -89,7 +89,6 @@ enum class DiagCode : u8 {
   SpecCanonicalShape = 42,
   // A path head or a declaration is spelled the way a neighboring
   // language spells it, so the name is known but the shape is not
-  // (ADR-0060, ADR-0061).
   SpellingSuggestion = 43,
   // A declaration or a struct field was reached from a module that
   // cannot see it: it is not `pub`, and the reach comes from outside

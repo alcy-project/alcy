@@ -54,7 +54,7 @@ fn nested(opt: Option<Option<i32>>) -> i32 {
 // One arm falls through, so the expression joins the two arms and has
 // a value; the all-terminated `classify` has to stay distinct from it.
 // The join is read through a binding: a function body's tail value is
-// not its return (ADR-0059).
+// not its return.
 fn mixed(opt: Option<i32>) -> i32 {
   v := match opt {
     Option::Some(v) => {

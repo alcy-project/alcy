@@ -63,7 +63,7 @@ u32 int_bytes(ir::TypeTag tag);
 u64 mask(ir::TypeTag tag);
 i64 sign_extend(u64 bits, ir::TypeTag tag);
 // Whether the checked source operation overflows at `tag`'s width
-// (ADR-0065). The operands are masked to the width already; the AST
+//. The operands are masked to the width already; the AST
 // evaluator and the IR interpreter share these, so a compile-time
 // `+ - *` stops at the same place whichever engine reads it.
 bool add_overflows(u64 left, u64 right, ir::TypeTag tag);
@@ -75,7 +75,7 @@ bool mul_overflows(u64 left, u64 right, ir::TypeTag tag);
 // accumulation wraps rather than rejects.
 u64 parse_numeric_value(std::string_view spelling, bool* overflow = nullptr);
 // A float literal's digits, read once at the type's own width
-// (ADR-0134): the suffix and any `_` separators are not part of the
+// : the suffix and any `_` separators are not part of the
 // digits.
 f32 parse_f32_value(std::string_view spelling);
 f64 parse_f64_value(std::string_view spelling);

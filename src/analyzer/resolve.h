@@ -74,7 +74,7 @@ struct PackageRoot {
 // dependency that loaded it puts it in (empty for the root package unless
 // it is the standard-library member under test, and for a dependency no
 // suite names), and the specs its manifest seals to
-// that suite (ADR-0053). One row per package - the root's, each path
+// that suite. One row per package - the root's, each path
 // dependency's, each staged standard-library member's - so an
 // implementation's package is placed even when it seals nothing.
 // Views borrow the caller's storage.
@@ -88,7 +88,7 @@ struct PackagePolicy {
 };
 
 // One item a summary spelled, with the symbol its code is written
-// under: a dependent calls it by that name (ADR-0078). The item is the
+// under: a dependent calls it by that name. The item is the
 // spelled declaration, which a call names exactly when a name repeats
 // across impls.
 struct SummarySymbol {
@@ -96,7 +96,7 @@ struct SummarySymbol {
   str::StringPoolId symbol = str::INVALID_STRING_POOL_ID;
   ast::ItemIdx item = ast::ItemIdx::invalid();
   // The parametric body the row named, in the summary's own storage: a
-  // dependent clones it for an instantiation (ADR-0079). Invalid for a
+  // dependent clones it for an instantiation. Invalid for a
   // signature with no body or one a symbol links.
   ir::FunctionIdx function = ir::FunctionIdx(base::INVALID_IDX);
 };
@@ -117,7 +117,7 @@ struct ModuleNode {
   // the subset whose public surface is in scope without a `use`; the
   // rest are ordinary modules that happen to be toolchain sources.
   bool is_staged = false;
-  // A module whose items a summary spelled (ADR-0078): the surface
+  // A module whose items a summary spelled: the surface
   // carries signatures and shapes, and nothing in it lowers.
   bool is_summary = false;
   // The symbols the summary's items link by, for the calls that leave
@@ -128,12 +128,12 @@ struct ModuleNode {
   // that the item does not exist.
   std::span<const std::string_view> summary_generic_names;
   // The storage a summary answered for and the interner its ids
-  // resolve in (ADR-0079); null for a module whose sources resolved.
+  // resolve in ; null for a module whose sources resolved.
   const ir::Storage* summary_storage = nullptr;
   const ir::SymbolTable* summary_strings = nullptr;
   // The per-type tables that came with the storage, aligned with its
   // type table: the destructor and movability answers a carried type's
-  // questions read (ADR-0085). Empty when the artifact carried none.
+  // questions read. Empty when the artifact carried none.
   std::span<const u8> summary_needs_drop;
   std::span<const u8> summary_not_movable;
 };
@@ -198,9 +198,7 @@ struct ModuleTree {
   // need a real one.
   //
   // Compiler-known expansions key on this rather than on a name, so a
-  // user function called `write` stays ordinary. See
-  // docs/adr/0016-suites-and-the-std-split.md and
-  // docs/adr/0025-ranges-as-data.md.
+  // user function called `write` stays ordinary.
   [[nodiscard]] bool is_staged_item(std::string_view package,
                                     ast::ItemIdx item) const;
 };
@@ -237,7 +235,7 @@ base::Result<void, ModuleTreeError> verify_module_tree(const ModuleTree& tree);
 // The `core` package of the staged standard library: the `core` root
 // and everything under it. The interval types are declared there and
 // their names are reserved, so a range expression always constructs
-// the one declaration. See docs/adr/0025-ranges-as-data.md.
+// the one declaration.
 inline bool is_core_package(std::string_view path) {
   return is_package_path(path, "core");
 }
@@ -265,13 +263,13 @@ struct ModuleInput {
   // NOLINTNEXTLINE(readability-redundant-member-init)
   std::span<const std::string_view> summary_generic_names = {};
   // The storage a summary answered for: a generic body it carries is
-  // merged from there, so a dependent instantiates it (ADR-0079).
+  // merged from there, so a dependent instantiates it.
   // Null for a module whose own sources resolved.
   const ir::Storage* summary_storage = nullptr;
   // The interner the summary's ids resolve in.
   const ir::SymbolTable* summary_strings = nullptr;
   // The per-type tables that came with the storage, aligned with its
-  // type table; empty when the artifact carried none (ADR-0085).
+  // type table; empty when the artifact carried none.
   // NOLINTNEXTLINE(readability-redundant-member-init)
   std::span<const u8> summary_needs_drop = {};
   // NOLINTNEXTLINE(readability-redundant-member-init)

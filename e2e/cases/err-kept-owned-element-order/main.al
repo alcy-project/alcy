@@ -2,7 +2,7 @@
 // it allocates into, so keeping it in a container declared before the
 // buffer it was built from is refused: a callee returning that field
 // could hold the loan, and the extent rule cannot see that this one
-// copies instead (ADR-0135).
+// copies instead.
 
 fn main() -> i32 {
   mut names := Vec::<String>::new()

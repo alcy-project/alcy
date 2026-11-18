@@ -342,7 +342,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
         }
         i32_load(body_, 2, 0);
       } else {
-        // The discriminant is the payload's spare pattern (ADR-0087):
+        // The discriminant is the payload's spare pattern :
         // pick the variant index the spell names.
         const std::optional<Access> byte = access_for(ir::TypeTag::I1);
         if (!byte.has_value()) {
@@ -491,7 +491,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       return unsupported(current_span_, "an aggregate construction");
     case O::ParametricDrop:
       // The specialization rewrites every one to a concrete end before
-      // emission; a parametric body never reaches a backend (ADR-0079).
+      // emission; a parametric body never reaches a backend.
       return unsupported(current_span_, ir::opcode_to_str(instr.op));
     default: return unsupported(current_span_, ir::opcode_to_str(instr.op));
   }

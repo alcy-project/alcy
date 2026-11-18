@@ -12,10 +12,10 @@ namespace ir {
 // What a parametric call waits on.
 enum class ParametricCalleeKind : u8 {
   // A generic item: the specialization substitutes `args` and clones
-  // the function's body (ADR-0079).
+  // the function's body.
   Generic,
   // A method a parameter's bound names: the specialization resolves
-  // the spec's implementation for the concrete type (ADR-0080).
+  // the spec's implementation for the concrete type.
   Dispatch,
 };
 
@@ -30,7 +30,7 @@ struct ParametricCallee {
   FunctionIdx function = FunctionIdx::invalid();
   // A Dispatch row's spec and method, by the names the source wrote:
   // a spec is a declaration, and its name is how the implementation is
-  // found once the argument's type is known (ADR-0080).
+  // found once the argument's type is known.
   str::StringPoolId spec = str::INVALID_STRING_POOL_ID;
   str::StringPoolId method = str::INVALID_STRING_POOL_ID;
   // The type arguments the definition-site check resolved: the generic

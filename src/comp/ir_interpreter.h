@@ -17,7 +17,7 @@
 
 namespace comp {
 
-// The second engine of compile-time evaluation (ADR-0054): runs a
+// The second engine of compile-time evaluation: runs a
 // lowered function's verified IR to a value. It is a differential
 // oracle for the AST engine first; nothing in the pipeline calls it yet.
 //
@@ -38,7 +38,7 @@ struct IrRunError {
     Quota,
     // The call stack reached COMP_MAX_CALL_DEPTH.
     Depth,
-    // A checked source operation overflowed (ADR-0065): the program
+    // A checked source operation overflowed: the program
     // is refused at compile time the way a debug build refuses it at
     // runtime. The wrap operations are the program's own choice and
     // never take this path.
@@ -64,7 +64,7 @@ inline constexpr u32 COMP_MAX_CALL_DEPTH = 64;
 
 // Every wording a refusal (`IrRunError::Kind::Unsupported`) can carry,
 // declared in one place. What the engine does not carry is a decision
-// (ADR-0054), so a case that refuses points at a wording this list owns,
+//, so a case that refuses points at a wording this list owns,
 // and a debug build refuses to report one the list does not declare.
 inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
     "aggregate argument in comp evaluation",

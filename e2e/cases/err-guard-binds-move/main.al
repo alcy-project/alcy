@@ -1,5 +1,5 @@
 // A guard must not bind a non-Copy payload by value: a false guard falls
-// through to the next arm after the value is taken (ADR-0137).
+// through to the next arm after the value is taken.
 
 enum E {
   A(String),

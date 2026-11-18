@@ -7,12 +7,11 @@ use package::error::error_from;
 
 // One `write(2)`, answering the byte count or the negated error
 // number the call reported. The compiler provides it per target
-// (ADR-0128).
 intrinsic fn sys_write(fd: i32, buf: str) -> i64;
 
 // One `read(2)`, the same way. The caller guarantees room for
 // `out_len` bytes at `out`, which is why the declaration carries
-// `unsafe` (ADR-0050).
+// `unsafe`.
 unsafe intrinsic fn sys_read(fd: i32, out: &mut u8, out_len: usize) -> i64;
 
 // One `write(2)`: the bytes it accepted, or the error it reported. A

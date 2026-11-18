@@ -1,4 +1,4 @@
-// `==` and `!=` reach `PartialEq` over the sealed specs (ADR-0053).
+// `==` and `!=` reach `PartialEq` over the sealed specs.
 
 fn main() -> i32 {
   mut a := Vec::<i32>::new()

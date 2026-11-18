@@ -1,5 +1,5 @@
 // A type argument is Movable, and a function instantiation checks its
-// own rather than passing through the nominal path (ADR-0085). The
+// own rather than passing through the nominal path. The
 // argument here is inferred rather than spelled.
 struct Pinned {
   held: Anchor,

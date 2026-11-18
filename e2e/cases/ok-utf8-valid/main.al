@@ -1,6 +1,6 @@
 // `utf8::valid` answers whether a byte sequence is well-formed UTF-8:
 // no overlong form, no surrogate, nothing above the last scalar, and
-// no truncated sequence (ADR-0091).
+// no truncated sequence.
 fn main() -> i32 {
   if !valid("abc") {
     ret 1

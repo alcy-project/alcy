@@ -5,8 +5,8 @@ states what a conforming implementation does, never how this one does it:
 no file of the compiler, no module of it, and no symbol it defines appears
 here. Where a rule is observable from a program, that is the rule's
 argument for belonging here; a decision about the implementation belongs
-in `src/docs/`, and the reasoning behind either is recorded in
-`docs/adr/`.
+in `src/docs/`. The reasoning behind either is recorded in the
+implementation's comments and tests.
 
 Normative keywords (MUST, SHOULD, MAY) follow RFC 2119 throughout
 `docs/spec/`. This specification states the language as it is meant to
@@ -37,8 +37,17 @@ checkable contracts here.
 
 ## Non-goals
 
-- Spec objects, async, compile-time evaluation beyond
-  constant items.
+- Spec objects: no dispatch through a table; there is no `dyn`. A
+  spec method call resolves to one implementation at compile time.
+- One execution model: the blocking one (`thread`, `sync`, `atomic`),
+  std-owned. An `async`/`await`, if it lands, carries exactly one
+  std executor.
+- Macros of any kind: compile-time work is `comp`-marked code,
+  checked by the ordinary type system.
+- Optional features or conditional compilation: a package has one
+  configuration; the manifest's dependencies, the target, and the
+  toolchain decide the build. Optional capability is selected as
+  separate packages, or paid for always.
 - Unsafe code, raw pointers, FFI (reserved; see `ffi.md`). The typed
   heap intrinsics are the one place pointers exist: they are checked
   against the intrinsic set's canonical shapes, and user code reaches

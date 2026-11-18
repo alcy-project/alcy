@@ -18,7 +18,7 @@ namespace bench {
 // Monotonic and standard-library only. A dedicated platform clock would
 // buy immunity to clock slewing, which a run measured in hundreds of
 // milliseconds does not meet, and its call cost is the same, so batching
-// is required either way. See docs/adr/0021-benchmark-measurement.md.
+// is required either way.
 struct SteadyClock {
   u64 now_ns() noexcept {
     return static_cast<u64>(

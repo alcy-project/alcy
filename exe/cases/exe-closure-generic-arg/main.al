@@ -1,5 +1,5 @@
 // A generic parameter that is called states the callable bound: the
-// body answers through `Fn` (ADR-0080), and a closure argument
+// body answers through `Fn`, and a closure argument
 // instantiates it like any other.
 
 fn id<T>(x: T) -> T {

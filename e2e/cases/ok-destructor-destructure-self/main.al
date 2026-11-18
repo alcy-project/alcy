@@ -1,5 +1,5 @@
 // The destructor's own body is the one scope that may take its receiver
-// apart (ADR-0137).
+// apart.
 
 struct Holder {
   s: String,

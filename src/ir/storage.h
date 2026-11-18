@@ -67,7 +67,7 @@ struct StorageState {
   ParametricCallees parametric_callees;
   // The functions emitted once in their parametric form: the
   // specialization pass clones them per instantiation, and no backend
-  // receives them (ADR-0079). Kept beside the table rather than in a
+  // receives them. Kept beside the table rather than in a
   // range because their indexes are not consecutive.
   std::vector<FunctionIdx> parametric_functions;
   // The specializations of staged items: clones no source function
@@ -112,7 +112,7 @@ inline TypeLayout type_layout(const StorageState& state,
 inline TypeLayout fields_layout(const StorageState& state,
                                 TypeIdxRange fields,
                                 PointerWidth width);
-// The niche an option-shaped enum's discriminant lives in (ADR-0087):
+// The niche an option-shaped enum's discriminant lives in :
 // exactly two variants, one carrying nothing and one carrying a single
 // reference. The reference's unused null pattern holds the fieldless
 // variant, so a value of the enum is the payload itself. A `bool`
@@ -181,7 +181,7 @@ inline EnumNiche enum_niche(const StorageState& state, TypeIdx idx) {
   if (payload_tag == TypeTag::Ref || payload_tag == TypeTag::MutRef) {
     // Only a thin reference has a spare null pattern. A reference to a
     // slice is fat - a data pointer and a length - and a fieldless
-    // variant would have to spell a null pair, which ADR-0087 does not
+    // variant would have to spell a null pair, which  does not
     // promise and the lowering does not build. Such an enum carries a
     // discriminant like any other.
     const TypeNode& payload_node = state.types[niche.payload];
@@ -337,7 +337,6 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::Enum: {
       // A niche-carrying enum is its payload: the discriminant lives in
       // the payload's spare pattern and takes no room of its own
-      // (ADR-0087).
       const EnumNiche niche = enum_niche(state, idx);
       if (niche.has) {
         return type_layout(state, niche.slot, width);
@@ -362,7 +361,7 @@ inline TypeLayout type_layout(const StorageState& state,
     // A type parameter has no layout until the argument is known: the
     // size of the type it stands for is the size of that type. A
     // reachable call would mean an unspecialized body reached the
-    // backend (ADR-0079).
+    // backend.
     case TypeTag::Param: UNREACHABLE();
   }
   UNREACHABLE();
@@ -386,7 +385,7 @@ class InsideScope {
   std::vector<u32>& inside_;
 };
 
-// Structural movability over raw state (ADR-0085): a value is movable
+// Structural movability over raw state: a value is movable
 // unless it holds an anchor. `not_movable` marks the types a
 // declaration makes unmovable - the anchor itself - and the walk is
 // structural, so a struct, enum, tuple, or array holding one is
@@ -504,7 +503,6 @@ inline bool is_copy_type(const StorageState& state,
   }
   // A type that holds an anchor is not Copy: copying a value would
   // place it somewhere else, which is what the anchor forbids
-  // (ADR-0085).
   if (idx.idx < not_movable.size() && not_movable[idx.idx] != 0) {
     return false;
   }
@@ -636,7 +634,7 @@ class Storage {
   }
   // Whether a function is emitted once in its parametric form. A pass
   // that asks about one body asks here; a pass that scans every
-  // function builds its membership set from the list once (ADR-0079).
+  // function builds its membership set from the list once.
   [[nodiscard]] bool is_parametric(FunctionIdx function) const {
     const std::vector<FunctionIdx>& functions = parametric_functions();
     return std::find(functions.begin(), functions.end(), function) !=

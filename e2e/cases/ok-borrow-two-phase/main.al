@@ -1,5 +1,5 @@
 // A call's exclusive receiver is a reservation the call activates, so
-// the arguments may read the place in between (ADR-0012).
+// the arguments may read the place in between.
 fn main() -> i32 {
   mut v := Vec::<i32>::new()
   v.push(1)

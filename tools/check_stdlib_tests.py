@@ -6,7 +6,7 @@
 """Check the toolchain standard library with its own tests.
 
 Every package under `lib/std/` holds `test` blocks beside the definitions
-they cover, and `alcy test` runs them (ADR-0139). This check asks each
+they cover, and `alcy test` runs them. This check asks each
 package for the tests it names and then for its verdict:
 
   - a package names at least one test, because a package that runs

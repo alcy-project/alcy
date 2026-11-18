@@ -1,4 +1,4 @@
-// The token cursor over the standard input (ADR-0129): a count, that
+// The token cursor over the standard input: a count, that
 // many integers, and the sum back out. The scanner is `io`'s implicit
 // surface, so no `use` names it.
 

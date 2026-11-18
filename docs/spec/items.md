@@ -33,7 +33,7 @@
   methods first, then the in-scope spec impls. Coherence is global
   (one impl per spec and type), and every method the spec declares
   must be implemented with a matching signature. An implementation
-  lives where the type does or where the spec does (ADR-0090): `impl
+  lives where the type does or where the spec does: `impl
   Spec for Type` is accepted in the package that declares `Type` or
   the package that declares `Spec`, and an inherent block only in the
   type's package. There are no covered types, so `impl MySpec for
@@ -63,8 +63,8 @@
   tool that runs tests enters the package through a module of its own
   making, whose items declare the `alcy_test_` prefix and the argument
   intrinsics they need, so a module that declares those names itself is
-  refused by the run; `docs/adr/0139-a-test-is-an-item-the-test-command-owns.md`
-  states the reservation and the diagnostic that reports it.
+  refused by the run, and the diagnostic that reports it names the
+  reservation.
 - `static` items have storage and MUST NOT contain `&mut`.
   `const X: T = ...` items are compile-time values: the initializer is
   evaluated during compilation, must terminate within the evaluation
@@ -89,8 +89,7 @@
     `write(2)`/`read(2)`: the byte count, or the negated error number
     the call reported. A short write and an interrupted call are the
     caller's to see; the std wraps them with `sys`'s `Fd` and
-    `OsError`, and the write-all loop stays with the print hooks
-    (ADR-0128).
+    `OsError`, and the write-all loop stays with the print hooks.
   - `error_kind(code: i32) -> i32` maps a failed call's reported
     number to a stable kind code (0 = Other, 1 = Interrupted,
     2 = WouldBlock, 3 = NotFound, 4 = PermissionDenied,
@@ -117,8 +116,8 @@
     `count` elements of `T` at `T`'s own size and alignment, and
     returns the unique owning reference. A zero `count` still yields a
     distinct, freeable pointer. A request the runtime cannot meet aborts
-    the process with the site-less `panic: allocation failed`
-    (ADR-0101), so the answer is never null; a size or alignment past
+    the process with the site-less `panic: allocation failed`,
+    so the answer is never null; a size or alignment past
     the largest object the address space can hold is refused the same
     way, before the host allocator is asked.
   - `dealloc<T>(ptr: &mut MaybeUninit<T>, count: usize)` releases a
@@ -131,7 +130,7 @@
     `wrapping_mul<T>` name the wrapping forms of the source
     arithmetic: the result is the mathematical one reduced modulo 2^N
     in every build. `T` is an integer type; a hash that relies on the
-    wrap says so through these (ADR-0065).
+    wrap says so through these.
   - `elem_ptr<T>(ptr: &mut MaybeUninit<T>, index: usize) -> &mut
     MaybeUninit<T>` offsets a pointer by whole elements. It is
     unchecked: the result is in bounds exactly when the caller keeps
@@ -142,7 +141,7 @@
   - `uninit_assume<T>(slot: &mut MaybeUninit<T>) -> &mut T` releases a
     slot as a mutable reference to its value. Reading through the
     result before anything was written yields whatever the allocator
-    returned. See `docs/adr/0027-maybe-uninit-storage.md`.
+    returned.
   - `ptr_offset<T>(ptr: *T, count: isize) -> *T` offsets a raw
     pointer by whole elements; `ptr_offset_mut<T>` is its exclusive
     counterpart over `*mut T`. The count is signed, so one spelling
@@ -158,7 +157,7 @@
     canonical one, with each type parameter bound to a placeholder.
   - `&u8` and `&mut u8` are not indexable. Element access through a
     heap pointer arrives with the growable containers, which own the
-    bounds check. See `docs/adr/0010-typed-heap-primitives.md`.
+    bounds check.
 - `memcopy`, `str_from_parts`, `slice_from_parts`,
   `slice_from_parts_mut`, `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
   `uninit_assume`, `ptr_offset`, `ptr_offset_mut`, `sys_read`,
@@ -172,7 +171,7 @@
   `println(comp fmt: str, args: ..)` are `io`'s declarations,
   compiler-expanded like `fmt::format`: the format string is
   comp-known and the call's remaining arguments are collected at
-  compile time (`fmt.md`, ADR-0055). The declared bodies never run.
+  compile time (`fmt.md`). The declared bodies never run.
 - Calls to intrinsics check like ordinary calls. Intrinsics have no
   bodies to lower, borrow, or specialize; `comp` parameters on
   intrinsics are rejected.
@@ -186,7 +185,7 @@
   function, associated function, or method), and the type arguments of
   the instantiation. A source name never reaches the linker, so no
   program can collide with a C library entry point or with another
-  alcy item. See `docs/adr/0011-symbol-mangling.md`.
+  alcy item.
 - The encoding is deterministic: the same signature yields the same
   symbol in any lowering order, so a profiler, a debugger, and a
   backtrace all read the same name.
@@ -207,10 +206,20 @@
   `Some(T)`/`None` are the canonical examples). Struct variants and
   explicit discriminants are deferred; layout is the compiler's except
   for the niches promised below.
+- An enum's variants and a spec's methods are the item's declaration;
+  growth happens by declaring a new type or a new spec, never by
+  extending one that existing code matches or implements. Adding a
+  variant to an enum is a breaking change for every exhaustive match,
+  and adding a method to a spec is one for every implementation.
+  A capability that grows is a new spec naming the old one as its
+  super-spec (`spec Eq: PartialEq`); a spec whose method set must grow
+  is sealed to its suite (`[spec] suite-only`), and an open spec
+  promises its set will not grow. There is no `#[non_exhaustive]` and
+  no wildcard requirement: a match covering an enum stays exhaustive.
 
 ## Layout
 
-- The language promises two niches (ADR-0087): a reference is never
+- The language promises two niches: a reference is never
   null, and a `bool` is zero or one. An option-shaped enum over a
   reference to a sized type, or over `bool`, therefore has the payload's
   size and alignment: `Option<&i32>` is a pointer and `Option<bool>` is

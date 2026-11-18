@@ -1,7 +1,7 @@
 // The specification's parameter declares a 'Named' bound, and the
 // argument the implementation names does not implement it. A method with
 // type parameters of its own still answers its call through the same
-// declaration check (ADR-0028).
+// declaration check.
 spec Named {
   fn name(self: &Self) -> i32;
 }

@@ -53,10 +53,10 @@ struct WriteInput {
   FileTable files;
   std::span<const AddrName> addr_names;
   // The package's public surface, for the summary a library's artifact
-  // carries (ADR-0078). Empty when the caller has none.
+  // carries. Empty when the caller has none.
   std::span<const SummaryEntry> summary;
   // The per-type tables the drop and borrow passes read, aligned with
-  // the type table: one byte per type, zero meaning no (ADR-0085). A
+  // the type table: one byte per type, zero meaning no. A
   // dependent's merge copies the entries its carried types reached, so
   // a destructor or an anchor the writer measured crosses with them.
   // Empty when the caller has none.
@@ -83,7 +83,7 @@ struct WriteInput {
 // the pointer width (4 or 8); then the version string's bytes.
 //
 // The profile is not in it: the unoptimized forms answer the same
-// artifact under every profile (ADR-0067), so a cache that keys a
+// artifact under every profile, so a cache that keys a
 // profile's output composes the profile above this digest.
 inline base::Digest128 identity_digest(const FileTable& files,
                                        PointerWidth width,

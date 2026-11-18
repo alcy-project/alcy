@@ -6,7 +6,7 @@
 """The union of checks a contributor runs before pushing.
 
 Every command here is one CI asks in its own job
-(docs/adr/0040-checks-live-beside-the-builds.md); the flags skip a check
+; the flags skip a check
 whose tool a machine lacks, and a skipped check refuses or says so rather
 than passing in silence. `./tools/check.sh` execs this, so the entry
 point the documentation names still works.
@@ -163,11 +163,11 @@ def main() -> int:
     tool("check_borrow_rules.py", f"--build-subdir={debug_subdir}")
 
     # The standard library carries its own tests beside the definitions
-    # they cover (ADR-0139), so the suite is a program the compiler runs
+    # they cover, so the suite is a program the compiler runs
     # rather than a corpus it reads.
     tool("check_stdlib_tests.py", f"--build-subdir={debug_subdir}")
 
-    # The second engine (ADR-0054) over the acceptance corpus: every case
+    # The second engine  over the acceptance corpus: every case
     # that compiles is evaluated function by function, and a construct
     # the lowering emits that the engine refuses without declaring it
     # fails here. The refusal declarations are checked in a debug build,

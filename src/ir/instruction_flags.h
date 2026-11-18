@@ -27,7 +27,7 @@ struct InstructionFlags {
   bool inbounds : 1 = false;
   // Meaningful only for Move: the move was emitted for a value whose
   // type parameter had not settled `Copy`-ness, so the borrow pass
-  // treats it as a copy when the substituted type is `Copy` (ADR-0079).
+  // treats it as a copy when the substituted type is `Copy`.
   bool maybe_copy : 1 = false;
   // Meaningful only for ParametricDrop: the end also marks the place
   // moved, which a binding's end does and an explicit one does not.

@@ -92,7 +92,7 @@ skips value binding for any producer with an invalid `dst`.
 | Comparisons | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only. |
 | Atomics | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent. |
 | `Move` / `Drop` | Register alias / ownership marker; no code emitted. |
-| `ParametricDrop` | `[place]`, discarded value; an end whose destructor only the substitution decides. The specialization rewrites it to the concrete glue call or removes it, and no backend meets one (ADR-0079). |
+| `ParametricDrop` | `[place]`, discarded value; an end whose destructor only the substitution decides. The specialization rewrites it to the concrete glue call or removes it, and no backend meets one. |
 | `Select` | `[cond, true_value, false_value]`. |
 
 `InstructionFlags` carries the per-opcode facts that are not operands:

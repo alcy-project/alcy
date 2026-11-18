@@ -113,8 +113,7 @@ CheckOutcome check_case(
     const source::FileId id = f.sources.add_virtual(file->name, file->bytes);
     prelude_storage.emplace_back(name);
     // A staged prelude source is a package facade, so its public
-    // surface is in scope without a `use`; see
-    // docs/adr/0016-suites-and-the-std-split.md.
+    // surface is in scope without a `use`.
     prelude_inputs.push_back({prelude_storage.back(), id, true});
   }
   base::Result<ModuleTree, diag::Reported> tree_result =
@@ -229,7 +228,7 @@ usize count_messages(const diag::DiagBag& bag, std::string_view message) {
 }
 
 // `Option` and `Result` live in the core prelude since
-// `docs/adr/0009-result-option-library-enums.md`, so
+//, so
 // tests that mention them inject a matching declaration set.
 constexpr std::string_view CORE_PRELUDE =
     R"(pub intrinsic fn panic(msg: str) -> !;
@@ -1984,8 +1983,8 @@ TEST_CASE("Check borrow expressions") {
   }
   {
     // `&mut T` where `&T` is expected is a shared reborrow, so this
-    // binds rather than mismatching. See
-    // docs/adr/0012-reborrow-on-reference-read.md rule 3.
+    // binds rather than mismatching: a `&mut T` coerces to `&T` as a
+    // shared reborrow.
     VirtualDir dir;
     const bool setup = write_all(dir, {{"main.al",
                                         "fn main() {\n"
@@ -2948,7 +2947,7 @@ TEST_CASE("Check rejects a non-canonical display spec") {
 }
 
 // A bound says what a parameter answers, and a call instantiates only
-// when the argument's type implements each bound (ADR-0028).
+// when the argument's type implements each bound.
 TEST_CASE("Check reads a bounded generic call") {
   VirtualDir dir;
   const bool setup = write_all(
@@ -3006,7 +3005,7 @@ TEST_CASE("Check rejects a call whose type misses a bound") {
 }
 
 // A call on an unbounded type parameter is refused at the definition,
-// where the bound would be written (ADR-0079, ADR-0080): the body is
+// where the bound would be written: the body is
 // checked once, against its parameters.
 TEST_CASE("Check refuses a call on an unbounded type parameter") {
   VirtualDir dir;
@@ -3034,7 +3033,7 @@ TEST_CASE("Check refuses a call on an unbounded type parameter") {
 // The definition-site check is a body's only check: a call
 // instantiates the signature and does not walk the body again, so a
 // mistake is reported against the declaration and never against a
-// caller's instantiation (ADR-0079).
+// caller's instantiation.
 TEST_CASE("A generic body is checked once, not at each call") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
@@ -3065,7 +3064,7 @@ TEST_CASE("A generic body is checked once, not at each call") {
 }
 
 // The declared bound is what a parameter's body may call: the
-// definition-site check resolves the call through it (ADR-0080).
+// definition-site check resolves the call through it.
 TEST_CASE("Check reads a call on a bounded type parameter") {
   VirtualDir dir;
   const bool setup = write_all(
@@ -3094,7 +3093,7 @@ TEST_CASE("Check reads a call on a bounded type parameter") {
   CHECK(!f.bag.has_errors());
 }
 
-// The closure capability is a bound like any other (ADR-0116): a
+// The closure capability is a bound like any other: a
 // spelled `Fn` bound instantiates with a named function or a closure
 // literal, and the body's calls reach the witness.
 TEST_CASE("Check reads a call through a spelled Fn bound") {
@@ -3151,7 +3150,7 @@ TEST_CASE("Check rejects a non-callable argument for an Fn bound") {
       f.bag, "Type 'i32' does not implement 'Fn', which the bound requires"));
 }
 
-// The sugar's bound belongs to the compiler's spec (ADR-0116): a
+// The sugar's bound belongs to the compiler's spec: a
 // module-local spec that shares the name is a different capability, so
 // the desugared spelling keeps answering core's.
 TEST_CASE("Check binds the fn spelling to core's Fn by identity") {
@@ -3187,7 +3186,7 @@ TEST_CASE("Check binds the fn spelling to core's Fn by identity") {
 
 // A parameter no argument binds but a bound mentions is inferred from
 // the first declared method's signature: `drain`'s item type comes
-// from `I: Stepper<T>` (ADR-0028).
+// from `I: Stepper<T>`.
 TEST_CASE("Check infers a bound's argument at a call") {
   VirtualDir dir;
   const bool setup =
@@ -4371,7 +4370,7 @@ TEST_CASE("Check reports a spent name table") {
 }
 
 // A spec its package seals to a suite is implementable from inside
-// that package or its suite, and from nowhere else (ADR-0053). These
+// that package or its suite, and from nowhere else. These
 // drive the checker directly because a local dependency cannot yet
 // import a suite sibling's spec.
 TEST_CASE("Check refuses a sealed spec implementation outside its package") {
@@ -4642,7 +4641,7 @@ TEST_CASE("Check reports a seal that names no declared spec") {
         "declare");
 }
 
-// ADR-0053: a super-spec is resolved after every declaration is in, so
+// : a super-spec is resolved after every declaration is in, so
 // a forward reference works, and an implementation owes an
 // implementation of the super for the same target.
 TEST_CASE("Check requires a super-spec implementation for the same target") {
@@ -4802,7 +4801,7 @@ TEST_CASE("Check binds a concrete spec argument in a generic impl") {
   CHECK(!f.bag.has_errors());
 }
 
-// ADR-0053: the operator specs are the compiler's, so a staged core
+// : the operator specs are the compiler's, so a staged core
 // declaration must keep the canonical shape; anything else is a
 // different operator, not a library choice.
 TEST_CASE("Check accepts a canonical core operator spec") {
@@ -6637,7 +6636,7 @@ TEST_CASE(
     "A generic whose const reads a parameter's layout stays at its calls") {
   // `size_of::<T>()` in a compile-time position cannot be answered at
   // the definition site, so the item keeps its per-instantiation
-  // bodies instead of a parametric one (ADR-0079).
+  // bodies instead of a parametric one.
   VirtualDir dir;
   write_all(dir, {{"mem.al", "pub intrinsic fn size_of<T>() -> usize;\n"},
                   {"main.al",

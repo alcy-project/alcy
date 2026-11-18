@@ -252,7 +252,7 @@ ast::TypeIdx Parser::parse_type() {
         return ast::TypeIdx::invalid();
       }
       // The length is a literal or a path to a `const` integer value
-      // (ADR-0054); the analyzer resolves the path.
+      // ; the analyzer resolves the path.
       u64 count = 0;
       ast::PathIdx length_path = ast::PathIdx::invalid();
       if (peek_kind() == T::Integer) {

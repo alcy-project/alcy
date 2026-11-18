@@ -153,7 +153,7 @@ class Emitter {
   EmitResult emit_ret(const ir::Instruction& instr);
   EmitResult emit_compute(ir::InstructionIdx instr_idx,
                           const ir::Instruction& instr);
-  // The build's check an instruction carries, or nothing (ADR-0068).
+  // The build's check an instruction carries, or nothing.
   [[nodiscard]] const overlay::Entry* overlay_entry(
       ir::InstructionIdx instr_idx) const;
   // The checked form of `+`, `-`, `*`: the operation's value, its
@@ -262,7 +262,7 @@ class Emitter {
   std::span<const diag::Span> spans_;
   ir::SymbolTable* strings_;
   // The build's arithmetic checks, parallel to the storage's
-  // instructions; null when the build checks nothing (ADR-0068).
+  // instructions; null when the build checks nothing.
   const overlay::Overlay* overlay_ = nullptr;
   diag::DiagBag* bag_;
   codegen::Target target_;

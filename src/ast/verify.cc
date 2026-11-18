@@ -363,7 +363,7 @@ bool verify_param_children(const ItemFnParam& param, const AstArena& arena) {
     return false;
   }
   // A variadic parameter carries no type: it collects the call's
-  // remaining arguments and only the compiler expands it (ADR-0055).
+  // remaining arguments and only the compiler expands it.
   return param.is_variadic || bound(param.type, arena.types);
 }
 

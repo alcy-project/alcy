@@ -25,8 +25,7 @@
   dependency package is addressed as `<package>::<path>`, where
   `<package>` is the `alcy.toml [package] name` with `-` normalized to
   `_`. There is no parent-relative spelling: every upward reference
-  names the root
-  (`docs/adr/0060-the-path-vocabulary-is-three-forms.md`).
+  names the root.
 - `use a::b;`, `use a::b as c;`, and `pub use` re-exports are part
   of the language.
   Glob imports (`::*`) are deferred.
@@ -80,10 +79,11 @@ grammar to name members or other packages.
 A package has two surfaces:
 
 - `[modules] export` is the **public** surface: what `use` can reach.
-  It is manifest-declared, per `docs/adr/0007-manifest-driven-modules.md`.
+  It is manifest-declared.
 - The package's root module (`prelude.al`) is the **implicit** surface:
   its `pub` items need no `use`. This is a scope concern, not a way to
-  hide an API, which is why it does not conflict with `docs/adr/0007-manifest-driven-modules.md`.
+  hide an API, which is why it does not conflict with the
+  manifest-declared public surface.
 
 A suite guarantees that no name appears in two members' implicit
 surfaces, so selecting a whole suite cannot produce an ambiguity.
@@ -100,8 +100,8 @@ the specs another package's seal lets this one implement. Each entry
 is a spec name, the list may be empty, and an implementation the list
 does not cover is refused where it is written.
 
-The standard library is the `alcy/std` suite; see `docs/adr/0016-suites-and-the-std-split.md` for the
-member list and the dependency graph.
+The standard library is the `alcy/std` suite; the member list and
+the dependency graph are declared in the suite's own `alcy.toml`.
 
 ## Packages
 
@@ -130,5 +130,8 @@ member list and the dependency graph.
   cross-package compilation follow the whole-program-analysis,
   per-package-emission model (see `deferred.md`).
 - Symbol mangling for the alcy convention is per-signature and starts
-  `_A`; the encoding is `docs/adr/0011-symbol-mangling.md`. `extern "C"`
-  names are unmangled.
+  `_A`: the encoding derives from what the symbol names - the module
+  path, the owner of a member, the item name, what the item is, and
+  the type arguments of the instantiation - so a source name never
+  reaches the linker and no two distinct signatures collide.
+  `extern "C"` names are unmangled.

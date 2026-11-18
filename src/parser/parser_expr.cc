@@ -25,8 +25,7 @@ namespace {
 
 // `..`, `..=`, and `..<` all open a range. A range that names an end
 // must say how it is bound, so only `..=` (inclusive) and `..<`
-// (exclusive) may be followed by an endpoint; see
-// `docs/adr/0032-explicit-range-end-spelling.md`.
+// (exclusive) may be followed by an endpoint.
 bool is_range_op(lexer::TokenKind kind) {
   return kind == lexer::TokenKind::DotDot ||
          kind == lexer::TokenKind::DotDotEq ||
@@ -254,7 +253,7 @@ ast::ExprIdx Parser::parse_unary() {
   const base::NestingScope scope(nesting_);
   const usize mark = pos_;
   // An increment or decrement written in prefix position is a
-  // neighboring language's spelling (ADR-0061); the message names the
+  // neighboring language's spelling; the message names the
   // statement alcy writes. `--i` would otherwise read as negation
   // twice, which parses and means something else.
   if ((check(lexer::TokenKind::Plus) || check(lexer::TokenKind::Minus)) &&
@@ -341,7 +340,7 @@ ast::ExprIdx Parser::parse_postfix() {
   }
   while (true) {
     // A macro call (`name!(...)`) is a neighboring language's spelling;
-    // read it as the call it meant (ADR-0061).
+    // read it as the call it meant.
     if (check(lexer::TokenKind::Bang) &&
         (peek_kind(1) == lexer::TokenKind::LParen ||
          peek_kind(1) == lexer::TokenKind::LBracket)) {
@@ -786,7 +785,6 @@ std::optional<ast::CondIdx> Parser::parse_spelled_condition() {
 
 ast::CondIdx Parser::parse_cond() {
   // Rust's `if let` reads as the pattern condition it meant
-  // (ADR-0061).
   if (const std::optional<ast::CondIdx> spelled = parse_spelled_condition()) {
     return *spelled;
   }
@@ -1157,7 +1155,7 @@ ast::ExprIdx Parser::parse_for() {
     return ast::ExprIdx::invalid();
   }
 
-  // The one rule of docs/adr/0028-spec-system.md: `for pat in head {
+  // The one rule of the desugar: `for pat in head {
   // body }` means
   //
   //   {
@@ -1341,7 +1339,7 @@ ast::ExprIdx Parser::parse_array_literal() {
   }
   if (match(lexer::TokenKind::Semicolon)) {
     // The repeat count is a literal or a path to a `const` integer
-    // value, the same grammar the array type's length takes (ADR-0054).
+    // value, the same grammar the array type's length takes.
     u64 count = 0;
     ast::PathIdx count_path = ast::PathIdx::invalid();
     if (peek_kind() == lexer::TokenKind::Integer) {

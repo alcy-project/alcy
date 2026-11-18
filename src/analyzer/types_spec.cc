@@ -268,7 +268,7 @@ static bool is_mut_slice_of_u8(const ast::AstArena& ast, ast::TypeIdx type) {
 
 bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
   // The compiler owns the operators' and the closure capability's
-  // specs (ADR-0053, ADR-0116): their declared shape is part of the
+  // specs: their declared shape is part of the
   // meaning, so a staged declaration that does not match the canonical
   // shape is an error rather than a different operator. Index and
   // IndexMut take `<I, O>` and one method, PartialEq has one `eq`
@@ -338,7 +338,7 @@ bool Checker::check_operator_spec(const ast::ItemSpec& declaration) {
   if (canonical->shape == Shape::Callable) {
     // `spec Fn<P, R> { fn call(self: &Self, args: P) -> R; }`: `P` is
     // the parameters as one tuple and `R` the return slot, so one
-    // spec covers every arity (ADR-0116).
+    // spec covers every arity.
     if (declaration.params.size() != 2 || declaration.methods.size() != 1) {
       return wrong();
     }
@@ -545,7 +545,7 @@ void Checker::register_spec(u32 module, ast::ItemIdx item) {
   }
   specs.push_back(SpecEntry{module, spec.name.name, item, node.span});
   specs_of_module[module].push_back(static_cast<u32>(specs.size() - 1));
-  // The compiler owns the operator specs (ADR-0053), and `fmt` owns
+  // The compiler owns the operator specs, and `fmt` owns
   // `Display`: a staged declaration of either must keep the canonical
   // shape. It still registers, so a wrong shape is one diagnostic
   // rather than a flood of unresolved names at every use.
@@ -818,7 +818,7 @@ bool Checker::implements_spec(ir::TypeIdx type,
                               u32 module) {
   (void)module;
   const ir::TypeIdx origin = type_origin(type);
-  // The closure capability has no impl records (ADR-0116): a value is
+  // The closure capability has no impl records: a value is
   // callable by the signature its type carries, a closure nominal's
   // recorded one or a function view's own. `P` is the parameters as
   // one tuple, and a single non-tuple argument reads as the one
@@ -924,7 +924,7 @@ bool Checker::implements_spec(ir::TypeIdx type,
 }
 
 // Whether `declared` is `required` or refines it through the super
-// chain (`Eq` carries `PartialEq`, ADR-0028): an implementation of a
+// chain (`Eq` carries `PartialEq`): an implementation of a
 // refined spec implements the ones it refines, so a bound on one
 // provides the others' methods.
 
@@ -972,7 +972,7 @@ void Checker::declared_bounds(u32 module,
 // Whether the declared bounds of the parameter at `index` include
 // `spec` over `spec_args`: the requirement a parametric call checks,
 // the way an implementation satisfies a concrete instantiation's
-// (ADR-0080). The comparison is exact - the spec in scope and the
+//. The comparison is exact - the spec in scope and the
 // arguments pairwise equal - which is the shape the sources write.
 
 bool Checker::param_declares_bound(u32 index,
@@ -1031,7 +1031,7 @@ bool Checker::infer_bound_arguments(u32 module,
     // `I` answers it, read through the spec method's signature. The
     // bound is what the argument means, so the answer stands even when
     // the call spelled one - `count::<VecIter<i32>, i32>` reads the
-    // element type `&i32` its implementation provides (ADR-0079).
+    // element type `&i32` its implementation provides.
     for (usize i = 0; i < params.size(); ++i) {
       if (i == j || is_value_param(ast, params[i]) || !bound[i].is_valid()) {
         continue;
@@ -1131,7 +1131,7 @@ bool Checker::check_declared_bounds(
       continue;
     }
     // A return-position owning-function slot carries its witness from
-    // the body (ADR-0075): its bound is checked when the body names
+    // the body: its bound is checked when the body names
     // one, not against the stand-in the signature resolved with.
     const OwnFnSlot* own = own_fn_slot(param.name.name);
     if (own != nullptr && own->is_return) {
@@ -1157,7 +1157,7 @@ bool Checker::check_declared_bounds(
         continue;
       }
       // The sugar's bound names `core`'s spec by identity, the way
-      // operator dispatch does (ADR-0053, ADR-0116): a module-local
+      // operator dispatch does: a module-local
       // spec that happens to be called `Fn` is a different capability.
       const u32 spec =
           own != nullptr ? fn_spec() : bound_spec(module, segments.back().name);
@@ -1188,7 +1188,7 @@ bool Checker::check_declared_bounds(
           analyzer::is_formattable_tag(tag_of(*bound_type)) &&
           specs[spec].name == "Display" &&
           tree.is_staged_item("fmt", specs[spec].item);
-      // A scalar carries its operators builtin (ADR-0053), so an
+      // A scalar carries its operators builtin, so an
       // arithmetic bound it already satisfies, the way a formattable
       // scalar satisfies `Display`. The spec is the compiler-owned one
       // by identity, not a user spec that shares the name.
@@ -1205,7 +1205,6 @@ bool Checker::check_declared_bounds(
       // A parameter the instantiation has not fixed yet meets the
       // definition-site check: what its declared bounds already state
       // satisfies the requirement, the way an implementation would
-      // (ADR-0080).
       const bool implied =
           tag_of(*bound_type) == ir::TypeTag::Param &&
           param_declares_bound(
@@ -1213,7 +1212,7 @@ bool Checker::check_declared_bounds(
               spec_args, module);
       if (!builtin_display && !builtin_arithmetic && !implied &&
           !implements_spec(*bound_type, spec, spec_args, module)) {
-        // An owning-function slot reports its own spelling (ADR-0075):
+        // An owning-function slot reports its own spelling :
         // the witness does not carry the `fn(...)` signature that was
         // written, and the message names the slot rather than the spec.
         if (own != nullptr) {
@@ -1410,7 +1409,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     return;
   }
   const u32 spec_index = static_cast<u32>(spec_entry - specs.data());
-  // ADR-0053: a spec its package seals to a suite may be implemented
+  // : a spec its package seals to a suite may be implemented
   // only by that package or by a package of that suite. The manifest
   // name list is the seal; the reserved implementing-side key that
   // would open it is not accepted yet. A sealed spec is also the only
@@ -1524,8 +1523,8 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   ir::TypeIdx primitive = ir::TypeIdx::invalid();
   std::string_view target_display;
   if (target_node.kind == ast::TypeKind::Primitive) {
-    // A scalar belongs to the staged suite (ADR-0090): only a staged
-    // package implements a spec for one, sealed or not (ADR-0133). The
+    // A scalar belongs to the staged suite: only a staged
+    // package implements a spec for one, sealed or not. The
     // seal above still governs which package may implement a sealed
     // spec, for a scalar as for a nominal.
     if (!in_staged_suite(module)) {
@@ -1603,7 +1602,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     (void)index;
     return;
   }
-  // ADR-0090: an implementation lives where the type does or where the
+  // : an implementation lives where the type does or where the
   // spec does. A builtin type has no declaring package: it belongs to
   // the staged suite, and a package outside it cannot implement for
   // one.
@@ -1915,7 +1914,7 @@ SpecEntry* Checker::spec_of_impl_path(u32 module, ast::TypeIdx spec_side) {
 // A closure literal's nominal type: a one-field struct over the
 // environment tuple, so the value owns its captures, its `Copy`-ness is
 // the environment's, and the drop pass ends it through the field
-// (ADR-0064). A literal gets its own type, because the code a value
+//. A literal gets its own type, because the code a value
 // calls is the literal's.
 
 bool Checker::match_compound_target(

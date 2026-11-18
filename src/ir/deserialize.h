@@ -76,7 +76,7 @@ struct LoadedIr {
   PointerWidth width = PointerWidth::W64;
   std::string compiler_version;
   // The package's public surface, when the file carries a summary
-  // (ADR-0078). Names resolve in `strings`.
+  //. Names resolve in `strings`.
   std::vector<SummaryEntry> summary;
   // The fields the summary rows point into; held here because the rows
   // borrow them.
@@ -86,7 +86,7 @@ struct LoadedIr {
   base::Digest128 identity;
   // The per-type tables the writer measured, aligned with the storage's
   // type table: whether ending a value of the type runs code, and
-  // whether one is never moved (ADR-0085). A dependent's merge copies
+  // whether one is never moved. A dependent's merge copies
   // the entries its carried types reached. Empty when the file carried
   // none.
   std::vector<u8> needs_drop;

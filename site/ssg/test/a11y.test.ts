@@ -21,7 +21,7 @@ test("each document declares the language of its own strings", () => {
 });
 
 test("the prose declares its own language inside a translated tree", () => {
-  // The guide and the reference are English in every tree (ADR-0058), so
+  // The guide and the reference are English in every tree, so
   // the tree's language is the chrome's, not the article's. A screen
   // reader that takes the whole document for Japanese reads the English
   // body in Japanese; the region says what it actually is.

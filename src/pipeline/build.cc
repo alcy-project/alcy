@@ -328,15 +328,15 @@ struct Emission {
         profile.on_panic == pkg::OnPanic::Backtrace) {
       site_names = render_instr_sites(ctx, package.instr_spans);
     }
-    // The build's checks ride beside the IR (ADR-0068): one walk turns the
+    // The build's checks ride beside the IR: one walk turns the
     // profile into per-instruction entries the backend realizes. A build
     // with the checks off computes nothing.
     if (profile.overflow_checks) {
       checks = overlay::build(*package.storage, true, site_names);
     }
     // A summary row with code is what a dependent links by name
-    // (ADR-0078); a parametric body is cloned from the summary instead
-    // (ADR-0079). Everything else in a library object stays this
+    // ; a parametric body is cloned from the summary instead
+    //. Everything else in a library object stays this
     // object's own code.
     for (const ir::SummaryEntry& row : package.summary) {
       if (row.function.is_valid() &&
@@ -346,7 +346,7 @@ struct Emission {
     }
     // A library's request names its surface, even when the surface is
     // empty; a request that names none (a binary's object, a relocatable
-    // module) keeps every symbol (ADR-0078, ADR-0079).
+    // module) keeps every symbol.
     const std::optional<std::span<const ir::FunctionIdx>> surface =
         is_lib ? std::optional<std::span<const ir::FunctionIdx>>(
                      exported_functions)
@@ -534,7 +534,7 @@ struct IrWriteInput {
 };
 
 // The symbol one summary row's code is written under: the same encoding
-// the emitter gives the function, so a dependent links by it (ADR-0078).
+// the emitter gives the function, so a dependent links by it.
 std::string linkable_symbol(PipelineContext& ctx,
                             lowering::LoweredPackage& package,
                             const ir::SummaryEntry& row) {
@@ -570,7 +570,7 @@ std::vector<u8> serialize_package_ir(PipelineContext& ctx,
                                      lowering::LoweredPackage& package,
                                      bool is_lib) {
   // A dependent resolves against a library's summary; a bin's artifact
-  // carries none (ADR-0078).
+  // carries none.
   const std::span<const ir::SummaryEntry> summary =
       is_lib ? std::span<const ir::SummaryEntry>(package.summary)
              : std::span<const ir::SummaryEntry>();
@@ -581,7 +581,7 @@ std::vector<u8> serialize_package_ir(PipelineContext& ctx,
       continue;
     }
     // A parametric body has no ABI to link by; a dependent clones it
-    // from the carried storage instead (ADR-0079).
+    // from the carried storage instead.
     if (package.storage->is_parametric(row.function)) {
       continue;
     }
@@ -665,7 +665,7 @@ base::Result<void, diag::Reported> link_executable(
   if (link.freestanding) {
     // No startup files and no C library; the object's `_start` is the
     // entry. `-static` keeps the driver from asking for a loader the
-    // program has no symbols for (ADR-0052).
+    // program has no symbols for.
     argv.emplace_back("-nostdlib");
     argv.emplace_back("-static");
     argv.emplace_back("-Wl,-e,_start");
@@ -747,7 +747,7 @@ base::Result<std::string, diag::Reported> emit_output(
     if (ctx.target.is_wasm() && codegen::backend_available(ctx.backend) &&
         !backend_writes_final_module(ctx.backend, ctx.target)) {
       // A wasm executable is one final module, and no wasm linker lives
-      // behind this build (ADR-0049 puts it at M3). Handing the object
+      // behind this build (puts it at M3). Handing the object
       // to the host driver only surfaces its own confusing error, so
       // name the ways to get a wasm executable instead.
       const u32 index =
@@ -860,7 +860,7 @@ base::Result<std::string, diag::Reported> build_single_root(
 // The front half of a target's lifecycle - the cache lookup, the compile
 // that stores the unoptimized package when the lowering was quiet, and
 // the summary a library leaves beside its artifact before optimization
-// (ADR-0078). The build's target loop and the run path both walk this;
+//. The build's target loop and the run path both walk this;
 // single-file `compile` lowers through `build_single_root` instead, and
 // `check` names no artifact and stops earlier.
 base::Result<lowering::LoweredPackage, diag::Reported> lower_target(

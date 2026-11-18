@@ -1,4 +1,4 @@
-// The spelled bound is the sugar's own capability (ADR-0116): a
+// The spelled bound is the sugar's own capability: a
 // parameter bounded by `Fn<(A, B), R>` takes a named function, a
 // closure literal - owning or not - and the body calls through the
 // bound.

@@ -71,7 +71,7 @@ i32 run_run(const CliConfig& config,
   }
   pipeline::ManifestProbe found = std::move(probe).unwrap();
   // A suite names several programs and no single entry point, so it is
-  // not something run can execute (ADR-0057).
+  // not something run can execute.
   const std::optional<std::string_view> manifest_bytes =
       ctx.sources.bytes(found.manifest);
   if (manifest_bytes.has_value() &&

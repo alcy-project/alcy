@@ -1,5 +1,5 @@
 // Indexing reaches `Vec`, `String`, and `Map` through the sealed
-// `Index`/`IndexMut` specs (ADR-0053).
+// `Index`/`IndexMut` specs.
 
 fn bump(mut v: &mut Vec<i32>) {
   x := v[0]

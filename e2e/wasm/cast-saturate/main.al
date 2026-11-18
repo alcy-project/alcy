@@ -1,7 +1,7 @@
 // A cast from a float to an integer saturates: a value below the
 // destination takes its minimum, above it its maximum, and NaN becomes
 // zero. The LLVM form was undefined and the wasm form trapped, so the
-// same program answered differently or not at all (ADR-0077).
+// same program answered differently or not at all.
 fn main() -> i32 {
   z := 0.0f64
   nan := z / z

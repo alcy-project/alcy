@@ -63,14 +63,13 @@ enum class VerificationErrorKind : u8 {
   ParametricCalleeArgsOutOfRange,
   ParametricFunctionOutOfRange,
   // A parametric end in a body the specialization pass resolved: no
-  // pass rewrites it, so it would reach a backend (ADR-0079).
+  // pass rewrites it, so it would reach a backend.
   MisplacedParametricDrop,
   // A callee record in a body the specialization pass resolved: the
   // call would reach a backend as an opcode operand it cannot name
-  // (ADR-0079).
   MisplacedParametricCall,
   // A type parameter in a body the specialization pass resolved: no
-  // layout answers for it, and no pass replaces it (ADR-0079).
+  // layout answers for it, and no pass replaces it.
   MisplacedParametricType,
   // An operand that names a register of another primitive type, or of
   // another value width: the register's row and the operand naming it are

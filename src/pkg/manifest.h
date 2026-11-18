@@ -129,7 +129,7 @@ struct PackageManifest {
   // Specs this package seals to its suite, from the optional [spec]
   // table (`suite-only = [...]`); an arena-owned array, possibly
   // empty. An implementation of a sealed spec is refused outside the
-  // declaring package's suite (ADR-0053).
+  // declaring package's suite.
   const std::string_view* suite_only = nullptr;
   u32 suite_only_count = 0;
   // Specs this package's seal lets it implement, from the same table
@@ -276,7 +276,7 @@ ManifestKind probe_manifest_kind(std::string_view bytes);
 
 // The name a suite member is addressed by: the last segment of its
 // suite-relative path, which is also the name its own manifest must
-// carry (ADR-0057). Pure.
+// carry. Pure.
 std::string_view suite_member_name(std::string_view path);
 
 // Parses suite manifest bytes; all strings reference arena copies.

@@ -193,7 +193,7 @@ impl<T>[T] {
 
 // The comparisons walk elements, so they sit in a block that says
 // what they need: `s.contains(&x)` on a `[Plain]` names `Plain` at the
-// call rather than a line in here (ADR-0028).
+// call rather than a line in here.
 impl<T: PartialEq>[T] {
   // Whether some element equals `value`, compared the way `==`
   // compares two elements.

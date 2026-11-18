@@ -334,7 +334,7 @@ TEST_CASE("Suite manifest parses the std suite") {
   CHECK(manifest.packages[11] == "time");
   CHECK(verify_suite_manifest(manifest).is_ok());
 
-  // A fresh suite has no members and no owner yet (ADR-0057).
+  // A fresh suite has no members and no owner yet.
   constexpr std::string_view empty =
       "[suite]\nname = \"tools\"\nlicense = \"\"\npackages = []\n";
   base::Result<SuiteManifest, diag::Reported> empty_result =

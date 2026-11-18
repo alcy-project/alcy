@@ -17,7 +17,7 @@
 
 ## Movability
 
-- A value is movable unless its type holds an anchor (ADR-0085). A
+- A value is movable unless its type holds an anchor. A
   move is always a bitwise relocation that leaves the old place spent;
   there is no user-defined move, and none is planned.
 - `Movable` is derived: a type is movable exactly when every field,
@@ -53,19 +53,18 @@
   passes to `drop_in_place` ends where it stands, a field it moves
   into a binding ends with that binding, and a field it leaves alone
   is not ended. A destructor is the one scope the compiler cannot
-  prove, because what a body has already ended has no spelling
-  (ADR-0137).
+  prove, because what a body has already ended has no spelling.
 - Scope exit runs the destructors of the values that block declared,
   innermost first, and a `return` runs the destructors of everything
   still alive. A destructor that ends a value of a generic type is
   resolved per instantiation; when the type came from a dependency
   whose summary did not carry the destructor's body, ending the value
-  is refused rather than skipped (ADR-0079).
+  is refused rather than skipped.
 - A type with no destructor of its own still ends what it holds: the
   compiler ends each destructible struct or tuple field, the live
   variant's destructible fields after a discriminant read, and each
   destructible array element.
-- Ends have a stated order (ADR-0086): a block's values end in reverse
+- Ends have a stated order: a block's values end in reverse
   declaration order, so the value declared last ends first and a
   borrower's end precedes the end of what it borrows; a `return` takes
   the result first, then ends what is still alive in the same order.
@@ -73,7 +72,7 @@
   live payload in declaration order, and an array's elements in index
   order. A type with its own destructor runs it in their place, and
   what its receiver still holds ends from the body, in the order the
-  body states (ADR-0137). The std's sequences end their elements from
+  body states. The std's sequences end their elements from
   first to last.
 - There is no `forget` and no `ManuallyDrop`-shaped wrapper: a value's
   destructor runs at its end, or the program panics and leaves what it

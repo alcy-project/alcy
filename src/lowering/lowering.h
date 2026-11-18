@@ -86,23 +86,23 @@ struct LoweredPackage {
   // Lowered concrete functions from prelude modules. Reported counts
   // exclude them, matching files and modules. A prelude parametric
   // body is not a source function either, and counts through the
-  // storage's parametric list (ADR-0079).
+  // storage's parametric list.
   usize prelude_functions = 0;
-  // Comp calls the IR engine also ran and matched (ADR-0054's
+  // Comp calls the IR engine also ran and matched (
   // comparison before the switch). A construct outside the engine's
   // subset is not counted.
   usize comp_engine_compared = 0;
   // Comp calls the IR engine answered instead of the AST engine.
   usize comp_engine_answered = 0;
   // The package's public surface, for the summary a dependent reads
-  // (ADR-0078). Empty when the package has no public items.
+  //. Empty when the package has no public items.
   std::vector<ir::SummaryEntry> summary;
   // The field names the summary rows point into, one run per nominal
   // row; the rows borrow them. Growing the container moves the runs,
   // which keeps each run's own buffer where the rows point.
   std::vector<std::vector<ir::SummaryField>> summary_fields;
   // Where each type copy came from, which types carry a destructor,
-  // and which are never moved (ADR-0085). The borrow pass reads them:
+  // and which are never moved. The borrow pass reads them:
   // a move of a `Copy` type is a copy, which only the destructor table
   // can tell.
   std::unordered_map<u32, u32> type_origins;
@@ -114,7 +114,7 @@ struct LoweredPackage {
 // is refused with a diagnostic rather than left to exhaust memory: the
 // entry table, the per-function caches, and the work list are
 // package-sized. Lowering a plain function costs about five microseconds
-// and 1.4 KiB measured (ADR-0046), so this many keeps those tables under
+// and 1.4 KiB measured, so this many keeps those tables under
 // 200 MiB.
 inline constexpr usize MAX_FUNCTIONS = 65536;
 

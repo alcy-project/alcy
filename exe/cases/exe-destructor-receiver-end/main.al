@@ -1,6 +1,6 @@
 // A destructor's receiver ends from its body: the compiler places no
 // end on the receiver or on its fields, so the body ends what it still
-// holds (docs/spec/values.md, ADR-0137).
+// holds (docs/spec/values.md).
 
 struct Payload {
   tag: i32,

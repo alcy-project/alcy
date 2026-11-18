@@ -21,7 +21,7 @@ struct LinkOptions {
   // through -Wl,.
   std::span<const std::string_view> args;
   // Whether the program links without a C runtime: no startup objects,
-  // no dynamic linker, and no C library (ADR-0052). The object defines
+  // no dynamic linker, and no C library. The object defines
   // `_start`, which the compiler emits for a freestanding program.
   bool freestanding = false;
 };

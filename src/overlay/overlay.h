@@ -26,7 +26,7 @@ enum class Check : u8 {
   MinOverOne,
 };
 
-// One instruction's check for this build. The definitions of ADR-0066
+// One instruction's check for this build. The definitions of
 // stay in the IR; an entry only names the diagnostic a checked build
 // adds.
 struct Entry {
@@ -42,7 +42,7 @@ struct Entry {
 
 // The build's checks, parallel to the storage's instructions. The IR is
 // borrowed, never copied or rewritten; a backend reads an entry in
-// place of the profile (ADR-0068).
+// place of the profile.
 struct Overlay {
   std::vector<Entry> entries;
 };
@@ -57,7 +57,7 @@ Overlay build(const ir::Storage& storage,
 
 // What a checked build's aborts take from the IR, parallel to the
 // storage's instructions. Neither range depends on the profile, so the
-// same release passes run in every build (ADR-0067).
+// same release passes run in every build.
 struct Checks {
   // The check a checked build adds at the instruction, for the IR as
   // written: `Check::None` where the abort is ruled out. Folding the

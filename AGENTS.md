@@ -13,10 +13,9 @@ From there, read the documentation the work needs rather than all of it:
 - `src/docs/architecture.md`: the pipeline, the intermediate
   representation, LLVM integration, and the repository structure - the
   map for work that touches the compiler itself.
-- `docs/adr/`: one decision per file, the record of why the code is
-  shaped the way it is; a change that revisits a decision amends it.
 - `docs/spec/`: what a program is written against, as opposed to how
-  the compiler happens to implement it.
+  the compiler happens to implement it. The specification is the record a
+  change is reviewed against; a change that revisits a rule amends it.
 - `docs/backlog.md` and `docs/roadmap.md`: the open work, and the
   foundations it stands on.
 

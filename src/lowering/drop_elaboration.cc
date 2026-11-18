@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Drop elaboration: solve ownership per place over the CFG and place
-// each end where the paths still own the value (ADR-0062). Lowering
+// each end where the paths still own the value. Lowering
 // journals the end sites and the ownership events; this pass reads
 // them, computes the state of every place at every point that decides
 // an end, and rewrites the function's blocks to carry the ends.
@@ -238,7 +238,7 @@ void Lowerer::emit_drop_glue_call(ir::OperandIdx place,
     // The glue table is the analyzer's, and a summary type it did not
     // measure may carry a destructor whose body did not cross; skipping
     // the end silently would leak, so the build stops and names what
-    // did not cross (ADR-0085).
+    // did not cross.
     if (glue_type.idx < summary_drops_.size() &&
         summary_drops_[glue_type.idx] != 0) {
       summary_drop_not_carried(span, glue_type);
@@ -357,7 +357,7 @@ namespace {
 
 // The drop pass as one unit: the journals lowering recorded, the
 // streams it rewrites, and the caller's facilities, none of them
-// reached through the lowerer (ADR-0062).
+// reached through the lowerer.
 class DropElaborator {
  public:
   DropElaborator(const DropElaborationInputs& inputs,
@@ -476,7 +476,7 @@ class DropElaborator {
   void internal(diag::Span span, std::string_view what) {
     emit_internal_error(bag, span, what);
   }
-  // Whether ending a value of the type can run code (ADR-0079).
+  // Whether ending a value of the type can run code.
   [[nodiscard]] bool may_end(ir::TypeIdx type) const {
     return drops_.runs(type) || ir::type_names_param(builder.state(), type);
   }
@@ -504,7 +504,7 @@ class DropElaborator {
   const ir::SymbolTable& strings;
   std::span<const Local> locals;
   u32 end_exempt_ = base::INVALID_IDX;
-  // A destructor's receiver ends from its own body alone (ADR-0137).
+  // A destructor's receiver ends from its own body alone.
   // Every other place ends whole, named or not: a field reached
   // through an ordinary value is a value of its own, with its own
   // destructor to run.
@@ -1136,7 +1136,6 @@ void DropElaborator::run() {
     // Take the place before the end reads it: the tag load and the
     // element addresses below name the place itself, so a marker after
     // them leaves the borrow checker reading what the end is taking
-    // (ADR-0062).
     pass_emit_void(seq_of(out), ir::Opcode::Drop, {place}, span);
     // A place may arrive byte-addressed: a payload field's address is
     // the area's byte pointer, and the projections below index the
@@ -1166,7 +1165,7 @@ void DropElaborator::run() {
         summary_drops[glue_type.idx] != 0) {
       // The destructor's body did not cross with the type; the field
       // walk alone would leak what it owned, so the build stops and
-      // names the type (ADR-0085).
+      // names the type.
       emit_summary_drop_not_carried(bag, builder.state(), strings, span,
                                     glue_type);
       return;
@@ -1183,7 +1182,7 @@ void DropElaborator::run() {
         // A binding's end marks the place moved; an explicit end does
         // not, because the reference names a value borrow should not
         // retire for the rest of the buffer. An unmovable value is
-        // never moved, so its end only ends (ADR-0085).
+        // never moved, so its end only ends.
         if (local < locals.size() && movable(type)) {
           pass_emit_void(seq_of(out), ir::Opcode::Move, {place}, span);
         }
@@ -1202,7 +1201,7 @@ void DropElaborator::run() {
       const ir::EnumType& shape = builder.enum_types()[node.as_enum()];
       const ir::TypeIdx i32_ty = builder.primitive(ir::TypeTag::I32);
       // The discriminant answers which variant is live, however the
-      // representation spells it (ADR-0087); the tag read is the same
+      // representation spells it ; the tag read is the same
       // semantic operation the lowering emits.
       const ir::RegisterIdx disc = pass_emit(
           seq_of(out), ir::Opcode::EnumTagLoad, i32_ty, {end_place}, span);
@@ -1243,7 +1242,7 @@ void DropElaborator::run() {
             continue;
           }
           // The address carries the field's own type; the offsets are
-          // the backend's (ADR-0087). The payload's place is the shell's
+          // the backend's. The payload's place is the shell's
           // path with the variant and the field on it, so an end consults
           // the state the journal recorded for that payload.
           std::vector<u32> payload_path = path;

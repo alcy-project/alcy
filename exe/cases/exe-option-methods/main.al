@@ -1,5 +1,5 @@
 // `Option`'s first method set: an eager default, a lazy default, and a
-// predicate that keeps the value (ADR: Option and Iterator APIs).
+// predicate that keeps the value.
 
 fn main() -> i32 {
   a := Option::<i32>::Some(41)

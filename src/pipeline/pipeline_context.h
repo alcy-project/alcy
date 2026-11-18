@@ -78,7 +78,7 @@ struct PipelineContext {
   std::string_view version;
   // Whether this run builds a freestanding program: the backend emits
   // `_start` instead of `main`, and the link skips the C runtime
-  // (ADR-0052). Set from the goal package's toolchain file.
+  //. Set from the goal package's toolchain file.
   bool freestanding = false;
   // Skip the build cache for this invocation (`--no-cache`): no lookup
   // and no store, so the pipeline can be measured and debugged without

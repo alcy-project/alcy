@@ -9,7 +9,7 @@
 //
 // The heap and the raw buffers, `Box` and `Vec`. The string lives in
 // the `text` package above this one and the lookup structures in
-// `collections`; see docs/adr/0016-suites-and-the-std-split.md.
+// `collections`.
 
 pub use package::box::Box;
 pub use package::collect::collect;

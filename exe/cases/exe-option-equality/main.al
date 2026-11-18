@@ -1,6 +1,6 @@
 // `Option<T>` equality compares shapes and payloads: `Some` with
 // `Some` through `PartialEq`, `None` with `None`, and mixed shapes are
-// unequal (ADR-0053).
+// unequal.
 fn main() -> i32 {
   a := Option::Some(1)
   b := Option::Some(1)

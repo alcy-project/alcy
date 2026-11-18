@@ -34,7 +34,7 @@ using Builder =
 
 // The program runtime: the `alcy_*` functions a program's module
 // declares, libc calls and platform split included, built as IR rather
-// than compiled per build (see `docs/adr/0023-program-runtime-in-process.md`).
+// than compiled per build (see).
 class RuntimeBuilder {
  public:
   RuntimeBuilder(llvm::Module& module,
@@ -59,7 +59,7 @@ class RuntimeBuilder {
       build_syscall();
       // The code generator lowers an aggregate copy and a fill it will
       // not inline to `memcpy` and `memset` calls, and a freestanding
-      // program has no libc to resolve them (ADR-0052).
+      // program has no libc to resolve them.
       build_memcpy();
       build_memset();
     }
@@ -67,7 +67,6 @@ class RuntimeBuilder {
     // that never allocates carries no allocator, and a freestanding
     // program that never prints carries no libc call: the declaration
     // is the program's call site, so nothing else can reach it
-    // (ADR-0052).
     const bool print = declared("alcy_print");
     const bool println = declared("alcy_println");
     const bool eprint = declared("alcy_eprint");
@@ -180,7 +179,7 @@ class RuntimeBuilder {
   // and AArch64 layout (Apple spells the latter `arm64`). Windows x64
   // keeps its frame pointer at an RSP-relative point in the fixed frame
   // by design, which is not a chain, so its panic carries its message
-  // and site only (ADR-0070).
+  // and site only.
   bool walkable_frames() const {
     if (windows_) {
       return false;
@@ -449,7 +448,7 @@ class RuntimeBuilder {
 
   // A byte loop stands in for the libc routine a freestanding program
   // cannot link: LLVM synthesizes `memcpy` for aggregate copies, so the
-  // symbol must exist whatever the program declares (ADR-0052).
+  // symbol must exist whatever the program declares.
   void build_memcpy() {
     llvm::FunctionType* type = llvm::FunctionType::get(
         builder_.getPtrTy(), {builder_.getPtrTy(), builder_.getPtrTy(), usize_},
@@ -1232,7 +1231,7 @@ class RuntimeBuilder {
     builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt32Ty(), 0));
   }
 
-  // The faithful descriptor call (ADR-0128): one `write(2)`/`read(2)`,
+  // The faithful descriptor call: one `write(2)`/`read(2)`,
   // answering the bytes or `-(errno)`. A short write and an interrupted
   // call are the caller's to see; the retrying loops stay with the
   // print hooks and the std's own helpers.

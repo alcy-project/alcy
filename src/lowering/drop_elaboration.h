@@ -42,7 +42,7 @@ struct Local {
   ir::RegisterIdx addr;
   ir::TypeIdx type;
   // A parameter's slot holds the caller's value, so its storage outlives
-  // the return that ends every other slot of the frame (ADR-0135).
+  // the return that ends every other slot of the frame.
   bool is_param = false;
   // The outer local a reference capture borrows, or the same sentinel
   // when the slot is this frame's own. A borrowed capture's place has
@@ -58,7 +58,7 @@ struct Local {
   std::vector<u32> referents;
 };
 
-// One ownership event the drop pass reads (ADR-0062), in lowering
+// One ownership event the drop pass reads, in lowering
 // order. `offset` is the instruction count of the block at the moment
 // the event was recorded: a Bind is after the binding's store, a Move
 // after the marker, a Store after the store.
@@ -159,30 +159,30 @@ class DestructorQuery {
 
 // What the drop pass reads, rewrites, and asks of its caller: the
 // journals, the local table, the streams of the function being
-// lowered, and nothing of the lowerer's own (ADR-0062). The pass owns
+// lowered, and nothing of the lowerer's own. The pass owns
 // the solving; the caller owns the bookkeeping that the block numbers
 // and the instruction spans need.
 struct DropElaborationInputs {
   // Whether a type ends with code: a fresh span of the caller's table,
   // which the pass reads through its own per-type memo.
   std::span<const u8> needs_drop;
-  // Types that are never moved (ADR-0085): their end only ends.
+  // Types that are never moved: their end only ends.
   std::span<const u8> not_movable;
   // Parallel to the type table: whether a type a summary brought in
   // carries a destructor whose body did not cross. Ending one is
-  // refused rather than skipped (ADR-0085).
+  // refused rather than skipped.
   // NOLINTNEXTLINE(readability-redundant-member-init)
   std::span<const u8> summary_drops = {};
   std::span<const analyzer::CheckedModule::DropGlue> drop_glue;
   ir::StorageBuilder& builder;
   diag::DiagBag& bag;
-  // Where a diagnostic resolves a type's name (ADR-0079).
+  // Where a diagnostic resolves a type's name.
   const ir::SymbolTable& strings;
   std::span<const Local> locals;
   // The receiver of a destructor. Its end belongs to the destructor's
   // own body, so the walk leaves it alone: there is no way to spell a
   // value that has been partly ended, and the body is where a value
-  // that has been is written (ADR-0137). No local when the function is
+  // that has been is written. No local when the function is
   // not a destructor.
   u32 end_exempt = base::INVALID_IDX;
   std::span<const OwnershipEvent> ownership;
@@ -236,7 +236,7 @@ class DropWorkingSet {
 };
 
 // Solves ownership per place over the function's CFG and places each
-// end where the paths still own the value (ADR-0062). It rewrites the
+// end where the paths still own the value. It rewrites the
 // streams the caller handed over, before their blocks are published,
 // and reports what it cannot place through the caller's diagnostics.
 void elaborate_drops(const DropElaborationInputs& inputs,
@@ -260,7 +260,7 @@ void elaborate_drops(const DropElaborationInputs& inputs);
 
 // Whether ending a value of the type can run code: an end the analyzer
 // measured, or a type that names a parameter, which the substitution
-// may turn into one (ADR-0079).
+// may turn into one.
 [[nodiscard]] bool may_end(std::span<const u8> needs_drop,
                            const ir::StorageBuilder& builder,
                            const std::unordered_map<u32, u32>& type_origins,
@@ -274,7 +274,7 @@ void emit_internal_error(diag::DiagBag& bag,
 
 // A carried body ends a value whose destructor body did not cross with
 // its summary: the end cannot run it and skipping it would leak, so the
-// build stops and names the type (ADR-0079, ADR-0085).
+// build stops and names the type.
 void emit_summary_drop_not_carried(diag::DiagBag& bag,
                                    const ir::StorageState& state,
                                    const ir::SymbolTable& strings,

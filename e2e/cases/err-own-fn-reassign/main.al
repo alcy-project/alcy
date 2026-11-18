@@ -1,5 +1,5 @@
 // The slot holds the witness the caller instantiated, so a second
-// value cannot take its place (ADR-0075).
+// value cannot take its place.
 fn twice(x: i32) -> i32 {
   ret x + x
 }

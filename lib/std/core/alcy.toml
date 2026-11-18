@@ -1,4 +1,4 @@
-# Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
+# Part of the `alcy/std` suite.
 #
 # Language primitives, with no dependency on any other package.
 
@@ -25,7 +25,7 @@ include = [
   "ops",
   "hash",
 ]
-# The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
+# The public surface, in the form  specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
 export = [
@@ -46,10 +46,10 @@ export = [
   "hash",
 ]
 
-# Specs only this suite may implement (ADR-0053). Indexing and
+# Specs only this suite may implement. Indexing and
 # equality are operators, so their capabilities are the compiler's,
 # not a user's; arithmetic joins them, and so does calling
-# (ADR-0116).
+#.
 [spec]
 suite-only = [
   "Index",

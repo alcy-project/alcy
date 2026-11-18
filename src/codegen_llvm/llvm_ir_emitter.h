@@ -36,7 +36,6 @@ namespace codegen_llvm {
 
 // One program function of the runtime backtrace table the unwinder
 // reads: the LLVM function and the source spelling a frame shows
-// (ADR-0070).
 struct BacktraceName {
   llvm::Function* function = nullptr;
   std::string name;
@@ -51,7 +50,7 @@ void define_backtrace_table(llvm::Module& module,
                             const std::vector<BacktraceName>& visible);
 
 // One call a backtrace names: the block holding only that call, and the
-// rendered site the frame shows beside the function name (ADR-0070).
+// rendered site the frame shows beside the function name.
 struct CallSiteName {
   llvm::BasicBlock* block = nullptr;
   std::string site;
@@ -127,7 +126,7 @@ class LlvmIrEmitter {
   // the operation's overflow condition, calls the runtime check named
   // for it, and answers the operation's value. `emit_compute` takes
   // these only in a build whose `overflow_checks_` is set.
-  // The build's checks (ADR-0068): an overflow entry replaces the
+  // The build's checks: an overflow entry replaces the
   // operation's own emission with the with-overflow form, and the other
   // kinds emit their condition and the runtime call before it.
   void emit_checked_arith(const ir::Instruction& instr,
@@ -156,7 +155,7 @@ class LlvmIrEmitter {
   // an aggregate's elements in one selection DAG node, so a load, a
   // store, or a call operand past this size aborts the compiler; a shape
   // this large lives in a slot of the frame instead, and its copies,
-  // arguments, returns, and joins go through memory (ADR-0140).
+  // arguments, returns, and joins go through memory.
   static constexpr u64 IN_MEMORY_AGGREGATE_BYTES = 4096;
   bool in_memory_aggregate(ir::TypeIdx idx) const;
   // The LLVM type a parameter of the IR type crosses as.
@@ -167,7 +166,7 @@ class LlvmIrEmitter {
   // null for a result that crosses as a value.
   llvm::AllocaInst* call_result_slot(ir::TypeIdx ret, ir::RegisterIdx dst);
   // The value an argument crosses as: a large aggregate crosses as its
-  // slot (ADR-0140).
+  // slot.
   llvm::Value* call_argument(const ir::Operand& operand, llvm::Type* wanted);
   // An alloca in the entry block for a value an instruction builds: one
   // slot per value, so a loop reuses it across iterations.
@@ -200,10 +199,10 @@ class LlvmIrEmitter {
 
   // True for a zero-parameter `main` whose return form maps to an
   // exit code: `()`, `i32`, or a two-variant enum whose first variant
-  // holds `()` (see docs/adr/0009-result-option-library-enums.md).
+  // holds `` (see).
   bool is_entry_candidate(const ir::Function& function) const;
   // Emits the C-ABI `main` wrapper around a renamed user entry,
-  // supplying a slot for a result past the direct limit (ADR-0140).
+  // supplying a slot for a result past the direct limit.
   void emit_entry(llvm::Function* entry_function, ir::TypeIdx ret);
   // Ends a freestanding program through the target's exit syscall.
   // Answers false for a target with no sequence here, which the
@@ -227,14 +226,14 @@ class LlvmIrEmitter {
   // that names no surface, which keeps every symbol.
   std::optional<std::span<const ir::FunctionIdx>> exported_functions_;
   // Whether the entry is `_start`, ending through the exit syscall
-  // instead of returning to a C runtime (ADR-0052).
+  // instead of returning to a C runtime.
   bool freestanding_ = false;
   // The build's arithmetic checks, parallel to the storage's
-  // instructions; null when the build checks nothing (ADR-0068).
+  // instructions; null when the build checks nothing.
   const overlay::Overlay* overlay_ = nullptr;
   // Whether the panic walker gets a table to read; the emitter creates
   // the slot it lands in, and define_backtrace_table fills it once the
-  // runtime exists (ADR-0070).
+  // runtime exists.
   bool backtrace_ = false;
   std::vector<BacktraceName> visible_functions_;
   // Source spans parallel to storage instructions, and the rendered
@@ -250,7 +249,7 @@ class LlvmIrEmitter {
   LlvmIrStorage values_;
   // The slot a return past the direct limit fills, named by the caller as
   // the function's leading argument; null when the return crosses as a
-  // value (ADR-0140).
+  // value.
   llvm::Value* return_slot_ = nullptr;
   // LLVM types are immutable once built, and one shape is requested for
   // every register, operand, and signature that names it, so each is

@@ -96,7 +96,7 @@ bool is_path_segment(lexer::TokenKind kind) {
 }
 
 // A scalar spelling, which a path may open with: `i64::parse(text)`
-// reaches a static member of the scalar (ADR-0133).
+// reaches a static member of the scalar.
 bool is_primitive_path_head(lexer::TokenKind kind) {
   switch (kind) {
     case lexer::TokenKind::I8:
@@ -468,7 +468,7 @@ ast::ItemIdx Parser::parse_item() {
     return ast::ItemIdx::invalid();
   }
   const bool is_unsafe = match(lexer::TokenKind::Unsafe);
-  // `comp` in item position marks a free function (ADR-0054); a
+  // `comp` in item position marks a free function ; a
   // receiver method keeps the marker for a later slice. The two
   // markers do not combine yet, in either spelling order.
   const lexer::Token comp_token = peek();
@@ -487,7 +487,7 @@ ast::ItemIdx Parser::parse_item() {
     return refuse_comp_unsafe();
   }
   // An item keyword from a neighboring language is parsed as the item
-  // it meant (ADR-0061).
+  // it meant.
   if (const std::optional<ast::ItemIdx> spelled =
           parse_spelled_item(is_pub, is_unsafe, is_comp)) {
     return *spelled;
@@ -1373,7 +1373,7 @@ ast::ItemIdx Parser::parse_spec(bool is_pub, bool keyword_consumed) {
   if (!parse_generic_params(params)) {
     return ast::ItemIdx::invalid();
   }
-  // `spec Eq: PartialEq` refines a super-spec (ADR-0053): a path the
+  // `spec Eq: PartialEq` refines a super-spec: a path the
   // checker resolves to another spec, whose implementation every
   // implementation of this one then requires.
   ast::TypeIdx super = ast::TypeIdx::invalid();
@@ -1902,7 +1902,7 @@ ast::StmtIdx Parser::parse_stmt() {
   const usize mark = pos_;
   // A line spelled like a neighboring language's construct is parsed as
   // the construct it meant, so the report is the spelling and not a
-  // cascade (ADR-0061).
+  // cascade.
   if (const std::optional<ast::StmtIdx> spelled =
           parse_spelled_declaration(mark)) {
     return *spelled;
@@ -1923,7 +1923,7 @@ ast::StmtIdx Parser::parse_stmt() {
     default: lead = scan_lead(); break;
   }
   if (lead == StmtLead::Decl) {
-    // `comp` never declares a value (ADR-0054). Parse the line as the
+    // `comp` never declares a value. Parse the line as the
     // const declaration it should have been, so the report is the
     // spelling and not a cascade.
     const lexer::Token comp_token = peek();

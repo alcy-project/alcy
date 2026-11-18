@@ -183,7 +183,7 @@ def main():
         )
         # The specs each member seals to the suite, from its [spec]
         # table. The compiler checks the staged member's declarations
-        # against these rows (ADR-0053).
+        # against these rows.
         for name in members:
             seals = pkg_specs[name]
             if seals:

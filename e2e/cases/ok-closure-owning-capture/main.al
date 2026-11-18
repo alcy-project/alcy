@@ -1,5 +1,5 @@
 // A closure owns what it moves in: the environment lives in the value,
-// and the drop walk ends it with the value (ADR-0064).
+// and the drop walk ends it with the value.
 struct R {
   x: i32,
   m: &mut i32,

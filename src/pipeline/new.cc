@@ -190,7 +190,7 @@ bool insert_suite_member(std::string_view text,
 }
 
 // Whether the suite may take the member: no listed path equals it,
-// and no other member is addressed by its name (ADR-0057). Checked
+// and no other member is addressed by its name. Checked
 // before any file is written, so a refusal leaves nothing behind.
 bool suite_accepts_member(PipelineContext& ctx,
                           const EnclosingSuite& suite,

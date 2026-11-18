@@ -1,3 +1,3 @@
-# A parameter and a return is Movable (ADR-0085).
+# A parameter and a return is Movable.
 exit = 4
-contains = ["A parameter or return is Movable, and this type holds an anchor (ADR-0085)"]
+contains = ["A parameter or return is Movable, and this type holds an anchor"]

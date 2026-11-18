@@ -141,7 +141,7 @@ enum class TypeKind : u8 {
   Ref,
   RawPtr,
   Func,
-  // An owning function type (`fn(params) -> ret`, ADR-0075): a value
+  // An owning function type (`fn(params) -> ret`): a value
   // that owns its environment, move-only, against `Func`'s borrowing
   // view. Shares the `TypeFunc` payload.
   OwnFunc,
@@ -821,7 +821,7 @@ struct StmtDecl {
   TypeIdx type = TypeIdx::invalid();
   ExprIdx init = ExprIdx::invalid();
   // `const x := expr`: the initializer is a compile-time value and the
-  // binding is immutable (ADR-0054).
+  // binding is immutable.
   bool is_const = false;
   // The `for` desugar sets this on the cursor declaration it builds:
   // the declaration is not in the source, so a diagnostic about its
@@ -899,7 +899,7 @@ struct GenericParam {
   // The annotation after `:`: a value parameter's type (`N: usize`) or
   // a bounded parameter's first bound (`T: Display`). Invalid when the
   // parameter writes none. A primitive scalar annotation is what makes
-  // the parameter a value (ADR-0028).
+  // the parameter a value.
   TypeIdx type = TypeIdx::invalid();
   // The bounds after the first, from `T: A + B`; empty when the
   // annotation is the whole of it.
@@ -926,7 +926,6 @@ struct ItemFn {
   // An `unsafe fn`: calling it is an operation that needs the opt-in.
   bool is_unsafe = false;
   // A `comp fn`: the call is evaluated during compilation only
-  // (ADR-0054).
   bool is_comp = false;
 };
 
@@ -1016,7 +1015,7 @@ struct ItemSpec {
   Ident name;
   std::span<const GenericParam> params;
   // The super-spec this one refines (`spec Eq: PartialEq`), as a path
-  // type, or an invalid index when absent. ADR-0053.
+  // type, or an invalid index when absent..
   TypeIdx super = TypeIdx::invalid();
   std::span<const SpecMethod> methods;
 };

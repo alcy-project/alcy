@@ -33,7 +33,6 @@ namespace ir {
 // function read from the appended half names its table's base plus the
 // index it had there. The two halves share one index space then, and a
 // name the other half holds was copied into this build's interner
-// (ADR-0079).
 struct StorageBases {
   u32 types = 0;
   u32 struct_types = 0;
@@ -57,12 +56,12 @@ struct StorageBases {
   // Where each function of the appended half landed. A function a
   // symbol answers for, or one no root reaches, is `U32_MAX` here: the
   // code stays the package's own object's for the first, and the second
-  // is not carried at all (ADR-0078, ADR-0079).
+  // is not carried at all.
   std::vector<u32> function_map;
   // Where each type of the appended half landed, relative to `types`.
   // A type no root reaches is `U32_MAX`. The per-type tables run
   // parallel to the type table, so this is what a caller extends them
-  // by (ADR-0085).
+  // by.
   std::vector<u32> type_map;
 };
 
@@ -131,8 +130,7 @@ class StorageBuilder {
   }
   // Resolves a function the appended half holds: a symbol means the
   // code lives in the package's own object and crosses as a call by
-  // that name; no symbol means the body is imported (ADR-0078,
-  // ADR-0079).
+  // that name; no symbol means the body is imported.
   using SurfaceResolver =
       std::function<std::optional<str::StringPoolId>(FunctionIdx)>;
   // Copies the part of `other` that `roots` reach after this build's,
@@ -141,7 +139,7 @@ class StorageBuilder {
   // functions they call, and those functions' own closure. An entry no
   // root reaches is not copied, so a dependent holds what its carried
   // bodies reach rather than the other package's whole lowered storage
-  // (ADR-0079). `map_string` copies a name into this build's
+  //. `map_string` copies a name into this build's
   // interner; a name the other storage's table holds is remapped
   // through it. A function `surface_of` names by symbol keeps no body:
   // a reference to it stays a call by that name.
@@ -241,12 +239,12 @@ class StorageBuilder {
     state_.parametric_functions.push_back(function);
   }
   // Marks a specialization of a staged item, which a reported count
-  // excludes (ADR-0079).
+  // excludes.
   void add_prelude_specialization(FunctionIdx function) {
     state_.prelude_specializations.push_back(function);
   }
   // Marks a body the specialization pass synthesized, which a reported
-  // count excludes too (ADR-0079).
+  // count excludes too.
   void add_synthetic_function(FunctionIdx function) {
     state_.synthetic_functions.push_back(function);
   }

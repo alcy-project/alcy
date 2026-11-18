@@ -1,5 +1,5 @@
 // A generic struct's turbofish takes a value parameter as a value:
-// the declaration is ADR-0054's ArrayVec acceptance case.
+// the declaration is ArrayVec acceptance case.
 struct ArrayVec<T, N: usize> {
   data: [T; N],
   len: usize,

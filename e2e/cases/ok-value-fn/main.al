@@ -1,7 +1,7 @@
 // Generic functions with value parameters: the turbofish names the
 // count, the instance's parameter type carries it, and a value slot
 // never infers from an array. An associated function reached through a
-// value-argument path resolves the same way (ADR-0054).
+// value-argument path resolves the same way.
 
 fn first<T, N: usize>(a: [T; N]) -> T {
   ret a[0]

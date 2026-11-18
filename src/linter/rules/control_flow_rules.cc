@@ -119,7 +119,7 @@ void check_while(LintContext& ctx, ast::ExprIdx expr) {
   ctx.label<i18n::Key::LintWhileTrueHelp>(finding, node.span);
   // The repair is sure only when the text the swap covers is exactly
   // the keyword and the condition: a spread or parenthesized `true`
-  // would leave bytes the swap does not own behind (ADR-0111 - a repair
+  // would leave bytes the swap does not own behind (- a repair
   // is the rule's assertion that it knows the bytes it replaces).
   const std::optional<std::string_view> bytes =
       ctx.sources.bytes(node.span.file);

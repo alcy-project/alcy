@@ -1,7 +1,7 @@
 // The ways a non-unit function may end: an explicit ret (with or
 // without its semicolon), branches that all return, match arms that
 // all return, a diverging call, and a block-bodied closure, which
-// keeps its tail value (ADR-0059).
+// keeps its tail value.
 fn direct() -> i32 {
   ret 1;
 }

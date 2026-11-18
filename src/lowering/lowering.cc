@@ -250,7 +250,7 @@ void Lowerer::complete_traits() {
   // The seeds close over what a value holds: an end runs its fields'
   // destructors, and a value holding an anchor is not movable. A
   // reference owns nothing, and a `MaybeUninit` ends nothing of its
-  // payload, so neither passes its parts through (ADR-0085).
+  // payload, so neither passes its parts through.
   bool changed = true;
   while (changed) {
     changed = false;
@@ -553,7 +553,7 @@ Val Lowerer::materialize_slow(Val v) {
   // and a reference is a pointer: moving it transfers no value. A
   // parametric body cannot decide Copy-ness yet; the specialization
   // substitutes the argument and borrows the clone, which is where the
-  // read is admitted or refused (ADR-0079).
+  // read is admitted or refused.
   if (v.borrowed && !is_copy(v.type) && !ir::is_pointer_type(tag_of(v.type)) &&
       cur_inst_ != analyzer::PARAM_INST) {
     const u32 index = bag.emit<i18n::Key::LowerMoveOutOfBorrow>(
@@ -699,7 +699,7 @@ bool Lowerer::destructure_refused(ir::TypeIdx type,
     return false;
   }
   // The destructor body is the one scope that may take its own receiver
-  // apart (ADR-0137): its fields end where the body moves them.
+  // apart: its fields end where the body moves them.
   u32 local = 0;
   std::vector<u32> path;
   const ir::Operand& operand = builder.state().operands[op.idx];
@@ -722,7 +722,7 @@ ir::TypeIdx Lowerer::type_at_path(ir::TypeIdx type, std::span<const u32> path) {
 void Lowerer::emit_move_marker_slow(Val v, bool subsumes_parts) {
   // A closure that owns nothing is not moved: its captures are borrows,
   // so the value holds handles to storage that stays where it is and a
-  // second binding shares the one loan (ADR-0064). A shared-borrow
+  // second binding shares the one loan. A shared-borrow
   // closure is `Copy` and returned above; an exclusive capture is the
   // shape `exe-closure-capture-mut` expects to hand on, so the two
   // handles share the loan there too, and whether both may write
@@ -732,7 +732,7 @@ void Lowerer::emit_move_marker_slow(Val v, bool subsumes_parts) {
   }
   // A value whose type parameter has not settled `Copy`-ness moves
   // conservatively: the borrow pass re-decides for the substitution's
-  // type (ADR-0079).
+  // type.
   ir::InstructionFlags flags;
   flags.maybe_copy = ir::type_names_param(builder.state(), v.type);
   flags.subsumes_parts = subsumes_parts;
@@ -764,7 +764,7 @@ void Lowerer::record_move_event_slow(Val v, diag::Span span) {
   // the method would run on a value with a hole where the field was. The
   // receiver of the destructor being lowered is exempt at its own place:
   // the body is that method, so a field it moves into a binding ends with
-  // the binding (ADR-0137). A value reached through one of its fields still
+  // the binding. A value reached through one of its fields still
   // keeps the check, because the field's own destructor ends the hole.
   const usize first_prefix = local_index == end_exempt_ ? 1 : 0;
   for (usize i = first_prefix; i < path.size(); ++i) {
@@ -832,7 +832,7 @@ void Lowerer::merge_summary_module(u32 module) {
   const ir::Storage* const storage = node.summary_storage;
   // Every module one artifact answers for shares its storage: the merge
   // copies each reached entry once, so a later module aliases the result
-  // instead of appending a second copy (ADR-0079).
+  // instead of appending a second copy.
   const auto merged = merged_storages_.find(storage);
   if (merged != merged_storages_.end()) {
     merged_modules_.emplace(module, merged->second);
@@ -911,7 +911,7 @@ void Lowerer::merge_summary_module(u32 module) {
   // lowering interned shapes is refused rather than misaligned: a
   // carried type keeps the destructor and anchor answers its library
   // measured, and a destructor whose body did not cross stays visible
-  // as a marker (ADR-0085).
+  // as a marker.
   const auto extend_traits = [&](std::vector<u8>& table,
                                  std::span<const u8> source,
                                  const std::function<u8(ir::TypeIdx)>& gap) {
@@ -1182,7 +1182,7 @@ bool Lowerer::escapes_referent(ir::TypeIdx type,
 
 // A place handed out of a block reaches the locals the views it kept
 // were taken of, and those slots end with the block that declares them,
-// so the place would outlive a view it still names (ADR-0135).
+// so the place would outlive a view it still names.
 bool Lowerer::kept_view_escapes(ast::ExprIdx expr,
                                 diag::Span span,
                                 usize first) {
@@ -1219,7 +1219,7 @@ bool Lowerer::kept_view_escapes(ast::ExprIdx expr,
 
 // A call may leave an argument in storage it owns - `Vec::push` writes
 // its element into the buffer - so a value that carries a borrow has to
-// outlive the place the call borrows (ADR-0135). `sources_from` is
+// outlive the place the call borrows. `sources_from` is
 // where the argument's loans start in `borrow_sources`.
 bool Lowerer::check_kept_values(
     const std::vector<KeptValue>& values,
@@ -1279,7 +1279,7 @@ bool Lowerer::check_kept_values(
 
 // The storage the call wrote into holds what it was handed, so a view
 // left there names the local it was taken of from now on: the place
-// reaches that local until something overwrites it (ADR-0135).
+// reaches that local until something overwrites it.
 void Lowerer::note_kept_referents(
     const std::vector<KeptValue>& values,
     const std::vector<ast::ExprIdx>& borrowed_places) {
@@ -1893,7 +1893,7 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
                                   bool parametric) {
   // A signature that names a type parameter belongs to the
   // definition-site check, and only the parametric body itself or the
-  // specialization pass may lower one (ADR-0079). A row that gets here
+  // specialization pass may lower one. A row that gets here
   // means the isolation broke: the failure is loud rather than a Param
   // type at a backend.
   if (!parametric &&
@@ -2089,7 +2089,7 @@ ir::FunctionIdx Lowerer::closure_fn_index(
 // method's own, so a call passes the receiver and the view it already
 // holds. The body is emitted where it is asked for, the way a
 // specialization is: the call that wants it runs between body
-// lowerings (ADR-0053, ADR-0079).
+// lowerings.
 ir::FunctionIdx Lowerer::display_fn_for(ir::TypeIdx type) {
   const auto found = display_fn_by_type_.find(type.idx);
   if (found != display_fn_by_type_.end()) {
@@ -2304,7 +2304,7 @@ ir::TypeIdx Lowerer::storage_copy(ir::TypeIdx type) {
   const ir::TypeIdx copy = builder.ref_type(type);
   type_origins_.emplace(copy.idx, type.idx);
   // A copy carries the mark of what it came from, the way the
-  // checker's copies do (ADR-0085).
+  // checker's copies do.
   if (type.idx < pkg.not_movable.size() && pkg.not_movable[type.idx] != 0) {
     if (pkg.not_movable.size() <= copy.idx) {
       pkg.not_movable.resize(copy.idx + 1, 0);
@@ -2426,7 +2426,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
                    Val{to_operand(addr, ptype), ptype, true, true});
     }
     // The caller owns what arrived here, so these slots outlive the
-    // return that ends the frame (ADR-0135).
+    // return that ends the frame.
     for (usize slot = params_at; slot < locals.size(); ++slot) {
       locals[slot].is_param = true;
       param_of_local_[static_cast<u32>(slot)] = static_cast<u32>(i);
@@ -2437,7 +2437,7 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   if (is_destructor(entry.item) && !locals.empty()) {
     // The receiver ends from this body: the walk would run the
     // destructor this body is, and a value it has partly ended has no
-    // spelling (ADR-0137).
+    // spelling.
     end_exempt_ = 0;
   }
   if (failed) {
@@ -2537,7 +2537,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
         locals.emplace_back(capture.name, field, capture.type);
         // The environment owns this field, and the closure may run
         // again: moving it out is moving out of borrowed content, which
-        // is what the borrow pass refuses (ADR-0064).
+        // is what the borrow pass refuses.
         addr_names_.push_back({field, capture.name, false, true});
         continue;
       }
@@ -2572,7 +2572,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
         addr_names_.push_back({addr, name, binding_param_});
       }
       // The caller owns what arrived here, so these slots outlive the
-      // return that ends the frame (ADR-0135).
+      // return that ends the frame.
       locals.back().is_param = true;
     }
   }
@@ -2646,7 +2646,7 @@ void Lowerer::lower_closure_fn(const FnEntry& entry) {
 // The synthesized `Display` body: the inline expansion for one value,
 // reading the receiver through the reference the call passes and
 // writing into the view it passes, exactly as the concrete expansion
-// would have (ADR-0053).
+// would have.
 // Publishes the body a synthesized function emitted: the reserved
 // blocks in reservation order, the entry block carrying the
 // parameters. A specialization clones blocks of its own between
@@ -2674,7 +2674,7 @@ void Lowerer::publish_body(ir::FunctionIdx fn) {
 // The function that ends a value of the type: the drop pass's own walk,
 // emitted once per type. A specialization's end cannot run that pass in
 // place - a clone's blocks are fixed before its body is translated -
-// and a call keeps one spelling of the walk (ADR-0079).
+// and a call keeps one spelling of the walk.
 ir::FunctionIdx Lowerer::drop_fn_for(ir::TypeIdx type) {
   const auto found = drop_fn_by_type_.find(type.idx);
   if (found != drop_fn_by_type_.end()) {
@@ -2844,7 +2844,7 @@ void Lowerer::run() {
   // reserved on demand like any other instantiation.
   for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
     // A summary's module carries signatures and no bodies; the
-    // package's own artifact holds the code (ADR-0078).
+    // package's own artifact holds the code.
     if (pkg.tree.modules[m]->is_summary) {
       continue;
     }
@@ -2869,14 +2869,13 @@ void Lowerer::run() {
   }
   // The work list's comp prefix, counted by what is on it: a merged
   // summary's bodies hold entries in `fns` and never lower here
-  // (ADR-0079).
   const usize comp_prefix = worklist_.size();
   // Seed every checked non-comp signature so bodies without call
   // sites still reach codegen. A generic impl contributes one
   // signature per instantiation, keyed by its self type.
   for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
     // A summary's module carries signatures and no bodies; the
-    // package's own artifact holds the code (ADR-0078).
+    // package's own artifact holds the code.
     if (pkg.tree.modules[m]->is_summary) {
       continue;
     }
@@ -2886,7 +2885,7 @@ void Lowerer::run() {
           ast.items[method.item].kind == ast::ItemKind::Intrinsic) {
         continue;
       }
-      // The definition-site check's rows never lower (ADR-0079): the
+      // The definition-site check's rows never lower: the
       // specialization pass is what consumes them. The key says so even
       // when the signature is concrete - a method called on a concrete
       // receiver inside a generic body carries one.
@@ -2933,7 +2932,7 @@ void Lowerer::run() {
       // Generic free functions reserve per instantiation on first
       // call, like comp specializations; seeding them here would
       // lower one body under the wrong instantiation key, and the
-      // definition-site check's rows never lower at all (ADR-0079).
+      // definition-site check's rows never lower at all.
       if (sig.inst == analyzer::PARAM_INST ||
           (ast.items[sig.item].kind == ast::ItemKind::Fn &&
            !ast.items[sig.item].payload.get<ast::ItemFn>().generic.empty())) {
@@ -2967,7 +2966,7 @@ void Lowerer::run() {
   }
   // The definition-site check's bodies: one function per generic item,
   // emitted once with the `Param` nodes its signature resolved
-  // (ADR-0079). The list is what the specialization clones and what
+  //. The list is what the specialization clones and what
   // the borrow pass and the backends skip.
   for (const analyzer::ParametricBody& body : pkg.parametric_bodies) {
     if (body.module >= pkg.tree.modules.size() ||
@@ -3086,7 +3085,7 @@ void Lowerer::run() {
   for (const Done& lowered : done) {
     materialize(fns[lowered.fn], lowered.blocks);
   }
-  // Specialization (ADR-0079): resolve the callee records concrete
+  // Specialization: resolve the callee records concrete
   // bodies carry, lower the bodies a dispatch resolution enqueues, and
   // resolve theirs in turn. Clones are resolved as they are built, so
   // the sweep only has to pick up newly lowered bodies.
@@ -3118,7 +3117,7 @@ void Lowerer::run() {
   }
   if (!failed) {
     // Every body has been lowered, so the kept-parameter summaries are
-    // complete and the deferred call-site checks can run (ADR-0135).
+    // complete and the deferred call-site checks can run.
     finish_kept_checks();
   }
 }
@@ -3150,7 +3149,7 @@ void Lowerer::materialize(const FnEntry& entry, ir::BlockIdxRange blocks) {
   // Every staged module is toolchain sources, facades and siblings
   // alike; only facades are preludes. A parametric body counts
   // through the storage's parametric list instead, because no source
-  // function stands for one (ADR-0079).
+  // function stands for one.
   if (pkg.tree.modules[entry.mod]->is_staged && !entry.parametric) {
     ++prelude_functions_;
   }
@@ -3159,7 +3158,7 @@ void Lowerer::materialize(const FnEntry& entry, ir::BlockIdxRange blocks) {
 
 // A function's streams are handed to the drop pass after its body is lowered,
 // and the pass rewrites them by copying the instructions it read into a fresh
-// range (ADR-0062). The instructions it read stay in the table with no block
+// range. The instructions it read stay in the table with no block
 // referring to them: they carry spans, they define the registers the copies
 // define, and a register's definition still points at one of them. Dropping
 // them leaves one instruction per index a block owns, so a definition, a span,
@@ -3290,7 +3289,7 @@ bool takes_receiver(const ast::AstArena& ast, const ast::ItemFn& fn) {
   return false;
 }
 
-// The package's public surface for the summary (ADR-0078): one row per
+// The package's public surface for the summary: one row per
 // public item of the package's own modules. A concrete item names the
 // lowered code that carries it; a generic one knows only its
 // declaration, because instantiating it needs the body, so the row says
@@ -3335,7 +3334,7 @@ ir::TypeIdx indexed_type(const std::unordered_map<u32, ir::TypeIdx>& index,
 // The nominal an associated function or method belongs to, found by the
 // item the checked method tables recorded for it. A generic impl's
 // declaration-shaped owner is the one whose type names a parameter; a
-// concrete instantiation is the fallback (ADR-0079).
+// concrete instantiation is the fallback.
 ir::TypeIdx method_owner_of(const analyzer::CheckedPackage& pkg,
                             const std::vector<ModuleDecls>& decls,
                             u32 mod,
@@ -3400,7 +3399,7 @@ ir::TypeIdx nominal_type_of(const analyzer::CheckedPackage& pkg,
 
 // The declaration-shaped type a generic nominal's row names: the
 // instance the parametric bodies were built with, whose arguments are
-// the item's own parameters, in order (ADR-0079).
+// the item's own parameters, in order.
 ir::TypeIdx generic_declaration_type(const ir::StorageState& state,
                                      bool is_struct,
                                      str::StringPoolId name) {
@@ -3442,7 +3441,7 @@ ir::TypeIdx generic_declaration_type(const ir::StorageState& state,
 
 // The owner an impl's method rows name, read from the impl's target:
 // the declaration-shaped instance for a generic impl, the interned one
-// for a concrete impl (ADR-0079).
+// for a concrete impl.
 ir::TypeIdx impl_owner_of(const analyzer::CheckedPackage& pkg,
                           const std::vector<ModuleDecls>& decls,
                           const ast::AstArena& ast,
@@ -3525,8 +3524,8 @@ std::vector<ir::SummaryEntry> collect_summary(
   }
   std::vector<ir::SummaryEntry> summary;
   // The parametric body a generic row carries: the definition-site body
-  // a dependent's specialization clones (ADR-0079). An item whose body
-  // stays per-instantiation (`Fn`-bounded, ADR-0116) has none.
+  // a dependent's specialization clones. An item whose body
+  // stays per-instantiation (`Fn`-bounded) has none.
   const auto parametric_body = [&fns](ast::ItemIdx item) -> ir::FunctionIdx {
     for (const Lowerer::FnEntry& entry : fns) {
       if (entry.parametric && entry.item == item) {
@@ -3568,7 +3567,7 @@ std::vector<ir::SummaryEntry> collect_summary(
       const ast::ItemNode& node = ast.items[item];
       // An impl carries no visibility of its own: its methods say what
       // crosses, and a generic impl's methods have no lowered entry to
-      // take a row from (ADR-0079).
+      // take a row from.
       if (!node.is_pub && node.kind != ast::ItemKind::Impl) {
         continue;
       }
@@ -3583,7 +3582,7 @@ std::vector<ir::SummaryEntry> collect_summary(
                       : node.payload.get<ast::ItemEnum>().name.name;
         // A generic declaration's shape exists only per instantiation;
         // the instance the parametric bodies were built with is the
-        // declaration-shaped one (ADR-0079).
+        // declaration-shaped one.
         const str::StringPoolId type_name = strings.intern(name);
         const ir::TypeIdx type =
             generic ? generic_declaration_type(state, is_struct, type_name)
@@ -3670,7 +3669,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   // A dependency with no sources carries its generic bodies in the
   // summary: merging them before any body is lowered keeps every index
   // this build hands out after the merged tables, so the pass can clone
-  // a carried body beside the dependent's own code (ADR-0079).
+  // a carried body beside the dependent's own code.
   for (u32 m = 0; m < static_cast<u32>(lowerer.pkg.tree.modules.size()); ++m) {
     if (lowerer.pkg.tree.modules[m]->is_summary &&
         lowerer.pkg.tree.modules[m]->summary_storage != nullptr) {
@@ -3694,13 +3693,13 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   // The artifact carries the trait tables, and the analyzer measured a
   // type only when its own build ended one; re-derive them over the
   // whole storage so a dependent inherits an answer for every type a
-  // carried body can name (ADR-0085).
+  // carried body can name.
   lowerer.complete_traits();
   std::vector<diag::Span> spans = std::move(lowerer.instr_spans_);
   std::vector<LoweredPackage::AddrInfo> addrs = std::move(lowerer.addr_names_);
   // The borrow pass reads both tables through the lowered package, so
   // they travel with it; the lowerer itself is moved into finish()
-  // below (ADR-0085).
+  // below.
   std::unordered_map<u32, u32> type_origins = std::move(lowerer.type_origins_);
   std::vector<u8> not_movable = std::move(lowerer.pkg.not_movable);
   const usize prelude_functions = lowerer.prelude_functions_;
@@ -3754,7 +3753,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
                          std::move(type_origins),
                          std::move(not_movable),
                          std::move(needs_drop)};
-  // ADR-0054: the IR engine is compared against the AST engine over
+  // : the IR engine is compared against the AST engine over
   // every comp call lowering made, before it is trusted to answer. A
   // disagreement is a compiler bug; a construct the interpreter does
   // not carry yet is simply not compared.

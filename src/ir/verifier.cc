@@ -347,7 +347,7 @@ VerificationResult verify_storage(const Storage& storage) {
   }
 
   // Which bodies the specialization pass clones: only these carry the
-  // records it resolves, an end included (ADR-0079).
+  // records it resolves, an end included.
   std::vector<bool> parametric(storage.functions().size(), false);
   for (const FunctionIdx fidx : storage.parametric_functions()) {
     if (fidx.idx >= storage.functions().size()) {
@@ -369,7 +369,7 @@ VerificationResult verify_storage(const Storage& storage) {
     // A body outside the list has resolved everything the parametric
     // form waits on: an end or a callee record has no pass left that
     // would rewrite it, and a type parameter has no layout any reader
-    // could answer (ADR-0079).
+    // could answer.
     if (!parametric[fidx.idx]) {
       if (type_names_param(storage.state(), func.meta.return_type) ||
           type_names_param(storage.state(), func.meta.owner)) {
@@ -413,7 +413,7 @@ VerificationResult verify_storage(const Storage& storage) {
                        iidx.idx);
           }
           // The pass resolves a callee record into a function before
-          // any backend runs; an unresolved one is a hole (ADR-0079).
+          // any backend runs; an unresolved one is a hole.
           for (const OperandIdx operand : instr.operands) {
             if (operand.idx >= storage.operands().size()) {
               continue;

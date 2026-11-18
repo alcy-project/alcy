@@ -27,7 +27,7 @@ struct Toolchain {
   std::span<const std::string_view> link_args;
   // Whether the goal package links without a C runtime: no startup
   // objects, no C library, and the compiler emits `_start` as the
-  // entry instead of `main` (ADR-0052).
+  // entry instead of `main`.
   bool freestanding = false;
 };
 

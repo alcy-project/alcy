@@ -1,6 +1,6 @@
 // A destructor's body may move a field of its receiver into a binding:
 // the binding owns the value from there and ends it where it stands
-// (docs/spec/values.md, ADR-0137).
+// (docs/spec/values.md).
 
 struct Payload {
   id: i32,

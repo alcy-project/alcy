@@ -1,5 +1,5 @@
 // An aggregate too large to live in a register crosses as a pointer to
-// the caller's slot, and the callee works on its own copy (ADR-0140).
+// the caller's slot, and the callee works on its own copy.
 fn last(a: [u8; 70000]) -> u8 {
   ret a[69999]
 }

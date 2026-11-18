@@ -11,7 +11,7 @@
 # The oracle is the existing verifier layer rather than a comparison
 # against a known answer. Every byte-level entry point already returns a
 # `base::Result`, and the pipeline already verifies at each stage
-# boundary (docs/adr/0015), so "does not crash, does not trip a
+# boundary, so "does not crash, does not trip a
 # sanitizer, and the verifier accepts or rejects cleanly" is a complete
 # statement for the memory-safety class. Two targets go further and abort
 # on a broken invariant, because libFuzzer turns an abort into a

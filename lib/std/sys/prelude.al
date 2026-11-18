@@ -9,7 +9,7 @@
 //
 // The calls stay off the facade: `read` and `write` already name a
 // core intrinsic and `fmt`'s expanded write, and a suite's implicit
-// surfaces do not repeat a name (ADR-0016). They are reached by path
+// surfaces do not repeat a name. They are reached by path
 // (`sys::raw::read`, `sys::raw::write`).
 
 pub use package::args::arg;

@@ -34,7 +34,7 @@ enum class DiagCode : u8 {
   // A field moved out of a value whose `drop` method the user wrote.
   MoveOutOfDestructor = 8,
   // A constant expression the compiler evaluated overflows its type
-  // (ADR-0065): the program is refused rather than read as wrapping.
+  // : the program is refused rather than read as wrapping.
   CompOverflow = 9,
   // A constant expression the compiler evaluated divides by zero: the
   // program is refused the way a checked build refuses it at runtime.
@@ -72,7 +72,7 @@ enum class DiagCode : u8 {
   CompNotEvaluable = 19,
   // A carried generic body ends a value whose destructor the library
   // measured: its body did not cross with the summary, so the end
-  // cannot run there and skipping it would leak (ADR-0079, ADR-0085).
+  // cannot run there and skipping it would leak.
   SummaryDropNotCarried = 20,
 };
 

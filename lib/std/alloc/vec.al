@@ -14,7 +14,7 @@
 // `at` takes `&Self` and hands out `&T`; the mutating accessors take
 // `&mut Self`. A shared reborrow of `*self` reaches the buffer field,
 // so a read-only view is a shared loan of the referent, not a copy of
-// the pointer. See docs/adr/0012-reborrow-on-reference-read.md.
+// the pointer.
 pub struct Vec<T> {
   buf: &mut MaybeUninit<T>,
   len: usize,
@@ -307,7 +307,7 @@ impl<T> Vec<T> {
   // Keeps the elements the predicate accepts and drops the rest, in
   // order. A write cursor follows a read cursor; the swaps leave the
   // kept prefix in place, and the rejected tail ends from first to last
-  // like every other sequence (ADR-0086).
+  // like every other sequence.
   pub fn retain(mut self: &mut Self, keep: (&T) -> bool) {
     mut write := 0 as usize
     mut scan := 0 as usize
@@ -407,7 +407,7 @@ impl<T> Vec<T> {
   }
 
   // Ends the elements past `n` and keeps the first `n`, from first to
-  // last like every other sequence (ADR-0086). A length at or beyond the
+  // last like every other sequence. A length at or beyond the
   // current one changes nothing.
   pub fn truncate(mut self: &mut Self, n: usize) {
     if self.len <= n {
@@ -449,7 +449,6 @@ impl<T> Vec<T> {
 // Equality has to exist for `contains` to compare elements, so the
 // method sits in a block that says so: `v.contains(&x)` on a
 // `Vec<Plain>` names `Plain` at the call rather than a line in here
-// (ADR-0028).
 impl<T: PartialEq> Vec<T> {
   // Whether some element equals `value`, compared the way `==`
   // compares two elements.
@@ -467,7 +466,7 @@ impl<T: PartialEq> Vec<T> {
 
 // The total order has to exist for the sort to, so the method sits in
 // a block that says so: `v.sort()` on a `Vec<Plain>` names `Plain` at
-// the call rather than a line in here (ADR-0028). A type that only has
+// the call rather than a line in here. A type that only has
 // `PartialOrd` sorts through `sort_by`.
 impl<T: Ord> Vec<T> {
   pub fn sort(mut self: &mut Self) {

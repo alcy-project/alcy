@@ -4,7 +4,7 @@
 // Arbitrary bytes through the IR binary form's reader.
 //
 // A cache or a tool hands the reader bytes the compiler did not just
-// write, so this is an entry point for untrusted input and ADR-0015's
+// write, so this is an entry point for untrusted input and
 // property applies: it refuses with an error or hands back verified
 // storage, and never crashes or reads out of bounds. A package that
 // loads is also normalized: writing what was read and loading that

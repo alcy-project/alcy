@@ -1,5 +1,5 @@
 // An unmovable value is built in place, read through borrows, and
-// ended in place (ADR-0085).
+// ended in place.
 struct Pinned {
   held: Anchor,
   value: i32,

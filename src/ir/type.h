@@ -34,7 +34,7 @@ enum class TypeTag : u8 {
   Ptr,     // Opaque pointer
   Ref,     // Immutable reference (region tracked)
   MutRef,  // Mutable reference  (exclusive, region tracked)
-  // Raw pointers (ADR-0050): thin, Copy, and outside the region
+  // Raw pointers: thin, Copy, and outside the region
   // system. They share the reference payload, which names the pointee.
   RawPtr,     // *T
   RawMutPtr,  // *mut T
@@ -63,7 +63,7 @@ enum class TypeTag : u8 {
   // A type parameter of the item the node belongs to: the payload is
   // the parameter's index, counting the item's own type parameters.
   // A body that has not been specialized still names the types it was
-  // written with, and the specialization replaces them (ADR-0079).
+  // written with, and the specialization replaces them.
   // It is never a value of the language: a parameter has no layout
   // until the argument is known.
   Param,

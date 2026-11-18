@@ -5,7 +5,7 @@
 
 """Check the borrow checker against the rules it is supposed to enforce.
 
-docs/spec/ownership.md and `docs/adr/0012-reborrow-on-reference-read.md` state the
+docs/spec/ownership.md and  state the
 rules as propositions about a loan, so a program's verdict is derivable
 rather than a matter of taste. Every case below declares the verdict its
 loan demands, and the checker either agrees or does not. A disagreement
@@ -434,7 +434,7 @@ case(
 # buffer's loan and cannot leave the function that owns the container.
 # Binding it to a local reads it in place (`err-borrow-live-owned`
 # pins the `push` conflict); handing it back needs the region a loan
-# carries, which ADR-0012 records as the work that replaces this.
+# carries, which  records as the work that replaces this.
 case(
     "returned",
     "owned-element-returned",

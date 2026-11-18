@@ -5,7 +5,7 @@
 
 // The capability behind `a[i]`: `I` is the index type and `O` the
 // element type, and an index that names no element panics, the way
-// array indexing behaves. The spec is sealed to the suite (ADR-0053),
+// array indexing behaves. The spec is sealed to the suite,
 // so the standard containers are the implementations that exist.
 pub spec Index<I, O> {
   fn index(self: &Self, i: I) -> &O;

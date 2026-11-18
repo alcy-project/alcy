@@ -43,7 +43,7 @@ enum class VersionReqError : u8 {
   TooManyBounds,
 };
 
-// Parses a requirement (ADR-0057):
+// Parses a requirement :
 //
 //   requirement = term ("," term)*
 //   term        = comparator X.Y.Z | X.Y.Z | X.Y.x | X.x

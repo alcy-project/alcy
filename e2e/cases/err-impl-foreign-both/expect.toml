@@ -1,4 +1,4 @@
-# An implementation lives where the type or the spec lives (ADR-0090).
+# An implementation lives where the type or the spec lives.
 exit = 4
 contains = [
   "An implementation lives where the type or the spec lives: 'Thing' is declared in package 'acme_types' and 'Tagged' in package 'acme_specs'",

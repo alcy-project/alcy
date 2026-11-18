@@ -32,7 +32,7 @@ enum class SummaryKind : u8 {
   Enum = 5,
 };
 
-// One row of a package's public surface (ADR-0078): the source name, the
+// One row of a package's public surface: the source name, the
 // module it belongs to, and what the symbol is. A function row whose
 // `function` is valid names the lowered code that carries its signature;
 // a nominal row's `function` is the type index, invalid when the

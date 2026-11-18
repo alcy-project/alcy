@@ -3,7 +3,7 @@
 Near-term work on the language's foundations. Ordered, and one at a
 time: the next task is the only one started, and the rest wait. The
 peripheral work lives in `backlog.md`. The language record lives in
-`docs/adr/`; entries below cite the decision, not the history.
+`docs/spec/`; entries below cite the specification, not the history.
 
 ## Next
 
@@ -19,7 +19,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   markers and the stores, solves ownership per place (owned, moved,
   maybe), and appends an end where every path owns; paths that differ
   decide at run time behind a per-place flag, and splitting the edge
-  instead is the refinement ADR-0062 records. The `Drop` opcode is the
+  instead is the refinement the ownership pass records. The `Drop` opcode is the
   marker a placed end carries, and the borrow checker consumes it as
   an authoritative boundary. Glue reaches a struct's or tuple's
   fields, an enum's live variant, and an array's elements; the unsafe
@@ -27,8 +27,6 @@ peripheral work lives in `backlog.md`. The language record lives in
   elements in `clear` and `drop` (`Map` and `Set` already did by
   moving entries into bindings); and discarding - `_ := expr`, a bare
   statement, or a wildcard binding - ends the value where it stands.
-  Designed in
-  `docs/adr/0062-a-values-end-follows-the-path-that-owns-it.md`.
 
 - [x] Container iteration.
 
@@ -43,7 +41,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   that yields a reference needed the checker to accept a spec argument
   naming one of the implementation's parameters (`Iterator<&T>`); a
   cursor whose element may be Copy needed a declared destructor to
-  make its type move-only (ADR-0013, amended). `impl str` landed with
+  make its type move-only. `impl str` landed with
   `len`, `is_empty`, `byte`, and byte iteration; inherent impls may
   target compound shapes (`impl<T> [T]`, `impl<T, N: usize> [T; N]`),
   so slices and arrays answer `len`, `is_empty`, `as_slice`,
@@ -71,12 +69,11 @@ peripheral work lives in `backlog.md`. The language record lives in
   formats through `fmt`'s `fn display(self: &Self, out: &mut [u8]) ->
   usize`, which writes the prefix that fits and returns the total the
   measure pass learns from an empty slice, so `{}` reaches a type of
-  one's own. Floats stay `PartialOrd` only. Designed in
-  `docs/adr/0053-operators-are-sealed-specs.md`.
+  one's own. Floats stay `PartialOrd` only.
 
 - [x] Spec bounds and checked generics.
 
-  ADR-0028's last slice: bounds where a parameter is declared - on
+  The spec system's last slice: bounds where a parameter is declared - on
   functions, methods, spec methods, and impls, never on structs or
   enums - multiple bounds joined with `+`, `where` still reserved,
   each call checked against them. The first slices landed: `T: A + B`
@@ -102,17 +99,16 @@ peripheral work lives in `backlog.md`. The language record lives in
   argument instantiates like any other, because the body is checked at
   the call and the parameter is already the concrete function type
   there, so `id((a: i32) -> a)` and calling through `f(x)` need no
-  bound. Designed in
-  `docs/adr/0028-spec-system.md`, and the body-checking decision is
-  `docs/adr/0063-generic-bodies-are-checked-at-their-calls.md`.
+  bound. Designed in `docs/spec/grammar.md`'s function types, and
+  the body-checking decision is recorded in `docs/spec/summaries.md`.
 
 - [ ] Owned heap values.
 
-  ADR-0044's follow-up, and the recursive types an indirection
+  follow-up, and the recursive types an indirection
   unblocks. A function value is structurally typed, `Copy`, and
   carries no destructor glue, so whether a closure owns its captures
-  cannot be a property of its type yet. The decision landed
-  (ADR-0064): a closure literal interns a nominal type whose field is
+  cannot be a property of its type yet. The decision landed:
+  a closure literal interns a nominal type whose field is
   its environment tuple, so its `Copy`-ness is the environment's and a
   closure coerces to a bare function type as a borrow of it. The first
   half landed with `Box<T>`: a literal's type is that struct, a value
@@ -128,10 +124,9 @@ peripheral work lives in `backlog.md`. The language record lives in
   link exactly once - the sanitizer run checks it. What remains is the
   owning environment where the view must own it: the environment is
   allocated on the heap, the frame-escape refusal retires, and
-  frame-crossing iterators close the adapters' frame-bound caveat. Designed in
-  `docs/adr/0044-function-types-and-closures.md`, with the owning
-  function type in `docs/adr/0075-owning-function-types.md` and capture
-  regions in `docs/adr/0076-region-annotated-captures.md`.
+  frame-crossing iterators close the adapters' frame-bound caveat.
+  Designed in `docs/spec/grammar.md`'s function types, with the owning
+  function type and the capture regions recorded beside it.
 
 - [ ] Package artifacts: a cache and resolution summaries.
 
@@ -139,7 +134,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   object because a dependent package cannot resolve against it. In
   slices: the build identity - source
   bytes, the manifest among them, pointer width, and toolchain, with a
-  profile joining above the IR boundary where ADR-0067 keeps the cache -
+  profile joining above the IR boundary the cache's design chose -
   and the content hashes the format's `FILES` section reserves but the
   writer leaves empty; a cache of the checked artifact, its location
   and invalidation, and a hit or miss in the command envelope; a
@@ -163,21 +158,17 @@ peripheral work lives in `backlog.md`. The language record lives in
   rebuilds and the cache hit path hands back. A dependent now resolves
   against a summary in place of the dependency's source, and the
   generic half is decided: a generic item crosses as its declaration
-  and its checked body, and the dependent instantiates it
-  (`docs/adr/0079-a-generic-item-crosses-as-its-checked-body.md`).
+  and its checked body, and the dependent instantiates it, as
+  `docs/spec/summaries.md` records.
   What remains is that work, and the spec implementations the roadmap
-  asks a summary to carry. Designed in
-  `docs/adr/0056-the-ir-has-a-text-and-a-binary-form.md`, for the
-  cache's key, artifact, location, and reporting,
-  `docs/adr/0072-a-packages-cache-holds-its-binary-ir.md`, and for the
-  surface a dependent reads,
-  `docs/adr/0078-the-summary-a-dependent-reads.md`; the pieces
-  are named in `docs/spec/deferred.md`.
+  asks a summary to carry. The design spans the IR format, the cache's
+  key, artifact, location, and reporting, and the surface a dependent
+  reads; the pieces are named in `docs/spec/deferred.md`.
 
 - [x] The platform floor: a core-only `sys`, and the OS calls out of
   `core`.
 
-  ADR-0128 landed: `sys` depends on `core` alone and owns `Fd` with
+  The floor landed: `sys` depends on `core` alone and owns `Fd` with
   the standard descriptors (associated functions), the faithful
   `read`/`write` that reports short and interrupted results as
   themselves, `OsError` over the raw errno, and the process
@@ -185,19 +176,19 @@ peripheral work lives in `backlog.md`. The language record lives in
   descriptor calls and the arguments to `sys`, the whole-file helpers
   to `io` - and `core`'s prelude re-exports retired. `sys_write` is
   one `write(2)` now and the write-all loop stayed with the print
-  hooks (ADR-0023); `sys_read` joined it, and the runtimes answer
+  hooks; `sys_read` joined it, and the runtimes answer
   `-(errno)` (LLVM through the C library's error slot, freestanding
   through the kernel, wasm through WASI's `fd_read`/`fd_write`, whose
   playground host answers end of input). The landing also settled two
   surface rules: a selected member is a package root
   (`use sys::raw::write`), and an explicit `use` shadows a facade's
-  name - the follow-up ADR-0016 recorded. The exe runner's stdin field
+  name - the follow-up the suite's landing recorded. The exe runner's stdin field
   still waits on the input layer's cases.
 
 - [ ] The standard library's surface is impls and specs.
 
-  ADR-0132. The parse family goes generic first, because input needs
-  it: the `Parse` capability (receiver-less, per ADR-0133) is called
+  The parse family goes generic first, because input needs
+  it: the `Parse` capability (a receiver-less call) is called
   as `i64::parse(text)` or `T::parse(text)`, and `String`'s six
   delegations collapse into one. The method spelling
   `str.parse::<T>()` waits on generic methods over builtin compound
@@ -209,8 +200,7 @@ peripheral work lives in `backlog.md`. The language record lives in
   promised.
 
 - [ ] Bytes-first input.
-
-  ADR-0129. Over `sys` and `Parse`: `io::BufReader` (one-call `fill`,
+  Over `sys` and `Parse`: `io::BufReader` (one-call `fill`,
   `read_byte`, `read_line` with the CRLF rule and no UTF-8 validation,
   `read_to_end`; `EINTR` retried here and only here) and
   `io::Scanner` (ASCII whitespace, `next_token`, `next::<T>`, counted
@@ -218,20 +208,20 @@ peripheral work lives in `backlog.md`. The language record lives in
   that does not parse, the OS error underneath. wasm reads through
   WASI `fd_read` (end of input in the playground), and exe cases cover
   the path. proconio-class input stays out; its blockers are recorded
-  in the ADR.
+  in the specification.
 
 - [ ] `comp` expands what it knows, and the `fmt` pilot.
 
-  ADR-0130. Explicit `comp for`/`comp if` control flow whose remaining
+. Explicit `comp for`/`comp if` control flow whose remaining
   operations are emitted in the function's per-instantiation body,
   with the variadic tuple's shape readable at compile time (length,
-  comp-known indexing that keeps each element's type) and ADR-0055's
+  comp-known indexing that keeps each element's type) and
   variadic rule restated. The pilot rewrites `fmt`'s parse and its
   conversions in alcy (the builtins gain conversion impls; a float
   carries its precision), retires the C++ conversion lane once the
   tests, code size, compile time, runtime performance, wasm parity,
   and the float-digit accuracy item pass, and lets `print` ride the
-  same expansion. Then ADR-0131's removals follow: `builtin_display`
+  same expansion. Then removals follow: `builtin_display`
   retires, the fmt/io recognition moves under the mechanism, and the
   agreement test pinning the scalar comparisons to their impls lands
   early.
@@ -239,15 +229,15 @@ peripheral work lives in `backlog.md`. The language record lives in
 ## 1.0
 
 The number is a compatibility boundary rather than a feature count,
-and ADR-0099 says what it means: the promises in `docs/adr/` stop
+and the specification says what it means: the promises in `docs/spec/` stop
 being editable there. It is declared when the boxes below are ticked,
 and not on a date.
 
 - [ ] Everything `docs/spec/` states is implemented, and
   `docs/spec/deferred.md` holds only what is explicitly moved past 1.0.
-- [ ] Every Accepted ADR is implemented or explicitly deferred, and
+- [ ] Every decision this specification states is implemented or explicitly deferred, and
   none contradicts the code.
 - [ ] The suite's public surface is described in `docs/spec/`, so the
   record of what is promised lives beside the record of why.
 - [ ] A program written against the suite needs no `unsafe` outside
-  the standard library's own internals (ADR-0100).
+  the standard library's own internals.

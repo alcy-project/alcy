@@ -311,7 +311,7 @@ module.exports = grammar({
     // The block is module level only and does not nest: what it holds is an
     // entry or a helper, so a second `test` block here reads as neither and
     // is a parse error, as it is in the compiler (items.md, "Tests";
-    // ADR-0139).
+    //).
     test_block_item: $ => seq(
       'test',
       $._block_lbrace,
@@ -322,7 +322,7 @@ module.exports = grammar({
     // A test takes no arguments, so its parameter list is empty by syntax:
     // the two parentheses are tokens rather than a `parameters` node. A
     // declared return type parses, and it is the `alcy test` command that
-    // reports it, not the parse (ADR-0139).
+    // reports it, not the parse.
     test_entry_item: $ => seq(
       'test',
       field('name', $.identifier),
@@ -394,7 +394,7 @@ module.exports = grammar({
 
     // `args: ..` collects the call's remaining arguments; only a plain
     // name may bind them and only a compiler-expanded function may
-    // declare one (ADR-0055). The precedence matches `identifier_pattern`
+    // declare one. The precedence matches `identifier_pattern`
     // so the `:` after a lone name stays a conflict rather than being
     // resolved before the token that follows it is read.
     variadic_parameter: $ => prec(1, seq(
@@ -462,7 +462,7 @@ module.exports = grammar({
     ),
 
     // `fn(A, B) -> R`: the owning spelling of the same signature
-    // (ADR-0075); the parameter list mirrors the structural one.
+    // ; the parameter list mirrors the structural one.
     owning_function_type: $ => seq(
       'fn',
       field('parameters', $.function_parameters),
@@ -477,7 +477,7 @@ module.exports = grammar({
     ),
 
     // A length is a literal or a path to a `const` integer value
-    // (types.md; ADR-0054).
+    // (types.md;).
     array_type: $ => seq(
       '[',
       field('element', $._type),
@@ -846,7 +846,7 @@ module.exports = grammar({
     ),
 
     // The repeat count takes the same length grammar as the array
-    // type: a literal or a path to a `const` integer value (ADR-0054).
+    // type: a literal or a path to a `const` integer value.
     repeat_expression: $ => seq(
       '[',
       field('value', $._expression),

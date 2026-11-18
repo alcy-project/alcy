@@ -1,6 +1,6 @@
 // `Result<T, E>` equality compares shapes and the matching payload:
 // `Ok` with `Ok` through `T`, `Err` with `Err` through `E`, and mixed
-// shapes are unequal (ADR-0053).
+// shapes are unequal.
 fn main() -> i32 {
   a: Result<i32, i32> := Result::Ok(1)
   b: Result<i32, i32> := Result::Ok(1)

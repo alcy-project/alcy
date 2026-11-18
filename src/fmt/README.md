@@ -13,7 +13,7 @@ reports rather than writes with `--check`.
 
 The lossless front end lives in `cst/`, its own module: the tools'
 counterpart to `ast/`, built for the linter that will read the same
-tree the formatter does (ADR-0081).
+tree the formatter does.
 
 - `cst/lex`: a lossless token stream. The compiler's lexer already
   reads every token; this layer adds back the comments it treats as
@@ -65,6 +65,4 @@ holds none.
   input crashes the formatter.
 
 `tools/check_fmt.py` asks both of every `.al` file in the repository,
-along with the layout the tree already has. See
-`docs/adr/0081-a-formatter-over-a-concrete-syntax-tree.md` for the
-decision the shape follows.
+along with the layout the tree already has.

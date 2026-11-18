@@ -3,7 +3,7 @@
 # frames above it keep the sites of the calls they made. The site table
 # spans the module and the nearest entry below a return address can be
 # another function's call, so a frame reads only the entries above the
-# start of the function it matched (ADR-0070). The frames are for the
+# start of the function it matched. The frames are for the
 # hosts whose frame pointer is a chain; the message and its site are
 # every host's.
 exit = "non-zero"

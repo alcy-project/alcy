@@ -32,7 +32,6 @@ using NewResult = base::Result<ScaffoldResult, i32>;
 // package joins a suite) .gitignore. A path with slashes creates the
 // directories it names, the package name is its last segment, and the
 // package joins the nearest ancestor suite when one encloses it
-// (ADR-0057).
 NewResult create_new_package(PipelineContext& ctx,
                              std::string_view input,
                              Vcs vcs);

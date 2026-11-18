@@ -50,12 +50,12 @@ enum class EmitError : u8 {
 // ignores is a field the next reader has to check.
 struct EmitOptions {
   // Whether the entry is `_start` and the link skips the C runtime
-  // (ADR-0052); only meaningful with `emit_entry`. The LLVM backend's
+  // ; only meaningful with `emit_entry`. The LLVM backend's
   // runtime carries the sequence, so this is what that emitter is asked
   // for.
   bool freestanding = false;
   // Whether a panic walks the frame chain and names the frames it can
-  // (ADR-0070). Only the LLVM backend keeps frame pointers and emits the
+  //. Only the LLVM backend keeps frame pointers and emits the
   // table the walk reads; the direct wasm backend writes the message and
   // its site and no frames.
   bool backtrace = false;
@@ -95,7 +95,7 @@ struct EmitRequest {
   bool emit_entry = false;
   // The functions a library's surface names, and the only ones whose
   // symbols stay external: a dependent links by them, and every other
-  // definition is this object's own (ADR-0078). Nothing means the
+  // definition is this object's own. Nothing means the
   // request names no surface - a binary's object, a relocatable module -
   // and every symbol stays as it is; a surface that names no function is
   // present and empty, and everything is internalized. `emit_entry`
@@ -103,7 +103,7 @@ struct EmitRequest {
   // reachability and reads this as the surface alone.
   std::optional<std::span<const ir::FunctionIdx>> exported_functions;
   // The build's arithmetic checks, parallel to the storage's
-  // instructions; null when the build checks nothing (ADR-0068). A
+  // instructions; null when the build checks nothing. A
   // backend reads an entry in place of the profile, which never reaches
   // it.
   const overlay::Overlay* overlay = nullptr;

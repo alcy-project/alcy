@@ -1374,7 +1374,7 @@ Val Lowerer::Fmt::lower_write(ast::ExprIdx expr,
           .array_types()[owner_.builder.types()[buf_pointee].as_array()]
           .count;
   // The arguments after the buffer are the format arguments; they are
-  // collected into the tuple the pieces read (ADR-0055).
+  // collected into the tuple the pieces read.
   std::vector<ir::TypeIdx> elem_types;
   std::vector<ir::TypeIdx> arg_types;
   Val tup{owner_.size_one, owner_.error_type(), false, false};
@@ -1467,7 +1467,7 @@ Val Lowerer::Fmt::lower_format(ast::ExprIdx expr,
     return Val{owner_.size_one, owner_.error_type(), false, false};
   }
   // The arguments after the format string are collected into the tuple
-  // the pieces read (ADR-0055).
+  // the pieces read.
   std::vector<ir::TypeIdx> elem_types;
   std::vector<ir::TypeIdx> arg_types;
   Val tup{owner_.size_one, owner_.error_type(), false, false};
@@ -1621,7 +1621,7 @@ Val Lowerer::Fmt::lower_print(ast::ExprIdx expr,
     return Val{owner_.size_one, owner_.error_type(), false, false};
   }
   // The arguments after the format string are collected into the tuple
-  // the pieces read (ADR-0055).
+  // the pieces read.
   std::vector<ir::TypeIdx> elem_types;
   std::vector<ir::TypeIdx> arg_types;
   Val tup{owner_.size_one, owner_.error_type(), false, false};

@@ -293,7 +293,7 @@ class Checker {
   usize scanned_param_loans = 0;
   // Two-phase borrows: an exclusive receiver whose only use is the call
   // it serves. The borrow is a reservation until the call activates it,
-  // so the argument evaluation between the two is the window ADR-0012
+  // so the argument evaluation between the two is the window
   // opens for reads of the place.
   std::vector<u8> reserved_receiver;
   // What the package named, by the address it named, and the captured
@@ -1006,7 +1006,7 @@ class Checker {
         // from, and the wrapper is representation-transparent, so both
         // keep the source's place and its loans. A raw pointer
         // destination is the exception: raw pointers are outside the
-        // region system (ADR-0050), so the address travels but the
+        // region system, so the address travels but the
         // loan dies at the cast.
         u32 src = NO_ROOT;
         if (!operand_reg(0, src) || !instr.dst.is_valid()) {
@@ -1045,7 +1045,7 @@ class Checker {
         // place that reference holds: `&*(r as *T)` is a view of what
         // `r` names, which is how the std's view constructors hand a
         // place back. Writes through the raw pointer stay untracked
-        // (ADR-0050); only the safe reborrow reads back into the region
+        // ; only the safe reborrow reads back into the region
         // system, and the summary of a body that returns such a view
         // records the parameter it derives from.
         for (u32 hops = 0; home[place_reg] == NO_ROOT && hops < 8; ++hops) {
@@ -1741,7 +1741,7 @@ class Checker {
   // A move of a `Copy` type is a copy: the source stays owned, so the
   // move neither retires the place nor conflicts with a loan. The
   // parametric bodies emit moves for every value before the
-  // substitution says whether the type is `Copy` (ADR-0079).
+  // substitution says whether the type is `Copy`.
   bool copy_move(ir::TypeIdx type) const {
     return ir::is_copy_type(storage.state(), type, lowered.needs_drop,
                             lowered.not_movable);
@@ -1813,7 +1813,7 @@ class Checker {
   // A `Borrow` whose destination is used exactly once, as the receiver
   // operand of a direct call, is a reservation: the call activates it,
   // and the argument evaluation between the two is the window
-  // ADR-0012 opens for reads of the place.
+  //  opens for reads of the place.
   void collect_reserved(const ir::Function& fn) {
     // Both scratch vectors are sized with the package and cleared per
     // register by reset_function, so counting a function touches only what
@@ -2027,7 +2027,7 @@ class Checker {
           (void)index;
           break;
         }
-        // ADR-0085: an unmovable value is never moved. The root's type
+        // : an unmovable value is never moved. The root's type
         // decides, because a part of an unmovable value is reached
         // through borrows only.
         const ir::TypeIdx root_type = storage.registers()[place.root].type;
@@ -2322,7 +2322,7 @@ class Checker {
         // The reservation activates: the callee sees the exclusive
         // borrow, so any other loan still live on the place it covers
         // conflicts. Reads that ended in the argument evaluation are
-        // the window two-phase borrows admit (ADR-0012).
+        // the window two-phase borrows admit.
         if (instr.operands.size() < 2 ||
             !storage.operands()[instr.operands.head()].is<ir::FunctionIdx>()) {
           break;
@@ -2795,7 +2795,7 @@ class Checker {
     size_scratch();
     summaries.assign(storage.functions().size(), {});
     // A parametric function is borrowed once per specialization, after
-    // the pass substitutes the arguments (ADR-0079); borrowing it in
+    // the pass substitutes the arguments ; borrowing it in
     // its parametric form would read types the borrow rules cannot
     // answer.
     std::vector<bool> parametric(storage.functions().size(), false);

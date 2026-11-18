@@ -166,7 +166,7 @@ TEST_CASE("A const argument survives the binary form") {
 
 TEST_CASE("A type parameter survives the binary form") {
   // The parameter's index is the payload, not a table row, so the
-  // round trip has to keep it (ADR-0079).
+  // round trip has to keep it.
   ir::SymbolTable strings;
   const Storage storage = test::composite_storage(strings);
   const std::vector<u8> bytes = test::composite_bytes(strings, storage);
@@ -191,7 +191,7 @@ TEST_CASE("A type parameter survives the binary form") {
 
 TEST_CASE("A parametric callee and drop survive the binary form") {
   // The parametric form's tables and the operand that names a callee
-  // the specialization resolves (ADR-0079, ADR-0080).
+  // the specialization resolves.
   ir::SymbolTable strings;
   ir::StorageBuilder builder;
   const TypeIdx void_ty = builder.primitive(TypeTag::Void);

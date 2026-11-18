@@ -45,7 +45,7 @@ struct CompInputs {
   std::span<const FnInstance> fn_insts;
 };
 
-// The AST engine of compile-time evaluation (ADR-0054): it interprets
+// The AST engine of compile-time evaluation: it interprets
 // the checked AST, and both readers - the checker for the const values
 // types need, the lowering for comp blocks and specialization - ask it
 // for values. The value types live in the comp component; the engine
@@ -86,7 +86,7 @@ class CompEvaluator {
     None,
     Program,      // an operation the engine cannot express
     Internal,     // an engine invariant broke
-    Overflow,     // a checked arithmetic overflow (ADR-0065)
+    Overflow,     // a checked arithmetic overflow
     DivZero,      // a division by zero
     OutOfBounds,  // an index past the end of a fixed array
     Budget,       // the evaluation quota ran out

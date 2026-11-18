@@ -3,8 +3,7 @@
 A browser playground for alcy: edit a program, have it checked, and run it,
 with no server behind the page. The page is plain HTML, CSS, and
 TypeScript, and the compiler is the project's own wasm module, built
-without LLVM through the direct wasm backend described in
-[ADR-0049](../../docs/adr/0049-the-direct-backends-and-the-playground.md).
+without LLVM through the direct wasm backend.
 It is one page of the site under `site/`; the shell around the pages
 lives in `site/shared/`, the theme is a site-wide preference there, and
 the page is stamped once per language by the site generator.

@@ -2,7 +2,7 @@
 # find, innermost first, each with the site of the call it returns to.
 # The call sits in a loop body, so the emission also splits a block a
 # successor PHI names. The frames are for the hosts whose frame pointer
-# is a chain (ADR-0070); the message and its site are every host's.
+# is a chain ; the message and its site are every host's.
 exit = "non-zero"
 args = ["--on-panic=backtrace"]
 stderr_contains = ["panic at main.al:2:3: boom"]

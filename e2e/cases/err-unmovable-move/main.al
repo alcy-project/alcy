@@ -1,5 +1,4 @@
 // An unmovable value lives where it was built: a move is refused
-// (ADR-0085).
 struct Pinned {
   held: Anchor,
   value: i32,

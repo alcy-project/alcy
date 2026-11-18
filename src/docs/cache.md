@@ -2,9 +2,12 @@
 
 A package build stores its lowered binary IR under one digest over the
 inputs that steer it; a later build with the same digest loads the IR
-instead of running the frontend. Designed in
-`docs/adr/0072-a-packages-cache-holds-its-binary-ir.md`, hashed per
-`docs/adr/0073-one-hash-xxh3.md`.
+instead of running the frontend. The compiler version rides the key
+beside the sources, the manifest, and the target: the lowering, the
+opcode set, and the binary format itself change between versions, so
+an entry another version wrote may decode differently, and keying on
+the version makes cross-version reuse impossible rather than
+detected.
 
 ## What is cached, and what is not
 

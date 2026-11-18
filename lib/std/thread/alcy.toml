@@ -1,4 +1,4 @@
-# Part of the `alcy/std` suite; see docs/adr/0016-suites-and-the-std-split.md.
+# Part of the `alcy/std` suite.
 #
 # Spawning and joining threads of execution.
 
@@ -9,7 +9,7 @@ license = "Apache-2.0 WITH LLVM-exception"
 
 [modules]
 include = ["prelude"]
-# The public surface, in the form `docs/adr/0007-manifest-driven-modules.md` specifies. Nothing
+# The public surface, in the form  specifies. Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
 export = ["prelude"]

@@ -10,7 +10,7 @@
 namespace ir {
 
 // The lowered package as the text view `--emit=ir` writes. The form is
-// defined by `src/docs/ir-format.md` (ADR-0056): a view for people,
+// defined by `src/docs/ir-format.md` : a view for people,
 // write-only, with storage indices preserved. The same input dumps to
 // the same text.
 [[nodiscard]] std::string write_text(const WriteInput& input);

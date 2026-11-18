@@ -4,9 +4,7 @@ The published site is three kinds of page over one shell: the landing
 page, the [guide](../docs/guide/) under `/guide/`, and the
 [playground](playground/) under `/playground/`. `tools/site.py` assembles
 everything into `site/dist/`, and `.github/workflows/site.yaml` deploys
-that directory to GitHub Pages. See
-`../docs/adr/0058-the-site-its-generator-and-the-guide.md` for why the
-site is shaped this way.
+that directory to GitHub Pages.
 
 ## Layout
 

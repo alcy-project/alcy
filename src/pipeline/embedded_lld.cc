@@ -124,7 +124,7 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
   args.emplace_back("-no-pie");
   if (link.freestanding) {
     // The object defines `_start` and the program owns every symbol it
-    // calls: no startup objects, no loader, no C library (ADR-0052).
+    // calls: no startup objects, no loader, no C library.
     args.emplace_back("-e");
     args.emplace_back("_start");
     for (const std::string& object_path : object_paths) {

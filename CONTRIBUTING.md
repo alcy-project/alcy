@@ -27,7 +27,7 @@ uv run ./tools/check_exe.py
 # runs them: one `alcy test` per member package, so a member that declares
 # no item yet is the only one excused.
 uv run ./tools/check_stdlib_tests.py
-# The compile-time evaluator (ADR-0054) over the acceptance corpus: every
+# The compile-time evaluator over the acceptance corpus: every
 # case that compiles is also evaluated function by function:
 uv run ./tools/check_comp.py
 # The .al sources are the formatter's own check: laid out as alcy fmt
@@ -89,8 +89,7 @@ not match, runs the corpus, and checks the queries; adding
 `--differential` compares every `.al` file against the compiler's own
 verdict, which is the half of the check that can notice the specification,
 the parser, and the grammar disagreeing. `check.sh` runs both and
-`measure_checks.py` times both. See
-[docs/adr/0041-alcy-treesitter-grammar.md](docs/adr/0041-alcy-treesitter-grammar.md).
+`measure_checks.py` times both. See `treesitter/README.md`.
 
 Performance work has its own loop: a generated corpus, instruction counts
 instead of wall clock, a profile that names the function, and an emitted-IR
@@ -208,10 +207,11 @@ Notes:
   and namespace names must always match; full forms live in `src/docs/architecture.md`.
 - **Wording:** The private LLVM fork is `llvm-alcy-fork` on first mention per document,
   and `the fork` thereafter.
-- **Architecture decisions:** One decision, one record. Significant technical decisions get an ADR
-  in `docs/adr/` (copy `docs/adr/0000-template.md`). Small, obvious changes do not need one. A
-  reference names the file (`docs/adr/0011-symbol-mangling.md`), never the number alone: a number
-  breaks when the log is renumbered, and a filename is what a reader can open.
+- **The specification is the record.** The language and the standard library are
+  specified in `docs/spec/`; how the toolchain itself is put together is the
+  record in `src/docs/architecture.md`. A change that alters observable behavior
+  must update `docs/spec/` in the same change, with a conformance case where
+  one applies. Small, obvious changes do not need a separate decision record.
 - **ASCII Character Set**: All C++ source files (`src/`) must remain pure ASCII. Do not use
   non-ASCII Unicode characters in code or comments (e.g., em-dashes `—`, smart quotes `“”`, or arrows `→`).
   Use standard ASCII equivalents (`-`, `"..."`, `->`). Non-ASCII characters are permitted only in
@@ -254,7 +254,7 @@ a change that invalidates previous behaviour. The tree is young enough that none
 yet, which is a reason to be sure before spending the one.
 
 The body is optional and says why. A commit that needs more than a handful of lines has a message
-that is too long: put the reasoning in a comment, a test, or the ADR rather than in the log. A
+that is too long: put the reasoning in a comment, a test, or the specification rather than in the log. A
 message that has to be read carefully to find the point is a message that is too long.
 
 Record no abandoned attempts. Work that left nothing in the tree has nothing to point at later, so
@@ -262,14 +262,14 @@ the log becomes its only trace; if a mistake is worth remembering, it is worth a
 next person meets the same wall.
 
 When changing architecture, module boundaries, invariants, ownership/lifetime rules, or other
-design-level contracts, update `docs/architecture.md` and add or update an ADR when appropriate.
+design-level contracts, update `src/docs/architecture.md`, which is the record
+  of how the compiler and the tools are put together, and keep it in the same change.
 
 When changing language behavior, update `docs/spec/` in the same change; spec and implementation
 must not drift apart.
 
 When changing behavior, tests must cover the new behavior and preserve relevant
-invariants. The rule below is what "cover" means here; the full rationale is in
-`docs/adr/0017-verification-strategy.md`.
+invariants. The rule below is what "cover" means here.
 
 ## Testing rules
 

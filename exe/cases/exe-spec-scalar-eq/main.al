@@ -1,4 +1,4 @@
-// Scalars implement the sealed `PartialEq`/`Eq` specs (ADR-0053):
+// Scalars implement the sealed `PartialEq`/`Eq` specs :
 // `.eq` reaches the core implementation for integers, floats, and
 // `bool`, while `==` and `!=` keep the builtin comparison.
 

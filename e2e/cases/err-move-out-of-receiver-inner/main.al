@@ -1,6 +1,6 @@
 // A value reached through one of the receiver's fields is not a field of
 // the receiver: the inner type's own `drop` would run on the hole the move
-// leaves (docs/spec/values.md, ADR-0137).
+// leaves (docs/spec/values.md).
 struct Inner {
   sub: Vec<i32>,
   tag: i32,

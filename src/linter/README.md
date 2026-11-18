@@ -36,7 +36,7 @@ too-many-arguments = { level = "warn", max-args = 5 }
 ```
 
 An unknown rule name or level is an error: both are typos. Unknown keys
-are ignored, like the other `.alcy/` files (ADR-0019). `ignore` lists
+are ignored, like the other `.alcy/` files. `ignore` lists
 names the rule must not report; the binding rules and `unused-import`
 read it. A `deny` finding is an error, so `alcy lint` exits non-zero;
 a `warn` finding does not change the exit code.
@@ -226,7 +226,7 @@ machine-applicable repair (`ctx.fix`) when the expression they would
 put in place binds tightly enough that the regrouping cannot change
 the meaning.
 
-`needless-bool` reads the shape ADR-0059 gives an `if`: every branch
+`needless-bool` reads the shape the return rule gives an `if`: every branch
 must end in `ret`, so `if c { ret true } else { ret false }` is the
 condition itself and the swapped pair is its negation. Both branches
 returning one literal is a constant and an `if PAT := EXPR` tests a

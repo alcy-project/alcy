@@ -1,7 +1,7 @@
 // A value of an enum type consumed on one arm and not the other is
 // ended on the path that still owns it: the end reads the
 // discriminant and each payload field through the place, so the
-// ownership marker has to come before both (ADR-0062).
+// ownership marker has to come before both.
 
 struct D {
   n: i32,

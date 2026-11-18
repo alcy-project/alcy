@@ -5,7 +5,7 @@
 
 // The kind of a failed call: the portable half of the error. The
 // runtime answers a stable kind code for the number it reported, so
-// the table is the target's own (ADR-0128).
+// the table is the target's own.
 pub enum ErrorKind {
   Interrupted,
   WouldBlock,
@@ -28,7 +28,7 @@ pub struct OsError {
 //   0 = Other, 1 = Interrupted, 2 = WouldBlock, 3 = NotFound,
 //   4 = PermissionDenied, 5 = BrokenPipe, 6 = InvalidInput.
 // The compiler provides it per target, so the table is the target's
-// own (ADR-0128).
+// own.
 intrinsic fn error_kind(code: i32) -> i32;
 
 // The kind of a raw error number.

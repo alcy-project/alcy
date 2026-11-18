@@ -95,7 +95,7 @@ base::Result<pkg::PackageManifest, diag::Reported> read_manifest(
   }
   pkg::PackageManifest manifest = std::move(parsed).unwrap();
   // A member takes the identity keys it spelled from its suite before
-  // the verifier sees it (ADR-0057).
+  // the verifier sees it.
   if (suite != nullptr) {
     base::Result<void, pkg::InheritError> inherited =
         pkg::inherit_from_suite(manifest, *suite);
@@ -149,7 +149,7 @@ namespace {
 // Reads the summary a library build leaves beside its object and spells
 // its surface, answering false when there is none, when the sources it
 // names have outgrown it, or when it carries nothing a dependent can use
-// yet (ADR-0078).
+// yet.
 bool load_summary_dependency(PipelineContext& ctx,
                              const path::Path& dir,
                              const pkg::PackageManifest& manifest,

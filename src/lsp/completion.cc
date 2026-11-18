@@ -87,7 +87,7 @@ void collect(const pipeline::PipelineContext& context,
     }
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
       // The definition-site check registers rows for a parameter's
-      // bound (ADR-0079); they name no declaration, so there is
+      // bound ; they name no declaration, so there is
       // nothing here to offer.
       if (!method.item.is_valid()) {
         continue;
