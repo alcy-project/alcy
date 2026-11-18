@@ -12,11 +12,11 @@ impl Point {
   }
 }
 
-const GREETING: str = " hello "
+const GREETING: str := " hello "
 
-const ORIGIN: Point = Point { x: 3, y: 4 }
+const ORIGIN: Point := Point { x: 3, y: 4 }
 
-const SIZE: i32 = 3
+const SIZE: i32 := 3
 
 fn main() -> i32 {
   if str_len(GREETING.trim()) != 5 {

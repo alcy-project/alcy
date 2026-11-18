@@ -220,8 +220,8 @@ TEST_CASE("Parser builds module items") {
       "pub struct Point { x: i32, y: i32 }\n"
       "enum Choice { Yes, No }\n"
       "use package::other;\n"
-      "static answer: i32 = 42\n"
-      "const limit: i32 = 7\n"
+      "static answer: i32 := 42\n"
+      "const limit: i32 := 7\n"
       "impl Point { fn get(self: Self) -> i32 { ret 0 } }\n",
       f);
   CHECK(result.ok);

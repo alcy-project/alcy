@@ -7,7 +7,7 @@ use sys::raw::read;
 
 // The capacity a reader starts with: a token or a line rarely needs
 // more than one read behind it.
-const DEFAULT_CAPACITY: usize = 8192
+const DEFAULT_CAPACITY: usize := 8192
 
 // A reader over a descriptor. It owns its buffer and not the
 // descriptor, so the standard input can be wrapped and never closed;

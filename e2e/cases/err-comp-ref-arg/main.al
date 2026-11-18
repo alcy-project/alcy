@@ -4,7 +4,7 @@ comp fn deref(comp x: &i32) -> i32 {
   ret *x
 }
 
-const K: i32 = 5
+const K: i32 := 5
 
 fn main() {
   const y := deref(&K)

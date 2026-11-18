@@ -7,11 +7,11 @@ struct Pair {
   wide: f64,
 }
 
-const MINIMUM: i8 = -128
+const MINIMUM: i8 := -128
 
-const FRACTION: f32 = -1.5
+const FRACTION: f32 := -1.5
 
-const ZERO: f64 = -0.0
+const ZERO: f64 := -0.0
 
 fn take(value: i8) -> i8 {
   ret value

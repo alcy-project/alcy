@@ -277,11 +277,11 @@ TEST_CASE("An if chain keeps its blocks on the header lines") {
 TEST_CASE("A wide variety of inputs is idempotent and error tolerant") {
   check_corpus("valid", {
                             "use a::b;\n",
-                            "static X: [u8; 4] = [0, 0, 0, 0]\n",
+                            "static X: [u8; 4] := [0, 0, 0, 0]\n",
                             "enum E { A, B(i32) }\n",
                             "impl Foo {\n  fn a(&self) {}\n  fn b() {}\n}\n",
                             "spec S {\n  fn m(&self) -> i32;\n}\n",
-                            "const N: usize = 4\n",
+                            "const N: usize := 4\n",
                             "fn f(x: &mut Vec<u8>) -> Option<(i32, i32)> { "
                             "Option::Some((1, 2)) }\n",
                             "fn f() { mut v := Vec::<String>::new(); v }\n",

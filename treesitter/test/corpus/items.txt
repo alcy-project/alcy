@@ -312,9 +312,9 @@ impl Display for Point {
 Static and const items
 ================================================================================
 
-static LIMIT: i32 = 10
+static LIMIT: i32 := 10
 
-const MAX: i32 = 99
+const MAX: i32 := 99
 
 --------------------------------------------------------------------------------
 
@@ -780,7 +780,7 @@ test {
 A test block sits among the module's other items
 ================================================================================
 
-const TWICE: i64 = 2
+const TWICE: i64 := 2
 
 test {
   test adds() {

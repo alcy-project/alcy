@@ -1655,6 +1655,17 @@ ast::ItemIdx Parser::parse_spec(bool is_pub, bool keyword_consumed) {
   return ast_.items.push_back(node);
 }
 
+bool Parser::expect_static_const_equals() {
+  if (peek_kind() == lexer::TokenKind::Eq) {
+    const lexer::Token eq = peek();
+    (void)bag_.emit<i18n::Key::ParserStaticConstSpelling>(DiagCode::Spelling,
+                                                          eq.span);
+    match(lexer::TokenKind::Eq);
+    return true;
+  }
+  return expect(lexer::TokenKind::ColonEq, "`:=`");
+}
+
 ast::ItemIdx Parser::parse_static(bool is_pub) {
   const usize mark = pos_;
   if (!expect(lexer::TokenKind::Static, "static")) {
@@ -1671,7 +1682,7 @@ ast::ItemIdx Parser::parse_static(bool is_pub) {
   if (!type.is_valid()) {
     return ast::ItemIdx::invalid();
   }
-  if (!expect(lexer::TokenKind::Eq, "`=`")) {
+  if (!expect_static_const_equals()) {
     return ast::ItemIdx::invalid();
   }
   ast::ExprIdx init = parse_expr();
@@ -1706,7 +1717,7 @@ ast::ItemIdx Parser::parse_const(bool is_pub) {
   if (!type.is_valid()) {
     return ast::ItemIdx::invalid();
   }
-  if (!expect(lexer::TokenKind::Eq, "`=`")) {
+  if (!expect_static_const_equals()) {
     return ast::ItemIdx::invalid();
   }
   ast::ExprIdx init = parse_expr();

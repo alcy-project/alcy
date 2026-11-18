@@ -105,8 +105,8 @@ spec_method = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] ,
                  implementation supplies each declared method. An
                  `unsafe` method marker parses and is refused for
                  now; see docs/spec/ffi.md. *)
-static_item = "static" , IDENT , ":" , type , "=" , expr ;
-const_item  = "const" , IDENT , ":" , type , "=" , expr ;
+static_item = "static" , IDENT , ":" , type , ":=" , expr ;
+const_item  = "const" , IDENT , ":" , type , ":=" , expr ;
 use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
 test_item   = "test" , "{" , { test_entry | fn_item } , "}" ;
 test_entry  = "test" , IDENT , "(" , ")" , [ "->" , type ] , block ;

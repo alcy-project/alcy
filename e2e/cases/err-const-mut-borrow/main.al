@@ -6,11 +6,11 @@ struct C {
   n: i32,
 }
 
-const K: C = C { n: 1 }
+const K: C := C { n: 1 }
 
-const A: [i32; 2] = [1, 2]
+const A: [i32; 2] := [1, 2]
 
-const N: i32 = 7
+const N: i32 := 7
 
 fn main() -> i32 {
   a := &mut N

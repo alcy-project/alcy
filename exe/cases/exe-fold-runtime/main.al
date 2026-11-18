@@ -45,39 +45,39 @@ fn mul(a: i32, b: i32) -> i32 {
   ret a * b
 }
 
-const K1: i32 = (0 - 7) / 2
+const K1: i32 := (0 - 7) / 2
 
-const K2: i32 = (0 - 7) % 2
+const K2: i32 := (0 - 7) % 2
 
-const K3: i32 = 7 / (0 - 2)
+const K3: i32 := 7 / (0 - 2)
 
-const K4: i32 = 7 % (0 - 2)
+const K4: i32 := 7 % (0 - 2)
 
-const K5: i32 = 1 << 31
+const K5: i32 := 1 << 31
 
-const K6: i32 = (0 - 1) >> 1
+const K6: i32 := (0 - 1) >> 1
 
-const K7: i32 = 12 & 10
+const K7: i32 := 12 & 10
 
-const K8: i32 = 12 | 10
+const K8: i32 := 12 | 10
 
-const K9: i32 = 12 ^ 10
+const K9: i32 := 12 ^ 10
 
-const K10: i32 = (0 - 1) & 255
+const K10: i32 := (0 - 1) & 255
 
-const K11: i32 = (300 as u8) as i32
+const K11: i32 := (300 as u8) as i32
 
-const K12: i32 = ((0 - 300) as u8) as i32
+const K12: i32 := ((0 - 300) as u8) as i32
 
-const K13: i32 = ((0 - 1) as u8) as i32
+const K13: i32 := ((0 - 1) as u8) as i32
 
-const K14: i32 = ((0 - 200) as i8) as i32
+const K14: i32 := ((0 - 200) as i8) as i32
 
-const K15: i32 = 1000 * 1000
+const K15: i32 := 1000 * 1000
 
-const K16: i32 = (0 - 5) - 1
+const K16: i32 := (0 - 5) - 1
 
-const K17: i32 = ((0 - 2147483647) - 1) % (0 - 1)
+const K17: i32 := ((0 - 2147483647) - 1) % (0 - 1)
 
 fn main() -> i32 {
   mut bad := 0

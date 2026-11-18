@@ -10,77 +10,77 @@
 // wrap while a program's is checked. `Map` hashes its keys through
 // `xxh3_64`.
 
-const PRIME_1: u64 = 0x9e3779b185ebca87u64
+const PRIME_1: u64 := 0x9e3779b185ebca87u64
 
-const PRIME_2: u64 = 0xc2b2ae3d27d4eb4fu64
+const PRIME_2: u64 := 0xc2b2ae3d27d4eb4fu64
 
-const PRIME_3: u64 = 0x165667b19e3779f9u64
+const PRIME_3: u64 := 0x165667b19e3779f9u64
 
-const PRIME_4: u64 = 0x85ebca77c2b2ae63u64
+const PRIME_4: u64 := 0x85ebca77c2b2ae63u64
 
-const PRIME_5: u64 = 0x27d4eb2f165667c5u64
+const PRIME_5: u64 := 0x27d4eb2f165667c5u64
 
-const PRIME_32_1: u64 = 0x9e3779b1u64
+const PRIME_32_1: u64 := 0x9e3779b1u64
 
-const PRIME_32_2: u64 = 0x85ebca77u64
+const PRIME_32_2: u64 := 0x85ebca77u64
 
-const PRIME_32_3: u64 = 0xc2b2ae3du64
+const PRIME_32_3: u64 := 0xc2b2ae3du64
 
-const PRIME_MX1: u64 = 0x165667919e3779f9u64
+const PRIME_MX1: u64 := 0x165667919e3779f9u64
 
-const PRIME_MX2: u64 = 0x9fb21c651e98df25u64
+const PRIME_MX2: u64 := 0x9fb21c651e98df25u64
 
-const MASK_32: u64 = 0xffffffffu64
+const MASK_32: u64 := 0xffffffffu64
 
-const MASK_8: u64 = 0xffu64
+const MASK_8: u64 := 0xffu64
 
-const SECRET_0: u64 = 0xbe4ba423396cfeb8u64
+const SECRET_0: u64 := 0xbe4ba423396cfeb8u64
 
-const SECRET_1: u64 = 0x1cad21f72c81017cu64
+const SECRET_1: u64 := 0x1cad21f72c81017cu64
 
-const SECRET_2: u64 = 0xdb979083e96dd4deu64
+const SECRET_2: u64 := 0xdb979083e96dd4deu64
 
-const SECRET_3: u64 = 0x1f67b3b7a4a44072u64
+const SECRET_3: u64 := 0x1f67b3b7a4a44072u64
 
-const SECRET_4: u64 = 0x78e5c0cc4ee679cbu64
+const SECRET_4: u64 := 0x78e5c0cc4ee679cbu64
 
-const SECRET_5: u64 = 0x2172ffcc7dd05a82u64
+const SECRET_5: u64 := 0x2172ffcc7dd05a82u64
 
-const SECRET_6: u64 = 0x8e2443f7744608b8u64
+const SECRET_6: u64 := 0x8e2443f7744608b8u64
 
-const SECRET_7: u64 = 0x4c263a81e69035e0u64
+const SECRET_7: u64 := 0x4c263a81e69035e0u64
 
-const SECRET_8: u64 = 0xcb00c391bb52283cu64
+const SECRET_8: u64 := 0xcb00c391bb52283cu64
 
-const SECRET_9: u64 = 0xa32e531b8b65d088u64
+const SECRET_9: u64 := 0xa32e531b8b65d088u64
 
-const SECRET_10: u64 = 0x4ef90da297486471u64
+const SECRET_10: u64 := 0x4ef90da297486471u64
 
-const SECRET_11: u64 = 0xd8acdea946ef1938u64
+const SECRET_11: u64 := 0xd8acdea946ef1938u64
 
-const SECRET_12: u64 = 0x3f349ce33f76faa8u64
+const SECRET_12: u64 := 0x3f349ce33f76faa8u64
 
-const SECRET_13: u64 = 0x1d4f0bc7c7bbdcf9u64
+const SECRET_13: u64 := 0x1d4f0bc7c7bbdcf9u64
 
-const SECRET_14: u64 = 0x3159b4cd4be0518au64
+const SECRET_14: u64 := 0x3159b4cd4be0518au64
 
-const SECRET_15: u64 = 0x647378d9c97e9fc8u64
+const SECRET_15: u64 := 0x647378d9c97e9fc8u64
 
-const SECRET_16: u64 = 0xc3ebd33483acc5eau64
+const SECRET_16: u64 := 0xc3ebd33483acc5eau64
 
-const SECRET_17: u64 = 0xeb6313faffa081c5u64
+const SECRET_17: u64 := 0xeb6313faffa081c5u64
 
-const SECRET_18: u64 = 0x49daf0b751dd0d17u64
+const SECRET_18: u64 := 0x49daf0b751dd0d17u64
 
-const SECRET_19: u64 = 0x9e68d429265516d3u64
+const SECRET_19: u64 := 0x9e68d429265516d3u64
 
-const SECRET_20: u64 = 0xfca1477d58be162bu64
+const SECRET_20: u64 := 0xfca1477d58be162bu64
 
-const SECRET_21: u64 = 0xce31d07ad1b8f88fu64
+const SECRET_21: u64 := 0xce31d07ad1b8f88fu64
 
-const SECRET_22: u64 = 0x280416958f3acb45u64
+const SECRET_22: u64 := 0x280416958f3acb45u64
 
-const SECRET_23: u64 = 0x7e404bbbcafbd7afu64
+const SECRET_23: u64 := 0x7e404bbbcafbd7afu64
 
 fn rotl(x: u64, r: u64) -> u64 {
   ret (x << r) | (x >> (64u64 - r))

@@ -4,7 +4,7 @@ fn narrow(comp x: i32) -> i64 {
   ret (x as i8) as i64
 }
 
-const K: i64 = narrow(-84)
+const K: i64 := narrow(-84)
 
 fn main() -> i32 {
   println("A {} {}", -81 as i64, comp { -81 as i64 })

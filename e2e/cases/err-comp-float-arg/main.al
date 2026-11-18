@@ -6,7 +6,7 @@ comp fn twice(comp x: f64) -> f64 {
   ret x * 2.0
 }
 
-const K: f64 = 2.5
+const K: f64 := 2.5
 
 fn main() {
   const y := twice(K)

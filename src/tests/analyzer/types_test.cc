@@ -515,7 +515,7 @@ TEST_CASE("Check resolves annotations and signatures") {
                        "fn f(a: i32, b: &i32, c: (i32, bool), d: !) -> str {\n"
                        "  ret \"x\"\n"
                        "}\n"
-                       "static count: u64 = 0\n"}});
+                       "static count: u64 := 0\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -1931,7 +1931,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
   {
     VirtualDir dir;
     const bool setup =
-        write_all(dir, {{"main.al", "static r: &mut i32 = 0\n"}});
+        write_all(dir, {{"main.al", "static r: &mut i32 := 0\n"}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1948,7 +1948,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
                                         "fn one() -> i32 {\n"
                                         "  ret 1\n"
                                         "}\n"
-                                        "const k: i32 = one()\n"}});
+                                        "const k: i32 := one()\n"}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -1960,7 +1960,7 @@ TEST_CASE("Check items enforce entry and initializer rules") {
   }
   {
     VirtualDir dir;
-    const bool setup = write_all(dir, {{"main.al", "const k: i32 = \"x\"\n"}});
+    const bool setup = write_all(dir, {{"main.al", "const k: i32 := \"x\"\n"}});
     CHECK(setup);
     if (!setup) {
       return;
@@ -2147,7 +2147,7 @@ TEST_CASE("Check accepts comp fn calls during compilation") {
                                       "  ret x * 2\n"
                                       "}\n"
                                       "\n"
-                                      "const N: i32 = twice(21)\n"
+                                      "const N: i32 := twice(21)\n"
                                       "\n"
                                       "fn main() -> i32 {\n"
                                       "  ret comp { twice(1) } + N\n"
@@ -4989,7 +4989,7 @@ TEST_CASE("Check reads an array length from a const item") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const N: usize = 4\n"
+                       "const N: usize := 4\n"
                        "\n"
                        "struct Buf {\n  data: [u8; N],\n}\n"
                        "\n"
@@ -5010,9 +5010,9 @@ TEST_CASE("Check evaluates a const initializer for an array length") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const A: usize = 2\n"
-                       "const B: usize = A * 3\n"
-                       "const M: i32 = 1 + 2\n"
+                       "const A: usize := 2\n"
+                       "const B: usize := A * 3\n"
+                       "const M: i32 := 1 + 2\n"
                        "\n"
                        "fn f(a: [u8; B], b: [i32; M]) -> i32 {\n  ret 0\n}\n"
                        "\n"
@@ -5033,7 +5033,7 @@ TEST_CASE("Check evaluates a comp fn call in a const array length") {
       write_all(dir, {{"main.al",
                        "comp fn twice(x: usize) -> usize {\n  ret x * 2\n}\n"
                        "\n"
-                       "const N: usize = twice(2)\n"
+                       "const N: usize := twice(2)\n"
                        "\n"
                        "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
                        "\n"
@@ -5051,7 +5051,7 @@ TEST_CASE("Check evaluates a comp fn call in a const array length") {
 TEST_CASE("Check reports a const cycle in an array length") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
-                                      "const C: usize = C + 1\n"
+                                      "const C: usize := C + 1\n"
                                       "\n"
                                       "fn f(a: [i32; C]) -> i32 {\n  ret 0\n}\n"
                                       "\n"
@@ -5078,7 +5078,7 @@ TEST_CASE("Check reports a const cycle in an array length") {
 TEST_CASE("Check rejects a non-integer const array length") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
-                                      "const F: bool = true\n"
+                                      "const F: bool := true\n"
                                       "\n"
                                       "fn f(a: [i32; F]) -> i32 {\n  ret 0\n}\n"
                                       "\n"
@@ -5100,7 +5100,7 @@ TEST_CASE("Check interns value arguments by their values") {
       write_all(dir, {{"main.al",
                        "struct ArrayVec<T, N: usize> { data: [T; N], len: "
                        "usize }\n"
-                       "const K: usize = 4\n"
+                       "const K: usize := 4\n"
                        "fn take(a: ArrayVec<i32, K>) -> i32 {\n"
                        "  ret a.data[0]\n"
                        "}\n"
@@ -5289,7 +5289,7 @@ TEST_CASE("Check rejects a runtime function value argument") {
                        "fn first<T, N: usize>(a: [T; N]) -> T {\n"
                        "  ret a[0]\n"
                        "}\n"
-                       "static n: usize = 3\n"
+                       "static n: usize := 3\n"
                        "fn main() -> i32 {\n"
                        "  ret first::<i32, n>([1, 2, 3])\n"
                        "}\n"}});
@@ -5310,7 +5310,7 @@ TEST_CASE("Check instantiates an enum with a value argument") {
   const bool setup =
       write_all(dir, {{"main.al",
                        "enum Pair<T, N: usize> { Both([T; N]) }\n"
-                       "const K: usize = 2\n"
+                       "const K: usize := 2\n"
                        "fn take(a: Pair<i32, K>) -> i32 {\n  ret 0\n}\n"
                        "fn make(b: Pair<i32, 2>) -> i32 {\n  ret 0\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"}});
@@ -5365,7 +5365,7 @@ TEST_CASE("Check constructs and destructures value-generic types") {
                        "struct ArrayVec<T, N: usize> { data: [T; N], len: "
                        "usize }\n"
                        "enum Pair<T, N: usize> { Both([T; N]) }\n"
-                       "const K: usize = 4\n"
+                       "const K: usize := 4\n"
                        "fn unpack(p: ArrayVec<i32, K>) -> i32 {\n"
                        "  ArrayVec { data, len } := p\n"
                        "  ret data[3] + (len as i32)\n"
@@ -5441,7 +5441,7 @@ TEST_CASE("Check rejects a non-integer value argument") {
       write_all(dir, {{"main.al",
                        "struct ArrayVec<T, N: usize> { data: [T; N], len: "
                        "usize }\n"
-                       "const F: bool = true\n"
+                       "const F: bool := true\n"
                        "fn main() -> i32 {\n"
                        "  a: ArrayVec<i32, F> := ArrayVec { data: [1], len: 0 "
                        "}\n"
@@ -6035,7 +6035,7 @@ TEST_CASE("Check keeps the caller body state across a const precheck") {
   VirtualDir dir;
   const bool setup = write_all(dir, {{"main.al",
                                       "comp fn two() -> usize {\n  ret 2\n}\n"
-                                      "const N: usize = two()\n"
+                                      "const N: usize := two()\n"
                                       "fn f() -> i32 {\n"
                                       "  a: [u8; N] := [0u8; 2]\n"
                                       "  ret a[0] as i32\n"
@@ -6058,7 +6058,7 @@ TEST_CASE("Check resolves an imported const before its module registers") {
                        "use util::N\n"
                        "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"},
-                      {"util.al", "pub const N: usize = 4\n"}});
+                      {"util.al", "pub const N: usize := 4\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -6098,7 +6098,7 @@ TEST_CASE("Check evaluates an imported const in its declaring module") {
                        "fn main() -> i32 {\n  ret 0\n}\n"},
                       {"util.al",
                        "comp fn helper() -> u8 {\n  ret 5\n}\n"
-                       "pub const N: usize = helper() as usize\n"}});
+                       "pub const N: usize := helper() as usize\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -6131,7 +6131,7 @@ TEST_CASE("Check resolves an array length before a called comp fn registers") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const N: usize = f()\n"
+                       "const N: usize := f()\n"
                        "fn f() -> usize {\n  ret g()\n}\n"
                        "fn use_it(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
                        "fn g() -> usize {\n  ret 3\n}\n"
@@ -6151,7 +6151,7 @@ TEST_CASE("Check resolves an array length from a const declared later") {
   const bool setup =
       write_all(dir, {{"main.al",
                        "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
-                       "const N: usize = 4\n"
+                       "const N: usize := 4\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"}});
   CHECK(setup);
   if (!setup) {
@@ -6167,7 +6167,7 @@ TEST_CASE("Check rejects a type parameter used as an array length") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const N: usize = 4\n"
+                       "const N: usize := 4\n"
                        "struct S<N> { a: [u8; N] }\n"
                        "fn f(s: S<i32>) -> i32 {\n  ret s.a[0]\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"}});
@@ -6186,7 +6186,7 @@ TEST_CASE("Check accepts a narrow const as an array length") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const N: u8 = 44u8\n"
+                       "const N: u8 := 44u8\n"
                        "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"}});
   CHECK(setup);
@@ -6222,7 +6222,7 @@ TEST_CASE("Check resolves a qualified const array length") {
       write_all(dir, {{"main.al",
                        "fn f(a: [u8; util::N]) -> u8 {\n  ret a[0]\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"},
-                      {"util.al", "pub const N: usize = 4\n"}});
+                      {"util.al", "pub const N: usize := 4\n"}});
   CHECK(setup);
   if (!setup) {
     return;
@@ -6259,7 +6259,7 @@ TEST_CASE("Check evaluates a method call in a const initializer") {
                        "impl P {\n"
                        "  fn get(self: Self) -> u8 {\n    ret self.x\n  }\n"
                        "}\n"
-                       "const N: u8 = P { x: 3u8 }.get()\n"
+                       "const N: u8 := P { x: 3u8 }.get()\n"
                        "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"}});
   CHECK(setup);
@@ -6293,7 +6293,7 @@ TEST_CASE("Check reports a const initializer error once") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const N: usize = true\n"
+                       "const N: usize := true\n"
                        "fn f(a: [u8; N]) -> u8 {\n  ret a[0]\n}\n"
                        "fn main() -> i32 {\n  ret 0\n}\n"}});
   CHECK(setup);
@@ -6317,7 +6317,7 @@ TEST_CASE("Check propagates an expected integer type into binary operands") {
   VirtualDir dir;
   const bool setup =
       write_all(dir, {{"main.al",
-                       "const M: usize = 1 + 2\n"
+                       "const M: usize := 1 + 2\n"
                        "fn f(a: [u8; M]) -> u8 {\n  ret a[0]\n}\n"
                        "fn g() -> i32 {\n"
                        "  x: u64 := 1 + 2\n"

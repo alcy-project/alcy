@@ -1,1 +1,1 @@
-pub const C: i32 = 3
+pub const C: i32 := 3

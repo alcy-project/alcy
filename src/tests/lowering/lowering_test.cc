@@ -54,8 +54,8 @@ codegen_llvm::Target host_target() {
 TEST_CASE("Lower evaluates a const item initializer") {
   VirtualDir dir;
   write_all(dir, {{"main.al",
-                   "const N: i32 = 1 + 2\n"
-                   "const M: i32 = N * 2\n"
+                   "const N: i32 := 1 + 2\n"
+                   "const M: i32 := N * 2\n"
                    "\n"
                    "fn main() -> i32 {\n"
                    "  ret M\n"
@@ -73,7 +73,7 @@ TEST_CASE("Lower evaluates a comp fn through a const item") {
                    "comp fn twice(x: i32) -> i32 {\n"
                    "  ret x * 2\n"
                    "}\n"
-                   "const N: i32 = twice(21)\n"
+                   "const N: i32 := twice(21)\n"
                    "\n"
                    "fn main() -> i32 {\n"
                    "  ret N - 42\n"
@@ -97,7 +97,7 @@ TEST_CASE("Lower compares the checker's comp call against the IR engine") {
                    "comp fn twice(x: i32) -> i32 {\n"
                    "  ret x * 2\n"
                    "}\n"
-                   "const N: i32 = twice(2)\n"
+                   "const N: i32 := twice(2)\n"
                    "\n"
                    "fn main() -> i32 {\n"
                    "  a: [i32; N] := [1, 2, 3, 4]\n"
@@ -121,8 +121,8 @@ TEST_CASE("Lower compares the checker's comp call against the IR engine") {
 TEST_CASE("Lower reports a const cycle instead of recursing") {
   VirtualDir dir;
   write_all(dir, {{"main.al",
-                   "const A: i32 = B\n"
-                   "const B: i32 = A\n"
+                   "const A: i32 := B\n"
+                   "const B: i32 := A\n"
                    "\n"
                    "fn main() -> i32 {\n"
                    "  ret A\n"
@@ -852,7 +852,7 @@ TEST_CASE("Lowering refuses a package past its function budget") {
 TEST_CASE("Lowering reports an overflow in a constant") {
   VirtualDir dir;
   write_all(dir, {{"main.al",
-                   "const N: i32 = 2147483647 + 1\n"
+                   "const N: i32 := 2147483647 + 1\n"
                    "fn main() -> i32 {\n"
                    "  ret N\n"
                    "}\n"}});

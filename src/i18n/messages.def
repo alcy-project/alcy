@@ -55,6 +55,7 @@
   F(ParserArrayLengthTooLarge, Error, Parser, "Array length is too large") \
   F(ParserArrayLiteralWithoutCount, Error, Parser, "Array literal needs elements or a repeat count") \
   F(ParserBlockBraceOnHeader, Error, Parser, "A block's `{{` must stay on its header line") \
+  F(ParserStaticConstSpelling, Error, Parser, "`static` and `const` items are declared with `:=`, not `=`") \
   F(ParserCompDeclarationSpelling, Error, Parser, "`comp` marks parameters and blocks; write the declaration as `const x := ...`") \
   F(ParserCompOnlyOnBindings, Error, Parser, "Comp evaluation is only allowed on parameters and blocks") \
   F(ParserCompOnlyOnFunctions, Error, Parser, "`comp` marks a function in item position") \

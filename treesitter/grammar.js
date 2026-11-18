@@ -285,7 +285,7 @@ module.exports = grammar({
       field('name', $.identifier),
       ':',
       field('type', $._type),
-      '=',
+      ':=',
       field('value', $._expression),
     ),
 
@@ -295,7 +295,7 @@ module.exports = grammar({
       field('name', $.identifier),
       ':',
       field('type', $._type),
-      '=',
+      ':=',
       field('value', $._expression),
     ),
 

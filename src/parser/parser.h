@@ -315,6 +315,9 @@ class Parser {
   // Parses an optional `<T, N: usize, ...>` parameter list; empty when
   // absent. A parameter with an annotation is a value parameter.
   bool parse_generic_params(std::vector<ast::GenericParam>& params);
+  // A `=` where a static or const item was meant: the shape is
+  // recognized and the report names the declaration spelling.
+  bool expect_static_const_equals();
   ast::ItemIdx parse_static(bool is_pub);
   ast::ItemIdx parse_const(bool is_pub);
   ast::ItemIdx parse_use(bool is_pub, bool keyword_consumed = false);

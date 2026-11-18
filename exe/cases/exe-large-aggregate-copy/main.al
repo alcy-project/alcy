@@ -1,6 +1,6 @@
 // Copying a large aggregate copies the bytes: the binding that follows
 // a later write keeps its own value.
-const FILLED: [u8; 5000] = [8u8; 5000]
+const FILLED: [u8; 5000] := [8u8; 5000]
 
 fn main() -> i32 {
   mut a := [7u8; 5000]

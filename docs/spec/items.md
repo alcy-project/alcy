@@ -67,7 +67,7 @@
   refused by the run, and the diagnostic that reports it names the
   reservation.
 - `static` items have storage and MUST NOT contain `&mut`.
-  `const X: T = ...` items are compile-time values: the initializer is
+  `const X: T := ...` items are compile-time values: the initializer is
   evaluated during compilation, must terminate within the evaluation
   bound, and is pure (no runtime storage or I/O). A const value is
   immutable and readable wherever a value is; `const x := expr` in

@@ -444,7 +444,7 @@ fn f(a: *i32, b: *mut u8, c: **i32, d: **mut u8, e: *mut *i32) {}
 An array length names a const integer value
 ================================================================================
 
-const N: usize = 2 + 2
+const N: usize := 2 + 2
 
 fn f(a: [i32; N]) -> [i32; N] {
   ret a

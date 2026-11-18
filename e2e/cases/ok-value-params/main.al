@@ -22,7 +22,7 @@ enum Chunk<T, N: usize> {
   Empty,
 }
 
-const K: usize = 4
+const K: usize := 4
 
 fn main() -> i32 {
   a: ArrayVec<i32, 4> := ArrayVec { data: [1, 2, 3, 4], len: 0 }

@@ -6,7 +6,7 @@ struct P {
   b: u8,
 }
 
-const K: P = P { a: 3, b: 4 }
+const K: P := P { a: 3, b: 4 }
 
 comp fn sum(comp p: P) -> i32 {
   ret p.a + (p.b as i32)

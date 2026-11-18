@@ -63,7 +63,7 @@ TEST_CASE("Hover on a function shows its signature") {
 
 TEST_CASE("Hover on a const shows its decided type") {
   const std::optional<std::string> markdown =
-      hover("const LIMIT: i32 = 3\n", 0, 7);
+      hover("const LIMIT: i32 := 3\n", 0, 7);
   CHECK(markdown.has_value());
   if (markdown.has_value()) {
     CHECK(markdown->find("const LIMIT: i32") != std::string::npos);

@@ -297,7 +297,7 @@ TEST_CASE("IR interpreter agrees on branches and arithmetic") {
                      "  }\n"
                      "  ret unit * count + kind\n"
                      "}\n"
-                     "const R: i32 = price(4, 3)\n"
+                     "const R: i32 := price(4, 3)\n"
                      "fn main() {\n"
                      "}\n",
                      {"R"}, scenario);
@@ -344,7 +344,7 @@ TEST_CASE("IR interpreter agrees on a while loop") {
                                     "  }\n"
                                     "  ret total\n"
                                     "}\n"
-                                    "const R: i32 = sum(10)\n"
+                                    "const R: i32 := sum(10)\n"
                                     "fn main() {\n"
                                     "}\n",
                                     {"R"}, scenario);
@@ -388,8 +388,8 @@ TEST_CASE("IR interpreter agrees on a direct call") {
                                     "fn quad(comp n: i32) -> i32 {\n"
                                     "  ret double(n) * 2\n"
                                     "}\n"
-                                    "const R: i32 = quad(21)\n"
-                                    "const S: i32 = double(21)\n"
+                                    "const R: i32 := quad(21)\n"
+                                    "const S: i32 := double(21)\n"
                                     "fn main() {\n"
                                     "  _ := quad(21)\n"
                                     "}\n",
@@ -436,7 +436,7 @@ TEST_CASE("IR interpreter agrees on casts and signed shifts") {
                                     "  y := x as i64\n"
                                     "  ret ((y * 3 - 1) as i32) >> 1\n"
                                     "}\n"
-                                    "const R: i32 = mix(0 - 7)\n"
+                                    "const R: i32 := mix(0 - 7)\n"
                                     "fn main() {\n"
                                     "}\n",
                                     {"R"}, scenario);
@@ -481,9 +481,9 @@ TEST_CASE("Both engines widen a negative value by its sign") {
                                     "comp fn widen(x: i32) -> i64 {\n"
                                     "  ret x as i64\n"
                                     "}\n"
-                                    "const R: i64 = widen(0 - 81)\n"
-                                    "const N: i32 = ((0 - 84) as i8) as i32\n"
-                                    "const M: u32 = ((0 - 1) as u16) as u32\n"
+                                    "const R: i64 := widen(0 - 81)\n"
+                                    "const N: i32 := ((0 - 84) as i8) as i32\n"
+                                    "const M: u32 := ((0 - 1) as u16) as u32\n"
                                     "fn main() {\n"
                                     "}\n",
                                     {"R", "N", "M"}, scenario);
@@ -535,7 +535,7 @@ TEST_CASE("IR interpreter agrees on unsigned bitwise operations") {
                      "comp fn weave(x: u32) -> u32 {\n"
                      "  ret ((x << 3) ^ (x >> 1)) | (x & 0xF0u32)\n"
                      "}\n"
-                     "const R: u32 = weave(12u32)\n"
+                     "const R: u32 := weave(12u32)\n"
                      "fn main() {\n"
                      "}\n",
                      {"R"}, scenario);
@@ -577,7 +577,7 @@ TEST_CASE("IR interpreter agrees on booleans") {
                      "comp fn agree(a: bool, b: bool) -> bool {\n"
                      "  ret a && !b\n"
                      "}\n"
-                     "const R: bool = agree(true, false)\n"
+                     "const R: bool := agree(true, false)\n"
                      "fn main() {\n"
                      "}\n",
                      {"R"}, scenario);
@@ -757,7 +757,7 @@ TEST_CASE("IR interpreter refuses past the branch quota") {
                                     "  }\n"
                                     "  ret total\n"
                                     "}\n"
-                                    "const R: i32 = sum(100)\n"
+                                    "const R: i32 := sum(100)\n"
                                     "fn main() {\n"
                                     "}\n",
                                     {"R"}, scenario);
@@ -965,7 +965,7 @@ TEST_CASE("IR interpreter agrees on enum variants and payloads") {
   Scenario scenario;
   const bool built = build_scenario(dir,
                                     "enum Grade { Point(u32), Pass, Fail }\n"
-                                    "const D: Grade = Grade::Point(7u32)\n"
+                                    "const D: Grade := Grade::Point(7u32)\n"
                                     "comp fn score(mark: u32) -> u32 {\n"
                                     "  ret match Grade::Point(mark) {\n"
                                     "    Grade::Point(p) => p,\n"
@@ -987,9 +987,9 @@ TEST_CASE("IR interpreter agrees on enum variants and payloads") {
                                     "    Grade::Fail => 0u32,\n"
                                     "  }\n"
                                     "}\n"
-                                    "const A: u32 = score(42u32)\n"
-                                    "const B: u32 = pass()\n"
-                                    "const C: u32 = fail()\n"
+                                    "const A: u32 := score(42u32)\n"
+                                    "const B: u32 := pass()\n"
+                                    "const C: u32 := fail()\n"
                                     "fn main() {\n"
                                     "}\n",
                                     {"A", "B", "C"}, scenario);
@@ -1058,9 +1058,9 @@ TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
                      "    Maybe::No => 3,\n"
                      "  }\n"
                      "}\n"
-                     "const A: i32 = say(true)\n"
-                     "const B: i32 = say(false)\n"
-                     "const C: i32 = absent()\n"
+                     "const A: i32 := say(true)\n"
+                     "const B: i32 := say(false)\n"
+                     "const C: i32 := absent()\n"
                      "fn main() {\n"
                      "}\n",
                      {"A", "B", "C"}, scenario);
@@ -1126,7 +1126,7 @@ TEST_CASE("The AST engine falls back from a definition-site method row") {
                    "    ret self.n + 1\n"
                    "  }\n"
                    "}\n"
-                   "const V: bool = comp {\n"
+                   "const V: bool := comp {\n"
                    "  c := Counter { n: 41 }\n"
                    "  c.bump() == 42\n"
                    "}\n"
@@ -1196,9 +1196,9 @@ TEST_CASE("IR interpreter agrees on an early return") {
                                     "  }\n"
                                     "  ret n\n"
                                     "}\n"
-                                    "const A: i32 = clamp_high(42)\n"
-                                    "const B: i32 = pick(0)\n"
-                                    "const C: i32 = inner(2)\n"
+                                    "const A: i32 := clamp_high(42)\n"
+                                    "const B: i32 := pick(0)\n"
+                                    "const C: i32 := inner(2)\n"
                                     "fn main() {\n"
                                     "}\n",
                                     {"A", "B", "C"}, scenario);
@@ -1253,8 +1253,8 @@ TEST_CASE("IR interpreter agrees on a jump in a match arm") {
                                     "  }\n"
                                     "  ret out\n"
                                     "}\n"
-                                    "const A: i32 = stop_at()\n"
-                                    "const B: i32 = skip_three()\n"
+                                    "const A: i32 := stop_at()\n"
+                                    "const B: i32 := skip_three()\n"
                                     "fn main() {\n"
                                     "}\n",
                                     {"A", "B"}, scenario);

@@ -246,7 +246,10 @@ Declaration left-hand sides use this grammar with `:=`
 - `const x := expr` (or `const x: T := expr`) declares a compile-time
   value: the initializer is evaluated during compilation and the
   binding is immutable. `comp` marks parameters and blocks only, so
-  `comp x := ...` is a spelling diagnostic pointing at `const`.
+  `comp x := ...` is a spelling diagnostic pointing at `const`. The
+  item forms `const X: T := expr` and `static S: T := expr` spell the
+  declaration the same way, and an `=` there is a spelling diagnostic
+  pointing at `:=`.
 - The left side of an assignment is read as an ordinary expression, and
   whether it names a place is decided after the whole line is read. So
   `g() = 1` is a diagnostic about the place rather than a syntax error,
