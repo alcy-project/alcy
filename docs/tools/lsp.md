@@ -7,7 +7,7 @@ until the client closes the channel.
 ## Usage
 
 ```console
-$ alcy lsp
+alcy lsp
 ```
 
 There is one mode and no flags: `alcy lsp` runs over the pair of

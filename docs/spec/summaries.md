@@ -52,12 +52,13 @@ instantiation walk is gone.
 A summary carries a generic body in its parametric form, and the
 dependent spells the row's declaration, so the specialization
 produces the instance beside the dependent's own code. A monomorphic
-body is not carried - the dependent links the library's object for it
-- and an item the once-check cannot stand in for (a value parameter,
-a `comp fn`, an owning `fn()` slot, a parameter bounded by the `Fn`
-spec) keeps a declaration-only row: a dependent that calls one is
-told the item is unavailable rather than reading a body the library
-could not carry.
+body is not carried - the dependent links the library's object for it.
+
+An item the once-check cannot stand in for (a value parameter, a
+`comp fn`, an owning `fn()` slot, a parameter bounded by the `Fn` spec)
+keeps a declaration-only row: a dependent that calls one is told the
+item is unavailable rather than reading a body the library could not
+carry.
 
 ## Scope
 

@@ -7,7 +7,7 @@ environment variable, a config file, or a terminal's capabilities.
 ## Usage
 
 ```console
-$ alcy fmt [--file FILE] [--stdin] [--stdout] [--check] [--diff] [--exclude SUFFIX]... [PACKAGE-DIR]
+alcy fmt [--file FILE] [--stdin] [--stdout] [--check] [--diff] [--exclude SUFFIX]... [PACKAGE-DIR]
 ```
 
 Three shapes the command takes:

@@ -10,7 +10,7 @@ linker.
 ## Usage
 
 ```console
-$ alcy check [--file FILE] [PACKAGE-DIR]
+alcy check [--file FILE] [PACKAGE-DIR]
 ```
 
 `PACKAGE-DIR` defaults to the current directory. `.al`-suffixed

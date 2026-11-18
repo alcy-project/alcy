@@ -65,7 +65,7 @@ Every verb takes these before its own arguments:
 | `-j`, `--jobs` | `N` | `1` | Threads reading source files. `--jobs 0` is refused; everything after the read is single-threaded |
 
 `--release` selects the built-in `release` profile; `--profile <name>`
-selects one by name (see [the profile file](build.md#profiletoml)). The
+selects one by name (see [the profile file](build.md#the-profile-file) in [`build`](build.md)). The
 two may not be given together.
 
 ## The `--json` envelope

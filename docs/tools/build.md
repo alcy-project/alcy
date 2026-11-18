@@ -90,7 +90,7 @@ no libc, and the compiler emits `_start` as the entry instead of
 `main`. A freestanding build's `main` keeps its signature and its
 value becomes the process's exit code.
 
-### `.alcy/profile.toml`
+### The profile file
 
 ```toml
 [debug]

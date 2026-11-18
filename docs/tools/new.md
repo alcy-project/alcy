@@ -7,7 +7,7 @@ already in; the two differ only in where the files land.
 ## Usage
 
 ```console
-$ alcy new [--vcs git|none] [--suite <name>] <directory>
+alcy new [--vcs git|none] [--suite <name>] <directory>
 ```
 
 The trailing operand names a directory path; the package's name is the

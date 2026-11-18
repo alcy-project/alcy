@@ -8,7 +8,7 @@ never makes a new directory for you.
 ## Usage
 
 ```console
-$ alcy init [--vcs git|none] [--suite <name>] [directory]
+alcy init [--vcs git|none] [--suite <name>] [directory]
 ```
 
 Without an argument, the current directory becomes the package's root
