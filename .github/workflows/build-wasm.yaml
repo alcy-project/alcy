@@ -118,4 +118,4 @@ jobs:
 
       - name: Run Tests
         shell: bash
-        run: uv run ./tools/run.py --target=tests --mode="$BUILD_TYPE" --build-subdir=build --target-os=emscripten
+        run: uv run ./tools/run.py --target=tests --mode="$BUILD_TYPE" --build-subdir=build --target-os=emscripten --no-build

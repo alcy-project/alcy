@@ -86,9 +86,6 @@ jobs:
 
       - name: Package & Generate Checksum
         shell: bash
-        # --verify unpacks the archive and runs the binary it carries, so
-        # packaging is a path a consumer took rather than a file the
-        # runner wrote.
         run: |
           ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/package.py \
             --plat="${{ matrix.plat }}" \
@@ -96,7 +93,21 @@ jobs:
             --mode="$BUILD_TYPE" \
             --role="$ROLE" \
             --archive="${{ matrix.archive }}" \
-            --verify \
+            ${{ matrix.nix && '--nix' || '' }}
+
+      # --verify-only unpacks the archive the step above just wrote and
+      # runs the binary it carries, so packaging is a path a consumer
+      # took rather than a file the runner wrote.
+      - name: Verify Package
+        shell: bash
+        run: |
+          ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/package.py \
+            --verify-only \
+            --plat="${{ matrix.plat }}" \
+            --arch="${{ matrix.arch }}" \
+            --mode="$BUILD_TYPE" \
+            --role="$ROLE" \
+            --archive="${{ matrix.archive }}" \
             ${{ matrix.nix && '--nix' || '' }}
 
       - name: Upload Build Artifacts
@@ -124,7 +135,7 @@ jobs:
 
       - name: Run Tests
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode="$BUILD_TYPE" --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/run.py --target=tests --mode="$BUILD_TYPE" --build-subdir=build --no-build
 
       # A corpus whose cases link a program or run one is a question the
       # platform answers: what the linker names the objects, what the frame

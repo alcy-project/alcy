@@ -43,12 +43,17 @@ jobs:
         shell: bash
         run: alcy --version
 
-      - name: Compile and run a program
+      - name: Compile a Program
         shell: bash
         run: |
           mkdir smoke && cd smoke
           printf 'fn main() -> i32 {\n  ret 7\n}\n' > main.al
           alcy compile main.al -o smoke
+
+      - name: Run the Program
+        shell: bash
+        run: |
+          cd smoke
           set +e
           ./smoke
           code=$?

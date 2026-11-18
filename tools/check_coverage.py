@@ -20,6 +20,8 @@ report that called them untested would send the next test to the wrong
 place.
 
     ./tools/check_coverage.py            build, run, check
+    ./tools/check_coverage.py --build-only
+                                         build, then stop
     ./tools/check_coverage.py --no-build reuse the last build
     ./tools/check_coverage.py --report   print the report, no check
     ./tools/check_coverage.py --update   record the current numbers
@@ -296,6 +298,11 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
+        "--build-only",
+        action="store_true",
+        help="build the instrumented tree and exit",
+    )
+    parser.add_argument(
         "--no-build",
         action="store_true",
         help="reuse the last instrumented build",
@@ -318,6 +325,11 @@ def main() -> int:
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+
+    if args.build_only:
+        if build() != 0:
+            sys.exit("build failed")
+        return 0
 
     if shutil.which("llvm-profdata") is None or shutil.which("llvm-cov") is None:
         sys.exit("llvm-cov and llvm-profdata must be on PATH")

@@ -160,9 +160,13 @@ jobs:
       # yields profile data that describes a compiler that no longer
       # exists, and the ratchet then fails on a number nobody can
       # account for.
+      - name: Build Instrumented Tree
+        shell: bash
+        run: uv run ./tools/check_coverage.py --build-only
+
       - name: Check Coverage
         shell: bash
-        run: uv run ./tools/check_coverage.py
+        run: uv run ./tools/check_coverage.py --no-build
 
   # The layer that can see a wrong code-generation decision become memory
   # corruption: the generated program is instrumented, which alcy cannot
@@ -342,9 +346,13 @@ jobs:
           key: ${{ runner.os }}-fuzz-build-dir-${{ hashFiles('.gn', 'BUILD.gn', 'src/**', 'config.toml') }}
           restore-keys: ${{ runner.os }}-fuzz-build-dir-
 
-      - name: Build and Run the Fuzz Targets
+      - name: Build Fuzz Targets
         shell: bash
-        run: uv run ./tools/run_fuzz.py
+        run: uv run ./tools/run_fuzz.py --build
+
+      - name: Run Fuzz Targets
+        shell: bash
+        run: uv run ./tools/run_fuzz.py --no-build
 
   # The matrix builds the host and the wasm target; the other operating
   # systems a manifest can name are only ever configured here, which is

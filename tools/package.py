@@ -88,6 +88,26 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> None:
                 tar.extractall(dest_dir, filter="data")
 
 
+def required_targets(plat: str, role: str) -> list[str]:
+    if plat == "wasm":
+        targets = list(WASM_BASE_TARGETS) + list(WASM_PLAYGROUND_TARGETS)
+        if role != "release":
+            targets += WASM_TEST_TARGETS
+        return targets
+    exe = ".exe" if plat == "windows" else ""
+    targets = [f"{t}{exe}" for t in NATIVE_BASE_TARGETS]
+    if role != "release":
+        targets += [f"{t}{exe}" for t in NATIVE_TEST_TARGETS]
+    return targets
+
+
+def archive_name(plat: str, arch: str, mode: str, archive: str, nix: bool) -> str:
+    nix_suffix = "-nix" if nix else ""
+    if plat == "wasm":
+        return f"alcy-wasm-{arch}-{mode}.{archive}"
+    return f"alcy-{plat}-{arch}-{mode}{nix_suffix}.{archive}"
+
+
 def verify_archive(archive_path: Path, plat: str, required_targets: list[str]) -> bool:
     """Unpacks the archive and asks the binary it carries to run.
 
@@ -136,10 +156,28 @@ def main() -> int:
         help="Unpack the archive, check its contents, and run the binary "
         "it carries; the wasm archive stops at the contents",
     )
+    parser.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="verify the archive for these flags without packaging: the "
+        "one the package step just wrote is what a consumer would hold",
+    )
     parser.add_argument("--nix", action="store_true")
     parser.add_argument("--build-dir", type=Path, default=Path("out/build"))
     parser.add_argument("--dist-dir", type=Path, default=Path("dist"))
     args = parser.parse_args()
+
+    if args.verify_only:
+        verify_targets = required_targets(args.plat, args.role)
+        archive_path = REPO_ROOT / archive_name(
+            args.plat, args.arch, args.mode, args.archive, args.nix
+        )
+        if not archive_path.is_file():
+            log_error(
+                f"verify found no archive at {archive_path}; run package.py first"
+            )
+            return 1
+        return 0 if verify_archive(archive_path, args.plat, verify_targets) else 1
 
     # Resolve relative paths against repository root
     build_dir: Path = (
@@ -169,18 +207,9 @@ def main() -> int:
             shutil.copy2(doc_path, dist_dir)
 
     # Collect required target binaries
-    if args.plat == "wasm":
-        required_targets = list(WASM_BASE_TARGETS)
-        required_targets.extend(WASM_PLAYGROUND_TARGETS)
-        if args.role != "release":
-            required_targets.extend(WASM_TEST_TARGETS)
-    else:
-        exe = ".exe" if args.plat == "windows" else ""
-        required_targets = [f"{t}{exe}" for t in NATIVE_BASE_TARGETS]
-        if args.role != "release":
-            required_targets.extend(f"{t}{exe}" for t in NATIVE_TEST_TARGETS)
+    targets = required_targets(args.plat, args.role)
 
-    for target in required_targets:
+    for target in targets:
         src = build_dir / target
         if not src.is_file():
             log_error(f"Expected output file missing: {src}")
@@ -194,24 +223,18 @@ def main() -> int:
             if lib_path.is_file():
                 shutil.copy2(lib_path, dist_dir)
 
-    nix_suffix = "-nix" if args.nix else ""
-    if args.plat == "wasm":
-        archive_name = f"alcy-wasm-{args.arch}-{args.mode}.{args.archive}"
-    else:
-        archive_name = (
-            f"alcy-{args.plat}-{args.arch}-{args.mode}{nix_suffix}.{args.archive}"
-        )
-
-    archive_path = REPO_ROOT / archive_name
+    archive_path = REPO_ROOT / archive_name(
+        args.plat, args.arch, args.mode, args.archive, args.nix
+    )
 
     try:
         create_archive(dist_dir, archive_path, args.archive)
         generate_sha256(archive_path)
     except Exception as e:
-        log_error(f"Packaging failed for {archive_name}: {e}")
+        log_error(f"Packaging failed for {archive_path.name}: {e}")
         return 1
 
-    if args.verify and not verify_archive(archive_path, args.plat, required_targets):
+    if args.verify and not verify_archive(archive_path, args.plat, targets):
         return 1
 
     return 0

@@ -55,6 +55,11 @@ def main():
         help='GN target_cpu override (e.g. "wasm32"; defaults per target_os)',
     )
     parser.add_argument(
+        "--no-build",
+        action="store_true",
+        help="run the binary in out/<subdir> without building it first",
+    )
+    parser.add_argument(
         "--fast",
         action="store_true",
         help="Skip gn gen, gn check, and compdb before building "
@@ -81,21 +86,24 @@ def main():
     if args.run_args[:1] == ["--"]:
         del args.run_args[0]
 
-    ret = build(
-        args.target,
-        args.mode,
-        args.clang,
-        args.lld,
-        args.build_subdir,
-        args.target_os,
-        args.target_cpu,
-        False,
-        args.fast,
-        "",
-        args.llvm_dir,
-    )
-    if ret != 0:
-        return ret
+    if args.no_build:
+        ret = 0
+    else:
+        ret = build(
+            args.target,
+            args.mode,
+            args.clang,
+            args.lld,
+            args.build_subdir,
+            args.target_os,
+            args.target_cpu,
+            False,
+            args.fast,
+            "",
+            args.llvm_dir,
+        )
+        if ret != 0:
+            return ret
 
     if args.target != "default":
         build_dir = project_root_dir / "out" / args.build_subdir
