@@ -101,6 +101,45 @@ TEST_CASE("Result lines start their subject in one column") {
   CHECK(checked_line.starts_with("Checked"));
 }
 
+TEST_CASE("A build that read a manifest reports what it built") {
+  Envelope package = built("out/proj/app", 1, 1);
+  package.built_name = "proj";
+  package.built_count = 2;
+
+  CHECK(text(package).find("Built     package proj (2 targets)") == 0);
+  CHECK(render_json(package, i18n::Language::EnUs)
+            .find("\"subject\":\"package proj (2 targets)\"") !=
+        std::string::npos);
+
+  package.built_count = 1;
+  CHECK(text(package).find("Built     package proj (1 target)") == 0);
+
+  Envelope suite = built("out/std", 0, 2000000);
+  suite.built_name = "alcy/std";
+  suite.built_count = 17;
+  suite.built_suite = true;
+
+  const std::string line = text(suite);
+  CHECK(line.find("Built     suite alcy/std (17 packages)") == 0);
+  // A suite's output is a directory, so the note names the time and
+  // the peak, never a byte count.
+  CHECK(line.find("KiB") == std::string::npos);
+  CHECK(line.find("bytes") == std::string::npos);
+  CHECK(render_json(suite, i18n::Language::EnUs)
+            .find("\"subject\":\"suite alcy/std (17 packages)\"") !=
+        std::string::npos);
+
+  // A check names what it read, so the document carries a subject for
+  // the machine reader and the old stats stay for the precise counts.
+  Envelope checked;
+  checked.command = "check";
+  checked.status = Status::Ok;
+  checked.outcome = Outcome::Checked;
+  checked.file_count = 1;
+  CHECK(render_json(checked, i18n::Language::EnUs)
+            .find("\"subject\":\"1 file\"") != std::string::npos);
+}
+
 TEST_CASE("A run reports no result line, having announced itself already") {
   // The announcement carries the name, and it is printed before the
   // program's own output. A second line afterwards would sit below that

@@ -991,7 +991,7 @@ TEST_CASE("A generic item a summary cannot spell is named for what it is") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1053,7 +1053,7 @@ TEST_CASE("A summary carries a generic body the dependent instantiates") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1077,7 +1077,7 @@ TEST_CASE("A summary carries a generic body the dependent instantiates") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Object);
     CHECK(built.is_ok());
@@ -1117,7 +1117,7 @@ TEST_CASE("A summary carries a generic body the dependent instantiates") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1140,7 +1140,7 @@ TEST_CASE("A summary carries a generic body the dependent instantiates") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Executable);
     CHECK(built.is_ok());
@@ -1198,7 +1198,7 @@ TEST_CASE("A summary's generic declaration and impl cross whole") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1221,7 +1221,7 @@ TEST_CASE("A summary's generic declaration and impl cross whole") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Object);
     CHECK(built.is_ok());
@@ -1264,7 +1264,7 @@ TEST_CASE("A summary's generic declaration and impl cross whole") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Executable);
     CHECK(built.is_ok());
@@ -1332,7 +1332,7 @@ TEST_CASE("Two libraries that reach one std function link into one image") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Object);
     CHECK(built.is_ok());
@@ -1377,7 +1377,7 @@ TEST_CASE("Two libraries that reach one std function link into one image") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Executable);
     CHECK(built.is_ok());
@@ -1446,7 +1446,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1470,7 +1470,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Object);
     CHECK(built.is_ok());
@@ -1542,7 +1542,7 @@ TEST_CASE("A dependency a summary answers for is not read") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Executable);
     CHECK(built.is_ok());
@@ -1599,7 +1599,7 @@ TEST_CASE("A summary import carries what a carried body reaches") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1635,7 +1635,7 @@ TEST_CASE("A summary import carries what a carried body reaches") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1724,7 +1724,7 @@ TEST_CASE("A package's storage merges once for all of its modules") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1760,7 +1760,7 @@ TEST_CASE("A package's storage merges once for all of its modules") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1845,7 +1845,7 @@ TEST_CASE("A summary destructor the carrier did not cross is refused") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1878,7 +1878,7 @@ TEST_CASE("A summary destructor the carrier did not cross is refused") {
   if (manifest.is_err()) {
     return;
   }
-  const base::Result<std::string, diag::Reported> built =
+  const base::Result<pipeline::BuildResult, diag::Reported> built =
       build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                     "", BuildPlan{}, EmitMode::IrBinary);
   CHECK(built.is_err());
@@ -1953,7 +1953,7 @@ TEST_CASE("A carried body ends a summary type the library did not arm") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -1986,7 +1986,7 @@ TEST_CASE("A carried body ends a summary type the library did not arm") {
   if (manifest.is_err()) {
     return;
   }
-  const base::Result<std::string, diag::Reported> built =
+  const base::Result<pipeline::BuildResult, diag::Reported> built =
       build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                     "", BuildPlan{}, EmitMode::IrBinary);
   CHECK(built.is_ok());
@@ -2029,7 +2029,7 @@ TEST_CASE("A carried body ends a generic aggregate once per element") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());
@@ -2073,7 +2073,7 @@ TEST_CASE("A carried body ends a generic aggregate once per element") {
     if (manifest.is_err()) {
       return;
     }
-    const base::Result<std::string, diag::Reported> built =
+    const base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::IrBinary);
     CHECK(built.is_ok());

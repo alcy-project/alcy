@@ -97,6 +97,17 @@ struct Envelope {
   // The suite a scaffold joined or made, spelled `owner/name` or
   // `name`. Empty for everything else.
   std::string suite_name;
+  // What a build built: the name of the package or suite named in its
+  // manifest, and how many targets or member packages went into it.
+  // The name is the manifest's package name for a package build, and
+  // the suite's `owner/name` (or `name` when owner-less) for a suite
+  // build. Empty for every command that is not one of those builds.
+  std::string built_name;
+  // Whether a build built a suite rather than a single package.
+  bool built_suite = false;
+  // The targets a package build produced, or the member packages a
+  // suite build built. Zero outside those builds.
+  usize built_count = 0;
   // Counts worth reporting. Zero means the command has no such
   // measurement, which is why they are not optional: a package with no
   // files and a package that was not counted read the same, and only one

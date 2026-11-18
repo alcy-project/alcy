@@ -537,6 +537,11 @@
   F(CliMemoryPeak, Note, Pipeline, "{} peak") \
   F(CliModulePlural, Note, Pipeline, "modules") \
   F(CliModuleSingular, Note, Pipeline, "module") \
+  F(CliPackagePlural, Note, Pipeline, "packages") \
+  F(CliPackageSingular, Note, Pipeline, "package") \
+  F(CliSuiteWord, Note, Pipeline, "suite") \
+  F(CliTargetPlural, Note, Pipeline, "targets") \
+  F(CliTargetSingular, Note, Pipeline, "target") \
   F(CliNewAbout, Note, Pipeline, "Create a new package") \
   F(CliNoStdHelp, Note, Pipeline, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoCacheHelp, Note, Pipeline, "Skip the build cache for this invocation: no lookup and no store.") \

@@ -47,7 +47,7 @@ reaches it, and its exit code is the gate.
 $ alcy check
 Checked   1 file, 1 module, 1 function  (3.46 ms, 71.8 MiB peak)
 $ alcy check --json
-{"version":1,"command":"check","status":"ok","outcome":"checked","cache":"off","summary":"Checked   1 file, 1 module, 1 function  (2.92 ms, 71.7 MiB peak)","output_path":null,"stats":{"files":1,"modules":1,"functions":1,"findings":0,"fixes":0,"tests":0,"test_failures":0,"test_ended_early":false,"output_bytes":0,"wall_ns":2916373,"peak_memory_bytes":75165696},"diagnostics":[]}
+{"version":1,"command":"check","status":"ok","outcome":"checked","cache":"off","summary":"Checked   1 file, 1 module, 1 function  (2.92 ms, 71.7 MiB peak)","output_path":null,"subject":"1 file, 1 module, 1 function","stats":{"files":1,"modules":1,"functions":1,"findings":0,"fixes":0,"tests":0,"test_failures":0,"test_ended_early":false,"output_bytes":0,"wall_ns":2916373,"peak_memory_bytes":75165696},"diagnostics":[]}
 ```
 
 Diagnostics of the form `error[ECxxx]`/`warning[WCxxx]` are the same

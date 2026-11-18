@@ -320,7 +320,7 @@ TEST_CASE("An ir-binary build carries the summary only for a library") {
   if (manifest.is_err()) {
     return;
   }
-  base::Result<std::string, diag::Reported> built =
+  base::Result<pipeline::BuildResult, diag::Reported> built =
       build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                     "", BuildPlan{}, EmitMode::IrBinary);
   CHECK(built.is_ok());

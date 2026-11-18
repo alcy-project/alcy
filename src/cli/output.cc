@@ -212,6 +212,15 @@ void append_dim(std::string& out, std::string_view text) {
 // as a placeholder in a sentence and as a mistake in a list. A language
 // that carries the count inside its noun gets two messages and picks
 // between them, which is why both arrive already composed.
+// A subject's nouns are comma-joined, and the last one carries no
+// separator after it.
+void strip_trailing_separator(std::string& subject) {
+  constexpr std::string_view SEPARATOR = ", ";
+  if (subject.ends_with(SEPARATOR)) {
+    subject.erase(subject.size() - SEPARATOR.size());
+  }
+}
+
 void append_count(std::string& out,
                   usize count,
                   std::string_view one,
@@ -249,6 +258,10 @@ bool note_has_duration(const Envelope& envelope) {
 }
 
 bool note_has_size(const Envelope& envelope) {
+  // A directory's size is not what a suite build wrote.
+  if (envelope.built_suite) {
+    return false;
+  }
   return envelope.outcome == Outcome::Built ||
          envelope.outcome == Outcome::Compiled;
 }
@@ -290,6 +303,7 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
                      i18n::text<Key::CliFunctionSingular>(language),
                      i18n::text<Key::CliFunctionPlural>(language));
       }
+      strip_trailing_separator(subject);
       return subject;
     }
     case Outcome::Formatted: {
@@ -319,6 +333,7 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
                      i18n::text<Key::CliLintFixSingular>(language),
                      i18n::text<Key::CliLintFixPlural>(language));
       }
+      strip_trailing_separator(subject);
       return subject;
     }
     case Outcome::Tested:
@@ -329,7 +344,28 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
                    i18n::text<Key::CliTestPlural>(language));
       return subject;
     }
+    // A build that read a manifest names what it built, with the
+    // counts behind it; anything else names the path it wrote.
     case Outcome::Built:
+      if (!envelope.built_name.empty()) {
+        const std::string_view kind =
+            envelope.built_suite
+                ? i18n::text<Key::CliSuiteWord>(language)
+                : i18n::text<Key::CliPackageSingular>(language);
+        std::string subject{kind};
+        subject += ' ';
+        subject += envelope.built_name;
+        subject += " (";
+        append_count(
+            subject, envelope.built_count,
+            envelope.built_suite ? i18n::text<Key::CliPackageSingular>(language)
+                                 : i18n::text<Key::CliTargetSingular>(language),
+            envelope.built_suite ? i18n::text<Key::CliPackagePlural>(language)
+                                 : i18n::text<Key::CliTargetPlural>(language));
+        subject += ')';
+        return subject;
+      }
+      return envelope.output_path;
     case Outcome::Compiled:
     case Outcome::Ran: return envelope.output_path;
   }
@@ -586,6 +622,13 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
     out += "null";
   } else {
     append_json_string(out, envelope.output_path);
+  }
+  out += R"(,"subject":)";
+  const std::string subject = result_subject(envelope, language);
+  if (subject.empty()) {
+    out += "null";
+  } else {
+    append_json_string(out, subject);
   }
   // The statistics are flat and always present, so a reader indexes them
   // without first finding out which command ran.

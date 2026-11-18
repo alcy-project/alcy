@@ -110,7 +110,7 @@ array. Each carries `check_name` with the rule's id.
 
 ```console
 $ alcy lint --json
-{"version":1,"command":"lint","status":"ok","outcome":"linted","cache":"off","summary":"Linted    1 file, 1 finding  (3.75 ms, 72.8 MiB peak)","output_path":null,"stats":{"files":1,"modules":1,"functions":0,"findings":1,"fixes":0,"tests":0,"test_failures":0,"test_ended_early":false,"output_bytes":0,"wall_ns":3745283,"peak_memory_bytes":76365824},"diagnostics":[{"severity":"warning","code":{"stage":"lint","local_id":10},"check_name":"unused-variable","message":"unused variable: unused","span":{"file":"main.al","offset":21,"length":6},"labels":[{"span":{"file":"main.al","offset":21,"length":6},"message":"if this is intentional, prefix the name with an underscore"}]}]}
+{"version":1,"command":"lint","status":"ok","outcome":"linted","cache":"off","summary":"Linted    1 file, 1 finding  (3.75 ms, 72.8 MiB peak)","output_path":null,"subject":"1 file, 1 finding","stats":{"files":1,"modules":1,"functions":0,"findings":1,"fixes":0,"tests":0,"test_failures":0,"test_ended_early":false,"output_bytes":0,"wall_ns":3745283,"peak_memory_bytes":76365824},"diagnostics":[{"severity":"warning","code":{"stage":"lint","local_id":10},"check_name":"unused-variable","message":"unused variable: unused","span":{"file":"main.al","offset":21,"length":6},"labels":[{"span":{"file":"main.al","offset":21,"length":6},"message":"if this is intentional, prefix the name with an underscore"}]}]}
 ```
 
 Exit code is `0` for warnings, `9` for a denied finding, lint read

@@ -963,7 +963,7 @@ base::Result<std::string, diag::Reported> emit_target(
                      target.kind == ArtifactKind::Lib, target.linked_objects);
 }
 
-base::Result<std::string, diag::Reported> build_package(
+base::Result<BuildResult, diag::Reported> build_package(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,
@@ -971,9 +971,10 @@ base::Result<std::string, diag::Reported> build_package(
     std::string_view output,
     BuildPlan plan,
     EmitMode mode) {
+  std::string package_name;
   base::Result<std::vector<Artifact>, diag::Reported> targets =
       resolve_artifacts(ctx, root, manifest_file, manifest_name,
-                        ArtifactScope::All);
+                        ArtifactScope::All, &package_name);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -1068,10 +1069,15 @@ base::Result<std::string, diag::Reported> build_package(
   if (failed || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  return base::make_ok(first_output);
+  return base::make_ok(BuildResult{
+      .output_path = std::move(first_output),
+      .name = std::move(package_name),
+      .suite = false,
+      .count = planned.size(),
+  });
 }
 
-base::Result<std::string, diag::Reported> build_suite(
+base::Result<BuildResult, diag::Reported> build_suite(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,
@@ -1123,16 +1129,28 @@ base::Result<std::string, diag::Reported> build_suite(
       return base::make_err(diag::Reported{});
     }
     ManifestProbe member = std::move(probe).unwrap();
-    base::Result<std::string, diag::Reported> built =
+    base::Result<BuildResult, diag::Reported> built =
         build_package(ctx, member.root, member.manifest, member.manifest_name,
                       {}, plan, mode);
     if (built.is_err()) {
       return base::make_err(diag::Reported{});
     }
   }
+  std::string suite_name;
+  if (!suite.owner.empty()) {
+    suite_name += suite.owner;
+    suite_name += '/';
+  }
+  suite_name += suite.name;
   // A member is not more the build than its siblings, so the suite
-  // reports the one directory its artifacts share.
-  return base::make_ok(std::string(root.join(path::DEFAULT_OUT_DIR).as_view()));
+  // reports the one directory its artifacts share, and names the suite
+  // rather than any member's output.
+  return base::make_ok(BuildResult{
+      .output_path = std::string(root.join(path::DEFAULT_OUT_DIR).as_view()),
+      .name = std::move(suite_name),
+      .suite = true,
+      .count = suite.package_count,
+  });
 }
 
 }  // namespace pipeline

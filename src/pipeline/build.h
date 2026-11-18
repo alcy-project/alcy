@@ -107,7 +107,21 @@ base::Result<std::string, diag::Reported> emit_target(
     BuildPlan plan,
     lowering::LoweredPackage& lowered);
 
-base::Result<std::string, diag::Reported> build_package(
+// What a build built, besides the path its first artifact landed at.
+// `name` is the manifest's package name for a package build, and the
+// suite's `owner/name` (or `name` when the suite declares no owner) for
+// a suite build. `count` is the number of targets a package build
+// produced, or the number of member packages a suite build built.
+// `output_path` is the first artifact's path for a package build, and
+// the directory the suite's artifacts share for a suite build.
+struct BuildResult {
+  std::string output_path;
+  std::string name;
+  bool suite = false;
+  usize count = 0;
+};
+
+base::Result<BuildResult, diag::Reported> build_package(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,
@@ -120,7 +134,7 @@ base::Result<std::string, diag::Reported> build_package(
 // manifest and into its own directory under the suite's `out/`
 //. Success names that directory; `-o` is refused because it
 // cannot name more than one member's artifact.
-base::Result<std::string, diag::Reported> build_suite(
+base::Result<BuildResult, diag::Reported> build_suite(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,

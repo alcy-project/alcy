@@ -71,7 +71,7 @@ Built build_in(io::TempDir& dir, std::string_view rel, bool no_cache) {
     return built;
   }
   ManifestProbe found = std::move(probe).unwrap();
-  base::Result<std::string, diag::Reported> res =
+  base::Result<pipeline::BuildResult, diag::Reported> res =
       build_package(ctx, found.root, found.manifest, found.manifest_name, "",
                     BuildPlan{}, EmitMode::IrBinary);
   if (res.is_err() || ctx.bag.has_errors()) {
@@ -79,7 +79,7 @@ Built build_in(io::TempDir& dir, std::string_view rel, bool no_cache) {
   }
   built.ok = true;
   built.outcome = ctx.cache_outcome;
-  built.bytes = io::read_file(std::move(res).unwrap());
+  built.bytes = io::read_file(std::move(res).unwrap().output_path);
   return built;
 }
 
@@ -103,7 +103,7 @@ Built build_configured(io::TempDir& dir, std::string_view rel) {
       load_toolchain(ctx, found.root).is_err()) {
     return built;
   }
-  base::Result<std::string, diag::Reported> res =
+  base::Result<pipeline::BuildResult, diag::Reported> res =
       build_package(ctx, found.root, found.manifest, found.manifest_name, "",
                     BuildPlan{}, EmitMode::IrBinary);
   if (res.is_err() || ctx.bag.has_errors()) {
@@ -111,7 +111,7 @@ Built build_configured(io::TempDir& dir, std::string_view rel) {
   }
   built.ok = true;
   built.outcome = ctx.cache_outcome;
-  built.bytes = io::read_file(std::move(res).unwrap());
+  built.bytes = io::read_file(std::move(res).unwrap().output_path);
   return built;
 }
 

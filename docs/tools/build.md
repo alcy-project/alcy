@@ -117,10 +117,10 @@ or derive ones it names from defaults.
 
 ```console
 $ alcy build
-Built     out/hello  (4.3 KiB, 28.6 ms, 96.9 MiB peak, cache miss)
+Built     package hello (1 target)  (4.3 KiB, 28.6 ms, 96.9 MiB peak, cache miss)
 
 $ alcy build --json
-{"version":1,"command":"build","status":"ok","outcome":"built","cache":"miss","summary":"Built     out/hello  (4.3 KiB, 23.4 ms, 96.6 MiB peak, cache miss)","output_path":"out/hello","stats":{"files":0,"modules":0,"functions":120,"findings":0,"fixes":0,"tests":0,"test_failures":0,"test_ended_early":false,"output_bytes":4416,"wall_ns":23438168,"peak_memory_bytes":101269504},"diagnostics":[]}
+{"version":1,"command":"build","status":"ok","outcome":"built","cache":"miss","summary":"Built     package hello (1 target)  (4.3 KiB, 23.4 ms, 96.6 MiB peak, cache miss)","output_path":"out/hello","subject":"package hello (1 target)","stats":{"files":0,"modules":0,"functions":120,"findings":0,"fixes":0,"tests":0,"test_failures":0,"test_ended_early":false,"output_bytes":4416,"wall_ns":23438168,"peak_memory_bytes":101269504},"diagnostics":[]}
 
 $ ls out/
 hello

@@ -777,7 +777,8 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
-    ArtifactScope scope) {
+    ArtifactScope scope,
+    std::string* package_name_out) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "targets", "frontend");
   base::Result<LoadedPackage, diag::Reported> loaded =
       load_package(ctx, root, manifest_file, manifest_name);
@@ -785,6 +786,9 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     return base::make_err(diag::Reported{});
   }
   LoadedPackage package = std::move(loaded).unwrap();
+  if (package_name_out != nullptr) {
+    *package_name_out = std::string(package.manifest.name);
+  }
   if (package.manifest.bin_count == 0 && package.manifest.lib == nullptr) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoTarget>(
         DiagCode::NoTargets, manifest_name);

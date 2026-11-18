@@ -266,7 +266,7 @@ TEST_CASE("A package build honours the mode too") {
     if (manifest.is_err()) {
       return;
     }
-    base::Result<std::string, diag::Reported> built =
+    base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, one.mode);
     CHECK(built.is_ok());
@@ -344,7 +344,7 @@ TEST_CASE("A package's module does not depend on how many jobs read it") {
       if (manifest.is_err()) {
         return;
       }
-      base::Result<std::string, diag::Reported> built =
+      base::Result<pipeline::BuildResult, diag::Reported> built =
           build_package(ctx, root_path, std::move(manifest).unwrap(),
                         "alcy.toml", "", BuildPlan{}, EmitMode::LlvmIr);
       CHECK(built.is_ok());
@@ -498,7 +498,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
     if (manifest.is_err()) {
       return;
     }
-    base::Result<std::string, diag::Reported> built =
+    base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Object);
     CHECK(built.is_err());
@@ -520,7 +520,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
     if (manifest.is_err()) {
       return;
     }
-    base::Result<std::string, diag::Reported> built =
+    base::Result<pipeline::BuildResult, diag::Reported> built =
         build_package(ctx, root_path, std::move(manifest).unwrap(), "alcy.toml",
                       "", BuildPlan{}, EmitMode::Executable);
     CHECK(built.is_ok());
@@ -568,7 +568,7 @@ TEST_CASE("A suite builds every member into its own out/") {
   if (manifest.is_err()) {
     return;
   }
-  base::Result<std::string, diag::Reported> built =
+  base::Result<pipeline::BuildResult, diag::Reported> built =
       build_suite(ctx, suite_root, std::move(manifest).unwrap(), "alcy.toml",
                   "", BuildPlan{}, EmitMode::LlvmIr);
   CHECK(built.is_ok());
@@ -578,7 +578,7 @@ TEST_CASE("A suite builds every member into its own out/") {
   CHECK(io::is_file(dir.join("tools/out/cli/cli.ll")));
   CHECK(io::is_file(dir.join("tools/out/first-party/other/other.ll")));
   if (built.is_ok()) {
-    CHECK(std::move(built).unwrap() == dir.join("tools/out"));
+    CHECK(std::move(built).unwrap().output_path == dir.join("tools/out"));
   }
 }
 

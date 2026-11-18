@@ -81,6 +81,7 @@ interleaved with it:
   "outcome": "built",
   "args": ["--release"],
   "output_path": "out/app",
+  "subject": "package app (1 target)",
   "cache": "miss",
   "diagnostics": [],
   "stats": {

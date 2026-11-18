@@ -80,7 +80,7 @@ Listed    2 tests  (37.1 ms, 99.7 MiB peak)
 
 ```console
 $ alcy test --json
-{"version":1,"command":"test","status":"ok","outcome":"tested","cache":"hit","summary":"Tested    2 tests  (589 ms, 357.5 MiB peak, cache hit)","output_path":null,"stats":{"files":0,"modules":0,"functions":0,"findings":0,"fixes":0,"tests":2,"test_failures":0,"test_ended_early":false,"output_bytes":0,"wall_ns":588942561,"peak_memory_bytes":374874112},"diagnostics":[]}
+{"version":1,"command":"test","status":"ok","outcome":"tested","cache":"hit","summary":"Tested    2 tests  (589 ms, 357.5 MiB peak, cache hit)","output_path":null,"subject":"2 tests","stats":{"files":0,"modules":0,"functions":0,"findings":0,"fixes":0,"tests":2,"test_failures":0,"test_ended_early":false,"output_bytes":0,"wall_ns":588942561,"peak_memory_bytes":374874112},"diagnostics":[]}
 ```
 
 `--json` keeps one document on standard output and captures a test's

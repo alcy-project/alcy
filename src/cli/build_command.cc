@@ -118,7 +118,7 @@ ResultCode run_build(const CliConfig& config,
   const bool suite =
       manifest_bytes.has_value() &&
       pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite;
-  base::Result<std::string, diag::Reported> res =
+  base::Result<pipeline::BuildResult, diag::Reported> res =
       suite ? pipeline::build_suite(ctx, found.root, found.manifest,
                                     found.manifest_name, config.output, plan,
                                     config.emit)
@@ -129,7 +129,11 @@ ResultCode run_build(const CliConfig& config,
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;
   }
-  record_output(std::move(res).unwrap(), envelope);
+  pipeline::BuildResult built = std::move(res).unwrap();
+  record_output(built.output_path, envelope);
+  envelope.built_name = std::move(built.name);
+  envelope.built_suite = built.suite;
+  envelope.built_count = built.count;
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Built;
   envelope.cache = ctx.cache_outcome;

@@ -109,13 +109,16 @@ enum class ArtifactScope : u8 {
 
 // Parses the manifest and resolves the artifacts `scope` names: the
 // binary first when one exists, then the library. Shared by build,
-// check, and run; the manifest views borrow the context arena.
+// check, and run; the manifest views borrow the context arena. When
+// `package_name_out` is not null the manifest's package name is written
+// to it (a copy, so it outlives the arena's other uses).
 base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
-    ArtifactScope scope);
+    ArtifactScope scope,
+    std::string* package_name_out = nullptr);
 
 // A package resolved for testing: the module tree a test run enters
 // through, and the tests the tree's driver calls, in the order the driver
