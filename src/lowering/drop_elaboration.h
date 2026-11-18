@@ -17,7 +17,6 @@
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/seq_builder.h"
-#include "ir/type.h"
 
 namespace diag {
 class DiagBag;

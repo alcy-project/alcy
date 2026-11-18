@@ -70,11 +70,35 @@ usize utf8_scalar_length(std::string_view bytes, usize at) {
   };
   switch (c) {
     case 0xC2:
-    case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
-    case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD:
-    case 0xCE: case 0xCF: case 0xD0: case 0xD1: case 0xD2: case 0xD3:
-    case 0xD4: case 0xD5: case 0xD6: case 0xD7: case 0xD8: case 0xD9:
-    case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF: {
+    case 0xC3:
+    case 0xC4:
+    case 0xC5:
+    case 0xC6:
+    case 0xC7:
+    case 0xC8:
+    case 0xC9:
+    case 0xCA:
+    case 0xCB:
+    case 0xCC:
+    case 0xCD:
+    case 0xCE:
+    case 0xCF:
+    case 0xD0:
+    case 0xD1:
+    case 0xD2:
+    case 0xD3:
+    case 0xD4:
+    case 0xD5:
+    case 0xD6:
+    case 0xD7:
+    case 0xD8:
+    case 0xD9:
+    case 0xDA:
+    case 0xDB:
+    case 0xDC:
+    case 0xDD:
+    case 0xDE:
+    case 0xDF: {
       if (!continuation(at + 1)) {
         return 0;
       }
@@ -98,9 +122,20 @@ usize utf8_scalar_length(std::string_view bytes, usize at) {
       }
       return 3;
     }
-    case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6:
-    case 0xE7: case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC:
-    case 0xEE: case 0xEF: {
+    case 0xE1:
+    case 0xE2:
+    case 0xE3:
+    case 0xE4:
+    case 0xE5:
+    case 0xE6:
+    case 0xE7:
+    case 0xE8:
+    case 0xE9:
+    case 0xEA:
+    case 0xEB:
+    case 0xEC:
+    case 0xEE:
+    case 0xEF: {
       if (!continuation(at + 1) || !continuation(at + 2)) {
         return 0;
       }
@@ -126,7 +161,9 @@ usize utf8_scalar_length(std::string_view bytes, usize at) {
       }
       return 4;
     }
-    case 0xF1: case 0xF2: case 0xF3: {
+    case 0xF1:
+    case 0xF2:
+    case 0xF3: {
       if (!continuation(at + 1) || !continuation(at + 2) ||
           !continuation(at + 3)) {
         return 0;

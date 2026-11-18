@@ -3,7 +3,6 @@
 
 #include "lexer/lexer.h"
 
-
 #include <span>
 #include <string_view>
 #include <vector>
@@ -261,7 +260,7 @@ TEST_CASE("Lexer accepts a scalar in a string body") {
   // The scalar is part of a valid literal: three ordinary code points
   // ride through the lexer.
   const std::string bytes =
-      raw({'s', ' ', ':', '=', ' ', '"', '\\', 'u', '{', '0', '3', '0',
+      raw({'s', ' ', ':', '=', ' ', '"',  '\\', 'u',  '{',  '0',  '3', '0',
            '8', '}', 'a', 'b', 'c', 0xC2, 0xA2, 0xE6, 0x97, 0xA5, '"', '\n'});
   CHECK(check_kinds(bytes, f.bag,
                     {TokenKind::Ident, TokenKind::ColonEq, TokenKind::String,
