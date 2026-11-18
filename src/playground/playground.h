@@ -5,11 +5,10 @@
 
 #include "fpag/base/numeric.h"
 
-// The playground host API: check and compile one source buffer, with no
-// filesystem and no command line behind it. A host that embeds the
-// compiler -- the browser page first -- calls these three; the CLI is
-// not built on them, because a command has more to say than a result
-// struct can carry.
+// The playground host API: check, compile, and format one source buffer, with
+// no filesystem and no command line behind it. A host that embeds the compiler
+// -- the browser page first -- calls these four; the CLI is not built on them,
+// because a command has more to say than a result struct can carry.
 //
 // The functions have C linkage so a host binds them by name, which is
 // what makes them the wasm module's exports. The types are the project's
@@ -23,7 +22,8 @@ extern "C" {
 //
 // `diagnostics` is the JSON array the CLI's `--json` document carries
 // under "diagnostics", so the page and the command line cannot disagree
-// about a message. `ok` is 1 when the source was accepted. On wasm32
+// about a message. `ok` is 1 when the source was accepted. `text` is
+// the formatter's output; only `alcy_format` fills it. On wasm32
 // every word is four bytes, which is the layout the JS wrapper reads.
 typedef struct AlcyResult {
   u8* wasm;
@@ -34,6 +34,8 @@ typedef struct AlcyResult {
   usize module_count;
   usize function_count;
   i32 ok;
+  u8* text;
+  usize text_len;
 } AlcyResult;
 
 // Checks `src` the way `alcy check` does. The counts describe the
@@ -46,6 +48,12 @@ i32 alcy_check(const u8* src, usize len, AlcyResult* out);
 // emitter. Returns 1 when the module was produced and 0 when it was not;
 // `out` is always filled.
 i32 alcy_compile(const u8* src, usize len, AlcyResult* out);
+
+// Formats `src` the way `alcy fmt` does, with the tool's own default
+// layout. The formatter is defined for every input, including one the
+// grammar rejects, so the call answers 1 unless it could not allocate;
+// the canonical text is in `text`. `out` is always filled.
+i32 alcy_format(const u8* src, usize len, AlcyResult* out);
 
 // Frees what a call allocated and zeroes the result. Releasing a result
 // twice, or one that was never filled, is safe.

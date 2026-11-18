@@ -19,6 +19,8 @@ interface AlcyCallResult {
   moduleCount: number;
   functionCount: number;
   wasm: Uint8Array | null;
+  // The formatter's output; only an `alcy_format` call fills it.
+  text: Uint8Array | null;
   diagnostics: unknown[];
 }
 
@@ -60,7 +62,7 @@ interface WorkerGlobalScope {
 (function (global: WorkerGlobalScope) {
   "use strict";
 
-  const RESULT_BYTES = 32;
+  const RESULT_BYTES = 40;
   // The `AlcyResult` fields as word offsets, in declaration order.
   const OFFSET = {
     wasm: 0,
@@ -71,6 +73,8 @@ interface WorkerGlobalScope {
     moduleCount: 20,
     functionCount: 24,
     ok: 28,
+    text: 32,
+    textLen: 36,
   } as const;
 
   const decoder = new TextDecoder("utf-8");
@@ -107,7 +111,7 @@ interface WorkerGlobalScope {
 
     constructor(module: EmscriptenModule) {
       this.module = module;
-      this.missing = ["_alcy_check", "_alcy_compile"].filter(
+      this.missing = ["_alcy_check", "_alcy_compile", "_alcy_format"].filter(
         (name) => typeof module[name] !== "function",
       );
     }
@@ -141,6 +145,8 @@ interface WorkerGlobalScope {
         const wasmLen = view.getUint32(OFFSET.wasmLen, true);
         const diagnosticsPtr = view.getUint32(OFFSET.diagnostics, true);
         const diagnosticsLen = view.getUint32(OFFSET.diagnosticsLen, true);
+        const textPtr = view.getUint32(OFFSET.text, true);
+        const textLen = view.getUint32(OFFSET.textLen, true);
         const result: AlcyCallResult = {
           ok: view.getInt32(OFFSET.ok, true) !== 0,
           returnCode,
@@ -148,6 +154,7 @@ interface WorkerGlobalScope {
           moduleCount: view.getUint32(OFFSET.moduleCount, true),
           functionCount: view.getUint32(OFFSET.functionCount, true),
           wasm: wasmPtr && wasmLen ? module.HEAPU8.slice(wasmPtr, wasmPtr + wasmLen) : null,
+          text: textPtr && textLen ? module.HEAPU8.slice(textPtr, textPtr + textLen) : null,
           diagnostics: [],
         };
         if (diagnosticsPtr && diagnosticsLen) {

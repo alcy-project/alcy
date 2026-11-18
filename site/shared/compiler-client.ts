@@ -54,6 +54,8 @@ export interface CompilerResponse {
   diagnostics: Diagnostic[];
   stats?: CompilerStats;
   wasm: ArrayBuffer | null;
+  // The formatted source, when the request was a format call.
+  text?: string;
   // How long the compiler call itself took, in milliseconds. The first
   // call's number does not include loading the wasm module.
   ms?: number;
@@ -84,7 +86,7 @@ export interface RunErrorMessage {
 export type RunnerMessage = RunResultMessage | RunErrorMessage;
 
 export interface CompilerClient {
-  request(op: "check" | "compile", source: string): Promise<CompilerResponse>;
+  request(op: "check" | "compile" | "format", source: string): Promise<CompilerResponse>;
   dispose(): void;
 }
 

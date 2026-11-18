@@ -12,9 +12,18 @@ importScripts("wasm-api.js");
 interface CompilerRequest {
   type: "request";
   id: number;
-  op: "check" | "compile";
+  op: "check" | "compile" | "format";
   source: string;
 }
+
+// The wasm entry each op answers through.
+const ENTRY = {
+  check: "alcy_check",
+  compile: "alcy_compile",
+  format: "alcy_format",
+} as const;
+
+const decoder = new TextDecoder("utf-8");
 
 let compilerPromise: Promise<AlcyCompiler> | null = null;
 
@@ -51,7 +60,7 @@ self.addEventListener("message", async (event: MessageEvent<CompilerRequest>) =>
   const id = request.id;
   try {
     const compiler = await loadCompiler();
-    const entry = request.op === "check" ? "alcy_check" : "alcy_compile";
+    const entry = ENTRY[request.op];
     // Time the call, not the module load: the load happens once, and a
     // first compile should not look slower than every later one.
     const started = performance.now();
@@ -70,6 +79,11 @@ self.addEventListener("message", async (event: MessageEvent<CompilerRequest>) =>
         functionCount: result.functionCount,
       },
       wasm: result.wasm ? (result.wasm.buffer as ArrayBuffer) : null,
+      // A format call answers the canonical text instead of a module.
+      text:
+        request.op === "format" && result.text !== null
+          ? decoder.decode(result.text)
+          : undefined,
     };
     if (response.wasm !== null) {
       self.postMessage(response, [response.wasm]);

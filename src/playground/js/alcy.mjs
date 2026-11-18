@@ -28,9 +28,11 @@ const RESULT = {
   module_count: 5,
   function_count: 6,
   ok: 7,
+  text: 8,
+  text_len: 9,
 };
 
-const RESULT_WORDS = 8;
+const RESULT_WORDS = 10;
 
 // Thrown by `proc_exit` to unwind a module that ends by exiting, which
 // is every module with an `i32` main.
@@ -51,6 +53,7 @@ function takeResult(Module, structPtr) {
     fileCount: word("file_count"),
     moduleCount: word("module_count"),
     functionCount: word("function_count"),
+    text: slice(word("text"), word("text_len")),
     diagnostics: [],
   };
   const diagnosticsPtr = word("diagnostics");
@@ -136,6 +139,7 @@ export async function createPlayground({ factory }) {
   return {
     check: (source) => call(Module, "alcy_check", source),
     compile: (source) => call(Module, "alcy_compile", source),
+    format: (source) => call(Module, "alcy_format", source),
     run,
   };
 }

@@ -29,8 +29,8 @@ The built site is deployed to GitHub Pages by
 - `problems.ts` - the diagnostics list, including jump-to-span.
 - `output.ts` - the run meta line and the program's two streams.
 - `runtime.ts` - the compiler worker, the disposable runner worker, and
-  the Check and Run flows, and the download of the module a compile
-  answers.
+  the flows behind the toolbar: Check, Run, Format, and the download of
+  the module a compile answers.
 - `samples.ts` - the example picker and the restore-or-default choice.
 - `session.ts` - the buffer and selected example kept in `localStorage`.
 - `status.ts` - the status line, the compiler indicator, and the Run

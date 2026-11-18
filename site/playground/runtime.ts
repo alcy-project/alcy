@@ -6,7 +6,7 @@
 
 import { assetBase } from "./assets.js";
 import { elements } from "./elements.js";
-import { normalizedSource } from "./editor.js";
+import { normalizedSource, replaceBuffer } from "./editor.js";
 import { openCompiler, runProgram } from "../shared/compiler-client.js";
 import type { CompilerClient } from "../shared/compiler-client.js";
 import { t } from "../shared/site.js";
@@ -77,7 +77,7 @@ export function warmOnIntent(): void {
 }
 
 function callCompiler(
-  op: "check" | "compile",
+  op: "check" | "compile" | "format",
   source: string,
 ): Promise<CompilerResponse> {
   return compiler().request(op, source);
@@ -264,6 +264,33 @@ export async function runDownload(): Promise<void> {
     link.click();
     URL.revokeObjectURL(url);
     setStatus("status.downloaded");
+  } catch (error) {
+    applyCompilerState("error", error instanceof Error ? error.message : String(error));
+  }
+}
+
+// The formatter runs in the compiler worker like a check does. The
+// buffer is replaced only when the answer differs from it, and the
+// replacement goes through the editor so the reader's undo history and
+// the follow-up check both keep working.
+export async function runFormat(): Promise<void> {
+  if (state.running) {
+    return;
+  }
+  try {
+    const response = await callCompiler("format", normalizedSource());
+    if (response.error !== undefined) {
+      setStatus("status.compilerUnavailable");
+      return;
+    }
+    if (typeof response.text !== "string") {
+      setStatus("status.compilerError");
+      return;
+    }
+    if (response.text !== normalizedSource()) {
+      replaceBuffer(response.text);
+    }
+    setStatus("status.formatted");
   } catch (error) {
     applyCompilerState("error", error instanceof Error ? error.message : String(error));
   }

@@ -47,5 +47,24 @@ if (rejected.wasm !== null) {
   process.exit(6);
 }
 
+// The formatter is defined for every input, including one the grammar
+// rejects, and what it answers must already be in the canonical layout.
+const decoder = new TextDecoder();
+const messy = alcy.format('fn main() {println( "hello, playground" )}');
+if (!messy.ok || messy.text === null) {
+  console.error("format refused to answer");
+  process.exit(7);
+}
+const once = decoder.decode(messy.text);
+if (decoder.decode(alcy.format(once).text ?? new Uint8Array()) !== once) {
+  console.error("format is not idempotent");
+  process.exit(8);
+}
+const broken = alcy.format("fn {{{{");
+if (!broken.ok || broken.text === null) {
+  console.error("format refused input the grammar rejects");
+  process.exit(9);
+}
+
 // Set rather than exit: the module's output may still be buffered.
 process.exitCode = ran.exitCode;

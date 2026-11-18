@@ -205,6 +205,17 @@ export function setText(text: string): void {
   syncScroll();
 }
 
+// Replaces the buffer from outside the keyboard, the way a formatter
+// does: through the textarea's own editing primitive rather than a value
+// write, so the reader's undo history survives, and with the caret at
+// the start, where a reflowed document begins.
+export function replaceBuffer(text: string): void {
+  const source = elements.source;
+  source.setRangeText(text, 0, source.value.length, "start");
+  noteEdit();
+  syncMetrics();
+}
+
 export function initEditor(handlers: EditorHandlers): void {
   onInput = handlers.onInput ?? onInput;
   onRun = handlers.onRun ?? onRun;

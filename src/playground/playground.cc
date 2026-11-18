@@ -17,6 +17,7 @@
 #include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/json.h"
+#include "fmt/formatter.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/language.h"
@@ -79,6 +80,8 @@ void reset(AlcyResult* out) {
   out->module_count = 0;
   out->function_count = 0;
   out->ok = 0;
+  out->text = nullptr;
+  out->text_len = 0;
 }
 
 void fill_diagnostics(pipeline::PipelineContext& ctx, AlcyResult* out) {
@@ -189,6 +192,20 @@ extern "C" i32 alcy_compile(const u8* src, usize len, AlcyResult* out) {
   return out->ok;
 }
 
+extern "C" i32 alcy_format(const u8* src, usize len, AlcyResult* out) {
+  if (out == nullptr) {
+    return 0;
+  }
+  reset(out);
+  const std::string_view source(reinterpret_cast<const char*>(src), len);
+  const std::string formatted =
+      alcy_fmt::format(source, alcy_fmt::default_format_config());
+  out->text = copy_bytes(formatted.data(), formatted.size());
+  out->text_len = formatted.size();
+  out->ok = out->text != nullptr || formatted.empty();
+  return out->ok;
+}
+
 extern "C" void alcy_release(AlcyResult* out) {
   if (out == nullptr) {
     return;
@@ -197,5 +214,7 @@ extern "C" void alcy_release(AlcyResult* out) {
   std::free(out->wasm);
   // ast-grep-ignore: no-c-heap
   std::free(out->diagnostics);
+  // ast-grep-ignore: no-c-heap
+  std::free(out->text);
   reset(out);
 }

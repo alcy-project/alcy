@@ -15,6 +15,7 @@ source_set("playground") {
     "//src/analyzer",
     "//src/codegen",
     "//src/diag",
+    "//src/fmt:alcy_fmt",
     "//src/i18n",
     "//src/overlay",
     "//src/pipeline",
@@ -32,7 +33,7 @@ if (is_wasm) {
     ldflags = [
       "--no-entry",
       "-O3",
-      "-sEXPORTED_FUNCTIONS=_alcy_check,_alcy_compile,_alcy_release,_malloc,_free",
+      "-sEXPORTED_FUNCTIONS=_alcy_check,_alcy_compile,_alcy_format,_alcy_release,_malloc,_free",
       "-sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU32,UTF8ToString",
       "-sMODULARIZE=1",
       "-sEXPORT_NAME=createAlcyPlayground",
