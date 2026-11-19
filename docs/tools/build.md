@@ -88,9 +88,10 @@ freestanding = true
 `freestanding = true` links without the C runtime: no startup files,
 no libc, and the compiler emits `_start` as the entry instead of
 `main`. A freestanding build's `main` keeps its signature and its
-value becomes the process's exit code. Linux hosted builds always
-link this way, so the flag names the same link on platforms whose
-hosted build still uses a C runtime.
+value becomes the process's exit code. On Linux the hosted default
+links the system C runtime, so the flag is how a Linux build asks
+for the kernel-only link; on platforms whose hosted build uses a C
+runtime it names that link directly.
 
 A Windows hosted build links `kernel32.dll` and nothing else: no
 startup objects, no C runtime, no UCRT. The compiler emits `_start` as

@@ -177,8 +177,10 @@ struct CliConfig {
 // toolchain file, overridden wherever the command named something. An
 // absent file is an empty Toolchain, which is what a command that reads
 // no file passes.
-// Whether the target is a Linux triple the freestanding ELF
-// entry can serve; the hosted build uses the same binary there.
+// Whether the target is a Linux triple the freestanding ELF entry
+// can serve. `alcy test` links the test binary that way on those
+// triples, so the kernel-only link is exercised on every test run;
+// elsewhere the package's `freestanding` choice stands alone.
 bool force_freestanding_elf(std::string_view triple);
 
 pipeline::LinkOptions resolve_link_options(const CliConfig& config,

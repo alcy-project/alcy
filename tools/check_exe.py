@@ -227,17 +227,26 @@ def run_tool(args: list[str]) -> str:
     return proc.stdout
 
 
-def foreign_imports(exe: Path) -> list[str]:
-    """What a produced image imports beyond its kernel.
+def foreign_imports(exe: Path, freestanding: bool) -> list[str]:
+    """What a produced image imports beyond the sanctioned ones.
 
-    A program the compiler links carries no C runtime on Linux or
-    Windows: an import table with anything but the kernel means the
-    system C library crept in. A Mach-O image keeps libSystem, which is
-    the one sanctioned route there, so it is not judged here.
+    A freestanding Linux build links no C runtime at all, so an import
+    table of anything but empty means the system C library crept in.
+    A hosted Linux build links the system C runtime by default, so
+    `libc.so.6` is sanctioned there as well. Windows links `kernel32`
+    in both modes: an import table with anything else means the CRT or
+    a C++ runtime crept in. A Mach-O image keeps libSystem, which is
+    the one sanctioned route there, so it is not judged.
     """
     headers = run_tool(["llvm-readobj", "--file-headers", str(exe)])
     if "COFF" not in headers and "elf" not in headers.lower():
         return []
+    if "COFF" in headers:
+        allowed = {"kernel32.dll"}
+    elif freestanding:
+        allowed = set()
+    else:
+        allowed = {"libc.so.6", "libc.so"}
     out = run_tool(["llvm-readobj", "--needed-libs", str(exe)])
     libs = []
     in_block = False
@@ -250,7 +259,6 @@ def foreign_imports(exe: Path) -> list[str]:
             if line == "]" or not line:
                 continue
             libs.append(line)
-    allowed = {"kernel32.dll"}
     return [lib for lib in libs if lib.lower() not in allowed]
 
 
@@ -522,7 +530,7 @@ def run_case(
                     f"--- build stderr ---\n{proc.stderr}"
                 )
             if not sanitize:
-                foreign = foreign_imports(exe_path)
+                foreign = foreign_imports(exe_path, is_freestanding(case_dir))
                 if foreign:
                     return False, (
                         "image imports beyond the kernel: " + ", ".join(foreign)

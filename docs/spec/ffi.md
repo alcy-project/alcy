@@ -84,14 +84,20 @@ foreclose the baremetal story.
 
 ## Freestanding (Bootstrap)
 
-- A hosted build for a Linux target links without a C runtime, always
-  and without a flag: no startup objects, no dynamic linker, and no
-  libc. The kernel enters `_start`, which reads `argc` and `argv` off
-  the initial stack into the registers the program's `main` expects
-  and calls it; the program ends through the exit syscall. An `i32`
-  main is the process status, `()` is zero, and an enum main writes
-  `main returned Err` to stderr and exits 1 on a variant other than
-  the first.
+- A hosted build for a Linux target links the system C runtime by
+  default: the C runtime's startup enters `main`, which keeps its
+  signature, and an `i32` main is the process status, `()` is zero,
+  and an enum main writes `main returned Err` to stderr and exits 1
+  on a variant other than the first. A hosted build goes through the
+  C runtime's startup objects, so a sanitizer runtime can join it;
+  a freestanding one cannot, which is the reason the sanitizers run
+  against the hosted build. `.alcy/toolchain.toml` with
+  `freestanding = true` asks for the kernel-only link instead: no
+  startup objects, no dynamic linker, and no libc. On that link the
+  kernel enters `_start`, which reads `argc` and `argv` off the
+  initial stack into the registers the program's `main` expects and
+  calls it; the program ends through the exit syscall, with the same
+  rules for the exit code.
 - A hosted build for a Windows target links `kernel32.dll` and
   nothing else: no startup objects, no C runtime, no UCRT. The entry
   point is `_start`, which the loader enters with no arguments; it
@@ -100,11 +106,13 @@ foreclose the baremetal story.
   allocator (`VirtualAlloc`), the standard handles are the descriptors,
   and the exit is `ExitProcess`, so an `i32` main is the process
   status and an enum main behaves as it does everywhere else.
-- `.alcy/toolchain.toml` with `freestanding = true` asks for the same
-  link on a platform whose hosted build still uses its C runtime. The
-  entry is `_start` exactly as above, with the same rules, on a
-  package that opted in. A Windows target has no separate freestanding
-  mode: the kernel-only link is what a hosted build is.
+- `.alcy/toolchain.toml` with `freestanding = true` asks for the
+  kernel-only link on a platform whose hosted build still uses its
+  C runtime, and on Linux, whose hosted build uses the system C
+  runtime by default. The entry is `_start` exactly as above, with
+  the same rules, on a package that opted in. A Windows target has
+  no separate freestanding mode: the kernel-only link is what a
+  hosted build is.
 - A runtime piece is defined only when the program declares it, so a
   program carries only what it uses. The pieces reach the kernel
   through raw syscalls: `print`, `println`, and `panic`

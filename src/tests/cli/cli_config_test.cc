@@ -78,7 +78,7 @@ TEST_CASE("A command that reads no file links from the command alone") {
   }
 }
 
-TEST_CASE("A Linux ELF target forces the freestanding entry") {
+TEST_CASE("A Linux ELF target serves the kernel-only test link") {
   CHECK(force_freestanding_elf("x86_64-unknown-linux-gnu"));
   CHECK(force_freestanding_elf("aarch64-unknown-linux-gnu"));
   CHECK(force_freestanding_elf("arm64-unknown-linux-gnu"));
@@ -89,13 +89,13 @@ TEST_CASE("A Linux ELF target forces the freestanding entry") {
   CHECK(!force_freestanding_elf(""));
 }
 
-TEST_CASE("The target's freestanding flag rides into the link") {
+TEST_CASE("A Linux hosted target links the system C runtime by default") {
   const pipeline::LinkOptions link =
       resolve_link_options(CliConfig{}, file(), "x86_64-unknown-linux-gnu");
-  CHECK(link.freestanding);
-  const pipeline::LinkOptions unlinked =
+  CHECK(!link.freestanding);
+  const pipeline::LinkOptions macos =
       resolve_link_options(CliConfig{}, file(), "aarch64-apple-darwin");
-  CHECK(!unlinked.freestanding);
+  CHECK(!macos.freestanding);
 }
 
 TEST_CASE("The file's freestanding flag rides onto any target") {

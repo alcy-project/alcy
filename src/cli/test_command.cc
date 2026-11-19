@@ -116,10 +116,14 @@ i32 run_test(const CliConfig& config,
     return failed;
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  ctx.freestanding = tool.freestanding || ctx.freestanding;
   // A test is a process the run starts and watches; a target that cannot
   // start one has nothing to report tests with. Freestanding ELF targets
-  // can: their entry parses argc/argv and uses the same syscalls as hosted.
+  // can: their entry reads argc and argv off the initial stack.
+  // On those triples the test binary is always the kernel-only link, so
+  // the no-libc path keeps its coverage even though a hosted build now
+  // links the system C runtime by default.
+  ctx.freestanding =
+      tool.freestanding || force_freestanding_elf(ctx.target.triple);
   if (ctx.target.is_wasm() ||
       (ctx.freestanding && !force_freestanding_elf(ctx.target.triple))) {
     const u32 index = ctx.bag.emit<i18n::Key::CliTestTargetNotRunnable>(
@@ -130,8 +134,12 @@ i32 run_test(const CliConfig& config,
   // The run's front half consults and stores the build's cache, so the
   // opt-out the build carries is the run's too.
   ctx.no_cache = config.no_cache;
+  // Emission and the link must agree on the link kind, so the file the
+  // link sees carries the choice this run made.
+  pkg::Toolchain link_tool = tool;
+  link_tool.freestanding = ctx.freestanding;
   const pipeline::LinkOptions link =
-      resolve_link_options(config, tool, ctx.target.triple);
+      resolve_link_options(config, link_tool, ctx.target.triple);
   base::Result<pkg::Profiles, diag::Reported> profiles =
       pipeline::load_profiles(ctx, found.root);
   if (profiles.is_err()) {

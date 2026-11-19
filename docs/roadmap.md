@@ -210,16 +210,20 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 - [x] The libc-free runtime, and `path` / `ffi` / `env` on it.
 
-  The Linux hosted build links no C runtime, ever: the compiler emits
-  `_start`, its naked trampoline reads argc and argv off the initial
-  stack - and the environment pointer now rides as a third argument -
-  and the process ends through the exit syscall, the same code a
-  freestanding program was already running. A hosted build for
-  Windows links `kernel32.dll` and nothing else: the entry gathers
-  the arguments from `GetCommandLineW` with Rust's parse rules, the
-  allocator is `VirtualAlloc`, and the file intrinsics open with
-  `CreateFileW`. macOS keeps libSystem, the one sanctioned route
-  there.
+  A hosted build for Windows links `kernel32.dll` and nothing else:
+  the entry gathers the arguments from `GetCommandLineW` with Rust's
+  parse rules, the allocator is `VirtualAlloc`, and the file
+  intrinsics open with `CreateFileW`. macOS keeps libSystem, the one
+  sanctioned route there. Linux is different: the hosted build links
+  the system C runtime by default - it began kernel-only like the
+  freestanding one, but a libc-free hosted build cannot join a
+  sanitizer runtime - so the hosted default moved to the host C
+  toolchain, and the kernel-only link lives on as
+  `.alcy/toolchain.toml` `freestanding = true`, which is also what
+  `alcy test` selects on Linux ELF. For that link the compiler
+  emits `_start`, its naked trampoline reads argc and argv off the
+  initial stack - and the environment pointer rides as a third
+  argument - and the process ends through the exit syscall.
 
   The standard library grew `path` (one owned type with a `&Path`
   borrowed view, its UTF-8/UTF-16 internals selected by `#[when]`),

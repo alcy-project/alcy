@@ -101,8 +101,10 @@ A test is a process the run starts and watches. The wasm backend cannot
 start one, and neither can a freestanding target on a platform whose
 entry the runner cannot execute; the runner refuses either with
 `Cannot run tests for target` and exit code 4 before building. A
-freestanding target on Linux can start one: its entry parses `argc` and
-`argv` the same way a hosted build's does.
+freestanding target on Linux can start one: its entry reads `argc` and
+`argv` off the initial stack. `alcy test` always selects the kernel-only
+link for Linux ELF targets, so that path keeps its coverage even though a
+hosted build links the system C runtime by default.
 
 ## See also
 

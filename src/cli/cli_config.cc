@@ -25,7 +25,7 @@ bool force_freestanding_elf(std::string_view triple) {
 
 pipeline::LinkOptions resolve_link_options(const CliConfig& config,
                                            const pkg::Toolchain& tool,
-                                           std::string_view target) {
+                                           std::string_view /*target*/) {
   // A flag replaces the file's list instead of adding to it, the same way
   // an explicit driver replaces the file's driver. A list half from each
   // could be predicted from neither.
@@ -36,7 +36,7 @@ pipeline::LinkOptions resolve_link_options(const CliConfig& config,
   return pipeline::LinkOptions{
       .driver = config.linker.empty() ? tool.linker : config.linker,
       .args = args,
-      .freestanding = tool.freestanding || force_freestanding_elf(target)};
+      .freestanding = tool.freestanding};
 }
 
 void resolve_backend_options(const CliConfig& config,

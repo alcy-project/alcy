@@ -162,10 +162,6 @@ i32 cli_main(i32 argc, char** argv) {
       pipeline::PipelineContext ctx{config.language};
       ctx.jobs = config.jobs;
       ctx.target = config.target;
-      // Linux ELF targets use the same emission either way; the
-      // freestanding flag's meaning on Linux is now "hosted".
-      ctx.freestanding =
-          ctx.freestanding || force_freestanding_elf(ctx.target.triple);
       // What a written artifact records about the build that made it:
       // the IR binary's header carries it so a cache can reject a
       // mismatch.
