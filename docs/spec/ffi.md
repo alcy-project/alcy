@@ -92,10 +92,19 @@ foreclose the baremetal story.
   main is the process status, `()` is zero, and an enum main writes
   `main returned Err` to stderr and exits 1 on a variant other than
   the first.
+- A hosted build for a Windows target links `kernel32.dll` and
+  nothing else: no startup objects, no C runtime, no UCRT. The entry
+  point is `_start`, which the loader enters with no arguments; it
+  gathers them from `GetCommandLineW`, parsed the way a command line
+  is documented to parse, before the program starts. The kernel is the
+  allocator (`VirtualAlloc`), the standard handles are the descriptors,
+  and the exit is `ExitProcess`, so an `i32` main is the process
+  status and an enum main behaves as it does everywhere else.
 - `.alcy/toolchain.toml` with `freestanding = true` asks for the same
   link on a platform whose hosted build still uses its C runtime. The
   entry is `_start` exactly as above, with the same rules, on a
-  package that opted in.
+  package that opted in. A Windows target has no separate freestanding
+  mode: the kernel-only link is what a hosted build is.
 - A runtime piece is defined only when the program declares it, so a
   program carries only what it uses. The pieces reach the kernel
   through raw syscalls: `print`, `println`, and `panic`

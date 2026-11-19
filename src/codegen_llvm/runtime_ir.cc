@@ -55,11 +55,13 @@ class RuntimeBuilder {
   void build() {
     empty_text_ = text_constant("");
     newline_text_ = text_constant("\n");
-    if (freestanding_) {
-      build_syscall();
+    if (freestanding_ || windows_) {
       // The code generator lowers an aggregate copy and a fill it will
-      // not inline to `memcpy` and `memset` calls, and a freestanding
-      // program has no libc to resolve them.
+      // not inline to `memcpy` and `memset` calls; no libc answers
+      // for either when the kernel is the only library.
+      if (freestanding_ && !windows_) {
+        build_syscall();
+      }
       build_memcpy();
       build_memset();
     }
@@ -115,13 +117,30 @@ class RuntimeBuilder {
       }
       link_once_odr(*argv);
     }
+    if (windows_) {
+      // The marker the C runtime defines for a module that does
+      // floating-point code; no CRT answers for it now.
+      if (declared("alcy_arg_count")) {
+        // `_fltused` is defined for every module already; this line
+        // documents why.
+      }
+      llvm::GlobalVariable* fltused = cast<llvm::GlobalVariable>(
+          module_.getOrInsertGlobal("_fltused", builder_.getInt32Ty()));
+      if (!fltused->hasInitializer()) {
+        fltused->setInitializer(
+            llvm::ConstantInt::get(builder_.getInt32Ty(), 0));
+      }
+      link_once_odr(*fltused);
+      build_chkstk();
+      build_args_init();
+    }
     if (declared("alcy_arg_count")) {
       build_arg_count();
     }
     if (declared("alcy_arg")) {
       build_arg();
     }
-    if (freestanding_) {
+    if (freestanding_ && !windows_) {
       if (arch_ == "x86_64" || arch_ == "aarch64" || arch_ == "riscv64") {
         if (declared("alcy_file_size")) {
           build_file_size_syscall();
@@ -368,12 +387,178 @@ class RuntimeBuilder {
     return llvm::ConstantPointerNull::get(builder_.getPtrTy());
   }
 
+  // The kernel32 handle behind a descriptor number: 0 reads stdin,
+  // 1 writes stdout, 2 writes stderr, anything else is stderr.
+  llvm::Value* std_handle(llvm::Value* fd_value) {
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Function* get =
+        libc("GetStdHandle",
+             llvm::FunctionType::get(builder_.getPtrTy(), {i32}, false));
+    llvm::Value* zero = llvm::ConstantInt::get(i32, 0);
+    llvm::Value* two = llvm::ConstantInt::get(i32, 2);
+    llvm::Value* is_in = builder_.CreateICmpEQ(fd_value, zero, "is_in");
+    llvm::Value* is_err = builder_.CreateICmpEQ(fd_value, two, "is_err");
+    // STD_INPUT_HANDLE (DWORD)-10, STD_OUTPUT_HANDLE (DWORD)-11,
+    // STD_ERROR_HANDLE (DWORD)-12.
+    llvm::Value* id = builder_.CreateSelect(
+        is_in, llvm::ConstantInt::get(i32, -10, true),
+        builder_.CreateSelect(is_err, llvm::ConstantInt::get(i32, -12, true),
+                              llvm::ConstantInt::get(i32, -11, true)),
+        "id");
+    return builder_.CreateCall(get, {id}, "handle");
+  }
+
+  // The handle CreateFileW answers with for a path it cannot open, as
+  // an integer to compare against.
+  llvm::Value* invalid_handle(llvm::Value* handle) {
+    llvm::Type* i64 = builder_.getInt64Ty();
+    return builder_.CreateICmpEQ(
+        builder_.CreatePtrToInt(handle, i64, "handle_int"),
+        llvm::ConstantInt::get(i64, 0xffffffffffffffffULL), "invalid");
+  }
+
+  // The UTF-16 spelling of a byte path in a slot with the terminator
+  // the kernel wants, or null when the bytes do not decode as UTF-8 or
+  // the path is too long for a stack slot. The slot does not outlive
+  // the call, and the brackets it spans are the caller's to own.
+  llvm::Value* wide_path(llvm::Value* data, llvm::Value* len) {
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Type* i16 = builder_.getInt16Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Function* to_wide = libc(
+        "MultiByteToWideChar",
+        llvm::FunctionType::get(
+            i32, {i32, i32, builder_.getPtrTy(), i32, builder_.getPtrTy(), i32},
+            false));
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::Function* caller = builder_.GetInsertBlock()->getParent();
+    llvm::BasicBlock* fail =
+        llvm::BasicBlock::Create(context, "path_fail", caller);
+    llvm::BasicBlock* measure =
+        llvm::BasicBlock::Create(context, "path_measure", caller);
+    llvm::BasicBlock* convert =
+        llvm::BasicBlock::Create(context, "path_convert", caller);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "path_done", caller);
+    llvm::Value* zero32 = llvm::ConstantInt::get(i32, 0);
+    llvm::Value* data_len = builder_.CreateZExtOrTrunc(len, i32, "path_len");
+    llvm::Value* too_long = builder_.CreateICmpUGT(
+        len, llvm::ConstantInt::get(usize_, 0x8000), "too_long");
+    builder_.CreateCondBr(too_long, fail, measure);
+    builder_.SetInsertPoint(fail);
+    builder_.CreateBr(done);
+    builder_.SetInsertPoint(measure);
+    llvm::Value* units = builder_.CreateCall(
+        to_wide,
+        {llvm::ConstantInt::get(i32, 65001 /* CP_UTF8 */), zero32, data,
+         data_len, llvm::ConstantPointerNull::get(builder_.getPtrTy()), zero32},
+        "units");
+    llvm::Value* empty = builder_.CreateICmpSLE(units, zero32, "empty");
+    builder_.CreateCondBr(empty, fail, convert);
+    builder_.SetInsertPoint(convert);
+    // A static buffer: the path never lives past the call, and the
+    // frame stays under a page, so no stack probe is asked for.
+    llvm::GlobalVariable* buffer =
+        cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
+            "alcy_wide_path", llvm::ArrayType::get(i16, 32768)));
+    buffer->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    if (!buffer->hasInitializer()) {
+      buffer->setInitializer(
+          llvm::ConstantAggregateZero::get(buffer->getValueType()));
+    }
+    llvm::Value* written =
+        builder_.CreateCall(to_wide,
+                            {llvm::ConstantInt::get(i32, 65001 /* CP_UTF8 */),
+                             zero32, data, data_len, buffer, units},
+                            "written");
+    llvm::Value* at = builder_.CreateGEP(
+        i16, buffer, builder_.CreateZExt(written, i64), "term");
+    builder_.CreateStore(llvm::ConstantInt::get(i16, 0), at);
+    builder_.CreateBr(done);
+    builder_.SetInsertPoint(done);
+    llvm::PHINode* result = builder_.CreatePHI(builder_.getPtrTy(), 2, "path");
+    result->addIncoming(llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+                        fail);
+    result->addIncoming(buffer, convert);
+    return result;
+  }
+
+  // The kernel32 handle for a descriptor, with the kernel's own answer
+  // for a failed call left in the thread-local slot. One operation per
+  // call: a caller that needs the count re-reads it.
+  llvm::Value* descriptor_io(bool is_write,
+                             llvm::Value* fd_value,
+                             llvm::Value* data,
+                             llvm::Value* len) {
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::Function* caller = builder_.GetInsertBlock()->getParent();
+    llvm::BasicBlock* valid =
+        llvm::BasicBlock::Create(context, "valid", caller);
+    llvm::BasicBlock* rest = llvm::BasicBlock::Create(context, "rest", caller);
+    llvm::BasicBlock* done = llvm::BasicBlock::Create(context, "done", caller);
+    // Only the three descriptors exist on this platform; any other
+    // number is a descriptor that was never opened.
+    llvm::Value* is_zero = builder_.CreateICmpEQ(
+        fd_value, llvm::ConstantInt::get(i32, 0), "is_zero");
+    llvm::Value* is_one = builder_.CreateICmpEQ(
+        fd_value, llvm::ConstantInt::get(i32, 1), "is_one");
+    llvm::Value* is_two = builder_.CreateICmpEQ(
+        fd_value, llvm::ConstantInt::get(i32, 2), "is_two");
+    llvm::Value* known = builder_.CreateOr(
+        is_zero, builder_.CreateOr(is_one, is_two, "is_one_or_two"), "known");
+    builder_.CreateCondBr(known, valid, rest);
+    builder_.SetInsertPoint(rest);
+    // EBADF, as a descriptor that was never opened, in the same
+    // thread-local slot a failed kernel call leaves behind.
+    llvm::Function* set_last_error =
+        libc("SetLastError",
+             llvm::FunctionType::get(builder_.getVoidTy(), {i32}, false));
+    builder_.CreateCall(set_last_error, {llvm::ConstantInt::get(i32, 9)});
+    builder_.CreateBr(done);
+    builder_.SetInsertPoint(valid);
+    llvm::Value* handle = std_handle(fd_value);
+    llvm::Value* cap = llvm::ConstantInt::get(usize_, 0xffffffff);
+    llvm::Value* clamped = builder_.CreateSelect(
+        builder_.CreateICmpUGT(len, cap, "clamp"), cap, len, "clamped");
+    llvm::Value* chunk32 = builder_.CreateTrunc(clamped, i32, "chunk");
+    llvm::AllocaInst* slot = builder_.CreateAlloca(i32, nullptr, "count_slot");
+    builder_.CreateStore(llvm::ConstantInt::get(i32, 0), slot);
+    llvm::Function* call = libc(
+        is_write ? "WriteFile" : "ReadFile",
+        llvm::FunctionType::get(i32,
+                                {builder_.getPtrTy(), builder_.getPtrTy(), i32,
+                                 builder_.getPtrTy(), builder_.getPtrTy()},
+                                false));
+    llvm::Value* ok = builder_.CreateCall(
+        call,
+        {handle, data, chunk32, slot,
+         llvm::ConstantPointerNull::get(builder_.getPtrTy())},
+        "ok");
+    llvm::Value* count = builder_.CreateLoad(i32, slot, "count");
+    // A failed call answers `-1`; the thread-local slot keeps the code.
+    llvm::Value* failed =
+        builder_.CreateICmpEQ(ok, llvm::ConstantInt::get(i32, 0), "failed");
+    llvm::Value* wide = builder_.CreateZExt(count, i64, "wide");
+    llvm::Value* answer = builder_.CreateSelect(
+        failed, llvm::ConstantInt::get(i64, 0xffffffffffffffffULL), wide,
+        "answer");
+    builder_.CreateBr(done);
+    builder_.SetInsertPoint(done);
+    llvm::PHINode* joined = builder_.CreatePHI(i64, 2, "joined");
+    joined->addIncoming(llvm::ConstantInt::get(i64, 0xffffffffffffffffULL),
+                        rest);
+    joined->addIncoming(answer, valid);
+    return joined;
+  }
+
   // One `write`, with the count the C signature asks for, widened to
   // `usize` so the caller compares it as the signed result it is.
   llvm::Value* write_call(llvm::Value* fd_value,
                           llvm::Value* data,
                           llvm::Value* len) {
-    if (freestanding_) {
+    if (freestanding_ && !windows_) {
       SyscallAbi abi{};
       CHECK_MSG(syscall_abi(abi),
                 "freestanding runtime on an unsupported target");
@@ -395,15 +580,8 @@ class RuntimeBuilder {
     }
     llvm::SmallVector<llvm::Value*, 3> args{fd_value, data};
     if (windows_) {
-      // `_write` takes and returns the narrower count.
-      llvm::Function* write_function = libc(
-          "_write",
-          llvm::FunctionType::get(builder_.getInt32Ty(),
-                                  {builder_.getInt32Ty(), builder_.getPtrTy(),
-                                   builder_.getInt32Ty()},
-                                  false));
-      args.push_back(builder_.CreateTrunc(len, builder_.getInt32Ty()));
-      llvm::Value* count = builder_.CreateCall(write_function, args, "count");
+      llvm::Value* count =
+          descriptor_io(/*is_write=*/true, fd_value, data, len);
       if (count->getType() != usize_) {
         count = builder_.CreateSExt(count, usize_, "count.wide");
       }
@@ -676,6 +854,10 @@ class RuntimeBuilder {
 
   // `alcy_file_size(path, len)` answers the byte count or -1.
   void build_file_size() {
+    if (windows_) {
+      build_file_size_kernel32();
+      return;
+    }
     llvm::FunctionType* type = llvm::FunctionType::get(
         builder_.getInt64Ty(), {builder_.getPtrTy(), usize_}, false);
     llvm::Function* function = runtime("alcy_file_size", type);
@@ -725,6 +907,10 @@ class RuntimeBuilder {
   // `alcy_read_file_into(path, len, out, out_len)` answers the bytes
   // read or -1 when the path cannot be opened.
   void build_read_file_into() {
+    if (windows_) {
+      build_read_file_into_kernel32();
+      return;
+    }
     llvm::FunctionType* type = llvm::FunctionType::get(
         builder_.getInt64Ty(),
         {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
@@ -778,6 +964,10 @@ class RuntimeBuilder {
   // `alcy_write_file(path, len, data, data_len)` answers the bytes
   // written or -1 when the path cannot be opened.
   void build_write_file() {
+    if (windows_) {
+      build_write_file_kernel32();
+      return;
+    }
     llvm::FunctionType* type = llvm::FunctionType::get(
         builder_.getInt64Ty(),
         {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
@@ -827,6 +1017,783 @@ class RuntimeBuilder {
     }
     builder_.CreateRet(widened);
   }
+  // `alcy_file_size(path, len)` answers the byte count or -1.
+  void build_file_size_kernel32() {
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::FunctionType* type =
+        llvm::FunctionType::get(i64, {builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime("alcy_file_size", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", function);
+    llvm::BasicBlock* opened =
+        llvm::BasicBlock::Create(context, "opened", function);
+    llvm::BasicBlock* sized =
+        llvm::BasicBlock::Create(context, "sized", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* path = wide_path(function->getArg(0), function->getArg(1));
+    llvm::Value* absent = builder_.CreateICmpEQ(
+        path, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "absent");
+    builder_.CreateCondBr(absent, missing, opened);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(llvm::ConstantInt::get(i64, -1));
+    builder_.SetInsertPoint(opened);
+    llvm::Function* open_fn = libc(
+        "CreateFileW", llvm::FunctionType::get(
+                           builder_.getPtrTy(),
+                           {builder_.getPtrTy(), i32, i32, builder_.getPtrTy(),
+                            i32, i32, builder_.getPtrTy()},
+                           false));
+    // GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING,
+    // FILE_ATTRIBUTE_NORMAL.
+    llvm::Value* handle = builder_.CreateCall(
+        open_fn,
+        {path, llvm::ConstantInt::get(i32, static_cast<u32>(0x80000000)),
+         llvm::ConstantInt::get(i32, 1),
+         llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+         llvm::ConstantInt::get(i32, 3), llvm::ConstantInt::get(i32, 0x80),
+         llvm::ConstantPointerNull::get(builder_.getPtrTy())},
+        "handle");
+    llvm::Value* invalid = invalid_handle(handle);
+    llvm::BasicBlock* size_block =
+        llvm::BasicBlock::Create(context, "size", function);
+    builder_.CreateCondBr(invalid, missing, size_block);
+    builder_.SetInsertPoint(size_block);
+    llvm::AllocaInst* slot = builder_.CreateAlloca(i64, nullptr, "size_slot");
+    builder_.CreateStore(llvm::ConstantInt::get(i64, 0), slot);
+    llvm::Function* size_fn =
+        libc("GetFileSizeEx",
+             llvm::FunctionType::get(
+                 i32, {builder_.getPtrTy(), builder_.getPtrTy()}, false));
+    llvm::Value* ok = builder_.CreateCall(size_fn, {handle, slot}, "ok");
+    llvm::Function* close_fn =
+        libc("CloseHandle",
+             llvm::FunctionType::get(i32, {builder_.getPtrTy()}, false));
+    builder_.CreateCall(close_fn, {handle});
+    llvm::Value* size = builder_.CreateLoad(i64, slot, "size");
+    llvm::Value* zero32 = llvm::ConstantInt::get(i32, 0);
+    llvm::Value* failed = builder_.CreateICmpEQ(ok, zero32, "failed");
+    builder_.CreateCondBr(failed, missing, sized);
+    builder_.SetInsertPoint(sized);
+    builder_.CreateRet(size);
+  }
+
+  // `alcy_read_file_into(path, len, out, out_len)` answers the bytes
+  // read or -1 when the path cannot be opened.
+  void build_read_file_into_kernel32() {
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        i64, {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime("alcy_read_file_into", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", function);
+    llvm::BasicBlock* opened =
+        llvm::BasicBlock::Create(context, "opened", function);
+    llvm::BasicBlock* read =
+        llvm::BasicBlock::Create(context, "read", function);
+    llvm::BasicBlock* progress =
+        llvm::BasicBlock::Create(context, "progress", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* path = wide_path(function->getArg(0), function->getArg(1));
+    llvm::Value* absent = builder_.CreateICmpEQ(
+        path, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "absent");
+    builder_.CreateCondBr(absent, missing, opened);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(llvm::ConstantInt::get(i64, -1));
+    builder_.SetInsertPoint(opened);
+    llvm::Function* open_fn = libc(
+        "CreateFileW", llvm::FunctionType::get(
+                           builder_.getPtrTy(),
+                           {builder_.getPtrTy(), i32, i32, builder_.getPtrTy(),
+                            i32, i32, builder_.getPtrTy()},
+                           false));
+    llvm::Value* handle = builder_.CreateCall(
+        open_fn,
+        {path, llvm::ConstantInt::get(i32, static_cast<u32>(0x80000000)),
+         llvm::ConstantInt::get(i32, 1),
+         llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+         llvm::ConstantInt::get(i32, 3), llvm::ConstantInt::get(i32, 0x80),
+         llvm::ConstantPointerNull::get(builder_.getPtrTy())},
+        "handle");
+    llvm::Value* invalid = invalid_handle(handle);
+    llvm::BasicBlock* loop =
+        llvm::BasicBlock::Create(context, "loop", function);
+    builder_.CreateCondBr(invalid, missing, loop);
+    builder_.SetInsertPoint(loop);
+    llvm::PHINode* total = builder_.CreatePHI(usize_, 2, "total");
+    llvm::PHINode* into = builder_.CreatePHI(builder_.getPtrTy(), 2, "into");
+    llvm::PHINode* left = builder_.CreatePHI(usize_, 2, "left");
+    total->addIncoming(llvm::ConstantInt::get(usize_, 0), opened);
+    into->addIncoming(function->getArg(2), opened);
+    left->addIncoming(function->getArg(3), opened);
+    llvm::Value* more =
+        builder_.CreateICmpUGT(left, llvm::ConstantInt::get(usize_, 0), "more");
+    builder_.CreateCondBr(more, read, done);
+    builder_.SetInsertPoint(read);
+    llvm::Value* cap = llvm::ConstantInt::get(usize_, 0xffffffff);
+    llvm::Value* clamped = builder_.CreateSelect(
+        builder_.CreateICmpUGT(left, cap, "clamp"), cap, left, "clamped");
+    llvm::Value* chunk32 = builder_.CreateTrunc(clamped, i32, "chunk");
+    llvm::AllocaInst* slot = builder_.CreateAlloca(i32, nullptr, "count_slot");
+    builder_.CreateStore(llvm::ConstantInt::get(i32, 0), slot);
+    llvm::Function* read_fn = libc(
+        "ReadFile",
+        llvm::FunctionType::get(i32,
+                                {builder_.getPtrTy(), builder_.getPtrTy(), i32,
+                                 builder_.getPtrTy(), builder_.getPtrTy()},
+                                false));
+    llvm::Value* ok = builder_.CreateCall(
+        read_fn,
+        {handle, into, chunk32, slot,
+         llvm::ConstantPointerNull::get(builder_.getPtrTy())},
+        "ok");
+    llvm::Value* count32 = builder_.CreateLoad(i32, slot, "count");
+    llvm::Value* zero32 = llvm::ConstantInt::get(i32, 0);
+    llvm::Value* call_stopped =
+        builder_.CreateICmpEQ(ok, zero32, "call_stopped");
+    llvm::Value* no_bytes = builder_.CreateICmpEQ(count32, zero32, "no_bytes");
+    llvm::Value* stopped = builder_.CreateOr(call_stopped, no_bytes, "stopped");
+    builder_.CreateCondBr(stopped, done, progress);
+    builder_.SetInsertPoint(progress);
+    llvm::Value* advance = builder_.CreateZExt(count32, usize_, "advance");
+    llvm::Value* next_total = builder_.CreateAdd(total, advance, "next_total");
+    llvm::Value* added =
+        builder_.CreateGEP(builder_.getInt8Ty(), into, advance, "added");
+    llvm::Value* next_left = builder_.CreateSub(left, advance, "next_left");
+    total->addIncoming(next_total, progress);
+    into->addIncoming(added, progress);
+    left->addIncoming(next_left, progress);
+    builder_.CreateBr(loop);
+    builder_.SetInsertPoint(done);
+    llvm::Function* close_fn =
+        libc("CloseHandle",
+             llvm::FunctionType::get(i32, {builder_.getPtrTy()}, false));
+    builder_.CreateCall(close_fn, {handle});
+    builder_.CreateRet(builder_.CreateZExtOrTrunc(total, i64, "widened"));
+  }
+
+  // `alcy_write_file(path, len, data, data_len)` answers the bytes
+  // written or -1 when the path cannot be opened.
+  void build_write_file_kernel32() {
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        i64, {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime("alcy_write_file", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", function);
+    llvm::BasicBlock* opened =
+        llvm::BasicBlock::Create(context, "opened", function);
+    llvm::BasicBlock* loop =
+        llvm::BasicBlock::Create(context, "loop", function);
+    llvm::BasicBlock* write =
+        llvm::BasicBlock::Create(context, "write", function);
+    llvm::BasicBlock* progress =
+        llvm::BasicBlock::Create(context, "progress", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* path = wide_path(function->getArg(0), function->getArg(1));
+    llvm::Value* absent = builder_.CreateICmpEQ(
+        path, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "absent");
+    builder_.CreateCondBr(absent, missing, opened);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(llvm::ConstantInt::get(i64, -1));
+    builder_.SetInsertPoint(opened);
+    llvm::Function* open_fn = libc(
+        "CreateFileW", llvm::FunctionType::get(
+                           builder_.getPtrTy(),
+                           {builder_.getPtrTy(), i32, i32, builder_.getPtrTy(),
+                            i32, i32, builder_.getPtrTy()},
+                           false));
+    // GENERIC_WRITE, no share mode, CREATE_ALWAYS,
+    // FILE_ATTRIBUTE_NORMAL.
+    llvm::Value* handle = builder_.CreateCall(
+        open_fn,
+        {path, llvm::ConstantInt::get(i32, 0x40000000),
+         llvm::ConstantInt::get(i32, 0),
+         llvm::ConstantPointerNull::get(builder_.getPtrTy()),
+         llvm::ConstantInt::get(i32, 2), llvm::ConstantInt::get(i32, 0x80),
+         llvm::ConstantPointerNull::get(builder_.getPtrTy())},
+        "handle");
+    llvm::Value* invalid = invalid_handle(handle);
+    builder_.CreateCondBr(invalid, missing, loop);
+    builder_.SetInsertPoint(loop);
+    llvm::PHINode* total = builder_.CreatePHI(usize_, 2, "total");
+    llvm::PHINode* from = builder_.CreatePHI(builder_.getPtrTy(), 2, "from");
+    llvm::PHINode* left = builder_.CreatePHI(usize_, 2, "left");
+    total->addIncoming(llvm::ConstantInt::get(usize_, 0), opened);
+    from->addIncoming(function->getArg(2), opened);
+    left->addIncoming(function->getArg(3), opened);
+    llvm::Value* more =
+        builder_.CreateICmpUGT(left, llvm::ConstantInt::get(usize_, 0), "more");
+    builder_.CreateCondBr(more, write, done);
+    builder_.SetInsertPoint(write);
+    llvm::Value* cap = llvm::ConstantInt::get(usize_, 0xffffffff);
+    llvm::Value* clamped = builder_.CreateSelect(
+        builder_.CreateICmpUGT(left, cap, "clamp"), cap, left, "clamped");
+    llvm::Value* chunk32 = builder_.CreateTrunc(clamped, i32, "chunk");
+    llvm::AllocaInst* slot = builder_.CreateAlloca(i32, nullptr, "count_slot");
+    builder_.CreateStore(llvm::ConstantInt::get(i32, 0), slot);
+    llvm::Function* write_fn = libc(
+        "WriteFile",
+        llvm::FunctionType::get(i32,
+                                {builder_.getPtrTy(), builder_.getPtrTy(), i32,
+                                 builder_.getPtrTy(), builder_.getPtrTy()},
+                                false));
+    llvm::Value* ok = builder_.CreateCall(
+        write_fn,
+        {handle, from, chunk32, slot,
+         llvm::ConstantPointerNull::get(builder_.getPtrTy())},
+        "ok");
+    llvm::Value* count32 = builder_.CreateLoad(i32, slot, "count");
+    llvm::Value* zero32 = llvm::ConstantInt::get(i32, 0);
+    llvm::Value* call_stopped =
+        builder_.CreateICmpEQ(ok, zero32, "call_stopped");
+    llvm::Value* no_bytes = builder_.CreateICmpEQ(count32, zero32, "no_bytes");
+    llvm::Value* stopped = builder_.CreateOr(call_stopped, no_bytes, "stopped");
+    builder_.CreateCondBr(stopped, done, progress);
+    builder_.SetInsertPoint(progress);
+    llvm::Value* advance = builder_.CreateZExt(count32, usize_, "advance");
+    llvm::Value* next_total = builder_.CreateAdd(total, advance, "next_total");
+    llvm::Value* added =
+        builder_.CreateGEP(builder_.getInt8Ty(), from, advance, "added");
+    llvm::Value* next_left = builder_.CreateSub(left, advance, "next_left");
+    total->addIncoming(next_total, progress);
+    from->addIncoming(added, progress);
+    left->addIncoming(next_left, progress);
+    builder_.CreateBr(loop);
+    builder_.SetInsertPoint(done);
+    llvm::Function* close_fn =
+        libc("CloseHandle",
+             llvm::FunctionType::get(i32, {builder_.getPtrTy()}, false));
+    builder_.CreateCall(close_fn, {handle});
+    builder_.CreateRet(builder_.CreateZExtOrTrunc(total, i64, "widened"));
+  }
+
+  // `__chkstk`, the stack prober the CRT used to provide: every page
+  // between the current stack pointer and the next one is touched,
+  // so a frame larger than a page faults the guard page in instead of
+  // jumping over it. `rax` carries the frame in; the routine is
+  // varargs-shaped, keeps `rax` and `rcx`, and never adjusts `rsp`.
+  // Sequence after the canonical one in compiler-rt's chkstk.S.
+  void build_chkstk() {
+    llvm::FunctionType* type =
+        llvm::FunctionType::get(builder_.getVoidTy(), false);
+    llvm::Function* function = llvm::Function::Create(
+        type, llvm::GlobalValue::LinkOnceODRLinkage, "__chkstk", module_);
+    function->addFnAttr(llvm::Attribute::Naked);
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(module_.getContext(), "", function);
+    builder_.SetInsertPoint(entry);
+    const char* sequence = nullptr;
+    if (arch_ == "x86_64") {
+      sequence =
+          "push %rcx\n"
+          "push %rax\n"
+          "cmp $$4096, %rax\n"
+          "lea 24(%rsp), %rcx\n"
+          "jb 2f\n"
+          "1:\n"
+          "sub $$4096, %rcx\n"
+          "test %rcx, (%rcx)\n"
+          "sub $$4096, %rax\n"
+          "cmp $$4096, %rax\n"
+          "ja 1b\n"
+          "2:\n"
+          "sub %rax, %rcx\n"
+          "test %rcx, (%rcx)\n"
+          "pop %rax\n"
+          "pop %rcx\n"
+          "ret";
+    } else if (arch_ == "aarch64") {
+      // The frame arrives in x15 in units of 16 bytes, like the C
+      // runtime's; x16 and x17 are the call-clobbered helper pair.
+      sequence =
+          "lsl x16, x15, #4\n"
+          "mov x17, sp\n"
+          "1:\n"
+          "sub x17, x17, #4096\n"
+          "subs x16, x16, #4096\n"
+          "ldr xzr, [x17]\n"
+          "b.gt 1b\n"
+          "ret";
+    } else {
+      return;
+    }
+    llvm::InlineAsm* prober = llvm::InlineAsm::get(
+        type, sequence, "~{memory}", /*hasSideEffects=*/true,
+        /*isAlignStack=*/false, llvm::InlineAsm::AD_ATT);
+    builder_.CreateCall(prober);
+    builder_.CreateRetVoid();
+  }
+
+  // The arguments the process was started with, gathered the way the
+  // C runtime hands them out: the command line as the kernel gave it,
+  // parsed the way the command line is documented to parse -
+  // backslashes are literal except before a quote, an even run of them
+  // collapses, the quote itself toggles or escapes - and checked as
+  // UTF-8 out of the kernel's wide string. The argv bytes are owned by
+  // a static arena and handed out as NUL-terminated strings, so the
+  // descriptor scan answers unchanged.
+  void build_args_init() {
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Type* i16 = builder_.getInt16Ty();
+    llvm::Type* i8 = builder_.getInt8Ty();
+    llvm::Type* ptr = builder_.getPtrTy();
+    llvm::LLVMContext& context = module_.getContext();
+
+    llvm::Function* get_command_line =
+        libc("GetCommandLineW", llvm::FunctionType::get(ptr, false));
+    llvm::Function* to_multi_byte =
+        libc("WideCharToMultiByte",
+             llvm::FunctionType::get(
+                 i32, {i32, i32, ptr, i32, ptr, i32, ptr, ptr}, false));
+
+    llvm::GlobalVariable* arena =
+        cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
+            "alcy_args_arena", llvm::ArrayType::get(i8, 262144)));
+    arena->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    if (!arena->hasInitializer()) {
+      arena->setInitializer(
+          llvm::ConstantAggregateZero::get(arena->getValueType()));
+    }
+    llvm::GlobalVariable* table =
+        cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
+            "alcy_args_table", llvm::ArrayType::get(ptr, 1024)));
+    table->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    if (!table->hasInitializer()) {
+      table->setInitializer(
+          llvm::ConstantAggregateZero::get(table->getValueType()));
+    }
+    llvm::GlobalVariable* temp =
+        cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
+            "alcy_args_temp", llvm::ArrayType::get(i16, 32768)));
+    temp->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    if (!temp->hasInitializer()) {
+      temp->setInitializer(
+          llvm::ConstantAggregateZero::get(temp->getValueType()));
+    }
+
+    llvm::FunctionType* type =
+        llvm::FunctionType::get(builder_.getVoidTy(), false);
+    llvm::Function* function = runtime("alcy_init_args", type);
+    function->setDoesNotThrow();
+
+    const auto block = [&](const char* name) {
+      return llvm::BasicBlock::Create(context, name, function);
+    };
+    llvm::BasicBlock* entry = block("entry");
+    llvm::BasicBlock* scan = block("scan");
+    llvm::BasicBlock* scan_done = block("scan_done");
+    llvm::BasicBlock* skip_ws = block("skip_ws");
+    llvm::BasicBlock* have_arg = block("have_arg");
+    llvm::BasicBlock* arg_start = block("arg_start");
+    llvm::BasicBlock* char_loop = block("char_loop");
+    llvm::BasicBlock* read_char = block("read_char");
+    llvm::BasicBlock* bslash = block("bslash");
+    llvm::BasicBlock* not_bslash = block("not_bslash");
+    llvm::BasicBlock* quote = block("quote");
+    llvm::BasicBlock* quote_paired = block("quote_paired");
+    llvm::BasicBlock* quote_toggle = block("quote_toggle");
+    llvm::BasicBlock* quote_literal = block("quote_literal");
+    llvm::BasicBlock* quote_single = block("quote_single");
+    llvm::BasicBlock* quote_drop_one = block("quote_drop_one");
+    llvm::BasicBlock* quote_zero = block("quote_zero");
+    llvm::BasicBlock* open_quote = block("open_quote");
+    llvm::BasicBlock* in_quote_qv = block("in_quote_qv");
+    llvm::BasicBlock* in_quote_doubled = block("in_quote_doubled");
+    llvm::BasicBlock* quote_zero_single = block("quote_zero_single");
+    llvm::BasicBlock* not_quote = block("not_quote");
+    llvm::BasicBlock* space = block("space");
+    llvm::BasicBlock* space_keep = block("space_keep");
+    llvm::BasicBlock* ordinary = block("ordinary");
+    llvm::BasicBlock* arg_end = block("arg_end");
+    llvm::BasicBlock* flush = block("flush");
+    llvm::BasicBlock* flush_replacement = block("flush_replacement");
+    llvm::BasicBlock* flush_copy = block("flush_copy");
+    llvm::BasicBlock* flush_join = block("flush_join");
+    llvm::BasicBlock* flush_check = block("flush_check");
+    llvm::BasicBlock* args_done = block("args_done");
+
+    // How many arguments an argv the runtime built carries, for the
+    // `alcy_arg` descriptor scan. The kernel hands the entry no
+    // arguments on this platform, so the runtime gathers them.
+    builder_.SetInsertPoint(entry);
+    llvm::Value* wcmd = builder_.CreateCall(get_command_line, {}, "wcmd");
+    builder_.CreateBr(scan);
+
+    builder_.SetInsertPoint(scan);
+    llvm::PHINode* at = builder_.CreatePHI(i64, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(i64, 0), entry);
+    llvm::Value* c = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, wcmd, at, "at_arg"), "c");
+    llvm::Value* next =
+        builder_.CreateAdd(at, llvm::ConstantInt::get(i64, 1), "next");
+    llvm::Value* done =
+        builder_.CreateICmpEQ(c, llvm::ConstantInt::get(i16, 0), "done");
+    at->addIncoming(next, scan);
+    builder_.CreateCondBr(done, scan_done, scan);
+
+    builder_.SetInsertPoint(scan_done);
+    llvm::PHINode* n = builder_.CreatePHI(i64, 1, "n");
+    n->addIncoming(at, scan);
+    builder_.CreateBr(skip_ws);
+
+    // Skip leading whitespace: the position of the next argument, or
+    // the end of the command line.
+    builder_.SetInsertPoint(skip_ws);
+    llvm::PHINode* outer_i = builder_.CreatePHI(i64, 3, "i");
+    llvm::PHINode* arena_pos = builder_.CreatePHI(i64, 3, "arena_pos");
+    llvm::PHINode* argc = builder_.CreatePHI(i64, 3, "argc");
+    outer_i->addIncoming(llvm::ConstantInt::get(i64, 0), scan_done);
+    arena_pos->addIncoming(llvm::ConstantInt::get(i64, 0), scan_done);
+    argc->addIncoming(llvm::ConstantInt::get(i64, 0), scan_done);
+    llvm::Value* past_end = builder_.CreateICmpUGE(outer_i, n, "past_end");
+    builder_.CreateCondBr(past_end, args_done, have_arg);
+    builder_.SetInsertPoint(have_arg);
+    llvm::Value* outer_c = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, wcmd, outer_i, "have_at"), "outer_c");
+    llvm::Value* is_space0 = builder_.CreateOr(
+        builder_.CreateICmpEQ(outer_c, llvm::ConstantInt::get(i16, 32)),
+        builder_.CreateICmpEQ(outer_c, llvm::ConstantInt::get(i16, 9)),
+        "is_space0");
+    llvm::BasicBlock* to_next_block =
+        llvm::BasicBlock::Create(context, "to_next", function);
+    builder_.CreateCondBr(is_space0, to_next_block, arg_start);
+    builder_.SetInsertPoint(to_next_block);
+    llvm::PHINode* to_space = builder_.CreatePHI(i64, 1, "to_space");
+    to_space->addIncoming(outer_i, have_arg);
+    llvm::Value* to_next =
+        builder_.CreateAdd(to_space, llvm::ConstantInt::get(i64, 1), "to_next");
+    outer_i->addIncoming(to_next, to_next_block);
+    arena_pos->addIncoming(arena_pos, to_next_block);
+    argc->addIncoming(argc, to_next_block);
+    builder_.CreateBr(skip_ws);
+
+    // One argument: a fresh segment, unquoted, no pending backslashes.
+    builder_.SetInsertPoint(arg_start);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(char_loop);
+    llvm::PHINode* seg_i = builder_.CreatePHI(i64, 9, "i");
+    llvm::PHINode* seg = builder_.CreatePHI(i64, 9, "seg");
+    llvm::PHINode* in_quotes =
+        builder_.CreatePHI(builder_.getInt1Ty(), 9, "in_quotes");
+    llvm::PHINode* bs = builder_.CreatePHI(i64, 9, "bs");
+    llvm::PHINode* started =
+        builder_.CreatePHI(builder_.getInt1Ty(), 9, "started");
+    seg_i->addIncoming(outer_i, arg_start);
+    seg->addIncoming(llvm::ConstantInt::get(i64, 0), arg_start);
+    in_quotes->addIncoming(llvm::ConstantInt::getFalse(context), arg_start);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), arg_start);
+    started->addIncoming(llvm::ConstantInt::getFalse(context), arg_start);
+    llvm::Value* at_end_now = builder_.CreateICmpUGE(seg_i, n, "at_end_now");
+    builder_.CreateCondBr(at_end_now, arg_end, read_char);
+
+    builder_.SetInsertPoint(read_char);
+    llvm::Value* read = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, wcmd, seg_i, "read_at"), "read");
+    llvm::Value* is_bslash = builder_.CreateICmpEQ(
+        read, llvm::ConstantInt::get(i16, 92), "is_bslash");
+    builder_.CreateCondBr(is_bslash, bslash, not_bslash);
+
+    builder_.SetInsertPoint(bslash);
+    // A backslash is copied now - it is literal until a quote or
+    // whitespace decides it is not; the quote case rewinds the run.
+    llvm::Value* temp_at_bslash = builder_.CreateGEP(i16, temp, seg, "temp_at");
+    builder_.CreateStore(llvm::ConstantInt::get(i16, 92), temp_at_bslash);
+    llvm::Value* bs_next =
+        builder_.CreateAdd(bs, llvm::ConstantInt::get(i64, 1), "bs_next");
+    llvm::Value* seg_b =
+        builder_.CreateAdd(seg, llvm::ConstantInt::get(i64, 1), "seg_b");
+    llvm::Value* i_b =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_b");
+    seg_i->addIncoming(i_b, bslash);
+    seg->addIncoming(seg_b, bslash);
+    in_quotes->addIncoming(in_quotes, bslash);
+    bs->addIncoming(bs_next, bslash);
+    started->addIncoming(llvm::ConstantInt::getTrue(context), bslash);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(not_bslash);
+    llvm::Value* is_quote = builder_.CreateICmpEQ(
+        read, llvm::ConstantInt::get(i16, 34), "is_quote");
+    builder_.CreateCondBr(is_quote, quote, not_quote);
+
+    builder_.SetInsertPoint(quote);
+    llvm::Value* bs_ge_2 =
+        builder_.CreateICmpUGE(bs, llvm::ConstantInt::get(i64, 2), "bs_ge_2");
+    builder_.CreateCondBr(bs_ge_2, quote_paired, quote_single);
+
+    builder_.SetInsertPoint(quote_paired);
+    // An even run collapses to half literal backslashes, and the quote
+    // toggles; an odd run collapses to half backslashes, and the quote
+    // is literal.
+    llvm::Value* half =
+        builder_.CreateLShr(bs, llvm::ConstantInt::get(i64, 1), "half");
+    llvm::Value* whole = builder_.CreateSub(bs, half, "whole");
+    llvm::Value* seg_after = builder_.CreateSub(seg, whole, "seg_after");
+    llvm::Value* is_odd =
+        builder_.CreateAnd(bs, llvm::ConstantInt::get(i64, 1), "is_odd");
+    llvm::Value* odd =
+        builder_.CreateICmpNE(is_odd, llvm::ConstantInt::get(i64, 0), "odd");
+    builder_.CreateCondBr(odd, quote_literal, quote_toggle);
+
+    builder_.SetInsertPoint(quote_toggle);
+    llvm::Value* toggled = builder_.CreateXor(
+        in_quotes, llvm::ConstantInt::getTrue(context), "toggled");
+    llvm::Value* i_toggle =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_toggle");
+    seg_i->addIncoming(i_toggle, quote_toggle);
+    seg->addIncoming(seg_after, quote_toggle);
+    in_quotes->addIncoming(toggled, quote_toggle);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), quote_toggle);
+    started->addIncoming(llvm::ConstantInt::getTrue(context), quote_toggle);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(quote_literal);
+    llvm::Value* temp_at_lit =
+        builder_.CreateGEP(i16, temp, seg_after, "temp_at_lit");
+    builder_.CreateStore(llvm::ConstantInt::get(i16, 34), temp_at_lit);
+    llvm::Value* seg_lit = builder_.CreateAdd(
+        seg_after, llvm::ConstantInt::get(i64, 1), "seg_lit");
+    llvm::Value* i_lit =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_lit");
+    seg_i->addIncoming(i_lit, quote_literal);
+    seg->addIncoming(seg_lit, quote_literal);
+    in_quotes->addIncoming(in_quotes, quote_literal);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), quote_literal);
+    started->addIncoming(llvm::ConstantInt::getTrue(context), quote_literal);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(quote_single);
+    llvm::Value* bs_one =
+        builder_.CreateICmpEQ(bs, llvm::ConstantInt::get(i64, 1), "bs_one");
+    builder_.CreateCondBr(bs_one, quote_drop_one, quote_zero);
+
+    builder_.SetInsertPoint(quote_drop_one);
+    llvm::Value* seg_drop =
+        builder_.CreateSub(seg, llvm::ConstantInt::get(i64, 1), "seg_drop");
+    llvm::Value* temp_at_drop =
+        builder_.CreateGEP(i16, temp, seg_drop, "temp_at_drop");
+    builder_.CreateStore(llvm::ConstantInt::get(i16, 34), temp_at_drop);
+    llvm::Value* seg_dropped = builder_.CreateAdd(
+        seg_drop, llvm::ConstantInt::get(i64, 1), "seg_dropped");
+    llvm::Value* i_drop =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_drop");
+    seg_i->addIncoming(i_drop, quote_drop_one);
+    seg->addIncoming(seg_dropped, quote_drop_one);
+    in_quotes->addIncoming(in_quotes, quote_drop_one);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), quote_drop_one);
+    started->addIncoming(llvm::ConstantInt::getTrue(context), quote_drop_one);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(quote_zero);
+    builder_.CreateCondBr(in_quotes, in_quote_qv, open_quote);
+
+    builder_.SetInsertPoint(open_quote);
+    llvm::Value* i_open =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_open");
+    seg_i->addIncoming(i_open, open_quote);
+    seg->addIncoming(seg, open_quote);
+    in_quotes->addIncoming(llvm::ConstantInt::getTrue(context), open_quote);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), open_quote);
+    started->addIncoming(llvm::ConstantInt::getTrue(context), open_quote);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(in_quote_qv);
+    // A doubled quote inside a quoted section is one literal quote; a
+    // lone quote ends the section.
+    llvm::Value* next_i =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "next_i");
+    llvm::Value* next_c = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, wcmd, next_i, "next_at"), "next_c");
+    llvm::Value* doubled = builder_.CreateICmpEQ(
+        next_c, llvm::ConstantInt::get(i16, 34), "doubled");
+    builder_.CreateCondBr(doubled, in_quote_doubled, quote_zero_single);
+
+    builder_.SetInsertPoint(in_quote_doubled);
+    llvm::Value* temp_at_dbl =
+        builder_.CreateGEP(i16, temp, seg, "temp_at_dbl");
+    builder_.CreateStore(llvm::ConstantInt::get(i16, 34), temp_at_dbl);
+    llvm::Value* seg_dbl =
+        builder_.CreateAdd(seg, llvm::ConstantInt::get(i64, 1), "seg_dbl");
+    llvm::Value* i_dbl =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 2), "i_dbl");
+    seg_i->addIncoming(i_dbl, in_quote_doubled);
+    seg->addIncoming(seg_dbl, in_quote_doubled);
+    in_quotes->addIncoming(llvm::ConstantInt::getTrue(context),
+                           in_quote_doubled);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), in_quote_doubled);
+    started->addIncoming(llvm::ConstantInt::getTrue(context), in_quote_doubled);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(quote_zero_single);
+    llvm::Value* i_qzs =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_qzs");
+    seg_i->addIncoming(i_qzs, quote_zero_single);
+    seg->addIncoming(seg, quote_zero_single);
+    in_quotes->addIncoming(llvm::ConstantInt::getFalse(context),
+                           quote_zero_single);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), quote_zero_single);
+    started->addIncoming(llvm::ConstantInt::getTrue(context),
+                         quote_zero_single);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(not_quote);
+    llvm::Value* is_space = builder_.CreateOr(
+        builder_.CreateICmpEQ(read, llvm::ConstantInt::get(i16, 32)),
+        builder_.CreateICmpEQ(read, llvm::ConstantInt::get(i16, 9)),
+        "is_space");
+    builder_.CreateCondBr(is_space, space, ordinary);
+
+    builder_.SetInsertPoint(space);
+    builder_.CreateCondBr(in_quotes, space_keep, arg_end);
+
+    builder_.SetInsertPoint(space_keep);
+    llvm::Value* temp_at_space = builder_.CreateGEP(i16, temp, seg, "temp_at");
+    builder_.CreateStore(read, temp_at_space);
+    llvm::Value* seg_sp =
+        builder_.CreateAdd(seg, llvm::ConstantInt::get(i64, 1), "seg_sp");
+    llvm::Value* i_sp =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_sp");
+    seg_i->addIncoming(i_sp, space_keep);
+    seg->addIncoming(seg_sp, space_keep);
+    in_quotes->addIncoming(in_quotes, space_keep);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), space_keep);
+    // Whitespace inside quotes is content of the argument.
+    started->addIncoming(llvm::ConstantInt::getTrue(context), space_keep);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(ordinary);
+    llvm::Value* temp_at_ord = builder_.CreateGEP(i16, temp, seg, "temp_at");
+    builder_.CreateStore(read, temp_at_ord);
+    llvm::Value* seg_ord =
+        builder_.CreateAdd(seg, llvm::ConstantInt::get(i64, 1), "seg_ord");
+    llvm::Value* i_ord =
+        builder_.CreateAdd(seg_i, llvm::ConstantInt::get(i64, 1), "i_ord");
+    seg_i->addIncoming(i_ord, ordinary);
+    seg->addIncoming(seg_ord, ordinary);
+    in_quotes->addIncoming(in_quotes, ordinary);
+    bs->addIncoming(llvm::ConstantInt::get(i64, 0), ordinary);
+    started->addIncoming(llvm::ConstantInt::getTrue(context), ordinary);
+    builder_.CreateBr(char_loop);
+
+    builder_.SetInsertPoint(arg_end);
+    builder_.CreateCondBr(started, flush, flush_check);
+
+    builder_.SetInsertPoint(flush);
+    llvm::Value* seg32 = builder_.CreateTrunc(seg, i32, "seg32");
+    llvm::Value* bytes = builder_.CreateCall(
+        to_multi_byte,
+        {llvm::ConstantInt::get(i32, 65001 /* CP_UTF8 */),
+         llvm::ConstantInt::get(i32, 0), temp, seg32,
+         llvm::ConstantPointerNull::get(ptr), llvm::ConstantInt::get(i32, 0),
+         llvm::ConstantPointerNull::get(ptr),
+         llvm::ConstantPointerNull::get(ptr)},
+        "bytes");
+    llvm::Value* bad =
+        builder_.CreateICmpSLE(bytes, llvm::ConstantInt::get(i32, 0), "bad");
+    builder_.CreateCondBr(bad, flush_replacement, flush_copy);
+
+    builder_.SetInsertPoint(flush_replacement);
+    llvm::Value* bad_at = builder_.CreateGEP(i8, arena, arena_pos, "bad_at");
+    builder_.CreateStore(llvm::ConstantInt::get(i8, 0xef), bad_at);
+    builder_.CreateStore(
+        llvm::ConstantInt::get(i8, 0xbf),
+        builder_.CreateGEP(i8, bad_at, llvm::ConstantInt::get(i64, 1)));
+    builder_.CreateStore(
+        llvm::ConstantInt::get(i8, 0xbd),
+        builder_.CreateGEP(i8, bad_at, llvm::ConstantInt::get(i64, 2)));
+    builder_.CreateStore(
+        llvm::ConstantInt::get(i8, 0),
+        builder_.CreateGEP(i8, bad_at, llvm::ConstantInt::get(i64, 3)));
+    builder_.CreateBr(flush_join);
+
+    builder_.SetInsertPoint(flush_copy);
+    llvm::Value* bytes64 = builder_.CreateZExt(bytes, i64, "bytes64");
+    llvm::Value* dest = builder_.CreateGEP(i8, arena, arena_pos, "dest");
+    builder_.CreateCall(to_multi_byte,
+                        {llvm::ConstantInt::get(i32, 65001 /* CP_UTF8 */),
+                         llvm::ConstantInt::get(i32, 0), temp, seg32, dest,
+                         builder_.CreateTrunc(bytes64, i32, "bytes32"),
+                         llvm::ConstantPointerNull::get(ptr),
+                         llvm::ConstantPointerNull::get(ptr)});
+    builder_.CreateStore(llvm::ConstantInt::get(i8, 0),
+                         builder_.CreateGEP(i8, dest, bytes64, "dest_end"));
+    llvm::Value* advance =
+        builder_.CreateAdd(bytes64, llvm::ConstantInt::get(i64, 1), "advance");
+    builder_.CreateBr(flush_join);
+
+    builder_.SetInsertPoint(flush_join);
+    llvm::PHINode* dest_phi = builder_.CreatePHI(ptr, 2, "dest_phi");
+    llvm::PHINode* advance_phi = builder_.CreatePHI(i64, 2, "advance_phi");
+    dest_phi->addIncoming(bad_at, flush_replacement);
+    dest_phi->addIncoming(dest, flush_copy);
+    advance_phi->addIncoming(llvm::ConstantInt::get(i64, 4), flush_replacement);
+    advance_phi->addIncoming(advance, flush_copy);
+    // The argv bytes are permanent: the slot table borrows from the
+    // same arena.
+    llvm::Value* slot = builder_.CreateGEP(ptr, table, argc, "slot");
+    builder_.CreateStore(dest_phi, slot);
+    llvm::Value* arena_next =
+        builder_.CreateAdd(arena_pos, advance_phi, "arena_pos_next");
+    llvm::Value* argc_next =
+        builder_.CreateAdd(argc, llvm::ConstantInt::get(i64, 1), "argc_next");
+    builder_.CreateBr(flush_check);
+
+    builder_.SetInsertPoint(flush_check);
+    llvm::PHINode* check_i = builder_.CreatePHI(i64, 2, "i");
+    llvm::PHINode* check_arena = builder_.CreatePHI(i64, 2, "arena_pos");
+    llvm::PHINode* check_argc = builder_.CreatePHI(i64, 2, "argc");
+    // The not-started path arrives here with the pre-flush values; the
+    // flushed path arrives with the grown ones.
+    check_i->addIncoming(seg_i, arg_end);
+    check_arena->addIncoming(arena_pos, arg_end);
+    check_argc->addIncoming(argc, arg_end);
+    check_i->addIncoming(seg_i, flush_join);
+    check_arena->addIncoming(arena_next, flush_join);
+    check_argc->addIncoming(argc_next, flush_join);
+    llvm::Value* full = builder_.CreateICmpUGE(
+        check_argc, llvm::ConstantInt::get(i64, 1024), "full");
+    llvm::Value* exhausted = builder_.CreateICmpUGT(
+        check_arena, llvm::ConstantInt::get(i64, 262144 - 4), "exhausted");
+    llvm::Value* stop = builder_.CreateOr(full, exhausted, "stop");
+    builder_.CreateCondBr(stop, args_done, skip_ws);
+
+    // The parse continues at the whitespace the argument ended on; the
+    // position arrives from the flush.
+    builder_.SetInsertPoint(skip_ws);
+    outer_i->addIncoming(check_i, flush_check);
+    arena_pos->addIncoming(check_arena, flush_check);
+    argc->addIncoming(check_argc, flush_check);
+
+    builder_.SetInsertPoint(args_done);
+    llvm::Value* argc32 = builder_.CreateTrunc(argc, i32, "argc32");
+    llvm::Value* argc_glob = module_.getOrInsertGlobal("alcy_argc", i32);
+    builder_.CreateStore(argc32, argc_glob);
+    llvm::Value* argv_glob = module_.getOrInsertGlobal("alcy_argv", ptr);
+    builder_.CreateStore(table, argv_glob);
+    builder_.CreateRetVoid();
+  }
+
   // openat(2) with `AT_FDCWD` for the current directory. The path is
   // copied into a slot with the terminator the syscall wants.
   static constexpr i64 AT_FDCWD = -100;
@@ -1121,9 +2088,19 @@ class RuntimeBuilder {
     }
 
     builder_.SetInsertPoint(end);
-    if (freestanding_) {
+    if (freestanding_ && !windows_) {
       // No libc `abort`; exit with the status a hosted abort reports.
       exit_now(134);
+      return;
+    }
+    if (windows_) {
+      llvm::Function* quit =
+          libc("ExitProcess",
+               llvm::FunctionType::get(builder_.getVoidTy(),
+                                       {builder_.getInt32Ty()}, false));
+      builder_.CreateCall(quit,
+                          {llvm::ConstantInt::get(builder_.getInt32Ty(), 134)});
+      builder_.CreateUnreachable();
       return;
     }
     builder_.CreateCall(
@@ -1484,7 +2461,7 @@ class RuntimeBuilder {
     llvm::Value* fd_value = function->getArg(0);
     llvm::Value* data = function->getArg(1);
     llvm::Value* len = function->getArg(2);
-    if (freestanding_) {
+    if (freestanding_ && !windows_) {
       // The kernel answers `-errno` itself; there is nothing to fetch.
       SyscallAbi abi{};
       CHECK_MSG(syscall_abi(abi),
@@ -1519,28 +2496,6 @@ class RuntimeBuilder {
     builder_.CreateRet(builder_.CreateSExtOrTrunc(count, i64, "count"));
   }
 
-  // The handler the C runtime calls instead of ending the process, so a
-  // call it cannot serve lands back in the runtime as -1 and an errno.
-  llvm::Function* quiet_argument() {
-    const char* name = "alcy_quiet_argument";
-    if (llvm::Function* existing = module_.getFunction(name)) {
-      return existing;
-    }
-    llvm::FunctionType* type = llvm::FunctionType::get(
-        builder_.getVoidTy(),
-        {builder_.getPtrTy(), builder_.getPtrTy(), builder_.getPtrTy(),
-         builder_.getInt32Ty(), usize_},
-        false);
-    llvm::Function* function = runtime(name, type);
-    llvm::BasicBlock* caller = builder_.GetInsertBlock();
-    llvm::BasicBlock* body =
-        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
-    builder_.SetInsertPoint(body);
-    builder_.CreateRetVoid();
-    builder_.SetInsertPoint(caller);
-    return function;
-  }
-
   // One libc call, with the raw signed result the caller compares; the
   // Windows entry points take and return the narrower count.
   llvm::Value* io_call(bool is_write,
@@ -1548,44 +2503,7 @@ class RuntimeBuilder {
                        llvm::Value* data,
                        llvm::Value* len) {
     if (windows_) {
-      llvm::Type* narrow = builder_.getInt32Ty();
-      // The C runtime reports an argument it cannot serve by ending the
-      // process through its invalid parameter handler, and a descriptor
-      // the program does not hold is such an argument. A handler that
-      // returns leaves the two calls below to answer -1 with EBADF,
-      // which is what a raw descriptor call gives the same caller.
-      // The thread-local slot holds it for this call alone and the
-      // previous handler goes back when it returns, so the report of any
-      // other call on this thread still ends the process as the C
-      // runtime intends.
-      llvm::Function* install =
-          libc("_set_thread_local_invalid_parameter_handler",
-               llvm::FunctionType::get(builder_.getPtrTy(),
-                                       {builder_.getPtrTy()}, false));
-      llvm::Value* previous =
-          builder_.CreateCall(install, {quiet_argument()}, "previous");
-      // The C runtime opens descriptors in text mode by default, which
-      // translates a newline on read and write; that would make the
-      // faithful descriptor call answer a byte count the caller never
-      // wrote. Put the descriptor in binary mode first, so the bytes
-      // pass through exactly as a raw descriptor call would give them.
-      // The mode sticks with the descriptor, so later calls see the
-      // same answer.
-      llvm::Function* set_mode = libc(
-          "_setmode", llvm::FunctionType::get(narrow, {narrow, narrow}, false));
-      builder_.CreateCall(set_mode,
-                          {fd_value, llvm::ConstantInt::get(narrow, 0x8000)});
-      llvm::Function* function =
-          libc(is_write ? "_write" : "_read",
-               llvm::FunctionType::get(
-                   narrow, {narrow, builder_.getPtrTy(), narrow}, false));
-      llvm::Value* count = builder_.CreateCall(
-          function, {fd_value, data, builder_.CreateTrunc(len, narrow)},
-          "count");
-      builder_.CreateCall(install, {previous});
-      // Setting and restoring the handler is what this path pays for the
-      // answer, and no benchmark sees it: tools/perf.py builds for Linux.
-      return count;
+      return descriptor_io(is_write, fd_value, data, len);
     }
     llvm::Function* function =
         libc(is_write ? "write" : "read",
@@ -1598,8 +2516,15 @@ class RuntimeBuilder {
   // The number the last failed call left, read from the C library's
   // thread-local slot.
   llvm::Value* errno_code() {
-    const char* slot_name =
-        windows_ ? "_errno" : (mach_o_ ? "__error" : "__errno_location");
+    if (windows_) {
+      // GetLastError: the last kernel call leaves a number; nothing
+      // here interprets it.
+      llvm::Function* slot =
+          libc("GetLastError",
+               llvm::FunctionType::get(builder_.getInt32Ty(), {}, false));
+      return builder_.CreateCall(slot, {}, "errno");
+    }
+    const char* slot_name = mach_o_ ? "__error" : "__errno_location";
     llvm::Function* slot = libc(
         slot_name, llvm::FunctionType::get(builder_.getPtrTy(), {}, false));
     return builder_.CreateLoad(builder_.getInt32Ty(),
@@ -1655,7 +2580,7 @@ class RuntimeBuilder {
     function->addFnAttr(llvm::Attribute::getWithAllocKind(
         module_.getContext(),
         llvm::AllocFnKind::Alloc | llvm::AllocFnKind::Uninitialized));
-    if (freestanding_) {
+    if (freestanding_ && !windows_) {
       build_alloc_mmap(function);
       return;
     }
@@ -1710,13 +2635,34 @@ class RuntimeBuilder {
         builder_.CreateSelect(size_is_zero, effective, size, "requested");
 
     if (windows_) {
-      // `_aligned_malloc` returns null on failure, so the result is
-      // checked here rather than read back from a slot.
-      llvm::Function* aligned = libc(
-          "_aligned_malloc", llvm::FunctionType::get(builder_.getPtrTy(),
-                                                     {usize_, usize_}, false));
-      llvm::Value* block =
-          builder_.CreateCall(aligned, {requested, align}, "block");
+      // VirtualAlloc gives page-granular blocks, which answer every
+      // alignment the page covers. A request past it is refused: the
+      // kernel has nothing to answer with.
+      llvm::Value* over_page = builder_.CreateICmpUGT(
+          align, llvm::ConstantInt::get(usize_, 4096), "over_page");
+      llvm::BasicBlock* page_ok =
+          llvm::BasicBlock::Create(context, "page_ok", function);
+      builder_.CreateCondBr(over_page, reject, page_ok);
+      builder_.SetInsertPoint(page_ok);
+      // A zero-size request still returns a distinct, freeable block,
+      // the same as the POSIX path.
+      llvm::Value* at_least_one = builder_.CreateSelect(
+          builder_.CreateICmpEQ(size, zero, "size_is_zero"),
+          llvm::ConstantInt::get(usize_, 1), size, "at_least_one");
+      llvm::Function* valloc = libc(
+          "VirtualAlloc", llvm::FunctionType::get(
+                              builder_.getPtrTy(),
+                              {builder_.getPtrTy(), usize_,
+                               builder_.getInt32Ty(), builder_.getInt32Ty()},
+                              false));
+      llvm::Value* block = builder_.CreateCall(
+          valloc,
+          {null_pointer(), at_least_one,
+           // MEM_COMMIT | MEM_RESERVE
+           llvm::ConstantInt::get(builder_.getInt32Ty(), 0x3000),
+           // PAGE_READWRITE
+           llvm::ConstantInt::get(builder_.getInt32Ty(), 0x04)},
+          "block");
       llvm::Value* failed =
           builder_.CreateICmpEQ(block, null_pointer(), "failed");
       llvm::BasicBlock* ok = llvm::BasicBlock::Create(context, "ok", function);
@@ -1748,7 +2694,7 @@ class RuntimeBuilder {
     function->setDoesNotThrow();
     function->addFnAttr(llvm::Attribute::getWithAllocKind(
         module_.getContext(), llvm::AllocFnKind::Free));
-    if (freestanding_) {
+    if (freestanding_ && !windows_) {
       build_dealloc_mmap(function);
       return;
     }
@@ -1762,6 +2708,32 @@ class RuntimeBuilder {
 
     llvm::Value* block = function->getArg(0);
 
+    if (windows_) {
+      release->eraseFromParent();
+      // MEM_RELEASE: the pointer is the whole reservation, so the size
+      // the caller carries is not needed and the kernel wants none.
+      builder_.SetInsertPoint(entry);
+      llvm::Value* is_null =
+          builder_.CreateICmpEQ(block, null_pointer(), "is_null");
+      llvm::BasicBlock* release_win =
+          llvm::BasicBlock::Create(context, "release_win", function);
+      builder_.CreateCondBr(is_null, done, release_win);
+      builder_.SetInsertPoint(release_win);
+      llvm::Function* vfree = libc(
+          "VirtualFree",
+          llvm::FunctionType::get(
+              builder_.getInt32Ty(),
+              {builder_.getPtrTy(), usize_, builder_.getInt32Ty()}, false));
+      // 0x8000 is MEM_RELEASE; the size must be 0 with it.
+      builder_.CreateCall(
+          vfree, {block, llvm::ConstantInt::get(usize_, 0),
+                  llvm::ConstantInt::get(builder_.getInt32Ty(), 0x8000)});
+      builder_.CreateBr(done);
+      builder_.SetInsertPoint(done);
+      builder_.CreateRetVoid();
+      return;
+    }
+
     builder_.SetInsertPoint(entry);
     llvm::Value* is_null =
         builder_.CreateICmpEQ(block, null_pointer(), "is_null");
@@ -1769,9 +2741,8 @@ class RuntimeBuilder {
 
     builder_.SetInsertPoint(release);
     builder_.CreateCall(
-        libc(windows_ ? "_aligned_free" : "free",
-             llvm::FunctionType::get(builder_.getVoidTy(),
-                                     {builder_.getPtrTy()}, false)),
+        libc("free", llvm::FunctionType::get(builder_.getVoidTy(),
+                                             {builder_.getPtrTy()}, false)),
         {block});
     builder_.CreateBr(done);
 

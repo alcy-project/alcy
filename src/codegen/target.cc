@@ -66,7 +66,7 @@ Target host_target() {
 }
 
 std::vector<std::string> target_names() {
-  return {"host", "wasm32-unknown-emscripten"};
+  return {"host", "wasm32-unknown-emscripten", "x86_64-pc-windows-msvc"};
 }
 
 std::optional<Target> target_from_name(std::string_view name) {
@@ -75,6 +75,9 @@ std::optional<Target> target_from_name(std::string_view name) {
   }
   if (name == "wasm32-unknown-emscripten") {
     return Target{std::string(name), ir::PointerWidth::W32};
+  }
+  if (name == "x86_64-pc-windows-msvc") {
+    return Target{std::string(name), ir::PointerWidth::W64};
   }
   return std::nullopt;
 }

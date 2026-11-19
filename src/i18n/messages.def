@@ -420,6 +420,7 @@
   F(PipelineCannotExecute, Error, Pipeline, "Cannot execute '{}'") \
   F(PipelineCannotInitPackage, Error, Pipeline, "Cannot init package '{}'") \
   F(PipelineCannotOptimize, Error, Pipeline, "Cannot optimize the module") \
+  F(PipelineCrossLinkDriverMissing, Error, Pipeline, "Cross-building for '{}' needs a linker driver; set 'linker' and 'link-args' in the package's .alcy/toolchain.toml") \
   F(PipelineCannotRead, Error, Pipeline, "Cannot read '{}'") \
   F(PipelineCannotReadSource, Error, Pipeline, "Cannot read source file '{}'") \
   F(PipelineCannotReadStandardInput, Error, Pipeline, "Cannot read standard input") \

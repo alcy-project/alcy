@@ -7,6 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -174,6 +175,10 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
                                                     const Target& target,
                                                     debug::Profiler* profiler,
                                                     bool freestanding) {
+  // A target the host links no C library for is one the optimizer
+  // may not synthesize calls against: no libc exists to answer them.
+  const bool no_libc =
+      freestanding || target.triple.find("windows") != std::string_view::npos;
   base::Result<void, ObjectEmitError> configured =
       configure_target(module, target);
   if (configured.is_err()) {
@@ -265,7 +270,7 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
   pb.registerModuleAnalyses(mam);
   pb.registerCGSCCAnalyses(cgam);
   pb.registerFunctionAnalyses(fam);
-  if (freestanding) {
+  if (no_libc) {
     // A freestanding program has no libc, so the pipeline may not invent
     // one: an inline byte scan must not turn into a `strlen` call.
     llvm::Triple triple(target.triple);

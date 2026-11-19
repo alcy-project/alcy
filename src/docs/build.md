@@ -96,6 +96,10 @@ To verify which CRT an artifact uses, inspect its directives, e.g.
 `MT_StaticRelease` / `MTd_StaticDebug` for alcy objects and LLVM libraries
 alike.
 
+`verify_static_linkage.py` checks the built binaries on every
+platform; on Windows it also refuses a dynamic UCRT/MSVCRT/VCRUNTIME
+import, so a build that slipped the static runtime shows up there.
+
 ## Troubleshooting
 
 - `gn gen` failures: make sure `gn` and `ninja` are on `PATH`

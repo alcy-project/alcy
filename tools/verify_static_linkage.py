@@ -22,6 +22,11 @@ LINUX_STDLIB_DYNAMIC_RE = re.compile(
     re.IGNORECASE,
 )
 
+WINDOWS_CRT_DYNAMIC_RE = re.compile(
+    r"(?:ucrtbase|msvcrt|vcruntime\d*)[^\s]*\.dll",
+    re.IGNORECASE,
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -128,6 +133,15 @@ def verify_binary(path: Path, target_platform: str) -> bool:
     if target_platform == "linux" and LINUX_STDLIB_DYNAMIC_RE.search(needed):
         print(
             f"error: C++ standard library is dynamically linked: {path}",
+            file=sys.stderr,
+        )
+        failed = True
+
+    # The Windows build uses the static CRT; a dynamic CRT import means
+    # one slipped in.
+    if target_platform == "windows" and WINDOWS_CRT_DYNAMIC_RE.search(needed):
+        print(
+            f"error: C runtime is dynamically linked: {path}",
             file=sys.stderr,
         )
         failed = True

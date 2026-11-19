@@ -216,8 +216,10 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   // into a context of their own by the thread that will use it. Carrying IR
   // across contexts by hand is not a path LLVM supports; this is.
   if (optimize_parts) {
-    return optimize_in_parts(split, workers_of(request),
-                             request.options.freestanding);
+    const bool no_libc =
+        request.options.freestanding ||
+        request.target.triple.find("windows") != std::string::npos;
+    return optimize_in_parts(split, workers_of(request), no_libc);
   }
   std::vector<std::vector<u8>> bitcode(split.size());
   std::vector<std::unique_ptr<llvm::LLVMContext>> contexts(split.size());

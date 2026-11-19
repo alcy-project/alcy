@@ -1386,6 +1386,26 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
       freestanding_ && triple_view.find("windows") == std::string_view::npos &&
       triple_view.find("darwin") == std::string_view::npos &&
       triple_view.find("wasm") == std::string_view::npos;
+  const bool windows_msvc =
+      triple_view.find("windows") != std::string_view::npos;
+  if (windows_msvc) {
+    // The kernel calls the entry with no arguments and the static C
+    // library is not there to gather them; the runtime does it from
+    // the command line before the program starts.
+    llvm::FunctionType* start_type =
+        llvm::FunctionType::get(builder_->getVoidTy(), false);
+    llvm::Function* wrapper = llvm::Function::Create(
+        start_type, llvm::Function::ExternalLinkage, "_start", module_);
+    llvm::BasicBlock* entry_block =
+        llvm::BasicBlock::Create(context, "", wrapper);
+    builder_->SetInsertPoint(entry_block);
+    llvm::FunctionCallee init_args = module_->getOrInsertFunction(
+        "alcy_init_args",
+        llvm::FunctionType::get(builder_->getVoidTy(), false));
+    builder_->CreateCall(init_args);
+    emit_entry_body(wrapper, entry_function, entry_return);
+    return;
+  }
   if (elf_entry) {
     // A naked trampoline: read argc and argv off the initial stack
     // into the registers main's ABI expects, then call the outer
@@ -1476,6 +1496,9 @@ void LlvmIrEmitter::emit_entry_body(llvm::Function* wrapper,
                                     ir::TypeIdx entry_return) {
   const ir::TypeTag ret = storage_->types()[entry_return.idx].tag;
   llvm::LLVMContext& context = module_->getContext();
+  const std::string_view triple_view = triple_;
+  const bool windows_msvc =
+      triple_view.find("windows") != std::string_view::npos;
   builder_->SetInsertPoint(&wrapper->getEntryBlock());
   // A result past the direct limit crosses in a slot the wrapper owns,
   // so the exit code reads it out of memory.
@@ -1495,6 +1518,37 @@ void LlvmIrEmitter::emit_entry_body(llvm::Function* wrapper,
         builder_->getInt32Ty(),
         builder_->CreateStructGEP(type(entry_return), result_slot, 0));
   };
+  // A windows target always exits through ExitProcess: the freestanding
+  // flag carries no other meaning there, and the syscall exit below is
+  // the Linux sequence.
+  if (windows_msvc) {
+    llvm::Value* code = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
+    if (ret == ir::TypeTag::I32) {
+      code = result;
+    } else if (ret == ir::TypeTag::Enum) {
+      llvm::Value* tag = result_tag();
+      llvm::Value* is_ok = builder_->CreateICmpEQ(
+          tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
+      code = builder_->CreateSelect(
+          is_ok, llvm::ConstantInt::get(builder_->getInt32Ty(), 0),
+          llvm::ConstantInt::get(builder_->getInt32Ty(), 1));
+      llvm::BasicBlock* ok_block =
+          llvm::BasicBlock::Create(context, "", wrapper);
+      llvm::BasicBlock* err_block =
+          llvm::BasicBlock::Create(context, "", wrapper);
+      builder_->CreateCondBr(is_ok, ok_block, err_block);
+      builder_->SetInsertPoint(err_block);
+      if (!emit_stderr_message("main returned Err\n")) {
+        DCHECK_MSG(false, "windows stderr on an unsupported target");
+      }
+      builder_->CreateBr(ok_block);
+      builder_->SetInsertPoint(ok_block);
+    }
+    if (!emit_exit_windows(code)) {
+      DCHECK_MSG(false, "windows exit on an unsupported target");
+    }
+    return;
+  }
   if (freestanding_) {
     // The exit status is the i32 main returned; an enum main exits
     // nonzero on a variant other than the first, and `()` exits zero.
@@ -1586,6 +1640,42 @@ void LlvmIrEmitter::emit_entry_body(llvm::Function* wrapper,
 // so one shape covers every output kind: a syscall never returns, so
 // the call is immediately unreachable.
 bool LlvmIrEmitter::emit_stderr_message(llvm::StringRef message) {
+  const std::string_view triple_check = triple_;
+  if (triple_check.find("windows") != std::string_view::npos) {
+    // GetStdHandle(-12) is stderr; the kernel writes the bytes and
+    // nothing sees a C library.
+    llvm::FunctionType* get_std_type = llvm::FunctionType::get(
+        builder_->getPtrTy(), {builder_->getInt32Ty()}, false);
+    llvm::FunctionCallee get_std =
+        module_->getOrInsertFunction("GetStdHandle", get_std_type);
+    llvm::Value* handle = builder_->CreateCall(
+        get_std, {llvm::ConstantInt::get(builder_->getInt32Ty(), -12, true)},
+        "stderr");
+    llvm::AllocaInst* slot =
+        builder_->CreateAlloca(builder_->getInt32Ty(), nullptr, "written");
+    builder_->CreateStore(llvm::ConstantInt::get(builder_->getInt32Ty(), 0),
+                          slot);
+    llvm::FunctionType* write_file_type = llvm::FunctionType::get(
+        builder_->getInt32Ty(),
+        {builder_->getPtrTy(), builder_->getPtrTy(), builder_->getInt32Ty(),
+         builder_->getPtrTy(), builder_->getPtrTy()},
+        false);
+    llvm::FunctionCallee write_file =
+        module_->getOrInsertFunction("WriteFile", write_file_type);
+    llvm::GlobalVariable* global =
+        builder_->CreateGlobalString(message, "", 0, module_);
+    llvm::Value* zero = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
+    llvm::SmallVector<llvm::Value*, 2> indices{zero, zero};
+    llvm::Value* bytes =
+        builder_->CreateInBoundsGEP(global->getValueType(), global, indices);
+    builder_->CreateCall(
+        write_file,
+        {handle, bytes,
+         llvm::ConstantInt::get(builder_->getInt32Ty(),
+                                static_cast<u32>(message.size())),
+         slot, llvm::ConstantPointerNull::get(builder_->getPtrTy())});
+    return true;
+  }
   const std::string arch = triple_.substr(0, triple_.find('-'));
   const char* text = nullptr;
   const char* constraints = nullptr;
@@ -1619,6 +1709,15 @@ bool LlvmIrEmitter::emit_stderr_message(llvm::StringRef message) {
   llvm::Value* wide_fd = builder_->CreateSExt(fd, word);
   llvm::Value* wide_len = builder_->CreateSExt(len, word);
   builder_->CreateCall(call, {wide_fd, bytes, wide_len});
+  return true;
+}
+
+bool LlvmIrEmitter::emit_exit_windows(llvm::Value* code32) {
+  llvm::FunctionCallee quit = module_->getOrInsertFunction(
+      "ExitProcess", llvm::FunctionType::get(builder_->getVoidTy(),
+                                             {builder_->getInt32Ty()}, false));
+  builder_->CreateCall(quit, {code32});
+  builder_->CreateUnreachable();
   return true;
 }
 

@@ -212,6 +212,7 @@ class LlvmIrEmitter {
   // Answers false for a target with no sequence here, which the
   // pipeline refuses before emission.
   bool emit_exit(llvm::Value* code32);
+  bool emit_exit_windows(llvm::Value* code32);
   bool emit_stderr_message(llvm::StringRef message);
 
   llvm::Module* module_;

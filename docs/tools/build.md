@@ -92,6 +92,16 @@ value becomes the process's exit code. Linux hosted builds always
 link this way, so the flag names the same link on platforms whose
 hosted build still uses a C runtime.
 
+A Windows hosted build links `kernel32.dll` and nothing else: no
+startup objects, no C runtime, no UCRT. The compiler emits `_start` as
+the entry; it gathers the process arguments from `GetCommandLineW`
+before the program starts, and the process ends through `ExitProcess`.
+`alcy-test`, `alcy build` and `alcy run` all get the same link; no
+flag selects it. A non-Windows host cannot link a Windows target by
+itself: `--target x86_64-pc-windows-msvc` there needs `linker` and
+`link-args` naming a Windows linker and the library paths in the
+package's `.alcy/toolchain.toml`.
+
 ### The profile file
 
 ```toml

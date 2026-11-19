@@ -637,6 +637,16 @@ base::Result<void, diag::Reported> link_executable(
   // in-process where the build has it and the host's startup inputs are
   // found. The startup probe is one-time and reads the host's files, so
   // it gets its own row in a time trace.
+  // The embedded linker links what the host can run, and nothing else:
+  // another target's objects belong to a driver that knows how to name
+  // them and the libraries around them.
+  const bool cross_target = ctx.target.triple != codegen::host_triple();
+  if (link.driver.empty() && cross_target) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineCrossLinkDriverMissing>(
+        DiagCode::LinkError, ctx.target.triple);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
   if (link.driver.empty()) {
     bool ready = false;
     {
@@ -650,6 +660,10 @@ base::Result<void, diag::Reported> link_executable(
   }
   const std::string driver =
       link.driver.empty() ? "clang" : std::string(link.driver);
+  // A raw MSVC-style driver speaks `/OUT:` rather than `-o`, and
+  // nothing else it does resembles a compiler's command line.
+  const bool direct = driver.find("lld-link") != std::string::npos ||
+                      driver == "link" || driver == "link.exe";
   // The driver's own arguments follow the object, where a library is
   // resolved against it, and stop short of the output, which stays the
   // last word.
@@ -662,7 +676,28 @@ base::Result<void, diag::Reported> link_executable(
   for (std::string_view argument : link.args) {
     argv.emplace_back(argument);
   }
-  if (link.freestanding) {
+  const bool target_is_windows =
+      ctx.target.triple.find("windows") != std::string_view::npos;
+  if (target_is_windows) {
+    // The kernel is the only library: no startup objects, no C
+    // runtime, and the object's `_start` is the entry the loader
+    // calls. A compiler-style driver takes the switches as
+    // `-Xlinker` flags it hands straight to the underlying MSVC-style
+    // linker; a raw MSVC-style driver takes them as they are, with the
+    // library's path left to the caller.
+    if (direct) {
+      argv.emplace_back("/nodefaultlib");
+      argv.emplace_back("/entry:_start");
+      argv.emplace_back("/subsystem:console");
+    } else {
+      argv.emplace_back("-nostdlib");
+      argv.emplace_back("-Xlinker");
+      argv.emplace_back("/entry:_start");
+      argv.emplace_back("-Xlinker");
+      argv.emplace_back("/subsystem:console");
+      argv.emplace_back("kernel32.lib");
+    }
+  } else if (link.freestanding) {
     // No startup files and no C library; the object's `_start` is the
     // entry. `-static` keeps the driver from asking for a loader the
     // program has no symbols for.
@@ -670,8 +705,12 @@ base::Result<void, diag::Reported> link_executable(
     argv.emplace_back("-static");
     argv.emplace_back("-Wl,-e,_start");
   }
-  argv.emplace_back("-o");
-  argv.emplace_back(exe_path);
+  if (direct) {
+    argv.emplace_back("/OUT:" + exe_path);
+  } else {
+    argv.emplace_back("-o");
+    argv.emplace_back(exe_path);
+  }
 
   base::Result<SpawnOutcome, SpawnError> linked = run_command(argv);
   if (linked.is_err()) {

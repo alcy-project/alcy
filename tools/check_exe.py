@@ -227,6 +227,33 @@ def run_tool(args: list[str]) -> str:
     return proc.stdout
 
 
+def foreign_imports(exe: Path) -> list[str]:
+    """What a produced image imports beyond its kernel.
+
+    A program the compiler links carries no C runtime on Linux or
+    Windows: an import table with anything but the kernel means the
+    system C library crept in. A Mach-O image keeps libSystem, which is
+    the one sanctioned route there, so it is not judged here.
+    """
+    headers = run_tool(["llvm-readobj", "--file-headers", str(exe)])
+    if "COFF" not in headers and "elf" not in headers.lower():
+        return []
+    out = run_tool(["llvm-readobj", "--needed-libs", str(exe)])
+    libs = []
+    in_block = False
+    for raw in out.splitlines():
+        line = raw.strip()
+        if line.startswith("NeededLibraries"):
+            in_block = True
+            continue
+        if in_block:
+            if line == "]" or not line:
+                continue
+            libs.append(line)
+    allowed = {"kernel32.dll"}
+    return [lib for lib in libs if lib.lower() not in allowed]
+
+
 def image_facts(exe: Path) -> str:
     """What a failed walk resolution needs read back from the image.
 
@@ -494,6 +521,12 @@ def run_case(
                     f"--- build stdout ---\n{proc.stdout}"
                     f"--- build stderr ---\n{proc.stderr}"
                 )
+            if not sanitize:
+                foreign = foreign_imports(exe_path)
+                if foreign:
+                    return False, (
+                        "image imports beyond the kernel: " + ", ".join(foreign)
+                    )
 
             try:
                 proc = subprocess.run(
@@ -649,10 +682,11 @@ def main():
         if args.cases
         else None
     )
-    # A freestanding program is Linux's syscall ABI and an `_start` the
-    # kernel enters; another host's pipeline refuses the target, which is
-    # the compiler working rather than the case failing.
-    runs_freestanding = sys.platform.startswith("linux")
+    # A freestanding program owns its entry and links no C runtime;
+    # the Windows build supports the same kernel-only link, and the
+    # macOS host cannot, so the freestanding cases stay Linux and
+    # Windows.
+    runs_freestanding = not sys.platform.startswith("darwin")
     # A case is a subprocess pipeline of its own -- the compiler, the
     # system link, the run -- so the pool waits on processes rather than
     # holding the interpreter, and the order the cases finish in is the
