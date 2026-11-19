@@ -30,10 +30,13 @@ gap conform, the run says so, and the entry can become a plain
 expectation.
 """
 
+import concurrent.futures
+import os
 import re
 import subprocess
 import sys
 import tempfile
+from functools import partial
 from pathlib import Path
 
 from utils.env import run_environment
@@ -1315,12 +1318,14 @@ def main():
     broken = []
     fixed = []
     total = 0
+    jobs = min(os.cpu_count() or 2, 8)
     with tempfile.TemporaryDirectory(prefix="alcy_borrow_sweep_") as tmp:
         workdir = Path(tmp)
-        for case in CASES:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            ran = list(pool.map(partial(run_case, alcy, workdir), CASES))
+        for case, (got, reason) in zip(CASES, ran, strict=True):
             total += 1
             group, name, expect, known, _ = case
-            got, reason = run_case(alcy, workdir, case)
             agrees = got == expect
             if not agrees and got == "reject" and not is_borrow_diagnostic(reason):
                 broken.append((group, name, expect, got, reason))

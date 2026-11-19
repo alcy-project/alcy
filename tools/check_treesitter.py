@@ -26,6 +26,8 @@ exit code of `alcy check` on each file.
 """
 
 import argparse
+import concurrent.futures
+import os
 import shutil
 import subprocess
 import sys
@@ -172,7 +174,7 @@ def unread(paths: list[Path]) -> set[Path]:
 
 
 def compiler_verdicts(alcy: Path) -> dict[Path, bool]:
-    """What `alcy check` says about each source, one run per case.
+    """What `alcy check` says about each source.
 
     A directory holding an `alcy.toml` is a package, and its files name each
     other, so the package is what has an accept or a reject; a lone file is
@@ -180,19 +182,24 @@ def compiler_verdicts(alcy: Path) -> dict[Path, bool]:
     than to one of them, which errs towards calling a file accepted and
     therefore towards asking more of the grammar.
     """
-    verdicts: dict[Path, bool] = {}
+    groups: dict[Path, list[Path]] = {}
     for path in alcy_sources():
-        case = path.parent
-        if case in verdicts:
-            continue
-        if (case / "alcy.toml").is_file():
-            result = run([str(alcy), "check", "."], cwd=case)
-            for member in case.rglob("*.al"):
-                verdicts[member] = result.returncode == 0
-        else:
-            verdicts[path] = (
-                run([str(alcy), "check", "--file", str(path)]).returncode == 0
-            )
+        groups.setdefault(path.parent, []).append(path)
+
+    def work(case_dir: Path, members: list[Path]) -> list[tuple[Path, bool]]:
+        if (case_dir / "alcy.toml").is_file():
+            ok = run([str(alcy), "check", "."], cwd=case_dir).returncode == 0
+            return [(member, ok) for member in case_dir.rglob("*.al")]
+        return [
+            (member, run([str(alcy), "check", "--file", str(member)]).returncode == 0)
+            for member in members
+        ]
+
+    verdicts: dict[Path, bool] = {}
+    jobs = min(os.cpu_count() or 2, 8)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        for result in pool.map(work, groups.keys(), groups.values()):
+            verdicts.update(result)
     return verdicts
 
 
