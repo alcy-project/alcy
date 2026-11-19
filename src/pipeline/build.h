@@ -133,12 +133,12 @@ struct BuildResult {
 // failed. `cached` says the target's frontend was served from the
 // build cache, so a caller can stay silent about it.
 struct BuildProgressObserver {
-  void* ctx = nullptr;
-  void (*begin)(void* ctx,
+  const void* ctx = nullptr;
+  void (*begin)(const void* ctx,
                 std::string_view name,
                 usize count,
                 bool suite) = nullptr;
-  void (*member_done)(void* ctx,
+  void (*member_done)(const void* ctx,
                       std::string_view member,
                       u64 duration_ns,
                       bool cached) = nullptr;

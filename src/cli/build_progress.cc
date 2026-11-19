@@ -68,11 +68,11 @@ void BuildProgress::member_done(std::string_view member,
 
 namespace {
 
-void begin_fn(void* ctx, std::string_view name, usize count, bool suite) {
+void begin_fn(const void* ctx, std::string_view name, usize count, bool suite) {
   static_cast<const BuildProgress*>(ctx)->begin(name, count, suite);
 }
 
-void member_done_fn(void* ctx,
+void member_done_fn(const void* ctx,
                     std::string_view member,
                     u64 duration_ns,
                     bool cached) {
@@ -85,7 +85,7 @@ void member_done_fn(void* ctx,
 pipeline::BuildProgressObserver build_progress_observer(
     const BuildProgress& progress) {
   return pipeline::BuildProgressObserver{
-      .ctx = const_cast<BuildProgress*>(&progress),
+      .ctx = &progress,
       .begin = &begin_fn,
       .member_done = &member_done_fn,
   };
