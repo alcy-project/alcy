@@ -1,62 +1,23 @@
-# Project Context
+# Context
 
-This workspace contains `alcy`, a high-performance programming language compiler written in C++.
+`alcy` is an AOT C++20 compiler (no interpreter/runtime).
 
-## What alcy is not
+- **Host:** Linux (`x86_64`), macOS (`aarch64`), Windows (`x64`).
+- **Targets:** Native binaries (LLVM), WASI (`--backend=direct-wasm`), `wasm32-unknown-emscripten`. Freestanding builds need no `libc` (see `README.md`, "What alcy is", and `docs/spec/ffi.md`).
 
-It is not Linux-only: the compiler builds and tests for Linux (x86_64), macOS (aarch64), and Windows (x64), and `wasm32-unknown-emscripten` is a supported output target. Output is a stand-alone native binary (LLVM) or a WebAssembly module (`--backend=direct-wasm`, alcy's own WASI emitter); there is no interpreter or runtime to ship. A freestanding build needs no C runtime and no libc; see `README.md`, "What alcy is", and `docs/spec/ffi.md`.
+# Docs
 
-# Reference Documentation
+- **Always read first:** `CONTRIBUTING.md` (`build.py`, `lint.py`, formatting, commits).
+- **Read as needed:** `src/docs/architecture.md` (pipeline, IR, modules), `docs/spec/` (language rules; the record a change is reviewed against — a change that revisits a rule amends it), `docs/backlog.md`, `docs/roadmap.md`.
 
-Read `CONTRIBUTING.md` before any work in this repository: workflow
-scripts (`build.py`, `lint.py`), tooling setup, formatting, and commit
-conventions.
+# C++20 & Style Rules
 
-From there, read the documentation the work needs rather than all of it:
+- **Idioms & Memory:** Use C++20 (`std::span`, `std::optional`, concepts, designated initializers). Enforce value semantics or smart pointers (`unique_ptr`/`shared_ptr`); no raw `new`/`delete`. Default to `const` and pure functions.
+- **No Exceptions / No RTTI:** Built with `-fno-exceptions -fno-rtti`. Never use `try`/`catch`/`throw`, `dynamic_cast`, or RTTI. Report errors via `std::optional`, `Result`, `AutoTaggedUnion`, or diagnostic handlers. Assert internal invariants with `DCHECK()` or `src/base/` & `src/debug/` logging.
+- **Comments:** Prefer self-documenting types/names. Keep comments concise and maintenance-focused. Do not justify, narrate, or restate obvious code; never leak session/prompt context (BAD: `// No std::filesystem, we don't use it here`, `// Per user request`, `// Omitted X`).
 
-- `src/docs/architecture.md`: the pipeline, the intermediate
-  representation, LLVM integration, and the repository structure - the
-  map for work that touches the compiler itself.
-- `docs/spec/`: what a program is written against, as opposed to how
-  the compiler happens to implement it. The specification is the record a
-  change is reviewed against; a change that revisits a rule amends it.
-- `docs/backlog.md` and `docs/roadmap.md`: the open work, and the
-  foundations it stands on.
+# Code Generation & Workflow
 
-# Code Quality & Refactoring Directives
-
-- **Modern & Idiomatic C++20**:
-  - Target C++20 features (e.g., `std::span`, `std::optional`, concepts, designated initializers).
-  - Enforce explicit ownership using value semantics, `std::unique_ptr`, or `std::shared_ptr`. Avoid manual memory management (`new`/`delete`).
-  - Keep functions pure and side-effect-free where possible. Prefer `const` by default for variables, members, and methods.
-- **Mechanical & Structural Refactoring**:
-  - Prefer `ast-grep` over manual edits for repetitive, structural, or mechanical code transformations.
-- **Error Handling & Constraints**:
-  - The project builds with `-fno-exceptions` and `-fno-rtti`. **Do not use `try`, `catch`, `throw`, `dynamic_cast`, or RTTI.**
-  - Use explicit, zero-overhead error reporting abstractions (e.g., `std::optional`, custom `Result`/`AutoTaggedUnion` types, or diagnostic handlers) instead of exceptions.
-  - Use assertions (`DCHECK()`) or diagnostic logging (`src/base/`, `src/debug/`) for internal compiler invariant failures.
-- **Signal-to-Noise Ratio in Comments**:
-  - **No Session or Metacognitive Leakage**: NEVER write comments that reference the prompt, chat session, negative decisions, or omitted alternatives (e.g., BAD: `// No std::filesystem, we don't use it here`, `// Per user instruction`). Write comments purely from the perspective of long-term codebase maintenance.
-  - **No Over-Explanation or Justifications**: Do not write multi-line defenses or excuses for obvious code choices.
-  - **Avoid Redundant Comments**: Do not restate what the C++ code clearly expresses (e.g., `// constructor`, `// push to vector`, `// return status`).
-- **Self-Documenting Code**: Prefer expressive namespaces, functions, type aliases, and strong types over heavy block comments.
-
-# Token & Tool Execution Directives
-
-To optimize token efficiency and execution speed:
-
-- **Silent Success & Isolated Output**:
-  - Direct output to a clear log name under `/tmp/` that names the worktree or branch and the check, not the console; parallel checkouts then keep separate logs.
-    (example: `LOG="/tmp/alcy-<branch>-lint.log"; uv run tools/lint.py > $LOG 2>&1 || tail -n 50 $LOG`)
-- **Precision Search & Diffing**:
-  - Use `-l` with `rg` to list matching files first: `rg "pattern" src/ -l`.
-  - Cap search results using pipe limiters: `rg "pattern" src/ | head -n 30`.
-  - Check change volume with `git diff --stat` before fetching detailed file diffs.
-- **Batch Refactoring via `ast-grep`**:
-  - Use `ast-grep` one-liners for structural, repetitive transformations instead of making multiple iterative manual edits.
-
-# Code Generation Directives
-
-- Respect module boundaries inside `src/*` and adhere strictly to the linear pipeline flow defined in `src/docs/architecture.md`.
-- Ensure new files include the project license header and have corresponding target entries in their module's `BUILD.gn`.
-- Code generation, comments, documentation, and commit messages must be written in English.
+- **Boundaries & Build:** Obey `src/*` module boundaries and the linear pipeline in `src/docs/architecture.md`. Add license headers and `BUILD.gn` entries to all new files. Use English for all code, comments, docs, and commits.
+- **Logs:** Redirect verbose tool output to `/tmp/alcy-<branch>-<check>.log` (e.g., `LOG="/tmp/alcy-<branch>-lint.log"; uv run tools/lint.py > "$LOG" 2>&1 || tail -n 50 "$LOG"`).
+- **Search & Edit:** Scope searches with `rg "pattern" src/ -l` and `| head -n 30`. Check `git diff --stat` before full diffs. Prefer `ast-grep` over manual edits for repetitive structural changes.
