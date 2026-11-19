@@ -41,6 +41,12 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Build output directory to inspect.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print every binary and its dynamic libraries; the default "
+        "reports only whether the run held.",
+    )
     return parser.parse_args()
 
 
@@ -108,16 +114,19 @@ def get_needed_libraries(path: Path) -> str:
     return result.stdout
 
 
-def verify_binary(path: Path, target_platform: str) -> bool:
-    print(f"==> {path}")
+def verify_binary(path: Path, target_platform: str, verbose: bool) -> bool:
+    if verbose:
+        print(f"==> {path}")
 
     needed = get_needed_libraries(path)
 
     if not needed.strip():
-        print("No dynamic libraries found.")
+        if verbose:
+            print("No dynamic libraries found.")
         return True
 
-    print(needed, end="" if needed.endswith("\n") else "\n")
+    if verbose:
+        print(needed, end="" if needed.endswith("\n") else "\n")
 
     failed = False
 
@@ -153,8 +162,9 @@ def main() -> int:
     args = parse_args()
     target_platform = detect_platform()
 
-    print(f"Platform: {target_platform}")
-    print(f"Build directory: {args.build_dir}")
+    if args.verbose:
+        print(f"Platform: {target_platform}")
+        print(f"Build directory: {args.build_dir}")
 
     if not args.build_dir.is_dir():
         print(
@@ -162,6 +172,8 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    verbose = args.verbose
 
     if shutil.which("file") is None:
         print("error: 'file' was not found in PATH", file=sys.stderr)
@@ -192,7 +204,7 @@ def main() -> int:
             continue
 
         checked += 1
-        if not verify_binary(path, target_platform):
+        if not verify_binary(path, target_platform, verbose):
             failed = True
 
     if checked == 0:
