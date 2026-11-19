@@ -631,6 +631,26 @@ body.site {
 }
 
 @media (max-width: 760px) {
+  /* A phone fits the header on one line only with tighter spacing and
+     smaller labels; CJK labels are as wide as the ASCII beside them. */
+  .site-header {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .site-brand {
+    font-size: 16px;
+  }
+
+  .site-nav {
+    gap: 10px;
+  }
+
+  .site-nav a,
+  .site-nav .site-search-open {
+    font-size: 12px;
+  }
+
   .guide-layout {
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;
