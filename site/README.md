@@ -22,7 +22,8 @@ that directory to GitHub Pages.
   names its cache from that file, so a deploy retires the old cache on
   the next page load. The playground's editor and the guide's
   build-time highlighting share `shared/highlight.ts`, and
-  `shared/i18n.ts` is the catalog both trees are cut from. The guide's
+  `shared/catalog.json` is the catalog both trees are cut from; the
+  build generates one TypeScript module per language beside it. The guide's
   code blocks are two modules: `guide-copy.ts` reveals the row and
   wires Copy on every block, and `guide.ts` adds Run and Edit, with the
   edit colored by the same tree-sitter grammar the playground uses,
@@ -37,12 +38,14 @@ that directory to GitHub Pages.
   too; the launch scripts resolve the page's assets against their own
   URL, so a page in another language's tree finds the one set of assets.
   Its own README covers the page and the compiler module it expects.
-- `ssg/` - the generator: a parser for the Markdown subset the guide is
-  written in, the page shell, the link audit, the build-time
-  highlighter, and the template stamper. Its tests are in `ssg/test/`.
-- `tsconfig.json`, `tsconfig.workers.json`, `tsconfig.ssg.json` - the
-  three builds: the pages (DOM), the playground's two workers
-  (WebWorker), and the generator (Bun).
+
+The generator itself is not TypeScript: it is the C++ module under
+`../src/ssg/`, built as the `alcy-docsite` binary — a parser for the
+Markdown subset the guide is written in, the page shell, the link
+audit, the build-time highlighter, and the template stamper. Its
+tests are in `../src/tests/ssg/`. `tsconfig.json` and
+`tsconfig.workers.json` are the two remaining TypeScript builds: the
+pages (DOM) and the playground's two workers (WebWorker).
 
 The guide's sources live outside the site, under `docs/guide/`, named
 `NN-slug.md`: the number is the reading order, the `# heading` is the
@@ -63,7 +66,7 @@ commit (`ALCY_BUILD_STAMP` lets CI hand the tag down).
 Every page exists once per language. English is the tree at the site
 root; each other language lives under its prefix, so `/ja/guide/...` is
 the Japanese guide and `/ja/playground/` its playground. The generator
-stamps the labels from `shared/i18n.ts` at build time and the header
+stamps the labels from `shared/catalog.json` at build time and the header
 links to the same page in the other tree, which means no page renders in
 the wrong language first and the guide reads without JavaScript. The
 compiled assets (`shared/`, `playground/`) stay in one place; only the
@@ -76,14 +79,12 @@ of our own. Everything below is a property of the built HTML and of what
 the page names, so a change that breaks one breaks it in production and
 nowhere earlier.
 
-- **The page reads without JavaScript.** The generator stamps the
-  article, the highlighting, the labels, and the language; scripts only
-  reveal controls and wire them. `ssg/test/no-js.test.ts` holds this:
-  every character of the text is in the document, nothing that needs a
-  script to work is shown, and no styling comes from a script. The tests
-  that hold a page's contract (`no-js`, `a11y`, `render`) read the
-  page through one description in `ssg/test/page.ts` — its text, the
-  modules it names, the names of its landmarks — so a property is stated
+- **The page reads without JavaScript.** The generator stamps the article, the
+  highlighting, the labels, and the language; scripts only reveal controls and
+  wire them. the doctests under `../src/tests/ssg/` hold this: every character
+  of the text is in the document, nothing that needs a script to work is shown,
+  and no styling comes from a script. the render and header tests state a page's
+  contract — its modules, its landmarks, its language — so a property is stated
   once and a template change is answered in one place.
 - **The first paint needs nothing but the HTML.** `boot.js` is inlined
   into every head and resolves the theme before the body paints, so a
@@ -102,8 +103,8 @@ nowhere earlier.
   compiler module is the exception: its size belongs to the compiler, so
   it is held to a ceiling that catches a change in its size class rather
   than a ratchet that trips on every compiler feature.
-- **One catalog per tree, one copy of the assets.** `i18n.ts` is the
-  source; the build writes `i18n.<lang>.js` and stamps each tree's
+- **One catalog per tree, one copy of the assets.** `catalog.json` is
+  the source; the build writes `i18n.<lang>.js` and stamps each tree's
   modules to import its own, so a page never carries the other
   language's strings. The compiled assets stay at the root, and every
   tree fetches them from there.
@@ -123,8 +124,8 @@ nowhere earlier.
   come from the elements, the navigation and the search carry names, the
   search dialog announces its result count through a live region, and a
   control that ships hidden is a real button that appears in the tab
-  order the moment it is shown. `ssg/test/a11y.test.ts` holds the markup
-  contract.
+  order the moment it is shown. The header and settings doctests under
+  `../src/tests/ssg/` hold the markup contract.
 - **Offline is a cache, not a rewrite.** The service worker caches the
   shell and the assets by name and leaves navigations to the network
   first, so a deploy is seen on the next load and an old cache is retired
@@ -139,11 +140,19 @@ uv run ./tools/site.py budget         # check the built pages' weight
 uv run ./tools/site.py serve          # http://127.0.0.1:8000/
 ```
 
-`build` needs `bun` and `tree-sitter` on `PATH` (the versions in
-`config.toml` are installed into `out/site-cache/`). Every `alcy` fence
-in the guide is compiled with the playground's wasm module and every
-link is audited; a fence that does not compile or a link that goes
-nowhere fails the build.
+`build` assembles nothing until the generator is built:
+
+```sh
+uv run ./tools/build.py --target=src/ssg:docsite \
+  --mode=release --build-subdir=docsite
+```
+
+`tree-sitter` (the CLI, for the grammar wasm) and `bun` (TypeScript
+and `web-tree-sitter`, the versions in `config.toml` installed into
+`out/site-cache/`) stay on `PATH` for the playground. Every `alcy`
+fence in the guide is compiled by the generator itself, through the
+compiler the binary links, and every link is audited; a fence that
+does not compile or a link that goes nowhere fails the build.
 
 On the page, every code block can be copied, and the `alcy` ones can be
 run and edited in place. The compiler is the playground's wasm module

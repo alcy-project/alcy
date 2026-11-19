@@ -23,6 +23,7 @@ namespace {
 // error, not a best-effort parse.
 struct Json {
   const char* cursor;
+  const char* begin;
 
   void skip_ws() {
     while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' ||
@@ -32,14 +33,14 @@ struct Json {
   }
 
   std::string error_at(std::string_view message) const {
-    return std::string(message) + " at offset " +
-           std::to_string(0 /* unused */);
+    return std::string(message) + " at byte " +
+           std::to_string(static_cast<usize>(cursor - begin));
   }
 
   base::Result<std::string, std::string> parse_string() {
     skip_ws();
     if (*cursor != '"') {
-      return base::make_err(std::string("expected a string"));
+      return base::make_err(error_at("expected a string"));
     }
     cursor++;
     std::string out;
@@ -70,10 +71,17 @@ struct Json {
               } else if (hex >= 'A' && hex <= 'F') {
                 code |= static_cast<u32>(hex - 'A' + 10);
               } else {
-                return base::make_err(std::string("bad \\u escape"));
+                return base::make_err(error_at("bad \\u escape"));
               }
             }
             cursor += 4;
+            // A surrogate half names no character; UTF-8 encodes one
+            // code point per escape and the catalog writes the rest
+            // literally.
+            if (code >= 0xD800 && code <= 0xDFFF) {
+              return base::make_err(
+                  error_at("a surrogate escape does not name a character"));
+            }
             if (code < 0x80) {
               out += static_cast<char>(code);
             } else if (code < 0x800) {
@@ -86,7 +94,7 @@ struct Json {
             }
             break;
           }
-          default: return base::make_err(std::string("bad escape in a string"));
+          default: return base::make_err(error_at("bad escape in a string"));
         }
         cursor++;
         continue;
@@ -95,7 +103,7 @@ struct Json {
       cursor++;
     }
     if (*cursor != '"') {
-      return base::make_err(std::string("unterminated string"));
+      return base::make_err(error_at("unterminated string"));
     }
     cursor++;
     return base::make_ok(std::move(out));
@@ -104,7 +112,7 @@ struct Json {
   base::Result<std::vector<std::string>, std::string> parse_string_array() {
     skip_ws();
     if (*cursor != '[') {
-      return base::make_err(std::string("expected an array"));
+      return base::make_err(error_at("expected an array"));
     }
     cursor++;
     std::vector<std::string> items;
@@ -128,7 +136,7 @@ struct Json {
         cursor++;
         return base::make_ok(std::move(items));
       }
-      return base::make_err(std::string("expected , or ] in an array"));
+      return base::make_err(error_at("expected , or ] in an array"));
     }
   }
 
@@ -137,7 +145,7 @@ struct Json {
   parse_string_map() {
     skip_ws();
     if (*cursor != '{') {
-      return base::make_err(std::string("expected an object"));
+      return base::make_err(error_at("expected an object"));
     }
     cursor++;
     std::unordered_map<std::string, std::string> table;
@@ -153,7 +161,7 @@ struct Json {
       }
       skip_ws();
       if (*cursor != ':') {
-        return base::make_err(std::string("expected : after a key"));
+        return base::make_err(error_at("expected : after a key"));
       }
       cursor++;
       base::Result<std::string, std::string> value = parse_string();
@@ -170,7 +178,7 @@ struct Json {
         cursor++;
         return base::make_ok(std::move(table));
       }
-      return base::make_err(std::string("expected , or } in an object"));
+      return base::make_err(error_at("expected , or } in an object"));
     }
   }
 };
@@ -221,11 +229,12 @@ base::Result<Catalog, std::string> load_catalog(const std::string& path) {
   std::ostringstream bytes;
   bytes << input.rdbuf();
   const std::string source = bytes.str();
-  Json json{source.c_str()};
+  Json json{source.c_str(), source.c_str()};
 
   json.skip_ws();
   if (*json.cursor != '{') {
-    return base::make_err(std::string("the catalog must open with an object"));
+    return base::make_err(
+        json.error_at("the catalog must open with an object"));
   }
   json.cursor++;
   Catalog catalog;
@@ -242,7 +251,7 @@ base::Result<Catalog, std::string> load_catalog(const std::string& path) {
     const std::string name = std::move(key).unwrap();
     json.skip_ws();
     if (*json.cursor != ':') {
-      return base::make_err(std::string("expected : after a top-level key"));
+      return base::make_err(json.error_at("expected : after a top-level key"));
     }
     json.cursor++;
     if (name == "languages") {
@@ -267,7 +276,7 @@ base::Result<Catalog, std::string> load_catalog(const std::string& path) {
       json.skip_ws();
       if (*json.cursor != '{') {
         return base::make_err(
-            std::string("messages must be an object of objects"));
+            json.error_at("messages must be an object of objects"));
       }
       json.cursor++;
       while (true) {
@@ -283,7 +292,8 @@ base::Result<Catalog, std::string> load_catalog(const std::string& path) {
         const std::string language = std::move(language_key).unwrap();
         json.skip_ws();
         if (*json.cursor != ':') {
-          return base::make_err(std::string("expected : after a language key"));
+          return base::make_err(
+              json.error_at("expected : after a language key"));
         }
         json.cursor++;
         auto table = json.parse_string_map();
@@ -300,7 +310,7 @@ base::Result<Catalog, std::string> load_catalog(const std::string& path) {
           json.cursor++;
           break;
         }
-        return base::make_err(std::string("expected , or } in messages"));
+        return base::make_err(json.error_at("expected , or } in messages"));
       }
     } else {
       return base::make_err("unknown top-level key: " + name);
@@ -314,16 +324,16 @@ base::Result<Catalog, std::string> load_catalog(const std::string& path) {
       json.cursor++;
       break;
     }
-    return base::make_err(std::string("expected , or } in the catalog"));
+    return base::make_err(json.error_at("expected , or } in the catalog"));
   }
   json.skip_ws();
   if (*json.cursor != '\0') {
     return base::make_err(
-        std::string("junk after the catalog's closing brace"));
+        json.error_at("junk after the catalog's closing brace"));
   }
 
   if (catalog.languages.empty()) {
-    return base::make_err(std::string("the catalog lists no languages"));
+    return base::make_err(json.error_at("the catalog lists no languages"));
   }
   if (catalog.default_language.empty()) {
     catalog.default_language = catalog.languages[0];

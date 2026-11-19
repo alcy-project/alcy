@@ -159,17 +159,20 @@ what implements it lives in `src/`.
 - `third_party/` - vendored dependencies as submodules (`llvm`, `fpag`,
   `fmt`, `doctest`, `xxhash`), each wrapped with a `BUILD.gn`.
 - `treesitter/` - the language's tree-sitter grammar, a second reading of
-  `docs/spec/` for editors. It is not a GN target and shares no build with
-  the compiler; `tools/check_treesitter.py` checks it against the
-  specification's corpus and against the compiler itself.
+  `docs/spec/` for editors. A GN `source_set` compiles it, and the site
+  generator links the same parse table the editors use;
+  `tools/check_treesitter.py` checks it against the specification's
+  corpus and against the compiler itself.
 - `site/` - the published site: one page tree per language (English at the site
   root, `/ja/` beside it), the shared shell under `site/shared/`, and the
   browser playground under `site/playground/`; the guide under `docs/guide/` and
-  the specification under `docs/spec/` are rendered by the site's own generator
-  (`site/ssg/`), which also stamps the landing and playground templates per
-  language. `tools/site.py` builds it into `site/dist/`, combining those sources
-  with the grammar and the compiler's wasm module; `.github/workflows/site.yaml`
-  deploys that directory to GitHub Pages.
+  the specification under `docs/spec/` are rendered by the site's own generator,
+  the C++ module under `src/ssg/` built as the `alcy-docsite` binary, which also
+  stamps the landing and playground templates per language and compiles every
+  guide fence through the compiler it links. `tools/site.py` builds the pages
+  into `site/dist/`, combining those sources with the grammar and the compiler's
+  wasm module; `.github/workflows/site.yaml` deploys that directory to GitHub
+  Pages.
 
 ## Compiler modules
 
