@@ -1475,6 +1475,9 @@ bool Checker::check_intrinsic_signature(u32 module,
     return false;
   }
   const ir::TypeIdx str = builder.primitive(ir::TypeTag::Str);
+  // `&[u8]` for the intrinsics that walk a raw byte view.
+  const ir::TypeIdx slice_ref = builder.reference_type(
+      builder.slice_type(builder.primitive(ir::TypeTag::U8)), false);
   const ir::TypeIdx u8 = builder.primitive(ir::TypeTag::U8);
   const ir::TypeIdx usize_ty = builder.primitive(ir::TypeTag::Usize);
   const ir::TypeIdx isize_ty = builder.primitive(ir::TypeTag::Isize);
@@ -1594,20 +1597,20 @@ bool Checker::check_intrinsic_signature(u32 module,
   }
   // A slice reference of either kind: what `slice_len` reads and
   // what the slice constructors return through.
-  const auto slice_ref = [&](ir::TypeIdx type) {
+  const auto is_slice_ref = [&](ir::TypeIdx type) {
     const ir::TypeTag tag = builder.types()[type.idx].tag;
     return tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef;
   };
   if (name == "slice_len") {
     // `slice_len<T>(s: &[T]) -> usize`.
-    return or_wrong(params.size() == 1 && slice_ref(params[0]) &&
+    return or_wrong(params.size() == 1 && is_slice_ref(params[0]) &&
                     tag_of(pointee(params[0])) == ir::TypeTag::Slice &&
                     is_usize(ret));
   }
   if (name == "slice_at") {
     // `slice_at<T>(s: &[T], i: usize) -> &T`: the caller keeps `i`
     // within the slice, which is the opt-in's precondition.
-    if (!slice_ref(params[0]) ||
+    if (!is_slice_ref(params[0]) ||
         builder.types()[ret.idx].tag != ir::TypeTag::Ref) {
       return wrong();
     }
@@ -1622,7 +1625,7 @@ bool Checker::check_intrinsic_signature(u32 module,
   if (name == "slice_at_mut") {
     // `slice_at_mut<T>(s: &mut [T], i: usize) -> &mut T`, the exclusive
     // counterpart over the same precondition.
-    if (!slice_ref(params[0]) ||
+    if (!is_slice_ref(params[0]) ||
         builder.types()[ret.idx].tag != ir::TypeTag::MutRef) {
       return wrong();
     }
@@ -1648,7 +1651,7 @@ bool Checker::check_intrinsic_signature(u32 module,
     const ir::TypeTag ptr_tag = params.size() == 2
                                     ? builder.types()[params[0].idx].tag
                                     : ir::TypeTag::Error;
-    if (!slice_ref(ret) ||
+    if (!is_slice_ref(ret) ||
         (ptr_tag != ir::TypeTag::Ref && ptr_tag != ir::TypeTag::MutRef)) {
       return wrong();
     }
@@ -1708,15 +1711,15 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected.push_back(usize_ty);
     expected_ret = str;
   } else if (name == "file_size") {
-    expected.push_back(str);
+    expected.push_back(slice_ref);
     expected_ret = builder.primitive(ir::TypeTag::I64);
   } else if (name == "read_file_into") {
-    expected.push_back(str);
+    expected.push_back(slice_ref);
     expected.push_back(builder.reference_type(u8, true));
     expected.push_back(usize_ty);
     expected_ret = builder.primitive(ir::TypeTag::I64);
   } else if (name == "write_file_all") {
-    expected.push_back(str);
+    expected.push_back(slice_ref);
     expected.push_back(str);
     expected_ret = builder.primitive(ir::TypeTag::I64);
   } else if (name == "arg_count") {

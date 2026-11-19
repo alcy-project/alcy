@@ -468,6 +468,7 @@ TEST_CASE("A package build refuses targets sharing one output") {
           "\"alcy/std/arch\" = {}\n"
           "\"alcy/std/fmt\" = {}\n"
           "\"alcy/std/io\" = {}\n"
+          "\"alcy/std/path\" = {}\n"
           "\"alcy/std/text\" = {}\n"
           "\"alcy/std/unicode\" = {}\n"
           "\"alcy/std/collections\" = {}\n\n"

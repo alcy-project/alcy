@@ -1,9 +1,9 @@
 // The io prelude exposes whole-file reads and writes.
 fn main() -> i32 {
-  if !write_file("t.txt", "abc") {
+  if !write_file(&Path::from_str("t.txt"), "abc") {
     ret 1
   }
-  match read_file("t.txt") {
+  match read_file(&Path::from_str("t.txt")) {
     Option::Some(text) => {
       if text.as_str() != "abc" {
         ret 2
@@ -13,7 +13,7 @@ fn main() -> i32 {
       ret 3
     }
   }
-  if read_file("/nonexistent/alcy-no-such-file").is_some() {
+  if read_file(&Path::from_str("/nonexistent/alcy-no-such-file")).is_some() {
     ret 4
   }
   ret 0

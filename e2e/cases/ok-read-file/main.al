@@ -1,6 +1,6 @@
 // `read_file` reads a whole file; a missing path is `None`.
 fn main() -> i32 {
-  match read_file("main.al") {
+  match read_file(&Path::from_str("main.al")) {
     Option::Some(text) => {
       if text.len_bytes() == 0 {
         ret 1
@@ -13,7 +13,7 @@ fn main() -> i32 {
       ret 3
     }
   }
-  if read_file("/nonexistent/alcy-no-such-file").is_some() {
+  if read_file(&Path::from_str("/nonexistent/alcy-no-such-file")).is_some() {
     ret 4
   }
   ret 0

@@ -16,6 +16,7 @@ packages = [
   "atomic",
   "sync",
   "io",
+  "path",
   "network",
   "thread",
   "arch",

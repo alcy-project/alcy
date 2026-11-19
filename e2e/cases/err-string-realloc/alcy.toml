@@ -14,6 +14,7 @@ include = ["main"]
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}
 "alcy/std/io" = {}
+"alcy/std/path" = {}
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}
 

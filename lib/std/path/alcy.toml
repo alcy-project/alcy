@@ -1,0 +1,19 @@
+# Part of the `alcy/std` suite.
+#
+# Paths owned here are the platform's own spelling: validated bytes
+# on Unix, wide units on Windows, one public name.
+
+[package]
+name = "path"
+version = "0.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[modules]
+include = ["prelude", "unix", "windows"]
+export = ["prelude", "unix", "windows"]
+
+[dependencies]
+"alcy/std/core" = {}
+"alcy/std/alloc" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}

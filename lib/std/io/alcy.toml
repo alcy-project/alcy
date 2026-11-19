@@ -23,3 +23,4 @@ export = ["prelude", "args", "file", "print", "reader", "scanner"]
 "alcy/std/fmt" = {}
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}
+"alcy/std/path" = {}
