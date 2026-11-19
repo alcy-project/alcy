@@ -163,9 +163,13 @@ fix: usize
 id: numeric-isize
 language: Cpp
 severity: error
-message: Use isize from fpag/base/numeric.h instead of ptrdiff_t.
+message: Use isize from fpag/base/numeric.h instead of ssize_t/ptrdiff_t.
 rule:
   any:
+    - kind: primitive_type
+      regex: ^ssize_t$
+    - kind: qualified_identifier
+      regex: ^std::ssize_t$
     - kind: primitive_type
       regex: ^ptrdiff_t$
     - kind: qualified_identifier
