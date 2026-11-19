@@ -134,10 +134,10 @@ foreclose the baremetal story.
   kit under `Windows Kits\10\Lib`, and a host with no SDK falls back
   to the spawned driver.
 - `.alcy/toolchain.toml` with `freestanding = true` asks for the
-  kernel-only link on a platform whose hosted build still uses its
-  C runtime, and on Linux, whose hosted build uses the system C
-  runtime by default. The entry is `_start` exactly as above, with
-  the same rules, on a package that opted in. A Windows target has
+  kernel-only link. On Linux the hosted default links the system C
+  runtime, so the flag is how a Linux build asks for it; the entry
+  is `_start` exactly as above, with the same rules, on a package
+  that opted in. A Windows target has
   no separate freestanding mode: the kernel-only link is what a
   hosted build is. A macOS target has no freestanding mode either:
   libSystem is the only sanctioned route to the kernel there, so

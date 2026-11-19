@@ -110,8 +110,7 @@ no libc, and the compiler emits `_start` as the entry instead of
 `main`. A freestanding build's `main` keeps its signature and its
 value becomes the process's exit code. On Linux the hosted default
 links the system C runtime, so the flag is how a Linux build asks
-for the kernel-only link; on platforms whose hosted build uses a C
-runtime it names that link directly.
+for the kernel-only link.
 A macOS target has no freestanding mode: libSystem is the only
 sanctioned route there, so the flag is refused with a diagnostic
 naming the target.
