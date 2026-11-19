@@ -2,6 +2,10 @@
 
 This workspace contains `alcy`, a high-performance programming language compiler written in C++.
 
+## What alcy is not
+
+It is not Linux-only: the compiler builds and tests for Linux (x86_64), macOS (aarch64), and Windows (x64), and `wasm32-unknown-emscripten` is a supported output target. Output is a stand-alone native binary (LLVM) or a WebAssembly module (`--backend=direct-wasm`, alcy's own WASI emitter); there is no interpreter or runtime to ship. A freestanding build needs no C runtime and no libc; see `README.md`, "What alcy is", and `docs/spec/ffi.md`.
+
 # Reference Documentation
 
 Read `CONTRIBUTING.md` before any work in this repository: workflow

@@ -33,10 +33,32 @@ compiles today may need an edit tomorrow.
 - [samples/](samples/) - small programs kept because they are worth
   reading, `fizzbuzz` and `wordfreq` among them.
 
+## What alcy is
+
+alcy compiles to stand-alone binaries (LLVM backend) or to WebAssembly
+(`--backend=direct-wasm`; alcy's own WASI emitter, with no LLVM and no
+linker behind it). There is no interpreter and no runtime to ship: a
+compiled program runs on its own.
+
+It builds and tests on Linux (x86_64), macOS (aarch64), and Windows
+(x64), which is what CI runs; `wasm32-unknown-emscripten` is also a
+target.
+
+A freestanding build - `.alcy/toolchain.toml` with `freestanding = true` -
+links without a C runtime and without libc: the compiler emits `_start`,
+and the pieces that need the kernel talk to it with raw syscalls
+(x86-64, aarch64, riscv64), so a freestanding program carries only what
+it uses. See [the specification](docs/spec/ffi.md#freestanding-bootstrap).
+
+`comp` evaluates at build time and is carried by nothing at runtime.
+The language is pre-1.0; see [docs/spec/](docs/spec/) for what a program
+is written against, and [src/docs/architecture.md](src/docs/architecture.md)
+for how the compiler is put together.
+
 ## Build & Install
 
-Requires GN, Ninja, Clang, LLD, and libc++ (see [src/docs/build.md](src/docs/build.md)
-for details).
+Requires GN, Ninja, Clang, LLD, and libc++ on Linux/macOS, or the MSVC
+STL on Windows (see [src/docs/build.md](src/docs/build.md) for details).
 
 ```bash
 # Using Nix (Linux / macOS):
