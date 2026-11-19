@@ -17,6 +17,7 @@ packages = [
   "sync",
   "io",
   "path",
+  "ffi",
   "network",
   "thread",
   "arch",

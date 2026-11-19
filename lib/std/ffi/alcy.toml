@@ -1,0 +1,19 @@
+# Part of the `alcy/std` suite.
+#
+# The C ABI strings: owned bytes with a terminator for a declaration
+# that wants one, and a view over bytes someone else terminated.
+
+[package]
+name = "ffi"
+version = "0.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[modules]
+include = ["prelude", "cstring", "cstr"]
+export = ["prelude", "cstring", "cstr"]
+
+[dependencies]
+"alcy/std/core" = {}
+"alcy/std/alloc" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}
