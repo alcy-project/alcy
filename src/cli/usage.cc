@@ -149,6 +149,7 @@ UsageText::UsageText(Language language)
   set(Key::CliNewAbout, i18n::format<Key::CliNewAbout>(language));
   set(Key::CliInitAbout, i18n::format<Key::CliInitAbout>(language));
   set(Key::CliVcsHelp, i18n::format<Key::CliVcsHelp>(language));
+  set(Key::CliSuiteHelp, i18n::format<Key::CliSuiteHelp>(language));
   set(Key::CliCheckAbout, i18n::format<Key::CliCheckAbout>(language));
   set(Key::CliCheckFileHelp, i18n::format<Key::CliCheckFileHelp>(language));
   set(Key::CliTestAbout, i18n::format<Key::CliTestAbout>(language));

@@ -526,7 +526,7 @@
   F(CliFmtStdoutTakesOneFile, Note, Pipeline, "The `--stdout` flag takes one file") \
   F(CliFunctionPlural, Note, Pipeline, "functions") \
   F(CliFunctionSingular, Note, Pipeline, "function") \
-  F(CliInitAbout, Note, Pipeline, "Create a package in an existing directory") \
+  F(CliInitAbout, Note, Pipeline, "Create a package in an existing directory, or a suite with `--suite <name|owner/name>`") \
   F(CliInvalidConfiguration, Note, Pipeline, "Invalid configuration") \
   F(CliJsonHelp, Note, Pipeline, "Report the result as one JSON document on standard output, for a tool reading it. Applies to build, compile, check, lint, and test.") \
   F(CliJobsHelp, Note, Pipeline, "How many threads read the source at once. Reading files is the only part of a run spread over them; everything after it is one thread. One by default, because a threaded read leaves the passes that read what it built to find nodes in an order that costs them more than the read saves.") \
@@ -542,7 +542,7 @@
   F(CliSuiteWord, Note, Pipeline, "suite") \
   F(CliTargetPlural, Note, Pipeline, "targets") \
   F(CliTargetSingular, Note, Pipeline, "target") \
-  F(CliNewAbout, Note, Pipeline, "Create a new package") \
+  F(CliNewAbout, Note, Pipeline, "Create a new package, or a suite with `--suite <name|owner/name>`") \
   F(CliNoStdHelp, Note, Pipeline, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoCacheHelp, Note, Pipeline, "Skip the build cache for this invocation: no lookup and no store.") \
   F(CliNoSubcommand, Note, Pipeline, "No subcommand given") \
