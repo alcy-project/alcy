@@ -121,13 +121,13 @@ class RuntimeBuilder {
       // The entry wrapper stores the platform's environment table
       // here, whatever shape it has there, so the environment answers
       // whether or not anyone asked for it.
-      llvm::GlobalVariable* environ =
+      llvm::GlobalVariable* environGlobal =
           module_.getOrInsertGlobal("alcy_environ", builder_.getPtrTy());
-      if (!environ->hasInitializer()) {
-        environ->setInitializer(
+      if (!environGlobal->hasInitializer()) {
+        environGlobal->setInitializer(
             llvm::ConstantPointerNull::get(builder_.getPtrTy()));
       }
-      link_once_odr(*environ);
+      link_once_odr(*environGlobal);
     }
     if (windows_) {
       // The scratch the environment answer encodes into, and the one
@@ -1467,7 +1467,6 @@ class RuntimeBuilder {
   void build_environ_linux() {
     llvm::LLVMContext& context = module_.getContext();
     llvm::Type* i8 = builder_.getInt8Ty();
-    llvm::Type* i64 = builder_.getInt64Ty();
     llvm::Type* ptr = builder_.getPtrTy();
     llvm::StructType* view = llvm::StructType::get(context, {ptr, usize_});
     llvm::Function* find = new_find(view);
@@ -1497,16 +1496,16 @@ class RuntimeBuilder {
         ptr, module_.getOrInsertGlobal("alcy_environ", ptr), "table");
     builder_.CreateBr(iter);
     builder_.SetInsertPoint(iter);
-    llvm::PHINode* at = builder_.CreatePHI(i64, 2, "at");
-    at->addIncoming(llvm::ConstantInt::get(i64, 0), entry);
+    llvm::PHINode* at = builder_.CreatePHI(usize_, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(usize_, 0), entry);
     llvm::Value* slot = builder_.CreateGEP(ptr, table, at, "slot");
     llvm::Value* entry_ptr = builder_.CreateLoad(ptr, slot, "entry");
     llvm::Value* is_null = builder_.CreateICmpEQ(
         entry_ptr, llvm::ConstantPointerNull::get(ptr), "is_null");
     builder_.CreateCondBr(is_null, missing, compare);
     builder_.SetInsertPoint(compare);
-    llvm::PHINode* j = builder_.CreatePHI(i64, 2, "j");
-    j->addIncoming(llvm::ConstantInt::get(i64, 0), iter);
+    llvm::PHINode* j = builder_.CreatePHI(usize_, 2, "j");
+    j->addIncoming(llvm::ConstantInt::get(usize_, 0), iter);
     llvm::Value* at_equal = builder_.CreateICmpUGE(j, name_len, "at_equal");
     builder_.CreateCondBr(at_equal, at_equals, byte_compare);
     builder_.SetInsertPoint(byte_compare);
@@ -1518,7 +1517,7 @@ class RuntimeBuilder {
     builder_.CreateCondBr(eq, advance, next_entry);
     builder_.SetInsertPoint(advance);
     j->addIncoming(
-        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "j_next"),
+        builder_.CreateAdd(j, llvm::ConstantInt::get(usize_, 1), "j_next"),
         advance);
     builder_.CreateBr(compare);
     builder_.SetInsertPoint(at_equals);
@@ -1530,18 +1529,18 @@ class RuntimeBuilder {
     builder_.SetInsertPoint(value_scan);
     llvm::Value* value = builder_.CreateGEP(
         i8, entry_ptr,
-        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "value_at"),
+        builder_.CreateAdd(j, llvm::ConstantInt::get(usize_, 1), "value_at"),
         "value");
     builder_.CreateBr(value_scan_loop);
     builder_.SetInsertPoint(value_scan_loop);
-    llvm::PHINode* loop_at = builder_.CreatePHI(i64, 2, "loop_at");
-    loop_at->addIncoming(llvm::ConstantInt::get(i64, 0), value_scan);
+    llvm::PHINode* loop_at = builder_.CreatePHI(usize_, 2, "loop_at");
+    loop_at->addIncoming(llvm::ConstantInt::get(usize_, 0), value_scan);
     llvm::Value* byte = builder_.CreateLoad(
         i8, builder_.CreateGEP(i8, value, loop_at, "byte_at"), "byte");
     llvm::Value* is_zero =
         builder_.CreateICmpEQ(byte, llvm::ConstantInt::get(i8, 0), "is_zero");
     llvm::Value* next_loop = builder_.CreateAdd(
-        loop_at, llvm::ConstantInt::get(i64, 1), "next_loop");
+        loop_at, llvm::ConstantInt::get(usize_, 1), "next_loop");
     loop_at->addIncoming(next_loop, value_scan_loop);
     builder_.CreateCondBr(is_zero, done, value_scan_loop);
     builder_.SetInsertPoint(done);
@@ -1551,7 +1550,7 @@ class RuntimeBuilder {
     builder_.CreateRet(found);
     builder_.SetInsertPoint(next_entry);
     at->addIncoming(
-        builder_.CreateAdd(at, llvm::ConstantInt::get(i64, 1), "at_next"),
+        builder_.CreateAdd(at, llvm::ConstantInt::get(usize_, 1), "at_next"),
         next_entry);
     builder_.CreateBr(iter);
     builder_.SetInsertPoint(missing);
@@ -1562,7 +1561,6 @@ class RuntimeBuilder {
   void build_environ_macho() {
     llvm::LLVMContext& context = module_.getContext();
     llvm::Type* i8 = builder_.getInt8Ty();
-    llvm::Type* i64 = builder_.getInt64Ty();
     llvm::Type* ptr = builder_.getPtrTy();
     llvm::StructType* view = llvm::StructType::get(context, {ptr, usize_});
     llvm::Function* find = new_find(view);
@@ -1587,14 +1585,14 @@ class RuntimeBuilder {
     builder_.SetInsertPoint(found);
     builder_.CreateBr(scan);
     builder_.SetInsertPoint(scan);
-    llvm::PHINode* scan_at = builder_.CreatePHI(i64, 2, "scan_at");
-    scan_at->addIncoming(llvm::ConstantInt::get(i64, 0), found);
+    llvm::PHINode* scan_at = builder_.CreatePHI(usize_, 2, "scan_at");
+    scan_at->addIncoming(llvm::ConstantInt::get(usize_, 0), found);
     llvm::Value* byte = builder_.CreateLoad(
         i8, builder_.CreateGEP(i8, found_ptr, scan_at, "byte_at"), "byte");
     llvm::Value* is_zero =
         builder_.CreateICmpEQ(byte, llvm::ConstantInt::get(i8, 0), "is_zero");
-    llvm::Value* next_at =
-        builder_.CreateAdd(scan_at, llvm::ConstantInt::get(i64, 1), "next_at");
+    llvm::Value* next_at = builder_.CreateAdd(
+        scan_at, llvm::ConstantInt::get(usize_, 1), "next_at");
     scan_at->addIncoming(next_at, scan);
     builder_.CreateCondBr(is_zero, getenv_done, scan);
     builder_.SetInsertPoint(getenv_done);
@@ -1612,7 +1610,6 @@ class RuntimeBuilder {
     llvm::Type* i8 = builder_.getInt8Ty();
     llvm::Type* i16 = builder_.getInt16Ty();
     llvm::Type* i32 = builder_.getInt32Ty();
-    llvm::Type* i64 = builder_.getInt64Ty();
     llvm::Type* ptr = builder_.getPtrTy();
     llvm::StructType* view = llvm::StructType::get(context, {ptr, usize_});
     auto lower = [&](llvm::Value* unit) {
@@ -1678,21 +1675,21 @@ class RuntimeBuilder {
     builder_.CreateCondBr(bad, missing, prepare_done);
     builder_.SetInsertPoint(prepare_done);
     llvm::Value* name_units64 =
-        builder_.CreateZExt(name_units, i64, "name_units64");
+        builder_.CreateZExtOrTrunc(name_units, usize_, "name_units64");
     llvm::Value* block = builder_.CreateLoad(
         ptr, module_.getOrInsertGlobal("alcy_environ", ptr), "block");
     builder_.CreateBr(iter);
     builder_.SetInsertPoint(iter);
-    llvm::PHINode* at = builder_.CreatePHI(i64, 2, "at");
-    at->addIncoming(llvm::ConstantInt::get(i64, 0), prepare_done);
+    llvm::PHINode* at = builder_.CreatePHI(usize_, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(usize_, 0), prepare_done);
     llvm::Value* entry_ptr = builder_.CreateGEP(i16, block, at, "entry");
     llvm::Value* c0 = builder_.CreateLoad(i16, entry_ptr, "c0");
     llvm::Value* end_of_block = builder_.CreateICmpEQ(
         c0, llvm::ConstantInt::get(i16, 0), "end_of_block");
     builder_.CreateCondBr(end_of_block, missing, unit_compare);
     builder_.SetInsertPoint(unit_compare);
-    llvm::PHINode* j = builder_.CreatePHI(i64, 2, "j");
-    j->addIncoming(llvm::ConstantInt::get(i64, 0), iter);
+    llvm::PHINode* j = builder_.CreatePHI(usize_, 2, "j");
+    j->addIncoming(llvm::ConstantInt::get(usize_, 0), iter);
     llvm::Value* at_equal = builder_.CreateICmpUGE(j, name_units64, "at_equal");
     builder_.CreateCondBr(at_equal, at_equals, unit_compare_body);
     builder_.SetInsertPoint(unit_compare_body);
@@ -1704,7 +1701,7 @@ class RuntimeBuilder {
     builder_.CreateCondBr(eq, advance, next_entry);
     builder_.SetInsertPoint(advance);
     j->addIncoming(
-        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "j_next"),
+        builder_.CreateAdd(j, llvm::ConstantInt::get(usize_, 1), "j_next"),
         advance);
     builder_.CreateBr(unit_compare);
     builder_.SetInsertPoint(at_equals);
@@ -1716,18 +1713,18 @@ class RuntimeBuilder {
     builder_.SetInsertPoint(encode);
     llvm::Value* value_ptr = builder_.CreateGEP(
         i16, entry_ptr,
-        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "value_at"),
+        builder_.CreateAdd(j, llvm::ConstantInt::get(usize_, 1), "value_at"),
         "value");
     builder_.CreateBr(value_scan);
     builder_.SetInsertPoint(value_scan);
-    llvm::PHINode* k = builder_.CreatePHI(i64, 2, "k");
-    k->addIncoming(llvm::ConstantInt::get(i64, 0), encode);
+    llvm::PHINode* k = builder_.CreatePHI(usize_, 2, "k");
+    k->addIncoming(llvm::ConstantInt::get(usize_, 0), encode);
     llvm::Value* u = builder_.CreateLoad(
         i16, builder_.CreateGEP(i16, value_ptr, k, "u_at"), "u");
     llvm::Value* is_zero =
         builder_.CreateICmpEQ(u, llvm::ConstantInt::get(i16, 0), "is_zero");
     llvm::Value* next_k =
-        builder_.CreateAdd(k, llvm::ConstantInt::get(i64, 1), "next_k");
+        builder_.CreateAdd(k, llvm::ConstantInt::get(usize_, 1), "next_k");
     k->addIncoming(next_k, value_scan);
     builder_.CreateCondBr(is_zero, value_done, value_scan);
     builder_.SetInsertPoint(value_done);
@@ -1761,7 +1758,8 @@ class RuntimeBuilder {
     llvm::Value* aggregate = llvm::UndefValue::get(view);
     aggregate = builder_.CreateInsertValue(aggregate, buf, 0);
     aggregate = builder_.CreateInsertValue(
-        aggregate, builder_.CreateZExt(encoded, usize_, "encoded_wide"), 1);
+        aggregate, builder_.CreateZExtOrTrunc(encoded, usize_, "encoded_wide"),
+        1);
     builder_.CreateRet(aggregate);
     builder_.SetInsertPoint(give_up);
     builder_.CreateRet(null_view(view));
@@ -1770,14 +1768,14 @@ class RuntimeBuilder {
     llvm::BasicBlock* scan_nul_incr =
         llvm::BasicBlock::Create(context, "scan_nul_incr", find);
     builder_.SetInsertPoint(scan_nul);
-    llvm::PHINode* k_next = builder_.CreatePHI(i64, 2, "k_next");
-    k_next->addIncoming(llvm::ConstantInt::get(i64, 0), next_entry);
+    llvm::PHINode* k_next = builder_.CreatePHI(usize_, 2, "k_next");
+    k_next->addIncoming(llvm::ConstantInt::get(usize_, 0), next_entry);
     llvm::Value* u2 = builder_.CreateLoad(
         i16, builder_.CreateGEP(i16, entry_ptr, k_next, "u2_at"), "u2");
     llvm::Value* is_zero2 =
         builder_.CreateICmpEQ(u2, llvm::ConstantInt::get(i16, 0), "is_zero2");
     llvm::Value* k_plus =
-        builder_.CreateAdd(k_next, llvm::ConstantInt::get(i64, 1), "k_plus");
+        builder_.CreateAdd(k_next, llvm::ConstantInt::get(usize_, 1), "k_plus");
     builder_.CreateCondBr(is_zero2, next_iter, scan_nul_incr);
     builder_.SetInsertPoint(scan_nul_incr);
     k_next->addIncoming(k_plus, scan_nul_incr);
@@ -1785,7 +1783,7 @@ class RuntimeBuilder {
     builder_.SetInsertPoint(next_iter);
     at->addIncoming(
         builder_.CreateAdd(builder_.CreateAdd(at, k_next, "at_plus_k"),
-                           llvm::ConstantInt::get(i64, 1), "at_next"),
+                           llvm::ConstantInt::get(usize_, 1), "at_next"),
         next_iter);
     builder_.CreateBr(iter);
     builder_.SetInsertPoint(missing);
