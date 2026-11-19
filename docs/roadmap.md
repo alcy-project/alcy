@@ -208,6 +208,28 @@ peripheral work lives in `backlog.md`. The language record lives in
   the path. proconio-class input stays out; its blockers are recorded
   in the specification.
 
+- [x] The libc-free runtime, and `path` / `ffi` / `env` on it.
+
+  The Linux hosted build links no C runtime, ever: the compiler emits
+  `_start`, its naked trampoline reads argc and argv off the initial
+  stack - and the environment pointer now rides as a third argument -
+  and the process ends through the exit syscall, the same code a
+  freestanding program was already running. A hosted build for
+  Windows links `kernel32.dll` and nothing else: the entry gathers
+  the arguments from `GetCommandLineW` with Rust's parse rules, the
+  allocator is `VirtualAlloc`, and the file intrinsics open with
+  `CreateFileW`. macOS keeps libSystem, the one sanctioned route
+  there.
+
+  The standard library grew `path` (one owned type with a `&Path`
+  borrowed view, its UTF-8/UTF-16 internals selected by `#[when]`),
+  `ffi` (`CString` for an owned, terminated string and `CStr` for a
+  borrowed one), and `env` (`env`/`env_str` reading the platform's
+  own table, `GetEnvironmentStringsW` on Windows, `getenv` on
+  macOS, the inherited array on Linux); `io` now takes `&Path`
+  throughout, and its intrinsics take `&[u8]`. The `err-io-file`
+  corpus passes on both hosts - the Windows build runs under wine.
+
 - [ ] `comp` expands what it knows, and the `fmt` pilot.
 
 . Explicit `comp for`/`comp if` control flow whose remaining
