@@ -442,6 +442,7 @@
   F(PipelineDependencyOverlaps, Error, Pipeline, "Dependency '{}' overlaps '{}'; the default suite globs 'alcy/std/*', so name a package or a member, not both") \
   F(PipelineDependencySuiteAmbiguous, Error, Pipeline, "Dependency '{}' answers to the suite '{}' and to the suite '{}'") \
   F(PipelineDependencySuiteMismatch, Error, Pipeline, "Dependency '{}' names suite '{}/{}', but '{}' holds suite '{}/{}'") \
+  F(PipelineFreestandingAppleTarget, Error, Pipeline, "A freestanding build is not available for target '{}': libSystem is the only sanctioned route on Apple platforms") \
   F(PipelineFreestandingTarget, Error, Pipeline, "A freestanding build is not implemented for target '{}' yet") \
   F(PipelineInheritsWithoutSuite, Error, Pipeline, "Manifest '{}' inherits from a suite, but no suite encloses it") \
   F(PipelineInvalidOutputPath, Error, Pipeline, "Invalid output path '{}'") \

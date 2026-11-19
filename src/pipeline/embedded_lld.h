@@ -16,10 +16,12 @@ struct PipelineContext;
 
 // Whether this compiler links in-process with the lld it was built with:
 // the build embedded one (see `alcy_embedded_lld` in
-// //third_party/llvm/llvm.gni) and the host's startup inputs are where
-// the linker expects them. False falls back to the configured driver,
-// which is what every build did before the linker was embedded.
-bool embedded_lld_ready();
+// //third_party/llvm/llvm.gni) and the platform's link inputs are where
+// the linker expects them. `freestanding` is the link's mode; the
+// freestanding path on a Linux target needs no host discovery, so it
+// does not probe. False falls back to the configured driver, which is
+// what every build did before the linker was embedded.
+bool embedded_lld_ready(bool freestanding);
 
 // Links the objects into `exe_path` with the embedded lld, passing the
 // configured driver arguments through. Only called when

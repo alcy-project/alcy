@@ -72,9 +72,10 @@ replaced. The foundations are in `roadmap.md`.
   route is what would say whether the report was a false positive about
   a loan's place or a conservative rule worth keeping.
 
-- [ ] The embedded linker beyond this host: startup discovery hard-codes
-  Linux paths, only the ELF driver is embedded, and M3 (the
-  wasm lld driver and the portable full compiler) is unstarted.
+- [ ] The embedded linker as a portable full compiler: M3 (the wasm lld
+  driver) is unstarted. Linux, macOS, and Windows link in-process with the
+  drivers their hosts embed; the macOS and Windows link inputs are discovered
+  from the environment or the usual SDK install locations.
 
 - [ ] IR cache shared across profiles and machines. The lowered IR is
   one artifact per pointer width: a test lowers one source under two

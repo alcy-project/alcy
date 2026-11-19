@@ -11,16 +11,15 @@ declare_args() {
 }
 
 declare_args() {
-  # Link the lld the install carries into the compiler, so a program
-  # links in-process by default. Native Linux targets only for now: the
-  # embedded linker is a linker and not a driver, so the compiler has to
-  # find the host's startup inputs itself, and that discovery exists for
-  # Linux; another target CPU would need an install built for it, which
-  # the tag download does not stage. Other targets keep spawning their
-  # driver until their own discovery lands. A `linker` in
+  # Link the lld this install carries into the compiler, so a program
+  # links in-process by default. Native hosts only: the embedded linker
+  # is a linker and not a driver, so the compiler has to find the
+  # platform's link inputs itself, and each platform's discovery is
+  # written for the host it runs on; another CPU would need an install
+  # built for it, which the tag download does not stage. A `linker` in
   # .alcy/toolchain.toml or `--linker` on the command line replaces the
   # default either way.
-  alcy_embedded_lld = is_linux && target_cpu == host_cpu
+  alcy_embedded_lld = (is_linux || is_mac || is_win) && target_cpu == host_cpu
 }
 
 if (is_debug) {
@@ -175,7 +174,7 @@ llvm_components = llvm_backend_components + [
                     "LLVMHipStdPar",
                   ]
 
-# Every LLVM component the embedded lld ELF driver references, taken from
+# Every LLVM component the embedded lld drivers reference, taken from
 # the install's lib/cmake/lld/LLDTargets.cmake. The drivers initialize
 # every target backend, so this is the full set rather than the targets
 # this compiler emits for. Only read when alcy_embedded_lld is set.
@@ -333,6 +332,9 @@ llvm_lld_components = [
   "LLVMDebugInfoMSF",
   "LLVMDebugInfoBTF",
   "LLVMFrontendHLSL",
+  "LLVMLibDriver",
+  "LLVMWindowsDriver",
+  "LLVMWindowsManifest",
   "LLVMCore",
   "LLVMBinaryFormat",
   "LLVMTargetParser",

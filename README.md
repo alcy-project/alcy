@@ -82,12 +82,18 @@ Download the archive for your platform from
 `.sha256` beside it before extracting (`sha256sum -c` on Linux,
 `shasum -a 256 -c` on macOS). The archive carries the `alcy` binary.
 
-Linking what you build: on Linux the binary links in-process with its
-embedded LLD and the host's C library, so no toolchain needs to be on
-PATH. macOS and Windows builds drive a `clang` from PATH — macOS ships
-one — against the platform's C library (the MSVC STL on Windows). A
-freestanding build links without a C library anywhere, and a
-`linker` in `.alcy/toolchain.toml` or `--linker` replaces the default.
+Linking what you build: on Linux, macOS, and Windows the binary links
+in-process with the lld the compiler carries. Linux hosted links the
+system C runtime by default; a freestanding build links without one.
+Windows links `kernel32.dll` and nothing else; macOS links
+the SDK's `crt1.o` and `libSystem`, the SDK discovered from `SDKROOT`,
+`DEVELOPER_DIR`, or the usual Command Line Tools or Xcode SDK
+locations (the Windows SDK is discovered the same way, from
+`WindowsSdkDir` or the kits' `Lib` directories). A host with no SDK
+falls back to a `clang` from PATH — and a freestanding build links
+without a C library anywhere (macOS aside, where `freestanding = true`
+is refused: libSystem is the only sanctioned route there). A `linker`
+in `.alcy/toolchain.toml` or `--linker` replaces the default.
 
 In a workflow, `uses: alcy-project/alcy@vX.Y.Z` does the same thing:
 download, verify, and put `alcy` on PATH.

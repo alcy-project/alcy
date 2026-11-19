@@ -84,6 +84,13 @@ foreclose the baremetal story.
 
 ## Freestanding (Bootstrap)
 
+- The default executable link runs in-process with the linker the
+  compiler carries, on Linux, macOS, and Windows; a `linker` in
+  `.alcy/toolchain.toml` or `--linker` on the command line replaces
+  it, and an install whose build embedded no linker falls back to
+  spawning a driver from PATH. A build targeting another machine
+  needs a configured driver: the embedded linker links what the host
+  can run, and nothing else.
 - A hosted build for a Linux target links the system C runtime by
   default: the C runtime's startup enters `main`, which keeps its
   signature, and an `i32` main is the process status, `()` is zero,
@@ -91,13 +98,29 @@ foreclose the baremetal story.
   on a variant other than the first. A hosted build goes through the
   C runtime's startup objects, so a sanitizer runtime can join it;
   a freestanding one cannot, which is the reason the sanitizers run
-  against the hosted build. `.alcy/toolchain.toml` with
-  `freestanding = true` asks for the kernel-only link instead: no
-  startup objects, no dynamic linker, and no libc. On that link the
-  kernel enters `_start`, which reads `argc` and `argv` off the
-  initial stack into the registers the program's `main` expects and
-  calls it; the program ends through the exit syscall, with the same
-  rules for the exit code.
+  against the hosted build. The embedded linker links this default
+  too, probing the host's usual startup files and loader once per
+  process. `.alcy/toolchain.toml` with `freestanding = true` asks
+  for the kernel-only link instead: no startup objects, no dynamic
+  linker, and no libc. On that link the kernel enters `_start`,
+  which reads `argc` and `argv` off the initial stack into the
+  registers the program's `main` expects and calls it; the program
+  ends through the exit syscall, with the same rules for the exit
+  code.
+- A hosted build for a macOS target links the SDK's C runtime
+  startup object and `libSystem`, and nothing else. libSystem is the
+  one sanctioned C library on Apple platforms: no glibc or musl, no
+  libc++, and no other library. The startup is the SDK's
+  `usr/lib/crt1.o` and the library is the SDK's `usr/lib/libSystem.tbd`;
+  both are discovered from `SDKROOT`, then `DEVELOPER_DIR` (an Xcode
+  Developer directory, or any root with an `SDKs` directory), then the
+  usual SDK locations (Command Line Tools, then Xcode), highest
+  version first. The link fixes the deployment floor to macOS 11.0,
+  which arm64 requires and which bounds the load commands and the
+  symbol variants `libSystem.tbd` carries. A host with no SDK falls
+  back to the spawned driver; a `--time-trace` session names the link
+  `lld-link` when the embedded linker ran, so the two paths are
+  distinguishable in a log.
 - A hosted build for a Windows target links `kernel32.dll` and
   nothing else: no startup objects, no C runtime, no UCRT. The entry
   point is `_start`, which the loader enters with no arguments; it
@@ -105,14 +128,22 @@ foreclose the baremetal story.
   is documented to parse, before the program starts. The kernel is the
   allocator (`VirtualAlloc`), the standard handles are the descriptors,
   and the exit is `ExitProcess`, so an `i32` main is the process
-  status and an enum main behaves as it does everywhere else.
+  status and an enum main behaves as it does everywhere else. The link
+  needs only the kernel import library: it is discovered from
+  `WindowsSdkDir` and `WindowsSDKVersion`, then the newest `10.0.*`
+  kit under `Windows Kits\10\Lib`, and a host with no SDK falls back
+  to the spawned driver.
 - `.alcy/toolchain.toml` with `freestanding = true` asks for the
   kernel-only link on a platform whose hosted build still uses its
   C runtime, and on Linux, whose hosted build uses the system C
   runtime by default. The entry is `_start` exactly as above, with
   the same rules, on a package that opted in. A Windows target has
   no separate freestanding mode: the kernel-only link is what a
-  hosted build is.
+  hosted build is. A macOS target has no freestanding mode either:
+  libSystem is the only sanctioned route to the kernel there, so
+  `freestanding = true` is refused with a diagnostic naming the
+  target rather than linking a kernel-only program the runtime
+  cannot serve.
 - A runtime piece is defined only when the program declares it, so a
   program carries only what it uses. The pieces reach the kernel
   through raw syscalls: `print`, `println`, and `panic`

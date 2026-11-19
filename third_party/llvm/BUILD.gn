@@ -52,13 +52,17 @@ config("llvm_config") {
 source_set("llvm") {
   public_configs = [ ":llvm_config" ]
 
-  # The ELF driver comes first: lld references the LLVM libraries and not
-  # the other way around. Only the format the compiler links through is
-  # embedded; another one would take its own driver library.
+  # The drivers for every host the compiler links in-process on: ELF
+  # for Linux, Mach-O for macOS, COFF for Windows (lld-link). Each is a
+  # linker and not a driver, so the compiler has to find the platform's
+  # link inputs itself (see src/pipeline/embedded_lld.cc); naming all of
+  # them costs each host no objects it does not reference.
   libs = []
   if (alcy_embedded_lld) {
     libs += [
       "lldELF",
+      "lldCOFF",
+      "lldMachO",
       "lldCommon",
     ]
 

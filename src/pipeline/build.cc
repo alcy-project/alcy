@@ -291,10 +291,23 @@ base::Result<void, diag::Reported> check_emission(PipelineContext& ctx,
   }
   if (ctx.freestanding && !is_lib) {
     // The exit sequence is written per architecture, so a target with
-    // no sequence has no freestanding entry to emit. Refusing here
-    // names the target instead of leaving the emitter to guess.
+    // no sequence has no freestanding entry to emit. A Darwin target
+    // has no sequence at all: its kernel is not the runtime's route,
+    // and libSystem is the only sanctioned one, so freestanding is
+    // refused there. Refusing here names the target instead of leaving
+    // the emitter to guess.
     const std::string_view triple = ctx.target.triple;
     const std::string_view arch = triple.substr(0, triple.find('-'));
+    const bool apple = triple.find("apple") != std::string_view::npos ||
+                       triple.find("darwin") != std::string_view::npos ||
+                       triple.find("macos") != std::string_view::npos;
+    if (apple) {
+      const u32 index =
+          ctx.bag.emit<i18n::Key::PipelineFreestandingAppleTarget>(
+              DiagCode::UnsupportedOutput, ctx.target.triple);
+      (void)index;
+      return base::make_err(diag::Reported{});
+    }
     if (arch != "x86_64" && arch != "aarch64" && arch != "riscv64") {
       const u32 index = ctx.bag.emit<i18n::Key::PipelineFreestandingTarget>(
           DiagCode::UnsupportedOutput, ctx.target.triple);
@@ -635,9 +648,9 @@ base::Result<void, diag::Reported> link_executable(
     const std::string& exe_path) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "link", "backend");
   // A configured linker replaces the embedded one; the embedded one runs
-  // in-process where the build has it and the host's startup inputs are
-  // found. The startup probe is one-time and reads the host's files, so
-  // it gets its own row in a time trace.
+  // in-process where the build has it and the platform's link inputs are
+  // found. The probe is one-time and reads the install's files, so it
+  // gets its own row in a time trace.
   // The embedded linker links what the host can run, and nothing else:
   // another target's objects belong to a driver that knows how to name
   // them and the libraries around them.
@@ -653,7 +666,7 @@ base::Result<void, diag::Reported> link_executable(
     {
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lld-startup",
                                                "backend");
-      ready = embedded_lld_ready();
+      ready = embedded_lld_ready(link.freestanding);
     }
     if (ready) {
       return link_with_embedded_lld(ctx, link, object_paths, exe_path);

@@ -77,6 +77,26 @@ artifact it cannot verify.
 | `--linker` | driver | (default) | System linker driver for executable builds; overrides `.alcy/toolchain.toml` |
 | `--link-args` | argument | (empty) | Argument for the link driver after the objects. Repeatable, one element each; overrides `.alcy/toolchain.toml` |
 
+The default is an in-process link with the lld the compiler carries,
+on Linux, macOS, and Windows; it falls back to a `clang` from PATH when
+the platform's inputs are not found. Linux hosted links the system C
+runtime: the C runtime's startup enters `main`, and the embedded
+linker probes the host's usual startup files and loader once per
+process; `freestanding = true` asks for the kernel-only link instead.
+macOS links the SDK's
+`usr/lib/crt1.o` and `libSystem` from the SDK named by `SDKROOT`, or
+by `DEVELOPER_DIR`, or the newest Command Line Tools or Xcode SDK;
+the deployment floor is 11.0. `--time-trace` names the link
+`lld-link` when the embedded linker ran; a log with no `lld-link`
+row means the spawned driver did the work instead.
+Windows links `kernel32.dll` and
+nothing else: the import library is found from `WindowsSdkDir` and
+`WindowsSDKVersion`, or the newest `10.0.*` kit under
+`Windows Kits\10\Lib` (vcvars puts both in the environment). An
+install whose build embedded no linker behaves as it did before: the
+default is a `clang` from PATH. A build targeting another machine
+needs a configured driver either way.
+
 ### `.alcy/toolchain.toml`
 
 ```toml
@@ -92,6 +112,9 @@ value becomes the process's exit code. On Linux the hosted default
 links the system C runtime, so the flag is how a Linux build asks
 for the kernel-only link; on platforms whose hosted build uses a C
 runtime it names that link directly.
+A macOS target has no freestanding mode: libSystem is the only
+sanctioned route there, so the flag is refused with a diagnostic
+naming the target.
 
 A Windows hosted build links `kernel32.dll` and nothing else: no
 startup objects, no C runtime, no UCRT. The compiler emits `_start` as
