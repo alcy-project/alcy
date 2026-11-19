@@ -659,7 +659,12 @@ body.site {
 
   .guide-nav ol {
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 2px 18px;
+  }
+
+  .guide-nav li {
+    min-width: 0;
   }
 
   .guide-outline {
