@@ -5,7 +5,7 @@
 // module needs to know about another module's work is a field here, so a
 // reader can see the whole surface in one place.
 
-import type { MessageKey, MessageParams } from "../shared/i18n.js";
+import type { MessageKey, MessageParams } from "../shared/i18n.en.js";
 import type { CompilerStatusName, Diagnostic, RunMeta } from "./types.js";
 
 export interface Highlighter {

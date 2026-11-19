@@ -13,11 +13,11 @@
 // The catalog arrives under the name the page's import map gives it, and
 // that map names the one module for this page's tree, so a reader
 // downloads one language's strings rather than the table of all of them.
-// The generator writes the map into every page it emits; `i18n.ts` is
-// the source each tree's module is cut from.
+// The generator writes the map into every page it emits; the
+// catalog modules are generated from catalog.json at build time.
 
 import * as catalog from "alcy:i18n";
-import type { Language, MessageKey, MessageParams } from "./i18n.js";
+import type { Language, MessageKey, MessageParams } from "./i18n.en.js";
 
 const THEME_KEY = "alcy-site-theme";
 const LEGACY_THEME_KEY = "alcy-playground-theme";

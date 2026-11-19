@@ -1,0 +1,36 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The tree-sitter runtime, linked by the site generator so its
+# build-time highlighting runs natively. The grammar itself - the
+# parser C sources and the queries - lives in treesitter/.
+config("tree_sitter_config") {
+  include_dirs = [
+    "//third_party/tree-sitter/src/lib/include",
+    "//third_party/tree-sitter/src/lib/src",
+  ]
+}
+
+source_set("tree-sitter") {
+  configs = []
+  configs = default_third_party_configs
+  sources = [
+    "src/lib/src/alloc.c",
+    "src/lib/src/get_changed_ranges.c",
+    "src/lib/src/language.c",
+    "src/lib/src/lexer.c",
+    "src/lib/src/node.c",
+    "src/lib/src/parser.c",
+    "src/lib/src/point.c",
+    "src/lib/src/query.c",
+    "src/lib/src/stack.c",
+    "src/lib/src/subtree.c",
+    "src/lib/src/tree.c",
+    "src/lib/src/tree_cursor.c",
+    "src/lib/src/wasm_store.c",
+  ]
+  include_dirs = [
+    "//third_party/tree-sitter/src/lib/src",
+  ]
+  public_configs = [ ":tree_sitter_config" ]
+}

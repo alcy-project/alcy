@@ -105,6 +105,14 @@ executable("tests") {
     "property/mangle_property_test.cc",
     "source/source_test.cc",
     "source/virtual_source_test.cc",
+    "ssg/cases.h",
+    "ssg/catalog_test.cc",
+    "ssg/guide_render_test.cc",
+    "ssg/links_test.cc",
+    "ssg/markdown_test.cc",
+    "ssg/spec_test.cc",
+    "ssg/sw_test.cc",
+    "ssg/templates_test.cc",
     "symbol/mangle_test.cc",
     "test_main.cc",
     "testgen/driver_test.cc",
@@ -155,6 +163,7 @@ executable("tests") {
 
     # A property test parses what a serializer wrote, which is the only
     # way to state "the output is loadable" without a second reader.
+    "//src/ssg",
     "//third_party/toml",
   ]
 }

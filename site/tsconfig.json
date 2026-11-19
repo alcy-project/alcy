@@ -4,7 +4,7 @@
     "module": "ES2022",
     "moduleResolution": "bundler",
     "paths": {
-      "alcy:i18n": ["./shared/i18n.ts"]
+      "alcy:i18n": ["./shared/i18n.en.ts"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,

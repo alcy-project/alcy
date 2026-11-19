@@ -1,2 +1,4 @@
 /dist/
 /build/
+/shared/i18n.en.ts
+/shared/i18n.ja.ts

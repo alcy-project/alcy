@@ -7,7 +7,7 @@
 // keeps the three in step.
 
 import { elements } from "./elements.js";
-import type { MessageKey, MessageParams } from "../shared/i18n.js";
+import type { MessageKey, MessageParams } from "../shared/i18n.en.js";
 import { state } from "./state.js";
 import { assetBase } from "./assets.js";
 

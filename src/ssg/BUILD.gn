@@ -1,0 +1,59 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The site generator: stamps the site from the sources under docs/.
+# The module is split so `alcy doc` can reuse the same core for a
+# generated API reference: the core has no compiler dependencies,
+# and the docsite binary wires it to the fence compiler.
+source_set("ssg") {
+  sources = [
+    "catalog.cc",
+    "catalog.h",
+    "discover.cc",
+    "discover.h",
+    "documents.cc",
+    "documents.h",
+    "highlight.cc",
+    "highlight.h",
+    "links.cc",
+    "links.h",
+    "markdown.cc",
+    "markdown.h",
+    "paths.cc",
+    "paths.h",
+    "render.cc",
+    "render.h",
+    "shell.cc",
+    "shell.h",
+    "template.cc",
+    "template.h",
+    "urls.cc",
+    "urls.h",
+  ]
+
+  configs += [ "//src:alcy_config" ]
+  public_configs = [ "//src:alcy_config" ]
+
+  deps = [
+    "//src:base_modules",
+    "//third_party/fpag",
+    "//third_party/tree-sitter",
+    "//treesitter:grammar",
+  ]
+}
+
+# The binary the documentation builds invoke. It needs the whole
+# compiler to check a page's `alcy` fences before it lets them onto
+# the page.
+executable("docsite") {
+  output_name = "alcy-docsite"
+  sources = [ "docsite.cc" ]
+
+  configs += [ "//src:alcy_config" ]
+
+  deps = [
+    ":ssg",
+    "//src:base_modules",
+    "//src/playground",
+  ]
+}

@@ -8,7 +8,7 @@
 // Every name is a re-export so the feature modules keep importing from
 // `./types.js`.
 
-import type { MessageKey, MessageParams } from "../shared/i18n.js";
+import type { MessageKey, MessageParams } from "../shared/i18n.en.js";
 
 export type {
   CompilerMessage,

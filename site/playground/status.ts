@@ -6,7 +6,7 @@
 // kept as catalog keys so switching the language re-renders them.
 
 import { elements } from "./elements.js";
-import type { MessageKey, MessageParams } from "../shared/i18n.js";
+import type { MessageKey, MessageParams } from "../shared/i18n.en.js";
 import { t } from "../shared/site.js";
 import { renderDiagnostics } from "./problems.js";
 import { state } from "./state.js";

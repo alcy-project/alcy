@@ -13,3 +13,6 @@
 [submodule "third_party/toml/src"]
 	path = third_party/toml/src
 	url = https://github.com/marzer/tomlplusplus.git
+[submodule "third_party/tree-sitter/src"]
+	path = third_party/tree-sitter/src
+	url = https://github.com/tree-sitter/tree-sitter

@@ -1,0 +1,20 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The alcy grammar for tree-sitter, as a C parser the site
+# generator links against: highlighting at build time runs the
+# same grammar the browser uses to color the playground's code, so
+# a page fence and an editor buffer share one highlighting.
+config("grammar_config") {
+  include_dirs = [ "src" ]
+}
+
+source_set("grammar") {
+  configs = []
+  configs = default_third_party_configs
+  sources = [
+    "src/parser.c",
+    "src/scanner.c",
+  ]
+  public_configs = [ ":grammar_config" ]
+}

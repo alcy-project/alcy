@@ -10,7 +10,8 @@ templates plus the shared shell: TypeScript and plain HTML and CSS that
 is not self-contained. The sources compile to the JavaScript the pages
 load, highlighting needs the grammar compiled to wasm and a tree-sitter
 binding, and the Check and Run buttons need the compiler's wasm module.
-The site's own generator (`site/ssg/`) stamps one page tree per language
+The site's own generator (the docsite binary built from `src/ssg`)
+stamps one page tree per language
 (English at the root, `/ja/` beside it) from the templates and the guide
 under `docs/guide/`, checking the guide's examples with the same compiler
 module. This assembles all of those into `site/dist/`, which any static
@@ -58,8 +59,16 @@ SHARED_DIR = SITE_DIR / "shared"
 DEFAULT_DIST_DIR = SITE_DIR / "dist"
 # The user-facing guide; the site's generator renders it.
 GUIDE_DIR = project_root_dir / "docs" / "guide"
+SPEC_DIR = project_root_dir / "docs" / "spec"
+TOOLS_DIR = project_root_dir / "docs" / "tools"
 # Where the playground page lives inside the assembled site.
 PAGE_SUBDIR = "playground"
+
+# The languages the generator emits a page tree for; English is
+# the tree at the site root and every other language lives under its
+# own prefix.
+SITE_LANGUAGES = ("en", "ja")
+DEFAULT_LANGUAGE = "en"
 # The JavaScript the site loads, as emitted by `tsc`.
 BUILD_DIR = SITE_DIR / "build"
 GRAMMAR_DIR = project_root_dir / "treesitter"
@@ -344,6 +353,18 @@ def install_dependencies(versions: Versions) -> Path:
     return modules
 
 
+def generate_catalogs() -> None:
+    if not (SITE_DIR / "shared" / "catalog.json").is_file():
+        raise FileNotFoundError("site/shared/catalog.json is missing")
+    result = subprocess.run(
+        [sys.executable, str(project_root_dir / "tools" / "catalog.py")],
+        check=False,
+        cwd=project_root_dir,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("tools/catalog.py failed")
+
+
 def build_typescript(modules: Path) -> None:
     bun = shutil.which("bun")
     if bun is None:
@@ -353,7 +374,7 @@ def build_typescript(modules: Path) -> None:
         raise FileNotFoundError(f"{tsc} is missing")
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
-    for config in ("tsconfig.json", "tsconfig.workers.json", "tsconfig.ssg.json"):
+    for config in ("tsconfig.json", "tsconfig.workers.json"):
         subprocess.run(
             [bun, str(tsc), "-p", config],
             check=True,
@@ -393,56 +414,10 @@ def copy_shared(dist_dir: Path) -> None:
             # The service worker serves from the site's root, not here:
             # its scope is its own directory and the whole site needs it.
             continue
-        if source.name == "i18n.js":
-            continue
         shutil.copy2(source, target / source.name)
         source_map = source.with_suffix(".js.map")
         if source_map.is_file():
             shutil.copy2(source_map, target / source_map.name)
-
-
-# The languages the generator emits a page tree for. A tree's script
-# loads one language's strings, not the table of all of them: the build
-# writes one module per language with the other catalog removed, and each
-# page names the module for its tree in its import map.
-SITE_LANGUAGES = ("en", "ja")
-DEFAULT_LANGUAGE = "en"
-
-# The two catalogs are adjacent blocks that end at a line holding only
-# `};`, and the table that selects one by the page's language is a single
-# line between them and `toLanguage`.
-CATALOGS_TABLE = "const CATALOGS = { en, ja };"
-
-
-def prune_catalogs(source: str, language: str) -> str:
-    """Returns `source` with every catalog but `language` removed."""
-    pruned = source
-    for name in SITE_LANGUAGES:
-        if name == language:
-            continue
-        pattern = re.compile(
-            rf"^(?:export )?const {re.escape(name)} = \{{\n[\s\S]*?^\}};\n",
-            re.MULTILINE,
-        )
-        pruned, count = pattern.subn("", pruned)
-        if count != 1:
-            raise RuntimeError(
-                f"shared/i18n.js has no {name} catalog to remove for {language}"
-            )
-    if pruned.count(CATALOGS_TABLE) != 1:
-        raise RuntimeError("shared/i18n.js has no CATALOGS table to prune")
-    return pruned.replace(CATALOGS_TABLE, f"const CATALOGS = {{ {language} }};")
-
-
-def write_catalogs(dist_dir: Path) -> None:
-    source = (BUILD_DIR / "shared" / "i18n.js").read_text(encoding="utf-8")
-    target = dist_dir / "shared"
-    target.mkdir(parents=True, exist_ok=True)
-    for language in SITE_LANGUAGES:
-        (target / f"i18n.{language}.js").write_text(
-            prune_catalogs(source, language), encoding="utf-8"
-        )
-    log(f"catalogs: {', '.join(SITE_LANGUAGES)}")
 
 
 # The catalog import the shared modules carry. One set of shared modules
@@ -714,49 +689,42 @@ def build_stamp(repo_root: Path) -> tuple[str, str]:
 
 
 def build_guide(dist_dir: Path) -> None:
-    bun = shutil.which("bun")
-    if bun is None:
-        raise RuntimeError("bun is not on PATH; needed to run the generator")
-    generator = BUILD_DIR / "ssg" / "src" / "main.js"
-    if not generator.is_file():
-        raise FileNotFoundError(f"{generator} is missing; run the TypeScript build")
+    # alcy-docsite stamps every page tree, verifies every fence and
+    # walks the link audit natively. It links the compiler for the
+    # fence check, so its build is a release build.
+    docsite = docsite_binary()
+    if docsite is None:
+        raise RuntimeError(
+            "alcy-docsite is not built; build it with "
+            "tools/build.py --target=src/ssg:docsite --mode=release "
+            "--build-subdir=docsite"
+        )
     stamp, stamp_url = build_stamp(project_root_dir)
     command = [
-        bun,
-        str(generator),
+        str(docsite),
         "--docs",
         str(GUIDE_DIR),
+        "--spec",
+        str(SPEC_DIR),
+        "--tools",
+        str(TOOLS_DIR),
         "--dist",
         str(dist_dir),
         "--site",
         str(SITE_DIR),
         "--repo-root",
         str(project_root_dir),
-        "--alcy",
-        str(project_root_dir / "src" / "playground" / "js" / "alcy.mjs"),
         "--stamp",
         stamp,
         "--stamp-url",
         stamp_url,
     ]
-    grammar = dist_dir / PAGE_SUBDIR / "grammar"
-    if (grammar / "tree-sitter-alcy.wasm").is_file():
-        command += [
-            "--grammar",
-            str(grammar / "tree-sitter-alcy.wasm"),
-            "--highlights",
-            str(grammar / "highlights.scm"),
-            "--tree-sitter",
-            str(DEPS_DIR / "node_modules" / "web-tree-sitter" / "web-tree-sitter.js"),
-        ]
-    else:
-        log("guide: grammar wasm is missing; code fences are not highlighted")
-    glue = dist_dir / PAGE_SUBDIR / "compiler" / "alcy_playground.js"
-    if glue.is_file():
-        command += ["--glue", str(glue)]
-    else:
-        log("guide: compiler wasm is missing; alcy fences were not compiled")
     subprocess.run(command, check=True, cwd=project_root_dir)
+
+
+def docsite_binary() -> Path | None:
+    candidate = project_root_dir / "out" / "docsite" / "alcy-docsite"
+    return candidate if candidate.is_file() else None
 
 
 def command_build(args: argparse.Namespace) -> int:
@@ -773,6 +741,7 @@ def command_build(args: argparse.Namespace) -> int:
 
     versions = load_versions()
     modules = install_dependencies(versions)
+    generate_catalogs()
     build_typescript(modules)
 
     dist_dir = args.dist.resolve()
@@ -782,7 +751,6 @@ def command_build(args: argparse.Namespace) -> int:
 
     copy_static(dist_dir)
     copy_shared(dist_dir)
-    write_catalogs(dist_dir)
     copy_service_worker(dist_dir)
     copy_samples(dist_dir)
 
@@ -809,18 +777,23 @@ def command_build(args: argparse.Namespace) -> int:
 
 
 def command_test(_args: argparse.Namespace) -> int:
-    versions = load_versions()
-    modules = install_dependencies(versions)
-    build_typescript(modules)
-    bun = shutil.which("bun")
-    if bun is None:
-        raise RuntimeError("bun is not on PATH; needed to run the tests")
-    subprocess.run(
-        [bun, "test", str(BUILD_DIR / "ssg" / "test")],
-        check=True,
+    # The generator tests are part of the compiler test suite; run the
+    # same target CI does. The first build is full, subsequent ones
+    # are incremental.
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(project_root_dir / "tools" / "run.py"),
+            "--target=tests",
+            "--mode=debug",
+            "--build-subdir=build",
+        ],
+        check=False,
         cwd=project_root_dir,
     )
-    log("generator tests passed")
+    if result.returncode != 0:
+        return fail("tests failed")
+    log("tests passed")
     return 0
 
 
