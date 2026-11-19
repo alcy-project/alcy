@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "pipeline/build.h"
+
 #if BUILD_FLAG(IS_OS_WIN)
 #include <direct.h>
 #else
@@ -870,7 +872,8 @@ base::Result<TestPackage, diag::Reported> resolve_test_package(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
-    testgen::Execution execution) {
+    testgen::Execution execution,
+    const BuildProgressObserver* progress) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "tests", "frontend");
   base::Result<LoadedPackage, diag::Reported> loaded =
       load_package(ctx, root, manifest_file, manifest_name);
@@ -878,6 +881,9 @@ base::Result<TestPackage, diag::Reported> resolve_test_package(
     return base::make_err(diag::Reported{});
   }
   LoadedPackage package = std::move(loaded).unwrap();
+  if (progress != nullptr && progress->begin != nullptr) {
+    progress->begin(progress->ctx, package.manifest.name, 1, false);
+  }
   // A package whose directory is a copy of an embedded member is tested as
   // that member: the run stages the package's own files in the member's
   // tree, so the sealed specs and builtin type declarations its dialect

@@ -1332,6 +1332,8 @@ TEST_CASE("Run announces the target before the program, not after") {
   const std::string program = out.text();
   // Matched rather than compared whole, because the link driver adds a
   // warning of its own to this stream on some platforms.
+  CHECK(announced.find("Building  package app (1 target)\n") !=
+        std::string::npos);
   CHECK(announced.find("Running   app\n") != std::string::npos);
   CHECK(program.find("Running   app\n") == std::string::npos);
   CHECK(program.find("marker") != std::string::npos);

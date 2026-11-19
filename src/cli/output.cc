@@ -186,28 +186,6 @@ const char* outcome_name(Outcome outcome) {
 // the words after it.
 constexpr usize VERB_COLUMN = 10;
 
-// Bold bright green for the verb, underline for what it acted on, dim for the
-// note. The same palette the diagnostic renderer uses, so a result line and a
-// diagnostic agree about what a colour means.
-void append_bold_bright_green(std::string& out, std::string_view text) {
-  out.append(term::BOLD);
-  out.append(term::FG_BRIGHT_GREEN);
-  out.append(text);
-  out.append(term::RESET);
-}
-
-void append_underline(std::string& out, std::string_view text) {
-  out.append(term::UNDERLINE);
-  out.append(text);
-  out.append(term::RESET);
-}
-
-void append_dim(std::string& out, std::string_view text) {
-  out.append(term::DIM);
-  out.append(text);
-  out.append(term::RESET);
-}
-
 // A count with its noun, pluralized. `1 file(s)` was neither: it reads
 // as a placeholder in a sentence and as a mistake in a list. A language
 // that carries the count inside its noun gets two messages and picks
@@ -401,6 +379,67 @@ std::string result_note(const Envelope& envelope, i18n::Language language) {
   return note;
 }
 
+// The verb, the subject, and the note, laid out in columns. The one
+// place a result line is built, so the text report and the JSON
+// `summary` cannot drift apart.
+void render_result_line(std::string& out,
+                        const Envelope& envelope,
+                        bool color,
+                        bool newline,
+                        i18n::Language language) {
+  const std::string_view verb = verb_for(envelope.outcome, language);
+  const std::string subject = result_subject(envelope, language);
+  const bool scaffolds = envelope.outcome == Outcome::CreatedPackage ||
+                         envelope.outcome == Outcome::CreatedSuite;
+  render_labelled(out, verb, subject, !scaffolds, color, false);
+
+  if (note_has_size(envelope) || note_has_duration(envelope)) {
+    out.append("  ");
+    const std::string note = result_note(envelope, language);
+    if (color) {
+      append_dim(out, note);
+    } else {
+      out.append(note);
+    }
+  }
+  if (newline) {
+    out.push_back('\n');
+  }
+}
+
+// The same line without colour and without its newline, which is what a
+// JSON document carries: a reader wants the sentence, not the layout.
+std::string result_line(const Envelope& envelope, i18n::Language language) {
+  std::string line;
+  render_result_line(line, envelope, false, false, language);
+  return line;
+}
+
+}  // namespace
+
+// Styling helpers shared with build/test progress reports.
+// Bold bright green for the verb, underline for what it acted on, dim for the
+// note. The same palette the diagnostic renderer uses, so a result line and a
+// diagnostic agree about what a colour means.
+void append_bold_bright_green(std::string& out, std::string_view text) {
+  out.append(term::BOLD);
+  out.append(term::FG_BRIGHT_GREEN);
+  out.append(text);
+  out.append(term::RESET);
+}
+
+void append_underline(std::string& out, std::string_view text) {
+  out.append(term::UNDERLINE);
+  out.append(text);
+  out.append(term::RESET);
+}
+
+void append_dim(std::string& out, std::string_view text) {
+  out.append(term::DIM);
+  out.append(text);
+  out.append(term::RESET);
+}
+
 // A verb and its subject, in the column every result line uses.
 void render_labelled(std::string& out,
                      std::string_view verb,
@@ -441,44 +480,6 @@ void render_labelled(std::string& out,
     out.push_back('\n');
   }
 }
-
-// The verb, the subject, and the note, laid out in columns. The one
-// place a result line is built, so the text report and the JSON
-// `summary` cannot drift apart.
-void render_result_line(std::string& out,
-                        const Envelope& envelope,
-                        bool color,
-                        bool newline,
-                        i18n::Language language) {
-  const std::string_view verb = verb_for(envelope.outcome, language);
-  const std::string subject = result_subject(envelope, language);
-  const bool scaffolds = envelope.outcome == Outcome::CreatedPackage ||
-                         envelope.outcome == Outcome::CreatedSuite;
-  render_labelled(out, verb, subject, !scaffolds, color, false);
-
-  if (note_has_size(envelope) || note_has_duration(envelope)) {
-    out.append("  ");
-    const std::string note = result_note(envelope, language);
-    if (color) {
-      append_dim(out, note);
-    } else {
-      out.append(note);
-    }
-  }
-  if (newline) {
-    out.push_back('\n');
-  }
-}
-
-// The same line without colour and without its newline, which is what a
-// JSON document carries: a reader wants the sentence, not the layout.
-std::string result_line(const Envelope& envelope, i18n::Language language) {
-  std::string line;
-  render_result_line(line, envelope, false, false, language);
-  return line;
-}
-
-}  // namespace
 
 void announce(const Logger& err,
               std::string_view verb,

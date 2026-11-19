@@ -8,13 +8,20 @@
 #include <string_view>
 #include <utility>
 
+#include "cli/build_progress.h"
 #include "cli/cli_config.h"
 #include "cli/compile_command.h"
+#include "cli/logger.h"
 #include "cli/output.h"
 #include "cli/result_code.h"
 #include "cli/trace.h"
 #include "diag/bag.h"
+#include "diag/render.h"
 #include "fpag/base/result.h"
+#include "fpag/io/io_util.h"
+#include "fpag/term/color_mode.h"
+#include "fpag/term/color_style.h"
+#include "fpag/term/console.h"
 #include "pipeline/artifact.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
@@ -119,13 +126,24 @@ ResultCode run_build(const CliConfig& config,
   const bool suite =
       manifest_bytes.has_value() &&
       pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite;
+  const term::ColorStyle style =
+      term::console_color_style(term::Stream::Stderr, config.color_mode);
+  const diag::RenderOptions announce_options{
+      .color = style != term::ColorStyle::Off,
+      .language = config.language,
+  };
+  FdSink err_sink{io::STDERR_FD};
+  const Logger err{&FdSink::write, &err_sink};
+  const BuildProgress progress{err, !config.json, announce_options};
+  const pipeline::BuildProgressObserver progress_observer =
+      build_progress_observer(progress);
   base::Result<pipeline::BuildResult, diag::Reported> res =
       suite ? pipeline::build_suite(ctx, found.root, found.manifest,
                                     found.manifest_name, config.output, plan,
-                                    config.emit)
+                                    config.emit, &progress_observer)
             : pipeline::build_package(ctx, found.root, found.manifest,
                                       found.manifest_name, config.output, plan,
-                                      config.emit);
+                                      config.emit, &progress_observer);
   envelope.trace = trace.take_events();
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;

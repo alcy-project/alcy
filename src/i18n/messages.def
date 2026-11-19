@@ -585,6 +585,7 @@
   F(CliUnknownSubcommand, Note, Pipeline, "Unknown subcommand '{}'; see '{} --help'") \
   F(CliVcsHelp, Note, Pipeline, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \
   F(CliVerbBuilt, Note, Pipeline, "Built") \
+  F(CliVerbBuilding, Note, Pipeline, "Building") \
   F(CliVerbChecked, Note, Pipeline, "Checked") \
   F(CliVerbCompiled, Note, Pipeline, "Compiled") \
   F(CliVerbCreatedPackage, Note, Pipeline, "Created package") \

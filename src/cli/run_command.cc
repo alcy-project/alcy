@@ -8,6 +8,7 @@
 #include <string_view>
 #include <utility>
 
+#include "cli/build_progress.h"
 #include "cli/cli_config.h"
 #include "cli/logger.h"
 #include "cli/output.h"
@@ -115,15 +116,19 @@ i32 run_run(const CliConfig& config,
       term::console_color_style(term::Stream::Stderr, config.color_mode);
   const diag::RenderOptions announce_options{
       .color = style != term::ColorStyle::Off,
+      .language = config.language,
   };
   FdSink err_sink{io::STDERR_FD};
   const Logger err{&FdSink::write, &err_sink};
   const Announcement announcement{announce_options, err};
+  const BuildProgress progress{err, true, announce_options};
+  const pipeline::BuildProgressObserver progress_observer =
+      build_progress_observer(progress);
   const pipeline::BuildPlan plan{.profile = selected, .link = link};
   base::Result<pipeline::RunOutcome, diag::Reported> result =
       pipeline::run_package(ctx, found.root, found.manifest,
                             found.manifest_name, plan, args, announce_exec,
-                            &announcement);
+                            &announcement, &progress_observer);
   envelope.trace = trace.take_events();
   // A run lowers through the same lifecycle a build does, so its cache
   // outcome is the same report.

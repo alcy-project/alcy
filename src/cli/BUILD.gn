@@ -27,6 +27,8 @@ source_set("cli") {
     "$target_gen_dir/version.cc",
     "build_command.cc",
     "build_command.h",
+    "build_progress.cc",
+    "build_progress.h",
     "check_command.cc",
     "check_command.h",
     "cli_config.cc",

@@ -1,0 +1,7 @@
+[package]
+name = "one"
+version.suite = true
+license.suite = true
+
+[[bin]]
+path = "main.al"

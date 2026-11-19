@@ -177,6 +177,20 @@ std::string render_diagnostics(const Envelope& envelope,
 std::string render_result(const Envelope& envelope,
                           const diag::RenderOptions& r);
 
+// Shared styling helpers the renderers use; the definitions state what
+// each one does.
+void append_bold_bright_green(std::string& out, std::string_view text);
+void append_underline(std::string& out, std::string_view text);
+void append_dim(std::string& out, std::string_view text);
+
+// A verb and its subject, in the column every result line uses.
+void render_labelled(std::string& out,
+                     std::string_view verb,
+                     std::string_view subject,
+                     bool pad_verb,
+                     bool color,
+                     bool newline);
+
 // Writes the line that labels what a command is about to do, to
 // `err`, immediately before the command does it.
 //

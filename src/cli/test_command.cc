@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "cli/build_progress.h"
 #include "cli/cli_config.h"
 #include "cli/logger.h"
 #include "cli/output.h"
@@ -16,9 +17,12 @@
 #include "cli/trace.h"
 #include "codegen/target.h"
 #include "diag/bag.h"
+#include "diag/render.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
+#include "fpag/term/color_style.h"
+#include "fpag/term/console.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
 #include "pipeline/artifact.h"
@@ -148,12 +152,24 @@ i32 run_test(const CliConfig& config,
   resolve_backend_options(config, ctx, selected);
   FdSink err_sink{io::STDERR_FD};
   const Logger err{&FdSink::write, &err_sink};
+  const term::ColorStyle style =
+      term::console_color_style(term::Stream::Stderr, config.color_mode);
+  const diag::RenderOptions announce_options{
+      .color = style != term::ColorStyle::Off,
+      .language = language,
+  };
+  const BuildProgress build_progress{err, !config.json && !config.test_list,
+                                     announce_options};
+  const pipeline::BuildProgressObserver build_observer =
+      build_progress_observer(build_progress);
+  const pipeline::BuildProgressObserver* observer =
+      config.test_list ? nullptr : &build_observer;
   const pipeline::BuildPlan plan{.profile = selected, .link = link};
 
   base::Result<pipeline::TestPackage, diag::Reported> package =
       pipeline::resolve_test_package(ctx, found.root, found.manifest,
-                                     found.manifest_name,
-                                     config.test_execution);
+                                     found.manifest_name, config.test_execution,
+                                     observer);
   if (package.is_err()) {
     return failed;
   }

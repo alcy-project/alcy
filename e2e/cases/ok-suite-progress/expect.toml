@@ -1,0 +1,7 @@
+# A suite build announces itself on standard error, one line naming
+# the suite and the member count.
+exit = 0
+subcommand = "build"
+default_output = true
+contains = ["Building  suite acme/progress (2 packages)"]
+not_contains = ["error"]

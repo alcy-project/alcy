@@ -74,14 +74,19 @@ base::Result<RunOutcome, diag::Reported> run_package(
     BuildPlan plan,
     std::span<const std::string_view> args,
     AnnounceExec announce,
-    const void* announce_ctx) {
+    const void* announce_ctx,
+    const BuildProgressObserver* progress) {
+  std::string package_name;
   base::Result<std::vector<Artifact>, diag::Reported> targets =
       resolve_artifacts(ctx, root, manifest_file, manifest_name,
-                        ArtifactScope::BinOnly);
+                        ArtifactScope::BinOnly, &package_name);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   std::vector<Artifact> resolved = std::move(targets).unwrap();
+  if (progress != nullptr && progress->begin != nullptr) {
+    progress->begin(progress->ctx, package_name, resolved.size(), false);
+  }
   if (resolved.empty()) {
     // A library builds but never runs: there is no entry to execute.
     const u32 index = ctx.bag.emit<i18n::Key::PipelineManifestNoBinToRun>(

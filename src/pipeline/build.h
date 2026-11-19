@@ -97,7 +97,8 @@ base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
     PipelineContext& ctx,
     const PlannedArtifact& planned,
     const path::Path& root,
-    source::FileId manifest_file);
+    source::FileId manifest_file,
+    bool* cached_out = nullptr);
 
 // The back half of the same lifecycle: the middle end, the emission, and
 // the link. Success names the path written.
@@ -113,12 +114,34 @@ base::Result<std::string, diag::Reported> emit_target(
 // a suite build. `count` is the number of targets a package build
 // produced, or the number of member packages a suite build built.
 // `output_path` is the first artifact's path for a package build, and
-// the directory the suite's artifacts share for a suite build.
+// the directory the suite's artifacts share for a suite build. `cached`
+// is true only when every target in the scope was served from the
+// build cache.
 struct BuildResult {
   std::string output_path;
   std::string name;
   bool suite = false;
   usize count = 0;
+  bool cached = false;
+};
+
+// An optional observer for build progress, handed plain callbacks as
+// elsewhere in the pipeline. `begin` fires once, right after the
+// manifest is read, so the scope of the build is known before any
+// compilation starts. `member_done` fires once per suite member, in the
+// order the suite builds them; it does not fire for a member that
+// failed. `cached` says the target's frontend was served from the
+// build cache, so a caller can stay silent about it.
+struct BuildProgressObserver {
+  void* ctx = nullptr;
+  void (*begin)(void* ctx,
+                std::string_view name,
+                usize count,
+                bool suite) = nullptr;
+  void (*member_done)(void* ctx,
+                      std::string_view member,
+                      u64 duration_ns,
+                      bool cached) = nullptr;
 };
 
 base::Result<BuildResult, diag::Reported> build_package(
@@ -128,7 +151,8 @@ base::Result<BuildResult, diag::Reported> build_package(
     std::string_view manifest_name,
     std::string_view output,
     BuildPlan plan,
-    EmitMode mode);
+    EmitMode mode,
+    const BuildProgressObserver* progress = nullptr);
 
 // Builds every member of the suite at `root`, each through its own
 // manifest and into its own directory under the suite's `out/`
@@ -141,6 +165,7 @@ base::Result<BuildResult, diag::Reported> build_suite(
     std::string_view manifest_name,
     std::string_view output,
     BuildPlan plan,
-    EmitMode mode);
+    EmitMode mode,
+    const BuildProgressObserver* progress = nullptr);
 
 }  // namespace pipeline

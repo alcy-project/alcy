@@ -4,6 +4,7 @@
 #include "pipeline/build.h"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <span>
@@ -906,7 +907,11 @@ base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
     PipelineContext& ctx,
     const PlannedArtifact& planned,
     const path::Path& root,
-    source::FileId manifest_file) {
+    source::FileId manifest_file,
+    bool* cached_out) {
+  if (cached_out != nullptr) {
+    *cached_out = false;
+  }
   Artifact& target = *planned.target;
   const bool is_lib = target.kind == ArtifactKind::Lib;
   const bool emit_entry =
@@ -941,6 +946,9 @@ base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
     cache_dir = std::string(out_dir.join(".cache").as_view());
     entry = cache_entry_path(cache_dir, key);
     cached = cache_load(ctx, entry, identity);
+    if (cached_out != nullptr) {
+      *cached_out = cached.has_value();
+    }
     ctx.cache_outcome = combine_cache_outcome(
         ctx.cache_outcome,
         cached.has_value() ? CacheOutcome::Hit : CacheOutcome::Miss);
@@ -1009,7 +1017,8 @@ base::Result<BuildResult, diag::Reported> build_package(
     std::string_view manifest_name,
     std::string_view output,
     BuildPlan plan,
-    EmitMode mode) {
+    EmitMode mode,
+    const BuildProgressObserver* progress) {
   std::string package_name;
   base::Result<std::vector<Artifact>, diag::Reported> targets =
       resolve_artifacts(ctx, root, manifest_file, manifest_name,
@@ -1061,6 +1070,9 @@ base::Result<BuildResult, diag::Reported> build_package(
     }
     planned.push_back({&target, target_mode, std::move(output_path)});
   }
+  if (progress != nullptr && progress->begin != nullptr) {
+    progress->begin(progress->ctx, package_name, planned.size(), false);
+  }
   for (usize i = 0; i < planned.size(); ++i) {
     for (usize j = i + 1; j < planned.size(); ++j) {
       if (planned[i].path != planned[j].path) {
@@ -1082,10 +1094,13 @@ base::Result<BuildResult, diag::Reported> build_package(
   // The cli reports one artifact per build, so a package with several
   // targets names the first: the binary, resolved ahead of the library.
   bool failed = false;
+  bool targets_cached = !planned.empty();
   std::string first_output;
   for (PlannedArtifact& planned_target : planned) {
+    bool target_cached = false;
     base::Result<lowering::LoweredPackage, diag::Reported> lowered =
-        lower_target(ctx, planned_target, root, manifest_file);
+        lower_target(ctx, planned_target, root, manifest_file, &target_cached);
+    targets_cached = targets_cached && target_cached;
     if (lowered.is_err()) {
       failed = true;
       break;
@@ -1113,6 +1128,7 @@ base::Result<BuildResult, diag::Reported> build_package(
       .name = std::move(package_name),
       .suite = false,
       .count = planned.size(),
+      .cached = targets_cached,
   });
 }
 
@@ -1123,7 +1139,8 @@ base::Result<BuildResult, diag::Reported> build_suite(
     std::string_view manifest_name,
     std::string_view output,
     BuildPlan plan,
-    EmitMode mode) {
+    EmitMode mode,
+    const BuildProgressObserver* progress) {
   const std::optional<std::string_view> bytes =
       ctx.sources.bytes(manifest_file);
   if (!bytes.has_value()) {
@@ -1146,6 +1163,12 @@ base::Result<BuildResult, diag::Reported> build_suite(
                             ctx.bag);
     return base::make_err(diag::Reported{});
   }
+  std::string suite_display_name;
+  if (!suite.owner.empty()) {
+    suite_display_name += suite.owner;
+    suite_display_name += '/';
+  }
+  suite_display_name += suite.name;
   if (suite.package_count == 0) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteEmpty>(
         DiagCode::NoTargets, manifest_name);
@@ -1160,6 +1183,11 @@ base::Result<BuildResult, diag::Reported> build_suite(
     (void)index;
     return base::make_err(diag::Reported{});
   }
+  if (progress != nullptr && progress->begin != nullptr) {
+    progress->begin(progress->ctx, suite_display_name, suite.package_count,
+                    true);
+  }
+  bool suite_cached = true;
   for (u32 i = 0; i < suite.package_count; ++i) {
     base::Result<ManifestProbe, diag::Reported> probe =
         require_package_manifest(ctx, root.join(suite.packages[i]).as_view(),
@@ -1168,19 +1196,24 @@ base::Result<BuildResult, diag::Reported> build_suite(
       return base::make_err(diag::Reported{});
     }
     ManifestProbe member = std::move(probe).unwrap();
+    const auto started = std::chrono::steady_clock::now();
     base::Result<BuildResult, diag::Reported> built =
         build_package(ctx, member.root, member.manifest, member.manifest_name,
                       {}, plan, mode);
     if (built.is_err()) {
       return base::make_err(diag::Reported{});
     }
+    const BuildResult member_result = std::move(built).unwrap();
+    suite_cached = suite_cached && member_result.cached;
+    if (progress != nullptr && progress->member_done != nullptr) {
+      const std::chrono::steady_clock::duration elapsed =
+          std::chrono::steady_clock::now() - started;
+      const u64 ns = static_cast<u64>(elapsed.count());
+      progress->member_done(progress->ctx, member_result.name, ns,
+                            member_result.cached);
+    }
   }
-  std::string suite_name;
-  if (!suite.owner.empty()) {
-    suite_name += suite.owner;
-    suite_name += '/';
-  }
-  suite_name += suite.name;
+  std::string suite_name = std::move(suite_display_name);
   // A member is not more the build than its siblings, so the suite
   // reports the one directory its artifacts share, and names the suite
   // rather than any member's output.
@@ -1189,6 +1222,7 @@ base::Result<BuildResult, diag::Reported> build_suite(
       .name = std::move(suite_name),
       .suite = true,
       .count = suite.package_count,
+      .cached = suite_cached,
   });
 }
 

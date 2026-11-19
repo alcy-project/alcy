@@ -22,6 +22,8 @@
 
 namespace pipeline {
 
+struct BuildProgressObserver;
+
 // Which artifact a build produces: a runnable binary, or a library a
 // dependent resolves against.
 enum class ArtifactKind : u8 {
@@ -141,7 +143,8 @@ base::Result<TestPackage, diag::Reported> resolve_test_package(
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
-    testgen::Execution execution);
+    testgen::Execution execution,
+    const BuildProgressObserver* progress = nullptr);
 
 // Loads `.alcy/toolchain.toml` beside the package root. An absent file
 // means defaults; a corrupt one lands in the bag.

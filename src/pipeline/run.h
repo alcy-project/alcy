@@ -16,6 +16,8 @@
 
 namespace pipeline {
 
+struct BuildProgressObserver;
+
 // Called with the bin artifact's name immediately before the program is
 // executed, and not at all if the build or the link failed. A function
 // pointer and a context rather than a callback object, as the
@@ -43,6 +45,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     BuildPlan plan,
     std::span<const std::string_view> args,
     AnnounceExec announce = nullptr,
-    const void* announce_ctx = nullptr);
+    const void* announce_ctx = nullptr,
+    const BuildProgressObserver* progress = nullptr);
 
 }  // namespace pipeline
