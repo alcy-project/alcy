@@ -1,0 +1,20 @@
+# Part of the `alcy/std` suite.
+#
+# The environment the process inherited: a name lookup answers the
+# raw bytes the platform stored, or `None` when the variable is not
+# set.
+
+[package]
+name = "env"
+version = "0.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[modules]
+include = ["prelude", "env"]
+export = ["prelude", "env"]
+
+[dependencies]
+"alcy/std/core" = {}
+"alcy/std/alloc" = {}
+"alcy/std/text" = {}
+"alcy/std/unicode" = {}

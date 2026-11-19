@@ -1985,6 +1985,9 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "arg") {
     return lower_arg_intrinsic(expr, sig, type_args);
   }
+  if (name == "environ_exists" || name == "environ_value") {
+    return lower_environ_intrinsic(expr, sig, type_args);
+  }
   if (name == "arg_count") {
     return lower_arg_count_intrinsic(expr, sig, type_args);
   }
@@ -2273,6 +2276,38 @@ Val Lowerer::lower_read_intrinsic(
     return Val{size_one, error_type(), false, false};
   }
   return Val{to_operand(value, sig.ret), sig.ret, false, false};
+}
+
+// The environment lookups: one asks whether a variable is set, the
+// other asks for its bytes. Both are answered by the runtime against
+// what the platform handed the process.
+Val Lowerer::lower_environ_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& sig,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val name = lower_expr(call.args[0], &sig.params[0]);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const bool exists = std::string_view(sig.name) == "environ_exists";
+  const ir::ExternalFunctionIdx ext =
+      exists ? declare_external("alcy_env_exists", sig.ret, {sig.params[0]})
+             : declare_external("alcy_env_get", sig.ret, {sig.params[0]});
+  const ir::RegisterIdx dst =
+      emit(ir::Opcode::Call, sig.ret,
+           {builder.operand(ir::Operand::from_external_function(
+                ext, builder.primitive(ir::TypeTag::Function))),
+            arg_for(name, sig.params[0])});
+  if (failed) {
+    return Val{size_one, error_type(), false, false};
+  }
+  return Val{to_operand(dst, sig.ret), sig.ret, false, false};
 }
 
 Val Lowerer::lower_arg_intrinsic(

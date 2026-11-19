@@ -546,6 +546,8 @@ TEST_CASE("A Windows COFF runtime carries the kernel and nothing else") {
           signature(usize, {pointer, usize, pointer, usize}));
   declare(module, "alcy_arg_count", signature(usize, {}));
   declare(module, "alcy_arg", signature(view, {usize}));
+  declare(module, "alcy_env_exists", signature(i32, {view}));
+  declare(module, "alcy_env_get", signature(view, {view}));
 
   const codegen_llvm::Target windows{"x86_64-pc-windows-msvc",
                                      ir::PointerWidth::W64};
@@ -553,12 +555,26 @@ TEST_CASE("A Windows COFF runtime carries the kernel and nothing else") {
 
   CHECK(!llvm::verifyModule(module, &llvm::errs()));
   const std::string text = module_text(module);
-  for (const char* needle :
-       {"GetStdHandle", "WriteFile", "ReadFile", "CreateFileW", "GetFileSizeEx",
-        "CloseHandle", "VirtualAlloc", "VirtualFree", "ExitProcess",
-        "GetLastError", "SetLastError", "GetCommandLineW",
-        "WideCharToMultiByte", "MultiByteToWideChar", "__chkstk", "_fltused",
-        "alcy_init_args"}) {
+  for (const char* needle : {"GetStdHandle",
+                             "WriteFile",
+                             "ReadFile",
+                             "CreateFileW",
+                             "GetFileSizeEx",
+                             "CloseHandle",
+                             "VirtualAlloc",
+                             "VirtualFree",
+                             "ExitProcess",
+                             "GetLastError",
+                             "SetLastError",
+                             "GetCommandLineW",
+                             "WideCharToMultiByte",
+                             "MultiByteToWideChar",
+                             "GetEnvironmentStringsW",
+                             "alcy_env_exists",
+                             "alcy_env_get",
+                             "__chkstk",
+                             "_fltused",
+                             "alcy_init_args"}) {
     CHECK(text.find(needle) != std::string::npos);
   }
   // Nothing from the C runtime, and nothing from the Linux syscall ABI

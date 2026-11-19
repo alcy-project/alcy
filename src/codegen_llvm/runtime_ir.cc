@@ -117,13 +117,42 @@ class RuntimeBuilder {
       }
       link_once_odr(*argv);
     }
+    {
+      // The entry wrapper stores the platform's environment table
+      // here, whatever shape it has there, so the environment answers
+      // whether or not anyone asked for it.
+      llvm::GlobalVariable* environ =
+          module_.getOrInsertGlobal("alcy_environ", builder_.getPtrTy());
+      if (!environ->hasInitializer()) {
+        environ->setInitializer(
+            llvm::ConstantPointerNull::get(builder_.getPtrTy()));
+      }
+      link_once_odr(*environ);
+    }
     if (windows_) {
+      // The scratch the environment answer encodes into, and the one
+      // the name rides through: both hold one value at a time and are
+      // never borrowed past the call.
+      llvm::GlobalVariable* env_buf =
+          cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
+              "alcy_env_buf",
+              llvm::ArrayType::get(builder_.getInt8Ty(), 262144)));
+      env_buf->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+      if (!env_buf->hasInitializer()) {
+        env_buf->setInitializer(
+            llvm::ConstantAggregateZero::get(env_buf->getValueType()));
+      }
+      llvm::GlobalVariable* env_name =
+          cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
+              "alcy_env_name",
+              llvm::ArrayType::get(builder_.getInt16Ty(), 32768)));
+      env_name->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+      if (!env_name->hasInitializer()) {
+        env_name->setInitializer(
+            llvm::ConstantAggregateZero::get(env_name->getValueType()));
+      }
       // The marker the C runtime defines for a module that does
       // floating-point code; no CRT answers for it now.
-      if (declared("alcy_arg_count")) {
-        // `_fltused` is defined for every module already; this line
-        // documents why.
-      }
       llvm::GlobalVariable* fltused = cast<llvm::GlobalVariable>(
           module_.getOrInsertGlobal("_fltused", builder_.getInt32Ty()));
       if (!fltused->hasInitializer()) {
@@ -140,6 +169,8 @@ class RuntimeBuilder {
     if (declared("alcy_arg")) {
       build_arg();
     }
+    // The environment lookups are defined when something asked for them.
+    build_environ();
     if (freestanding_ && !windows_) {
       if (arch_ == "x86_64" || arch_ == "aarch64" || arch_ == "riscv64") {
         if (declared("alcy_file_size")) {
@@ -1343,6 +1374,425 @@ class RuntimeBuilder {
     builder_.CreateRetVoid();
   }
 
+  // The environment of the process, as the platform handed it out.
+  // `alcy_env_exists` answers whether a variable is set;
+  // `alcy_env_get` answers its raw bytes, with a null pointer when it
+  // is not set. `alcy_env_find` is the one place the platform's
+  // layout is read.
+  void build_environ() {
+    if (!declared("alcy_env_exists") && !declared("alcy_env_get")) {
+      return;
+    }
+    if (mach_o_) {
+      build_environ_macho();
+      return;
+    }
+    if (windows_) {
+      build_environ_windows();
+      return;
+    }
+    build_environ_linux();
+  }
+
+  void build_env_exists(llvm::Function* find, llvm::StructType* view) {
+    llvm::FunctionType* type =
+        llvm::FunctionType::get(builder_.getInt32Ty(), {view}, false);
+    llvm::Function* function = runtime("alcy_env_exists", type);
+    function->setDoesNotThrow();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* found_view = builder_.CreateCall(find, {function->getArg(0)});
+    llvm::Value* ptr = builder_.CreateExtractValue(found_view, 0);
+    llvm::Value* is_set = builder_.CreateICmpNE(
+        ptr, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "is_set");
+    builder_.CreateRet(builder_.CreateSelect(
+        is_set, llvm::ConstantInt::get(builder_.getInt32Ty(), 1),
+        llvm::ConstantInt::get(builder_.getInt32Ty(), 0)));
+  }
+
+  void build_env_get(llvm::Function* find, llvm::StructType* view) {
+    llvm::FunctionType* type = llvm::FunctionType::get(view, {view}, false);
+    llvm::Function* function = runtime("alcy_env_get", type);
+    function->setDoesNotThrow();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    llvm::BasicBlock* present =
+        llvm::BasicBlock::Create(module_.getContext(), "present", function);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(module_.getContext(), "missing", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* found = builder_.CreateCall(find, {function->getArg(0)});
+    llvm::Value* ptr = builder_.CreateExtractValue(found, 0);
+    llvm::Value* is_set = builder_.CreateICmpNE(
+        ptr, llvm::ConstantPointerNull::get(builder_.getPtrTy()), "is_set");
+    builder_.CreateCondBr(is_set, present, missing);
+    builder_.SetInsertPoint(present);
+    builder_.CreateRet(found);
+    builder_.SetInsertPoint(missing);
+    llvm::Value* empty = llvm::UndefValue::get(view);
+    empty = builder_.CreateInsertValue(
+        empty, llvm::ConstantPointerNull::get(builder_.getPtrTy()), 0);
+    empty =
+        builder_.CreateInsertValue(empty, llvm::ConstantInt::get(usize_, 0), 1);
+    builder_.CreateRet(empty);
+  }
+
+  llvm::Function* new_find(llvm::StructType* view) {
+    llvm::FunctionType* type = llvm::FunctionType::get(view, {view}, false);
+    llvm::Function* function = llvm::Function::Create(
+        type, llvm::GlobalValue::InternalLinkage, "alcy_env_find", module_);
+    function->setDoesNotThrow();
+    return function;
+  }
+
+  llvm::Value* null_view(llvm::StructType* view) {
+    llvm::Value* empty = llvm::UndefValue::get(view);
+    empty = builder_.CreateInsertValue(
+        empty, llvm::ConstantPointerNull::get(builder_.getPtrTy()), 0);
+    empty =
+        builder_.CreateInsertValue(empty, llvm::ConstantInt::get(usize_, 0), 1);
+    return empty;
+  }
+
+  void finish_environ(llvm::Function* find, llvm::StructType* view) {
+    if (declared("alcy_env_exists")) {
+      build_env_exists(find, view);
+    }
+    if (declared("alcy_env_get")) {
+      build_env_get(find, view);
+    }
+  }
+
+  void build_environ_linux() {
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::Type* i8 = builder_.getInt8Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Type* ptr = builder_.getPtrTy();
+    llvm::StructType* view = llvm::StructType::get(context, {ptr, usize_});
+    llvm::Function* find = new_find(view);
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(context, "entry", find);
+    llvm::BasicBlock* iter = llvm::BasicBlock::Create(context, "iter", find);
+    llvm::BasicBlock* compare =
+        llvm::BasicBlock::Create(context, "compare", find);
+    llvm::BasicBlock* byte_compare =
+        llvm::BasicBlock::Create(context, "byte_compare", find);
+    llvm::BasicBlock* advance =
+        llvm::BasicBlock::Create(context, "advance", find);
+    llvm::BasicBlock* at_equals =
+        llvm::BasicBlock::Create(context, "at_equals", find);
+    llvm::BasicBlock* value_scan =
+        llvm::BasicBlock::Create(context, "value_scan", find);
+    llvm::BasicBlock* value_scan_loop =
+        llvm::BasicBlock::Create(context, "value_scan_loop", find);
+    llvm::BasicBlock* done = llvm::BasicBlock::Create(context, "done", find);
+    llvm::BasicBlock* next_entry =
+        llvm::BasicBlock::Create(context, "next_entry", find);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", find);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* name = builder_.CreateExtractValue(find->getArg(0), 0);
+    llvm::Value* name_len = builder_.CreateExtractValue(find->getArg(0), 1);
+    llvm::Value* table = builder_.CreateLoad(
+        ptr, module_.getOrInsertGlobal("alcy_environ", ptr), "table");
+    builder_.CreateBr(iter);
+    builder_.SetInsertPoint(iter);
+    llvm::PHINode* at = builder_.CreatePHI(i64, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(i64, 0), entry);
+    llvm::Value* slot = builder_.CreateGEP(ptr, table, at, "slot");
+    llvm::Value* entry_ptr = builder_.CreateLoad(ptr, slot, "entry");
+    llvm::Value* is_null = builder_.CreateICmpEQ(
+        entry_ptr, llvm::ConstantPointerNull::get(ptr), "is_null");
+    builder_.CreateCondBr(is_null, missing, compare);
+    builder_.SetInsertPoint(compare);
+    llvm::PHINode* j = builder_.CreatePHI(i64, 2, "j");
+    j->addIncoming(llvm::ConstantInt::get(i64, 0), iter);
+    llvm::Value* at_equal = builder_.CreateICmpUGE(j, name_len, "at_equal");
+    builder_.CreateCondBr(at_equal, at_equals, byte_compare);
+    builder_.SetInsertPoint(byte_compare);
+    llvm::Value* nb = builder_.CreateLoad(
+        i8, builder_.CreateGEP(i8, entry_ptr, j, "nb_at"), "nb");
+    llvm::Value* mb =
+        builder_.CreateLoad(i8, builder_.CreateGEP(i8, name, j, "mb_at"), "mb");
+    llvm::Value* eq = builder_.CreateICmpEQ(nb, mb, "eq");
+    builder_.CreateCondBr(eq, advance, next_entry);
+    builder_.SetInsertPoint(advance);
+    j->addIncoming(
+        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "j_next"),
+        advance);
+    builder_.CreateBr(compare);
+    builder_.SetInsertPoint(at_equals);
+    llvm::Value* at_byte = builder_.CreateLoad(
+        i8, builder_.CreateGEP(i8, entry_ptr, j, "at_byte_at"), "at_byte");
+    llvm::Value* is_equals = builder_.CreateICmpEQ(
+        at_byte, llvm::ConstantInt::get(i8, '='), "is_equals");
+    builder_.CreateCondBr(is_equals, value_scan, next_entry);
+    builder_.SetInsertPoint(value_scan);
+    llvm::Value* value = builder_.CreateGEP(
+        i8, entry_ptr,
+        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "value_at"),
+        "value");
+    builder_.CreateBr(value_scan_loop);
+    builder_.SetInsertPoint(value_scan_loop);
+    llvm::PHINode* loop_at = builder_.CreatePHI(i64, 2, "loop_at");
+    loop_at->addIncoming(llvm::ConstantInt::get(i64, 0), value_scan);
+    llvm::Value* byte = builder_.CreateLoad(
+        i8, builder_.CreateGEP(i8, value, loop_at, "byte_at"), "byte");
+    llvm::Value* is_zero =
+        builder_.CreateICmpEQ(byte, llvm::ConstantInt::get(i8, 0), "is_zero");
+    llvm::Value* next_loop = builder_.CreateAdd(
+        loop_at, llvm::ConstantInt::get(i64, 1), "next_loop");
+    loop_at->addIncoming(next_loop, value_scan_loop);
+    builder_.CreateCondBr(is_zero, done, value_scan_loop);
+    builder_.SetInsertPoint(done);
+    llvm::Value* found = llvm::UndefValue::get(view);
+    found = builder_.CreateInsertValue(found, value, 0);
+    found = builder_.CreateInsertValue(found, loop_at, 1);
+    builder_.CreateRet(found);
+    builder_.SetInsertPoint(next_entry);
+    at->addIncoming(
+        builder_.CreateAdd(at, llvm::ConstantInt::get(i64, 1), "at_next"),
+        next_entry);
+    builder_.CreateBr(iter);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(null_view(view));
+    finish_environ(find, view);
+  }
+
+  void build_environ_macho() {
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::Type* i8 = builder_.getInt8Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Type* ptr = builder_.getPtrTy();
+    llvm::StructType* view = llvm::StructType::get(context, {ptr, usize_});
+    llvm::Function* find = new_find(view);
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(context, "entry", find);
+    llvm::BasicBlock* found = llvm::BasicBlock::Create(context, "found", find);
+    llvm::BasicBlock* scan = llvm::BasicBlock::Create(context, "scan", find);
+    llvm::BasicBlock* getenv_done =
+        llvm::BasicBlock::Create(context, "getenv_done", find);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", find);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* name = builder_.CreateExtractValue(find->getArg(0), 0);
+    llvm::Value* name_len = builder_.CreateExtractValue(find->getArg(0), 1);
+    llvm::Value* cname = nul_terminated_path(name, name_len);
+    llvm::Function* getenv_fn =
+        libc("getenv", llvm::FunctionType::get(ptr, {ptr}, false));
+    llvm::Value* found_ptr = builder_.CreateCall(getenv_fn, {cname}, "found");
+    builder_.CreateCondBr(
+        builder_.CreateICmpEQ(found_ptr, llvm::ConstantPointerNull::get(ptr),
+                              "is_missing"),
+        missing, found);
+    builder_.SetInsertPoint(found);
+    builder_.CreateBr(scan);
+    builder_.SetInsertPoint(scan);
+    llvm::PHINode* scan_at = builder_.CreatePHI(i64, 2, "scan_at");
+    scan_at->addIncoming(llvm::ConstantInt::get(i64, 0), found);
+    llvm::Value* byte = builder_.CreateLoad(
+        i8, builder_.CreateGEP(i8, found_ptr, scan_at, "byte_at"), "byte");
+    llvm::Value* is_zero =
+        builder_.CreateICmpEQ(byte, llvm::ConstantInt::get(i8, 0), "is_zero");
+    llvm::Value* next_at =
+        builder_.CreateAdd(scan_at, llvm::ConstantInt::get(i64, 1), "next_at");
+    scan_at->addIncoming(next_at, scan);
+    builder_.CreateCondBr(is_zero, getenv_done, scan);
+    builder_.SetInsertPoint(getenv_done);
+    llvm::Value* aggregate = llvm::UndefValue::get(view);
+    aggregate = builder_.CreateInsertValue(aggregate, found_ptr, 0);
+    aggregate = builder_.CreateInsertValue(aggregate, scan_at, 1);
+    builder_.CreateRet(aggregate);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(null_view(view));
+    finish_environ(find, view);
+  }
+
+  void build_environ_windows() {
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::Type* i8 = builder_.getInt8Ty();
+    llvm::Type* i16 = builder_.getInt16Ty();
+    llvm::Type* i32 = builder_.getInt32Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Type* ptr = builder_.getPtrTy();
+    llvm::StructType* view = llvm::StructType::get(context, {ptr, usize_});
+    auto lower = [&](llvm::Value* unit) {
+      llvm::Value* is_lower = builder_.CreateAnd(
+          builder_.CreateICmpUGE(unit, llvm::ConstantInt::get(i16, 'a')),
+          builder_.CreateICmpULE(unit, llvm::ConstantInt::get(i16, 'z')));
+      return builder_.CreateSelect(
+          is_lower, builder_.CreateSub(unit, llvm::ConstantInt::get(i16, 32)),
+          unit);
+    };
+
+    llvm::Function* find = new_find(view);
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(context, "entry", find);
+    llvm::BasicBlock* prepare_done =
+        llvm::BasicBlock::Create(context, "prepare_done", find);
+    llvm::BasicBlock* iter = llvm::BasicBlock::Create(context, "iter", find);
+    llvm::BasicBlock* unit_compare =
+        llvm::BasicBlock::Create(context, "unit_compare", find);
+    llvm::BasicBlock* unit_compare_body =
+        llvm::BasicBlock::Create(context, "unit_compare_body", find);
+    llvm::BasicBlock* at_equals =
+        llvm::BasicBlock::Create(context, "at_equals", find);
+    llvm::BasicBlock* advance =
+        llvm::BasicBlock::Create(context, "advance", find);
+    llvm::BasicBlock* encode =
+        llvm::BasicBlock::Create(context, "encode", find);
+    llvm::BasicBlock* value_scan =
+        llvm::BasicBlock::Create(context, "value_scan", find);
+    llvm::BasicBlock* value_done =
+        llvm::BasicBlock::Create(context, "value_done", find);
+    llvm::BasicBlock* encode_body =
+        llvm::BasicBlock::Create(context, "encode_body", find);
+    llvm::BasicBlock* give_up =
+        llvm::BasicBlock::Create(context, "give_up", find);
+    llvm::BasicBlock* next_entry =
+        llvm::BasicBlock::Create(context, "next_entry", find);
+    llvm::BasicBlock* scan_nul =
+        llvm::BasicBlock::Create(context, "scan_nul", find);
+    llvm::BasicBlock* next_iter =
+        llvm::BasicBlock::Create(context, "next_iter", find);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", find);
+
+    builder_.SetInsertPoint(entry);
+    llvm::Value* name = builder_.CreateExtractValue(find->getArg(0), 0);
+    llvm::Value* name_len = builder_.CreateExtractValue(find->getArg(0), 1);
+    llvm::Function* to_wide = libc(
+        "MultiByteToWideChar",
+        llvm::FunctionType::get(i32, {i32, i32, ptr, i32, ptr, i32}, false));
+    // The name as wide units, compared case-insensitively below.
+    llvm::Value* nametmp = module_.getOrInsertGlobal(
+        "alcy_env_name", llvm::ArrayType::get(i16, 32768));
+    (void)nametmp;
+    llvm::Value* name_units =
+        builder_.CreateCall(to_wide,
+                            {llvm::ConstantInt::get(i32, 65001 /* CP_UTF8 */),
+                             llvm::ConstantInt::get(i32, 0), name,
+                             builder_.CreateTrunc(name_len, i32, "name_len32"),
+                             nametmp, llvm::ConstantInt::get(i32, 32768)},
+                            "name_units");
+    llvm::Value* bad = builder_.CreateICmpSLE(
+        name_units, llvm::ConstantInt::get(i32, 0), "bad");
+    builder_.CreateCondBr(bad, missing, prepare_done);
+    builder_.SetInsertPoint(prepare_done);
+    llvm::Value* name_units64 =
+        builder_.CreateZExt(name_units, i64, "name_units64");
+    llvm::Value* block = builder_.CreateLoad(
+        ptr, module_.getOrInsertGlobal("alcy_environ", ptr), "block");
+    builder_.CreateBr(iter);
+    builder_.SetInsertPoint(iter);
+    llvm::PHINode* at = builder_.CreatePHI(i64, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(i64, 0), prepare_done);
+    llvm::Value* entry_ptr = builder_.CreateGEP(i16, block, at, "entry");
+    llvm::Value* c0 = builder_.CreateLoad(i16, entry_ptr, "c0");
+    llvm::Value* end_of_block = builder_.CreateICmpEQ(
+        c0, llvm::ConstantInt::get(i16, 0), "end_of_block");
+    builder_.CreateCondBr(end_of_block, missing, unit_compare);
+    builder_.SetInsertPoint(unit_compare);
+    llvm::PHINode* j = builder_.CreatePHI(i64, 2, "j");
+    j->addIncoming(llvm::ConstantInt::get(i64, 0), iter);
+    llvm::Value* at_equal = builder_.CreateICmpUGE(j, name_units64, "at_equal");
+    builder_.CreateCondBr(at_equal, at_equals, unit_compare_body);
+    builder_.SetInsertPoint(unit_compare_body);
+    llvm::Value* a = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, entry_ptr, j, "a_at"), "a");
+    llvm::Value* b = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, nametmp, j, "b_at"), "b");
+    llvm::Value* eq = builder_.CreateICmpEQ(lower(a), lower(b), "eq");
+    builder_.CreateCondBr(eq, advance, next_entry);
+    builder_.SetInsertPoint(advance);
+    j->addIncoming(
+        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "j_next"),
+        advance);
+    builder_.CreateBr(unit_compare);
+    builder_.SetInsertPoint(at_equals);
+    llvm::Value* at_byte = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, entry_ptr, j, "at_byte_at"), "at_byte");
+    llvm::Value* is_equals = builder_.CreateICmpEQ(
+        at_byte, llvm::ConstantInt::get(i16, '='), "is_equals");
+    builder_.CreateCondBr(is_equals, encode, next_entry);
+    builder_.SetInsertPoint(encode);
+    llvm::Value* value_ptr = builder_.CreateGEP(
+        i16, entry_ptr,
+        builder_.CreateAdd(j, llvm::ConstantInt::get(i64, 1), "value_at"),
+        "value");
+    builder_.CreateBr(value_scan);
+    builder_.SetInsertPoint(value_scan);
+    llvm::PHINode* k = builder_.CreatePHI(i64, 2, "k");
+    k->addIncoming(llvm::ConstantInt::get(i64, 0), encode);
+    llvm::Value* u = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, value_ptr, k, "u_at"), "u");
+    llvm::Value* is_zero =
+        builder_.CreateICmpEQ(u, llvm::ConstantInt::get(i16, 0), "is_zero");
+    llvm::Value* next_k =
+        builder_.CreateAdd(k, llvm::ConstantInt::get(i64, 1), "next_k");
+    k->addIncoming(next_k, value_scan);
+    builder_.CreateCondBr(is_zero, value_done, value_scan);
+    builder_.SetInsertPoint(value_done);
+    llvm::Function* to_multi =
+        libc("WideCharToMultiByte",
+             llvm::FunctionType::get(
+                 i32, {i32, i32, ptr, i32, ptr, i32, ptr, ptr}, false));
+    llvm::Value* value_len32 = builder_.CreateTrunc(k, i32, "value_len32");
+    llvm::Value* measure = builder_.CreateCall(
+        to_multi,
+        {llvm::ConstantInt::get(i32, 65001 /* CP_UTF8 */),
+         llvm::ConstantInt::get(i32, 0), value_ptr, value_len32,
+         llvm::ConstantPointerNull::get(ptr), llvm::ConstantInt::get(i32, 0),
+         llvm::ConstantPointerNull::get(ptr),
+         llvm::ConstantPointerNull::get(ptr)},
+        "measure");
+    llvm::Value* too_big = builder_.CreateICmpUGT(
+        measure, llvm::ConstantInt::get(i32, 262144), "too_big");
+    builder_.CreateCondBr(too_big, give_up, encode_body);
+    builder_.SetInsertPoint(encode_body);
+    llvm::Value* buf = module_.getOrInsertGlobal(
+        "alcy_env_buf", llvm::ArrayType::get(i8, 262144));
+    (void)buf;
+    llvm::Value* encoded = builder_.CreateCall(
+        to_multi,
+        {llvm::ConstantInt::get(i32, 65001 /* CP_UTF8 */),
+         llvm::ConstantInt::get(i32, 0), value_ptr, value_len32, buf, measure,
+         llvm::ConstantPointerNull::get(ptr),
+         llvm::ConstantPointerNull::get(ptr)},
+        "encoded");
+    llvm::Value* aggregate = llvm::UndefValue::get(view);
+    aggregate = builder_.CreateInsertValue(aggregate, buf, 0);
+    aggregate = builder_.CreateInsertValue(
+        aggregate, builder_.CreateZExt(encoded, usize_, "encoded_wide"), 1);
+    builder_.CreateRet(aggregate);
+    builder_.SetInsertPoint(give_up);
+    builder_.CreateRet(null_view(view));
+    builder_.SetInsertPoint(next_entry);
+    builder_.CreateBr(scan_nul);
+    llvm::BasicBlock* scan_nul_incr =
+        llvm::BasicBlock::Create(context, "scan_nul_incr", find);
+    builder_.SetInsertPoint(scan_nul);
+    llvm::PHINode* k_next = builder_.CreatePHI(i64, 2, "k_next");
+    k_next->addIncoming(llvm::ConstantInt::get(i64, 0), next_entry);
+    llvm::Value* u2 = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, entry_ptr, k_next, "u2_at"), "u2");
+    llvm::Value* is_zero2 =
+        builder_.CreateICmpEQ(u2, llvm::ConstantInt::get(i16, 0), "is_zero2");
+    llvm::Value* k_plus =
+        builder_.CreateAdd(k_next, llvm::ConstantInt::get(i64, 1), "k_plus");
+    builder_.CreateCondBr(is_zero2, next_iter, scan_nul_incr);
+    builder_.SetInsertPoint(scan_nul_incr);
+    k_next->addIncoming(k_plus, scan_nul_incr);
+    builder_.CreateBr(scan_nul);
+    builder_.SetInsertPoint(next_iter);
+    at->addIncoming(
+        builder_.CreateAdd(builder_.CreateAdd(at, k_next, "at_plus_k"),
+                           llvm::ConstantInt::get(i64, 1), "at_next"),
+        next_iter);
+    builder_.CreateBr(iter);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(null_view(view));
+    finish_environ(find, view);
+  }
+
   // The arguments the process was started with, gathered the way the
   // C runtime hands them out: the command line as the kernel gave it,
   // parsed the way the command line is documented to parse -
@@ -1436,6 +1886,12 @@ class RuntimeBuilder {
     // `alcy_arg` descriptor scan. The kernel hands the entry no
     // arguments on this platform, so the runtime gathers them.
     builder_.SetInsertPoint(entry);
+    llvm::Function* get_env_strings =
+        libc("GetEnvironmentStringsW", llvm::FunctionType::get(ptr, false));
+    llvm::Value* env_block =
+        builder_.CreateCall(get_env_strings, {}, "env_block");
+    builder_.CreateStore(env_block,
+                         module_.getOrInsertGlobal("alcy_environ", ptr));
     llvm::Value* wcmd = builder_.CreateCall(get_command_line, {}, "wcmd");
     builder_.CreateBr(scan);
 

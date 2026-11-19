@@ -1414,7 +1414,8 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     // trampoline depends on it rather than a symbol hidden in the
     // assembly text.
     llvm::FunctionType* outer_type = llvm::FunctionType::get(
-        builder_->getVoidTy(), {builder_->getInt32Ty(), builder_->getPtrTy()},
+        builder_->getVoidTy(),
+        {builder_->getInt32Ty(), builder_->getPtrTy(), builder_->getPtrTy()},
         false);
     llvm::Function* outer =
         llvm::Function::Create(outer_type, llvm::Function::InternalLinkage,
@@ -1428,20 +1429,26 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
       trampoline =
           "mov (%rsp), %edi\n"
           "lea 8(%rsp), %rsi\n"
+          "lea 16(%rsp,%rdi,8), %rdx\n"
           "call *$0";
-      constraints = "{rax},~{memory},~{rdi},~{rsi}";
+      constraints = "{rax},~{memory},~{rdi},~{rsi},~{rdx}";
     } else if (triple_view.rfind("aarch64", 0) == 0) {
       trampoline =
           "ldr x0, [sp]\n"
           "add x1, sp, #8\n"
+          "add x2, sp, #16\n"
+          "add x2, x2, x0, lsl #3\n"
           "blr $0";
-      constraints = "{x16},~{memory},~{x0},~{x1},~{lr}";
+      constraints = "{x16},~{memory},~{x0},~{x1},~{x2},~{lr}";
     } else {
       trampoline =
           "ld a0, 0(sp)\n"
           "addi a1, sp, 8\n"
+          "addi a2, sp, 16\n"
+          "slli t1, a0, 3\n"
+          "add a2, a2, t1\n"
           "jalr x0, $0, 0";
-      constraints = "{t0},~{memory},~{a0},~{a1}";
+      constraints = "{t0},~{memory},~{a0},~{a1},~{a2},~{t1}";
     }
     llvm::FunctionType* void_type =
         llvm::FunctionType::get(builder_->getVoidTy(), {i64}, false);
@@ -1464,6 +1471,9 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
     builder_->CreateStore(
         outer->getArg(1),
         module_->getOrInsertGlobal("alcy_argv", builder_->getPtrTy()));
+    builder_->CreateStore(
+        outer->getArg(2),
+        module_->getOrInsertGlobal("alcy_environ", builder_->getPtrTy()));
     emit_entry_body(outer, entry_function, entry_return);
     return;
   }

@@ -1426,7 +1426,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "wrapping_add" || name == "wrapping_sub" ||
          name == "wrapping_mul" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
-         name == "arg_count" || name == "arg";
+         name == "arg_count" || name == "arg" || name == "environ_exists" ||
+         name == "environ_value";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -1441,7 +1442,8 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "slice_at" || name == "slice_at_mut" || name == "read" ||
          name == "sys_read" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
-         name == "arg_count" || name == "arg";
+         name == "arg_count" || name == "arg" || name == "environ_exists" ||
+         name == "environ_value";
 }
 
 // What may cross a C boundary in the first ABI slice :
@@ -1728,6 +1730,17 @@ bool Checker::check_intrinsic_signature(u32 module,
     // `arg(i: i64) -> &[u8]`, the raw bytes of the process's argument.
     const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
     expected.push_back(builder.primitive(ir::TypeTag::I64));
+    expected_ret = builder.reference_type(builder.slice_type(u8_ty), false);
+  } else if (name == "environ_exists") {
+    // `environ_exists(name: &[u8]) -> i32`, 1 when the variable is
+    // set, whatever its value.
+    expected.push_back(slice_ref);
+    expected_ret = builder.primitive(ir::TypeTag::I32);
+  } else if (name == "environ_value") {
+    // `environ_value(name: &[u8]) -> &[u8]`, the raw bytes of the
+    // variable's value.
+    const ir::TypeIdx u8_ty = builder.primitive(ir::TypeTag::U8);
+    expected.push_back(slice_ref);
     expected_ret = builder.reference_type(builder.slice_type(u8_ty), false);
   } else {
     return wrong();

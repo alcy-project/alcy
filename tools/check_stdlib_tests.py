@@ -70,7 +70,7 @@ def invoke(alcy, package, *options):
     """Run `alcy test` on one package and read the document it wrote."""
     tried = subprocess.run(
         [str(alcy), "test", *options, "--json", str(package)],
-        env=run_environment(),
+        env=run_environment({"ALCY_STD_TEST_ENV": "alcy-std-test-value"}),
         capture_output=True,
         text=True,
     )

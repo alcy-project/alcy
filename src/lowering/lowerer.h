@@ -1049,6 +1049,9 @@ class Lowerer {
   Val lower_arg_intrinsic(ast::ExprIdx expr,
                           const analyzer::CheckedModule::FnSig& sig,
                           const std::vector<ir::TypeIdx>& type_args);
+  Val lower_environ_intrinsic(ast::ExprIdx expr,
+                              const analyzer::CheckedModule::FnSig& sig,
+                              const std::vector<ir::TypeIdx>& type_args);
   Val lower_arg_count_intrinsic(ast::ExprIdx expr,
                                 const analyzer::CheckedModule::FnSig& sig,
                                 const std::vector<ir::TypeIdx>& type_args);

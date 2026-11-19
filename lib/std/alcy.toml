@@ -18,6 +18,7 @@ packages = [
   "io",
   "path",
   "ffi",
+  "env",
   "network",
   "thread",
   "arch",
