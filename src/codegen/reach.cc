@@ -1,7 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "codegen/wasm/reach.h"
+#include "codegen/reach.h"
 
 #include <span>
 #include <vector>
@@ -13,7 +13,7 @@
 #include "ir/operand.h"
 #include "ir/storage.h"
 
-namespace codegen::wasm {
+namespace codegen {
 
 std::vector<bool> reachable_functions(const ir::Storage& storage,
                                       std::span<const ir::FunctionIdx> roots) {
@@ -43,4 +43,4 @@ std::vector<bool> reachable_functions(const ir::Storage& storage,
   return reachable;
 }
 
-}  // namespace codegen::wasm
+}  // namespace codegen

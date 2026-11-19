@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include "codegen/wasm/reach.h"
+#include "codegen/reach.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "ir/block.h"
@@ -16,7 +16,7 @@
 #include "ir/operand.h"
 #include "ir/storage.h"
 
-namespace codegen::wasm {
+namespace codegen {
 
 namespace {
 
@@ -108,4 +108,4 @@ TEST_CASE("No roots reach nothing") {
   CHECK(!set[3]);
 }
 
-}  // namespace codegen::wasm
+}  // namespace codegen

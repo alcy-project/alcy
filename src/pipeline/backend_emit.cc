@@ -20,6 +20,7 @@
 #include "codegen_llvm/emit.h"
 #endif
 #include "codegen/wasm/backend.h"
+#include "codegen/x86_64/backend.h"
 
 namespace pipeline {
 
@@ -40,6 +41,8 @@ bool backend_supports(codegen::Backend backend,
 #endif
     case codegen::Backend::DirectWasm:
       return codegen::wasm::Wasm::supports(kind, target);
+    case codegen::Backend::DirectX86_64:
+      return codegen::x86_64::X86_64::supports(kind, target);
   }
   return false;
 }
@@ -54,9 +57,10 @@ bool backend_can_optimize(codegen::Backend backend) {
       return false;
 #endif
     case codegen::Backend::DirectWasm:
-      // The direct emitter has no middle end of its own; the
+    case codegen::Backend::DirectX86_64:
+      // The direct emitters have no middle end of their own; the
       // pipeline's IR passes are the optimizer, and they run before
-      // either backend is chosen.
+      // any backend is chosen.
       return true;
   }
   return false;
@@ -102,7 +106,8 @@ codegen::Backend select_backend(const codegen::Target& target,
     return preferred;
   }
   for (const codegen::Backend candidate :
-       {codegen::Backend::Llvm, codegen::Backend::DirectWasm}) {
+       {codegen::Backend::Llvm, codegen::Backend::DirectWasm,
+        codegen::Backend::DirectX86_64}) {
     if (candidate != preferred && usable(candidate)) {
       return candidate;
     }
@@ -127,6 +132,9 @@ emit_artifacts_with_backend(codegen::Backend backend,
     case codegen::Backend::DirectWasm:
       return codegen::emit_artifacts_with<codegen::wasm::Wasm>(
           std::move(request));
+    case codegen::Backend::DirectX86_64:
+      return codegen::emit_artifacts_with<codegen::x86_64::X86_64>(
+          std::move(request));
   }
   return base::make_err(codegen::EmitError::Unsupported);
 }
@@ -148,6 +156,8 @@ base::Result<std::vector<u8>, codegen::EmitError> emit_with_backend(
 #endif
     case codegen::Backend::DirectWasm:
       return codegen::emit_with<codegen::wasm::Wasm>(std::move(request));
+    case codegen::Backend::DirectX86_64:
+      return codegen::emit_with<codegen::x86_64::X86_64>(std::move(request));
   }
   return base::make_err(codegen::EmitError::Unsupported);
 }

@@ -137,6 +137,7 @@ source_set("pipeline") {
     "//src/borrow",
     "//src/codegen",
     "//src/codegen/wasm",
+    "//src/codegen/x86_64",
     "//src/diag",
     "//src/i18n",
     "//src/ir",

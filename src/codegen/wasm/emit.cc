@@ -12,10 +12,10 @@
 
 #include "codegen/backend.h"
 #include "codegen/diag_code.h"
+#include "codegen/reach.h"
 #include "codegen/target.h"
 #include "codegen/wasm/module.h"
 #include "codegen/wasm/opcodes.h"
-#include "codegen/wasm/reach.h"
 #include "codegen/wasm/writer.h"
 #include "config/build_config.h"
 #include "debug/dcheck.h"

@@ -6,6 +6,8 @@ source_set("codegen") {
     "backend.cc",
     "backend.h",
     "diag_code.h",
+    "reach.cc",
+    "reach.h",
     "target.cc",
     "target.h",
   ]

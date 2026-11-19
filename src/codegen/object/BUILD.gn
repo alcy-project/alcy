@@ -1,0 +1,17 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The container formats a direct native backend writes. A format is
+# independent of the machine whose code it holds, which is why this
+# target is not inside one.
+source_set("object") {
+  sources = [
+    "elf64.cc",
+    "elf64.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/codegen",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

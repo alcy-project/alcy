@@ -9,7 +9,7 @@
 #include "ir/common.h"
 #include "ir/storage.h"
 
-namespace codegen::wasm {
+namespace codegen {
 
 // The functions a program reaches from `roots`: the closure of the call
 // graph, with an edge for every operand that names a function. An edge
@@ -19,4 +19,4 @@ namespace codegen::wasm {
     const ir::Storage& storage,
     std::span<const ir::FunctionIdx> roots);
 
-}  // namespace codegen::wasm
+}  // namespace codegen

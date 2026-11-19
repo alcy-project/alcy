@@ -375,6 +375,7 @@
   F(CodegenArgumentNotFormattable, Error, Analyzer, "Argument is not formattable") \
   F(CodegenInvalidModuleTree, Error, Analyzer, "Internal error: invalid module tree: {}") \
   F(CodegenWasmUnsupported, Error, CodegenNative, "Construct '{}' is not supported in the wasm backend") \
+  F(CodegenX86Unsupported, Error, CodegenNative, "Construct '{}' is not supported in the x86_64 backend; build with --backend=llvm") \
   /* pkg */ \
   F(PkgDependencyBadSpecifier, Error, Pkg, "Manifest '{}': dependency '{}' is not of the form name, owner/name, or owner/suite/package") \
   F(PkgDependencyBadVersion, Error, Pkg, "Manifest '{}': dependency '{}' needs a version of the form 1.2.3, 1.2.x, or 1.x") \

@@ -15,8 +15,6 @@ source_set("wasm") {
     "module.cc",
     "module.h",
     "opcodes.h",
-    "reach.cc",
-    "reach.h",
     "writer.cc",
     "writer.h",
   ]

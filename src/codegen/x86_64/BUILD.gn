@@ -1,0 +1,32 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The direct x86_64 backend. Built into every compiler the direct wasm
+# backend is, because a backend a debug build can be pointed at is the
+# point of it.
+source_set("x86_64") {
+  sources = [
+    "allocate.cc",
+    "allocate.h",
+    "backend.cc",
+    "backend.h",
+    "encode.cc",
+    "encode.h",
+    "frame.cc",
+    "frame.h",
+    "isa.h",
+    "minst.h",
+    "select.cc",
+    "select.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/codegen",
+    "//src/codegen/object",
+    "//src/diag",
+    "//src/i18n",
+    "//src/ir",
+    "//src/overlay",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

@@ -25,7 +25,7 @@ namespace codegen {
 // Which emitter produces the machine code. `None` is a build that carries
 // no backend at all: `check` still works, and a build command reports it
 // rather than producing nothing.
-enum class Backend : u8 { None, Llvm, DirectWasm };
+enum class Backend : u8 { None, Llvm, DirectWasm, DirectX86_64 };
 
 // What a backend is asked to write. `Object` is a relocatable object for
 // the linker; `Module` is a final module that needs no link (wasm today);
