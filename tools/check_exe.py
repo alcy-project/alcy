@@ -390,7 +390,9 @@ def run_case(
     problems = []
     missing_walk = False
 
-    with tempfile.TemporaryDirectory(prefix="alcy_exe_case") as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="alcy_exe_case", ignore_cleanup_errors=True
+    ) as tmp:
         work = Path(tmp)
         exe_name = "main_exe.exe" if os.name == "nt" else "main_exe"
 
