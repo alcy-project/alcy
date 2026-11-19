@@ -1966,6 +1966,26 @@ TEST_CASE("An increment or decrement reports the alcy spelling") {
   }
 }
 
+TEST_CASE("A static or const item declared with = reports the alcy spelling") {
+  struct Case {
+    std::string_view source;
+  };
+  const Case cases[] = {
+      {"static answer: i32 = 42\n"},
+      {"const limit: i32 = 7\n"},
+      {"pub const limit: i32 = 7\n"},
+      {"pub static answer: i32 = 42\n"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    const ParseResult result = parse(c.source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag,
+                      "`static` and `const` items are declared with `:=`, "
+                      "not `=`"));
+  }
+}
+
 TEST_CASE("Subtraction of a negation is not an increment") {
   Fixture f;
   const ParseResult result = parse(
