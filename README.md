@@ -55,10 +55,10 @@ The language is pre-1.0; see [docs/spec/](docs/spec/) for what a program
 is written against, and [src/docs/architecture.md](src/docs/architecture.md)
 for how the compiler is put together.
 
-## Build & Install
+## Building
 
 Requires GN, Ninja, Clang, LLD, and libc++ on Linux/macOS, or the MSVC
-STL on Windows (see [src/docs/build.md](src/docs/build.md) for details).
+STL on Windows (see [src/docs/build.md](src/docs/build.md) for details):
 
 ```bash
 # Using Nix (Linux / macOS):
@@ -67,9 +67,6 @@ uv run ./tools/build.py
 
 # Without Nix (after installing the toolchain above):
 uv run ./tools/build.py
-
-# Build and install (requires nix)
-./tools/install.sh
 ```
 
 Run the tests with:
@@ -77,6 +74,26 @@ Run the tests with:
 ```bash
 uv run ./tools/run.py --target=tests
 ```
+
+## Installing
+
+Download the archive for your platform from
+[Releases](https://github.com/alcy-project/alcy/releases) and verify the
+`.sha256` beside it before extracting (`sha256sum -c` on Linux,
+`shasum -a 256 -c` on macOS). The archive carries the `alcy` binary.
+
+Linking what you build: on Linux the binary links in-process with its
+embedded LLD and the host's C library, so no toolchain needs to be on
+PATH. macOS and Windows builds drive a `clang` from PATH — macOS ships
+one — against the platform's C library (the MSVC STL on Windows). A
+freestanding build links without a C library anywhere, and a
+`linker` in `.alcy/toolchain.toml` or `--linker` replaces the default.
+
+In a workflow, `uses: alcy-project/alcy@vX.Y.Z` does the same thing:
+download, verify, and put `alcy` on PATH.
+
+To install a source build instead, copy `out/build_release/alcy` to a
+directory on your PATH, such as `~/.local/bin`.
 
 ## Contributing
 

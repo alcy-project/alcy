@@ -8,8 +8,10 @@
 name: Set up alcy
 description: >-
   Install the alcy compiler CLI from this repository's releases and put
-  it on PATH. Linking a program needs a C toolchain on PATH (clang, or
-  MSVC on Windows).
+  it on PATH. On Linux the binary links in-process with its embedded LLD
+  and the host's C library; macOS and Windows builds drive a clang from
+  PATH (macOS ships one) against the platform's C library (the MSVC STL
+  on Windows). Freestanding builds need no C library anywhere.
 branding:
   icon: terminal
   color: purple
