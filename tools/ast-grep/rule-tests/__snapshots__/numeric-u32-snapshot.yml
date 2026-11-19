@@ -1,6 +1,6 @@
 id: numeric-u32
 snapshots:
-  std::uint32_t value = 0;:
+  "std::uint32_t value = 0;":
     fixed: u32 value = 0;
     labels:
     - source: std::uint32_t

@@ -1,6 +1,6 @@
 id: numeric-u8
 snapshots:
-  std::uint8_t value = 0;:
+  "std::uint8_t value = 0;":
     fixed: u8 value = 0;
     labels:
     - source: std::uint8_t

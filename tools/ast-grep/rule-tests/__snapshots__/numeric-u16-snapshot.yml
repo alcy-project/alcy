@@ -1,6 +1,6 @@
 id: numeric-u16
 snapshots:
-  std::uint16_t value = 0;:
+  "std::uint16_t value = 0;":
     fixed: u16 value = 0;
     labels:
     - source: std::uint16_t

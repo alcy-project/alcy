@@ -1,6 +1,6 @@
 id: numeric-u64
 snapshots:
-  std::uint64_t value = 0;:
+  "std::uint64_t value = 0;":
     fixed: u64 value = 0;
     labels:
     - source: std::uint64_t

@@ -1,18 +1,18 @@
 id: no-c-assert
 snapshots:
-  '#include <assert.h>':
+  "#include <assert.h>":
     labels:
-    - source: '#include <assert.h>'
+    - source: "#include <assert.h>"
       style: primary
       start: 0
       end: 19
-  '#include <cassert>':
+  "#include <cassert>":
     labels:
-    - source: '#include <cassert>'
+    - source: "#include <cassert>"
       style: primary
       start: 0
       end: 18
-  void f() { assert(true); }:
+  "void f() { assert(true); }":
     labels:
     - source: assert(true)
       style: primary
