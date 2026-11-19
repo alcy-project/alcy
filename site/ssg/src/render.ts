@@ -101,27 +101,33 @@ function relativeRoute(from: string, to: string): string {
   return posix.relative(posix.dirname(from), to);
 }
 
-function header(
-  route: string,
-  language: Language,
-  treePath: string,
-  tree: Tree = GUIDE_TREE,
-): string {
+// One header serves every page: the generated trees stamp it with their
+// segment as the current one, and the landing and playground templates
+// stamp the same markup with `{{header}}` (the landing has no current
+// tree; the playground marks itself). Sharing it here keeps the five
+// destinations from drifting between page kinds.
+export function siteHeader(options: {
+  route: string;
+  language: Language;
+  treePath: string;
+  currentSegment: string | null;
+}): string {
+  const { route, language, treePath, currentSegment } = options;
   const home = treeHome(route, language);
   const t = (key: MessageKey): string => translate(language, key);
   const settings = renderSettings({
     language,
     switchHref: languageSwitch(route, language, treePath),
   });
-  const current = (other: Tree): string =>
-    other.segment === tree.segment ? ' aria-current="page"' : "";
+  const current = (segment: string): string =>
+    segment === currentSegment ? ' aria-current="page"' : "";
   return `<header class="site-header">
       <a class="site-brand" href="${home}">alcy</a>
       <nav class="site-nav" aria-label="${t("site.nav")}">
-        <a href="${home}guide/"${current(GUIDE_TREE)}>${t("site.guide")}</a>
-        <a href="${home}reference/"${current(REFERENCE_TREE)}>${t("site.reference")}</a>
-        <a href="${home}tools/"${current(TOOLS_TREE)}>${t("site.tools")}</a>
-        <a href="${home}playground/">${t("site.playground")}</a>
+        <a href="${home}guide/"${current(GUIDE_TREE.segment)}>${t("site.guide")}</a>
+        <a href="${home}reference/"${current(REFERENCE_TREE.segment)}>${t("site.reference")}</a>
+        <a href="${home}tools/"${current(TOOLS_TREE.segment)}>${t("site.tools")}</a>
+        <a href="${home}playground/"${current("playground")}>${t("site.playground")}</a>
         <button type="button" class="site-search-open" data-action="search">${t("site.search")}</button>
       </nav>
       ${settings}
@@ -427,7 +433,7 @@ export function renderGuidePage(page: GuidePage, options: PageOptions): string {
   </head>
   <body class="site">
     <a class="skip-link" href="#content">${t("site.skip")}</a>
-    ${header(page.route, page.language, page.path, options.tree)}
+    ${siteHeader({ route: page.route, language: page.language, treePath: page.path, currentSegment: options.tree.segment })}
 
     <div class="guide-layout">
       <div class="guide-aside">
@@ -489,7 +495,7 @@ export function renderTreeIndex(
   </head>
   <body class="site">
     <a class="skip-link" href="#content">${t("site.skip")}</a>
-    ${header(route, language, `${tree.segment}/index.html`, tree)}
+    ${siteHeader({ route, language, treePath: `${tree.segment}/index.html`, currentSegment: tree.segment })}
 
     <main class="site-main guide-contents" id="content" tabindex="-1">
       <h1>${label}</h1>

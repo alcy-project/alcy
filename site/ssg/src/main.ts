@@ -47,6 +47,7 @@ import {
   renderNotFound,
   renderTreeIndex,
   sectionsOf,
+  siteHeader,
   speculation,
   stampMark,
 } from "./render.js";
@@ -239,12 +240,15 @@ function templateValues(
   const switchHref =
     other === undefined ? "" : posix.relative(dir, prefixOf(other) + treePath);
   const assets = dist === "" ? "" : `${dist}/`;
+  const currentSegment =
+    treePath === "playground/index.html" ? "playground" : null;
   return {
     lang: language,
     dist: assets,
     home: home === "" ? "./" : `${home}/`,
     switch: switchHref,
     settings: renderSettings({ language, switchHref }),
+    header: siteHeader({ route, language, treePath, currentSegment }),
     pageLinks: pageLinks(language, treePath),
     social: templateSocial(language, treePath, route),
     boot: `<script>${boot}</script>`,
