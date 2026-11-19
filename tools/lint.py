@@ -335,7 +335,7 @@ def lint_files(
     commands = create_commands(
         comp_files, header_files, build_dir, fix, fix_errors, verbose, whole_tree
     )
-    if not run_commands_in_parallel(commands):
+    if not run_commands_in_parallel(commands, verbose=verbose):
         failed = True
 
     if fix or fix_errors:
