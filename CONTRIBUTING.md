@@ -9,7 +9,7 @@
 - Alternatively, Nix provides the whole toolchain: `nix develop`. The wasm
   checks need Emscripten too, which the default shell leaves out to keep the
   build matrix light; they run from the shell that carries it:
-  `nix develop .#wasm --command ./tools/check.sh --nix`.
+  `nix develop .#wasm --command uv run ./tools/check.py --nix`.
 
 ## Workflow
 
@@ -43,8 +43,8 @@ uv run ./tools/verify_static_linkage.py --build-dir=out/build
 uv run ./tools/check_treesitter.py --grammar
 
 # Or run every local check at once. CI asks each of these as its own job,
-# and check.sh asks the same checks plus the ones below:
-./tools/check.sh
+# and check.py asks the same checks plus the ones below:
+uv run ./tools/check.py
 
 # Faster iteration (skips gn gen, gn check, and compdb; never for CI):
 uv run ./tools/build.py --target=tests --fast
@@ -88,7 +88,7 @@ grammar means changing the grammar there too. `tools/check_treesitter.py
 not match, runs the corpus, and checks the queries; adding
 `--differential` compares every `.al` file against the compiler's own
 verdict, which is the half of the check that can notice the specification,
-the parser, and the grammar disagreeing. `check.sh` runs both and
+the parser, and the grammar disagreeing. `check.py` runs both and
 `measure_checks.py` times both. See `treesitter/README.md`.
 
 Performance work has its own loop: a generated corpus, instruction counts
@@ -120,24 +120,24 @@ is installed, and CI's tree checks enforce it regardless.
 
 Please make sure the CI pass before requesting a review.
 
-`./tools/check.sh` runs every local check: the same commands as above,
+`uv run ./tools/check.py` runs every local check: the same commands as above,
 against the debug build and again against the release one (the unit
 tests, the e2e cases, and the exe programs -- a bug that only a release
 build has is invisible to the debug checks), plus the benchmark smoke, the
 WebAssembly tests, the direct-backend wasm acceptance, the exe programs
 against that backend, and the playground smoke, which need `emcc` and
-`bun` on `PATH`. `./tools/check.sh --help`
+`bun` on `PATH`. `uv run ./tools/check.py --help`
 lists what each flag skips.
 
 ```bash
 # Everything (requires emcc and bun on PATH):
-./tools/check.sh
+uv run ./tools/check.py
 
 # Skip the wasm checks:
-./tools/check.sh --no-wasm
+uv run ./tools/check.py --no-wasm
 
 # Skip the release checks:
-./tools/check.sh --no-release
+uv run ./tools/check.py --no-release
 
 # Just the wasm tests:
 uv run ./tools/run.py --target=tests --mode=debug \
@@ -160,7 +160,7 @@ ratchet, the sanitized exe cases, the WebAssembly tests — say so instead
 of waiting:
 
 ```bash
-./tools/check.sh --no-coverage --no-sanitize --no-wasm
+uv run ./tools/check.py --no-coverage --no-sanitize --no-wasm
 ```
 
 `--help` lists every skip. CI still runs each check as its own job, so the
@@ -336,7 +336,7 @@ so it is not a test.
 
 Which tool to reach for, in order: a unit test with an explicit expected value, a
 property test, a sanitized hostile-input case, and libFuzzer for coverage-guided
-exploration. Re-run everything with `./tools/check.sh`.
+exploration. Re-run everything with `uv run ./tools/check.py`.
 
 The project is pre-1.0, so APIs and the IR are still allowed to change, but please call out
 breaking changes in the commit message.

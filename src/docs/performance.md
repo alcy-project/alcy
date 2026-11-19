@@ -276,7 +276,7 @@ change.
 - `uv run ./tools/perf.py ab <corpus> <before> <after>` for the wall clock,
   interleaved and minimum of N; keep one binary per step so each delta is
   attributable.
-- The unit suite, the wasm suite, and `./tools/check.sh --no-coverage`.
+- The unit suite, the wasm suite, and `uv run ./tools/check.py --no-coverage`.
 
 ## Where the instructions are
 

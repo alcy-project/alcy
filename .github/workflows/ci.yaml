@@ -381,7 +381,7 @@ jobs:
 
       - name: Configure Every Target Operating System
         shell: bash
-        run: uv run ./tools/cross.sh --gen-only
+        run: uv run ./tools/cross.py --gen-only
 
   summary:
     needs: [changes, debug, release, wasm-debug, wasm-release]

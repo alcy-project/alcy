@@ -7,7 +7,7 @@
 
 A repository that says in prose which check is slow is a repository whose
 prose is wrong within a release. Two claims in this tree were: the
-coverage ratchet is the slowest check in `check.sh`, and
+coverage ratchet is the slowest check in `check.py`, and
 `CONTRIBUTING.md` repeated it. Lint is about 1.7x the ratchet, so both
 were wrong by the largest factor they had a number for, and nothing
 noticed because nothing measured the pair.
@@ -52,10 +52,10 @@ BASELINE = "lint"
 # rather than an accident if that ever stops being true.
 BUDGET = 1.2
 
-# (label, argv) in the order `check.sh` runs them, so the report reads as
+# (label, argv) in the order `check.py` runs them, so the report reads as
 # the check's own ordering rather than as a sorted table. The TOML,
 # Markdown, rule and Python checks are seconds each and live inside
-# `format` and `lint` here, which is where `check.sh` reaches them too.
+# `format` and `lint` here, which is where `check.py` reaches them too.
 # `fuzz` is not here: it is corpus-dependent development tooling,
 # asked in CI as a bounded smoke rather than a check this report ranks.
 CHECKS = [

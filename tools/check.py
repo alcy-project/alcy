@@ -8,8 +8,8 @@
 Every command here is one CI asks in its own job
 ; the flags skip a check
 whose tool a machine lacks, and a skipped check refuses or says so rather
-than passing in silence. `./tools/check.sh` execs this, so the entry
-point the documentation names still works.
+than passing in silence. `./tools/check.py` is the entry point the
+documentation names.
 """
 
 import argparse

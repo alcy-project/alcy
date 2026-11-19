@@ -542,7 +542,7 @@ contributor-facing rules are in
 | Sanitizers | AddressSanitizer | every debug build | No use-after-free, no out-of-bounds access |
 | Sanitizers, generated code | AddressSanitizer over alcy's output | `ci.yaml`, on Ubuntu | A wrong code-generation decision is not a memory bug in the program it emitted |
 | Fuzzing | Coverage-guided mutation | on demand | No input reaches a state the existing oracles miss |
-| Coverage | A recorded baseline | `ci.yaml`, and `check.sh` | Line coverage of `src/` did not decrease |
+| Coverage | A recorded baseline | `ci.yaml`, and `check.py` | Line coverage of `src/` did not decrease |
 
 Two of these are in CI and two are not, and the reason is what each one can
 discriminate. The sanitizers on alcy's own output and the coverage ratchet
@@ -550,9 +550,10 @@ have an answer for every input, so running them on every change is worth its
 cost. The fuzzer's answer depends on where its corpus has got to, so a
 per-push run would mostly re-verify what it already knows.
 
-CI runs `tools/check.sh` as a job, so the check a contributor runs is the check
-the server runs, and which job each check lives in is recorded
-beside the workflow definitions.
+CI asks the checks as their own jobs (`ci.yaml`, `build.yaml`,
+`style.yaml`), and `tools/check.py` runs the union as one local pass, so
+the check a contributor runs is the check the server runs. Which job
+each check lives in is recorded beside the workflow definitions.
 `tools/measure_checks.py` times every check against lint, the largest, and is a
 report rather than a check.
 
