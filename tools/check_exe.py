@@ -227,7 +227,42 @@ def run_tool(args: list[str]) -> str:
     return proc.stdout
 
 
-def foreign_imports(exe: Path, freestanding: bool) -> list[str]:
+# The first four bytes name an image's container, so the judgement does
+# not depend on text a tool prints about the path it read.
+ELF_MAGIC = b"\x7fELF"
+MACHO_MAGICS = frozenset(
+    (
+        b"\xfe\xed\xfa\xce",
+        b"\xce\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xcf",
+        b"\xcf\xfa\xed\xfe",
+        b"\xca\xfe\xba\xbe",
+        b"\xbe\xba\xfe\xca",
+        b"\xca\xfe\xba\xbf",
+        b"\xbf\xba\xfe\xca",
+    )
+)
+
+
+def image_format(exe: Path) -> str:
+    """The container the image is written in, from its magic bytes."""
+    with open(exe, "rb") as f:
+        magic = f.read(4)
+    if magic == ELF_MAGIC:
+        return "ELF"
+    if magic in MACHO_MAGICS:
+        return "Mach-O"
+    if magic[:2] == b"MZ":
+        with open(exe, "rb") as f:
+            f.seek(0x3C)
+            pe_offset = int.from_bytes(f.read(4), "little")
+            f.seek(pe_offset)
+            if f.read(4) == b"PE\0\0":
+                return "PE"
+    return "unknown"
+
+
+def foreign_imports(exe: Path, freestanding: bool) -> tuple[str, list[str]]:
     """What a produced image imports beyond the sanctioned ones.
 
     A freestanding Linux build links no C runtime at all, so an import
@@ -238,15 +273,13 @@ def foreign_imports(exe: Path, freestanding: bool) -> list[str]:
     a C++ runtime crept in. A Mach-O image keeps libSystem, which is
     the one sanctioned route there, so it is not judged.
     """
-    headers = run_tool(["llvm-readobj", "--file-headers", str(exe)])
-    if "COFF" not in headers and "elf" not in headers.lower():
-        return []
-    if "COFF" in headers:
+    fmt = image_format(exe)
+    if fmt == "ELF":
+        allowed = set() if freestanding else {"libc.so.6", "libc.so"}
+    elif fmt == "PE":
         allowed = {"kernel32.dll"}
-    elif freestanding:
-        allowed = set()
     else:
-        allowed = {"libc.so.6", "libc.so"}
+        return fmt, []
     out = run_tool(["llvm-readobj", "--needed-libs", str(exe)])
     libs = []
     in_block = False
@@ -259,7 +292,7 @@ def foreign_imports(exe: Path, freestanding: bool) -> list[str]:
             if line == "]" or not line:
                 continue
             libs.append(line)
-    return [lib for lib in libs if lib.lower() not in allowed]
+    return fmt, [lib for lib in libs if lib.lower() not in allowed]
 
 
 def image_facts(exe: Path) -> str:
@@ -530,10 +563,10 @@ def run_case(
                     f"--- build stderr ---\n{proc.stderr}"
                 )
             if not sanitize:
-                foreign = foreign_imports(exe_path, is_freestanding(case_dir))
+                fmt, foreign = foreign_imports(exe_path, is_freestanding(case_dir))
                 if foreign:
                     return False, (
-                        "image imports beyond the kernel: " + ", ".join(foreign)
+                        f"{fmt} image imports beyond the kernel: " + ", ".join(foreign)
                     )
 
             try:
