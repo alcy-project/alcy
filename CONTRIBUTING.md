@@ -144,6 +144,28 @@ uv run ./tools/run.py --target=tests --mode=debug \
   --build-subdir=build_wasm --target-os=emscripten
 ```
 
+Every check prints its own duration, and the run ends with the phases
+sorted by duration, slowest first:
+
+```text
+==> timings (slowest first)
+        812.3s  uv run ./tools/check_coverage.py
+         95.4s  uv run ./tools/check_exe.py --build-subdir=build_release
+        ...
+==> total 1832.1s
+```
+
+For an iteration pass that skips the heavyweight ones — the coverage
+ratchet, the sanitized exe cases, the WebAssembly tests — say so instead
+of waiting:
+
+```bash
+./tools/check.sh --no-coverage --no-sanitize --no-wasm
+```
+
+`--help` lists every skip. CI still runs each check as its own job, so the
+full run remains the bar before a review.
+
 Notes:
 
 - Keep different target OSes outputs in separate `--build-subdir` directories;

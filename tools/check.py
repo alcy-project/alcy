@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 from utils.paths import project_root_dir
 
@@ -78,14 +79,33 @@ def main() -> int:
     os.chdir(project_root_dir)
     py = python_runner()
 
+    started = time.perf_counter()
+    timings: list[tuple[str, float]] = []
+
+    def summarize_timings() -> None:
+        if not timings:
+            return
+        print("==> timings (slowest first)", flush=True)
+        for label, elapsed in sorted(timings, key=lambda timing: -timing[1]):
+            print(f"{elapsed:9.1f}s  {label}", flush=True)
+        print(f"==> total {time.perf_counter() - started:.1f}s", flush=True)
+
     def run(*command: str) -> None:
         """One check: the first failure is where the run stops."""
         # The boundary names the check before its output, so a silent check
         # and a talkative one read as steps of one run rather than as
         # stray output.
-        print(f"==> {' '.join(command)}", flush=True)
-        if subprocess.run(list(command)).returncode != 0:
-            sys.exit(f"error: check failed: {' '.join(command)}")
+        label = " ".join(command)
+        print(f"==> {label}", flush=True)
+        phase_started = time.perf_counter()
+        returncode = subprocess.run(list(command)).returncode
+        elapsed = time.perf_counter() - phase_started
+        timings.append((label, elapsed))
+        status = "ok" if returncode == 0 else "FAILED"
+        print(f"==> {status} ({elapsed:.1f}s): {label}", flush=True)
+        if returncode != 0:
+            summarize_timings()
+            sys.exit(f"error: check failed: {label}")
 
     def tool(script: str, *flags: str) -> None:
         run(*py, f"./tools/{script}", *flags)
@@ -313,6 +333,7 @@ def main() -> int:
         )
         tool("check_playground.py", f"--build-subdir={playground_subdir}")
 
+    summarize_timings()
     print("check ok")
     return 0
 
