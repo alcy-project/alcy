@@ -709,7 +709,10 @@ base::Result<void, diag::Reported> link_executable(
       argv.emplace_back("/entry:_start");
       argv.emplace_back("-Xlinker");
       argv.emplace_back("/subsystem:console");
-      argv.emplace_back("kernel32.lib");
+      // A bare `kernel32.lib` would be an input file to the driver,
+      // which checks that the path exists before the linker ever sees
+      // it; `-l` leaves the search to the linker, which knows `LIB`.
+      argv.emplace_back("-lkernel32");
     }
   } else if (link.freestanding) {
     // No startup files and no C library; the object's `_start` is the
