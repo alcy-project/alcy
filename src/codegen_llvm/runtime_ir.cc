@@ -983,7 +983,7 @@ class RuntimeBuilder {
         libc("fclose", llvm::FunctionType::get(builder_.getInt32Ty(),
                                                {builder_.getPtrTy()}, false));
     builder_.CreateCall(close_fn, {file});
-    // The count is a `size_t`, which a 32-bit target answers in 32 bits;
+    // The count is a `usize`, which a 32-bit target answers in 32 bits;
     // the helper answers `i64` on every target.
     llvm::Value* widened = count;
     if (count->getType() != builder_.getInt64Ty()) {
@@ -1040,7 +1040,7 @@ class RuntimeBuilder {
         libc("fclose", llvm::FunctionType::get(builder_.getInt32Ty(),
                                                {builder_.getPtrTy()}, false));
     builder_.CreateCall(close_fn, {file});
-    // The count is a `size_t`, which a 32-bit target answers in 32 bits;
+    // The count is a `usize`, which a 32-bit target answers in 32 bits;
     // the helper answers `i64` on every target.
     llvm::Value* widened = count;
     if (count->getType() != builder_.getInt64Ty()) {

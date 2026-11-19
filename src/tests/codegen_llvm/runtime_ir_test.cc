@@ -269,7 +269,7 @@ TEST_CASE("The file helpers answer i64 on a 32-bit target") {
   const auto pointer = opaque_pointer(context);
 
   // The lowering declares these with the intrinsic's own i64 shape,
-  // and the answer cannot follow the pointer's width: the size_t a
+  // and the answer cannot follow the pointer's width: the usize a
   // 32-bit fread/fwrite answers is widened inside the runtime.
   declare(module, "alcy_file_size", signature(i64, {pointer, usize32}));
   declare(module, "alcy_read_file_into",

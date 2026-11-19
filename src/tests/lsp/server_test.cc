@@ -28,7 +28,7 @@ std::string read_all(i32 fd) {
   std::string out;
   char buffer[4096];
   for (;;) {
-    const ssize_t count = ::read(fd, buffer, sizeof(buffer));
+    const isize count = ::read(fd, buffer, sizeof(buffer));
     if (count <= 0) {
       break;
     }
@@ -46,7 +46,7 @@ std::string serve(const std::string& requests, i32* exit_code) {
   CHECK(::pipe(input) == 0);
   CHECK(::pipe(output) == 0);
   CHECK(::write(input[1], requests.data(), requests.size()) ==
-        static_cast<ssize_t>(requests.size()));
+        static_cast<isize>(requests.size()));
   ::close(input[1]);
 
   Transport transport(input[0], output[1]);

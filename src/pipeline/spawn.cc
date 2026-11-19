@@ -252,7 +252,7 @@ base::Result<CapturedSpawn, SpawnError> run_command_capture(
   char buffer[65536];
   bool drained = true;
   for (;;) {
-    const ssize_t read = ::read(pipefd[0], buffer, sizeof buffer);
+    const isize read = ::read(pipefd[0], buffer, sizeof buffer);
     if (read > 0) {
       total += static_cast<u64>(read);
       continue;
