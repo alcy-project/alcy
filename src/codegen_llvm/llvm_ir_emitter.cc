@@ -1376,12 +1376,77 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
                                ir::TypeIdx entry_return) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler_, "main", "emit-fn");
   check_state();
-  const ir::TypeTag ret = storage_->types()[entry_return.idx].tag;
   llvm::LLVMContext& context = module_->getContext();
-  // A freestanding entry is the ELF entry symbol itself and never
-  // returns to a runtime; a hosted one is the C `main` a crt calls.
-  // A hosted entry is the C `main`, which a crt calls with the process
-  // arguments; a freestanding one is the ELF entry, which has none.
+  // A freestanding entry is the ELF entry symbol itself. At the ELF
+  // entry, `argv` sits above `argc` on the stack; the wrapper reads
+  // both from there, so a freestanding program sees the same `args()`
+  // as a hosted one.
+  const std::string_view triple_view = triple_;
+  const bool elf_entry =
+      freestanding_ && triple_view.find("windows") == std::string_view::npos &&
+      triple_view.find("darwin") == std::string_view::npos &&
+      triple_view.find("wasm") == std::string_view::npos;
+  if (elf_entry) {
+    // A naked trampoline: read argc and argv off the initial stack
+    // into the registers main's ABI expects, then call the outer
+    // function. The outer function's address rides an ordinary
+    // operand, so the partitioner and the LTO backend see the
+    // trampoline depends on it rather than a symbol hidden in the
+    // assembly text.
+    llvm::FunctionType* outer_type = llvm::FunctionType::get(
+        builder_->getVoidTy(), {builder_->getInt32Ty(), builder_->getPtrTy()},
+        false);
+    llvm::Function* outer =
+        llvm::Function::Create(outer_type, llvm::Function::InternalLinkage,
+                               "_alcy_start_outer", module_);
+    llvm::Type* i64 = builder_->getInt64Ty();
+    llvm::Value* outer_address =
+        builder_->CreatePtrToInt(outer, i64, "outer_address");
+    const char* trampoline = nullptr;
+    const char* constraints = nullptr;
+    if (triple_view.rfind("x86_64", 0) == 0) {
+      trampoline =
+          "mov (%rsp), %edi\n"
+          "lea 8(%rsp), %rsi\n"
+          "call *$0";
+      constraints = "{rax},~{memory},~{rdi},~{rsi}";
+    } else if (triple_view.rfind("aarch64", 0) == 0) {
+      trampoline =
+          "ldr x0, [sp]\n"
+          "add x1, sp, #8\n"
+          "blr $0";
+      constraints = "{x16},~{memory},~{x0},~{x1},~{lr}";
+    } else {
+      trampoline =
+          "ld a0, 0(sp)\n"
+          "addi a1, sp, 8\n"
+          "jalr x0, $0, 0";
+      constraints = "{t0},~{memory},~{a0},~{a1}";
+    }
+    llvm::FunctionType* void_type =
+        llvm::FunctionType::get(builder_->getVoidTy(), {i64}, false);
+    llvm::InlineAsm* trampoline_call = llvm::InlineAsm::get(
+        void_type, trampoline, constraints, /*hasSideEffects=*/true);
+    llvm::Function* start = llvm::Function::Create(
+        void_type, llvm::Function::ExternalLinkage, "_start", module_);
+    start->addFnAttr(llvm::Attribute::Naked);
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(context, "", start);
+    builder_->SetInsertPoint(entry);
+    builder_->CreateCall(trampoline_call, {outer_address});
+    builder_->CreateRetVoid();
+
+    llvm::BasicBlock* outer_entry =
+        llvm::BasicBlock::Create(context, "", outer);
+    builder_->SetInsertPoint(outer_entry);
+    builder_->CreateStore(
+        outer->getArg(0),
+        module_->getOrInsertGlobal("alcy_argc", builder_->getInt32Ty()));
+    builder_->CreateStore(
+        outer->getArg(1),
+        module_->getOrInsertGlobal("alcy_argv", builder_->getPtrTy()));
+    emit_entry_body(outer, entry_function, entry_return);
+    return;
+  }
   llvm::FunctionType* wrapper_type =
       freestanding_
           ? llvm::FunctionType::get(builder_->getInt32Ty(), false)
@@ -1402,6 +1467,16 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
         wrapper->getArg(1),
         module_->getOrInsertGlobal("alcy_argv", builder_->getPtrTy()));
   }
+  emit_entry_body(wrapper, entry_function, entry_return);
+  return;
+}
+
+void LlvmIrEmitter::emit_entry_body(llvm::Function* wrapper,
+                                    llvm::Function* entry_function,
+                                    ir::TypeIdx entry_return) {
+  const ir::TypeTag ret = storage_->types()[entry_return.idx].tag;
+  llvm::LLVMContext& context = module_->getContext();
+  builder_->SetInsertPoint(&wrapper->getEntryBlock());
   // A result past the direct limit crosses in a slot the wrapper owns,
   // so the exit code reads it out of memory.
   llvm::AllocaInst* result_slot = nullptr;
@@ -1423,18 +1498,36 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
   if (freestanding_) {
     // The exit status is the i32 main returned; an enum main exits
     // nonzero on a variant other than the first, and `()` exits zero.
-    llvm::Value* code = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
     if (ret == ir::TypeTag::I32) {
-      code = result;
-    } else if (ret == ir::TypeTag::Enum) {
-      llvm::Value* tag = result_tag();
-      llvm::Value* is_ok = builder_->CreateICmpEQ(
-          tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
-      code = builder_->CreateSelect(
-          is_ok, llvm::ConstantInt::get(builder_->getInt32Ty(), 0),
-          llvm::ConstantInt::get(builder_->getInt32Ty(), 1));
+      if (!emit_exit(result)) {
+        DCHECK_MSG(false, "freestanding exit on an unsupported target");
+      }
+      return;
     }
-    if (!emit_exit(code)) {
+    if (ret != ir::TypeTag::Enum) {
+      if (!emit_exit(llvm::ConstantInt::get(builder_->getInt32Ty(), 0))) {
+        DCHECK_MSG(false, "freestanding exit on an unsupported target");
+      }
+      return;
+    }
+    llvm::Value* tag = result_tag();
+    llvm::Value* is_ok = builder_->CreateICmpEQ(
+        tag, llvm::ConstantInt::get(builder_->getInt32Ty(), 0));
+    llvm::BasicBlock* ok_block = llvm::BasicBlock::Create(context, "", wrapper);
+    llvm::BasicBlock* err_block =
+        llvm::BasicBlock::Create(context, "", wrapper);
+    builder_->CreateCondBr(is_ok, ok_block, err_block);
+    builder_->SetInsertPoint(ok_block);
+    if (!emit_exit(llvm::ConstantInt::get(builder_->getInt32Ty(), 0))) {
+      DCHECK_MSG(false, "freestanding exit on an unsupported target");
+    }
+    builder_->SetInsertPoint(err_block);
+    // The error variant is an exit, not a panic: the message goes to
+    // stderr and the status is 1, the same as a hosted build.
+    if (!emit_stderr_message("main returned Err\n")) {
+      DCHECK_MSG(false, "freestanding stderr on an unsupported target");
+    }
+    if (!emit_exit(llvm::ConstantInt::get(builder_->getInt32Ty(), 1))) {
       DCHECK_MSG(false, "freestanding exit on an unsupported target");
     }
     return;
@@ -1492,6 +1585,43 @@ void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,
 // loaded in the assembly text and the status rides an input operand,
 // so one shape covers every output kind: a syscall never returns, so
 // the call is immediately unreachable.
+bool LlvmIrEmitter::emit_stderr_message(llvm::StringRef message) {
+  const std::string arch = triple_.substr(0, triple_.find('-'));
+  const char* text = nullptr;
+  const char* constraints = nullptr;
+  if (arch == "x86_64") {
+    text = "movq $$1, %rax\nsyscall";
+    constraints = "{rdi},{rsi},{rdx},~{rax},~{rcx},~{r11},~{memory}";
+  } else if (arch == "aarch64") {
+    text = "mov x8, #64\nsvc #0";
+    constraints = "{x0},{x1},{x2},~{x8},~{memory}";
+  } else if (arch == "riscv64") {
+    text = "li a7, 64\necall";
+    constraints = "{a0},{a1},{a2},~{a7},~{memory}";
+  } else {
+    return false;
+  }
+  llvm::GlobalVariable* global =
+      builder_->CreateGlobalString(message, "", 0, module_);
+  llvm::Type* len_ty = width_ == ir::PointerWidth::W64 ? builder_->getInt64Ty()
+                                                       : builder_->getInt32Ty();
+  llvm::Value* len = llvm::ConstantInt::get(len_ty, message.size());
+  llvm::Value* fd = llvm::ConstantInt::get(builder_->getInt32Ty(), 2);
+  llvm::Value* zero = llvm::ConstantInt::get(builder_->getInt32Ty(), 0);
+  llvm::SmallVector<llvm::Value*, 2> indices{zero, zero};
+  llvm::Value* bytes =
+      builder_->CreateInBoundsGEP(global->getValueType(), global, indices);
+  llvm::Type* word = builder_->getInt64Ty();
+  llvm::FunctionType* type = llvm::FunctionType::get(
+      builder_->getVoidTy(), {word, builder_->getPtrTy(), word}, false);
+  llvm::InlineAsm* call = llvm::InlineAsm::get(type, text, constraints,
+                                               /*hasSideEffects=*/true);
+  llvm::Value* wide_fd = builder_->CreateSExt(fd, word);
+  llvm::Value* wide_len = builder_->CreateSExt(len, word);
+  builder_->CreateCall(call, {wide_fd, bytes, wide_len});
+  return true;
+}
+
 bool LlvmIrEmitter::emit_exit(llvm::Value* code32) {
   const std::string arch = triple_.substr(0, triple_.find('-'));
   const char* text = nullptr;

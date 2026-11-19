@@ -45,6 +45,9 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     llvm::Module& module,
     const Target& target);
 
+// A freestanding program has no libc for the pipeline to synthesize
+// calls to; passing true says so.
+//
 // Runs the O3 middle-end pipeline over the module in place. The module must
 // verify clean; the pipeline preserves that. Unknown triples fail the same
 // way emission does.
@@ -55,7 +58,8 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
 // pipeline ran - nothing is recorded.
 base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
                                                     const Target& target,
-                                                    debug::Profiler* profiler);
+                                                    debug::Profiler* profiler,
+                                                    bool freestanding = false);
 
 // The module as LLVM's textual IR. This is the only output that can be
 // read, diffed, and checked by a tool outside this compiler: an object

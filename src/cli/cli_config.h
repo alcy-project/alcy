@@ -177,8 +177,13 @@ struct CliConfig {
 // toolchain file, overridden wherever the command named something. An
 // absent file is an empty Toolchain, which is what a command that reads
 // no file passes.
+// Whether the target is a Linux triple the freestanding ELF
+// entry can serve; the hosted build uses the same binary there.
+bool force_freestanding_elf(std::string_view triple);
+
 pipeline::LinkOptions resolve_link_options(const CliConfig& config,
-                                           const pkg::Toolchain& tool);
+                                           const pkg::Toolchain& tool,
+                                           std::string_view target = "");
 
 // Sets the backend this invocation uses: the one it named, or the first
 // that serves the mode's output kind and the resolved profile's

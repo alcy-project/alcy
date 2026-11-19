@@ -34,12 +34,16 @@ namespace codegen_llvm {
 // many threads did the work.
 base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
 optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
-                  u32 workers) {
+                  u32 workers,
+                  bool freestanding) {
   llvm::lto::Config config;
   config.CPU = "generic";
   config.OptLevel = 3;
   config.CGFileType = llvm::CodeGenFileType::ObjectFile;
   config.Options = llvm::TargetOptions();
+  // A freestanding program has no libc, so the thin link's middle end
+  // may not invent one either.
+  config.Freestanding = freestanding;
   // A diagnostic the link reports is the caller's to name, and the caller
   // reads the code generator's failures; this keeps the library's own
   // default handler from writing to a stream no command owns.

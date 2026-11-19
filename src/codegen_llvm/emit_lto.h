@@ -23,6 +23,7 @@ namespace codegen_llvm {
 // partitions of one module - `SplitModule`'s output - and they are consumed.
 base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
 optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
-                  u32 workers);
+                  u32 workers,
+                  bool freestanding);
 
 }  // namespace codegen_llvm

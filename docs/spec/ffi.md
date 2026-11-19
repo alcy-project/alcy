@@ -84,15 +84,21 @@ foreclose the baremetal story.
 
 ## Freestanding (Bootstrap)
 
-- `.alcy/toolchain.toml` with `freestanding = true` links without a C
-  runtime: no startup objects, no dynamic linker, and no libc. The
-  compiler emits `_start`, calls the program's `main`, and ends
-  through the target's exit syscall, so an `i32` main is the process
-  status, `()` is zero, and an enum main is nonzero on any variant
-  but the first.
+- A hosted build for a Linux target links without a C runtime, always
+  and without a flag: no startup objects, no dynamic linker, and no
+  libc. The kernel enters `_start`, which reads `argc` and `argv` off
+  the initial stack into the registers the program's `main` expects
+  and calls it; the program ends through the exit syscall. An `i32`
+  main is the process status, `()` is zero, and an enum main writes
+  `main returned Err` to stderr and exits 1 on a variant other than
+  the first.
+- `.alcy/toolchain.toml` with `freestanding = true` asks for the same
+  link on a platform whose hosted build still uses its C runtime. The
+  entry is `_start` exactly as above, with the same rules, on a
+  package that opted in.
 - A runtime piece is defined only when the program declares it, so a
-  freestanding program carries only what it uses. The pieces reach
-  the kernel through raw syscalls: `print`, `println`, and `panic`
+  program carries only what it uses. The pieces reach the kernel
+  through raw syscalls: `print`, `println`, and `panic`
   write with the write syscall, `panic` then exits nonzero, and
   `alloc`/`dealloc` map and unmap anonymous memory, so the heap
   containers work without a C allocator. The sequences are written

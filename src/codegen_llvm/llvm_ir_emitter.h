@@ -23,6 +23,7 @@
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "llvm/ADT/StringRef.h"
 #include "overlay/overlay.h"
 
 namespace llvm {
@@ -204,10 +205,14 @@ class LlvmIrEmitter {
   // Emits the C-ABI `main` wrapper around a renamed user entry,
   // supplying a slot for a result past the direct limit.
   void emit_entry(llvm::Function* entry_function, ir::TypeIdx ret);
+  void emit_entry_body(llvm::Function* wrapper,
+                       llvm::Function* entry_function,
+                       ir::TypeIdx entry_return);
   // Ends a freestanding program through the target's exit syscall.
   // Answers false for a target with no sequence here, which the
   // pipeline refuses before emission.
   bool emit_exit(llvm::Value* code32);
+  bool emit_stderr_message(llvm::StringRef message);
 
   llvm::Module* module_;
   ir::VerifiedStorage storage_;

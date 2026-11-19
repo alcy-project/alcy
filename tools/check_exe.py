@@ -120,7 +120,7 @@ WASM_UNPORTABLE = {
     "exe-alloc-refuse": "a usize literal past the 32-bit range",
     "exe-args": "`alcy_arg_count`, which the backend declines",
     "exe-args-len": "`alcy_arg_count`, which the backend declines",
-    "exe-extern-c-abs": "`abs`, which the backend declines",
+    "exe-extern-c-memcpy": "a foreign declaration, which the backend declines",
     "exe-file-round-trip": "`alcy_file_size`, which the backend declines",
     "exe-freestanding-exit": "a freestanding entry, which the target declines",
     "exe-freestanding-fill": "a freestanding entry, which the target declines",

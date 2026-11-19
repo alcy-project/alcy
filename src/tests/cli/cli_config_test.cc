@@ -78,4 +78,32 @@ TEST_CASE("A command that reads no file links from the command alone") {
   }
 }
 
+TEST_CASE("A Linux ELF target forces the freestanding entry") {
+  CHECK(force_freestanding_elf("x86_64-unknown-linux-gnu"));
+  CHECK(force_freestanding_elf("aarch64-unknown-linux-gnu"));
+  CHECK(force_freestanding_elf("arm64-unknown-linux-gnu"));
+  CHECK(force_freestanding_elf("riscv64-unknown-linux-gnu"));
+  CHECK(!force_freestanding_elf("aarch64-apple-darwin"));
+  CHECK(!force_freestanding_elf("x86_64-pc-windows-msvc"));
+  CHECK(!force_freestanding_elf("wasm32-unknown-emscripten"));
+  CHECK(!force_freestanding_elf(""));
+}
+
+TEST_CASE("The target's freestanding flag rides into the link") {
+  const pipeline::LinkOptions link =
+      resolve_link_options(CliConfig{}, file(), "x86_64-unknown-linux-gnu");
+  CHECK(link.freestanding);
+  const pipeline::LinkOptions unlinked =
+      resolve_link_options(CliConfig{}, file(), "aarch64-apple-darwin");
+  CHECK(!unlinked.freestanding);
+}
+
+TEST_CASE("The file's freestanding flag rides onto any target") {
+  const pkg::Toolchain freestanding_file{
+      .linker = FILE_DRIVER, .link_args = FILE_ARGS, .freestanding = true};
+  const pipeline::LinkOptions link = resolve_link_options(
+      CliConfig{}, freestanding_file, "aarch64-apple-darwin");
+  CHECK(link.freestanding);
+}
+
 }  // namespace cli

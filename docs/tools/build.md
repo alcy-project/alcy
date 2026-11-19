@@ -88,7 +88,9 @@ freestanding = true
 `freestanding = true` links without the C runtime: no startup files,
 no libc, and the compiler emits `_start` as the entry instead of
 `main`. A freestanding build's `main` keeps its signature and its
-value becomes the process's exit code.
+value becomes the process's exit code. Linux hosted builds always
+link this way, so the flag names the same link on platforms whose
+hosted build still uses a C runtime.
 
 ### The profile file
 

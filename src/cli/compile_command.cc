@@ -103,7 +103,7 @@ ResultCode run_compile(const CliConfig& config,
   // `compile` never reads a toolchain file, so one file stays
   // reproducible from the command alone.
   const pipeline::LinkOptions link =
-      resolve_link_options(config, pkg::Toolchain{});
+      resolve_link_options(config, pkg::Toolchain{}, ctx.target.triple);
   // The same rule for profiles: `--profile` selects a built-in one and
   // no file is read, so a name only the goal package could declare is
   // unknown here.

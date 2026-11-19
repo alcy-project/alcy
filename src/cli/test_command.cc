@@ -112,10 +112,12 @@ i32 run_test(const CliConfig& config,
     return failed;
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  ctx.freestanding = tool.freestanding;
-  // A test is a process the run starts and watches, so a target that
-  // cannot start one has nothing to report tests with.
-  if (ctx.target.is_wasm() || ctx.freestanding) {
+  ctx.freestanding = tool.freestanding || ctx.freestanding;
+  // A test is a process the run starts and watches; a target that cannot
+  // start one has nothing to report tests with. Freestanding ELF targets
+  // can: their entry parses argc/argv and uses the same syscalls as hosted.
+  if (ctx.target.is_wasm() ||
+      (ctx.freestanding && !force_freestanding_elf(ctx.target.triple))) {
     const u32 index = ctx.bag.emit<i18n::Key::CliTestTargetNotRunnable>(
         pipeline::DiagCode::TestTargetNotRunnable, ctx.target.triple);
     (void)index;
@@ -124,7 +126,8 @@ i32 run_test(const CliConfig& config,
   // The run's front half consults and stores the build's cache, so the
   // opt-out the build carries is the run's too.
   ctx.no_cache = config.no_cache;
-  const pipeline::LinkOptions link = resolve_link_options(config, tool);
+  const pipeline::LinkOptions link =
+      resolve_link_options(config, tool, ctx.target.triple);
   base::Result<pkg::Profiles, diag::Reported> profiles =
       pipeline::load_profiles(ctx, found.root);
   if (profiles.is_err()) {

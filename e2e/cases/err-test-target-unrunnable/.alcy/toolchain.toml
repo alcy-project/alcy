@@ -1,3 +1,0 @@
-# A test is a process the run starts and watches, and a freestanding
-# program has no process to be, so the test runner refuses it.
-freestanding = true

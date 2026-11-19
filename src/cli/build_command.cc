@@ -49,7 +49,7 @@ ResultCode run_build(const CliConfig& config,
     }
     pipeline::StdSelection selection = std::move(selected).unwrap();
     const pipeline::LinkOptions link =
-        resolve_link_options(config, pkg::Toolchain{});
+        resolve_link_options(config, pkg::Toolchain{}, ctx.target.triple);
     base::Result<pipeline::BuildProfile, diag::Reported> resolved =
         pipeline::resolve_profile(
             pipeline::ProfileRequest{.name = config.profile,
@@ -89,9 +89,10 @@ ResultCode run_build(const CliConfig& config,
     return failed;
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  ctx.freestanding = tool.freestanding;
+  ctx.freestanding = tool.freestanding || ctx.freestanding;
   ctx.no_cache = config.no_cache;
-  const pipeline::LinkOptions link = resolve_link_options(config, tool);
+  const pipeline::LinkOptions link =
+      resolve_link_options(config, tool, ctx.target.triple);
   base::Result<pkg::Profiles, diag::Reported> profiles =
       pipeline::load_profiles(ctx, found.root);
   if (profiles.is_err()) {

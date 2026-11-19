@@ -96,11 +96,11 @@ class RuntimeBuilder {
     if (eprintln) {
       build_writer("alcy_eprintln", /*newline=*/true, /*out_fd=*/2);
     }
-    if (!freestanding_) {
-      // The entry wrapper stores `argc` and `argv` here, so the
-      // globals exist whether or not a count is asked for.
-      // The two globals are discardable for the same reason the entry
-      // points are: every object carries them, and one copy answers.
+    // The entry wrapper stores `argc` and `argv` here, so the
+    // globals exist whether or not a count is asked for. The two
+    // globals are discardable for the same reason the entry points are:
+    // every object carries them, and one copy answers.
+    {
       llvm::GlobalVariable* argc =
           module_.getOrInsertGlobal("alcy_argc", builder_.getInt32Ty());
       if (!argc->hasInitializer()) {
@@ -122,8 +122,20 @@ class RuntimeBuilder {
       build_arg();
     }
     if (freestanding_) {
-      // No libc to open a file with; the std still links.
-      build_file_stubs();
+      if (arch_ == "x86_64" || arch_ == "aarch64" || arch_ == "riscv64") {
+        if (declared("alcy_file_size")) {
+          build_file_size_syscall();
+        }
+        if (declared("alcy_read_file_into")) {
+          build_read_file_into_syscall();
+        }
+        if (declared("alcy_write_file")) {
+          build_write_file_syscall();
+        }
+      } else {
+        // No libc to open a file with; the std still links.
+        build_file_stubs();
+      }
     } else {
       if (declared("alcy_file_size")) {
         build_file_size();
@@ -199,6 +211,9 @@ class RuntimeBuilder {
     u64 exit;
     u64 mmap;
     u64 munmap;
+    u64 openat;
+    u64 close;
+    u64 lseek;
   };
 
   bool syscall_abi(SyscallAbi& out) const {
@@ -213,6 +228,9 @@ class RuntimeBuilder {
           .exit = 60,
           .mmap = 9,
           .munmap = 11,
+          .openat = 257,
+          .close = 3,
+          .lseek = 8,
       };
       return true;
     }
@@ -225,6 +243,9 @@ class RuntimeBuilder {
           .exit = 93,
           .mmap = 222,
           .munmap = 215,
+          .openat = 56,
+          .close = 57,
+          .lseek = 62,
       };
       return true;
     }
@@ -237,6 +258,9 @@ class RuntimeBuilder {
           .exit = 93,
           .mmap = 222,
           .munmap = 215,
+          .openat = 56,
+          .close = 57,
+          .lseek = 62,
       };
       return true;
     }
@@ -566,10 +590,6 @@ class RuntimeBuilder {
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "entry", function);
     builder_.SetInsertPoint(entry);
-    if (freestanding_) {
-      builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), 0));
-      return;
-    }
     llvm::Value* count = builder_.CreateLoad(
         builder_.getInt32Ty(),
         module_.getOrInsertGlobal("alcy_argc", builder_.getInt32Ty()), "argc");
@@ -589,14 +609,14 @@ class RuntimeBuilder {
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", function);
     builder_.SetInsertPoint(entry);
-    if (freestanding_) {
-      builder_.CreateRet(llvm::ConstantAggregateZero::get(view));
-      return;
-    }
     llvm::BasicBlock* empty =
         llvm::BasicBlock::Create(context, "empty", function);
     llvm::BasicBlock* have =
         llvm::BasicBlock::Create(context, "have", function);
+    llvm::BasicBlock* scan =
+        llvm::BasicBlock::Create(context, "scan", function);
+    llvm::BasicBlock* scan_done =
+        llvm::BasicBlock::Create(context, "scan_done", function);
     llvm::Value* index = function->getArg(0);
     llvm::Value* count = builder_.CreateLoad(
         builder_.getInt32Ty(),
@@ -616,10 +636,26 @@ class RuntimeBuilder {
     llvm::Value* slot =
         builder_.CreateGEP(builder_.getPtrTy(), argv, index, "slot");
     llvm::Value* text = builder_.CreateLoad(builder_.getPtrTy(), slot, "text");
-    llvm::Function* strlen_fn =
-        libc("strlen",
-             llvm::FunctionType::get(usize_, {builder_.getPtrTy()}, false));
-    llvm::Value* len = builder_.CreateCall(strlen_fn, {text}, "len");
+    builder_.CreateBr(scan);
+    builder_.SetInsertPoint(scan);
+    llvm::PHINode* at = builder_.CreatePHI(usize_, 2, "at");
+    llvm::PHINode* length = builder_.CreatePHI(usize_, 2, "length");
+    at->addIncoming(llvm::ConstantInt::get(usize_, 0), have);
+    length->addIncoming(llvm::ConstantInt::get(usize_, 0), have);
+    llvm::Value* byte = builder_.CreateLoad(
+        builder_.getInt8Ty(),
+        builder_.CreateGEP(builder_.getInt8Ty(), text, at), "byte");
+    llvm::Value* is_zero = builder_.CreateICmpEQ(
+        byte, llvm::ConstantInt::get(builder_.getInt8Ty(), 0), "zero");
+    llvm::Value* next_at =
+        builder_.CreateAdd(at, llvm::ConstantInt::get(usize_, 1), "next_at");
+    llvm::Value* next_count = builder_.CreateAdd(
+        length, llvm::ConstantInt::get(usize_, 1), "next_count");
+    at->addIncoming(next_at, scan);
+    length->addIncoming(next_count, scan);
+    builder_.CreateCondBr(is_zero, scan_done, scan);
+    builder_.SetInsertPoint(scan_done);
+    llvm::Value* len = length;
     llvm::Value* with_ptr =
         builder_.CreateInsertValue(llvm::UndefValue::get(view), text, 0);
     builder_.CreateRet(builder_.CreateInsertValue(with_ptr, len, 1));
@@ -791,6 +827,206 @@ class RuntimeBuilder {
     }
     builder_.CreateRet(widened);
   }
+  // openat(2) with `AT_FDCWD` for the current directory. The path is
+  // copied into a slot with the terminator the syscall wants.
+  static constexpr i64 AT_FDCWD = -100;
+  static constexpr i64 O_RDONLY = 0;
+  // The low 12 bits are the access mode; `O_CREAT` and `O_TRUNC` are
+  // bits 6 and 9 on Linux.
+  static constexpr i64 O_WRONLY = 1;
+  static constexpr i64 O_CREAT = 0x40;
+  static constexpr i64 O_TRUNC = 0x200;
+  static constexpr i64 SEEK_TO_THE_END = 2;
+
+  void build_file_size_syscall() {
+    SyscallAbi abi{};
+    CHECK_MSG(syscall_abi(abi),
+              "freestanding runtime on an unsupported target");
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getInt64Ty(), {builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime("alcy_file_size", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", function);
+    llvm::BasicBlock* opened =
+        llvm::BasicBlock::Create(context, "opened", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* path =
+        nul_terminated_path(function->getArg(0), function->getArg(1));
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Value* zero = llvm::ConstantInt::get(i64, 0);
+    llvm::Value* fd_value =
+        syscall({llvm::ConstantInt::get(i64, abi.openat),
+                 llvm::ConstantInt::get(i64, static_cast<u64>(AT_FDCWD)),
+                 builder_.CreatePtrToInt(path, i64),
+                 llvm::ConstantInt::get(i64, O_RDONLY), zero, zero, zero});
+    llvm::Value* negative = builder_.CreateICmpSLT(fd_value, zero, "negative");
+    builder_.CreateCondBr(negative, missing, opened);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
+    builder_.SetInsertPoint(opened);
+    llvm::Value* size = syscall(
+        {llvm::ConstantInt::get(i64, abi.lseek), fd_value, zero,
+         llvm::ConstantInt::get(i64, SEEK_TO_THE_END), zero, zero, zero});
+    syscall({llvm::ConstantInt::get(i64, abi.close), fd_value, zero, zero, zero,
+             zero, zero});
+    builder_.CreateRet(size);
+  }
+
+  void build_read_file_into_syscall() {
+    SyscallAbi abi{};
+    CHECK_MSG(syscall_abi(abi),
+              "freestanding runtime on an unsupported target");
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getInt64Ty(),
+        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime("alcy_read_file_into", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", function);
+    llvm::BasicBlock* opened =
+        llvm::BasicBlock::Create(context, "opened", function);
+    llvm::BasicBlock* loop =
+        llvm::BasicBlock::Create(context, "loop", function);
+    llvm::BasicBlock* read =
+        llvm::BasicBlock::Create(context, "read", function);
+    llvm::BasicBlock* progress =
+        llvm::BasicBlock::Create(context, "progress", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* path =
+        nul_terminated_path(function->getArg(0), function->getArg(1));
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Value* zero = llvm::ConstantInt::get(i64, 0);
+    llvm::Value* fd_value =
+        syscall({llvm::ConstantInt::get(i64, abi.openat),
+                 llvm::ConstantInt::get(i64, static_cast<u64>(AT_FDCWD)),
+                 builder_.CreatePtrToInt(path, i64),
+                 llvm::ConstantInt::get(i64, O_RDONLY), zero, zero, zero});
+    llvm::Value* negative = builder_.CreateICmpSLT(fd_value, zero, "negative");
+    builder_.CreateCondBr(negative, missing, opened);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
+    builder_.SetInsertPoint(opened);
+    builder_.CreateBr(loop);
+    builder_.SetInsertPoint(loop);
+    llvm::PHINode* total = builder_.CreatePHI(usize_, 2, "total");
+    llvm::PHINode* into = builder_.CreatePHI(builder_.getPtrTy(), 2, "into");
+    llvm::PHINode* left = builder_.CreatePHI(usize_, 2, "left");
+    total->addIncoming(llvm::ConstantInt::get(usize_, 0), opened);
+    into->addIncoming(function->getArg(2), opened);
+    left->addIncoming(function->getArg(3), opened);
+    llvm::Value* more =
+        builder_.CreateICmpUGT(left, llvm::ConstantInt::get(usize_, 0), "more");
+    builder_.CreateCondBr(more, read, done);
+    builder_.SetInsertPoint(read);
+    llvm::Value* remaining = left;
+    llvm::Value* count =
+        syscall({llvm::ConstantInt::get(i64, abi.read), fd_value,
+                 builder_.CreatePtrToInt(into, i64),
+                 // The length rides the ABI's full-word register.
+                 builder_.CreateZExtOrTrunc(remaining, i64), zero, zero, zero});
+    llvm::Value* stopped = builder_.CreateICmpSLE(count, zero, "stopped");
+    builder_.CreateCondBr(stopped, done, progress);
+    builder_.SetInsertPoint(progress);
+    llvm::Value* advance = builder_.CreateZExtOrTrunc(count, usize_, "advance");
+    llvm::Value* next_total = builder_.CreateAdd(total, advance, "next_total");
+    llvm::Value* added =
+        builder_.CreateGEP(builder_.getInt8Ty(), into, advance, "added");
+    llvm::Value* next_left = builder_.CreateSub(left, advance, "next_left");
+    total->addIncoming(next_total, progress);
+    into->addIncoming(added, progress);
+    left->addIncoming(next_left, progress);
+    builder_.CreateBr(loop);
+    builder_.SetInsertPoint(done);
+    syscall({llvm::ConstantInt::get(i64, abi.close), fd_value, zero, zero, zero,
+             zero, zero});
+    builder_.CreateRet(
+        builder_.CreateZExtOrTrunc(total, builder_.getInt64Ty(), "widened"));
+  }
+
+  void build_write_file_syscall() {
+    SyscallAbi abi{};
+    CHECK_MSG(syscall_abi(abi),
+              "freestanding runtime on an unsupported target");
+    llvm::FunctionType* type = llvm::FunctionType::get(
+        builder_.getInt64Ty(),
+        {builder_.getPtrTy(), usize_, builder_.getPtrTy(), usize_}, false);
+    llvm::Function* function = runtime("alcy_write_file", type);
+    function->setDoesNotThrow();
+    llvm::LLVMContext& context = module_.getContext();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(context, "entry", function);
+    llvm::BasicBlock* missing =
+        llvm::BasicBlock::Create(context, "missing", function);
+    llvm::BasicBlock* opened =
+        llvm::BasicBlock::Create(context, "opened", function);
+    llvm::BasicBlock* loop =
+        llvm::BasicBlock::Create(context, "loop", function);
+    llvm::BasicBlock* write =
+        llvm::BasicBlock::Create(context, "write", function);
+    llvm::BasicBlock* progress =
+        llvm::BasicBlock::Create(context, "progress", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(context, "done", function);
+    builder_.SetInsertPoint(entry);
+    llvm::Value* path =
+        nul_terminated_path(function->getArg(0), function->getArg(1));
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::Value* zero = llvm::ConstantInt::get(i64, 0);
+    llvm::Value* fd_value =
+        syscall({llvm::ConstantInt::get(i64, abi.openat),
+                 llvm::ConstantInt::get(i64, static_cast<u64>(AT_FDCWD)),
+                 builder_.CreatePtrToInt(path, i64),
+                 llvm::ConstantInt::get(i64, O_WRONLY | O_CREAT | O_TRUNC),
+                 // 0666 octal = 438 decimal.
+                 llvm::ConstantInt::get(i64, 438), zero, zero});
+    llvm::Value* negative = builder_.CreateICmpSLT(fd_value, zero, "negative");
+    builder_.CreateCondBr(negative, missing, opened);
+    builder_.SetInsertPoint(missing);
+    builder_.CreateRet(llvm::ConstantInt::get(builder_.getInt64Ty(), -1));
+    builder_.SetInsertPoint(opened);
+    builder_.CreateBr(loop);
+    builder_.SetInsertPoint(loop);
+    llvm::PHINode* total = builder_.CreatePHI(usize_, 2, "total");
+    llvm::PHINode* from = builder_.CreatePHI(builder_.getPtrTy(), 2, "from");
+    llvm::PHINode* left = builder_.CreatePHI(usize_, 2, "left");
+    total->addIncoming(llvm::ConstantInt::get(usize_, 0), opened);
+    from->addIncoming(function->getArg(2), opened);
+    left->addIncoming(function->getArg(3), opened);
+    llvm::Value* more =
+        builder_.CreateICmpUGT(left, llvm::ConstantInt::get(usize_, 0), "more");
+    builder_.CreateCondBr(more, write, done);
+    builder_.SetInsertPoint(write);
+    llvm::Value* count =
+        syscall({llvm::ConstantInt::get(i64, abi.write), fd_value,
+                 builder_.CreatePtrToInt(from, i64), left, zero, zero, zero});
+    llvm::Value* stopped = builder_.CreateICmpSLE(count, zero, "stopped");
+    builder_.CreateCondBr(stopped, done, progress);
+    builder_.SetInsertPoint(progress);
+    llvm::Value* advance = builder_.CreateZExtOrTrunc(count, usize_, "advance");
+    llvm::Value* next_total = builder_.CreateAdd(total, advance, "next_total");
+    llvm::Value* advanced =
+        builder_.CreateGEP(builder_.getInt8Ty(), from, advance, "advanced");
+    llvm::Value* next_left = builder_.CreateSub(left, advance, "next_left");
+    total->addIncoming(next_total, progress);
+    from->addIncoming(advanced, progress);
+    left->addIncoming(next_left, progress);
+    builder_.CreateBr(loop);
+    builder_.SetInsertPoint(done);
+    syscall({llvm::ConstantInt::get(i64, abi.close), fd_value, zero, zero, zero,
+             zero, zero});
+    builder_.CreateRet(
+        builder_.CreateZExtOrTrunc(total, builder_.getInt64Ty(), "widened"));
+  }
+
   // A freestanding program has no libc to open a file with, so the
   // file answers are the error and the std still links.
   void build_file_stubs() {

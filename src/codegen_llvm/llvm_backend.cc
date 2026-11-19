@@ -21,6 +21,7 @@
 #include "fpag/debug/time_util.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/OptimizationLevel.h"
@@ -171,7 +172,8 @@ base::Result<void, ObjectEmitError> configure_target(llvm::Module& module,
 
 base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
                                                     const Target& target,
-                                                    debug::Profiler* profiler) {
+                                                    debug::Profiler* profiler,
+                                                    bool freestanding) {
   base::Result<void, ObjectEmitError> configured =
       configure_target(module, target);
   if (configured.is_err()) {
@@ -263,6 +265,15 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
   pb.registerModuleAnalyses(mam);
   pb.registerCGSCCAnalyses(cgam);
   pb.registerFunctionAnalyses(fam);
+  if (freestanding) {
+    // A freestanding program has no libc, so the pipeline may not invent
+    // one: an inline byte scan must not turn into a `strlen` call.
+    llvm::Triple triple(target.triple);
+    llvm::TargetLibraryInfoImpl no_builtin(triple);
+    no_builtin.disableAllFunctions();
+    fam.registerPass(
+        [no_builtin]() { return llvm::TargetLibraryAnalysis(no_builtin); });
+  }
   pb.registerLoopAnalyses(lam);
   pb.crossRegisterProxies(lam, fam, cgam, mam);
   llvm::ModulePassManager mpm =

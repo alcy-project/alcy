@@ -97,6 +97,12 @@ it is implemented.
 - Language server, formatter, linter, and other surrounding tools
   (see the bootstrap vision in `../../src/docs/architecture.md`).
 
+## Platform surface shelved with the runtime
+
+- `strerror` (mapping an errno to text), directory iteration (readdir),
+  and WTF-16 path encoding on Windows. The errno an operation reports
+  stays a number; nothing interprets it.
+
 ## Keywords reserved for the above
 
 `async`, `await`, `union`, `register`,

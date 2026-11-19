@@ -108,7 +108,8 @@ struct EmittedModule {
     }
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
                                              "optimize", "backend");
-    if (optimize_module(*module, request.target, request.options.profiler)
+    if (optimize_module(*module, request.target, request.options.profiler,
+                        request.options.freestanding)
             .is_err()) {
       return base::make_err(codegen::EmitError::CannotOptimize);
     }
@@ -215,7 +216,8 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   // into a context of their own by the thread that will use it. Carrying IR
   // across contexts by hand is not a path LLVM supports; this is.
   if (optimize_parts) {
-    return optimize_in_parts(split, workers_of(request));
+    return optimize_in_parts(split, workers_of(request),
+                             request.options.freestanding);
   }
   std::vector<std::vector<u8>> bitcode(split.size());
   std::vector<std::unique_ptr<llvm::LLVMContext>> contexts(split.size());

@@ -95,9 +95,14 @@ sets `test_ended_early: true`.
 | --- | --- |
 | 0 | every selected test passed |
 | 1 | a test failed, or the command line was rejected |
-| 4 | the package was not a program `alcy test` can accept (a freestanding or check target) |
+| 4 | the package was not a program `alcy test` can accept (a target that cannot start a test process) |
 
-`e2e/cases/err-test-target-unrunnable` pins this: a package built `freestanding = true` cannot start a test process, so the runner refuses it with `Cannot run tests for target` and exit code 4.
+A test is a process the run starts and watches. The wasm backend cannot
+start one, and neither can a freestanding target on a platform whose
+entry the runner cannot execute; the runner refuses either with
+`Cannot run tests for target` and exit code 4 before building. A
+freestanding target on Linux can start one: its entry parses `argc` and
+`argv` the same way a hosted build's does.
 
 ## See also
 
