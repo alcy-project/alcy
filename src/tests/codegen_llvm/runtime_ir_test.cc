@@ -519,4 +519,86 @@ TEST_CASE("Runtime reaches libc the way the platform expects") {
   }
 }
 
+TEST_CASE("A Windows COFF runtime carries the kernel and nothing else") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_windows_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto i32 = llvm::Type::getInt32Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+  const auto view = llvm::StructType::get(context, {pointer, usize});
+
+  declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_println", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_eprint", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_eprintln", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_panic",
+          signature(void_ty, {pointer, usize, pointer, usize}));
+  declare(module, "alcy_sys_write", signature(usize, {i32, pointer, usize}));
+  declare(module, "alcy_sys_read", signature(usize, {i32, pointer, usize}));
+  declare(module, "alcy_error_kind", signature(i32, {i32}));
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
+  declare(module, "alcy_file_size", signature(usize, {pointer, usize}));
+  declare(module, "alcy_read_file_into",
+          signature(usize, {pointer, usize, pointer, usize}));
+  declare(module, "alcy_write_file",
+          signature(usize, {pointer, usize, pointer, usize}));
+  declare(module, "alcy_arg_count", signature(usize, {}));
+  declare(module, "alcy_arg", signature(view, {usize}));
+
+  const codegen_llvm::Target windows{"x86_64-pc-windows-msvc",
+                                     ir::PointerWidth::W64};
+  add_runtime_definitions(module, windows);
+
+  CHECK(!llvm::verifyModule(module, &llvm::errs()));
+  const std::string text = module_text(module);
+  for (const char* needle :
+       {"GetStdHandle", "WriteFile", "ReadFile", "CreateFileW", "GetFileSizeEx",
+        "CloseHandle", "VirtualAlloc", "VirtualFree", "ExitProcess",
+        "GetLastError", "SetLastError", "GetCommandLineW",
+        "WideCharToMultiByte", "MultiByteToWideChar", "__chkstk", "_fltused",
+        "alcy_init_args"}) {
+    CHECK(text.find(needle) != std::string::npos);
+  }
+  // Nothing from the C runtime, and nothing from the Linux syscall ABI
+  // either; the check names whole symbols, not substrings.
+  for (const char* forbidden :
+       {"fopen", "fclose", "fseek", "ftell", "fwrite", "fread",
+        "posix_memalign", "_aligned_malloc", "_aligned_free", "free", "_write",
+        "_read", "_setmode", "_set_thread_local_invalid_parameter_handler",
+        "alcy_syscall"}) {
+    CHECK(module.getFunction(forbidden) == nullptr);
+  }
+  // The ELF entry is never built for a Windows target.
+  CHECK(module.getFunction("_start") == nullptr);
+}
+
+TEST_CASE("A Windows target with freestanding still carries kernel32") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_windows_freestanding_test", context);
+  const auto usize = llvm::Type::getInt64Ty(context);
+  const auto i32 = llvm::Type::getInt32Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
+  declare(module, "alcy_println", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_sys_write", signature(usize, {i32, pointer, usize}));
+
+  const codegen_llvm::Target windows{"x86_64-pc-windows-msvc",
+                                     ir::PointerWidth::W64};
+  // The flag an opted-into-freestanding package sets must not drag in
+  // the Linux syscall path on a Windows target.
+  add_runtime_definitions(module, windows,
+                          /*freestanding=*/true, /*backtrace=*/false);
+
+  CHECK(!llvm::verifyModule(module, &llvm::errs()));
+  const std::string text = module_text(module);
+  CHECK(text.find("VirtualAlloc") != std::string::npos);
+  CHECK(text.find("WriteFile") != std::string::npos);
+  CHECK(module.getFunction("alcy_syscall") == nullptr);
+}
+
 }  // namespace codegen_llvm
