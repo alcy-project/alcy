@@ -324,28 +324,26 @@ none, and a reader answers empty for those.
 
 **SUMMARY**: `count` × `{ function u32, type u32, name u32, path u32,
 symbol u32, owner u32, kind u8, flags u8, reserved u8[2] }`, the package's
-public surface for a dependent to resolve against. A row names
-one of two things: a function row puts the `FUNCTIONS` row whose signature
-carries the item in `function`, and a nominal row puts the `TYPES` row it
-declares in `type`. The field the kind does not use is `U32_MAX`, so an
-index is never read through the table it does not belong to; `U32_MAX`
-also stands where the declaration is generic and has no code or type of
-its own. `name` is the source name in `STRINGS`; `path` is
-the module it belongs to, dotted from the package root; `symbol` is the
-name the item's code is written under, so a dependent calls it by what
-the library's own artifact exports; `owner` is the nominal an
-associated function or method belongs to, `U32_MAX` for a free function;
-`kind` is the symbol kind a function row is written as, or the nominal a struct or enum row names; and `flags`
-bit 0 says the item needs its body to be used, as a generic declaration
-does. When a struct row is present the rows are followed by the field
-runs: `u32 group_count`, that many `{ row u32, first u32, count u32 }`,
-`u32 name_count`, and that many `{ name u32, flags u8, reserved u8[3] }`
-entries whose `name` indexes `STRINGS` and whose bit 0 says the
-declaration made the field public. The trailer is present even when no
-row carries names, so a payload is either whole or rejected. The section
-is written for a library
-target and absent otherwise, and a reader answers empty for a file that
-carries none.
+public surface for a dependent to resolve against. A row names one of two
+things: a function row puts the `FUNCTIONS` row whose signature carries
+the item in `function`, and a nominal row puts the `TYPES` row it declares in
+`type`. The field the kind does not use is `U32_MAX`, so an index is never read
+through the table it does not belong to; `U32_MAX` also stands where the
+declaration is generic and has no code or type of its own. `name` is the source
+name in `STRINGS`; `path` is the module it belongs to, dotted from the package
+root; `symbol` is the name the item's code is written under, so a dependent
+calls it by what the library's own artifact exports; `owner` is the nominal an
+associated function or method belongs to, `U32_MAX` for a free function; `kind`
+is the symbol kind a function row is written as, or the nominal a struct or enum
+row names; and `flags` bit 0 says the item needs its body to be used, as a
+generic declaration does. When a struct row is present the rows are followed by
+the field runs: `u32 group_count`, that many
+`{ row u32, first u32, count u32 }`, `u32 name_count`, and that many
+`{ name u32, flags u8, reserved u8[3] }` entries whose `name` indexes `STRINGS`
+and whose bit 0 says the declaration made the field public. The trailer is
+present even when no row carries names, so a payload is either whole or
+rejected. The section is written for a library target and absent otherwise, and
+a reader answers empty for a file that carries none.
 
 **PARAMETRIC_CALLEES**: `count` × `{ kind u8, pad u8[3], function u32,
 spec u32, method u32, args_head u32, args_size u32 }`, the callees a

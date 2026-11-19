@@ -1,11 +1,10 @@
 # Compile-Time Evaluation (Bootstrap)
 
-`comp` marks code that MUST be evaluated during compilation. Its first
-client is `fmt`: format strings are parsed at compile time and expand
-to copy sequences (see the fmt API design). This document covers the
-stage where `comp` marks parameters and blocks; a compile-time value
-in a declaration or an item is a `const` (see `items.md`). It extends the grammar stated in
-`grammar.md`.
+`comp` marks code that MUST be evaluated during compilation. Its first client is
+`fmt`: format strings are parsed at compile time and expand to copy sequences
+(see the fmt API design). This document covers the stage where `comp` marks
+parameters and blocks; a compile-time value in a declaration or an item is a
+`const` (see `items.md`). It extends the grammar stated in `grammar.md`.
 
 ## Syntax
 

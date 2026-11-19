@@ -64,9 +64,9 @@ Every verb takes these before its own arguments:
 | `--json` | flag | off | One JSON document on standard output, for a tool reading it. Applies to `build`, `compile`, `check`, `lint`, and `test` |
 | `-j`, `--jobs` | `N` | `1` | Threads reading source files. `--jobs 0` is refused; everything after the read is single-threaded |
 
-`--release` selects the built-in `release` profile; `--profile <name>`
-selects one by name (see [the profile file](build.md#the-profile-file) in [`build`](build.md)). The
-two may not be given together.
+`--release` selects the built-in `release` profile; `--profile <name>` selects
+one by name (see [the profile file](build.md#the-profile-file) in
+[`build`](build.md)). The two may not be given together.
 
 ## The `--json` envelope
 
@@ -167,4 +167,5 @@ feature.
 ## See also
 
 - [The getting-started guide](../guide/02-getting-started.md)
-- `alcy --help` on your machine - the authoritative synopsis for the build you have
+- `alcy --help` on your machine - the authoritative synopsis for the build you
+  have

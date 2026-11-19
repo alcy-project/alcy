@@ -490,6 +490,7 @@ from the idea.
   length switch in front of the table already answers the common case, so the
   pre-test is one more load and one more branch on a path that was going to
   find the answer anyway.
+
 - **A digest in the type instantiation search.** A request for a generic type
   compares its arguments against every instance the nominal has minted, once by
   index and once structurally, which is the shape the function instantiation
@@ -501,6 +502,7 @@ from the idea.
   few index comparisons, which is what the digest pays to compute. It paid on
   the function chain because an argument vector there is compared against a
   long list of candidates, not because arguments are expensive to compare.
+
 - **Spreading the borrow check.** Both passes walk the functions in order, and
   the second one only reads what the first wrote, which makes the bodies look
   like free work to hand to threads. On `plain1200` at `-j 4`:
@@ -515,18 +517,21 @@ from the idea.
 
   Borrow is about `22 ms` of a `138 ms` run at `-j 1` on that corpus, so even a
   perfect spread of the bodies is worth low single-digit percent.
+
 - **Spreading `analyze` and `lower` instead**, where the serial time actually
   is, is not the same move. Both append to the IR as they go, so the type,
   function, and instruction tables would end up ordered by whichever thread
   arrived first, and that order is part of the output. Those phases
   need per-module storage merged in module order, which is a design of its own
   rather than a loop to mark parallel.
+
 - **Sorting the drop-elaboration place table.** Building that table by
   appending every key and deduplicating once with a sort, instead of scanning
   it per event, costs `+0.14%` on `plain1200`: the table holds a few hundred
   places, so the scan it replaces is short, while the sort pays `log n` per key.
   Sizing the same table up front instead removes its growth copies and is worth
   `-0.20%`.
+
 - **Forcing the expression ladder to inline.** `parse_range` down to
   `parse_primary` is ten functions calling each other, each calling its child
   twice, and `[[gnu::always_inline]]` on all ten is worth `-1.9%` on
@@ -540,6 +545,7 @@ from the idea.
   operators into the loop, and is worth `-0.85%`: a level costs more for its
   prologue and its own switch than a step of the loop that reads the table,
   while the comparison that cannot chain stays a flag on its row.
+
 - **Walking the trivia of `Lexer::tokenize` by hand.** Reading `pos_` and
   `bytes_` into locals and keeping the byte in a local index, with a run of
   spaces skipped by its own loop, costs `+0.52%` on `plain1200`: the member
@@ -547,17 +553,20 @@ from the idea.
   test is paid for on every token and saved on none. Scanning a line comment
   with `find` instead is worth `-0.21%`, because there the loop it replaces
   does real per-byte work.
+
 - **Reopening a checker scope on the buffer the last one closed.** Handing a
   closed scope's binding buffer to the next scope that opens costs `+0.11%` on
   `plain1200`: it saves the allocation a block's scope would make, but every
   scope then pays a move out of the buffer on close and a move back in on open,
   which costs more than growing a buffer of a few bindings from empty.
+
 - **Walking a scope with `std::views::reverse`.** Reading the scope stack in
   `Lowerer::lookup_local` with an index loop instead of the reverse view, and
   dropping the header that view pulled in, moves `plain1200` by less than the
   run-to-run spread (`+0.0003%` over three interleaved pairs): the view settles
   its bounds once per loop and the iterator reads the same word the index does,
   so the loop that remains has nothing left to remove.
+
 - **Recording the borrow check's predecessors as one flat pair.** `preds` is
   sized for the whole package and written once per function, so a `head`/`len`
   pair over a single array, which zeroes eight bytes per block instead of a
@@ -570,6 +579,7 @@ from the idea.
   are `0.55%` together. The lever is their size, not their shape: a function
   names a few dozen blocks and the package a hundred thousand, so the sizing
   writes an entry for every block no function in it reads.
+
 - **An index of the columns a line's bytes open.** Measuring a display
   column walks a line once, and an index of the bytes that open a column
   turns the walk into a search, which looks like the cheap half of the

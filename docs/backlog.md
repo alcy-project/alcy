@@ -174,15 +174,15 @@ replaced. The foundations are in `roadmap.md`.
   the fix: a register that declared whether it holds an address or the
   pointee would let the check cover every tag.
 
-- [ ] The direct-wasm backend still has no allocation model for the
-  frame: a value with a slot and every constant-count alloca keep their
-  storage until the function returns, and allocas need a second frame
-  pass, so a frame grows with the statements a function spells rather
-  than the values live at once, and the stack guard costs four or five
-  instructions per call in functions whose frame cannot reach the limit. The opcodes are raw hex whose only name
-  is a comment, so a wide shift was misencoded while the suite was
-  green, and a narrow result is canonicalized per operation rather than
-  at one destination rule.
+- [ ] The direct-wasm backend still has no allocation model for the frame: a
+      value with a slot and every constant-count alloca keep their storage until
+      the function returns, and allocas need a second frame pass, so a frame
+      grows with the statements a function spells rather than the values live at
+      once, and the stack guard costs four or five instructions per call in
+      functions whose frame cannot reach the limit. The opcodes are raw hex
+      whose only name is a comment, so a wide shift was misencoded while the
+      suite was green, and a narrow result is canonicalized per operation rather
+      than at one destination rule.
 
 - [ ] A closure's environment is the closure's own address, so the
   value is self-referential and cannot be moved: a store of the address
@@ -226,7 +226,8 @@ replaced. The foundations are in `roadmap.md`.
   a `Copy` element survives (`ok-borrow-owned-element`) and an owning
   one keeps reading as borrowed from the container
   (`err-borrow-live-owned` pins the `push` conflict); handing it back
-  needs the region a loan carries rather than a fixed range, which the region model records as the work that replaces this.
+  needs the region a loan carries rather than a fixed range, which the
+  region model records as the work that replaces this.
   `check_borrow_rules.py` tracks the shape
   (`returned/owned-element-returned`).
 

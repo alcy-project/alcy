@@ -168,22 +168,20 @@ peripheral work lives in `backlog.md`. The language record lives in
 - [x] The platform floor: a core-only `sys`, and the OS calls out of
   `core`.
 
-  The floor landed: `sys` depends on `core` alone and owns `Fd` with
-  the standard descriptors (associated functions), the faithful
-  `read`/`write` that reports short and interrupted results as
-  themselves, `OsError` over the raw errno, and the process
-  arguments. The six declarations in `core/mem.al` moved out - the
-  descriptor calls and the arguments to `sys`, the whole-file helpers
-  to `io` - and `core`'s prelude re-exports retired. `sys_write` is
-  one `write(2)` now and the write-all loop stayed with the print
-  hooks; `sys_read` joined it, and the runtimes answer
-  `-(errno)` (LLVM through the C library's error slot, freestanding
-  through the kernel, wasm through WASI's `fd_read`/`fd_write`, whose
-  playground host answers end of input). The landing also settled two
-  surface rules: a selected member is a package root
-  (`use sys::raw::write`), and an explicit `use` shadows a facade's
-  name - the follow-up the suite's landing recorded. The exe runner's stdin field
-  still waits on the input layer's cases.
+  The floor landed: `sys` depends on `core` alone and owns `Fd` with the
+  standard descriptors (associated functions), the faithful `read`/`write` that
+  reports short and interrupted results as themselves, `OsError` over the raw
+  errno, and the process arguments. The six declarations in `core/mem.al` moved
+  out - the descriptor calls and the arguments to `sys`, the whole-file helpers
+  to `io` - and `core`'s prelude re-exports retired. `sys_write` is one
+  `write(2)` now and the write-all loop stayed with the print hooks; `sys_read`
+  joined it, and the runtimes answer `-(errno)` (LLVM through the C library's
+  error slot, freestanding through the kernel, wasm through WASI's
+  `fd_read`/`fd_write`, whose playground host answers end of input). The landing
+  also settled two surface rules: a selected member is a package root
+  (`use sys::raw::write`), and an explicit `use` shadows a facade's name - the
+  follow-up the suite's landing recorded. The exe runner's stdin field still
+  waits on the input layer's cases.
 
 - [ ] The standard library's surface is impls and specs.
 
@@ -235,8 +233,8 @@ and not on a date.
 
 - [ ] Everything `docs/spec/` states is implemented, and
   `docs/spec/deferred.md` holds only what is explicitly moved past 1.0.
-- [ ] Every decision this specification states is implemented or explicitly deferred, and
-  none contradicts the code.
+- [ ] Every decision this specification states is implemented or explicitly
+      deferred, and none contradicts the code.
 - [ ] The suite's public surface is described in `docs/spec/`, so the
   record of what is promised lives beside the record of why.
 - [ ] A program written against the suite needs no `unsafe` outside

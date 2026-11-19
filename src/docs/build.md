@@ -40,13 +40,14 @@ lets `tools/perf.py callers` walk a stack. See
 
 ## How the LLVM dependency works
 
-The compiler links against prebuilt LLVM binaries built from a private LLVM
-fork (`llvm-alcy-fork`). The required version and release tag are configured in
-`config.toml` (`llvm_fork_tag`), which serves as the single source of truth (SSOT).
+The compiler links against prebuilt LLVM binaries built from a private LLVM fork
+(`llvm-alcy-fork`). The required version and release tag are configured in
+`config.toml` (`llvm_fork_tag`), which serves as the single source of truth
+(SSOT).
 
 At GN time, the `//third_party/llvm:setup_llvm` action prepares a ready-to-link
-installation under `out/<build-subdir>/third_party/llvm/install/<debug|release>/`
-in this order:
+installation under
+`out/<build-subdir>/third_party/llvm/install/<debug|release>/` in this order:
 
 1. **Reuse**: if the installation directory exists and its recorded tag matches
    `llvm_fork_tag` in `config.toml`, nothing is done.
@@ -87,9 +88,11 @@ type (`MultiThreaded` / `MultiThreadedDebug`) in `.alcy/configure.sh`.
 One asymmetry is worked around rather than fixed upstream: Clang's
 `-fms-runtime-lib=*_debug` still selects the *release* CRT (`libcmt.lib`)
 instead of the debug CRT (`libcmtd.lib`), leaving debug-only symbols such as
-`_malloc_dbg` unresolved. Until that driver bug is fixed, Windows Debug
-builds additionally pass `-Xlinker /NODEFAULTLIB:libcmt.lib -Xlinker /DEFAULTLIB:libcmtd.lib` (same file, `linker` config).
-Do not remove those flags without re-checking the driver behavior.
+`_malloc_dbg` unresolved. Until that driver bug is fixed, Windows Debug builds
+additionally pass
+`-Xlinker /NODEFAULTLIB:libcmt.lib -Xlinker /DEFAULTLIB:libcmtd.lib` (same file,
+`linker` config). Do not remove those flags without re-checking the driver
+behavior.
 
 To verify which CRT an artifact uses, inspect its directives, e.g.
 `llvm-readobj --coff-directives <lib>.lib | grep RuntimeLibrary` should show

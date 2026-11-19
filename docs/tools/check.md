@@ -35,7 +35,8 @@ wrong one.
 - Name resolution binds every path.
 - Type checking infers and checks every body.
 - Drop elaboration and the borrow check pass over every lowered function.
-- A `test {}` block in the package is never analyzed for `check` unless it is a package's own test.
+- A `test {}` block in the package is never analyzed for `check` unless it is a
+  package's own test.
 
 A package with an error the language rules do not allow cannot slip
 past `check`; it reports everything in one run, in the order analysis

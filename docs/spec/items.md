@@ -101,6 +101,7 @@ item and may repeat without interaction.
   never resolved, checked, or emitted, and its absence is not
   diagnosed. The gate is evaluated when the file is read, and it is
   the only mechanism that selects items.
+
 - `EXPR` is a boolean expression over the `target` descriptor —
   `target.os`, `target.arch`, `target.freestanding` — with `==`,
   `!=`, `&&`, `||`, `!`, and parentheses. The descriptor's values are
@@ -123,21 +124,26 @@ item and may repeat without interaction.
   loses no arm silently. A value outside the known set of the key is a
   diagnostic that lists the set; a value that is a string where a
   boolean belongs, or the reverse, is a diagnostic of its own.
+
 - A `when` gate closed on a name is a promise that the name exists on
   the other platform arms too: one arm per OS, all spelling the same
   signature. An arm the gate excludes completely must not be named
   from anywhere else on that target, which is what makes OS-typed code
   in `sys` and `path` possible without a separate package per OS.
+
 - Multiple `when` attributes on one item are a conjunction: every
   gate must pass. Tests inside `test { }` blocks may be gated the
   same way and are gone from a run where their gate fails.
+
 - The `use`, `static`, and `const` forms take a gate, so a facade
   may re-export the arm that belongs to this target and drop the
   others. `impl` blocks may gate as well, and so may the methods
   inside them; a `spec` block may gate as one item, and its method
   signatures cannot gate individually.
+
 - A gate on a test entry excludes it from the run entirely: never
   compiled, never executed, never counted in the test list.
+
 - Unknown attribute names are rejected with guidance; expressions that
   are not boolean are rejected; comparisons of operands of different
   kinds are rejected. Item gates do not exist on statements or

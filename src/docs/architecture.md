@@ -155,14 +155,14 @@ what implements it lives in `src/`.
   `docs/spec/` for editors. It is not a GN target and shares no build with
   the compiler; `tools/check_treesitter.py` checks it against the
   specification's corpus and against the compiler itself.
-- `site/` - the published site: one page tree per language (English at
-  the site root, `/ja/` beside it), the shared shell under
-  `site/shared/`, and the browser playground under `site/playground/`;
-  the guide under `docs/guide/` and the specification under
-  `docs/spec/` are rendered by the site's own generator (`site/ssg/`),
-  which also stamps the landing and playground templates per language. `tools/site.py` builds it into `site/dist/`, combining
-  those sources with the grammar and the compiler's wasm module;
-  `.github/workflows/site.yaml` deploys that directory to GitHub Pages.
+- `site/` - the published site: one page tree per language (English at the site
+  root, `/ja/` beside it), the shared shell under `site/shared/`, and the
+  browser playground under `site/playground/`; the guide under `docs/guide/` and
+  the specification under `docs/spec/` are rendered by the site's own generator
+  (`site/ssg/`), which also stamps the landing and playground templates per
+  language. `tools/site.py` builds it into `site/dist/`, combining those sources
+  with the grammar and the compiler's wasm module; `.github/workflows/site.yaml`
+  deploys that directory to GitHub Pages.
 
 ## Compiler modules
 
@@ -284,11 +284,11 @@ Key design points:
   its tagged payload so the tag and payload cannot drift apart. Dispatch uses
   the corresponding tag and checked accessors.
 
-- **Structural verification**: `verify_storage()` checks structural
-  invariants including index bounds, single-definition of registers,
-  terminator placement, and per-opcode operand shapes. It returns
-  `base::Result<void, VerificationError>`. The emitter runs verification in debug
-  builds before LLVM verification.
+- **Structural verification**: `verify_storage()` checks structural invariants
+  including index bounds, single-definition of registers, terminator placement,
+  and per-opcode operand shapes. It returns
+  `base::Result<void, VerificationError>`. The emitter runs verification in
+  debug builds before LLVM verification.
 
 - **Invariant-preserving construction**: Important structural invariants
   should be enforced by types, builders, and construction APIs where
@@ -391,10 +391,10 @@ and nowhere else by default. The contract (decided in
   implementations live in private headers or `.cc` files.
 - **One rule chooses `E`.** A module-local error type when the caller must
   handle the failure programmatically (`path::PathError`,
-  `ir::VerificationError`, ...); `diag::Reported` when details are accumulated in
-  a `DiagBag` and only success/failure crosses the boundary. The
-  `diag::Fallible` container alias is not used: the error type is spelled
-  out in every signature.
+  `ir::VerificationError`, ...); `diag::Reported` when details are accumulated
+  in a `DiagBag` and only success/failure crosses the boundary. The
+  `diag::Fallible` container alias is not used: the error type is spelled out in
+  every signature.
 - **Verifiers are pure.** `verify_*` functions return
   `base::Result<void, VerificationError>` (or a validated artifact) and never
   mutate input, perform I/O, log, write to a `DiagBag`, or touch global
@@ -529,8 +529,8 @@ with a from-source fallback. Build and platform details are documented in
 
 Verification is layered by bug class, and no layer substitutes for another. A
 compiler can be memory-safe, crash-free, and still lower a program to the wrong
-value, so each layer names what it can see. The rationale is the layer table below, and the
-rejected alternatives are the layers it does not list; the
+value, so each layer names what it can see. The rationale is the layer table
+below, and the rejected alternatives are the layers it does not list; the
 contributor-facing rules are in
 [CONTRIBUTING.md](../../CONTRIBUTING.md#testing-rules).
 
@@ -562,15 +562,15 @@ Two properties of this shape matter more than the table:
 **A property test routes through an independent implementation where one
 exists.** `symbol::mangle` is verified by `symbol::demangle` round-tripping, so
 an encoder that lost or conflated a field cannot have it invented back. Where no
-second implementation exists, the property is a fixed point or a self-consistency
-of the output. A test that re-asserts the implementation it covers cannot fail
-and is not written.
+second implementation exists, the property is a fixed point or a
+self-consistency of the output. A test that re-asserts the implementation it
+covers cannot fail and is not written.
 
 **A deterministic generator, not a fuzzer, is the regression test.** The
-hostile-input layer is seeded, so a failure is reproducible from the seed and can
-be reported as a bug with a command line. libFuzzer is for finding new inputs; a
-crash it finds is checked in as a seed plus a unit test, because the artifact alone
-is only replayed by a fuzzer.
+hostile-input layer is seeded, so a failure is reproducible from the seed and
+can be reported as a bug with a command line. libFuzzer is for finding new
+inputs; a crash it finds is checked in as a seed plus a unit test, because the
+artifact alone is only replayed by a fuzzer.
 
 The recursion budget is part of this design rather than a detail of one pass:
 `base::MAX_NESTING` is shared by the parser, the analyzer, and the lowerer
@@ -579,11 +579,11 @@ accepted at all of them. The parser and the analyzer both need it and neither
 subsumes the other - a long operator chain parses in a loop, so it is shallow to
 the parser while building a tree the analyzer then walks.
 
-Tests reach the compiler through in-memory sources
-(`pipeline::check_source`, `tests::add_sources`), so a case that has text does not
-create a directory. That keeps the suite hermetic and keeps most cases out of the
-failure modes a shared temporary directory brings; a real directory is reserved
-for testing the filesystem or writing an output artifact.
+Tests reach the compiler through in-memory sources (`pipeline::check_source`,
+`tests::add_sources`), so a case that has text does not create a directory. That
+keeps the suite hermetic and keeps most cases out of the failure modes a shared
+temporary directory brings; a real directory is reserved for testing the
+filesystem or writing an output artifact.
 
 ## System invariants
 
