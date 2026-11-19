@@ -9,9 +9,7 @@ extern "C" {
 fn main() -> i32 {
   source := [1u8, 2u8, 3u8, 4u8]
   dest := [0u8, 0u8, 0u8, 0u8]
-  unsafe {
-    _ := memcpy(&mut dest[0] as *mut u8, &source[0] as *u8, 4 as usize)
-  }
+  unsafe { _ := memcpy(&mut dest[0] as *mut u8, &source[0] as *u8, 4 as usize) }
   if dest[3] != 4u8 || dest[0] != 1u8 {
     ret 1
   }
