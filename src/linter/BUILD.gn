@@ -51,30 +51,10 @@ linter_sources = [
   "walk.h",
 ]
 
-# The entry the cli and the tests link: the sources over the archive
-# that already carries every compiler module.
+# The library the cli, the playground, the tests, and the benchmarks
+# link: modules it uses, named directly, so the archived compiler links
+# it without a cycle.
 source_set("linter") {
-  sources = linter_sources
-
-  configs += [ "//src:alcy_config" ]
-  public_configs = [ "//src:alcy_config" ]
-
-  # Every compiler module is reached through the archive the binaries
-  # already link, rather than by naming each source set a second time:
-  # a complete static library that a source set also depended on would
-  # put its objects in the link twice. toml++ is the one third-party
-  # include this module makes directly.
-  deps = [
-    "//src:alcy_lib",
-    "//third_party/toml",
-  ]
-}
-
-# The entry a host inside the compiler's own graph links -- the
-# playground, which the archive itself archives -- over the modules
-# named directly, so the dependency does not close a cycle through
-# alcy_lib.
-source_set("linter_standalone") {
   sources = linter_sources
 
   configs += [ "//src:alcy_config" ]

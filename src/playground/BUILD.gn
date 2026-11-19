@@ -17,7 +17,7 @@ source_set("playground") {
     "//src/diag",
     "//src/fmt:alcy_fmt",
     "//src/i18n",
-    "//src/linter:linter_standalone",
+    "//src/linter",
     "//src/overlay",
     "//src/pipeline",
     "//src/source",
