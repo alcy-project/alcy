@@ -149,70 +149,6 @@ def main() -> int:
     else:
         run("typos")
 
-    if args.nix:
-        release_subdir = "build_release_nix"
-        debug_subdir = "build_nix"
-        wasm_subdir = "build_wasm_nix"
-    else:
-        release_subdir = "build_release"
-        debug_subdir = "build"
-        wasm_subdir = "build_wasm"
-
-    tool("build.py", "--target=all", "--mode=debug", f"--build-subdir={debug_subdir}")
-    tool("run.py", "--target=tests", "--mode=debug", f"--build-subdir={debug_subdir}")
-    tool(
-        "build.py", "--target=all", "--mode=release", f"--build-subdir={release_subdir}"
-    )
-
-    if not args.no_release:
-        # A bug only the release build has -- a DCHECK whose side effect
-        # the release build drops, an optimization the debug build never
-        # runs -- is invisible to every check below that reads the debug
-        # build, so the release binary answers the same three questions
-        # here: the unit tests, the e2e cases, and the exe programs.
-        tool(
-            "run.py",
-            "--target=tests",
-            "--mode=release",
-            f"--build-subdir={release_subdir}",
-        )
-        tool("check_e2e.py", f"--build-subdir={release_subdir}")
-        tool("check_exe.py", f"--build-subdir={release_subdir}")
-
-    tool("check_e2e.py", f"--build-subdir={debug_subdir}")
-    tool("check_borrow_rules.py", f"--build-subdir={debug_subdir}")
-
-    # The standard library carries its own tests beside the definitions
-    # they cover, so the suite is a program the compiler runs
-    # rather than a corpus it reads.
-    tool("check_stdlib_tests.py", f"--build-subdir={debug_subdir}")
-
-    # The second engine, over the acceptance corpus: every case
-    # that compiles is evaluated function by function, and a construct
-    # the lowering emits that the engine refuses without declaring it
-    # fails here. The refusal declarations are checked in a debug build,
-    # so the census reads the debug binary.
-    tool("check_comp.py", f"--build-subdir={debug_subdir}")
-
-    # The formatter's own check, over every source rather than a sample:
-    # the tree is what it would write, formatting formatted output
-    # changes nothing, and the compiler's verdict about a file survives
-    # its formatting.
-    tool("check_fmt.py", f"--build-subdir={debug_subdir}")
-
-    # The language server is a process an editor talks to over a pipe, so
-    # its check drives the built binary through one session: the framing,
-    # the diagnostics, and the formatter edit are one path, not three
-    # units the suite already covers separately.
-    tool("check_lsp.py", f"--build-subdir={debug_subdir}")
-
-    # The specification is what a program is written against, and the
-    # compiler is how this one happens to implement it. That boundary is
-    # prose in `docs/spec/overview.md` and a check here, since a
-    # reference that creeps in is the kind of thing nobody notices until
-    # the thing it names moves.
-    tool("check_spec.py")
-
     # The checks below read the tree rather than build it. Each names
     # the tool it could not find: a check that does not run must not
     # read as one that passed.
@@ -240,6 +176,72 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    # The specification is what a program is written against, and the
+    # compiler is how this one happens to implement it. That boundary is
+    # prose in `docs/spec/overview.md` and a check here, since a
+    # reference that creeps in is the kind of thing nobody notices until
+    # the thing it names moves.
+    tool("check_spec.py")
+
+    tool("format.py", "--dry-run")
+
+    if args.nix:
+        release_subdir = "build_release_nix"
+        debug_subdir = "build_nix"
+        wasm_subdir = "build_wasm_nix"
+    else:
+        release_subdir = "build_release"
+        debug_subdir = "build"
+        wasm_subdir = "build_wasm"
+
+    tool("build.py", "--target=all", "--mode=debug", f"--build-subdir={debug_subdir}")
+    tool("run.py", "--target=tests", "--mode=debug", f"--build-subdir={debug_subdir}")
+    tool(
+        "build.py", "--target=all", "--mode=release", f"--build-subdir={release_subdir}"
+    )
+
+    tool("verify_static_linkage.py", f"--build-dir=out/{debug_subdir}")
+    tool("verify_static_linkage.py", f"--build-dir=out/{release_subdir}")
+
+    # The standard library carries its own tests beside the definitions
+    # they cover, so the suite is a program the compiler runs
+    # rather than a corpus it reads.
+    tool("check_stdlib_tests.py", f"--build-subdir={debug_subdir}")
+
+    tool("check_borrow_rules.py", f"--build-subdir={debug_subdir}")
+
+    # The language server is a process an editor talks to over a pipe, so
+    # its check drives the built binary through one session: the framing,
+    # the diagnostics, and the formatter edit are one path, not three
+    # units the suite already covers separately.
+    tool("check_lsp.py", f"--build-subdir={debug_subdir}")
+
+    # The samples run through the harness the cases above use, so a
+    # program kept as an example is also one that still compiles and
+    # still prints what it says it prints. Here rather than with the
+    # cases because these are read as much as run, and a sample that is
+    # wrong is a documentation fault.
+    tool(
+        "check_exe.py",
+        f"--build-subdir={debug_subdir}",
+        "--cases-root=samples",
+    )
+
+    tool("check_e2e.py", f"--build-subdir={debug_subdir}")
+
+    # The second engine, over the acceptance corpus: every case
+    # that compiles is evaluated function by function, and a construct
+    # the lowering emits that the engine refuses without declaring it
+    # fails here. The refusal declarations are checked in a debug build,
+    # so the census reads the debug binary.
+    tool("check_comp.py", f"--build-subdir={debug_subdir}")
+
+    # The formatter's own check, over every source rather than a sample:
+    # the tree is what it would write, formatting formatted output
+    # changes nothing, and the compiler's verdict about a file survives
+    # its formatting.
+    tool("check_fmt.py", f"--build-subdir={debug_subdir}")
+
     if not args.no_grammar:
         # The tree-sitter grammar is a second reading of the language,
         # so it is checked against the first: its own corpus here, and
@@ -255,22 +257,6 @@ def main() -> int:
             f"--build-subdir={debug_subdir}",
         )
 
-    # The samples run through the harness the cases above use, so a
-    # program kept as an example is also one that still compiles and
-    # still prints what it says it prints. Here rather than with the
-    # cases because these are read as much as run, and a sample that is
-    # wrong is a documentation fault.
-    tool(
-        "check_exe.py",
-        f"--build-subdir={debug_subdir}",
-        "--cases-root=samples",
-    )
-
-    # The benchmark harness's own smoke: every case present, every
-    # sample counted, a figure above zero. It judges shape and not
-    # timing, so it runs anywhere, and CI asks it as its own job.
-    tool("run_benchmarks.py", "smoke", f"--build-subdir={debug_subdir}")
-
     if not args.no_sanitize:
         # The same cases again through --emit=llvm-ir, so the code alcy
         # generates is compiled by an external toolchain that can
@@ -281,22 +267,6 @@ def main() -> int:
         if shutil.which("clang") is None:
             refuse("clang", "pass --no-sanitize to skip")
         tool("check_exe.py", f"--build-subdir={debug_subdir}", "--sanitize")
-
-    tool("format.py", "--dry-run")
-    # Lint reuses the debug build's compile database: a dedicated GN
-    # tree would install its own copy of LLVM for the same bytes.
-    tool("lint.py", f"--build-subdir={debug_subdir}")
-
-    if not args.no_coverage:
-        # The coverage ratchet rebuilds instrumented binaries, so it
-        # runs after the format and lint checks and reuses its own output
-        # directory. Skip with --no-coverage when llvm-cov is absent.
-        if shutil.which("llvm-cov") is None:
-            refuse("llvm-cov", "pass --no-coverage to skip")
-        tool("check_coverage.py")
-
-    tool("verify_static_linkage.py", f"--build-dir=out/{release_subdir}")
-    tool("verify_static_linkage.py", f"--build-dir=out/{debug_subdir}")
 
     if not args.no_wasm:
         tool(
@@ -332,6 +302,38 @@ def main() -> int:
             "--gn-arg=alcy_backends=[]",
         )
         tool("check_playground.py", f"--build-subdir={playground_subdir}")
+
+    if not args.no_release:
+        # A bug only the release build has -- a DCHECK whose side effect
+        # the release build drops, an optimization the debug build never
+        # runs -- is invisible to every check below that reads the debug
+        # build, so the release binary answers the same three questions
+        # here: the unit tests, the e2e cases, and the exe programs.
+        tool(
+            "run.py",
+            "--target=tests",
+            "--mode=release",
+            f"--build-subdir={release_subdir}",
+        )
+        tool("check_e2e.py", f"--build-subdir={release_subdir}")
+        tool("check_exe.py", f"--build-subdir={release_subdir}")
+
+    # Lint reuses the debug build's compile database: a dedicated GN
+    # tree would install its own copy of LLVM for the same bytes.
+    tool("lint.py", f"--build-subdir={debug_subdir}")
+
+    if not args.no_coverage:
+        # The coverage ratchet rebuilds instrumented binaries, so it
+        # runs after the format and lint checks and reuses its own output
+        # directory. Skip with --no-coverage when llvm-cov is absent.
+        if shutil.which("llvm-cov") is None:
+            refuse("llvm-cov", "pass --no-coverage to skip")
+        tool("check_coverage.py")
+
+    # The benchmark harness's own smoke: every case present, every
+    # sample counted, a figure above zero. It judges shape and not
+    # timing, so it runs anywhere, and CI asks it as its own job.
+    tool("run_benchmarks.py", "smoke", f"--build-subdir={debug_subdir}")
 
     summarize_timings()
     print("check ok")
