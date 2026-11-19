@@ -1,0 +1,140 @@
+================================================================================
+An item gated on the target
+================================================================================
+
+#[when(target.os == "linux")]
+fn present() -> i32 {
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (attribute
+    (identifier)
+    (identifier)
+    (identifier)
+    (string))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))
+
+================================================================================
+A struct fixed to the C layout
+================================================================================
+
+#[repr(C)]
+struct Pair {
+  a: u8,
+  b: i32,
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (attribute
+    (identifier)
+    (identifier))
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type))
+    (field_declaration
+      (identifier)
+      (primitive_type))))
+
+================================================================================
+A method gated inside an impl
+================================================================================
+
+impl Point {
+  #[when(target.arch != "wasm32")]
+  fn get(self: Self) -> i32 {
+    ret 0
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (impl_item
+    (path_type
+      (path
+        (identifier)))
+    (attribute
+      (identifier)
+      (identifier)
+      (identifier)
+      (string))
+    (function_item
+      (identifier)
+      (parameters
+        (parameter
+          (identifier_pattern
+            (self))
+          (path_type
+            (path
+              (self_type)))))
+      (return_type
+        (primitive_type))
+      (block
+        (return_expression
+          (integer))))))
+
+================================================================================
+Attributes repeat
+================================================================================
+
+#[when(target.os == "linux")]
+#[repr(C)]
+struct Pair {
+  a: u8,
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (attribute
+    (identifier)
+    (identifier)
+    (identifier)
+    (string))
+  (attribute
+    (identifier)
+    (identifier))
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type))))
+
+================================================================================
+A test entry gated on the target
+================================================================================
+
+test {
+  #[when(target.os == "linux")]
+  test adds() {
+    ret
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_block_item
+    (attribute
+      (identifier)
+      (identifier)
+      (identifier)
+      (string))
+    (test_entry_item
+      (identifier)
+      (block
+        (return_expression)))))

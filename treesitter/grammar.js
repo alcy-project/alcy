@@ -131,9 +131,60 @@ module.exports = grammar({
     // A stray `;` between items is a no-op (grammar.md).
     source_file: $ => itemList($, $._item),
 
+    // Attributes ------------------------------------------------------------
+
+    // Either attribute may lead an item and repeat; the closed set is
+    // `#[when(EXPR)]`, which gates an item on the target, and
+    // `#[repr(C)]`, which fixes a struct's layout to the platform's C
+    // one (grammar.ebnf, `attribute`). Word-like parts read as
+    // identifiers so the rest of the language keeps its words, and the
+    // checker validates the argument the way it validates an extern
+    // convention.
+    attribute: $ => seq(
+      '#',
+      '[',
+      field('name', $.identifier),
+      optional(seq(
+        '(',
+        choice(
+          $._when_expr,
+          // The repr argument is the one letter `C`.
+          $._repr_argument,
+        ),
+        ')',
+      )),
+      ']',
+    ),
+
+    _when_expr: $ => prec.left(PREC.OR, seq($._when_and, repeat(seq('||', $._when_and)))),
+
+    _when_and: $ => prec.left(PREC.AND, seq($._when_cmp, repeat(seq('&&', $._when_cmp)))),
+
+    // A comparison binds one pair at most.
+    _when_cmp: $ => seq($._when_unary, optional(seq(choice('==', '!='), $._when_unary))),
+
+    _when_unary: $ => choice(seq('!', $._when_unary), $._when_primary),
+
+    _when_primary: $ => choice(
+      seq('(', $._when_expr, ')'),
+      $.string,
+      $.boolean,
+      $._target_key,
+    ),
+
+    _repr_argument: $ => $.identifier,
+
+    _target_key: $ => seq(
+      field('descriptor', $.identifier),
+      '.',
+      field('key', $.identifier),
+    ),
+
     // Items ----------------------------------------------------------------
 
-    _item: $ => choice(
+    _item: $ => seq(
+      repeat($.attribute),
+      choice(
       $.function_item,
       $.intrinsic_fn_item,
       $.extern_item,
@@ -145,6 +196,7 @@ module.exports = grammar({
       $.const_item,
       $.use_item,
       $.test_block_item,
+      ),
     ),
 
     visibility: _ => 'pub',
@@ -247,8 +299,14 @@ module.exports = grammar({
       optional(seq(field('spec', $._type), 'for')),
       field('type', $._type),
       $._block_lbrace,
-      itemList($, $.function_item),
+      itemList($, $._impl_method),
       '}',
+    ),
+
+    // A gate leads a method the same way it leads a free item.
+    _impl_method: $ => seq(
+      repeat($.attribute),
+      $.function_item,
     ),
 
     // A path after `:` names a super-spec: every implementation of this
@@ -315,8 +373,15 @@ module.exports = grammar({
     test_block_item: $ => seq(
       'test',
       $._block_lbrace,
-      itemList($, choice($.test_entry_item, $._test_helper_item)),
+      itemList($, $._test_item),
       '}',
+    ),
+
+    // A gate leads a test entry or a helper the same way it leads any
+    // item.
+    _test_item: $ => seq(
+      repeat($.attribute),
+      choice($.test_entry_item, $._test_helper_item),
     ),
 
     // A test takes no arguments, so its parameter list is empty by syntax:
