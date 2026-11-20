@@ -27,6 +27,19 @@ constexpr MeasurementPolicy COMPILE = {
     .min_batch_ns = 0,
 };
 
+// A borrow check is tens of microseconds while rebuilding the package
+// it reads is tens of milliseconds. An unbatched case would repeat that
+// setup tens of thousands of times just to collect a second of the
+// check. One batch lasts a millisecond, long past the clock's own cost,
+// and the shorter floor still gathers a hundred samples; both keep the
+// figure honest without timing the setup thousands of times.
+constexpr MeasurementPolicy BORROW = {
+    .warmup = 3,
+    .samples = 0,
+    .min_duration_ns = 300ull * 1000 * 1000,
+    .min_batch_ns = 1000ull * 1000,
+};
+
 // Everything up to and including lowering. It is the setup for the two
 // cases that read the lowered package and cannot rebuild it per sample,
 // and the whole of the setup for the ones that can.
@@ -85,9 +98,9 @@ void run_pipeline_cases(Runner<SteadyClock>& runner,
   // bag is the fixture's own: a clean program emits nothing, so nothing
   // accumulates across samples.
   if (filter.wants(CaseId{"frontend", "borrow"})) {
-    emit(CaseId{"frontend", "borrow"}, COMPILE,
+    emit(CaseId{"frontend", "borrow"}, BORROW,
          runner.measure(
-             COMPILE,
+             BORROW,
              [&] {
                fixture = std::make_unique<CompilerFixture>(spec);
                rebuild_through_lower(*fixture);
