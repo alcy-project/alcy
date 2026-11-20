@@ -532,6 +532,11 @@ ir::TypeIdx Checker::error_type() {
   return builder.error_type();
 }
 
+ir::TypeIdx Checker::variadic_shape_type() {
+  ir::TypeSeq empty;
+  return builder.tuple_type(empty.finish());
+}
+
 // Derives the receiver kind from a resolved first parameter: exactly
 // Self, &Self, or &mut Self count; anything else is an associated
 // function regardless of the parameter name.
@@ -4893,10 +4898,14 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   scopes.emplace_back();
   loop_depth = 0;
   for (const ast::ItemFnParam& param : node.payload.get<ast::ItemFn>().params) {
-    // A variadic slot has no type to resolve and no pattern to bind;
-    // only the compiler-expanded call reads the collected arguments
-    //, and the declared body guards with panic.
+    // A variadic slot takes no runtime value. A `comp fn` binds its
+    // pattern to a marker type so controlled shape access can type;
+    // an expanded function's body never reads the slot directly.
     if (param.is_variadic) {
+      if (fn_is_comp(fn)) {
+        bind_pattern(module, param.pattern, variadic_shape_type(), false,
+                     false);
+      }
       continue;
     }
     const ir::TypeIdx type = resolve_type(module, param.type, self);

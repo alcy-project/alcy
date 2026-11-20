@@ -1615,6 +1615,9 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
       }
       key += ");";
       return;
+    case CompValue::Tag::Variadic:
+      key += "V(" + std::to_string(value.fields.size()) + ");";
+      return;
   }
 }
 
@@ -2850,10 +2853,16 @@ void Lowerer::run() {
     }
     const analyzer::CheckedModule& checked = pkg.modules[m];
     for (const auto& sig : checked.functions) {
+      // A variadic comp fn exists only for compile-time shape access;
+      // its body has no runtime form and cannot be called at runtime.
       if (!sig.item.is_valid() || !sig.is_comp ||
           !comp_positions(sig.item).empty() ||
           ast.items[sig.item].kind == ast::ItemKind::Intrinsic ||
           sig.is_extern) {
+        continue;
+      }
+      const ast::ItemFn& decl = ast.items[sig.item].payload.get<ast::ItemFn>();
+      if (!decl.params.empty() && decl.params.back().is_variadic) {
         continue;
       }
       if (ast.items[sig.item].kind == ast::ItemKind::Fn &&
@@ -2936,6 +2945,10 @@ void Lowerer::run() {
       if (sig.inst == analyzer::PARAM_INST ||
           (ast.items[sig.item].kind == ast::ItemKind::Fn &&
            !ast.items[sig.item].payload.get<ast::ItemFn>().generic.empty())) {
+        continue;
+      }
+      const ast::ItemFn& decl = ast.items[sig.item].payload.get<ast::ItemFn>();
+      if (!decl.params.empty() && decl.params.back().is_variadic) {
         continue;
       }
       fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::NO_INST,
@@ -3239,7 +3252,8 @@ bool comp_values_match(const comp::CompValue& a, const comp::CompValue& b) {
     case comp::CompValue::Tag::Str: return a.str_value == b.str_value;
     case comp::CompValue::Tag::Tuple:
     case comp::CompValue::Tag::Array:
-    case comp::CompValue::Tag::Struct: break;
+    case comp::CompValue::Tag::Struct:
+    case comp::CompValue::Tag::Variadic: break;
     case comp::CompValue::Tag::Enum:
       if (a.variant != b.variant) {
         return false;

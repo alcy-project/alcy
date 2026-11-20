@@ -28,6 +28,10 @@ struct CompValue {
     Array,
     Struct,
     Enum,
+    // A variadic parameter seen at compile time: `fields` holds one
+    // slot per collected argument, each carrying that argument's
+    // type. Values are never exposed through it.
+    Variadic,
   };
   Tag tag = Tag::Void;
   u64 int_value = 0;

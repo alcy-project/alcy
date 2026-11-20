@@ -160,6 +160,11 @@ Val Lowerer::Comp::materialize(const CompVal& value, diag::Span span) {
       }
       return Val{owner_.to_operand(addr, value.type), value.type, true, false};
     }
+    case CompValue::Tag::Variadic:
+      // A variadic shape is compile-time-only; its slots are read by
+      // controlled access, never materialized as a runtime aggregate.
+      owner_.internal(span, "variadic shape outside comp access");
+      return Val{owner_.size_one, owner_.error_type(), false, false};
   }
 }
 

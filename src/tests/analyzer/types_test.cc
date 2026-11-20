@@ -2797,9 +2797,9 @@ TEST_CASE("Check refuses a user-declared variadic parameter") {
   const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f);
   CHECK(!result.package.has_value());
   CHECK(f.bag.has_errors());
-  CHECK(has_message(
-      f.bag,
-      "A variadic parameter may only appear on a compiler-expanded function"));
+  CHECK(has_message(f.bag,
+                    "A variadic parameter may only appear on a "
+                    "compiler-expanded or comp function"));
 }
 
 TEST_CASE("Check reads the fmt package's variadic call") {

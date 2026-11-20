@@ -1044,7 +1044,14 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     return fail(span, "callee without body");
   }
   const ast::ItemFn& fn = ast.items[item].payload.get<ast::ItemFn>();
-  if (args.size() != params.size() || args.size() != fn.params.size()) {
+  // A variadic `comp fn` collects its trailing arguments as a shape:
+  // the fixed parameters bind normally, and the shape carries each
+  // collected argument's type without evaluating its value.
+  const bool variadic = !fn.params.empty() && fn.params.back().is_variadic;
+  const usize fixed_count = params.size();
+  if (variadic
+          ? args.size() < fixed_count
+          : (args.size() != params.size() || args.size() != fn.params.size())) {
     return fail(span, "call arity");
   }
   if (!spend(span)) {
@@ -1060,9 +1067,10 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
   std::vector<CompVal> comp_actuals;
   std::vector<usize> bound_params;
   bool ok = true;
-  for (usize i = 0; i < args.size() && ok; ++i) {
-    // Every argument of a callee reached in a comp context is evaluated
-    // here; one that cannot produce a comp value fails closed.
+  const u32 caller_inst = inst_;
+  for (usize i = 0; i < fixed_count && ok; ++i) {
+    // Every fixed argument of a callee reached in a comp context is
+    // evaluated here; one that cannot produce a comp value fails closed.
     // An argument is an expression of the caller's body, so its types
     // answer the caller's instantiation; the callee's takes over for
     // its parameters and its body.
@@ -1077,6 +1085,17 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     }
     bound_params.push_back(i);
   }
+  CompVal shape;
+  if (variadic && ok) {
+    shape.value.tag = CompValue::Tag::Variadic;
+    for (usize i = fixed_count; i < args.size(); ++i) {
+      CompVal slot;
+      const CheckedModule::ExprType* type =
+          inputs_.modules[caller_module].expr_type_of(args[i], caller_inst);
+      slot.type = type == nullptr ? ir::TypeIdx(base::INVALID_IDX) : type->type;
+      shape.value.fields.push_back(std::move(slot.value));
+    }
+  }
   const u32 saved_inst = inst_;
   inst_ = inst;
   for (usize k = 0; k < bound_params.size() && ok; ++k) {
@@ -1084,6 +1103,12 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
     if (!comp_bind_pattern(def_module, fn.params[param].pattern,
                            accepted_args[k], callee_scope,
                            ast.exprs[args[param]].span)) {
+      ok = false;
+    }
+  }
+  if (variadic && ok) {
+    if (!comp_bind_pattern(def_module, fn.params.back().pattern, shape,
+                           callee_scope, span)) {
       ok = false;
     }
   }
@@ -1333,6 +1358,14 @@ bool CompEvaluator::comp_eval_method_call(u32 mod,
   CompVal receiver;
   if (!comp_eval_expr(mod, method.receiver, scope, receiver)) {
     return false;
+  }
+  if (method.name.name == "len" && method.args.empty() &&
+      receiver.value.tag == CompValue::Tag::Variadic) {
+    out.type = usize_type();
+    out.value = {};
+    out.value.tag = CompValue::Tag::Int;
+    out.value.int_value = receiver.value.fields.size();
+    return true;
   }
   out.type = expr_type_in(mod, expr);
   const analyzer::CheckedModule::CallTarget* target = call_target_in(mod, expr);

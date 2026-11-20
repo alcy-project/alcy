@@ -809,9 +809,11 @@ void Checker::check_call_args(u32 module,
                               const std::vector<bool>& comp_params,
                               diag::Span span,
                               std::string_view what,
-                              bool skip_first) {
+                              bool skip_first,
+                              bool variadic) {
   const usize fixed = skip_first ? 1 : 0;
-  if (args.size() + fixed != params.size()) {
+  if (variadic ? args.size() + fixed < params.size()
+               : args.size() + fixed != params.size()) {
     const u32 index = bag.emit<i18n::Key::AnalyzerCallArityMismatch>(
         DiagCode::ArityError, span, what, params.size() - fixed,
         (params.size() - fixed) == 1 ? "" : "s", args.size());
@@ -819,6 +821,12 @@ void Checker::check_call_args(u32 module,
     return;
   }
   for (usize i = 0; i < args.size(); ++i) {
+    // Collected variadic arguments have no declared parameter: their
+    // types are the shape the callee reads at compile time.
+    if (variadic && fixed + i >= params.size()) {
+      check_expr(module, args[i], nullptr);
+      continue;
+    }
     const ir::TypeIdx param = params[fixed + i];
     const bool comp_required =
         comp_eval_depth > 0 ||
@@ -1768,7 +1776,7 @@ ir::TypeIdx Checker::check_call(u32 module,
     check_comp_fn_call(fn, span);
     record_call(module, callee, fn);
     check_call_args(module, call.args, fn->params, comp_param_flags(fn->item),
-                    span, fn->name, false);
+                    span, fn->name, false, fn->is_variadic);
     if (expected != nullptr) {
       return unify(*expected, fn->ret, span, "call");
     }
@@ -1794,7 +1802,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       precheck_fn_body(*fn);
     }
     check_call_args(module, args, fn->params, comp_param_flags(fn->item), span,
-                    fn->name, false);
+                    fn->name, false, fn->is_variadic);
     if (expected != nullptr) {
       return unify(*expected, fn->ret, span, "call");
     }
@@ -1955,6 +1963,12 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   const std::string_view name =
       node.payload.get<ast::ExprMethodCall>().name.name;
   const diag::Span span = node.span;
+  // `args.len()` on a `comp fn` variadic slot is shape access, not a
+  // method call: it yields a comp-known count of collected arguments.
+  if (name == "len" && node.payload.get<ast::ExprMethodCall>().args.empty() &&
+      receiver.idx == variadic_shape_type().idx) {
+    return builder.primitive(ir::TypeTag::Usize);
+  }
   ir::TypeIdx nominal = receiver;
   const ir::TypeTag tag = tag_of(receiver);
   if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {

@@ -327,7 +327,7 @@
   F(AnalyzerValueParameterAsType, Error, Analyzer, "Value parameter '{}' cannot be used as a type") \
   F(AnalyzerValueParameterHasNoAddress, Error, Analyzer, "Value parameter '{}' has no address") \
   F(AnalyzerValueParameterTypeNotInteger, Error, Analyzer, "Value parameter '{}' must have an integer type") \
-  F(AnalyzerVariadicNotExpanded, Error, Analyzer, "A variadic parameter may only appear on a compiler-expanded function") \
+  F(AnalyzerVariadicNotExpanded, Error, Analyzer, "A variadic parameter may only appear on a compiler-expanded or comp function") \
   F(AnalyzerVariantCallArity, Error, Analyzer, "Variant expects {} argument{}, found {}") \
   F(AnalyzerVariantFieldArity, Error, Analyzer, "Variant expects {} field{}, pattern has {}") \
   F(AnalyzerVariantNotInMatchedType, Error, Analyzer, "Variant is not a member of the matched type") \

@@ -754,6 +754,10 @@ class Checker {
   u32 find_child_module(u32 module, std::string_view name) const;
   ir::TypeIdx primitive_type(ast::PrimitiveKind kind, diag::Span span);
   ir::TypeIdx error_type();
+  // The static type bound to a `comp fn`'s variadic parameter. It is a
+  // marker: controlled shape access recognizes it, and no value of it
+  // exists outside compile-time evaluation.
+  ir::TypeIdx variadic_shape_type();
   CheckedModule::ReceiverKind classify_receiver(ir::TypeIdx first,
                                                 ir::TypeIdx self);
   // Interns a name, or reports the shared table as spent once and returns
@@ -1552,7 +1556,8 @@ class Checker {
                        const std::vector<bool>& comp_params,
                        diag::Span span,
                        std::string_view what,
-                       bool skip_first);
+                       bool skip_first,
+                       bool variadic = false);
   bool is_core_fmt(const CheckedModule::FnSig* fn) const;
   bool is_io_print(const CheckedModule::FnSig* fn) const;
   std::vector<bool> comp_param_flags(ast::ItemIdx item) const;

@@ -144,7 +144,8 @@ void Checker::validate_variadic_parameters() {
   const auto check = [&](ast::ItemIdx item,
                          std::span<const ast::ItemFnParam> params) {
     for (const ast::ItemFnParam& param : params) {
-      if (!param.is_variadic || is_expanded_variadic(item)) {
+      if (!param.is_variadic || is_expanded_variadic(item) ||
+          fn_is_comp(item)) {
         continue;
       }
       const u32 index = bag.emit<i18n::Key::AnalyzerVariadicNotExpanded>(
