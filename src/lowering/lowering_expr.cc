@@ -1557,7 +1557,47 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   }
   if (analyzer::is_expanded_name(sig.name, analyzer::IO_EXPANDED_NAMES) &&
       pkg.tree.is_staged_item("io", sig.item)) {
-    return fmt_lowering_.lower_print(expr, sig);
+    // Inside a parametric body the collected argument types are still
+    // type parameters; the C++ lane defers that dispatch to
+    // specialization, where the concrete types are known.
+    std::vector<ir::TypeIdx> collected;
+    for (usize i = 1; i < call.args.size(); ++i) {
+      collected.push_back(expr_type(call.args[i]));
+    }
+    const ast::ItemNode& decl = ast.items[sig.item];
+    const ast::ItemFn& decl_fn = decl.payload.get<ast::ItemFn>();
+    bool guard = false;
+    if (decl_fn.body.is_valid()) {
+      const ast::Block& body = ast.blocks[decl_fn.body];
+      std::vector<ast::ExprIdx> values;
+      if (body.statements.size() == 1 &&
+          ast.stmts[body.statements[0]].kind == ast::StmtKind::Expr) {
+        values.push_back(
+            ast.stmts[body.statements[0]].payload.get<ast::StmtExpr>().value);
+      } else if (body.statements.empty() && body.value.is_valid()) {
+        values.push_back(body.value);
+      }
+      for (const ast::ExprIdx value : values) {
+        if (!value.is_valid() || ast.exprs[value].kind != ast::ExprKind::Call) {
+          continue;
+        }
+        const ast::ExprIdx callee =
+            ast.exprs[value].payload.get<ast::ExprCall>().callee;
+        if (ast.exprs[callee].kind != ast::ExprKind::Path) {
+          continue;
+        }
+        const ast::PathIdx path =
+            ast.exprs[callee].payload.get<ast::ExprPath>().idx;
+        if (ast.paths[path].segments.size() == 1 &&
+            ast.paths[path].segments[0].name == "panic") {
+          guard = true;
+        }
+      }
+    }
+    if (guard || signature_mentions_param(collected, ir::TypeIdx::invalid(),
+                                          ir::TypeIdx::invalid())) {
+      return fmt_lowering_.lower_print(expr, sig);
+    }
   }
   if (sig.inst == analyzer::PARAM_INST ||
       signature_mentions_param(sig.params, sig.ret, ir::TypeIdx::invalid()) ||

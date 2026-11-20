@@ -764,78 +764,130 @@ pub spec DisplayPrecision {
 
 impl DisplayPrecision for f32 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_f64(*self as f64, precision, trim, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_f64(*self as f64, precision, trim, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for f64 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_f64(*self as f64, precision, trim, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_f64(*self, precision, trim, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for i8 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret write_signed(*self as i64, &mut scratch[0] as *mut u8, 0)
+    }
     ret write_signed(*self as i64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for i16 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret write_signed(*self as i64, &mut scratch[0] as *mut u8, 0)
+    }
     ret write_signed(*self as i64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for i32 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret write_signed(*self as i64, &mut scratch[0] as *mut u8, 0)
+    }
     ret write_signed(*self as i64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for i64 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret write_signed(*self as i64, &mut scratch[0] as *mut u8, 0)
+    }
     ret write_signed(*self as i64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for isize {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret write_signed(*self as i64, &mut scratch[0] as *mut u8, 0)
+    }
     ret write_signed(*self as i64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for u8 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_u64(*self as u64, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_u64(*self as u64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for u16 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_u64(*self as u64, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_u64(*self as u64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for u32 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_u64(*self as u64, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_u64(*self as u64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for u64 {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_u64(*self as u64, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_u64(*self as u64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for usize {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_u64(*self as u64, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_u64(*self as u64, &mut out[0] as *mut u8, out.len())
   }
 }
 
 impl DisplayPrecision for bool {
   fn display_precision(self: &Self, precision: usize, trim: bool, out: &mut [u8]) -> usize {
+    if out.len() == 0 {
+      mut scratch := [0u8; 1]
+      ret display_bool(*self, &mut scratch[0] as *mut u8, 0)
+    }
     ret display_bool(*self, &mut out[0] as *mut u8, out.len())
   }
 }
