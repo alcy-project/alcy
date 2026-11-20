@@ -249,7 +249,7 @@ void allocate(Body& body, const Frame& frame) {
     // the two addresses. Every other shape a slot wider than a register
     // could take is an aggregate read the selector spelled some other
     // way.
-    const bool wide = shape.write0 &&
+    const bool wide = inst.op == MOp::Mov && shape.write0 &&
                       std::holds_alternative<VReg>(inst.ops[0]) &&
                       !register_sized(size_of(std::get<VReg>(inst.ops[0])));
     if (wide && size_of(std::get<VReg>(inst.ops[0])) == 0) {
@@ -346,6 +346,16 @@ void allocate(Body& body, const Frame& frame) {
       DCHECK(next_scratch <= pool.size());
       push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[0]));
       encoded.ops[0] = Operand{into};
+    }
+    // A widening move reads its source from a register or memory; a
+    // constant needs a scratch the instruction may clobber.
+    if ((encoded.op == MOp::Movsx || encoded.op == MOp::Movzx) &&
+        std::holds_alternative<Imm>(encoded.ops[1])) {
+      const Reg into = pool[next_scratch++];
+      DCHECK(next_scratch <= pool.size());
+      push_labeled(make_inst(MOp::Mov, inst.width, Operand{into},
+                             encoded.ops[1]));
+      encoded.ops[1] = Operand{into};
     }
     // The compare and ALU forms read their first operand from a register;
     // a constant there needs a scratch the instruction may clobber.
