@@ -5,6 +5,7 @@
 
 #include "lsp/analysis.h"
 #include "lsp/document.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -21,12 +22,14 @@ text::JsonValue prepare_call_hierarchy(const Document& document,
 // sites inside it.
 text::JsonValue incoming_calls(const Document& document,
                                const DocumentAnalysis& analysis,
-                               const text::JsonValue& item);
+                               const text::JsonValue& item,
+                               source::FileId item_file);
 
 // The callables the item calls, one entry per callee with the call
 // sites that reach it.
 text::JsonValue outgoing_calls(const Document& document,
                                const DocumentAnalysis& analysis,
-                               const text::JsonValue& item);
+                               const text::JsonValue& item,
+                               source::FileId item_file);
 
 }  // namespace lsp

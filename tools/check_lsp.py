@@ -837,21 +837,27 @@ version = "0.1.0"
 license = ""
 
 [modules]
-include = ["main", "helper"]
+include = ["main", "helper", "extra"]
 
 [[bin]]
 path = "main.al"
 """
 PACKAGE_MAIN = """use package::helper::Helper;
+use package::extra::extra_fn;
 
 pub fn use_it(value: Helper) -> i32 {
   ret value.x
 }
 
 fn main() -> i32 {
+  ret extra_fn()
+}
+"""
+PACKAGE_EXTRA = """pub fn extra_fn() -> i32 {
   ret 0
 }
 """
+
 PACKAGE_HELPER = """pub struct Helper {
   pub x: i32,
 }
@@ -864,8 +870,40 @@ def package_session(alcy: Path) -> int:
         (root / "alcy.toml").write_text(PACKAGE_MANIFEST)
         (root / "main.al").write_text(PACKAGE_MAIN)
         (root / "helper.al").write_text(PACKAGE_HELPER)
+        (root / "extra.al").write_text(PACKAGE_EXTRA)
         main_uri = (root / "main.al").as_uri()
         helper_uri = (root / "helper.al").as_uri()
+        extra_uri = (root / "extra.al").as_uri()
+
+        def position_at(text: str, offset: int) -> dict:
+            before = text[:offset]
+            return {
+                "line": before.count("\n"),
+                "character": offset - (before.rfind("\n") + 1),
+            }
+
+        fn_start = PACKAGE_EXTRA.index("pub fn extra_fn")
+        fn_end = fn_start + len(PACKAGE_EXTRA[fn_start:].split("\n")[0])
+        name_start = PACKAGE_EXTRA.index("extra_fn")
+        call_item = {
+            "name": "extra_fn",
+            "kind": 12,
+            "uri": extra_uri,
+            "range": {
+                "start": position_at(PACKAGE_EXTRA, fn_start),
+                "end": position_at(PACKAGE_EXTRA, fn_end),
+            },
+            "selectionRange": {
+                "start": position_at(PACKAGE_EXTRA, name_start),
+                "end": position_at(PACKAGE_EXTRA, name_start + len("extra_fn")),
+            },
+            "data": {
+                "nameOffset": name_start,
+                "nameLength": len("extra_fn"),
+                "rangeOffset": fn_start,
+                "rangeLength": fn_end - fn_start,
+            },
+        }
         session = [
             {
                 "jsonrpc": "2.0",
@@ -911,6 +949,12 @@ def package_session(alcy: Path) -> int:
             },
             {
                 "jsonrpc": "2.0",
+                "id": 4,
+                "method": "callHierarchy/incomingCalls",
+                "params": {"item": call_item},
+            },
+            {
+                "jsonrpc": "2.0",
                 "method": "textDocument/didChange",
                 "params": {
                     "textDocument": {"uri": helper_uri, "version": 2},
@@ -921,11 +965,11 @@ def package_session(alcy: Path) -> int:
             },
             {
                 "jsonrpc": "2.0",
-                "id": 3,
+                "id": 5,
                 "method": "textDocument/diagnostic",
                 "params": {"textDocument": {"uri": main_uri}},
             },
-            {"jsonrpc": "2.0", "id": 4, "method": "shutdown", "params": None},
+            {"jsonrpc": "2.0", "id": 6, "method": "shutdown", "params": None},
             {"jsonrpc": "2.0", "method": "exit"},
         ]
         proc = subprocess.run(
@@ -952,7 +996,11 @@ def package_session(alcy: Path) -> int:
         if any("Unresolved import" in item.get("message", "") for item in items):
             return fail(f"a sibling import was reported unresolved: {items!r}")
 
-        changed = by_id.get(3, {}).get("result", {})
+        incoming = by_id.get(4, {}).get("result")
+        if not incoming:
+            return fail(f"incoming calls were empty for an unopened file: {incoming!r}")
+
+        changed = by_id.get(5, {}).get("result", {})
         changed_items = changed.get("items", [])
         if not any(
             "Unresolved import" in item.get("message", "") for item in changed_items

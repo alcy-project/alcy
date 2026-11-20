@@ -224,6 +224,29 @@ std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
   return std::nullopt;
 }
 
+std::optional<source::FileId> file_of_uri(const DocumentAnalysis& analysis,
+                                          std::string_view uri) {
+  const auto found = analysis.owner().files_by_uri.find(std::string(uri));
+  if (found != analysis.owner().files_by_uri.end()) {
+    return found->second;
+  }
+  const std::optional<std::string> path = workspace::uri_to_path(uri);
+  if (!path.has_value()) {
+    return std::nullopt;
+  }
+  for (const analyzer::ModuleNode* module : analysis.package().tree.modules) {
+    if (module->file == source::UNKNOWN_FILE) {
+      continue;
+    }
+    const std::optional<std::string_view> name =
+        analysis.context().sources.name(module->file);
+    if (name.has_value() && *name == *path) {
+      return module->file;
+    }
+  }
+  return std::nullopt;
+}
+
 std::optional<SourceText> source_text_of(const DocumentAnalysis& analysis,
                                          source::FileId file) {
   const std::optional<std::string> uri = uri_of_file(analysis, file);

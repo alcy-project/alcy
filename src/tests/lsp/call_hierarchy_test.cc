@@ -38,8 +38,8 @@ TEST_CASE("A function's incoming calls name the caller") {
   if (items.as_array().empty()) {
     return;
   }
-  const text::JsonValue calls =
-      incoming_calls(document, analysis, items.as_array().front());
+  const text::JsonValue calls = incoming_calls(
+      document, analysis, items.as_array().front(), analysis.root());
   CHECK(calls.as_array().size() == 1);
   if (!calls.as_array().empty()) {
     CHECK(calls.as_array().front().find("from")->find("name")->as_string() ==
@@ -57,8 +57,8 @@ TEST_CASE("A function's outgoing calls name the callee") {
   if (items.as_array().empty()) {
     return;
   }
-  const text::JsonValue calls =
-      outgoing_calls(document, analysis, items.as_array().front());
+  const text::JsonValue calls = outgoing_calls(
+      document, analysis, items.as_array().front(), analysis.root());
   CHECK(calls.as_array().size() == 1);
   if (!calls.as_array().empty()) {
     CHECK(calls.as_array().front().find("to")->find("name")->as_string() ==

@@ -17,6 +17,7 @@
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "lsp/analysis_cache.h"
+#include "lsp/call_hierarchy.h"
 #include "lsp/code_actions.h"
 #include "lsp/code_lens.h"
 #include "lsp/completion.h"
@@ -28,6 +29,7 @@
 #include "lsp/workspace.h"
 #include "lsp/workspace_symbols.h"
 #include "path/path.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -411,6 +413,29 @@ TEST_CASE("Completion does not duplicate a name from an unimported module") {
     }
   }
   CHECK(count == 1);
+}
+
+TEST_CASE("Incoming calls resolve for a declaration in an unopened file") {
+  const Fixture f;
+  const Document document(f.main_uri, "alcy", 1, std::string(MAIN));
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const text::JsonValue items =
+      prepare_call_hierarchy(document, analysis, Position{8, 8});
+  CHECK_FALSE(items.as_array().empty());
+  if (items.as_array().empty()) {
+    return;
+  }
+  const std::optional<source::FileId> item_file =
+      file_of_uri(analysis, f.helper_uri);
+  if (!item_file.has_value()) {
+    return;
+  }
+  const text::JsonValue calls =
+      incoming_calls(document, analysis, items.as_array().front(), *item_file);
+  CHECK_FALSE(calls.as_array().empty());
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {

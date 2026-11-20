@@ -257,7 +257,8 @@ text::JsonValue prepare_call_hierarchy(const Document& document,
 
 text::JsonValue incoming_calls(const Document& document,
                                const DocumentAnalysis& analysis,
-                               const text::JsonValue& item) {
+                               const text::JsonValue& item,
+                               source::FileId item_file) {
   (void)document;
   text::JsonValue calls = text::JsonValue::make_array();
   const text::JsonValue* data = item_data(item);
@@ -265,7 +266,7 @@ text::JsonValue incoming_calls(const Document& document,
     return calls;
   }
   const diag::Span target =
-      span_of(*data, "nameOffset", "nameLength", analysis.root());
+      span_of(*data, "nameOffset", "nameLength", item_file);
   const pipeline::PipelineContext& context = analysis.context();
 
   struct Caller {
@@ -321,14 +322,15 @@ text::JsonValue incoming_calls(const Document& document,
 
 text::JsonValue outgoing_calls(const Document& document,
                                const DocumentAnalysis& analysis,
-                               const text::JsonValue& item) {
+                               const text::JsonValue& item,
+                               source::FileId item_file) {
   text::JsonValue calls = text::JsonValue::make_array();
   const text::JsonValue* data = item_data(item);
   if (!analysis.ok() || data == nullptr) {
     return calls;
   }
   const diag::Span body =
-      span_of(*data, "rangeOffset", "rangeLength", analysis.root());
+      span_of(*data, "rangeOffset", "rangeLength", item_file);
   const pipeline::PipelineContext& context = analysis.context();
 
   struct Callee {
@@ -338,7 +340,7 @@ text::JsonValue outgoing_calls(const Document& document,
   std::vector<Callee> callees;
   std::vector<std::vector<diag::Span>> ranges;
   for (const CallEdge& edge :
-       call_edges(context, analysis.package(), analysis.root())) {
+       call_edges(context, analysis.package(), item_file)) {
     if (!contains(body, edge.site)) {
       continue;
     }

@@ -38,6 +38,7 @@
 #include "lsp/workspace.h"
 #include "lsp/workspace_symbols.h"
 #include "path/path.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -56,15 +57,15 @@ const text::JsonValue* field(const text::JsonValue& object,
   return object.find(key);
 }
 
-bool offers_utf16(const text::JsonValue& value) {
+bool offers(const text::JsonValue& value, std::string_view encoding) {
   if (value.is_string()) {
-    return value.as_string() == "utf-16";
+    return value.as_string() == encoding;
   }
   if (!value.is_array()) {
     return false;
   }
   for (const text::JsonValue& entry : value.as_array()) {
-    if (entry.is_string() && entry.as_string() == "utf-16") {
+    if (entry.is_string() && entry.as_string() == encoding) {
       return true;
     }
   }
@@ -76,19 +77,22 @@ PositionEncoding negotiate_encoding(const text::JsonValue& params) {
   if (capabilities == nullptr || !capabilities->is_object()) {
     return PositionEncoding::Utf16;
   }
-  const text::JsonValue* general = capabilities->find("general");
-  if (general != nullptr && general->is_object()) {
-    if (const text::JsonValue* encoding = general->find("positionEncoding");
-        encoding != nullptr) {
-      return offers_utf16(*encoding) ? PositionEncoding::Utf16
-                                     : PositionEncoding::Utf8;
-    }
+  const text::JsonValue* offered = nullptr;
+  if (const text::JsonValue* general = capabilities->find("general");
+      general != nullptr && general->is_object()) {
+    offered = general->find("positionEncoding");
   }
-  // The LSP 3.16 spelling of the same preference.
-  if (const text::JsonValue* encoding = capabilities->find("positionEncoding");
-      encoding != nullptr) {
-    return offers_utf16(*encoding) ? PositionEncoding::Utf16
-                                   : PositionEncoding::Utf8;
+  if (offered == nullptr) {
+    offered = capabilities->find("positionEncoding");
+  }
+  if (offered == nullptr) {
+    return PositionEncoding::Utf16;
+  }
+  if (offers(*offered, "utf-16")) {
+    return PositionEncoding::Utf16;
+  }
+  if (offers(*offered, "utf-8")) {
+    return PositionEncoding::Utf8;
   }
   return PositionEncoding::Utf16;
 }
@@ -530,6 +534,22 @@ void Server::initialize(const text::JsonValue& id,
     }
     encoding_ = negotiate_encoding(*params);
     cache_.set_encoding(encoding_);
+    watched_files_supported_ = false;
+    if (const text::JsonValue* capabilities = params->find("capabilities");
+        capabilities != nullptr && capabilities->is_object()) {
+      if (const text::JsonValue* workspace = capabilities->find("workspace");
+          workspace != nullptr && workspace->is_object()) {
+        if (const text::JsonValue* watched =
+                workspace->find("didChangeWatchedFiles");
+            watched != nullptr && watched->is_object()) {
+          if (const text::JsonValue* dynamic =
+                  watched->find("dynamicRegistration");
+              dynamic != nullptr && dynamic->is_bool()) {
+            watched_files_supported_ = dynamic->as_bool();
+          }
+        }
+      }
+    }
   }
   text::JsonValue sync = text::JsonValue::make_object();
   sync.set("openClose", text::JsonValue::make_bool(true));
@@ -701,7 +721,14 @@ void Server::definition(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  send_result(id, location_json(*document, *location));
+  const std::optional<SourceText> source =
+      source_text_of(analysis, location->file);
+  if (!source.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id,
+              location_json(source->uri, source->text, *location, encoding_));
 }
 
 void Server::type_definition(const text::JsonValue& id,
@@ -712,13 +739,21 @@ void Server::type_definition(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
+  const DocumentAnalysis& analysis = cache_.get(*document);
   const std::optional<diag::Span> location =
-      type_definition_at(*document, cache_.get(*document), position);
+      type_definition_at(*document, analysis, position);
   if (!location.has_value()) {
     send_result(id, text::JsonValue{});
     return;
   }
-  send_result(id, location_json(*document, *location));
+  const std::optional<SourceText> source =
+      source_text_of(analysis, location->file);
+  if (!source.has_value()) {
+    send_result(id, text::JsonValue{});
+    return;
+  }
+  send_result(id,
+              location_json(source->uri, source->text, *location, encoding_));
 }
 
 void Server::code_lens(const text::JsonValue& id,
@@ -804,12 +839,30 @@ void Server::call_hierarchy_incoming(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  const Document* document = documents_.find(uri->as_string());
-  if (document == nullptr) {
+  const Document* document = nullptr;
+  const DocumentAnalysis* analysis = nullptr;
+  source::FileId item_file = source::UNKNOWN_FILE;
+  for (const auto& [candidate_uri, candidate] : documents_.documents()) {
+    (void)candidate_uri;
+    const DocumentAnalysis& found = cache_.get(candidate);
+    if (!found.ok()) {
+      continue;
+    }
+    const std::optional<source::FileId> file =
+        file_of_uri(found, uri->as_string());
+    if (!file.has_value()) {
+      continue;
+    }
+    document = &candidate;
+    analysis = &found;
+    item_file = *file;
+    break;
+  }
+  if (analysis == nullptr) {
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, incoming_calls(*document, cache_.get(*document), *item));
+  send_result(id, incoming_calls(*document, *analysis, *item, item_file));
 }
 
 void Server::call_hierarchy_outgoing(const text::JsonValue& id,
@@ -821,12 +874,30 @@ void Server::call_hierarchy_outgoing(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  const Document* document = documents_.find(uri->as_string());
-  if (document == nullptr) {
+  const Document* document = nullptr;
+  const DocumentAnalysis* analysis = nullptr;
+  source::FileId item_file = source::UNKNOWN_FILE;
+  for (const auto& [candidate_uri, candidate] : documents_.documents()) {
+    (void)candidate_uri;
+    const DocumentAnalysis& found = cache_.get(candidate);
+    if (!found.ok()) {
+      continue;
+    }
+    const std::optional<source::FileId> file =
+        file_of_uri(found, uri->as_string());
+    if (!file.has_value()) {
+      continue;
+    }
+    document = &candidate;
+    analysis = &found;
+    item_file = *file;
+    break;
+  }
+  if (analysis == nullptr) {
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, outgoing_calls(*document, cache_.get(*document), *item));
+  send_result(id, outgoing_calls(*document, *analysis, *item, item_file));
 }
 
 void Server::workspace_symbol(const text::JsonValue& id,
@@ -1241,6 +1312,9 @@ void Server::range_formatting(const text::JsonValue& id,
 }
 
 void Server::register_watchers() {
+  if (!watched_files_supported_) {
+    return;
+  }
   text::JsonValue watchers = text::JsonValue::make_array();
   for (const char* pattern : {"**/*.al", "**/alcy.toml", "**/lint.toml"}) {
     text::JsonValue watcher = text::JsonValue::make_object();

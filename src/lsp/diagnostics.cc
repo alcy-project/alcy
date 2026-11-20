@@ -36,8 +36,18 @@ f64 severity_number(diag::Severity severity) {
   return static_cast<f64>(DiagnosticSeverity::Error);
 }
 
-std::string code_string(diag::Code code) {
+char severity_code(diag::Severity severity) {
+  switch (severity) {
+    case diag::Severity::Error: return 'E';
+    case diag::Severity::Warning: return 'W';
+    case diag::Severity::Note: return 'N';
+  }
+  return 'E';
+}
+
+std::string code_string(diag::Severity severity, diag::Code code) {
   std::string out;
+  out.push_back(severity_code(severity));
   out.push_back(stage_letter(code.stage));
   std::string id = std::to_string(code.id);
   while (id.size() < 3) {
@@ -74,8 +84,8 @@ text::JsonValue diagnostics_for(const Document& document,
                               severity_number(diagnostic->severity)));
     entry.set("source", text::JsonValue::make_string("alcy"));
     if (diagnostic->code.has_value()) {
-      entry.set("code",
-                text::JsonValue::make_string(code_string(*diagnostic->code)));
+      entry.set("code", text::JsonValue::make_string(code_string(
+                            diagnostic->severity, *diagnostic->code)));
     }
     entry.set("message",
               text::JsonValue::make_string(std::string(diagnostic->message)));

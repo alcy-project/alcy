@@ -95,6 +95,10 @@ class DocumentAnalysis {
 std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
                                        source::FileId file);
 
+// The source file an editor URI names, when the analysis read it.
+std::optional<source::FileId> file_of_uri(const DocumentAnalysis& analysis,
+                                          std::string_view uri);
+
 // A file an editor can address: its URI and the bytes the analysis read.
 // Toolchain sources without an editor URI answer nothing.
 struct SourceText {
