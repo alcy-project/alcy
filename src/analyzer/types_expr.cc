@@ -2502,6 +2502,18 @@ ir::TypeIdx Checker::check_index(u32 module,
   if (is_error(receiver) || is_error(position)) {
     return error_type();
   }
+  // Selecting a variadic slot is shape access: the index must be an
+  // integer, and the element type is resolved at the call site where
+  // the collected arguments are known.
+  if (receiver.idx == variadic_shape_type().idx) {
+    if (!is_integer_tag(tag_of(position))) {
+      const u32 diag = bag.emit<i18n::Key::AnalyzerArrayIndexNotInteger>(
+          DiagCode::TypeMismatch, ast.exprs[index.index].span);
+      (void)diag;
+      return error_type();
+    }
+    return variadic_slot_type();
+  }
   ir::TypeIdx element = error_type();
   if (range_element(position, element)) {
     bool unsized = false;

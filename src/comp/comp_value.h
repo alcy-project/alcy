@@ -28,16 +28,19 @@ struct CompValue {
     Array,
     Struct,
     Enum,
-    // A variadic parameter seen at compile time: `fields` holds one
-    // slot per collected argument, each carrying that argument's
-    // type. Values are never exposed through it.
+    // A variadic parameter seen at compile time. `slot_types` names
+    // each collected argument's type; values are never exposed.
     Variadic,
+    // One collected argument slot, selected by a comp-known index.
+    // `int_value` is the slot number; the type rides on `CompVal`.
+    RuntimeSlot,
   };
   Tag tag = Tag::Void;
   u64 int_value = 0;
   bool bool_value = false;
   std::string str_value;
   std::vector<CompValue> fields;
+  std::vector<ir::TypeIdx> slot_types;
   u32 variant = 0;
 };
 

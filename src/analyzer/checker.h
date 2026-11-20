@@ -758,6 +758,9 @@ class Checker {
   // marker: controlled shape access recognizes it, and no value of it
   // exists outside compile-time evaluation.
   ir::TypeIdx variadic_shape_type();
+  // The type an `args[i]` selection carries inside a definition-site
+  // check; the actual element type is resolved at the call site.
+  ir::TypeIdx variadic_slot_type();
   CheckedModule::ReceiverKind classify_receiver(ir::TypeIdx first,
                                                 ir::TypeIdx self);
   // Interns a name, or reports the shared table as spent once and returns

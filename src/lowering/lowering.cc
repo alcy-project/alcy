@@ -1616,7 +1616,14 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
       key += ");";
       return;
     case CompValue::Tag::Variadic:
-      key += "V(" + std::to_string(value.fields.size()) + ");";
+      key += "V(";
+      for (ir::TypeIdx type : value.slot_types) {
+        key += std::to_string(type.idx) + ",";
+      }
+      key += ");";
+      return;
+    case CompValue::Tag::RuntimeSlot:
+      key += "r" + std::to_string(value.int_value) + ";";
       return;
   }
 }
@@ -3252,8 +3259,18 @@ bool comp_values_match(const comp::CompValue& a, const comp::CompValue& b) {
     case comp::CompValue::Tag::Str: return a.str_value == b.str_value;
     case comp::CompValue::Tag::Tuple:
     case comp::CompValue::Tag::Array:
-    case comp::CompValue::Tag::Struct:
-    case comp::CompValue::Tag::Variadic: break;
+    case comp::CompValue::Tag::Struct: break;
+    case comp::CompValue::Tag::Variadic:
+      if (a.slot_types.size() != b.slot_types.size()) {
+        return false;
+      }
+      for (usize i = 0; i < a.slot_types.size(); ++i) {
+        if (a.slot_types[i].idx != b.slot_types[i].idx) {
+          return false;
+        }
+      }
+      break;
+    case comp::CompValue::Tag::RuntimeSlot: return a.int_value == b.int_value;
     case comp::CompValue::Tag::Enum:
       if (a.variant != b.variant) {
         return false;

@@ -1089,11 +1089,10 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
   if (variadic && ok) {
     shape.value.tag = CompValue::Tag::Variadic;
     for (usize i = fixed_count; i < args.size(); ++i) {
-      CompVal slot;
       const CheckedModule::ExprType* type =
           inputs_.modules[caller_module].expr_type_of(args[i], caller_inst);
-      slot.type = type == nullptr ? ir::TypeIdx(base::INVALID_IDX) : type->type;
-      shape.value.fields.push_back(std::move(slot.value));
+      shape.value.slot_types.push_back(
+          type == nullptr ? ir::TypeIdx(base::INVALID_IDX) : type->type);
     }
   }
   const u32 saved_inst = inst_;
@@ -1364,7 +1363,7 @@ bool CompEvaluator::comp_eval_method_call(u32 mod,
     out.type = usize_type();
     out.value = {};
     out.value.tag = CompValue::Tag::Int;
-    out.value.int_value = receiver.value.fields.size();
+    out.value.int_value = receiver.value.slot_types.size();
     return true;
   }
   out.type = expr_type_in(mod, expr);
@@ -1923,6 +1922,20 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
       CompVal position;
       if (!comp_eval_expr(mod, index.index, scope, position)) {
         return false;
+      }
+      if (base.value.tag == CompValue::Tag::Variadic) {
+        if (position.value.tag != CompValue::Tag::Int) {
+          return fail(node.span, "variadic index without value");
+        }
+        const u64 slot = position.value.int_value;
+        if (slot >= base.value.slot_types.size()) {
+          return fail_oob(node.span, "variadic index out of bounds");
+        }
+        out.type = base.value.slot_types[static_cast<usize>(slot)];
+        out.value = {};
+        out.value.tag = CompValue::Tag::RuntimeSlot;
+        out.value.int_value = slot;
+        return true;
       }
       if (base.value.tag != CompValue::Tag::Array ||
           position.value.tag != CompValue::Tag::Int) {

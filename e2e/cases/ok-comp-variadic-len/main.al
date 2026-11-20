@@ -1,8 +1,13 @@
 comp fn count(args: ..) -> usize {
+  ret args.len()
+}
+
+comp fn counted(args: ..) -> usize {
   mut total := 0usize
-  comp for i in 0..<args.len() {
+  comp for _ in 0..<args.len() {
     total += 1
   }
+  _ := args[0]
   ret total
 }
 

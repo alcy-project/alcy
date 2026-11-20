@@ -537,6 +537,12 @@ ir::TypeIdx Checker::variadic_shape_type() {
   return builder.tuple_type(empty.finish());
 }
 
+ir::TypeIdx Checker::variadic_slot_type() {
+  ir::TypeSeq one;
+  one.push(builder.error_type());
+  return builder.tuple_type(one.finish());
+}
+
 // Derives the receiver kind from a resolved first parameter: exactly
 // Self, &Self, or &mut Self count; anything else is an associated
 // function regardless of the parameter name.
