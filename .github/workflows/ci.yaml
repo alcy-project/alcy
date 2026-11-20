@@ -1,8 +1,7 @@
-# Every pull request runs this workflow, and every job in it reports a
-# conclusion: a workflow that its own `paths:` filter skipped reports
-# nothing, so a check a branch requires would stay "Expected" on a change
-# that touched a document. The `changes` job reads the diff instead, and
-# the jobs below skip when it has nothing for them to read.
+# Every run of this workflow answers every question it owns. A `paths:`
+# filter would leave skipped jobs without a conclusion, keeping required
+# checks at "Expected", so there is no path filtering and no diff job:
+# a documentation change pays for the whole matrix, deliberately.
 name: CI
 
 on:
@@ -21,50 +20,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # CI answers questions about a tree it can build, and a change to prose
-  # or to the site asks none of them. The jobs below read this output and
-  # skip; what is listed is what CI has nothing to ask about, so a file
-  # that is neither of those runs the whole of it.
-  changes:
-    name: Changed Paths
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      code: ${{ steps.diff.outputs.code }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          submodules: false
-          fetch-depth: 0
-
-      - name: Read the Changed Paths
-        id: diff
-        shell: bash
-        run: |
-          base="${{ github.event.pull_request.base.sha }}"
-          if [ -z "$base" ]; then
-            base="${{ github.event.before }}"
-          fi
-          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            base=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
-          fi
-
-          echo "changed in ${base}..HEAD:"
-          changed=$(git diff --name-only "$base" HEAD)
-          printf '%s\n' "$changed"
-
-          code=false
-          if [ -n "$changed" ] && printf '%s\n' "$changed" | grep -Evq '^(docs/|site/)|(\.md$)|^LICENSE$'; then
-            code=true
-          fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-
   debug:
     name: Debug Build & Test
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/build.yaml
     with:
       build_type: debug
@@ -72,8 +29,6 @@ jobs:
 
   release:
     name: Release Build & Test
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
@@ -81,8 +36,6 @@ jobs:
 
   wasm-debug:
     name: WebAssembly Debug Build & Test
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: debug
@@ -90,8 +43,6 @@ jobs:
 
   wasm-release:
     name: WebAssembly Release Build & Test
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: release
@@ -102,13 +53,10 @@ jobs:
   # translation unit is the whole of the cost, so the job runs as three
   # shards and the wall clock is a third of the tree; the whole-tree
   # checks (format, gn, the rules, the ASCII gate) ride with shard 1/3,
-  # and it belongs beside the builds rather than in a workflow that a
-  # documentation change also triggers -- as a job that a change with
-  # nothing to read skips, which is what `changes` decides.
+  # and it belongs beside the builds that produce the compilation
+  # database it reads.
   lint:
     name: Tree Lint (${{ matrix.shard }})
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -138,8 +86,6 @@ jobs:
   # its own instrumented build and cannot share the matrix's.
   coverage:
     name: Coverage Ratchet
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -175,8 +121,6 @@ jobs:
   # is absent, so this job cannot pass without having run.
   sanitizers:
     name: Generated-Code Sanitizers
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -209,8 +153,6 @@ jobs:
   # build at all and runs in the Grammar job.
   grammar-vs-compiler:
     name: Grammar Against the Compiler
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -285,8 +227,6 @@ jobs:
   # multiplied the cost for one answer.
   benchmarks:
     name: Benchmark Harness
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -317,8 +257,6 @@ jobs:
   # the job with the bytes libFuzzer minimised it to.
   fuzz:
     name: Fuzz Smoke
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -361,8 +299,6 @@ jobs:
   # configures for, so the answer costs a minute.
   cross-gen:
     name: Cross-Target Gen
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -384,8 +320,8 @@ jobs:
         run: uv run ./tools/cross.py --gen-only
 
   summary:
-    needs: [changes, debug, release, wasm-debug, wasm-release]
-    if: always() && needs.changes.outputs.code == 'true'
+    needs: [debug, release, wasm-debug, wasm-release]
+    if: always()
     uses: ./.github/workflows/artifacts-summary.yaml
     with:
       artifact_pattern: "*"
