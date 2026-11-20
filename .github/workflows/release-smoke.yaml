@@ -24,7 +24,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-26, windows-2025-vs2026]
+        os:
+          - ubuntu-24.04
+          - macos-26
+          - windows-2025-vs2026
+          - ubuntu-24.04-arm
+          - macos-26-intel
+          - windows-11-arm
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
