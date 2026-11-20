@@ -166,3 +166,376 @@ pub fn display_u64(value: u64, out: *mut u8, cap: usize) -> usize {
   }
   ret count
 }
+
+fn put_byte(out: *mut u8, at: usize, b: u8, cap: usize) {
+  if at < cap {
+    unsafe { *ptr_offset_mut(out, at as isize) = b }
+  }
+}
+
+fn digits_u64(value: u64, out: *mut u8, cap: usize) -> usize {
+  mut scratch := [0u8; 20]
+  mut n := value
+  mut count := 0 as usize
+  loop {
+    d := n % 10u64
+    n = n / 10u64
+    scratch[19 - count] = (d as u8) + 48u8
+    count += 1
+    if n == 0u64 {
+      break
+    }
+  }
+  mut i := 0 as usize
+  while i < count && i < cap {
+    unsafe { *ptr_offset_mut(out, i as isize) = scratch[20 - count + i] }
+    i += 1
+  }
+  ret count
+}
+
+struct FixedResult {
+  written: usize,
+  carry: bool,
+}
+
+fn float_fixed(v: f64, digits: usize, trim: bool, out: *mut u8, cap: usize, fold: bool) -> FixedResult {
+  whole := v as u64
+  diff := v - (whole as f64)
+  integral := v >= 9007199254740992.0f64
+  mut fraction := diff
+  if integral {
+    fraction = 0.0f64
+  }
+  mut dyadic := fraction
+  mut power := 0u64
+  loop {
+    t := dyadic as u64
+    if (t as f64) == dyadic {
+      break
+    }
+    dyadic = dyadic * 2.0f64
+    power += 1
+  }
+  numerator := dyadic as u64
+  mut constant := 1u64
+  mut ci := 0 as usize
+  while ci < digits {
+    constant = constant * 10u64
+    ci += 1
+  }
+  m_low := numerator & 0xffffffffu64
+  m_high := numerator >> 32
+  p0 := m_low * (constant & 0xffffffffu64)
+  p1 := m_low * (constant >> 32)
+  p2 := m_high * (constant & 0xffffffffu64)
+  p3 := m_high * (constant >> 32)
+  middle := (p0 >> 32) + (p1 & 0xffffffffu64) + (p2 & 0xffffffffu64)
+  product_low := (p0 & 0xffffffffu64) | (middle << 32)
+  product_high := p3 + (p1 >> 32) + (p2 >> 32) + (middle >> 32)
+  split := wrapping_sub(power, 1u64)
+  low_window := split < 64u64
+  high_window := split >= 64u64
+  past_windows := split >= 128u64
+  mut low_count := 0u64
+  if low_window {
+    low_count = split
+  }
+  cross_raw := wrapping_sub(63u64, split)
+  mut cross_count := 0u64
+  if low_window {
+    cross_count = cross_raw
+  }
+  above_raw := wrapping_sub(split, 64u64)
+  mut above_count := 0u64
+  if high_window {
+    above_count = above_raw
+  }
+  mut high_count := above_count
+  if past_windows {
+    high_count = 0u64
+  }
+  crossed := product_high << cross_count
+  crossed_again := crossed << 1
+  low_digits := product_low >> low_count
+  below_path := crossed_again | low_digits
+  above_path := product_high >> high_count
+  middle_path := high_window && !past_windows
+  mut selected := 0u64
+  if middle_path {
+    selected = above_path
+  }
+  mut quotient := 0u64
+  if low_window {
+    quotient = below_path
+  } else {
+    quotient = selected
+  }
+  mut exact := quotient >> 1
+  round_bit := quotient & 1u64
+  mut buf := [48u8; 18]
+  mut i := digits
+  while i > 0 {
+    i -= 1
+    buf[i] = ((exact % 10u64) as u8) + 48u8
+    exact = exact / 10u64
+  }
+  mut carry := round_bit != 0u64
+  i = digits
+  while i > 0 {
+    i -= 1
+    summed :=
+      (buf[i] - 48u8) +
+      (
+        if carry {
+          1u8
+        } else {
+          0u8
+        }
+      )
+    if summed == 10u8 {
+      buf[i] = 48u8
+      carry = true
+    } else {
+      buf[i] = summed + 48u8
+      carry = false
+    }
+  }
+  adjusted :=
+    whole +
+    (
+      if carry {
+        1u64
+      } else {
+        0u64
+      }
+    )
+  mut printed := adjusted
+  mut carry_out := carry
+  if fold {
+    if adjusted == 10u64 {
+      printed = 1u64
+      carry_out = true
+    } else {
+      carry_out = false
+    }
+  }
+  mut n := digits_u64(printed, out, cap)
+  mut length := digits
+  if trim {
+    while length > 0 && buf[length - 1] == 48u8 {
+      length -= 1
+    }
+  }
+  if length > 0 {
+    put_byte(out, n, 46u8, cap)
+    n += 1
+  }
+  mut j := 0 as usize
+  while j < length {
+    put_byte(out, n, buf[j], cap)
+    n += 1
+    j += 1
+  }
+  ret FixedResult { written: n, carry: carry_out }
+}
+
+fn decimal_scale(places: i32) -> f64 {
+  highs :=
+    [
+      1e0f64,
+      1e16f64,
+      1e32f64,
+      1e48f64,
+      1e64f64,
+      1e80f64,
+      1e96f64,
+      1e112f64,
+      1e128f64,
+      1e144f64,
+      1e160f64,
+      1e176f64,
+      1e192f64,
+      1e208f64,
+      1e224f64,
+      1e240f64,
+      1e256f64,
+      1e272f64,
+      1e288f64,
+      1e304f64,
+      1.0f64 / 0.0f64,
+    ]
+  lows :=
+    [
+      1e0f64,
+      1e1f64,
+      1e2f64,
+      1e3f64,
+      1e4f64,
+      1e5f64,
+      1e6f64,
+      1e7f64,
+      1e8f64,
+      1e9f64,
+      1e10f64,
+      1e11f64,
+      1e12f64,
+      1e13f64,
+      1e14f64,
+      1e15f64,
+    ]
+  chunk := places / 16
+  rest := places - chunk * 16
+  ret highs[chunk as usize] * lows[rest as usize]
+}
+
+fn exp_digits(magnitude: f64, big: bool, digits: usize, trim: bool, out: *mut u8, cap: usize) -> usize {
+  mut m := magnitude
+  mut e := 0i32
+  loop {
+    mut again := false
+    if big {
+      if m >= 10.0f64 {
+        again = true
+      }
+    } else {
+      if m < 1.0f64 {
+        again = true
+      }
+    }
+    if !again {
+      break
+    }
+    if big {
+      m = m * 0.1f64
+      e += 1
+    } else {
+      m = m * 10.0f64
+      e -= 1
+    }
+  }
+  mut places := e
+  if e < 0i32 {
+    places = 0i32 - e
+  }
+  whole := decimal_scale(places)
+  overflowed := whole > 1.7976931348623157e308f64
+  direct_tiny := magnitude * whole
+  lower_places := places / 2
+  upper_places := places - lower_places
+  partial := magnitude * decimal_scale(lower_places)
+  staged := partial * decimal_scale(upper_places)
+  mut tiny := staged
+  if !overflowed {
+    tiny = direct_tiny
+  }
+  divided := magnitude / whole
+  mut mantissa := tiny
+  if big {
+    mantissa = divided
+  }
+  too_big := mantissa >= 10.0f64
+  too_small := mantissa < 1.0f64
+  mut picked := mantissa
+  if too_small {
+    picked = mantissa * 10.0f64
+  }
+  mut adjusted_m := picked
+  if too_big {
+    adjusted_m = mantissa * 0.1f64
+  }
+  mut base_e := e
+  if too_big {
+    base_e += 1
+  }
+  if too_small {
+    base_e -= 1
+  }
+  written := float_fixed(adjusted_m, digits, trim, out, cap, true)
+  mut exponent := base_e
+  if written.carry {
+    exponent += 1
+  }
+  put_byte(out, written.written, 101u8, cap)
+  mut n := written.written + 1
+  negative := exponent < 0i32
+  if negative {
+    put_byte(out, n, 45u8, cap)
+    n += 1
+  }
+  mut magnitude_e := exponent
+  if negative {
+    magnitude_e = 0i32 - exponent
+  }
+  mut rest := 0 as usize
+  if cap > n {
+    rest = cap - n
+  }
+  n += digits_u64(magnitude_e as u64, unsafe { ptr_offset_mut(out, n as isize) }, rest)
+  ret n
+}
+
+fn write_bytes(text: str, out: *mut u8, cap: usize) -> usize {
+  n := str_len(text)
+  mut i := 0 as usize
+  while i < n && i < cap {
+    unsafe { *ptr_offset_mut(out, i as isize) = str_byte(text, i) }
+    i += 1
+  }
+  ret n
+}
+
+pub fn display_f64(value: f64, precision: usize, trim: bool, out: *mut u8, cap: usize) -> usize {
+  if value != value {
+    ret write_bytes("NaN", out, cap)
+  }
+  reciprocal := 1.0f64 / value
+  negative := value < 0.0f64 || reciprocal < 0.0f64
+  mut n := 0 as usize
+  if negative {
+    put_byte(out, 0, 45u8, cap)
+    n = 1
+  }
+  mut remaining := 0 as usize
+  if cap > n {
+    remaining = cap - n
+  }
+  if reciprocal == 0.0f64 {
+    m := write_bytes("inf", unsafe { ptr_offset_mut(out, n as isize) }, remaining)
+    ret n + m
+  }
+  mut magnitude := value
+  if negative {
+    magnitude = value * -1.0f64
+  }
+  mut digits := 6 as usize
+  if !trim {
+    digits = precision
+  }
+  big := magnitude >= 1e16f64
+  scientific := big || (magnitude > 0.0f64 && magnitude < 1e-4f64)
+  mut written := 0 as usize
+  if scientific {
+    written =
+      exp_digits(
+        magnitude,
+        big,
+        digits,
+        trim,
+        unsafe { ptr_offset_mut(out, n as isize) },
+        remaining,
+      )
+  } else {
+    written =
+      float_fixed(
+        magnitude,
+        digits,
+        trim,
+        unsafe { ptr_offset_mut(out, n as isize) },
+        remaining,
+        false,
+      )
+      .written
+  }
+  ret n + written
+}

@@ -1439,6 +1439,13 @@ class Lowerer {
                                std::string_view name,
                                ir::OperandIdx value,
                                State& state);
+    // Formats a finite value in the fixed range through `display_f64`.
+    // Returns false without emitting when the helper is not selected or
+    // the value needs the exponent form, which the lane still owns.
+    bool emit_float_helper(diag::Span span,
+                           ir::OperandIdx value,
+                           u8 precision,
+                           State& state);
     // The usize operand for value.
     ir::OperandIdx usize_imm(u64 value);
     // Moves the running offset by delta bytes.

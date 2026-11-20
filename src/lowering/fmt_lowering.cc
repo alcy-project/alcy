@@ -146,6 +146,84 @@ bool Lowerer::Fmt::emit_primitive_helper(diag::Span span,
   return !owner_.failed;
 }
 
+bool Lowerer::Fmt::emit_float_helper(diag::Span span,
+                                     ir::OperandIdx value,
+                                     u8 precision,
+                                     State& state) {
+  u32 module = 0;
+  const analyzer::CheckedModule::FnSig* sig =
+      find_helper("display_f64", module);
+  if (sig == nullptr || sig->params.size() != 5) {
+    return false;
+  }
+  const ir::TypeIdx f64_ty = owner_.builder.primitive(ir::TypeTag::F64);
+  const ir::TypeIdx usize_ty = owner_.usize_type();
+  const ir::TypeIdx boolean = owner_.builder.primitive(ir::TypeTag::I1);
+  const ir::TypeIdx u8_ty = owner_.builder.primitive(ir::TypeTag::U8);
+  ir::OperandIdx ptr_op = ir::OperandIdx::invalid();
+  ir::OperandIdx cap_op = usize_imm(0);
+  if (state.measure_only) {
+    const ir::RegisterIdx scratch =
+        owner_.emit(ir::Opcode::Alloca, u8_ty, {owner_.size_one});
+    ptr_op =
+        owner_.to_operand(scratch, owner_.builder.reference_type(u8_ty, true));
+  } else {
+    const ir::RegisterIdx off =
+        owner_.emit(ir::Opcode::Load, usize_ty,
+                    {owner_.to_operand(state.off_addr, usize_ty)});
+    const ir::RegisterIdx remaining =
+        owner_.emit(ir::Opcode::IntSub, usize_ty,
+                    {state.capacity, owner_.to_operand(off, usize_ty)});
+    ptr_op = owner_.advance_ptr(state.dst_base,
+                                owner_.to_operand(off, usize_ty), span);
+    cap_op = owner_.to_operand(remaining, usize_ty);
+  }
+  if (owner_.failed) {
+    return false;
+  }
+  const ir::FunctionIdx fn =
+      owner_.fn_index(module, sig->item, sig->name, sig->params, sig->ret,
+                      sig->inst, std::vector<comp::CompVal>{});
+  if (!fn.is_valid()) {
+    owner_.internal(span, "fmt float helper without a function");
+    return false;
+  }
+  const bool trim = precision == analyzer::FMT_NO_PRECISION;
+  const ir::OperandIdx digits = owner_.to_operand(
+      owner_.builder.immutable(
+          {.type = usize_ty,
+           .data = {.u64_value = trim ? 6u : static_cast<u64>(precision)}}),
+      usize_ty);
+  const ir::OperandIdx trim_op = owner_.to_operand(
+      owner_.builder.immutable({.type = boolean, .data = {.i1_value = trim}}),
+      boolean);
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(owner_.builder.operand(ir::Operand::from_function(
+      fn, owner_.builder.primitive(ir::TypeTag::Function))));
+  ops.push_back(value);
+  ops.push_back(digits);
+  ops.push_back(trim_op);
+  ops.push_back(ptr_op);
+  ops.push_back(cap_op);
+  const ir::RegisterIdx written = owner_.emit(ir::Opcode::Call, sig->ret, ops);
+  if (owner_.failed) {
+    return false;
+  }
+  if (!state.measure_only) {
+    const ir::RegisterIdx fits =
+        owner_.emit(ir::Opcode::Lt, boolean,
+                    {owner_.to_operand(written, sig->ret), cap_op});
+    const ir::RegisterIdx chunk =
+        owner_.emit(ir::Opcode::Select, usize_ty,
+                    {owner_.to_operand(fits, boolean),
+                     owner_.to_operand(written, sig->ret), cap_op});
+    advance(owner_.to_operand(chunk, usize_ty), state);
+  }
+  accumulate(owner_.to_operand(written, sig->ret), state);
+  (void)f64_ty;
+  return !owner_.failed;
+}
+
 bool Lowerer::Fmt::emit_pieces(diag::Span span,
                                const std::vector<analyzer::FmtPiece>& pieces,
                                State& state) {
@@ -246,6 +324,13 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
               ? owner_.emit(ir::Opcode::TypeCast, f64_ty,
                             {owner_.to_operand(loaded, elem_ty)})
               : loaded;
+      if (emit_float_helper(span, owner_.to_operand(value, f64_ty),
+                            piece.precision, state)) {
+        continue;
+      }
+      if (owner_.failed) {
+        return false;
+      }
       emit_float(span, value, piece.precision, state);
       if (owner_.failed) {
         return false;
