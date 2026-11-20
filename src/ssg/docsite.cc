@@ -6,19 +6,19 @@
 // build; nothing here persists state. Every flag is a path or a build
 // stamp value; there is no configuration file.
 
-#include <filesystem>
-#include <fstream>
 #include <functional>
 #include <iostream>
-#include <sstream>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "fpag/arg/parser.h"
+#include "fpag/io/io_util.h"
 #include "playground/playground.h"
 #include "ssg/catalog.h"
 #include "ssg/discover.h"
@@ -31,17 +31,54 @@
 #include "ssg/template.h"
 #include "ssg/urls.h"
 
-namespace fs = std::filesystem;
-
 namespace {
 
-const char* USAGE =
-    "usage: alcy-docsite --docs <dir> --dist <dir> --repo-root <dir>\n"
-    "                  [--site <dir>] [--spec <dir>] [--tools <dir>]\n"
-    "                  [--stamp <stamp>] [--stamp-url <url>]\n";
-
-void print_usage() {
-  std::cerr << USAGE;
+// The one command the binary runs: every flag is a path or a build
+// stamp value, so the parse has no subcommands and no choices.
+arg::Command build_command() {
+  arg::CommandBuilder builder("alcy-docsite");
+  builder.about("Stamp the site's page trees from the sources under docs/.");
+  const auto path_arg = [](const char* name, const char* help) {
+    return arg::ArgBuilder(name).help(help).value_name("PATH").build();
+  };
+  builder.add_arg(arg::ArgBuilder("docs")
+                      .help("the guide's source directory, under --repo-root")
+                      .value_name("DIR")
+                      .required()
+                      .build());
+  builder.add_arg(arg::ArgBuilder("dist")
+                      .help("the directory the site is written to")
+                      .value_name("DIR")
+                      .required()
+                      .build());
+  builder.add_arg(arg::ArgBuilder("repo-root")
+                      .help("the repository root the sources live under")
+                      .value_name("DIR")
+                      .required()
+                      .build());
+  builder.add_arg(path_arg("site", "the site's templates and shared assets"));
+  builder.add_arg(path_arg(
+      "spec", "the specification's source directory, under --repo-root"));
+  builder.add_arg(path_arg(
+      "tools", "the tools pages' source directory, under --repo-root"));
+  builder.add_arg(arg::ArgBuilder("stamp")
+                      .help("the build stamp the footer names")
+                      .value_name("STAMP")
+                      .default_value("unknown")
+                      .build());
+  builder.add_arg(
+      arg::ArgBuilder("stamp-url")
+          .help("the address the stamp links to; empty links nowhere")
+          .value_name("URL")
+          .default_value("")
+          .build());
+  builder.add_arg(
+      arg::ArgBuilder("catalog")
+          .help("the catalog; the default is --site/shared/catalog.json")
+          .value_name("FILE")
+          .default_value("")
+          .build());
+  return std::move(builder).build();
 }
 
 struct Options {
@@ -56,93 +93,76 @@ struct Options {
   std::string catalog;
 };
 
-base::Result<Options, std::string> parse_args(i32 argc, char** argv) {
-  Options options;
-  std::unordered_map<std::string, std::string> values;
-  for (i32 index = 1; index < argc; index += 2) {
-    if (index + 1 >= argc) {
-      return base::make_err(std::string("missing value for ") + argv[index]);
-    }
-    const std::string key = argv[index];
-    if (!key.starts_with("--")) {
-      return base::make_err(std::string("unexpected argument ") + key);
-    }
-    values[key] = argv[index + 1];
+base::Result<std::optional<Options>, std::string> parse_args(i32 argc,
+                                                             char** argv) {
+  arg::Parser parser(build_command());
+  arg::Matches matches;
+  const arg::ParseStatus status = parser.parse(argc, argv, &matches);
+  if (status == arg::ParseStatus::HelpRequested) {
+    std::cout << parser.help_message() << "\n";
+    return base::make_ok(std::optional<Options>());
   }
-  auto need = [&](const char* name) -> base::Result<std::string, std::string> {
-    const auto found = values.find(name);
-    if (found == values.end()) {
-      return base::make_err(std::string("missing ") + name);
-    }
-    return base::make_ok(found->second);
+  if (status == arg::ParseStatus::Error) {
+    return base::make_err(parser.error_message());
+  }
+  const auto get = [&matches](const char* name) {
+    return std::string(matches.get<std::string_view>(name).unwrap_or(""));
   };
-  auto docs = need("--docs");
-  if (docs.is_err()) {
-    return base::make_err(std::move(docs).unwrap_err());
-  }
-  options.docs = std::move(docs).unwrap();
-  auto dist = need("--dist");
-  if (dist.is_err()) {
-    return base::make_err(std::move(dist).unwrap_err());
-  }
-  options.dist = std::move(dist).unwrap();
-  auto root = need("--repo-root");
-  if (root.is_err()) {
-    return base::make_err(std::move(root).unwrap_err());
-  }
-  options.repo_root = std::move(root).unwrap();
-  if (auto it = values.find("--site"); it != values.end()) {
-    options.site = it->second;
-  }
-  if (auto it = values.find("--spec"); it != values.end()) {
-    options.spec = it->second;
-  }
-  if (auto it = values.find("--tools"); it != values.end()) {
-    options.tools = it->second;
-  }
-  if (auto it = values.find("--stamp"); it != values.end()) {
-    options.stamp = it->second;
-  }
-  if (auto it = values.find("--stamp-url"); it != values.end()) {
-    options.stamp_url = it->second;
-  }
-  if (auto it = values.find("--catalog"); it != values.end()) {
-    options.catalog = it->second;
-  }
+  Options options;
+  options.docs = get("docs");
+  options.dist = get("dist");
+  options.repo_root = get("repo-root");
+  options.site = get("site");
+  options.spec = get("spec");
+  options.tools = get("tools");
+  options.stamp = get("stamp");
+  options.stamp_url = get("stamp-url");
+  options.catalog = get("catalog");
   if (options.catalog.empty()) {
-    options.catalog =
-        (fs::path(options.site) / "shared" / "catalog.json").string();
+    options.catalog = ssg::join_posix({options.site, "shared", "catalog.json"});
   }
-  return base::make_ok(std::move(options));
+  return base::make_ok(std::optional<Options>(std::move(options)));
 }
 
-std::string read_whole_file(const fs::path& path) {
-  std::ifstream input(path, std::ios::binary);
-  std::ostringstream bytes;
-  bytes << input.rdbuf();
-  return bytes.str();
+// io::create_directory is one level deep, and a route sits a few
+// levels under the dist root, so the parents are made one by one.
+void create_directories(const std::string& path) {
+  usize index = 0;
+  while (index < path.size()) {
+    const usize slash = path.find('/', index);
+    if (slash == std::string::npos) {
+      break;
+    }
+    io::create_directory(path.substr(0, slash));
+    index = slash + 1;
+  }
+  io::create_directory(path);
 }
 
-void write_string_to_file(const fs::path& root,
+std::string read_whole_file(std::string_view path) {
+  return io::read_file(std::string(path));
+}
+
+void write_string_to_file(std::string_view root,
                           std::string_view route,
                           std::string_view content) {
-  const fs::path target = root / fs::path(std::string(route));
-  std::error_code error;
-  fs::create_directories(target.parent_path(), error);
-  std::ofstream output(target, std::ios::binary | std::ios::trunc);
-  output << content;
+  const std::string target = ssg::join_posix({root, route});
+  create_directories(ssg::dirname_posix(target));
+  const std::string bytes(content);
+  const std::span<const u8> view(reinterpret_cast<const u8*>(bytes.data()),
+                                 bytes.size());
+  io::write_file(view, target);
 }
 
-bool site_exists_relative(const fs::path& root, std::string_view candidate) {
+bool site_exists_relative(std::string_view root, std::string_view candidate) {
   if (candidate.empty()) {
     return true;
   }
-  const fs::path target = root / fs::path(std::string(candidate));
-  std::error_code error;
+  const std::string target = ssg::join_posix({root, candidate});
   if (candidate.ends_with('/')) {
-    return fs::is_directory(target, error) && !error;
+    return io::is_dir(target);
   }
-  return fs::is_regular_file(target, error) && !error;
+  return io::is_file(target);
 }
 
 std::string json_escape(std::string_view text) {
@@ -191,8 +211,9 @@ struct Context {
   std::unordered_set<std::string> planned;
 };
 
-std::string boot_text(const fs::path& site) {
-  std::string boot = read_whole_file(site / "shared" / "boot.js");
+std::string boot_text(std::string_view site) {
+  std::string boot =
+      read_whole_file(ssg::join_posix({site, "shared", "boot.js"}));
   if (boot.find("</script") != std::string::npos) {
     return std::string();
   }
@@ -327,10 +348,11 @@ std::unordered_map<std::string, std::string> template_values_for(
 }
 namespace {
 void write_spec_assets(Context& context,
-                       const fs::path& site_root,
-                       const fs::path& dist_root) {
+                       std::string_view site_root,
+                       std::string_view dist_root) {
   base::Result<std::vector<ssg::SpecAsset>, std::string> assets =
-      ssg::discover_spec_assets(site_root / fs::path(context.options.spec));
+      ssg::discover_spec_assets(
+          ssg::join_posix({site_root, context.options.spec}));
   if (assets.is_err()) {
     return;  // An empty spec tree was caught earlier at the discover step.
   }
@@ -340,8 +362,8 @@ void write_spec_assets(Context& context,
     for (const ssg::SpecAsset& asset : asset_list) {
       write_string_to_file(
           dist_root, prefix + asset.path,
-          read_whole_file(site_root / fs::path(context.options.spec) /
-                          fs::path(asset.source_rel)));
+          read_whole_file(ssg::join_posix(
+              {site_root, context.options.spec, asset.source_rel})));
     }
   }
 }
@@ -357,20 +379,24 @@ namespace {
 void write_article_tree(Context& context,
                         const std::vector<ssg::DocSource>& sources,
                         const ssg::Tree& tree,
-                        const fs::path& dist,
+                        std::string_view dist,
                         ssg::LinkAudit* audit,
                         std::vector<std::vector<ssg::DocPage>>* by_language);
 }  // namespace
 
 i32 run(i32 argc, char** argv) {
-  base::Result<Options, std::string> parsed = parse_args(argc, argv);
+  base::Result<std::optional<Options>, std::string> parsed =
+      parse_args(argc, argv);
   if (parsed.is_err()) {
     std::cerr << "alcy-docsite: " << std::move(parsed).unwrap_err() << "\n";
-    print_usage();
     return 64;
   }
+  std::optional<Options> parsed_options = std::move(parsed).value();
+  if (!parsed_options.has_value()) {
+    return 0;  // --help: the parse printed the usage on standard output.
+  }
   Context context;
-  context.options = std::move(parsed).unwrap();
+  context.options = std::move(*parsed_options);
   context.stamp = {.text = context.options.stamp,
                    .url = context.options.stamp_url};
   base::Result<ssg::Catalog, std::string> loaded =
@@ -387,12 +413,12 @@ i32 run(i32 argc, char** argv) {
     return 1;
   }
 
-  const fs::path docs_dir =
-      fs::path(context.options.repo_root) / fs::path(context.options.docs);
-  const fs::path spec_dir =
-      fs::path(context.options.repo_root) / fs::path(context.options.spec);
-  const fs::path tools_dir =
-      fs::path(context.options.repo_root) / fs::path(context.options.tools);
+  const std::string docs_dir =
+      ssg::join_posix({context.options.repo_root, context.options.docs});
+  const std::string spec_dir =
+      ssg::join_posix({context.options.repo_root, context.options.spec});
+  const std::string tools_dir =
+      ssg::join_posix({context.options.repo_root, context.options.tools});
   base::Result<std::vector<ssg::DocSource>, std::string> guide =
       ssg::discover_guide(docs_dir);
   if (guide.is_err() || guide.value().empty()) {
@@ -400,7 +426,7 @@ i32 run(i32 argc, char** argv) {
     if (guide.is_err()) {
       message = std::move(guide).unwrap_err();
     } else {
-      message = docs_dir.string() + " has no guide pages";
+      message = docs_dir + " has no guide pages";
     }
     std::cerr << "alcy-docsite: " << message << "\n";
     return 1;
@@ -412,7 +438,7 @@ i32 run(i32 argc, char** argv) {
     if (spec.is_err()) {
       message = std::move(spec).unwrap_err();
     } else {
-      message = spec_dir.string() + " has no specification pages";
+      message = spec_dir + " has no specification pages";
     }
     std::cerr << "alcy-docsite: " << message << "\n";
     return 1;
@@ -424,7 +450,7 @@ i32 run(i32 argc, char** argv) {
     if (tools.is_err()) {
       message = std::move(tools).unwrap_err();
     } else {
-      message = tools_dir.string() + " has no tools pages";
+      message = tools_dir + " has no tools pages";
     }
     std::cerr << "alcy-docsite: " << message << "\n";
     return 1;
@@ -440,9 +466,8 @@ i32 run(i32 argc, char** argv) {
   const FenceResult fenced = fence_validate_all(all_sources);
 
   const std::string highlights_path =
-      (fs::path(context.options.repo_root) / "treesitter" / "queries" / "alcy" /
-       "highlights.scm")
-          .string();
+      ssg::join_posix({context.options.repo_root, "treesitter", "queries",
+                       "alcy", "highlights.scm"});
   auto highlighter_result = ssg::create_highlighter(highlights_path);
   if (highlighter_result.is_err()) {
     std::cout << "guide: no highlight; code fences are shown as plain text\n";
@@ -451,7 +476,7 @@ i32 run(i32 argc, char** argv) {
     context.highlight = std::move(highlighter_result).unwrap();
   }
 
-  const fs::path dist(context.options.dist);
+  const std::string& dist = context.options.dist;
   std::vector<ssg::DocPage> all_pages;
   for (const std::string& language : context.catalog.languages) {
     auto add = [&](const std::vector<ssg::DocSource>& sources) {
@@ -478,27 +503,25 @@ i32 run(i32 argc, char** argv) {
   }
 
   std::vector<std::string> fence_errors = fenced.errors;
-  ssg::LinkAudit audit(
-      {.pages = &all_pages,
-       .site_exists =
-           [&](std::string_view route) {
-             return context.planned.count(std::string(route)) > 0 ||
-                    site_exists_relative(dist, route);
-           },
-       .repo_exists =
-           [&](std::string_view path) {
-             std::error_code error;
-             return fs::is_regular_file(fs::path(context.options.repo_root) /
-                                            fs::path(std::string(path)),
-                                        error) &&
-                    !error;
-           }});
+  ssg::LinkAudit audit({.pages = &all_pages,
+                        .site_exists =
+                            [&](std::string_view route) {
+                              return context.planned.count(std::string(route)) >
+                                         0 ||
+                                     site_exists_relative(dist, route);
+                            },
+                        .repo_exists =
+                            [&](std::string_view path) {
+                              return io::is_file(ssg::join_posix(
+                                  {context.options.repo_root, path}));
+                            }});
 
   // Landing and playground stamped from their templates.
-  const fs::path site_dir(context.options.site);
-  const std::string landing = read_whole_file(site_dir / "index.html");
+  const std::string& site_dir = context.options.site;
+  const std::string landing =
+      read_whole_file(ssg::join_posix({site_dir, "index.html"}));
   const std::string playground =
-      read_whole_file(site_dir / "playground" / "index.html");
+      read_whole_file(ssg::join_posix({site_dir, "playground", "index.html"}));
   const std::vector<std::pair<std::string_view, std::string_view>> templates = {
       {"index.html", landing},
       {"playground/index.html", playground},
@@ -520,7 +543,7 @@ i32 run(i32 argc, char** argv) {
     }
   }
 
-  write_spec_assets(context, fs::path(context.options.repo_root), dist);
+  write_spec_assets(context, context.options.repo_root, dist);
 
   // Articles in every tree, with the link audit watching every
   // resolve. The contents pages come out per tree-owned set.
@@ -538,10 +561,11 @@ i32 run(i32 argc, char** argv) {
   // The files every static site needs at the root, and the ones the
   // reference links to. The 404 carries one runnable block: the page
   // is missing, the compiler is not.
-  const std::string og = read_whole_file(site_dir / "og.png");
+  const std::string og = read_whole_file(ssg::join_posix({site_dir, "og.png"}));
   write_string_to_file(dist, "og.png", og);
-  write_string_to_file(dist, "favicon.svg",
-                       read_whole_file(site_dir / "favicon.svg"));
+  write_string_to_file(
+      dist, "favicon.svg",
+      read_whole_file(ssg::join_posix({site_dir, "favicon.svg"})));
   write_string_to_file(
       dist, "robots.txt",
       "User-agent: *\nAllow: /\n\n"
@@ -682,7 +706,7 @@ namespace {
 void write_article_tree(Context& context,
                         const std::vector<ssg::DocSource>& sources,
                         const ssg::Tree& tree,
-                        const fs::path& dist,
+                        std::string_view dist,
                         ssg::LinkAudit* audit,
                         std::vector<std::vector<ssg::DocPage>>* by_language) {
   for (usize language_index = 0;

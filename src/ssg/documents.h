@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -42,9 +41,16 @@ struct DocPage {
   std::string route;
 };
 
+// The regular files directly under `dir`, as names, sorted. The
+// immediate subdirectory names go to `subdirs` when it is not null,
+// also sorted, so a caller can walk a tree without a second API.
+base::Result<std::vector<std::string>, std::string> list_directory(
+    std::string_view dir,
+    std::vector<std::string>* subdirs);
+
 // Every `.md` file directly under `dir`, as file names, sorted.
 base::Result<std::vector<std::string>, std::string> markdown_files(
-    const std::filesystem::path& dir);
+    std::string_view dir);
 
 // A title is the first line: every page opens with the heading that
 // names it, so a page's title is its source's heading rather than a

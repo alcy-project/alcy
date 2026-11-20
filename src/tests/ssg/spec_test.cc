@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
 #include <ios>
 #include <set>
 #include <string>
@@ -13,6 +11,8 @@
 #include <vector>
 
 #include "doctest/doctest.h"
+#include "fpag/io/io_util.h"
+#include "fpag/io/temp_dir.h"
 #include "ssg/discover.h"
 #include "ssg/documents.h"
 #include "ssg/markdown.h"
@@ -26,21 +26,16 @@ using ssg::SpecAsset;
 
 namespace {
 
-std::filesystem::path fresh_temp_dir(const char* label) {
-  const std::filesystem::path base = std::filesystem::temp_directory_path();
-  const std::string name = std::string("alcy-ssg-") + label;
-  const std::filesystem::path dir = base / name;
-  std::error_code error;
-  std::filesystem::remove_all(dir, error);
-  std::filesystem::create_directories(dir, error);
-  return dir;
-}
+// A scratch directory the discovery reads: fpag's TempDir wipes and
+// recreates it on construction and removes it on destruction, so
+// the cases here cannot leak state into one another.
+using TempDir = io::TempDir;
 
-void write_file(const std::filesystem::path& path, std::string_view content) {
-  std::ofstream output(path, std::ios::binary);
-  output << content;
+void write_file(io::TempDir& dir,
+                std::string_view rel,
+                std::string_view content) {
+  CHECK(dir.write_file(rel, content));
 }
-
 }  // namespace
 
 TEST_CASE("a spec file a page links to becomes reachable") {
@@ -81,11 +76,11 @@ TEST_CASE("a fence's text is left alone") {
   CHECK(blocks[0].text == "`types.md`");
 }
 TEST_CASE("the reference keeps its editorial order") {
-  const std::filesystem::path dir = fresh_temp_dir("spec");
-  write_file(dir / "deferred.md", "# Deferred\n\nbody\n");
-  write_file(dir / "overview.md", "# Overview\n\nbody\n");
-  write_file(dir / "zam.md", "# Zed\n\nbody\n");
-  auto pages = discover_spec(dir);
+  io::TempDir dir("spec");
+  write_file(dir, "deferred.md", "# Deferred\n\nbody\n");
+  write_file(dir, "overview.md", "# Overview\n\nbody\n");
+  write_file(dir, "zam.md", "# Zed\n\nbody\n");
+  auto pages = discover_spec(dir.path());
   CHECK(pages.is_ok());
   const std::vector<DocSource> list = std::move(pages).unwrap();
   CHECK(list.size() == 3);
@@ -95,30 +90,26 @@ TEST_CASE("the reference keeps its editorial order") {
   CHECK(list[1].order == 14);
   CHECK(list[2].source_rel == "zam.md");
   CHECK(list[2].order == 15);
-  std::error_code error;
-  std::filesystem::remove_all(dir, error);
 }
 
 TEST_CASE("the spec assets are the normative files") {
-  const std::filesystem::path dir = fresh_temp_dir("assets");
-  write_file(dir / "grammar.ebnf", "grammar\n");
-  write_file(dir / "notes.txt", "notes\n");
-  write_file(dir / "overview.md", "# Overview\n\nbody\n");
-  auto assets = discover_spec_assets(dir);
+  io::TempDir dir("assets");
+  write_file(dir, "grammar.ebnf", "grammar\n");
+  write_file(dir, "notes.txt", "notes\n");
+  write_file(dir, "overview.md", "# Overview\n\nbody\n");
+  auto assets = discover_spec_assets(dir.path());
   CHECK(assets.is_ok());
   const std::vector<SpecAsset> list = std::move(assets).unwrap();
   CHECK(list.size() == 2);
   CHECK(list[0].path == "reference/grammar.ebnf");
   CHECK(list[1].path == "reference/notes.txt");
-  std::error_code error;
-  std::filesystem::remove_all(dir, error);
 }
 
 TEST_CASE("the spec discovery rewrites a sibling reference") {
-  const std::filesystem::path dir = fresh_temp_dir("spec-link");
-  write_file(dir / "types.md", "# Types\n\nsee `modules.md`\n");
-  write_file(dir / "modules.md", "# Modules\n\nbody\n");
-  auto pages = discover_spec(dir);
+  io::TempDir dir("spec-link");
+  write_file(dir, "types.md", "# Types\n\nsee `modules.md`\n");
+  write_file(dir, "modules.md", "# Modules\n\nbody\n");
+  auto pages = discover_spec(dir.path());
   CHECK(pages.is_ok());
   const std::vector<DocSource> list = std::move(pages).unwrap();
   for (const DocSource& source : list) {
@@ -132,6 +123,4 @@ TEST_CASE("the spec discovery rewrites a sibling reference") {
       CHECK(found);
     }
   }
-  std::error_code error;
-  std::filesystem::remove_all(dir, error);
 }

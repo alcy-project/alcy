@@ -3,16 +3,22 @@
 
 #pragma once
 
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <vector>
 
+#if FPAG_BUILD_FLAG(IS_OS_WIN)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "doctest/doctest.h"
+#include "fpag/build/build_flag.h"
+#include "fpag/io/io_util.h"
 #include "ssg/catalog.h"
 #include "ssg/documents.h"
 #include "ssg/markdown.h"
+#include "ssg/paths.h"
 #include "ssg/render.h"
 #include "ssg/urls.h"
 
@@ -20,42 +26,53 @@ namespace ssg_test {
 
 // The catalog the tests read: the one the site actually ships,
 // loaded once from the repository. Tests fail loudly when it is
-// missing instead of running against a made-up one.
-inline std::filesystem::path repo_root() {
-  std::filesystem::path cwd = std::filesystem::current_path();
+// missing instead of running against a made-up one. The walk starts
+// at the working directory and climbs, because the runner's working
+// directory is the build directory under out/, not the repository
+// root.
+inline std::string repo_root() {
+  // The runner starts in the build directory under out/, so the walk
+  // climbs until the site's catalog is a regular file above it.
+  char buffer[4096];
+  std::string cwd;
+#if FPAG_BUILD_FLAG(IS_OS_WIN)
+  const DWORD length = GetCurrentDirectoryA(sizeof(buffer), buffer);
+  cwd = length > 0 && length < sizeof(buffer) ? std::string(buffer, length)
+                                              : std::string();
+#else
+  cwd = getcwd(buffer, sizeof(buffer)) != nullptr ? std::string(buffer)
+                                                  : std::string();
+#endif
   for (i32 depth = 0; depth < 8; depth++) {
-    if (std::filesystem::is_regular_file(cwd / "site/shared/catalog.json")) {
+    if (io::is_file(ssg::join_posix({cwd, "site/shared/catalog.json"}))) {
       return cwd;
     }
-    if (!cwd.has_parent_path()) {
+    const std::string parent = ssg::dirname_posix(cwd);
+    if (parent == cwd || parent == ".") {
       break;
     }
-    cwd = cwd.parent_path();
+    cwd = parent;
   }
   return {};
 }
 
-inline std::filesystem::path site_shared_path() {
-  const std::filesystem::path root = repo_root();
-  return root.empty() ? std::filesystem::path() : root / "site" / "shared";
-}
-
-inline std::filesystem::path catalog_path() {
-  const std::filesystem::path shared = site_shared_path();
-  return shared.empty() ? std::filesystem::path() : shared / "catalog.json";
+inline std::string site_shared_path() {
+  const std::string root = repo_root();
+  return root.empty() ? std::string()
+                      : ssg::join_posix({root, "site", "shared"});
 }
 
 inline const ssg::Catalog& test_catalog() {
   static ssg::Catalog catalog = []() {
-    const std::filesystem::path path = catalog_path();
+    const std::string path =
+        ssg::join_posix({site_shared_path(), "catalog.json"});
     CHECK(!path.empty());
-    auto loaded = ssg::load_catalog(path.string());
+    auto loaded = ssg::load_catalog(path);
     CHECK(loaded.is_ok());
     return std::move(loaded).unwrap();
   }();
   return catalog;
 }
-
 inline ssg::DocPage test_page(std::string_view title,
                               std::string_view path,
                               std::string_view language = "en") {

@@ -4,18 +4,14 @@
 #include "ssg/discover.h"
 
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <ios>
 #include <set>
-#include <sstream>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "fpag/io/io_util.h"
 #include "ssg/documents.h"
 #include "ssg/markdown.h"
 #include "ssg/paths.h"
@@ -23,16 +19,12 @@
 namespace ssg {
 namespace {
 
-std::string read_whole_file(const std::filesystem::path& path) {
-  std::ifstream input(path, std::ios::binary);
-  std::ostringstream bytes;
-  bytes << input.rdbuf();
-  return bytes.str();
+std::string read_whole_file(std::string_view path) {
+  return io::read_file(std::string(path));
 }
 
-base::Result<Blocks, std::string> parse_source(
-    const std::filesystem::path& path,
-    std::string_view source_rel) {
+base::Result<Blocks, std::string> parse_source(std::string_view path,
+                                               std::string_view source_rel) {
   base::Result<Blocks, std::string> blocks =
       parse_markdown(read_whole_file(path));
   if (blocks.is_err()) {
@@ -48,13 +40,13 @@ std::string strip_md(std::string_view name) {
 }
 
 base::Result<DocSource, std::string> make_doc_source(
-    const std::filesystem::path& dir,
+    std::string_view dir,
     std::string_view route_prefix,
     std::string_view segment,
     std::string_view name,
     usize order) {
   base::Result<Blocks, std::string> parsed =
-      parse_source(dir / std::filesystem::path(name),
+      parse_source(join_posix({dir, name}),
                    std::string(route_prefix) + "/" + std::string(name));
   if (parsed.is_err()) {
     return base::make_err(std::move(parsed).unwrap_err());
@@ -72,6 +64,37 @@ base::Result<DocSource, std::string> make_doc_source(
   source.title = std::move(title).unwrap();
   source.blocks = std::move(blocks);
   return base::make_ok(std::move(source));
+}
+
+// The guide's tree is walked in name order, so the discovery is
+// deterministic regardless of the OS's directory order: every file
+// becomes a relative path under `dir`, and each level's names are
+// sorted before the walk descends.
+base::Result<void, std::string> walk_markdown_files(
+    std::string_view dir,
+    std::string_view prefix,
+    std::vector<std::string>* files) {
+  std::vector<std::string> subdirs;
+  auto listed = list_directory(dir, &subdirs);
+  if (listed.is_err()) {
+    return base::make_err(std::move(listed).unwrap_err());
+  }
+  for (std::string& name : std::move(listed).unwrap()) {
+    if (name.ends_with(".md")) {
+      files->push_back(prefix.empty() ? std::move(name)
+                                      : join_posix({prefix, name}));
+    }
+  }
+  for (std::string& subdir : subdirs) {
+    const std::string next =
+        prefix.empty() ? subdir : join_posix({prefix, subdir});
+    base::Result<void, std::string> walked =
+        walk_markdown_files(join_posix({dir, subdir}), next, files);
+    if (walked.is_err()) {
+      return walked;
+    }
+  }
+  return base::make_ok();
 }
 
 }  // namespace
@@ -126,25 +149,12 @@ Blocks link_sibling_references(Blocks blocks,
 }
 
 base::Result<std::vector<DocSource>, std::string> discover_guide(
-    const std::filesystem::path& docs_dir) {
+    std::string_view docs_dir) {
   std::vector<std::string> files;
-  std::error_code error;
-  for (std::filesystem::recursive_directory_iterator entry(docs_dir, error),
-       end;
-       entry != end && !error; entry.increment(error)) {
-    if (error) {
-      return base::make_err("cannot walk the guide directory: " +
-                            docs_dir.string());
-    }
-    if (!entry->is_regular_file()) {
-      continue;
-    }
-    const std::string rel =
-        std::filesystem::relative(entry->path(), docs_dir, error)
-            .generic_string();
-    if (rel.ends_with(".md")) {
-      files.push_back(rel);
-    }
+  base::Result<void, std::string> walked =
+      walk_markdown_files(docs_dir, "", &files);
+  if (walked.is_err()) {
+    return base::make_err(std::move(walked).unwrap_err());
   }
   std::sort(files.begin(), files.end());
   std::vector<DocSource> pages;
@@ -174,7 +184,7 @@ base::Result<std::vector<DocSource>, std::string> discover_guide(
     }
     orders[order] = source_rel;
     base::Result<Blocks, std::string> parsed =
-        parse_source(docs_dir / std::filesystem::path(source_rel), source_rel);
+        parse_source(join_posix({docs_dir, source_rel}), source_rel);
     if (parsed.is_err()) {
       return base::make_err(std::move(parsed).unwrap_err());
     }
@@ -204,7 +214,7 @@ base::Result<std::vector<DocSource>, std::string> discover_guide(
 namespace {
 
 base::Result<std::vector<DocSource>, std::string> discover_ordered(
-    const std::filesystem::path& dir,
+    std::string_view dir,
     const std::vector<std::string>& order,
     std::string_view segment,
     std::string_view route_prefix) {
@@ -244,7 +254,7 @@ base::Result<std::vector<DocSource>, std::string> discover_ordered(
 }  // namespace
 
 base::Result<std::vector<DocSource>, std::string> discover_spec(
-    const std::filesystem::path& spec_dir) {
+    std::string_view spec_dir) {
   static const std::vector<std::string> SPEC_ORDER = {
       "overview.md",  "keywords.md",  "values.md",   "types.md",
       "grammar.md",   "items.md",     "modules.md",  "control.md",
@@ -255,19 +265,13 @@ base::Result<std::vector<DocSource>, std::string> discover_spec(
 }
 
 base::Result<std::vector<SpecAsset>, std::string> discover_spec_assets(
-    const std::filesystem::path& spec_dir) {
+    std::string_view spec_dir) {
   std::vector<SpecAsset> assets;
-  std::error_code error;
-  for (const std::filesystem::directory_entry& entry :
-       std::filesystem::directory_iterator(spec_dir, error)) {
-    if (error) {
-      return base::make_err("cannot list the spec directory: " +
-                            spec_dir.string());
-    }
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    const std::string name = entry.path().filename().string();
+  auto listed = list_directory(spec_dir, nullptr);
+  if (listed.is_err()) {
+    return base::make_err(std::move(listed).unwrap_err());
+  }
+  for (const std::string& name : std::move(listed).unwrap()) {
     const usize dot = name.rfind('.');
     const std::string extension =
         dot == std::string::npos ? std::string() : name.substr(dot + 1);
@@ -284,7 +288,7 @@ base::Result<std::vector<SpecAsset>, std::string> discover_spec_assets(
 }
 
 base::Result<std::vector<DocSource>, std::string> discover_tools(
-    const std::filesystem::path& tools_dir) {
+    std::string_view tools_dir) {
   static const std::vector<std::string> TOOLS_ORDER = {
       "index.md", "build.md", "compile.md", "check.md", "test.md", "run.md",
       "fmt.md",   "lint.md",  "lsp.md",     "new.md",   "init.md",

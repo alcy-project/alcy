@@ -3,16 +3,13 @@
 
 #include "ssg/catalog.h"
 
-#include <filesystem>
-#include <fstream>
-#include <ios>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
 #include "doctest/doctest.h"
+#include "fpag/io/temp_dir.h"
 #include "ssg/documents.h"
 #include "ssg/render.h"
 #include "ssg/shell.h"
@@ -37,21 +34,16 @@ std::string settings_html(std::string_view language,
   return ssg::render_settings(options);
 }
 
-std::filesystem::path fresh_temp_dir(const char* label) {
-  const std::filesystem::path base = std::filesystem::temp_directory_path();
-  const std::string name = std::string("alcy-ssg-") + label;
-  const std::filesystem::path dir = base / name;
-  std::error_code error;
-  std::filesystem::remove_all(dir, error);
-  std::filesystem::create_directories(dir, error);
-  return dir;
-}
+// A scratch directory load_catalog reads: fpag's TempDir wipes and
+// recreates it on construction and removes it on destruction, so
+// the cases here cannot leak state into one another.
+using TempDir = io::TempDir;
 
-void write_file(const std::filesystem::path& path, std::string_view content) {
-  std::ofstream output(path, std::ios::binary);
-  output << content;
+void write_file(io::TempDir& dir,
+                std::string_view rel,
+                std::string_view content) {
+  CHECK(dir.write_file(rel, content));
 }
-
 }  // namespace
 
 TEST_CASE("the settings menu carries the theme toggle and the language link") {
@@ -171,12 +163,12 @@ TEST_CASE("the Japanese header stamps Japanese labels") {
 }
 
 TEST_CASE("load_catalog refuses a message with no default counterpart") {
-  const std::filesystem::path dir = fresh_temp_dir("catalog-counterpart");
-  write_file(dir / "catalog.json",
+  io::TempDir dir("catalog-counterpart");
+  write_file(dir, "catalog.json",
              R"({"languages": ["en", "ja"], "default": "en",
          "names": {"en": "English", "ja": "Japanese"},
          "messages": {"en": {"a": "A"}, "ja": {"a": "A", "b": "B"}}})");
-  auto loaded = ssg::load_catalog((dir / "catalog.json").string());
+  auto loaded = ssg::load_catalog(std::string(dir.join("catalog.json")));
   CHECK(loaded.is_err());
   const std::string error = std::move(loaded).unwrap_err();
   CHECK_MESSAGE(error.find("has no en counterpart") != std::string::npos,
@@ -184,9 +176,9 @@ TEST_CASE("load_catalog refuses a message with no default counterpart") {
 }
 
 TEST_CASE("load_catalog refuses an unknown top-level key") {
-  const std::filesystem::path dir = fresh_temp_dir("catalog-key");
-  write_file(dir / "catalog.json", R"({"languages": ["en"], "surprise": {}})");
-  auto loaded = ssg::load_catalog((dir / "catalog.json").string());
+  io::TempDir dir("catalog-key");
+  write_file(dir, "catalog.json", R"({"languages": ["en"], "surprise": {}})");
+  auto loaded = ssg::load_catalog(std::string(dir.join("catalog.json")));
   CHECK(loaded.is_err());
   const std::string error = std::move(loaded).unwrap_err();
   CHECK_MESSAGE(error.find("unknown top-level key") != std::string::npos,
@@ -194,22 +186,22 @@ TEST_CASE("load_catalog refuses an unknown top-level key") {
 }
 
 TEST_CASE("load_catalog refuses junk after the closing brace") {
-  const std::filesystem::path dir = fresh_temp_dir("catalog-junk");
-  write_file(dir / "catalog.json",
+  io::TempDir dir("catalog-junk");
+  write_file(dir, "catalog.json",
              R"json({"languages": ["en"]}) and nothing else")json");
-  auto loaded = ssg::load_catalog((dir / "catalog.json").string());
+  auto loaded = ssg::load_catalog(std::string(dir.join("catalog.json")));
   CHECK(loaded.is_err());
   const std::string error = std::move(loaded).unwrap_err();
   CHECK_MESSAGE(error.find("junk after") != std::string::npos, error);
 }
 
 TEST_CASE("load_catalog refuses a surrogate escape") {
-  const std::filesystem::path dir = fresh_temp_dir("catalog-surrogate");
-  write_file(dir / "catalog.json",
+  io::TempDir dir("catalog-surrogate");
+  write_file(dir, "catalog.json",
              R"({"languages": ["en"], "default": "en",
          "names": {"en": "Engli\ud83dsh"},
          "messages": {"en": {"a": "A"}}})");
-  auto loaded = ssg::load_catalog((dir / "catalog.json").string());
+  auto loaded = ssg::load_catalog(std::string(dir.join("catalog.json")));
   CHECK(loaded.is_err());
   const std::string error = std::move(loaded).unwrap_err();
   CHECK_MESSAGE(error.find("surrogate") != std::string::npos, error);

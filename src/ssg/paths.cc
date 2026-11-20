@@ -97,6 +97,11 @@ std::string join_posix(std::string_view first, std::string_view second) {
   if (second.empty()) {
     return normalize_posix(first);
   }
+  // A path rooted at / answers for itself: joining an absolute
+  // entry onto a base keeps the entry verbatim.
+  if (second.front() == '/') {
+    return normalize_posix(second);
+  }
   std::string joined;
   joined.reserve(first.size() + second.size() + 1);
   joined = first;

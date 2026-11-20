@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <filesystem>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "fpag/base/result.h"
@@ -20,10 +20,10 @@ namespace ssg {
 // appended in name order.
 
 base::Result<std::vector<DocSource>, std::string> discover_guide(
-    const std::filesystem::path& docs_dir);
+    std::string_view docs_dir);
 
 base::Result<std::vector<DocSource>, std::string> discover_spec(
-    const std::filesystem::path& spec_dir);
+    std::string_view spec_dir);
 
 struct SpecAsset {
   std::string source_rel;
@@ -33,7 +33,7 @@ struct SpecAsset {
 // Files the reference publishes next to its pages: the normative
 // grammar the prose points at.
 base::Result<std::vector<SpecAsset>, std::string> discover_spec_assets(
-    const std::filesystem::path& spec_dir);
+    std::string_view spec_dir);
 
 // The prose of the reference and the tools tree names sibling pages as
 // backticked file.md; the ones with a page become links, the rest stay
@@ -42,6 +42,6 @@ Blocks link_sibling_references(Blocks blocks,
                                const std::set<std::string>& published);
 
 base::Result<std::vector<DocSource>, std::string> discover_tools(
-    const std::filesystem::path& tools_dir);
+    std::string_view tools_dir);
 
 }  // namespace ssg
