@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <bit>
 #include "codegen/x86_64/allocate.h"
 
 #include <optional>
@@ -69,7 +70,8 @@ Shape shape_of(const MOp op) {
 // The registers allocation borrows, in the order reads take them. A
 // divide reads its dividend and its sign out of `rax` and `rdx`, which
 // the selector set up, so its one read takes `rcx` and only `rcx`.
-constexpr Reg READ_SCRATCHES[] = {Reg::Rax, Reg::Rcx, Reg::Rdx};
+constexpr Reg READ_SCRATCHES[] = {Reg::Rax, Reg::Rcx, Reg::Rdx,
+                                  Reg::R10, Reg::R11};
 constexpr Reg DIVISOR_SCRATCHES[] = {Reg::Rcx};
 
 constexpr Mem slot(const i32 disp) {
@@ -356,6 +358,33 @@ void allocate(Body& body, const Frame& frame) {
       push_labeled(make_inst(MOp::Mov, inst.width, Operand{into},
                              encoded.ops[1]));
       encoded.ops[1] = Operand{into};
+    }
+    // An x86 scale field holds only 1, 2, 4 or 8. A wider element needs
+    // its index shifted first, then the scaled address uses one byte per
+    // step.
+    if (encoded.op == MOp::Lea) {
+      if (Mem* mem = std::get_if<Mem>(&encoded.ops[1]);
+          mem != nullptr && mem->index.has_value() && mem->scale > 8) {
+        const Reg into = pool[next_scratch++];
+        DCHECK(next_scratch <= pool.size());
+        const Reg idx = std::get<Reg>(*mem->index);
+        push_labeled(make_inst(MOp::Mov, 8, Operand{into}, Operand{idx}));
+        if (std::has_single_bit(mem->scale)) {
+          const i64 shift = static_cast<i64>(std::countr_zero(mem->scale));
+          push_labeled(
+              make_inst(MOp::Shl, 8, Operand{into}, Operand{Imm{shift}}));
+        } else {
+          const Reg factor = pool[next_scratch++];
+          DCHECK(next_scratch <= pool.size());
+          push_labeled(make_inst(
+              MOp::Mov, 8, Operand{factor},
+              Operand{Imm{static_cast<i64>(mem->scale)}}));
+          push_labeled(
+              make_inst(MOp::Imul, 8, Operand{into}, Operand{factor}));
+        }
+        mem->index = into;
+        mem->scale = 1;
+      }
     }
     // The compare and ALU forms read their first operand from a register;
     // a constant there needs a scratch the instruction may clobber.

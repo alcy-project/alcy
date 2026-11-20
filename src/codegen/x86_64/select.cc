@@ -542,15 +542,24 @@ bool Selector::receive_parameters(const ir::Block& entry) {
         }
         // The caller hands the parameter's bytes over by address, and
         // the slot is where this body reads them from, so the copy is
-        // the whole of receiving it. The copy runs from `rsi` to `rdi`,
-        // which is the order the instruction reads them in.
-        push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi},
+        // the whole of receiving it. The byte copy borrows `rdi`, `rsi`
+        // and `rcx`, which may still carry arguments for later
+        // parameters; hold its address in `rax` and save the three it
+        // clobbers around the copy.
+        push(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
                        Operand{ARG_REGS[next_register++]}));
+        push(make_inst(MOp::Push, 8, Operand{Reg::Rdi}));
+        push(make_inst(MOp::Push, 8, Operand{Reg::Rsi}));
+        push(make_inst(MOp::Push, 8, Operand{Reg::Rcx}));
+        push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{Reg::Rax}));
         push(make_inst(MOp::Lea, 8, Operand{Reg::Rdi},
                        Operand{SlotRef{vreg, 0}}));
         push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
                        Operand{Imm{static_cast<i64>(layout.size)}}));
         push(make_inst(MOp::RepMovsb, 8));
+        push(make_inst(MOp::Pop, 8, Operand{Reg::Rcx}));
+        push(make_inst(MOp::Pop, 8, Operand{Reg::Rsi}));
+        push(make_inst(MOp::Pop, 8, Operand{Reg::Rdi}));
         break;
       }
     }
@@ -998,12 +1007,25 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       if (!index.has_value()) {
         return false;
       }
+      // A constant element index folds into the displacement; a register
+      // one rides through the scaled-index field.
+      i64 disp = 0;
+      std::optional<RegRef> scaled;
+      if (const Imm* imm = std::get_if<Imm>(&*index); imm != nullptr) {
+        disp = imm->value * static_cast<i64>(layout.size);
+      } else {
+        scaled = regref_of(index);
+        if (!scaled.has_value()) {
+          (void)unsupported(span, "an element offset the backend cannot spell");
+          return false;
+        }
+      }
       push(make_inst(
           MOp::Lea, 8, dst_operand(),
           Operand{Mem{.base = VReg{vreg_of(at(0).as_register(), at(0).type)},
-                      .index = regref_of(index),
+                      .index = scaled,
                       .scale = static_cast<u8>(layout.size),
-                      .disp = 0}}));
+                      .disp = static_cast<i32>(disp)}}));
       note_pointee(instr.dst, element);
       return true;
     }
