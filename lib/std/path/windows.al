@@ -70,8 +70,10 @@ impl Path {
     }
   }
 
-  // Whether the path names a root: a drive prefix, a UNC prefix, or
-  // either separator opening the path.
+  // Whether the path names a root: a drive root, a UNC prefix, or
+  // either separator opening the path. A letter and a colon alone name
+  // the current directory on that drive, so a separator has to follow
+  // the colon before the path is absolute.
   pub fn is_absolute(self: &Self) -> bool {
     n := self.wide.len()
     if n == 0 {
@@ -81,7 +83,7 @@ impl Path {
     if first == 47u16 || first == 92u16 {
       ret true
     }
-    if n >= 2 && self.wide[1] == 58u16 {
+    if n >= 3 && self.wide[1] == 58u16 && is_separator(self.wide[2]) {
       ret true
     }
     ret false
@@ -116,13 +118,13 @@ impl Path {
   }
 
   // The last component, or `None` for a path of nothing but
-  // separators.
+  // separators or a bare drive prefix.
   pub fn file_name(self: &Self) -> Option<String> {
     mut end := self.wide.len()
     while end > 0 && is_separator(self.wide[end - 1]) {
       end = end - 1
     }
-    if end == 0 {
+    if end == 0 || is_drive_root(self.wide.as_slice(), end) {
       ret Option::None
     }
     mut start := end
@@ -139,7 +141,7 @@ impl Path {
     while end > 0 && is_separator(self.wide[end - 1]) {
       end = end - 1
     }
-    if end == 0 {
+    if end == 0 || is_drive_root(self.wide.as_slice(), end) {
       ret Option::None
     }
     mut start := end
@@ -258,6 +260,13 @@ impl Path {
 #[when(target.os == "windows")]
 fn is_separator(unit: u16) -> bool {
   ret unit == 47u16 || unit == 92u16
+}
+
+// What is left of `C:\` once its trailing separators are gone: the
+// letter and colon name a current directory, not a component.
+#[when(target.os == "windows")]
+fn is_drive_root(units: &[u16], end: usize) -> bool {
+  ret end == 2 && units[1] == 58u16
 }
 
 #[when(target.os == "windows")]
