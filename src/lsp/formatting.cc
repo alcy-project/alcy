@@ -3,9 +3,11 @@
 
 #include "lsp/formatting.h"
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "fmt/formatter.h"
 #include "lsp/document.h"
@@ -35,6 +37,74 @@ text::JsonValue document_formatting(const Document& document) {
   return edits;
 }
 
+struct Line {
+  std::string_view text;
+  usize start = 0;
+};
+
+std::vector<Line> split_lines(std::string_view text) {
+  std::vector<Line> lines;
+  usize start = 0;
+  for (usize i = 0; i < text.size(); ++i) {
+    if (text[i] == '\n') {
+      lines.push_back(Line{text.substr(start, i + 1 - start), start});
+      start = i + 1;
+    }
+  }
+  if (start < text.size()) {
+    lines.push_back(Line{text.substr(start), start});
+  }
+  return lines;
+}
+
+std::string join_lines(const std::vector<Line>& lines, usize from, usize to) {
+  std::string out;
+  for (usize i = from; i < to; ++i) {
+    out.append(lines[i].text);
+  }
+  return out;
+}
+
+void append_edit(const Document& document,
+                 std::string_view original,
+                 std::string_view replacement,
+                 usize start,
+                 usize end,
+                 usize asked_start,
+                 usize asked_end,
+                 text::JsonValue* edits) {
+  if (end <= asked_start || start >= asked_end) {
+    return;
+  }
+  usize prefix = 0;
+  while (prefix < original.size() && prefix < replacement.size() &&
+         original[prefix] == replacement[prefix]) {
+    ++prefix;
+  }
+  usize suffix = 0;
+  while (suffix < original.size() - prefix &&
+         suffix < replacement.size() - prefix &&
+         original[original.size() - 1 - suffix] ==
+             replacement[replacement.size() - 1 - suffix]) {
+    ++suffix;
+  }
+  const usize from = start + prefix;
+  const usize to = end - suffix;
+  if (from >= to || to <= asked_start || from >= asked_end) {
+    return;
+  }
+  text::JsonValue range = text::JsonValue::make_object();
+  range.set("start",
+            position_json(document.index().position_at(original, from)));
+  range.set("end", position_json(document.index().position_at(original, to)));
+  text::JsonValue edit = text::JsonValue::make_object();
+  edit.set("range", std::move(range));
+  edit.set("newText",
+           text::JsonValue::make_string(std::string(replacement.substr(
+               prefix, replacement.size() - prefix - suffix))));
+  edits->push(std::move(edit));
+}
+
 text::JsonValue document_range_formatting(const Document& document,
                                           Position start,
                                           Position end) {
@@ -45,35 +115,52 @@ text::JsonValue document_range_formatting(const Document& document,
   if (formatted == original) {
     return edits;
   }
-  usize prefix = 0;
-  while (prefix < original.size() && prefix < formatted.size() &&
-         original[prefix] == formatted[prefix]) {
-    ++prefix;
+  const std::vector<Line> before = split_lines(original);
+  const std::vector<Line> after = split_lines(formatted);
+  const usize n = before.size();
+  const usize m = after.size();
+  std::vector<std::vector<u32>> lcs(n + 1, std::vector<u32>(m + 1, 0));
+  for (usize i = n; i > 0; --i) {
+    for (usize j = m; j > 0; --j) {
+      lcs[i - 1][j - 1] = before[i - 1].text == after[j - 1].text
+                              ? lcs[i][j] + 1
+                              : std::max(lcs[i][j - 1], lcs[i - 1][j]);
+    }
   }
-  usize suffix = 0;
-  while (suffix < original.size() - prefix &&
-         suffix < formatted.size() - prefix &&
-         original[original.size() - 1 - suffix] ==
-             formatted[formatted.size() - 1 - suffix]) {
-    ++suffix;
-  }
-  const usize changed_start = prefix;
-  const usize changed_end = original.size() - suffix;
   const usize asked_start = document.index().byte_offset(original, start);
   const usize asked_end = document.index().byte_offset(original, end);
-  if (changed_end <= asked_start || changed_start >= asked_end) {
-    return edits;
+
+  usize i = 0;
+  usize j = 0;
+  usize hunk_start = 0;
+  usize hunk_after = 0;
+  const auto flush = [&]() {
+    if (i == hunk_start && j == hunk_after) {
+      return;
+    }
+    const usize from = before[hunk_start].start;
+    const usize to = i < n ? before[i].start : original.size();
+    append_edit(document, original.substr(from, to - from),
+                join_lines(after, hunk_after, j), from, to, asked_start,
+                asked_end, &edits);
+  };
+  while (i < n && j < m) {
+    if (before[i].text == after[j].text) {
+      flush();
+      ++i;
+      ++j;
+      hunk_start = i;
+      hunk_after = j;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      ++i;
+    } else {
+      ++j;
+    }
   }
-  text::JsonValue range = text::JsonValue::make_object();
-  range.set("start", position_json(document.index().position_at(
-                         original, changed_start)));
-  range.set("end",
-            position_json(document.index().position_at(original, changed_end)));
-  text::JsonValue edit = text::JsonValue::make_object();
-  edit.set("range", std::move(range));
-  edit.set("newText", text::JsonValue::make_string(formatted.substr(
-                          prefix, formatted.size() - prefix - suffix)));
-  edits.push(std::move(edit));
+  flush();
+  i = n;
+  j = m;
+  flush();
   return edits;
 }
 

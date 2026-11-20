@@ -310,7 +310,8 @@ text::JsonValue incoming_calls(const Document& document,
                                callers[i].ref));
     text::JsonValue from_ranges = text::JsonValue::make_array();
     for (const diag::Span range : ranges[i]) {
-      from_ranges.push(range_json(text, range.offset, range.length));
+      from_ranges.push(range_json(text, range.offset, range.length,
+                                  analysis.owner().encoding));
     }
     call.set("fromRanges", std::move(from_ranges));
     calls.push(std::move(call));

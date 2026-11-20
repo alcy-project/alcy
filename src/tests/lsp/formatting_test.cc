@@ -20,6 +20,24 @@ TEST_CASE("Range formatting edits only a changed span that intersects") {
   CHECK(far.as_array().empty());
 }
 
+TEST_CASE("Range formatting does not edit changes outside the range") {
+  const std::string source = "fn  main() {\n  let  x = 1\n}\n";
+  const Document document("file:///main.al", "alcy", 1, source);
+  const usize first_line = source.find('\n');
+  const text::JsonValue edits = document_range_formatting(
+      document, Position{0, 0}, Position{0, static_cast<u32>(first_line)});
+  for (const text::JsonValue& edit : edits.as_array()) {
+    const text::JsonValue* range = edit.find("range");
+    if (range == nullptr) {
+      continue;
+    }
+    const text::JsonValue* start = range->find("start");
+    if (start != nullptr) {
+      CHECK(start->find("line")->as_number() == 0);
+    }
+  }
+}
+
 TEST_CASE("Range formatting leaves canonical text alone") {
   const Document document("file:///main.al", "alcy", 1,
                           "struct Point {\n  x: i32,\n}\n");
