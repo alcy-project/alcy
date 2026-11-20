@@ -324,6 +324,7 @@ text::JsonValue outgoing_calls(const Document& document,
                                const DocumentAnalysis& analysis,
                                const text::JsonValue& item,
                                source::FileId item_file) {
+  (void)document;
   text::JsonValue calls = text::JsonValue::make_array();
   const text::JsonValue* data = item_data(item);
   if (!analysis.ok() || data == nullptr) {
@@ -364,6 +365,11 @@ text::JsonValue outgoing_calls(const Document& document,
     ranges[at].push_back(edge.site);
   }
 
+  std::string item_uri;
+  std::string_view item_text;
+  if (!source_text(analysis, item_file, item_uri, item_text)) {
+    return calls;
+  }
   for (usize i = 0; i < callees.size(); ++i) {
     std::string uri;
     std::string_view text;
@@ -375,7 +381,8 @@ text::JsonValue outgoing_calls(const Document& document,
                              callees[i].ref));
     text::JsonValue from_ranges = text::JsonValue::make_array();
     for (const diag::Span range : ranges[i]) {
-      from_ranges.push(range_json(document, range.offset, range.length));
+      from_ranges.push(range_json(item_text, range.offset, range.length,
+                                  analysis.owner().encoding));
     }
     call.set("fromRanges", std::move(from_ranges));
     calls.push(std::move(call));

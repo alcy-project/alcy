@@ -151,7 +151,7 @@ std::optional<text::JsonValue> workspace_rename(
     const std::optional<diag::Span> segment =
         named_segment_in(lexemes, site, name, *text);
     if (!segment.has_value()) {
-      continue;
+      return std::nullopt;
     }
     by_file[site.file].push_back(*segment);
   }
