@@ -545,9 +545,17 @@ TEST_CASE("Lower wraps all main forms in a C entry") {
     llvm::raw_string_ostream os(ir_str);
     module->print(os, nullptr);
 
-    // The user entry is renamed; a C-ABI `main` adapts its return.
+    // The user entry is renamed; a C-ABI `main` adapts its return. A
+    // Windows target has no C library to hand the entry its arguments,
+    // so the wrapper is the kernel entry the runtime's command-line
+    // parse answers.
     CHECK(ir_str.find("alcy_main") != std::string::npos);
-    CHECK(ir_str.find("define i32 @main(i32") != std::string::npos);
+    if (host_target().is_windows()) {
+      CHECK(ir_str.find("void @_start()") != std::string::npos);
+      CHECK(ir_str.find("alcy_init_args") != std::string::npos);
+    } else {
+      CHECK(ir_str.find("define i32 @main(i32") != std::string::npos);
+    }
   }
 }
 

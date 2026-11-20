@@ -8,7 +8,6 @@
 
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/target.h"
-#include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "ir/type.h"
 
@@ -365,9 +364,11 @@ TEST_CASE("A freestanding runtime provides the memory primitives") {
                    signature(pointer, {pointer, pointer, usize}));
   check_definition(coff, coff_x64, "memset",
                    signature(pointer, {pointer, i8, usize}));
-  // A host build leaves both to the libc it links.
+  // A hosted build leaves both to the libc it links; the case names a
+  // Linux one, as the cases above do, because a Windows host links no
+  // libc for the runtime to leave them to.
   llvm::Module hosted("runtime_ir_test", context);
-  add_runtime_definitions(hosted, target_of(ir::PointerWidth::W64));
+  add_runtime_definitions(hosted, linux_x64);
   CHECK(hosted.getFunction("memcpy") == nullptr);
   CHECK(hosted.getFunction("memset") == nullptr);
 }
@@ -508,14 +509,18 @@ TEST_CASE("Runtime reaches libc the way the platform expects") {
   declare(module, "alcy_panic",
           signature(void_ty, {pointer, usize, pointer, usize}));
 
-  add_runtime_definitions(module, target_of(ir::PointerWidth::W64));
+  const codegen_llvm::Target target = target_of(ir::PointerWidth::W64);
+  add_runtime_definitions(module, target);
 
   CHECK(!llvm::verifyModule(module));
 
-  if (BUILD_FLAG(IS_OS_WIN)) {
-    CHECK(module.getFunction("_write") != nullptr);
-    CHECK(module.getFunction("_aligned_malloc") != nullptr);
-    CHECK(module.getFunction("_aligned_free") != nullptr);
+  // The expectation follows the target the runtime was built for, not
+  // the host this suite runs on: a Windows target reaches the kernel
+  // alone, through the console handles and the page allocator.
+  if (target.is_windows()) {
+    CHECK(module.getFunction("GetStdHandle") != nullptr);
+    CHECK(module.getFunction("VirtualAlloc") != nullptr);
+    CHECK(module.getFunction("VirtualFree") != nullptr);
   } else {
     CHECK(module.getFunction("write") != nullptr);
     CHECK(module.getFunction("posix_memalign") != nullptr);

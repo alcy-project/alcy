@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "analyzer/resolve.h"
+#include "codegen/target.h"
 #include "config/build_config.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
@@ -251,9 +252,16 @@ TEST_CASE("Release optimizes the textual IR, not only the object") {
   CHECK(plain_ir.find("ret i32 0") != std::string::npos);
   // A binary's own symbols are internal, so O3 inlines the whole program
   // into the C entry and drops what nothing calls: one definition
-  // remains.
-  CHECK(released_ir.find("define noundef i32 @main(i32") != std::string::npos);
-  CHECK(released_ir.find("ret i32 0") != std::string::npos);
+  // remains. A Windows target's entry is the kernel entry, which exits
+  // through the kernel rather than returning.
+  if (codegen::host_triple().find("windows") != std::string::npos) {
+    CHECK(released_ir.find("void @_start()") != std::string::npos);
+    CHECK(released_ir.find("alcy_init_args") != std::string::npos);
+  } else {
+    CHECK(released_ir.find("define noundef i32 @main(i32") !=
+          std::string::npos);
+    CHECK(released_ir.find("ret i32 0") != std::string::npos);
+  }
 
   // Call of "add" at least exists on plain
   CHECK(plain_ir.find("add") != std::string::npos);
