@@ -49,6 +49,7 @@ class DiagnosticsCache {
  private:
   struct Entry {
     std::string result_id;
+    std::string fingerprint;
     i64 version = -1;
   };
 

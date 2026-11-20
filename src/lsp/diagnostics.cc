@@ -118,9 +118,10 @@ text::JsonValue DiagnosticsCache::pull(const Document& document,
                                        AnalysisCache& cache,
                                        std::string_view previous_result_id) {
   const std::string& uri = document.uri();
+  const std::string fingerprint = cache.get(document).owner().fingerprint;
   const auto found = entries_.find(uri);
   if (found != entries_.end() && found->second.version == document.version() &&
-      !previous_result_id.empty() &&
+      found->second.fingerprint == fingerprint && !previous_result_id.empty() &&
       found->second.result_id == previous_result_id) {
     text::JsonValue report = text::JsonValue::make_object();
     report.set("kind", text::JsonValue::make_string("unchanged"));
@@ -129,7 +130,7 @@ text::JsonValue DiagnosticsCache::pull(const Document& document,
     return report;
   }
   const std::string id = std::to_string(next_id_++);
-  entries_.insert_or_assign(uri, Entry{id, document.version()});
+  entries_.insert_or_assign(uri, Entry{id, fingerprint, document.version()});
   text::JsonValue report = document_diagnostic_report(document, cache);
   report.set("resultId", text::JsonValue::make_string(id));
   return report;

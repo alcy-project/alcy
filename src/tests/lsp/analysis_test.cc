@@ -16,9 +16,11 @@
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "lsp/analysis_cache.h"
+#include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/workspace.h"
 #include "path/path.h"
+#include "text/json.h"
 
 namespace lsp {
 namespace {
@@ -156,6 +158,36 @@ TEST_CASE("A source path finds the nearest package manifest") {
   if (root.has_value()) {
     CHECK(root->as_view() == f.root);
   }
+}
+
+TEST_CASE("A pull with a previous result id follows the package fingerprint") {
+  Fixture f;
+  DocumentStore documents;
+  documents.open(f.main_uri, "alcy", 1, std::string(MAIN));
+  documents.open(f.helper_uri, "alcy", 1, std::string(HELPER));
+  AnalysisCache analysis_cache(documents);
+  DiagnosticsCache pull_cache;
+
+  const Document* main = documents.find(f.main_uri);
+  if (main == nullptr) {
+    return;
+  }
+  const text::JsonValue first = pull_cache.pull(*main, analysis_cache, "");
+  const text::JsonValue* id = first.find("resultId");
+  if (id == nullptr) {
+    return;
+  }
+  CHECK(first.find("kind")->as_string() == "full");
+
+  documents.open(f.helper_uri, "alcy", 2,
+                 "pub struct Renamed {\n  pub x: i32,\n}\n");
+  main = documents.find(f.main_uri);
+  if (main == nullptr) {
+    return;
+  }
+  const text::JsonValue second =
+      pull_cache.pull(*main, analysis_cache, id->as_string());
+  CHECK(second.find("kind")->as_string() == "full");
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {
