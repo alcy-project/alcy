@@ -61,6 +61,33 @@ TEST_CASE("Hover on a function shows its signature") {
   }
 }
 
+TEST_CASE("Hover shows the doc comments above a function") {
+  const std::optional<std::string> markdown = hover(
+      "/// Adds two numbers.\n"
+      "/// Second line.\n"
+      "fn add(a: i32, b: i32) -> i32 {\n"
+      "  ret a\n"
+      "}\n",
+      2, 4);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("Adds two numbers.") != std::string::npos);
+    CHECK(markdown->find("Second line.") != std::string::npos);
+    CHECK(markdown->find("///") == std::string::npos);
+  }
+}
+
+TEST_CASE("Hover shows the doc comments above a const") {
+  const std::optional<std::string> markdown = hover(
+      "/// The limit.\n"
+      "const LIMIT: i32 := 3\n",
+      1, 7);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("The limit.") != std::string::npos);
+  }
+}
+
 TEST_CASE("Hover on a const shows its decided type") {
   const std::optional<std::string> markdown =
       hover("const LIMIT: i32 := 3\n", 0, 7);

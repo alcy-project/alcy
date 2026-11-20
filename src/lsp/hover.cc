@@ -97,6 +97,33 @@ std::string_view span_text(std::string_view source, diag::Span span) {
   return source.substr(span.offset, span.length);
 }
 
+// The doc comments the parser attached to an item, as markdown. Each span
+// covers the whole `///` line; the marker and one following space are
+// presentation, not part of the text the author wrote.
+std::string doc_markdown(std::string_view source,
+                         std::span<const diag::Span> docs) {
+  if (docs.empty()) {
+    return {};
+  }
+  std::string out = "\n";
+  bool first = true;
+  for (const diag::Span span : docs) {
+    std::string_view line = span_text(source, span);
+    if (line.starts_with("///")) {
+      line.remove_prefix(3);
+    }
+    if (line.starts_with(' ')) {
+      line.remove_prefix(1);
+    }
+    if (!first) {
+      out.push_back('\n');
+    }
+    out.append(line);
+    first = false;
+  }
+  return out;
+}
+
 // One line naming a type's size and alignment, or nothing for a type
 // that has no layout until an argument is known.
 std::string layout_line(const pipeline::PipelineContext& context,
@@ -178,7 +205,8 @@ std::optional<std::string> hover_markdown(const Document& document,
             if (!layout.has_value()) {
               return std::nullopt;
             }
-            return struct_layout_markdown(*layout);
+            return struct_layout_markdown(*layout) +
+                   doc_markdown(source, item.docs);
           }
           for (u32 i = 0; i < declaration.fields.size(); ++i) {
             if (!span_contains(declaration.fields[i].name.span, offset)) {
@@ -205,7 +233,8 @@ std::optional<std::string> hover_markdown(const Document& document,
             if (!layout.has_value()) {
               return std::nullopt;
             }
-            return enum_layout_markdown(*layout);
+            return enum_layout_markdown(*layout) +
+                   doc_markdown(source, item.docs);
           }
           for (u32 i = 0; i < declaration.variants.size(); ++i) {
             if (!span_contains(declaration.variants[i].name.span, offset)) {
@@ -247,7 +276,8 @@ std::optional<std::string> hover_markdown(const Document& document,
           }
           return signature_markdown(context, package,
                                     item.kind == K::Fn ? "fn" : "intrinsic",
-                                    name, signature->params, signature->ret);
+                                    name, signature->params, signature->ret) +
+                 doc_markdown(source, item.docs);
         }
         case K::Static:
         case K::Const: {
@@ -266,7 +296,7 @@ std::optional<std::string> hover_markdown(const Document& document,
                  std::string(item.kind == K::Const ? "const " : "static ") +
                  std::string(name) + ": " +
                  ir::type_display(state, context.strings, info->type) +
-                 "\n~~~\n";
+                 "\n~~~\n" + doc_markdown(source, item.docs);
         }
         default: break;
       }
