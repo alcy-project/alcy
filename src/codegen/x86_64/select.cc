@@ -183,6 +183,34 @@ class Selector {
   // construct it has no lowering for.
   [[nodiscard]] bool emit(const ir::Instruction& instr, const diag::Span span);
 
+  // The enum opcodes, which read a place rather than a value, and the
+  // call, which marshals every shape the ABI names.
+  [[nodiscard]] bool emit_enum(const ir::Instruction& instr,
+                               const ir::OperandIdxRange ops,
+                               const diag::Span span);
+  [[nodiscard]] bool emit_call(const ir::Instruction& instr,
+                               const ir::OperandIdxRange ops,
+                               const diag::Span span);
+
+  [[nodiscard]] static bool defines_dst(const ir::Instruction& instr) {
+    return instr.dst.is_valid();
+  }
+  [[nodiscard]] ir::TypeIdx dst_type(const ir::Instruction& instr) const {
+    return storage_.registers()[instr.dst].type;
+  }
+  [[nodiscard]] Operand dst_reg_operand(const ir::Instruction& instr) {
+    return Operand{VReg{vreg_of(instr.dst, dst_type(instr))}};
+  }
+  [[nodiscard]] ir::TypeTag dst_value_tag(const ir::Instruction& instr) const {
+    return storage_.types()[dst_type(instr).idx].tag;
+  }
+  [[nodiscard]] u32 fresh_label() { return body_.label_count++; }
+  // One instruction's operand, by position.
+  [[nodiscard]] const ir::Operand& operand_at(const ir::Instruction& instr,
+                                              const u32 index) const {
+    return storage_.operands()[instr.operands.head() + index];
+  }
+
   // Appends one instruction, carrying the block's label on the first one
   // the block lowers to.
   void push(MInst inst);
@@ -219,6 +247,11 @@ class Selector {
   // The symbol reference one string's bytes answer to, in this body's
   // own table.
   [[nodiscard]] SymbolRef string_ref(const std::string& symbol);
+
+  // The memory reference one place reads, at the offset from it. A
+  // register an `alloca` or a projection named names its own storage;
+  // any other holds the address, and the reference goes through it.
+  [[nodiscard]] Operand place_of(const ir::Operand& place, i32 offset);
 
   const ir::Storage& storage_;
   const ir::SymbolTable& strings_;
@@ -273,6 +306,15 @@ std::optional<ir::TypeIdx> Selector::pointee_hint(
   return std::nullopt;
 }
 
+Operand Selector::place_of(const ir::Operand& place, const i32 offset) {
+  const u32 vreg = vreg_of(place.as_register(), place.type);
+  if (pointee_of_register_.find(vreg) != pointee_of_register_.end()) {
+    return Operand{SlotRef{vreg, offset}};
+  }
+  return Operand{Mem{
+      .base = VReg{vreg}, .index = std::nullopt, .scale = 1, .disp = offset}};
+}
+
 SymbolRef Selector::string_ref(const std::string& symbol) {
   for (u32 at = 0; at < body_.symbols.size(); ++at) {
     if (body_.symbols[at] == symbol) {
@@ -320,8 +362,7 @@ std::optional<Operand> Selector::operand_of(const ir::Operand& op) {
 
 std::optional<Operand> Selector::scalar_of(const ir::Operand& op,
                                            const diag::Span span) {
-  const ir::TypeTag tag = storage_.types()[op.type].tag;
-  if (is_aggregate(tag) || is_two_word(tag)) {
+  if (passage_of(op.type) != Passage::Register) {
     (void)unsupported(span,
                       "a value wider than a register in a scalar instruction");
     return std::nullopt;
@@ -396,6 +437,16 @@ Selector::Passage Selector::passage_of(const ir::TypeIdx type) const {
   if (is_aggregate(tag)) {
     return Passage::ByAddress;
   }
+  // A reference to a slice is the fat pointer the callers handle beside
+  // these: two words, whatever the reference's own tag reads.
+  if (tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) {
+    const ir::TypeIdx pointee =
+        storage_.ref_types()[storage_.types()[type.idx].as_ref()].pointee;
+    if (storage_.types()[pointee.idx].tag == ir::TypeTag::Slice) {
+      return Passage::TwoWord;
+    }
+    return Passage::Register;
+  }
   if (is_two_word(tag)) {
     return Passage::TwoWord;
   }
@@ -468,10 +519,8 @@ bool Selector::receive_parameters(const ir::Block& entry) {
 bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
   using O = ir::Opcode;
   const ir::OperandIdxRange ops = instr.operands;
-  const auto at = [&](const u32 index) {
-    return storage_.operands()[ops.head() + index];
-  };
   const usize count = ops.size();
+  const auto at = [&](const u32 index) { return operand_at(instr, index); };
 
   const bool has_dst = instr.dst.is_valid();
   const auto dst_type_of = [&]() {
@@ -737,7 +786,6 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
                       .index = std::nullopt,
                       .scale = 1,
                       .disp = 0}}));
-      note_pointee(instr.dst, dst_type_of());
       return true;
     }
     case O::Store: {
@@ -750,6 +798,18 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       const ir::Operand& value = at(0);
       const ir::TypeTag tag = storage_.types()[value.type].tag;
       const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
+      if (is_aggregate(tag) && value.is<ir::RegisterIdx>()) {
+        // An aggregate crosses as the bytes its slot holds, which is
+        // the whole of what the store has to say.
+        push(make_inst(
+            MOp::Mov, 8,
+            Operand{Mem{.base = VReg{vreg_of(at(1).as_register(), at(1).type)},
+                        .index = std::nullopt,
+                        .scale = 1,
+                        .disp = 0}},
+            Operand{VReg{vreg_of(value.as_register(), value.type)}}));
+        return true;
+      }
       const std::optional<Operand> src = scalar_of(value, span);
       if (!src.has_value()) {
         return false;
@@ -846,6 +906,9 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       note_pointee(instr.dst, *ty);
       return true;
     }
+    case O::EnumTagLoad:
+    case O::EnumTagSet:
+    case O::EnumFieldAddr: return emit_enum(instr, ops, span);
     case O::ElemOffset: {
       // operands = [base_ptr, index]; the destination's own type names
       // the element.
@@ -986,132 +1049,12 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       (void)unsupported(span, "an aggregate field write");
       return false;
     }
-    case O::Call: {
-      // operands = [callee, arguments...]. A callee this body names by
-      // symbol takes a direct call; one it holds in a register takes an
-      // indirect one through the code word.
-      const bool indirect = at(0).is<ir::RegisterIdx>();
-      u32 symbol_id = 0;
-      if (!indirect) {
-        std::string symbol;
-        if (at(0).is<ir::FunctionIdx>()) {
-          symbol = internal_symbol(at(0).as_function());
-        } else if (at(0).is<ir::ExternalFunctionIdx>()) {
-          symbol = std::string(strings_.get(
-              storage_.external_functions()[at(0).as_external_function()]
-                  .meta.name));
-        } else {
-          (void)unsupported(span, "a call the backend cannot name");
-          return false;
-        }
-        symbol_id = body_.symbols.size();
-        for (u32 existing = 0; existing < body_.symbols.size(); ++existing) {
-          if (body_.symbols[existing] == symbol) {
-            symbol_id = existing;
-            break;
-          }
-        }
-        if (symbol_id == body_.symbols.size()) {
-          body_.symbols.push_back(symbol);
-        }
-      }
-
-      // The argument registers, in the order the call fills them. A
-      // wide answer took the first for the caller's slot.
-      u32 next_register = 0;
-      if (has_dst && passage_of(dst_type_of()) == Passage::ByAddress) {
-        // The answer lands in the slot the destination vreg holds, and
-        // the callee writes it there; nothing reads `rax`.
-        push(make_inst(MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
-                       Operand{SlotRef{vreg_of(instr.dst, dst_type_of()), 0}}));
-      }
-      for (u32 arg = 1; arg < count; ++arg) {
-        const ir::Operand& value = at(arg);
-        const ir::TypeTag tag = storage_.types()[value.type].tag;
-        if (is_float(tag)) {
-          (void)unsupported(span, "a floating point argument");
-          return false;
-        }
-        const Passage passage = passage_of(value.type);
-        if (passage == Passage::ByAddress) {
-          if (next_register >= ARG_REG_COUNT) {
-            (void)unsupported(span,
-                              "a parameter past the argument "
-                              "registers");
-            return false;
-          }
-          // The bytes cross by address: the slot the value's vreg holds
-          // is the copy the callee reads.
-          if (!value.is<ir::RegisterIdx>()) {
-            (void)unsupported(span, "a constant aggregate argument");
-            return false;
-          }
-          push(make_inst(
-              MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
-              Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}}));
-          continue;
-        }
-        const std::optional<Operand> side = scalar_of(value, span);
-        if (!side.has_value()) {
-          return false;
-        }
-        if (passage == Passage::TwoWord) {
-          if (next_register + 1 >= ARG_REG_COUNT) {
-            (void)unsupported(span,
-                              "a parameter past the argument "
-                              "registers");
-            return false;
-          }
-          // The pair rides in two registers, which is the slot's two
-          // words read whole.
-          const u32 vreg = vreg_of(value.as_register(), value.type);
-          push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
-                         Operand{SlotRef{vreg, 0}}));
-          push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
-                         Operand{SlotRef{vreg, 8}}));
-          continue;
-        }
-        if (next_register >= ARG_REG_COUNT) {
-          (void)unsupported(span, "a parameter past the argument registers");
-          return false;
-        }
-        push(make_inst(MOp::Mov, width_of(tag),
-                       Operand{ARG_REGS[next_register++]}, *side));
-      }
-      if (indirect) {
-        // A function value is the code and the environment it owns; the
-        // call goes through the code word, and the environment rides
-        // ahead of every argument.
-        const u32 vreg = vreg_of(at(0).as_register(), at(0).type);
-        push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
-                       Operand{SlotRef{vreg, 8}}));
-        push(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
-                       Operand{SlotRef{vreg, 0}}));
-        push(make_inst(MOp::CallReg, 8, Operand{Reg::Rax}));
-      } else {
-        push(make_inst(MOp::Call, 8, Operand{SymbolRef{symbol_id}}));
-      }
-      if (has_dst) {
-        const Passage passage = passage_of(dst_type_of());
-        if (passage == Passage::Register) {
-          push(make_inst(MOp::Mov, width_of(dst_tag()), dst_operand(),
-                         Operand{Reg::Rax}));
-        } else if (passage == Passage::TwoWord) {
-          const u32 vreg = vreg_of(instr.dst, dst_type_of());
-          push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 0}},
-                         Operand{Reg::Rax}));
-          push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 8}},
-                         Operand{Reg::Rdx}));
-        }
-        // By address, the callee already wrote the slot.
-      }
-      return true;
-    }
+    case O::Call: return emit_call(instr, ops, span);
     default: break;
   }
 
   // Everything left reads one or two scalars and writes one.
-  if (!has_dst) {
+  if (!defines_dst(instr)) {
     return true;
   }
   const u8 compute = compute_width_of(dst_tag());
@@ -1304,6 +1247,270 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
 }
 
 }  // namespace
+
+// The enum opcodes. Each reads a place, which is either the storage
+// a vreg names or the memory the pointer it holds addresses.
+// The enum opcodes. Each reads a place, which is either the storage a
+// vreg names or the memory the pointer it holds addresses.
+bool Selector::emit_enum(const ir::Instruction& instr,
+                         const ir::OperandIdxRange ops,
+                         const diag::Span span) {
+  const usize count = ops.size();
+
+  if (instr.op == ir::Opcode::EnumTagLoad) {
+    // operands = [place]. The representation is the enum's: a niche
+    // synthesizes the discriminant from the payload's spare pattern,
+    // and a plain enum reads the tag word at its front.
+    DCHECK(count == 1);
+    if (!defines_dst(instr)) {
+      return true;
+    }
+    const ir::TypeIdx enum_type =
+        ir::enum_place_type(storage_.state(), operand_at(instr, 0).type);
+    const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_type);
+    const Operand place = place_of(operand_at(instr, 0), 0);
+    if (!niche.has) {
+      push(make_inst(MOp::Mov, 4, dst_reg_operand(instr), place));
+      return true;
+    }
+    // The payload's spare pattern spells the fieldless variant: a null
+    // where the payload is a reference, the sentinel byte where it is
+    // not. Whatever the slot reads, the discriminant is one added when
+    // the pattern is the fieldless one.
+    const u32 vreg = vreg_of(instr.dst, dst_type(instr));
+    const Operand from = place;
+    const u8 width = width_of(storage_.types()[niche.slot.idx].tag);
+    if (niche.slot == niche.payload) {
+      // A reference payload spells null.
+      push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx}, from));
+      push(make_inst(MOp::Cmp, 8, Operand{Reg::Rcx}, Operand{Imm{0}}));
+      push(make_setcc(Cond::E, Operand{Reg::Rax}));
+    } else {
+      push(make_inst(MOp::Movzx, width, Operand{Reg::Rcx}, from));
+      push(make_inst(MOp::Cmp, width, Operand{Reg::Rcx},
+                     Operand{Imm{niche.sentinel}}));
+      push(make_setcc(Cond::Ae, Operand{Reg::Rax}));
+    }
+    push(make_inst(MOp::Movzx, 1, Operand{Reg::Rcx}, Operand{Reg::Rax}));
+    push(make_inst(MOp::Add, 4, Operand{Reg::Rcx},
+                   Operand{Imm{static_cast<i64>(niche.carrying)}}));
+    push(make_inst(MOp::Mov, 4, Operand{VReg{vreg}}, Operand{Reg::Rcx}));
+    return true;
+  }
+
+  if (instr.op == ir::Opcode::EnumTagSet) {
+    // operands = [place, tag]. A niche writes its fieldless spell for
+    // the fieldless variant; the carrying variant's payload follows, so
+    // a zero stands where that payload's store lands.
+    DCHECK(count == 2);
+    const ir::TypeIdx enum_type =
+        ir::enum_place_type(storage_.state(), operand_at(instr, 0).type);
+    const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_type);
+    const Operand place = place_of(operand_at(instr, 0), 0);
+    if (!niche.has) {
+      const std::optional<Operand> tag = scalar_of(operand_at(instr, 1), span);
+      if (!tag.has_value()) {
+        return false;
+      }
+      push(make_inst(MOp::Mov, 4, place, *tag));
+      return true;
+    }
+    const std::optional<Operand> tag = scalar_of(operand_at(instr, 1), span);
+    if (!tag.has_value()) {
+      return false;
+    }
+    const u8 width = width_of(storage_.types()[niche.slot.idx].tag);
+    const i64 spell =
+        niche.slot == niche.payload ? 0 : static_cast<i64>(niche.sentinel);
+    const u32 fieldless = fresh_label();
+    const u32 done = fresh_label();
+    push(make_inst(MOp::Cmp, 4, *tag,
+                   Operand{Imm{static_cast<i64>(niche.fieldless)}}));
+    push(make_jcc(Cond::Ne, Operand{Label{fieldless}}));
+    push(make_inst(MOp::Mov, width, place, Operand{Imm{spell}}));
+    push(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+    MInst carrying = make_inst(MOp::Mov, width, place, Operand{Imm{0}});
+    carrying.label = fieldless;
+    push(carrying);
+    MInst join = make_inst(MOp::Nop, 8);
+    join.label = done;
+    push(join);
+    return true;
+  }
+
+  // operands = [place, variant, field]. A niche's payload is the slot
+  // itself; a plain enum's field lies in the area after the tag, at the
+  // offset the variant's fields publish.
+  DCHECK(count == 3);
+  if (!defines_dst(instr)) {
+    return true;
+  }
+  const ir::TypeIdx enum_type =
+      ir::enum_place_type(storage_.state(), operand_at(instr, 0).type);
+  const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_type);
+  const Operand place = place_of(operand_at(instr, 0), 0);
+  const u32 address = vreg_of(instr.dst, ir::primitive_idx(ir::TypeTag::Ptr));
+  if (niche.has) {
+    push(make_inst(MOp::Lea, 8, Operand{VReg{address}}, place));
+    note_pointee(instr.dst, niche.payload);
+    return true;
+  }
+  const ir::Immutable& variant_imm =
+      storage_.immutables()[operand_at(instr, 1).as_immutable()];
+  const u64 variant =
+      variant_imm.as_u64_integer(storage_.types()[variant_imm.type.idx].tag);
+  const ir::Immutable& field_imm =
+      storage_.immutables()[operand_at(instr, 2).as_immutable()];
+  const u64 field =
+      field_imm.as_u64_integer(storage_.types()[field_imm.type.idx].tag);
+  const ir::EnumType& shape =
+      storage_.enum_types()[storage_.types()[enum_type.idx].as_enum()];
+  const ir::TypeIdxRange fields =
+      storage_.enum_variant_types()[shape.variants[variant]].fields;
+  // The tag takes the front, and the payload area starts where its own
+  // alignment allows.
+  const ir::TypeLayout area =
+      ir::enum_payload_area(storage_.state(), enum_type, width_);
+  const u64 payload_start =
+      area.align <= 1 ? 4 : (4 + area.align - 1) / area.align * area.align;
+  const i64 offset = static_cast<i64>(
+      payload_start + ir::field_offset(storage_.state(), fields,
+                                       static_cast<u32>(field), width_));
+  push(make_inst(MOp::Lea, 8, Operand{VReg{address}},
+                 place_of(operand_at(instr, 0), offset)));
+  note_pointee(instr.dst, fields[field]);
+  return true;
+}
+
+// The call. Every argument crosses the way its type rides, and the
+// answer lands where the ABI put it.
+bool Selector::emit_call(const ir::Instruction& instr,
+                         const ir::OperandIdxRange ops,
+                         const diag::Span span) {
+  const usize count = ops.size();
+
+  // operands = [callee, arguments...]. A callee this body names by
+  // symbol takes a direct call; one it holds in a register takes an
+  // indirect one through the code word.
+  const bool indirect = operand_at(instr, 0).is<ir::RegisterIdx>();
+  u32 symbol_id = 0;
+  if (!indirect) {
+    std::string symbol;
+    if (operand_at(instr, 0).is<ir::FunctionIdx>()) {
+      symbol = internal_symbol(operand_at(instr, 0).as_function());
+    } else if (operand_at(instr, 0).is<ir::ExternalFunctionIdx>()) {
+      symbol = std::string(strings_.get(
+          storage_
+              .external_functions()[operand_at(instr, 0).as_external_function()]
+              .meta.name));
+    } else {
+      (void)unsupported(span, "a call the backend cannot name");
+      return false;
+    }
+    symbol_id = body_.symbols.size();
+    for (u32 existing = 0; existing < body_.symbols.size(); ++existing) {
+      if (body_.symbols[existing] == symbol) {
+        symbol_id = existing;
+        break;
+      }
+    }
+    if (symbol_id == body_.symbols.size()) {
+      body_.symbols.push_back(symbol);
+    }
+  }
+
+  // The argument registers, in the order the call fills them. A
+  // wide answer took the first for the caller's slot.
+  u32 next_register = 0;
+  if (defines_dst(instr) && passage_of(dst_type(instr)) == Passage::ByAddress) {
+    // The answer lands in the slot the destination vreg holds, and
+    // the callee writes it there; nothing reads `rax`.
+    push(make_inst(MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
+                   Operand{SlotRef{vreg_of(instr.dst, dst_type(instr)), 0}}));
+  }
+  for (u32 arg = 1; arg < count; ++arg) {
+    const ir::Operand& value = operand_at(instr, arg);
+    const ir::TypeTag tag = storage_.types()[value.type].tag;
+    if (is_float(tag)) {
+      (void)unsupported(span, "a floating point argument");
+      return false;
+    }
+    const Passage passage = passage_of(value.type);
+    if (passage == Passage::ByAddress) {
+      if (next_register >= ARG_REG_COUNT) {
+        (void)unsupported(span,
+                          "a parameter past the argument "
+                          "registers");
+        return false;
+      }
+      // The bytes cross by address: the slot the value's vreg holds
+      // is the copy the callee reads.
+      if (!value.is<ir::RegisterIdx>()) {
+        (void)unsupported(span, "a constant aggregate argument");
+        return false;
+      }
+      push(make_inst(
+          MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
+          Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}}));
+      continue;
+    }
+    const std::optional<Operand> side = scalar_of(value, span);
+    if (!side.has_value()) {
+      return false;
+    }
+    if (passage == Passage::TwoWord) {
+      if (next_register + 1 >= ARG_REG_COUNT) {
+        (void)unsupported(span,
+                          "a parameter past the argument "
+                          "registers");
+        return false;
+      }
+      // The pair rides in two registers, which is the slot's two
+      // words read whole.
+      const u32 vreg = vreg_of(value.as_register(), value.type);
+      push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                     Operand{SlotRef{vreg, 0}}));
+      push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                     Operand{SlotRef{vreg, 8}}));
+      continue;
+    }
+    if (next_register >= ARG_REG_COUNT) {
+      (void)unsupported(span, "a parameter past the argument registers");
+      return false;
+    }
+    push(make_inst(MOp::Mov, width_of(tag), Operand{ARG_REGS[next_register++]},
+                   *side));
+  }
+  if (indirect) {
+    // A function value is the code and the environment it owns; the
+    // call goes through the code word, and the environment rides
+    // ahead of every argument.
+    const u32 vreg =
+        vreg_of(operand_at(instr, 0).as_register(), operand_at(instr, 0).type);
+    push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                   Operand{SlotRef{vreg, 8}}));
+    push(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{SlotRef{vreg, 0}}));
+    push(make_inst(MOp::CallReg, 8, Operand{Reg::Rax}));
+  } else {
+    push(make_inst(MOp::Call, 8, Operand{SymbolRef{symbol_id}}));
+  }
+  if (defines_dst(instr)) {
+    const Passage passage = passage_of(dst_type(instr));
+    if (passage == Passage::Register) {
+      push(make_inst(MOp::Mov, width_of(dst_value_tag(instr)),
+                     dst_reg_operand(instr), Operand{Reg::Rax}));
+    } else if (passage == Passage::TwoWord) {
+      const u32 vreg = vreg_of(instr.dst, dst_type(instr));
+      push(
+          make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 0}}, Operand{Reg::Rax}));
+      push(
+          make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 8}}, Operand{Reg::Rdx}));
+    }
+    // By address, the callee already wrote the slot.
+  }
+  return true;
+  return true;
+}
 
 base::Result<Body, codegen::EmitError> select_function(
     const ir::Storage& storage,
