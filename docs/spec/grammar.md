@@ -265,7 +265,9 @@ Declaration left-hand sides use this grammar with `:=`
   pattern-declarations).
 - `match scrutinee "{" (pattern ("if" expr)? "=>" expr ("," | ";")?)* "}"`
 - `loop block`, `while cond block`, `for pattern "in" expr block`;
-  `break`, `continue` (unlabeled); loops evaluate to `()`. The `for`
+  `break`, `continue` (unlabeled); loops evaluate to `()`. A `comp if`
+  or `comp for` marks the branch or unrolling compilation performs; a
+  plain `if` inside a comp block or comp fn already evaluates. The `for`
   rule lives in `control.md`.
 - `ret expr?` returns early from the enclosing function.
 

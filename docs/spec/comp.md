@@ -12,8 +12,10 @@ parameters and blocks; a compile-time value in a declaration or an item is a
 
 ```text
 params     := (("comp")? pattern ":" type ("," ...)* ","?)?
-primary    := ... | comp_block
+primary    := ... | comp_block | comp_if | comp_for
 comp_block := "comp" block
+comp_if    := "comp" if_expr
+comp_for   := "comp" for_expr
 ```
 
 - `fn repeat(comp n: usize, x: i32)` declares a compile-time parameter.
@@ -36,6 +38,12 @@ decl_stmt := "const" pattern [ ":" type ] ":=" expr
 - `comp` marks parameters and blocks only. A `comp` in declaration
   position is a spelling diagnostic pointing at `const`, because
   `comp` says when code runs and `const` says what a value is.
+- `comp if` picks a branch during compilation in an otherwise runtime
+  body; `comp for` unrolls its head at compile time. A plain `if`
+  inside a comp block or comp fn already evaluates and stays as it is;
+  a `comp if` there is redundant and diagnosed. The two markers are
+  the explicit surface for code the compiler performs, not a second
+  way to spell an existing evaluation.
 
 ## Comp-known values
 
@@ -44,6 +52,13 @@ compilation: literals, `const` items and bindings, and `comp`
 parameters (per call-site specialization). Types admitting comp-known
 values are integers, `bool`, `str`, and tuples, structs, and fixed
 arrays composed of comp-known values.
+
+In a compiler-expanded function, `args.len()` and `args[i]` observe a
+variadic parameter's static shape during compilation when `i` is
+comp-known: the length is an integer and the indexed element keeps its
+own type. Values are not exposed there; they lower at runtime as they
+did before. An unknown shape or an index outside it is a compile-time
+error, and no runtime type information reaches user code.
 
 ## Parameters
 
@@ -79,9 +94,15 @@ arrays composed of comp-known values.
   its value: `ret` inside a `comp` block is a compile-time error.
   `break`/`continue` confined to loops inside the block behave
   normally.
-- Calls inside comp evaluation interpret the callee with comp-known
-  arguments. Using an unsupported operation there is a compile-time
-  error pointing at the operation, not at the call boundary.
+- A call reached from a comp context evaluates an ordinary function
+  when its arguments are comp-known; a call in a runtime body is not
+  evaluated merely because its arguments happen to be literals.
+  Using an unsupported operation is a compile-time error pointing at
+  the operation, not at the call boundary. An intrinsic without a
+  compile-time form, an external declaration, and I/O or `panic` are
+  refused: every effect in the language goes through one of those, so
+  comp evaluation cannot reach the world without an explicit new
+  form.
 - `?` evaluates normally; an `Err` reaching the block boundary splices
   as an ordinary comp-known `Result` value.
 
@@ -93,15 +114,23 @@ The following are compile-time errors inside comp evaluation:
   compile time; it diagnoses instead).
 - Reading `static` items (storage exists only at runtime).
 - Loops whose conditions are not comp-known; comp-known `while` loops
-  are unrolled. A `for` loop is refused: iteration goes through a
-  cursor that holds a raw pointer into the iterable, and a
-  compile-time value has no pointer form.
+  are unrolled. A `for` head unrolls when its `into_iter`/`next` chain
+  is comp-evaluable: a range evaluates through the standard library's
+  value cursor, with a mutable receiver written back after `next`.
+  An array or slice head is deferred because its cursor holds a raw
+  pointer and a comp value has no pointer form. A bound that is not
+  comp-known is an error at the head, not inside the cursor library.
 - References in the spliced result, except `str` (references may appear
   during evaluation; the compiler materializes them as constant data).
 - Exhausting the evaluation quota. Every function call and every loop
   back edge spends one unit of a fixed quota (one million at this
   stage), so evaluation terminates deterministically; the quota cannot
   be raised yet.
+- Exceeding the expansion cap. One unrolled `for` body may run at most
+  4,096 iterations; this is separate from the global quota and keeps a
+  wide expansion from crowding out the rest of compilation. `while`
+  and `loop` stay on the quota, which is their unbounded-evaluation
+  diagnostic.
 - An integer overflow in `+ - *`. The checks are always on
   during evaluation, so a constant that would wrap at runtime is
   refused; `wrapping_add`, `wrapping_sub`, and `wrapping_mul` name the
@@ -113,9 +142,11 @@ ownership rules; comp evaluation has no runtime effects.
 ## Diagnostics
 
 Comp failures diagnose with source spans at the offending operation:
-non-comp-known argument, inexpressible operation, boundary crossing,
-unbounded evaluation, a checked arithmetic overflow, and unreadable
-statics each produce a distinct compile-time error.
+a non-comp-known bound, an inexpressible operation, boundary crossing,
+unbounded evaluation, expansion-cap exhaustion, a checked arithmetic
+overflow, and unreadable statics each produce a distinct compile-time
+error. A failure inside a library body pulled in for evaluation is
+reported once at the user's head; the library span is secondary.
 
 ## Deferred
 
@@ -124,4 +155,9 @@ statics each produce a distinct compile-time error.
   extensions.
 - Floating-point evaluation, recursion policy beyond the step bound,
   and evaluation caching.
-- Generics interplay; user-facing conditional compilation.
+- A comp-time pointer or index form, which array and slice `for` heads
+  need; tree-sitter and LSP support for the explicit markers; an
+  effect or purity system (fail-closed refusal is the policy today).
+- Item selection is a separate axis: `#[when]` in `items.md` gates
+  items when a file is read, before comp evaluation begins. A comp
+  body runs inside a selected item and never re-evaluates a gate.

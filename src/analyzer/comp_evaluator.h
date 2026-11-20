@@ -84,12 +84,13 @@ class CompEvaluator {
   // so a checked evaluation refuses the way a checked build would.
   enum class Failure : u8 {
     None,
-    Program,      // an operation the engine cannot express
-    Internal,     // an engine invariant broke
-    Overflow,     // a checked arithmetic overflow
-    DivZero,      // a division by zero
-    OutOfBounds,  // an index past the end of a fixed array
-    Budget,       // the evaluation quota ran out
+    Program,       // an operation the engine cannot express
+    Internal,      // an engine invariant broke
+    Overflow,      // a checked arithmetic overflow
+    DivZero,       // a division by zero
+    OutOfBounds,   // an index past the end of a fixed array
+    Budget,        // the evaluation quota ran out
+    ExpansionCap,  // one unrolled body exceeded its expansion bound
   };
 
   bool failed() const { return failure_ != Failure::None; }
@@ -160,6 +161,7 @@ class CompEvaluator {
   bool fail_oob(diag::Span span, std::string_view what);
   // An engine limit: the evaluation ran past its quota of branches.
   bool fail_budget(diag::Span span, std::string_view what);
+  bool fail_expansion_cap(diag::Span span);
   // The operation has no compile-time form. The message names it,
   // because which one it was is the whole of what a reader needs.
   bool fail_intrinsic(diag::Span span, std::string_view name);

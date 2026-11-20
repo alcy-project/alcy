@@ -215,6 +215,9 @@ void Lowerer::Comp::report_failure() {
     case analyzer::CompEvaluator::Failure::Budget:
       owner_.comp_budget(owner_.comp_.failure_span());
       return;
+    case analyzer::CompEvaluator::Failure::ExpansionCap:
+      owner_.comp_expansion_cap(owner_.comp_.failure_span());
+      return;
     case analyzer::CompEvaluator::Failure::Program:
     case analyzer::CompEvaluator::Failure::None: break;
   }

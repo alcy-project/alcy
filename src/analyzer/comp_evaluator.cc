@@ -167,6 +167,11 @@ bool CompEvaluator::fail_budget(diag::Span span, std::string_view what) {
   return fail_as(Failure::Budget, span, what);
 }
 
+bool CompEvaluator::fail_expansion_cap(diag::Span span) {
+  return fail_as(Failure::ExpansionCap, span,
+                 "comp expansion exceeded its iteration cap");
+}
+
 bool CompEvaluator::spend(diag::Span span) {
   if (quota_ == 0) {
     return fail_budget(span, "comp evaluation quota exhausted");
@@ -953,9 +958,25 @@ bool CompEvaluator::comp_eval_loop(u32 mod,
                                    CompFlow& out,
                                    diag::Span span,
                                    const ast::Cond* cond) {
+  constexpr u32 COMP_EXPANSION_CAP = 4096;
+  // A `for` desugars to a `loop` whose body is a match on `next()`;
+  // its `Some` pattern carries the marker. Cap that unrolling, while
+  // `while` and `loop` stay on the global quota, which is their
+  // unbounded-evaluation diagnostic.
+  bool unrolled = false;
+  const ast::Block& loop_block = ast.blocks[body];
+  if (loop_block.value.is_valid() &&
+      ast.exprs[loop_block.value].kind == ast::ExprKind::Match) {
+    const ast::ExprMatch& match =
+        ast.exprs[loop_block.value].payload.get<ast::ExprMatch>();
+    unrolled =
+        !match.arms.empty() && ast.patterns[match.arms[0].pattern].for_pattern;
+  }
+  u32 iterations = 0;
   while (!failed()) {
-    // Every turn of the loop is a backward jump, and the quota counts
-    // it so a comp-known loop cannot run without bound.
+    if (unrolled && ++iterations > COMP_EXPANSION_CAP) {
+      return fail_expansion_cap(span);
+    }
     if (!spend(span)) {
       return false;
     }

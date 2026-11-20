@@ -45,6 +45,9 @@ enum class DiagCode : u8 {
   // The evaluation ran past its quota of branches: the program would
   // never finish compiling, so it is refused instead.
   CompBudget = 17,
+  // One unrolled comp body exceeded its expansion cap; the global
+  // evaluation quota is a separate bound.
+  CompExpansionCap = 21,
   // A non-`Copy` value read through a shared or exclusive reference:
   // taking it would leave the referent owned twice.
   ValueOutOfBorrow = 10,
