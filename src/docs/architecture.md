@@ -133,7 +133,8 @@ what implements it lives in `src/`.
   It reads the manifest of a buffer's package, so the tree it checks
   holds the sibling modules and dependencies a command-line build sees;
   a buffer without a manifest, or a staged standard-library source,
-  keeps the single-file entry.
+  keeps the single-file entry. Definitions, references, rename, and the
+  workspace outline follow that tree across module boundaries.
   `src/fuzz/` holds
   the fuzz targets, which need libFuzzer and are therefore outside
   `all`.

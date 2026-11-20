@@ -29,12 +29,13 @@ of the compiler, so it owns no analysis of its own:
 - `highlights.{h,cc}` marks the declaration and every resolved use of
   the name under the cursor, and answers the ranges linked editing
   should change together.
-- `completion.{h,cc}` offers the names the checked package holds, plus
-  the keywords from the lexer's frozen table, filtered by the prefix the
-  cursor typed.
+- `completion.{h,cc}` offers the names visible from the buffer's module,
+  plus the keywords from the lexer's frozen table, filtered by the prefix
+  the cursor typed.
 - `diagnostics.{h,cc}` renders the shared package reading's diagnostic
   bag, filtered to one buffer's spans, so a compiler error and a lint
-  finding arrive from the same pass.
+  finding arrive from the same pass. Pull results carry the package
+  fingerprint so a sibling's edit cannot leave a stale result behind.
 - `formatting.{h,cc}` returns the `alcy_fmt` edit that canonicalizes a
   buffer, or none when the buffer already has that layout.
 - `inlay_hints.{h,cc}` shows the inferred type of a binding that wrote
@@ -61,8 +62,9 @@ of the compiler, so it owns no analysis of its own:
 - `code_lens.{h,cc}` counts each declaration's references in one pass
   over the reference table. The provider does not advertise a resolve,
   so a lens is complete in the first answer.
-- `workspace_symbols.{h,cc}` searches every open document's outline,
-  so quick open spans the buffers the client holds.
+- `workspace_symbols.{h,cc}` searches the outline of every source file in
+  the packages the open documents belong to, so quick open spans modules
+  the client has not opened.
 - `rename.{h,cc}` renames the name under the cursor, editing the
   segments the checker named.
 - `navigation.{h,cc}` also answers the declaration of a value's type,
@@ -139,3 +141,6 @@ reads the checked package through an analyzer query.
 7. Quick fixes for the linter's machine-applicable findings.
 8. Package-aware analysis, so an import resolves against the manifest's
    sibling modules and dependencies.
+9. Cross-package navigation: references, rename, call hierarchy, and
+   workspace symbols follow recorded resolutions beyond the open buffer.
+10. Watched files, log notifications, and position-encoding negotiation.
