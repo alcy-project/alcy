@@ -37,6 +37,25 @@ base::Result<void, TokenStreamError> verify_token_stream(
 // Short human-readable detail for a token stream failure.
 std::string_view describe_token_stream_error(TokenStreamError error);
 
+// A keyword the lexer recognizes, with the category the specification
+// gives it. Reserved words lex distinctly so they can be refused with
+// guidance; they are not forms an editor should offer as completions.
+enum class KeywordCategory : u8 { Keyword, Reserved };
+struct KeywordInfo {
+  std::string_view spelling;
+  TokenKind kind;
+  KeywordCategory category;
+};
+
+// The frozen spelling table, in spelling order. The same rows drive
+// lexing and every tool that lists the language's words.
+std::span<const KeywordInfo> keyword_infos();
+
+// Whether a token kind is a keyword (including a reserved word) or an
+// operator. These are the classifications tools use to colour a stream.
+bool is_keyword(TokenKind kind);
+bool is_operator(TokenKind kind);
+
 // Hand-written recursive lexer over UTF-8 source bytes. Lexing never
 // fails hard: invalid input becomes Error tokens with diagnostics in
 // `bag`, and tokenization always terminates with Eof. Callers own the

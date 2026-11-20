@@ -14,7 +14,6 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lsp/analysis.h"
-#include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
@@ -96,7 +95,7 @@ text::JsonValue code_lenses(const Document& document,
         continue;
       }
       const diag::Span name =
-          item_name_span(context.ast, context.ast.items[sig.item]);
+          ::ast::item_name_span(context.ast, context.ast.items[sig.item]);
       if (name.file == root) {
         emit(name);
       }
@@ -107,7 +106,7 @@ text::JsonValue code_lenses(const Document& document,
             return;
           }
           const diag::Span name =
-              item_name_span(context.ast, context.ast.items[info.item]);
+              ::ast::item_name_span(context.ast, context.ast.items[info.item]);
           if (name.file == root) {
             emit(name);
           }
@@ -120,7 +119,7 @@ text::JsonValue code_lenses(const Document& document,
         continue;
       }
       const diag::Span name =
-          item_name_span(context.ast, context.ast.items[info.item]);
+          ::ast::item_name_span(context.ast, context.ast.items[info.item]);
       if (name.file == root) {
         emit(name);
       }
@@ -130,7 +129,7 @@ text::JsonValue code_lenses(const Document& document,
         continue;
       }
       const diag::Span name =
-          item_name_span(context.ast, context.ast.items[info.item]);
+          ::ast::item_name_span(context.ast, context.ast.items[info.item]);
       if (name.file == root) {
         emit(name);
       }

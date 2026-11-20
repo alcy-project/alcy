@@ -72,6 +72,22 @@ TEST_CASE("Completion offers a function for its prefix") {
   }
 }
 
+TEST_CASE("Completion offers the lexer's keywords, not reserved words") {
+  const Document document("file:///main.al", "alcy", 1, SOURCE);
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{0, 0});
+  CHECK(find_item(list, "let") == nullptr);
+  CHECK(find_item(list, "async") == nullptr);
+  CHECK(find_item(list, "where") == nullptr);
+  CHECK(find_item(list, "i128") == nullptr);
+  CHECK(find_item(list, "i32") != nullptr);
+  CHECK(find_item(list, "bool") != nullptr);
+  CHECK(find_item(list, "Self") != nullptr);
+  CHECK(find_item(list, "package") != nullptr);
+  CHECK(find_item(list, "test") != nullptr);
+}
+
 TEST_CASE("Completion offers a keyword for its prefix") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
   const DocumentAnalysis analysis(document);

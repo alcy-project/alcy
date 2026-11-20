@@ -21,7 +21,6 @@
 #include "ir/storage.h"
 #include "ir/type_display.h"
 #include "lsp/analysis.h"
-#include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/layout.h"
 #include "lsp/protocol.h"
@@ -161,9 +160,23 @@ void collect_parameter_hints(const DocumentAnalysis& analysis,
     for (const analyzer::CheckedModule::FnSig& sig : module.functions) {
       if (sig.item.is_valid()) {
         item_by_declaration.insert_or_assign(
-            span_key(item_name_span(context.ast, context.ast.items[sig.item])),
+            span_key(::ast::item_name_span(context.ast,
+                                           context.ast.items[sig.item])),
             sig.item);
       }
+    }
+  }
+  std::unordered_map<u64, const analyzer::CheckedModule::MethodInfo*>
+      method_by_declaration;
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
+      if (!method.item.is_valid()) {
+        continue;
+      }
+      method_by_declaration.insert_or_assign(
+          span_key(::ast::item_name_span(context.ast,
+                                         context.ast.items[method.item])),
+          &method);
     }
   }
   std::unordered_map<u64, u64> declaration_by_site;
@@ -211,13 +224,14 @@ void collect_parameter_hints(const DocumentAnalysis& analysis,
     }
     const std::span<const ast::ItemFnParam> params =
         callee.payload.get<ast::ItemFn>().params;
-    const usize offset = is_method && !params.empty() &&
-                                 param_name(context.ast, params[0]) == "self"
-                             ? 1
-                             : 0;
+    const auto method = method_by_declaration.find(declaration->second);
+    const bool has_receiver =
+        method != method_by_declaration.end() &&
+        method->second->receiver != analyzer::CheckedModule::ReceiverKind::None;
+    const usize offset = is_method && has_receiver ? 1 : 0;
     for (usize i = 0; i < args.size() && i + offset < params.size(); ++i) {
       const std::string_view name = param_name(context.ast, params[i + offset]);
-      if (name.empty() || name == "self") {
+      if (name.empty()) {
         continue;
       }
       const ast::ExprNode& argument = context.ast.exprs[args[i]];

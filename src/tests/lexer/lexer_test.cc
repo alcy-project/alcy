@@ -22,6 +22,24 @@ namespace lexer {
 
 namespace {
 
+bool has_spelling(std::string_view name) {
+  for (const KeywordInfo& keyword : keyword_infos()) {
+    if (keyword.spelling == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+KeywordCategory category_of(std::string_view name) {
+  for (const KeywordInfo& keyword : keyword_infos()) {
+    if (keyword.spelling == name) {
+      return keyword.category;
+    }
+  }
+  return KeywordCategory::Reserved;
+}
+
 struct Fixture {
   mem::Arena arena;
   diag::DiagBag bag{arena, i18n::Language::EnUs};
@@ -397,6 +415,24 @@ TEST_CASE("Token stream verification rejects malformed streams") {
   CHECK(verify_token_stream(std::span<const Token>(&past_end, 1),
                             source::UNKNOWN_FILE, bytes)
             .is_err());
+}
+
+TEST_CASE("The keyword table is the frozen set, with reserved words marked") {
+  CHECK_FALSE(has_spelling("let"));
+  CHECK(has_spelling("i32"));
+  CHECK(has_spelling("Self"));
+  CHECK(has_spelling("package"));
+  CHECK(has_spelling("test"));
+  CHECK(has_spelling("async"));
+  CHECK_EQ(category_of("fn"), KeywordCategory::Keyword);
+  CHECK_EQ(category_of("i32"), KeywordCategory::Keyword);
+  CHECK_EQ(category_of("async"), KeywordCategory::Reserved);
+  CHECK_EQ(category_of("i128"), KeywordCategory::Reserved);
+  CHECK(is_keyword(TokenKind::Test));
+  CHECK(is_keyword(TokenKind::Await));
+  CHECK_FALSE(is_keyword(TokenKind::Ident));
+  CHECK(is_operator(TokenKind::ColonEq));
+  CHECK_FALSE(is_operator(TokenKind::Ident));
 }
 
 }  // namespace lexer

@@ -15,7 +15,6 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lsp/analysis.h"
-#include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/navigation.h"
 #include "lsp/protocol.h"
@@ -47,7 +46,7 @@ struct CallEdge {
 
 diag::Span name_of(const pipeline::PipelineContext& context,
                    ast::ItemIdx item) {
-  return item_name_span(context.ast, context.ast.items[item]);
+  return ::ast::item_name_span(context.ast, context.ast.items[item]);
 }
 
 // The callable a declaration span names, when the checker registered it

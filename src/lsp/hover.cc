@@ -164,7 +164,7 @@ std::optional<std::string> hover_markdown(const Document& document,
   for (const analyzer::ModuleNode* module : package.tree.modules) {
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
-      if (item_name_span(context.ast, item).file != root) {
+      if (::ast::item_name_span(context.ast, item).file != root) {
         continue;
       }
       using K = ast::ItemKind;
@@ -236,7 +236,8 @@ std::optional<std::string> hover_markdown(const Document& document,
         case K::Fn:
         case K::Intrinsic: {
           const std::string_view name = item.name();
-          if (!span_contains(item_name_span(context.ast, item), offset)) {
+          if (!span_contains(::ast::item_name_span(context.ast, item),
+                             offset)) {
             break;
           }
           const analyzer::CheckedModule::FnSig* signature =
@@ -251,7 +252,8 @@ std::optional<std::string> hover_markdown(const Document& document,
         case K::Static:
         case K::Const: {
           const std::string_view name = item.name();
-          if (!span_contains(item_name_span(context.ast, item), offset)) {
+          if (!span_contains(::ast::item_name_span(context.ast, item),
+                             offset)) {
             break;
           }
           const analyzer::CheckedModule::StaticInfo* info =

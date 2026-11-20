@@ -10,6 +10,7 @@
 #include <iterator>
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "debug/dcheck.h"
@@ -372,6 +373,34 @@ constexpr Keyword KEYWORDS[] = {
     {"where", TokenKind::Where},
     {"while", TokenKind::While},
 };
+
+// Reserved words are read past with guidance, and the two deferred
+// integer widths are reserved the same way (docs/spec/keywords.md).
+constexpr bool reserved_kind(TokenKind kind) {
+  switch (kind) {
+    case TokenKind::Async:
+    case TokenKind::Await:
+    case TokenKind::Union:
+    case TokenKind::Register:
+    case TokenKind::Where:
+    case TokenKind::Dyn:
+    case TokenKind::I128:
+    case TokenKind::U128: return true;
+    default: return false;
+  }
+}
+
+template <usize... I>
+constexpr std::array<KeywordInfo, sizeof...(I)> make_keyword_infos(
+    std::index_sequence<I...>) {
+  return {{KeywordInfo{KEYWORDS[I].spelling, KEYWORDS[I].kind,
+                       reserved_kind(KEYWORDS[I].kind)
+                           ? KeywordCategory::Reserved
+                           : KeywordCategory::Keyword}...}};
+}
+
+constexpr auto KEYWORD_INFOS =
+    make_keyword_infos(std::make_index_sequence<std::size(KEYWORDS)>{});
 
 constexpr usize KEYWORD_MIN_LENGTH = [] {
   usize shortest = KEYWORDS[0].spelling.size();
@@ -1290,6 +1319,115 @@ std::string_view describe_token_stream_error(TokenStreamError error) {
       return "token span runs past the end of the source bytes";
   }
   return "invalid token stream";
+}
+
+std::span<const KeywordInfo> keyword_infos() {
+  return KEYWORD_INFOS;
+}
+
+bool is_keyword(TokenKind kind) {
+  switch (kind) {
+    case TokenKind::SelfType:
+    case TokenKind::As:
+    case TokenKind::Async:
+    case TokenKind::Await:
+    case TokenKind::Bool:
+    case TokenKind::Break:
+    case TokenKind::Comp:
+    case TokenKind::Const:
+    case TokenKind::Continue:
+    case TokenKind::Dyn:
+    case TokenKind::Else:
+    case TokenKind::Enum:
+    case TokenKind::Extern:
+    case TokenKind::F32:
+    case TokenKind::F64:
+    case TokenKind::False:
+    case TokenKind::Fn:
+    case TokenKind::For:
+    case TokenKind::I8:
+    case TokenKind::I16:
+    case TokenKind::I32:
+    case TokenKind::I64:
+    case TokenKind::I128:
+    case TokenKind::If:
+    case TokenKind::Impl:
+    case TokenKind::In:
+    case TokenKind::Intrinsic:
+    case TokenKind::Isize:
+    case TokenKind::Loop:
+    case TokenKind::Match:
+    case TokenKind::Mut:
+    case TokenKind::Package:
+    case TokenKind::Pub:
+    case TokenKind::Register:
+    case TokenKind::Ret:
+    case TokenKind::Self:
+    case TokenKind::Spec:
+    case TokenKind::Static:
+    case TokenKind::Str:
+    case TokenKind::Struct:
+    case TokenKind::Test:
+    case TokenKind::True:
+    case TokenKind::U8:
+    case TokenKind::U16:
+    case TokenKind::U32:
+    case TokenKind::U64:
+    case TokenKind::U128:
+    case TokenKind::Union:
+    case TokenKind::Unsafe:
+    case TokenKind::Use:
+    case TokenKind::Usize:
+    case TokenKind::Where:
+    case TokenKind::While: return true;
+    default: return false;
+  }
+}
+
+bool is_operator(TokenKind kind) {
+  switch (kind) {
+    case TokenKind::Plus:
+    case TokenKind::Minus:
+    case TokenKind::Star:
+    case TokenKind::Slash:
+    case TokenKind::Percent:
+    case TokenKind::StarStar:
+    case TokenKind::Amp:
+    case TokenKind::Pipe:
+    case TokenKind::Caret:
+    case TokenKind::Tilde:
+    case TokenKind::LessLess:
+    case TokenKind::GreaterGreater:
+    case TokenKind::PlusEq:
+    case TokenKind::MinusEq:
+    case TokenKind::StarEq:
+    case TokenKind::SlashEq:
+    case TokenKind::PercentEq:
+    case TokenKind::StarStarEq:
+    case TokenKind::AmpEq:
+    case TokenKind::PipeEq:
+    case TokenKind::CaretEq:
+    case TokenKind::LessLessEq:
+    case TokenKind::GreaterGreaterEq:
+    case TokenKind::ColonEq:
+    case TokenKind::Eq:
+    case TokenKind::EqEq:
+    case TokenKind::Bang:
+    case TokenKind::AmpAmp:
+    case TokenKind::PipePipe:
+    case TokenKind::BangEq:
+    case TokenKind::Greater:
+    case TokenKind::Less:
+    case TokenKind::GreaterEq:
+    case TokenKind::LessEq:
+    case TokenKind::Arrow:
+    case TokenKind::FatArrow:
+    case TokenKind::DotDot:
+    case TokenKind::DotDotEq:
+    case TokenKind::DotDotLess:
+    case TokenKind::Question: return true;
+    default: return false;
+  }
 }
 
 }  // namespace lexer

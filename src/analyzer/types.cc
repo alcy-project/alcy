@@ -4126,20 +4126,7 @@ CheckedModule::FnSig& Checker::add_function(u32 module,
 }
 
 diag::Span Checker::item_name_span(ast::ItemIdx item) const {
-  if (!item.is_valid()) {
-    return {};
-  }
-  const ast::ItemNode& node = ast.items[item];
-  switch (node.kind) {
-    case ast::ItemKind::Fn: return node.payload.get<ast::ItemFn>().name.span;
-    case ast::ItemKind::Intrinsic:
-      return node.payload.get<ast::ItemIntrinsic>().name.span;
-    case ast::ItemKind::Static:
-      return node.payload.get<ast::ItemStatic>().name.span;
-    case ast::ItemKind::Const:
-      return node.payload.get<ast::ItemConst>().name.span;
-    default: return {};
-  }
+  return ::ast::item_name_span(ast, item);
 }
 
 diag::Span Checker::declaration_of(const PathValue& value) const {

@@ -17,9 +17,9 @@
 #include "cst/lex.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
+#include "lexer/lexer.h"
 #include "lexer/token.h"
 #include "lsp/analysis.h"
-#include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
@@ -57,94 +57,6 @@ std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
   }
 }
 
-bool is_keyword(lexer::TokenKind kind) {
-  switch (kind) {
-    case lexer::TokenKind::Fn:
-    case lexer::TokenKind::Intrinsic:
-    case lexer::TokenKind::Struct:
-    case lexer::TokenKind::Enum:
-    case lexer::TokenKind::Impl:
-    case lexer::TokenKind::Static:
-    case lexer::TokenKind::Pub:
-    case lexer::TokenKind::Const:
-    case lexer::TokenKind::Mut:
-    case lexer::TokenKind::Use:
-    case lexer::TokenKind::If:
-    case lexer::TokenKind::Else:
-    case lexer::TokenKind::Loop:
-    case lexer::TokenKind::While:
-    case lexer::TokenKind::Break:
-    case lexer::TokenKind::Continue:
-    case lexer::TokenKind::Ret:
-    case lexer::TokenKind::Match:
-    case lexer::TokenKind::Package:
-    case lexer::TokenKind::Self:
-    case lexer::TokenKind::SelfType:
-    case lexer::TokenKind::As:
-    case lexer::TokenKind::Async:
-    case lexer::TokenKind::Await:
-    case lexer::TokenKind::Union:
-    case lexer::TokenKind::Register:
-    case lexer::TokenKind::Comp:
-    case lexer::TokenKind::Spec:
-    case lexer::TokenKind::Extern:
-    case lexer::TokenKind::Unsafe:
-    case lexer::TokenKind::For:
-    case lexer::TokenKind::In:
-    case lexer::TokenKind::Where:
-    case lexer::TokenKind::Dyn:
-    case lexer::TokenKind::True:
-    case lexer::TokenKind::False: return true;
-    default: return false;
-  }
-}
-
-bool is_operator(lexer::TokenKind kind) {
-  switch (kind) {
-    case lexer::TokenKind::Plus:
-    case lexer::TokenKind::Minus:
-    case lexer::TokenKind::Star:
-    case lexer::TokenKind::Slash:
-    case lexer::TokenKind::Percent:
-    case lexer::TokenKind::StarStar:
-    case lexer::TokenKind::Amp:
-    case lexer::TokenKind::Pipe:
-    case lexer::TokenKind::Caret:
-    case lexer::TokenKind::Tilde:
-    case lexer::TokenKind::LessLess:
-    case lexer::TokenKind::GreaterGreater:
-    case lexer::TokenKind::PlusEq:
-    case lexer::TokenKind::MinusEq:
-    case lexer::TokenKind::StarEq:
-    case lexer::TokenKind::SlashEq:
-    case lexer::TokenKind::PercentEq:
-    case lexer::TokenKind::StarStarEq:
-    case lexer::TokenKind::AmpEq:
-    case lexer::TokenKind::PipeEq:
-    case lexer::TokenKind::CaretEq:
-    case lexer::TokenKind::LessLessEq:
-    case lexer::TokenKind::GreaterGreaterEq:
-    case lexer::TokenKind::ColonEq:
-    case lexer::TokenKind::Eq:
-    case lexer::TokenKind::EqEq:
-    case lexer::TokenKind::Bang:
-    case lexer::TokenKind::AmpAmp:
-    case lexer::TokenKind::PipePipe:
-    case lexer::TokenKind::BangEq:
-    case lexer::TokenKind::Greater:
-    case lexer::TokenKind::Less:
-    case lexer::TokenKind::GreaterEq:
-    case lexer::TokenKind::LessEq:
-    case lexer::TokenKind::Arrow:
-    case lexer::TokenKind::FatArrow:
-    case lexer::TokenKind::DotDot:
-    case lexer::TokenKind::DotDotEq:
-    case lexer::TokenKind::DotDotLess:
-    case lexer::TokenKind::Question: return true;
-    default: return false;
-  }
-}
-
 // The kinds the checker attached to names, addressable by the span a
 // name occupies, the end of a path, or the name itself.
 struct SymbolKinds {
@@ -170,7 +82,7 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       }
       const SemanticTokenType type = fn.is_method ? SemanticTokenType::Method
                                                   : SemanticTokenType::Function;
-      const diag::Span name = item_name_span(ast, ast.items[fn.item]);
+      const diag::Span name = ::ast::item_name_span(ast, ast.items[fn.item]);
       add_span(kinds, name, type);
       if (name.file == root) {
         kinds.by_name.emplace(fn.name, type);
@@ -180,7 +92,8 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       if (!method.item.is_valid()) {
         continue;
       }
-      const diag::Span name = item_name_span(ast, ast.items[method.item]);
+      const diag::Span name =
+          ::ast::item_name_span(ast, ast.items[method.item]);
       add_span(kinds, name, SemanticTokenType::Method);
       kinds.by_name.emplace(method.name, SemanticTokenType::Method);
     }
@@ -189,7 +102,7 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
         continue;
       }
       const ast::ItemNode& item = ast.items[info.item];
-      const diag::Span name = item_name_span(ast, item);
+      const diag::Span name = ::ast::item_name_span(ast, item);
       add_span(kinds, name, SemanticTokenType::Struct);
       kinds.by_name.emplace(item.payload.get<ast::ItemStruct>().name.name,
                             SemanticTokenType::Struct);
@@ -203,7 +116,8 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
         continue;
       }
       const ast::ItemNode& item = ast.items[info.item];
-      add_span(kinds, item_name_span(ast, item), SemanticTokenType::Enum);
+      add_span(kinds, ::ast::item_name_span(ast, item),
+               SemanticTokenType::Enum);
       kinds.by_name.emplace(info.name, SemanticTokenType::Enum);
       const ast::ItemEnum& declaration = item.payload.get<ast::ItemEnum>();
       for (const ast::ItemEnumVariant& variant : declaration.variants) {
@@ -215,7 +129,7 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       if (!info.item.is_valid()) {
         continue;
       }
-      add_span(kinds, item_name_span(ast, ast.items[info.item]),
+      add_span(kinds, ::ast::item_name_span(ast, ast.items[info.item]),
                SemanticTokenType::Variable);
       kinds.by_name.emplace(info.name, SemanticTokenType::Variable);
     }
@@ -356,17 +270,17 @@ std::vector<u32> semantic_tokens_in(const Document& document,
       }
       continue;
     }
-    if (is_keyword(lexeme.token)) {
-      emit_span(span, SemanticTokenType::Keyword);
-      continue;
-    }
     if (const std::optional<SemanticTokenType> literal =
             literal_type(lexeme.token);
         literal.has_value()) {
       emit_span(span, *literal);
       continue;
     }
-    if (is_operator(lexeme.token)) {
+    if (lexer::is_keyword(lexeme.token)) {
+      emit_span(span, SemanticTokenType::Keyword);
+      continue;
+    }
+    if (lexer::is_operator(lexeme.token)) {
       emit_span(span, SemanticTokenType::Operator);
     }
   }

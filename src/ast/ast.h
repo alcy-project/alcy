@@ -1308,4 +1308,10 @@ struct AstArena {
   std::atomic<bool> exhausted_any_{false};
 };
 
+// The span an item's name occupies. An impl is named by its target type;
+// items without a name (a use, a test block, an extern group) answer the
+// whole item span.
+diag::Span item_name_span(const AstArena& ast, const ItemNode& item);
+diag::Span item_name_span(const AstArena& ast, ItemIdx item);
+
 }  // namespace ast

@@ -46,7 +46,7 @@ std::optional<diag::Span> declaration_of_name(
       const ast::ItemStruct& declaration =
           context.ast.items[info.item].payload.get<ast::ItemStruct>();
       if (declaration.name.name == name && declaration.name.span.file == root) {
-        return item_name_span(context.ast, context.ast.items[info.item]);
+        return ::ast::item_name_span(context.ast, context.ast.items[info.item]);
       }
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
@@ -56,7 +56,7 @@ std::optional<diag::Span> declaration_of_name(
       const ast::ItemEnum& declaration =
           context.ast.items[info.item].payload.get<ast::ItemEnum>();
       if (declaration.name.name == name && declaration.name.span.file == root) {
-        return item_name_span(context.ast, context.ast.items[info.item]);
+        return ::ast::item_name_span(context.ast, context.ast.items[info.item]);
       }
     }
   }
@@ -127,7 +127,7 @@ std::optional<diag::Span> declaration_name_at(
   for (const analyzer::ModuleNode* module : package.tree.modules) {
     for (const ast::ItemIdx index : module->items) {
       const ast::ItemNode& item = context.ast.items[index];
-      const diag::Span name = item_name_span(context.ast, item);
+      const diag::Span name = ::ast::item_name_span(context.ast, item);
       if (name.file != root) {
         continue;
       }
@@ -152,7 +152,7 @@ std::optional<diag::Span> declaration_name_at(
         for (const ast::ItemIdx method :
              item.payload.get<ast::ItemImpl>().methods) {
           const diag::Span method_name =
-              item_name_span(context.ast, context.ast.items[method]);
+              ::ast::item_name_span(context.ast, context.ast.items[method]);
           if (span_contains(method_name, offset)) {
             return method_name;
           }
@@ -255,7 +255,8 @@ std::vector<diag::Span> implementation_at(const Document& document,
     for (const analyzer::CheckedModule& module : package.modules) {
       for (const analyzer::CheckedModule::MethodInfo& info : module.methods) {
         if (info.item.is_valid() &&
-            same_span(item_name_span(context.ast, context.ast.items[info.item]),
+            same_span(::ast::item_name_span(context.ast,
+                                            context.ast.items[info.item]),
                       *declaration)) {
           spec = info.spec;
           method = info.name;
@@ -306,7 +307,7 @@ std::vector<diag::Span> implementation_at(const Document& document,
         continue;
       }
       const diag::Span span =
-          item_name_span(context.ast, context.ast.items[info.item]);
+          ::ast::item_name_span(context.ast, context.ast.items[info.item]);
       if (span.file != root) {
         continue;
       }

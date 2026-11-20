@@ -15,7 +15,6 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lsp/analysis.h"
-#include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
@@ -59,7 +58,7 @@ std::optional<TypeRef> type_at(const pipeline::PipelineContext& context,
           kind != ast::ItemKind::Spec) {
         continue;
       }
-      const diag::Span name = item_name_span(context.ast, item);
+      const diag::Span name = ::ast::item_name_span(context.ast, item);
       if (name.file != root || !contains(name, offset)) {
         continue;
       }
@@ -81,23 +80,26 @@ std::optional<TypeRef> type_of_declaration(
     const analyzer::CheckedPackage& package,
     diag::Span name) {
   for (const analyzer::CheckedPackage::SpecDecl& spec : package.specs) {
-    if (same_span(item_name_span(context.ast, context.ast.items[spec.item]),
-                  name)) {
+    if (same_span(
+            ::ast::item_name_span(context.ast, context.ast.items[spec.item]),
+            name)) {
       return TypeRef{spec.item, TypeKind::Spec};
     }
   }
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::StructInfo& info : module.structs) {
       if (info.item.is_valid() &&
-          same_span(item_name_span(context.ast, context.ast.items[info.item]),
-                    name)) {
+          same_span(
+              ::ast::item_name_span(context.ast, context.ast.items[info.item]),
+              name)) {
         return TypeRef{info.item, TypeKind::Struct};
       }
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
       if (info.item.is_valid() &&
-          same_span(item_name_span(context.ast, context.ast.items[info.item]),
-                    name)) {
+          same_span(
+              ::ast::item_name_span(context.ast, context.ast.items[info.item]),
+              name)) {
         return TypeRef{info.item, TypeKind::Enum};
       }
     }
@@ -176,16 +178,16 @@ std::optional<TypeRef> find_type(const pipeline::PipelineContext& context,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::StructInfo& info : module.structs) {
       if (info.item.is_valid() &&
-          item_name_span(context.ast, context.ast.items[info.item]).file ==
-              root &&
+          ::ast::item_name_span(context.ast, context.ast.items[info.item])
+                  .file == root &&
           context.ast.items[info.item].name() == name) {
         return TypeRef{info.item, TypeKind::Struct};
       }
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
       if (info.item.is_valid() &&
-          item_name_span(context.ast, context.ast.items[info.item]).file ==
-              root &&
+          ::ast::item_name_span(context.ast, context.ast.items[info.item])
+                  .file == root &&
           context.ast.items[info.item].name() == name) {
         return TypeRef{info.item, TypeKind::Enum};
       }
@@ -198,7 +200,7 @@ text::JsonValue item_json(const Document& document,
                           const pipeline::PipelineContext& context,
                           TypeRef ref) {
   const ast::ItemNode& node = context.ast.items[ref.item];
-  const diag::Span name = item_name_span(context.ast, node);
+  const diag::Span name = ::ast::item_name_span(context.ast, node);
   text::JsonValue item = text::JsonValue::make_object();
   item.set("name", text::JsonValue::make_string(std::string(node.name())));
   item.set("kind", text::JsonValue::make_number(kind_number(ref.kind)));

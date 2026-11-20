@@ -30,7 +30,8 @@ of the compiler, so it owns no analysis of its own:
   the name under the cursor, and answers the ranges linked editing
   should change together.
 - `completion.{h,cc}` offers the names the checked package holds, plus
-  the language's keywords, filtered by the prefix the cursor typed.
+  the keywords from the lexer's frozen table, filtered by the prefix the
+  cursor typed.
 - `diagnostics.{h,cc}` renders the shared package reading's diagnostic
   bag, filtered to one buffer's spans, so a compiler error and a lint
   finding arrive from the same pass.

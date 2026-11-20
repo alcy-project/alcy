@@ -6,16 +6,11 @@
 #include <optional>
 
 #include "ast/ast.h"
-#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
 namespace lsp {
-
-// The name span of a named item declaration, or the item's whole span
-// when no single name locates it.
-diag::Span item_name_span(const ast::AstArena& ast, const ast::ItemNode& item);
 
 // The smallest expression, or type, whose span holds the offset in the
 // root file: the node the position is written inside, not the statement

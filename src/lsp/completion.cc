@@ -16,6 +16,7 @@
 #include "ir/storage.h"
 #include "ir/type.h"
 #include "ir/type_display.h"
+#include "lexer/lexer.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
@@ -25,13 +26,6 @@
 namespace lsp {
 
 namespace {
-
-const char* const KEYWORDS[] = {
-    "as",     "break",  "comp", "const",  "continue", "else",      "enum",
-    "extern", "false",  "fn",   "if",     "impl",     "intrinsic", "let",
-    "loop",   "match",  "mut",  "pub",    "ret",      "self",      "spec",
-    "static", "struct", "true", "unsafe", "use",      "while",
-};
 
 struct Item {
   std::string label;
@@ -139,8 +133,12 @@ text::JsonValue completion_items(const Document& document,
   if (analysis.ok()) {
     collect(analysis.context(), analysis.package(), &items);
   }
-  for (const char* keyword : KEYWORDS) {
-    items.push_back(Item{keyword, "", CompletionItemKind::Keyword});
+  for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {
+    if (keyword.category != lexer::KeywordCategory::Keyword) {
+      continue;
+    }
+    items.push_back(
+        Item{std::string(keyword.spelling), "", CompletionItemKind::Keyword});
   }
 
   std::sort(items.begin(), items.end(),
