@@ -18,6 +18,7 @@
 #include "lsp/analysis_cache.h"
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
+#include "lsp/highlights.h"
 #include "lsp/workspace.h"
 #include "path/path.h"
 #include "text/json.h"
@@ -32,18 +33,23 @@ constexpr std::string_view MANIFEST =
 
 constexpr std::string_view MAIN =
     "use package::helper::Helper;\n"
+    "use package::helper::helper_fn;\n"
     "\n"
     "fn use_it(value: Helper) -> i32 {\n"
     "  ret 0\n"
     "}\n"
     "\n"
     "fn main() -> i32 {\n"
-    "  ret 0\n"
+    "  ret helper_fn()\n"
     "}\n";
 
 constexpr std::string_view HELPER =
     "pub struct Helper {\n"
     "  pub x: i32,\n"
+    "}\n"
+    "\n"
+    "pub fn helper_fn() -> i32 {\n"
+    "  ret 0\n"
     "}\n";
 
 struct Fixture {
@@ -188,6 +194,18 @@ TEST_CASE("A pull with a previous result id follows the package fingerprint") {
   const text::JsonValue second =
       pull_cache.pull(*main, analysis_cache, id->as_string());
   CHECK(second.find("kind")->as_string() == "full");
+}
+
+TEST_CASE("Highlights do not paint a sibling definition into this buffer") {
+  const Fixture f;
+  const Document document(f.main_uri, "alcy", 1, std::string(MAIN));
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const text::JsonValue highlights =
+      document_highlights(document, analysis, Position{8, 8});
+  CHECK(highlights.as_array().size() == 1);
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {

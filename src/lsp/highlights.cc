@@ -12,6 +12,7 @@
 #include "lsp/document.h"
 #include "lsp/navigation.h"
 #include "lsp/protocol.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -37,9 +38,12 @@ text::JsonValue document_highlights(const Document& document,
   if (!declaration.has_value()) {
     return highlights;
   }
-  add(&highlights, document, *declaration);
+  const source::FileId root = analysis.root();
+  if (declaration->file == root) {
+    add(&highlights, document, *declaration);
+  }
   for (const diag::Span site : references_at(document, analysis, position)) {
-    if (!same_span(site, *declaration)) {
+    if (site.file == root && !same_span(site, *declaration)) {
       add(&highlights, document, site);
     }
   }
@@ -55,9 +59,12 @@ text::JsonValue linked_editing_ranges(const Document& document,
     return text::JsonValue{};
   }
   text::JsonValue ranges = text::JsonValue::make_array();
-  ranges.push(range_json(document, declaration->offset, declaration->length));
+  const source::FileId root = analysis.root();
+  if (declaration->file == root) {
+    ranges.push(range_json(document, declaration->offset, declaration->length));
+  }
   for (const diag::Span site : references_at(document, analysis, position)) {
-    if (!same_span(site, *declaration)) {
+    if (site.file == root && !same_span(site, *declaration)) {
       ranges.push(range_json(document, site.offset, site.length));
     }
   }
