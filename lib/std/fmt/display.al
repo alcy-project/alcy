@@ -106,6 +106,19 @@ test {
   }
 }
 
+pub fn display_str(value: str, out: &mut [u8]) -> usize {
+  n := str_len(value)
+  if out.len() < n {
+    ret n
+  }
+  mut i := 0 as usize
+  while i < n {
+    unsafe { *slice_at_mut(out, i) = str_byte(value, i) }
+    i += 1
+  }
+  ret n
+}
+
 // Primitive conversions live here as free functions rather than spec
 // methods: method lookup resolves `Display` on nominal types only.
 // The format expansion calls these where it used to copy the two

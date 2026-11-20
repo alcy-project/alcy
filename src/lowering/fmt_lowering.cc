@@ -71,12 +71,12 @@ const analyzer::CheckedModule::FnSig* Lowerer::Fmt::find_helper(
   return nullptr;
 }
 
-bool Lowerer::Fmt::emit_bool_helper(diag::Span span,
-                                    ir::OperandIdx value,
-                                    State& state) {
+bool Lowerer::Fmt::emit_primitive_helper(diag::Span span,
+                                         std::string_view name,
+                                         ir::OperandIdx value,
+                                         State& state) {
   u32 module = 0;
-  const analyzer::CheckedModule::FnSig* sig =
-      find_helper("display_bool", module);
+  const analyzer::CheckedModule::FnSig* sig = find_helper(name, module);
   if (sig == nullptr || sig->params.size() != 2) {
     return false;
   }
@@ -183,6 +183,13 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
     if (tag == ir::TypeTag::Str) {
       const ir::RegisterIdx loaded = owner_.emit(
           ir::Opcode::Load, elem_ty, {owner_.to_operand(elem_addr, elem_ty)});
+      if (emit_primitive_helper(span, "display_str",
+                                owner_.to_operand(loaded, elem_ty), state)) {
+        continue;
+      }
+      if (owner_.failed) {
+        return false;
+      }
       const ir::RegisterIdx ptr = owner_.emit(
           ir::Opcode::ExtractValue, owner_.builder.primitive(ir::TypeTag::Ptr),
           {owner_.to_operand(loaded, elem_ty), owner_.index_operand(0)});
@@ -201,7 +208,8 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
     if (tag == ir::TypeTag::I1) {
       const ir::RegisterIdx loaded = owner_.emit(
           ir::Opcode::Load, elem_ty, {owner_.to_operand(elem_addr, elem_ty)});
-      if (emit_bool_helper(span, owner_.to_operand(loaded, elem_ty), state)) {
+      if (emit_primitive_helper(span, "display_bool",
+                                owner_.to_operand(loaded, elem_ty), state)) {
         continue;
       }
       if (owner_.failed) {

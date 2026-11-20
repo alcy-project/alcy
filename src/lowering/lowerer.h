@@ -1433,9 +1433,12 @@ class Lowerer {
     // packages. Returns the module the signature belongs to.
     const analyzer::CheckedModule::FnSig* find_helper(std::string_view name,
                                                       u32& module) const;
-    // Formats a bool through `fmt`'s free helper: the alcy body owns
-    // the spelling, the lane supplies the destination view.
-    bool emit_bool_helper(diag::Span span, ir::OperandIdx value, State& state);
+    // Formats a primitive through an alcy free helper: the body owns
+    // the spelling or digits, the lane supplies the destination view.
+    bool emit_primitive_helper(diag::Span span,
+                               std::string_view name,
+                               ir::OperandIdx value,
+                               State& state);
     // The usize operand for value.
     ir::OperandIdx usize_imm(u64 value);
     // Moves the running offset by delta bytes.
