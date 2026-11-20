@@ -40,6 +40,8 @@ export const elements = {
   download: mustGet<HTMLButtonElement>("download"),
   format: mustGet<HTMLButtonElement>("format"),
   lint: mustGet<HTMLButtonElement>("lint"),
+  openFile: mustGet<HTMLButtonElement>("open-file"),
+  openFileInput: mustGet<HTMLInputElement>("open-file-input"),
   copyLink: mustGet<HTMLButtonElement>("copy-link"),
   compilerState: mustGet<HTMLElement>("compiler-state"),
   compilerStateText: mustGet<HTMLElement>("compiler-state-text"),

@@ -47,6 +47,9 @@
             </summary>
           </details>
           <div class="toolbar-actions">
+            <button id="open-file" type="button" title="{{t:playground.openFile}}">
+              <span>{{t:playground.openFile}}</span>
+            </button>
             <button id="copy-link" type="button" title="{{t:playground.copyLink}}">
               <span class="label">
                 <span>{{t:playground.copyLink}}</span>
@@ -65,6 +68,7 @@
             <button id="check" type="button" title="{{t:button.checkTitle}}">
               <span>{{t:button.check}}</span>
             </button>
+            <input id="open-file-input" type="file" accept=".al,.alcy,text/plain" hidden />
           </div>
           <button
             id="run"

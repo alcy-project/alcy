@@ -65,6 +65,15 @@ function init(): void {
   elements.download.addEventListener("click", () => void runtime.runDownload());
   elements.format.addEventListener("click", () => void runtime.runFormat());
   elements.lint.addEventListener("click", () => void runtime.runLint());
+  elements.openFile.addEventListener("click", () => elements.openFileInput.click());
+  elements.openFileInput.addEventListener("change", () => {
+    const file = elements.openFileInput.files?.[0];
+    // Clearing first lets the same file be chosen again after a cancel.
+    elements.openFileInput.value = "";
+    if (file !== undefined) {
+      void samples.openFile(file);
+    }
+  });
   runtime.warmOnIntent();
 
   // A reader who stays is likely to try something. Idle time is free

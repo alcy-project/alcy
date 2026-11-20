@@ -31,6 +31,31 @@ function applySource(text: string): void {
   scheduleCheck();
 }
 
+// The picker names where the program came from until the reader chooses a
+// real example; the change handler retires the option with the empty value.
+function markOrigin(label: string): void {
+  const origin = document.createElement("option");
+  origin.value = "";
+  origin.textContent = label;
+  elements.samples.prepend(origin);
+  elements.samples.value = "";
+}
+
+// A local source replaces the buffer the way an example or a link does,
+// and the session keeps it. The caller clears the input so the same file
+// can be picked twice in a row.
+export async function openFile(file: File): Promise<void> {
+  try {
+    applySource(await file.text());
+    markOrigin(t("samples.fromFile"));
+    saveCodeNow();
+  } catch (error) {
+    setStatus("status.openFileFailed", {
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function loadSample(file: string): Promise<void> {
   try {
     const response = await fetch(new URL(`samples/${file}`, assetBase));
@@ -84,14 +109,9 @@ export async function loadSamples(): Promise<void> {
     if (incoming.origin === "link") {
       clearLinkHash();
     }
-    // The picker names where the program came from until the reader
-    // chooses an example of their own.
-    const origin = document.createElement("option");
-    origin.value = "";
-    origin.textContent =
-      incoming.origin === "link" ? t("samples.fromLink") : t("samples.fromGuide");
-    elements.samples.prepend(origin);
-    elements.samples.value = "";
+    markOrigin(
+      t(incoming.origin === "link" ? "samples.fromLink" : "samples.fromGuide"),
+    );
     applySource(incoming.source);
     return;
   }
