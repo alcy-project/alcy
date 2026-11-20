@@ -1,7 +1,0 @@
-exit = 1
-subcommand = "test"
-args = ["--execution=single-thread", "--json"]
-# The counts say what the run selected and what it counted as failed, which
-# for a stopped run is nothing: the flag is what tells a reader the run did
-# not reach the end.
-contains = ['"tests":2', '"test_failures":0', '"test_ended_early":true']

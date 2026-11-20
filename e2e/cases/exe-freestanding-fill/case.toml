@@ -1,0 +1,6 @@
+[program.expect]
+exit = 0
+stdout = "1 9 0\n"
+
+[program.sweep.wasm]
+skip = "a freestanding entry, which the target declines"

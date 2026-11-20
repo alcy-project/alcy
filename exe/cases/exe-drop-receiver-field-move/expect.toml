@@ -1,8 +1,0 @@
-exit = 0
-stdout = """
-built
-holder
-res
-body done
-res
-"""

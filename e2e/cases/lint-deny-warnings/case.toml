@@ -1,0 +1,7 @@
+[cli]
+subcommand = "lint"
+args = ["--deny-warnings"]
+
+[cli.expect]
+exit = "non-zero"
+contains = ["error[unused-variable]"]

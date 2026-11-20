@@ -1,0 +1,7 @@
+[cli]
+subcommand = "build"
+args = ["--profile", "nope"]
+
+[cli.expect]
+exit = "non-zero"
+contains = ["Unknown profile 'nope'"]

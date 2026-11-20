@@ -1,0 +1,5 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0

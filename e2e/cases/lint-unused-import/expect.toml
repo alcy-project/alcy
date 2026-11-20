@@ -1,3 +1,0 @@
-subcommand = "lint"
-exit = 0
-contains = ["warning[unused-import]"]

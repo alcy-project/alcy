@@ -1,0 +1,11 @@
+[cli]
+subcommand = "test"
+
+[cli.expect]
+exit = 0
+contains = [
+  "running 2 tests (package test-block)",
+  "test main::adds ... ok",
+  "test util::doubles ... ok",
+  "2 tests passed",
+]

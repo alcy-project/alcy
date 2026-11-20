@@ -1,3 +1,0 @@
-exit = 4
-contains = ["Cannot infer the type arguments"]
-not_contains = []

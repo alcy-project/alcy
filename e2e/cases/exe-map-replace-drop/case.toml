@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "DROP 1\nafter\nDROP 2\n"

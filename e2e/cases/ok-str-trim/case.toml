@@ -1,0 +1,9 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+not_contains = ["error"]
+
+[program.expect]
+exit = 0

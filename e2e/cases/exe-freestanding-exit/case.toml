@@ -1,0 +1,5 @@
+[program.expect]
+exit = 7
+
+[program.sweep.wasm]
+skip = "a freestanding entry, which the target declines"

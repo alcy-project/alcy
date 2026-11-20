@@ -1,0 +1,7 @@
+[cli]
+subcommand = "lint"
+args = ["--no-borrow-checks"]
+
+[cli.expect]
+exit = 0
+contains = ["warning[unused-variable]"]

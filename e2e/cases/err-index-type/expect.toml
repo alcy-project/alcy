@@ -1,4 +1,0 @@
-# The spec fixes `Vec`'s index type, so a `str` is a type error
-# rather than a second `Index` implementation.
-exit = 4
-contains = ["Type mismatch in index"]

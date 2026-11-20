@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["The bounds on 'T' do not provide 'bump'"]
+not_contains = []

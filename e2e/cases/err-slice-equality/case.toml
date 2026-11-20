@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Cannot compare references to an unsized value"]
+not_contains = []

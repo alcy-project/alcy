@@ -1,0 +1,7 @@
+[cli]
+subcommand = "test"
+args = ["--list", "--json"]
+
+[cli.expect]
+exit = 0
+contains = ["\"test_labels\":[\"main::adds\",\"util::doubles\"]"]

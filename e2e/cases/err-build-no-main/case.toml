@@ -1,0 +1,6 @@
+[cli]
+subcommand = "build"
+
+[cli.expect]
+exit = 3
+contains = ["declares no free `main`"]

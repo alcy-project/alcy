@@ -35,7 +35,7 @@ from pathlib import Path
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
-SOURCE_ROOTS = ["lib", "e2e", "exe", "samples", "benchmarks"]
+SOURCE_ROOTS = ["lib", "e2e", "samples", "benchmarks"]
 
 # One command line per this many paths: the corpus is a few hundred
 # files, and a command line carries only so much of it at once.

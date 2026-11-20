@@ -1,0 +1,6 @@
+[cli]
+subcommand = "run"
+
+[cli.expect]
+exit = 6
+contains = ["declares no [[bin]] target to run"]

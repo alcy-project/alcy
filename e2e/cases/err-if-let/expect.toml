@@ -1,4 +1,0 @@
-# `if let` is Rust's shape; alcy binds a condition with `:=`
-#.
-exit = 4
-contains = ["a condition binds with `:=`"]

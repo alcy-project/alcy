@@ -1,0 +1,7 @@
+[cli]
+subcommand = "test"
+args = ["--execution=single-thread", "--json"]
+
+[cli.expect]
+exit = 1
+contains = ["\"tests\":2", "\"test_failures\":0", "\"test_ended_early\":true"]

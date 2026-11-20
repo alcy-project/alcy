@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["'println' is not allowed in comp evaluation"]

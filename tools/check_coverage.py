@@ -59,11 +59,23 @@ SUITES = (
     ("unit tests", [str(TEST_BINARY)]),
     (
         "e2e cases",
-        ["uv", "run", str(TOOLS / "check_e2e.py"), f"--build-subdir={BUILD_SUBDIR}"],
+        [
+            "uv",
+            "run",
+            str(TOOLS / "check_cases.py"),
+            "--steps=cli",
+            f"--build-subdir={BUILD_SUBDIR}",
+        ],
     ),
     (
         "exe cases",
-        ["uv", "run", str(TOOLS / "check_exe.py"), f"--build-subdir={BUILD_SUBDIR}"],
+        [
+            "uv",
+            "run",
+            str(TOOLS / "check_cases.py"),
+            "--steps=program",
+            f"--build-subdir={BUILD_SUBDIR}",
+        ],
     ),
 )
 

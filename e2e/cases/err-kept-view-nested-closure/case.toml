@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = "non-zero"
+contains = ["Reference to local 'a' escapes the block that declares it"]

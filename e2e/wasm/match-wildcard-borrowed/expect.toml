@@ -1,6 +1,0 @@
-exit = 0
-stdout = """
-wild
-after
-DROP 1
-"""

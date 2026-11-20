@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "after\nDROP Holder held\nDROP Payload 5\n"

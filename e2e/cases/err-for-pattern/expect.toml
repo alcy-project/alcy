@@ -1,2 +1,0 @@
-exit = 4
-contains = ["Type mismatch in tuple pattern"]

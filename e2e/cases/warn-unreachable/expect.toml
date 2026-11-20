@@ -1,3 +1,0 @@
-exit = 0
-contains = ["WD003", "Unreachable statement"]
-not_contains = ["error[E"]

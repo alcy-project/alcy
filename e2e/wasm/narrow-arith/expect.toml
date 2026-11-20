@@ -1,4 +1,0 @@
-# The checked build refuses the wraps on purpose ; the
-# release build is where the narrow container had to learn to wrap.
-args = ["--release"]
-exit = 0

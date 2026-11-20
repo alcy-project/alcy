@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+contains = ["WC021", "Unused non-() value"]
+not_contains = ["error[E"]

@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["A range end must be spelled `..<` or `..=`"]

@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Capture 't' is not visible here; the enclosing closure must capture it too"]

@@ -1,3 +1,0 @@
-# A builtin type belongs to the staged suite.
-exit = 4
-contains = ["A builtin type belongs to the staged suite: 'str' cannot be implemented here"]

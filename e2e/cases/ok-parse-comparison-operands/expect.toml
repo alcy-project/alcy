@@ -1,5 +1,0 @@
-# A comparison may stand in each operand of a lower-precedence operator, and
-# parentheses open a fresh one.
-exit = 0
-subcommand = "run"
-not_contains = ["error"]

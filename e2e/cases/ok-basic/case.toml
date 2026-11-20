@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+contains = ["Checked   1 file, 1 module, 2 functions"]
+not_contains = ["error"]

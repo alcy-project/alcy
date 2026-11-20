@@ -1,0 +1,8 @@
+[cli]
+subcommand = "check"
+args = ["--color=always"]
+
+[cli.expect]
+exit = 4
+contains = ["Moving a non-`Copy` value out from under an array's element", "\u001b[31m"]
+not_contains = ["Internal lowering error", "field without declaration"]

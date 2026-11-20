@@ -1,4 +1,0 @@
-# `let` is a neighbor language's keyword; alcy declares with `:=`
-#.
-exit = 4
-contains = ["`let` is not a keyword"]

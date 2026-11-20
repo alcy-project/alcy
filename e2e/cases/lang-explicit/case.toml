@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+args = ["--lang=en-us"]
+
+[cli.expect]
+exit = 4
+contains = ["Type mismatch in integer literal"]

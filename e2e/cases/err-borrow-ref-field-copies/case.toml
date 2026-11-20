@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["borrowed"]
+not_contains = []

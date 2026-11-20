@@ -1,0 +1,7 @@
+[cli]
+subcommand = "run"
+
+[cli.expect]
+exit = 0
+contains = ["mapped 3"]
+not_contains = ["error"]

@@ -1,3 +1,0 @@
-exit = 4
-contains = ["Integer overflow in constant evaluation"]
-not_contains = []

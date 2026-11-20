@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "non empty 3\nempty slice len 0\nempty mut slice len 0\niterated 0\n"

@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "push\nd2\nd3\ntruncate\nd5\nd7\nretain\nd11\nd9\ndedup\nd8\nd10\nd12\nd4\nd6\nd0\nd1\n"

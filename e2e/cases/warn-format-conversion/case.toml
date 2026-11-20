@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+contains = ["WC045", "conversion"]
+not_contains = ["error[E"]

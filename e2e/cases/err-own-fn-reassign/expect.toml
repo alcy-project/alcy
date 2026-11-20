@@ -1,3 +1,0 @@
-exit = 4
-contains = ["Cannot reassign an owning function value"]
-not_contains = []

@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Integer overflow in constant evaluation"]
+not_contains = []

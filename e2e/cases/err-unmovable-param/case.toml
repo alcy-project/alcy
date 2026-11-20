@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["A parameter or return is Movable, and this type holds an anchor"]

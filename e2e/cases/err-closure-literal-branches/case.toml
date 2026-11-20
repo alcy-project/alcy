@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["expected 'Closure#1() -> i32', found 'Closure#2(i32) -> i32'"]

@@ -1,3 +1,0 @@
-# The folded comparisons are a release-pass shape.
-args = ["--release"]
-exit = 0

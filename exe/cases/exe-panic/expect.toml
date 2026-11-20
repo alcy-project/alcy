@@ -1,2 +1,0 @@
-exit = "non-zero"
-stderr_contains = ["boom", "main.al:2:3"]

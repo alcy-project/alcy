@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "A -81 -81\nB -84 -84\nC -5 -5\nD 4294967295 4294967295\nE -56 -56\nF -1 -1\nG -84\n"

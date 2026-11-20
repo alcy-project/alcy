@@ -1,7 +1,0 @@
-exit = 0
-stdout = """
-kept
-took 1
-DROP 2
-done
-"""

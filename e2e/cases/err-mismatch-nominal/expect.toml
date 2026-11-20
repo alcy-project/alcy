@@ -1,2 +1,0 @@
-exit = 4
-contains = ["expected 'A', found 'B'"]

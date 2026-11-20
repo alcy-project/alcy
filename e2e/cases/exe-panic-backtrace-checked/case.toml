@@ -1,0 +1,12 @@
+[program]
+build_args = ["--on-panic=backtrace"]
+
+[program.expect]
+exit = "non-zero"
+stderr_contains = ["panic at main.al:3:7: integer overflow"]
+walk_stderr_contains = [
+  "  at h\n",
+  "  at g (main.al:7:8)",
+  "  at f (main.al:12:8)",
+  "  at main (main.al:17:8)",
+]

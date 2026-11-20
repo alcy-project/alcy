@@ -1,2 +1,0 @@
-exit = "non-zero"
-contains = ["Returns reference to local 'a'"]

@@ -1,3 +1,0 @@
-# A bare closure using an outer local names no list.
-exit = 4
-contains = ["Use of 't' is not captured; add it to the capture list"]

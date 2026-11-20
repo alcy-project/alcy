@@ -1,0 +1,7 @@
+[cli]
+subcommand = "run"
+
+[cli.expect]
+exit = 0
+contains = ["hi"]
+not_contains = ["EI004", "error"]

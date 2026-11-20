@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "9 7\n1 2\n8 8\n"

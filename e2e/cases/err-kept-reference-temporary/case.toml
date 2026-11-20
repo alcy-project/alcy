@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["A reference taken of a temporary outlives it"]
+not_contains = []

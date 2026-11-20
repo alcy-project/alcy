@@ -1,0 +1,8 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = [
+  "Spec 'Index' is sealed by package 'core'; implementing it from outside needs the [spec] implement key",
+]

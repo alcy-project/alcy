@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "drop tags\nitems\ndrop tags\nn 5\ndrop tags\nA\ndone\n"

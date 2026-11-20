@@ -1,3 +1,0 @@
-subcommand = "lint"
-exit = "non-zero"
-contains = ["error[unused-variable]"]

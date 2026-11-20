@@ -1,8 +1,0 @@
-exit = 0
-stdout = """
-drop 0
-drop 1
-drop 2
-kept
-drop 7
-"""

@@ -1,0 +1,11 @@
+[cli]
+subcommand = "test"
+
+[cli.expect]
+exit = 1
+contains = [
+  "test main::passing ... ok",
+  "test main::failing ... FAILED",
+  "1 test passed",
+  "1 test failed",
+]

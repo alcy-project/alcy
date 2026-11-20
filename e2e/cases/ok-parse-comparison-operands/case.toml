@@ -1,0 +1,6 @@
+[cli]
+subcommand = "run"
+
+[cli.expect]
+exit = 0
+not_contains = ["error"]

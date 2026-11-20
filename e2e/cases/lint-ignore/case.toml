@@ -1,0 +1,7 @@
+[cli]
+subcommand = "lint"
+
+[cli.expect]
+exit = 0
+contains = ["Linted"]
+not_contains = ["unused-variable", "error["]

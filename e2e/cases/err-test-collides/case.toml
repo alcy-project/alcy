@@ -1,0 +1,6 @@
+[cli]
+subcommand = "test"
+
+[cli.expect]
+exit = 4
+contains = ["already declared in module"]

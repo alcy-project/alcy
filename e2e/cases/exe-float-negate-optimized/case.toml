@@ -1,0 +1,6 @@
+[program]
+build_args = ["--optimize=on"]
+
+[program.expect]
+exit = 0
+stdout = "-0\n-0.00\n-inf\n-0\n-inf\n0\ninf\n-7.25\n7.25\n-0\n-inf\n"

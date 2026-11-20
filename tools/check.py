@@ -222,12 +222,13 @@ def main() -> int:
     # cases because these are read as much as run, and a sample that is
     # wrong is a documentation fault.
     tool(
-        "check_exe.py",
+        "check_cases.py",
         f"--build-subdir={debug_subdir}",
         "--cases-root=samples",
+        "--steps=program",
     )
 
-    tool("check_e2e.py", f"--build-subdir={debug_subdir}")
+    tool("check_cases.py", "--steps=cli", f"--build-subdir={debug_subdir}")
 
     # The second engine, over the acceptance corpus: every case
     # that compiles is evaluated function by function, and a construct
@@ -266,7 +267,12 @@ def main() -> int:
         # source of to get past.
         if shutil.which("clang") is None:
             refuse("clang", "pass --no-sanitize to skip")
-        tool("check_exe.py", f"--build-subdir={debug_subdir}", "--sanitize")
+        tool(
+            "check_cases.py",
+            f"--build-subdir={debug_subdir}",
+            "--steps=program",
+            "--mode=sanitized",
+        )
 
     if not args.no_wasm:
         tool(
@@ -281,13 +287,24 @@ def main() -> int:
         # the module and bun runs it under WASI. That is the half of the
         # wasm story the emscripten build above cannot ask, and CI runs
         # it in every matrix entry, so the local check asks it too.
-        tool("check_wasm.py", f"--build-subdir={debug_subdir}")
+        tool(
+            "check_cases.py",
+            f"--build-subdir={debug_subdir}",
+            "--cases-root=e2e/wasm",
+            "--steps=cli,program",
+            "--mode=wasm",
+        )
 
         # The direct backend is a second lowering of the exe programs too:
         # the same sources against the same expectations, with an
         # interpreter where the other arm links an executable. A construct
         # the two lowerings disagree about shows up here and nowhere else.
-        tool("check_exe.py", f"--build-subdir={debug_subdir}", "--direct-wasm")
+        tool(
+            "check_cases.py",
+            f"--build-subdir={debug_subdir}",
+            "--steps=program",
+            "--mode=wasm",
+        )
 
         # The playground carries no LLVM and no tests, so it is its own
         # configure; the smoke is what says the artifact a site loads
@@ -315,8 +332,8 @@ def main() -> int:
             "--mode=release",
             f"--build-subdir={release_subdir}",
         )
-        tool("check_e2e.py", f"--build-subdir={release_subdir}")
-        tool("check_exe.py", f"--build-subdir={release_subdir}")
+        tool("check_cases.py", "--steps=cli", f"--build-subdir={release_subdir}")
+        tool("check_cases.py", "--steps=program", f"--build-subdir={release_subdir}")
 
     # Lint reuses the debug build's compile database: a dedicated GN
     # tree would install its own copy of LLVM for the same bytes.

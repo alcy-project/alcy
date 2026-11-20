@@ -1,0 +1,8 @@
+[cli]
+subcommand = "test"
+args = ["--no-run"]
+
+[cli.expect]
+exit = 0
+contains = ["Built     out/test-no-run-test"]
+not_contains = ["tests passed", " ok"]

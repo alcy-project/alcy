@@ -1,0 +1,8 @@
+[cli]
+subcommand = "test"
+args = ["--no-run", "--filter", "nothing-matches"]
+
+[cli.expect]
+exit = 0
+contains = ["Built     out/test-filter-none-test"]
+not_contains = ["tests passed", "running 0 tests"]

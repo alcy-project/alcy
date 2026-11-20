@@ -1,5 +1,0 @@
-exit = 4
-subcommand = "check"
-# The parser names the declaration spelling alcy writes instead of
-# leaving the reader at a bare "expected :=".
-contains = ["error[EB009]", "`:=`"]

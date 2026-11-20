@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = "non-zero"
+contains = ["Returns reference to local 'a'"]

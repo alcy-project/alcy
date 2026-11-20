@@ -1,0 +1,8 @@
+[cli]
+subcommand = "check"
+args = ["--color=always"]
+
+[cli.expect]
+exit = 4
+contains = ["Comp match scrutinee is not comp-known", "\u001b[31m"]
+not_contains = []

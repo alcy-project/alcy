@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Intrinsic 'memcopy' is unsafe; declare it `unsafe`"]

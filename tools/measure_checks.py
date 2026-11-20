@@ -77,13 +77,28 @@ CHECKS = [
     ),
     (
         "e2e release",
-        ["uv", "run", "./tools/check_e2e.py", "--build-subdir=build_release"],
+        [
+            "uv",
+            "run",
+            "./tools/check_cases.py",
+            "--steps=cli",
+            "--build-subdir=build_release",
+        ],
     ),
     (
         "exe release",
-        ["uv", "run", "./tools/check_exe.py", "--build-subdir=build_release"],
+        [
+            "uv",
+            "run",
+            "./tools/check_cases.py",
+            "--steps=program",
+            "--build-subdir=build_release",
+        ],
     ),
-    ("e2e", ["uv", "run", "./tools/check_e2e.py", "--build-subdir=build"]),
+    (
+        "e2e",
+        ["uv", "run", "./tools/check_cases.py", "--steps=cli", "--build-subdir=build"],
+    ),
     (
         "borrow_rules",
         ["uv", "run", "./tools/check_borrow_rules.py", "--build-subdir=build"],
@@ -100,15 +115,25 @@ CHECKS = [
             "--build-subdir=build",
         ],
     ),
-    ("exe", ["uv", "run", "./tools/check_exe.py", "--build-subdir=build"]),
+    (
+        "exe",
+        [
+            "uv",
+            "run",
+            "./tools/check_cases.py",
+            "--steps=program",
+            "--build-subdir=build",
+        ],
+    ),
     (
         "exe samples",
         [
             "uv",
             "run",
-            "./tools/check_exe.py",
+            "./tools/check_cases.py",
             "--build-subdir=build",
             "--cases-root=samples",
+            "--steps=program",
         ],
     ),
     (
@@ -117,7 +142,14 @@ CHECKS = [
     ),
     (
         "exe sanitized",
-        ["uv", "run", "./tools/check_exe.py", "--build-subdir=build", "--sanitize"],
+        [
+            "uv",
+            "run",
+            "./tools/check_cases.py",
+            "--build-subdir=build",
+            "--steps=program",
+            "--mode=sanitized",
+        ],
     ),
     ("format", ["uv", "run", "./tools/format.py", "--dry-run"]),
     ("lint", ["uv", "run", "./tools/lint.py"]),
@@ -139,16 +171,25 @@ CHECKS = [
     ),
     (
         "wasm acceptance",
-        ["uv", "run", "./tools/check_wasm.py", "--build-subdir=build"],
+        [
+            "uv",
+            "run",
+            "./tools/check_cases.py",
+            "--cases-root=e2e/wasm",
+            "--steps=cli,program",
+            "--mode=wasm",
+            "--build-subdir=build",
+        ],
     ),
     (
         "exe on wasm",
         [
             "uv",
             "run",
-            "./tools/check_exe.py",
+            "./tools/check_cases.py",
             "--build-subdir=build",
-            "--direct-wasm",
+            "--steps=program",
+            "--mode=wasm",
         ],
     ),
     (

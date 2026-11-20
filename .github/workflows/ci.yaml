@@ -199,7 +199,7 @@ jobs:
 
       - name: Run exe Acceptance (sanitized)
         shell: bash
-        run: uv run ./tools/check_exe.py --build-subdir=build --sanitize
+        run: uv run ./tools/check_cases.py --steps=program --mode=sanitized --build-subdir=build
 
   # The grammar is a second reading of the language, and the compiler is
   # the oracle for it: every source this job's build accepts must parse
@@ -270,7 +270,7 @@ jobs:
             command: uv run ./tools/check_borrow_rules.py --build-subdir=build
             bun: false
           - name: Wasm Acceptance (alcy build --target=wasm)
-            command: uv run ./tools/check_wasm.py --build-subdir=build
+            command: uv run ./tools/check_cases.py --cases-root=e2e/wasm --steps=cli,program --mode=wasm --build-subdir=build
             bun: true
     uses: ./.github/workflows/harness.yaml
     with:

@@ -1,6 +1,0 @@
-subcommand = "lint"
-exit = 0
-# The rule states the wrap and stops there: the wrap is defined
-# behavior the reader may have meant, so it prescribes no spelling.
-contains = ["warning[negative-to-unsigned]", "wraps when cast to u32"]
-not_contains = ["did you mean", "0xffff"]

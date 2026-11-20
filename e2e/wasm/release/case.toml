@@ -1,0 +1,15 @@
+[cli]
+subcommand = "compile"
+args = ["--release", "--target=wasm32-unknown-emscripten", "--backend=direct-wasm"]
+
+[cli.expect]
+exit = 0
+
+[program]
+target = "wasm32-unknown-emscripten"
+backend = "direct-wasm"
+interpreter = "bun"
+
+[program.expect]
+exit = 0
+stdout = "sum 76\n"

@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Call to unsafe function 'ptr_offset' requires an `unsafe { ... }` block"]

@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "[3]\n[hi]\n[(1, 2)]\n<(1, 2)>\n<(1, 2)>\n7=(1, 2)\np=(1, 2)\nw((1, 2))\nw(5)\n"

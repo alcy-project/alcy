@@ -1,0 +1,4 @@
+[program.expect]
+exit = "non-zero"
+stderr_contains = ["panic at main.al:2:3: boom"]
+walk_stderr_contains = ["  at g", "  at f", "  at main"]

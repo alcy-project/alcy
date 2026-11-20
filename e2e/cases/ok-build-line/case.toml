@@ -1,0 +1,11 @@
+[cli]
+subcommand = "build"
+
+[cli.expect]
+exit = 0
+contains = ["Built     ", "  ("]
+not_contains = ["error", "byte(s)", "file(s)"]
+
+[program.expect]
+exit = 0
+stdout = "hi\n"

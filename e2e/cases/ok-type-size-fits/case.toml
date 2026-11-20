@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+not_contains = ["does not fit in `isize`"]

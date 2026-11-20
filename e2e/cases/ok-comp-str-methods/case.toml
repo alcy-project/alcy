@@ -1,0 +1,7 @@
+[cli]
+subcommand = "run"
+
+[cli.expect]
+exit = 0
+contains = ["comp str ok"]
+not_contains = ["error"]

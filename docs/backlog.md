@@ -250,7 +250,7 @@ replaced. The foundations are in `roadmap.md`.
   no runtime type information and no generative types.
 
 - [ ] `fmt` with no file argument formats the package in the current
-  directory, and only its predicate says so: `check_e2e.py` appends a
+  directory, and only its predicate says so: `check_cases.py` appends a
   positional to every case, and a unit test would have to move the test
   process into the package, which formats the repository when the run
   happens under a manifest. A runner option that sets a case's working

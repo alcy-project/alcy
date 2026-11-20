@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Reference to local 'm' escapes the block that declares it"]
+not_contains = []

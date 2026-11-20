@@ -1,4 +1,0 @@
-# An indirect call returning a borrow keeps the argument's loan,
-# so reassigning under it conflicts.
-exit = 4
-contains = ["Cannot assign to 't' while borrowed"]

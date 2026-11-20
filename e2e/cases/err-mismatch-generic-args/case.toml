@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["expected 'Vec<i32>', found 'Vec<u8>'"]

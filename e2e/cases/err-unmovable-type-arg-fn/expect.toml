@@ -1,3 +1,0 @@
-# A type argument is Movable.
-exit = 4
-contains = ["A type argument is Movable, and this one holds an anchor"]

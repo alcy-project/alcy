@@ -1,0 +1,6 @@
+[cli]
+subcommand = "lint"
+
+[cli.expect]
+exit = 0
+contains = ["warning[dead-code]"]

@@ -1,4 +1,0 @@
-# The specification's parameter declares a 'PartialEq' bound, and the
-# implementation names a type that does not implement it.
-exit = 4
-contains = ["does not implement 'PartialEq'"]

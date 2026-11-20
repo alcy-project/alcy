@@ -160,7 +160,7 @@ jobs:
       # once each in the CI workflow's `harness` job.
       - name: Run E2E Cases
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_e2e.py --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_cases.py --steps=cli --build-subdir=build
 
       # The standard library carries its tests beside the definitions they
       # cover, so the suite is a program the compiler runs. A
@@ -172,7 +172,7 @@ jobs:
 
       - name: Run Exe Cases
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_cases.py --steps=program --build-subdir=build
 
       # The language server is a process an editor talks to over a pipe,
       # and a pipe is what a platform answers for: Windows and a Unix
@@ -187,7 +187,7 @@ jobs:
       # what it shows is the platform's answer to those three.
       - name: Run Samples
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_exe.py --build-subdir=build --cases-root=samples
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_cases.py --steps=program --cases-root=samples --build-subdir=build
 
       - name: Verify Static Linkage
         shell: bash

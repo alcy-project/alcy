@@ -1,3 +1,0 @@
-exit = 4
-contains = ["The returned value does not carry the `fn(...)` signature of 'bad'"]
-not_contains = []

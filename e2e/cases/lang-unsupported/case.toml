@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+args = ["--lang=ja-jp"]
+
+[cli.expect]
+exit = 1
+contains = ["Invalid choice for argument 'lang': 'ja-jp'"]

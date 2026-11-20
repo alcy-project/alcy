@@ -1,5 +1,0 @@
-# The block declares 'U' and implements 'Tagged' for 'P', which carries
-# no argument for 'U' to bind.
-exit = 4
-contains = ["Impl parameter 'U' does not appear in the impl's target type"]
-not_contains = ["Unknown type"]

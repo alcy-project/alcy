@@ -1,3 +1,0 @@
-exit = 4
-contains = ["Unresolved value"]
-not_contains = ["standard library"]

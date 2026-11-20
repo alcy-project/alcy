@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Cannot infer the type arguments of method 'make'"]
+not_contains = []

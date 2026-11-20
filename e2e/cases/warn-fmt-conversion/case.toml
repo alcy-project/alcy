@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+contains = ["WC045", "Write the fixed-point conversion explicitly", "`{:.2f}`"]
+not_contains = ["error[E"]

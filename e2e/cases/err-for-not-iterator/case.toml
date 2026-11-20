@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["A 'for' loop requires an 'Iterator' implementation in scope for this type"]

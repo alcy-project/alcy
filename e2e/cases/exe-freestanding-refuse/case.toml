@@ -1,0 +1,6 @@
+[program.expect]
+exit = "non-zero"
+stderr_contains = ["panic: allocation failed"]
+
+[program.sweep.wasm]
+skip = "a usize literal past the 32-bit range"

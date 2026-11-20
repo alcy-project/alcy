@@ -1,2 +1,0 @@
-exit = "non-zero"
-contains = ["Reference to local 'x' escapes the block that declares it"]

@@ -1,0 +1,7 @@
+[cli]
+subcommand = "build"
+
+[cli.expect]
+exit = 0
+contains = ["WC021", "Unused non-() value", "Compiled"]
+not_contains = ["error[E"]

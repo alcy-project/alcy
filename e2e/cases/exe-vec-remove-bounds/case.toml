@@ -1,0 +1,7 @@
+[program.expect]
+exit = "non-zero"
+stdout = "1\n"
+stderr_contains = ["Vec remove index out of bounds"]
+
+[program.sweep.wasm]
+skip = "a usize literal past the 32-bit range"

@@ -1,0 +1,12 @@
+[cli]
+subcommand = "check"
+args = ["--color=always"]
+
+[cli.expect]
+exit = 0
+contains = [
+  "\u001b[1m\u001b[92mChecked\u001b[0m",
+  "\u001b[4m1 file, 1 module, 1 function\u001b[0m",
+  "\u001b[2m(",
+]
+not_contains = ["\u001b[31m"]

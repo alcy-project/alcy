@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+contains = []
+not_contains = ["escapes the block", "outlives it"]

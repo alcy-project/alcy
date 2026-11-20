@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "len = 6 capacity = 8\nsum = 91\npopped 36\nlen = 5\n"

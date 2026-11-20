@@ -1,2 +1,0 @@
-exit = 4
-contains = ["Float literal is out of range for its type"]

@@ -1,0 +1,7 @@
+[cli]
+subcommand = "test"
+args = ["--execution=single-thread"]
+
+[cli.expect]
+exit = 0
+contains = ["alcy-test: running main::adds", "alcy-test: running util::doubles", "2 tests passed"]

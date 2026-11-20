@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+contains = ["WI011", "not in [modules]"]
+not_contains = ["error[E"]

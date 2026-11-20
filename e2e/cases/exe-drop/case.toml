@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "made-holder\nmade-gen\nres\nearly-done\ngen\nres\n"

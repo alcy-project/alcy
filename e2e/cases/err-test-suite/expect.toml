@@ -1,3 +1,0 @@
-exit = 4
-subcommand = "test"
-contains = ["The `test` command tests one package"]

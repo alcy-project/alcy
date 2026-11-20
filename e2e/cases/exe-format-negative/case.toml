@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "-1 -42 0 7 -3\n"

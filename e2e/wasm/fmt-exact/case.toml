@@ -1,0 +1,15 @@
+[cli]
+subcommand = "compile"
+args = ["--target=wasm32-unknown-emscripten", "--backend=direct-wasm"]
+
+[cli.expect]
+exit = 0
+
+[program]
+target = "wasm32-unknown-emscripten"
+backend = "direct-wasm"
+interpreter = "bun"
+
+[program.expect]
+exit = 0
+stdout = "0.10000000000000001\n0.69999999999999996\n0.33333333333333331\n0.12500000000000000\n2.67499999999999982\n0.1000000000000000 0.100000000000000\n1 2 3\n1.00000000000000000\n0.29999999999999999\n0.05000000000000000\n"

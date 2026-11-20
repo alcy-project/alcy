@@ -1,8 +1,0 @@
-# A library that names nothing is the package, so its object lands in
-# `out/` and carries no entry. The document is what names the placement,
-# since the result line names the package.
-exit = 0
-subcommand = "build"
-args = ["--json"]
-contains = ["\"output_path\":\"out/hash.o\"", "\"subject\":\"package hash (1 target)\""]
-not_contains = ["error"]

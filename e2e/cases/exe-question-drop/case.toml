@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "drop-res\nmid\ndrop-res\nend\ndrop-E\ndrop-res\ndrop-E\n"

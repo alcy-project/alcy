@@ -1,5 +1,0 @@
-exit = 4
-subcommand = "check"
-# The parser names the spelling alcy writes instead of leaving the
-# reader at a generic "expected path".
-contains = ["error[EB009]", "has no"]

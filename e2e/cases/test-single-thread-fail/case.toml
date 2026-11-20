@@ -1,0 +1,8 @@
+[cli]
+subcommand = "test"
+args = ["--execution=single-thread"]
+
+[cli.expect]
+exit = 1
+contains = ["alcy-test: running main::fails", "the run stopped before every test finished"]
+not_contains = ["alcy-test: running main::later", "tests passed"]

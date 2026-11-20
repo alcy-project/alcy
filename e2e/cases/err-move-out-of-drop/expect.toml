@@ -1,2 +1,0 @@
-exit = 4
-contains = ["Cannot move a field out of a value of type 'Holder', which declares `drop`"]

@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "21\n31 31\n1 77 1\n"

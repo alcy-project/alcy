@@ -1,0 +1,5 @@
+[program.expect]
+exit = 0
+
+[program.sweep.wasm]
+skip = "a foreign declaration, which the backend declines"

@@ -1,0 +1,7 @@
+[cli]
+subcommand = "test"
+args = ["--filter", "doubles"]
+
+[cli.expect]
+exit = 0
+contains = ["running 1 test (package test-filter)", "test util::doubles ... ok", "1 test passed"]

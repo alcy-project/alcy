@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout_contains = ["distinct = 4\n", "the 3\n", "cat 2\n", "total = 7\n"]

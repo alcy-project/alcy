@@ -1,0 +1,7 @@
+[cli]
+subcommand = "build"
+
+[cli.expect]
+exit = 0
+contains = ["Built", "app"]
+not_contains = ["error"]

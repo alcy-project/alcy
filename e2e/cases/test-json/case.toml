@@ -1,0 +1,7 @@
+[cli]
+subcommand = "test"
+args = ["--json"]
+
+[cli.expect]
+exit = 0
+contains = ["\"outcome\":\"tested\"", "\"tests\":2", "\"test_failures\":0"]

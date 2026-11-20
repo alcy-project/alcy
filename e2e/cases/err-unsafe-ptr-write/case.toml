@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Writing through a raw pointer requires an `unsafe { ... }` block"]

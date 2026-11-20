@@ -1,0 +1,7 @@
+[cli]
+subcommand = "build"
+
+[cli.expect]
+exit = 0
+contains = ["Building  suite acme/progress (2 packages)"]
+not_contains = ["error"]

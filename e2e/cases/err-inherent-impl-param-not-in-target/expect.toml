@@ -1,5 +1,0 @@
-# 'U' appears in a method's parameter list only; 'P' is the whole of
-# the target.
-exit = 4
-contains = ["Impl parameter 'U' does not appear in the impl's target type"]
-not_contains = ["Unknown type"]

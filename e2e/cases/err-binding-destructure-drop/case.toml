@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = "non-zero"
+contains = ["Cannot move a field out of a value of type 'Holder', which declares"]

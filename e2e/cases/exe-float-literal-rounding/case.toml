@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "1.00000011920928955\ntrue\n1.00000005960464478\ntrue\n3.40282346638528876e38\ntrue\n"

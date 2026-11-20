@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "a kept\ntake 2\nDROP 2\nDROP 1\n"

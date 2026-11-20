@@ -1,4 +1,0 @@
-exit = 0
-subcommand = "test"
-args = ["--list", "--json"]
-contains = ["\"test_labels\":[\"main::adds\",\"util::doubles\"]"]

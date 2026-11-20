@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "pkg-ok\n"

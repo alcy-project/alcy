@@ -1,3 +1,0 @@
-# A value holding an anchor is never moved.
-exit = 4
-contains = ["A value holding an anchor is never moved: 'p' lives where it was built"]

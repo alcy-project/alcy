@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["Manifest seals spec 'Missing', which package 'demo' does not declare"]

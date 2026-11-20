@@ -1,0 +1,7 @@
+[cli]
+subcommand = "lint"
+args = ["--list-rules", "--json"]
+
+[cli.expect]
+exit = 0
+contains = ["\"rules\"", "\"unused-variable\""]

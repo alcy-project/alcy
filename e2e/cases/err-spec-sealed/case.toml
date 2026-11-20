@@ -1,0 +1,8 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = [
+  "Spec 'Sealed' is sealed by package 'acme_base'; implementing it from outside needs the [spec] implement key",
+]

@@ -1,6 +1,0 @@
-# The refusal does not depend on the arithmetic of the sum: a build
-# without overflow checks reaches the same panic instead of wrapping
-# the sum and returning with the room still short.
-args = ["--overflow-checks=off"]
-exit = "non-zero"
-stderr_contains = ["capacity overflow"]

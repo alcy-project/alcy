@@ -1,0 +1,7 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["error[EC018]: Invalid binary operand 'f64'"]
+not_contains = ["built successfully"]

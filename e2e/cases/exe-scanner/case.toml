@@ -1,0 +1,6 @@
+[program]
+input = "3 10 20 30\n"
+
+[program.expect]
+exit = 0
+stdout = "60\n"

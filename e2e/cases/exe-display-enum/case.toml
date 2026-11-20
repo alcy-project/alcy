@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "circle 3\nsquare 4\n"

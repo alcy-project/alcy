@@ -1,0 +1,4 @@
+[program.expect]
+exit = "non-zero"
+stdout = "2 1\n"
+stderr_contains = ["Vec insert index out of bounds"]

@@ -1,0 +1,6 @@
+[cli]
+subcommand = "test"
+
+[cli.expect]
+exit = 0
+contains = ["running 0 tests (package test-empty)", "0 tests passed"]

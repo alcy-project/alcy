@@ -1,3 +1,0 @@
-exit = 4
-contains = ["Reference to local 'key' escapes the block that declares it"]
-not_contains = []

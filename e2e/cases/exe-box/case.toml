@@ -1,0 +1,3 @@
+[program.expect]
+exit = 0
+stdout = "8\ndrop 1\ndrop 2\ncleared\n11\ndrop 3\n"

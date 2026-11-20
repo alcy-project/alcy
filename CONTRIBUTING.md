@@ -24,8 +24,8 @@ full option set:
 typos
 uv run ./tools/build.py --target=all --mode=debug
 uv run ./tools/run.py --target=tests --mode=debug
-uv run ./tools/check_e2e.py
-uv run ./tools/check_exe.py
+uv run ./tools/check_cases.py --steps=cli
+uv run ./tools/check_cases.py --steps=program
 # The standard library states its own behaviour in `test` blocks, and this
 # runs them: one `alcy test` per member package, so a member that declares
 # no item yet is the only one excused.
@@ -67,21 +67,15 @@ uv run ./tools/build.py --target=tests --debug-info=full
 uv run ./tools/build.py --target=tests --sanitizer=thread --build-subdir=tsan
 ```
 
-End-to-end acceptance cases live in `e2e/cases/<name>/` (sources plus
-`expect.toml` with the expected exit code and output). The `check_e2e.py`
-runner executes the built `alcy` binary against every case; add a case
-when a user-visible behavior needs a regression anchor that does not
-belong in unit tests.
-
-Programs that run live in `exe/cases/<name>/`, and `check_exe.py`
-builds and runs each one. `--direct-wasm` asks the same questions of the
-direct wasm backend instead: every case becomes a module for
-`wasm32-unknown-emscripten`, bun runs it under WASI, and the same
-`expect.toml` is the verdict. One program, two lowerings, one set of
-answers, so a construct the two disagree about has nowhere to hide. The
-cases the target cannot hold or the backend declines by name are listed in
-`WASM_UNPORTABLE` with the reason and reported as skipped; a case that
-starts failing to build is a line to add there deliberately, not a pass.
+Acceptance cases live in `e2e/cases/<name>/` and `e2e/wasm/<name>/`.
+Each directory holds its sources and a `case.toml`: `[cli]` says how the
+compiler is called and what it should answer, and `[program]` says what
+the program it builds should answer. A case may carry either or both.
+`check_cases.py` runs the steps a caller selects; `--mode=sanitized` and
+`--mode=wasm` ask the same program step of a different lowering. The
+cases a wasm run cannot hold name the reason in
+`[program.sweep.wasm] skip`, so a refusal is a decision beside the case
+rather than a list elsewhere.
 
 The grammar in `treesitter/` is a second reading of the language, written
 against `docs/spec/` rather than against the parser. `grammar.js` follows
@@ -153,7 +147,7 @@ sorted by duration, slowest first:
 ```text
 ==> timings (slowest first)
         812.3s  uv run ./tools/check_coverage.py
-         95.4s  uv run ./tools/check_exe.py --build-subdir=build_release
+         95.4s  uv run ./tools/check_cases.py --steps=program --build-subdir=build_release
         ...
 ==> total 1832.1s
 ```

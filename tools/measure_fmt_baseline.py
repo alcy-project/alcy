@@ -42,7 +42,7 @@ from utils.paths import project_root_dir
 ROOT = project_root_dir
 BENCH_CASES = "check/fmt-heavy,compile/fmt-heavy"
 FIXTURE = ROOT / "benchmarks" / "fixtures" / "fmt-heavy" / "main.al"
-DIGIT_CASE = ROOT / "exe" / "cases" / "exe-fmt-exact" / "main.al"
+DIGIT_CASE = ROOT / "e2e" / "cases" / "exe-fmt-exact" / "main.al"
 PRIMITIVE_CASE = ROOT / "benchmarks" / "fixtures" / "fmt-primitives" / "main.al"
 EXE_CASES = (
     "exe-fmt,exe-fmt-carry,exe-fmt-exact,exe-fmt-exponent,exe-fmt-float,exe-fmt-min"
@@ -146,13 +146,20 @@ def record(scratch: Path, full: bool) -> dict:
     if full:
         checks = {
             "sanitize": tool(
-                "check_exe.py",
+                "check_cases.py",
                 "--build-subdir=build",
-                "--sanitize",
+                "--steps=program",
+                "--mode=sanitized",
                 "--cases",
                 EXE_CASES,
             ),
-            "wasm": tool("check_wasm.py", "--build-subdir=build"),
+            "wasm": tool(
+                "check_cases.py",
+                "--build-subdir=build",
+                "--cases-root=e2e/wasm",
+                "--steps=cli,program",
+                "--mode=wasm",
+            ),
         }
         for name, argv in checks.items():
             proc = run(argv)

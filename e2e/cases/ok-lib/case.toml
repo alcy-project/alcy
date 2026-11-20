@@ -1,0 +1,8 @@
+[cli]
+subcommand = "build"
+args = ["--json"]
+
+[cli.expect]
+exit = 0
+contains = ["\"output_path\":\"out/hash.o\"", "\"subject\":\"package hash (1 target)\""]
+not_contains = ["error"]

@@ -1,0 +1,7 @@
+[cli]
+subcommand = "lint"
+
+[cli.expect]
+exit = 0
+contains = ["warning[negative-to-unsigned]", "wraps when cast to u8"]
+not_contains = ["did you mean", "0xfe"]

@@ -1,3 +1,0 @@
-exit = 4
-contains = ["Type mismatch in integer literal"]
-not_contains = ["\u001b["]

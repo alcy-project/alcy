@@ -1,0 +1,7 @@
+[cli]
+subcommand = "test"
+args = ["--list"]
+
+[cli.expect]
+exit = 0
+contains = ["main::adds", "util::doubles"]

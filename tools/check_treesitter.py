@@ -45,7 +45,7 @@ QUERIES = [
 ]
 # Every directory in the repository that holds alcy sources. A file the
 # compiler accepts is one whose tree this grammar has to agree with.
-SOURCE_ROOTS = ["lib", "e2e", "exe", "samples", "benchmarks"]
+SOURCE_ROOTS = ["lib", "e2e", "samples", "benchmarks"]
 
 
 def grammar_cli_version(cli: str) -> str:

@@ -1,3 +1,0 @@
-# A parameter and a return is Movable.
-exit = 4
-contains = ["A parameter or return is Movable, and this type holds an anchor"]

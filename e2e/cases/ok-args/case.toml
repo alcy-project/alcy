@@ -1,0 +1,12 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+not_contains = ["error"]
+
+[program.expect]
+exit = 0
+
+[program.sweep.wasm]
+skip = "`alcy_arg_count`, which the backend declines"
