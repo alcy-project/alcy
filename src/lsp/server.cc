@@ -495,6 +495,8 @@ void Server::handle_notification(const text::JsonValue& message) {
     did_close(*params);
   } else if (method == "workspace/didChangeWatchedFiles") {
     watched_files_changed(*params);
+  } else if (method == "$/cancelRequest") {
+    log_message(4, "cancellation requested");
   }
 }
 
@@ -608,6 +610,7 @@ void Server::initialize(const text::JsonValue& id,
   result.set("serverInfo", std::move(server_info));
 
   initialized_ = true;
+  log_message(3, "alcy-lsp 0.1.0 initialized");
   send_result(id, std::move(result));
 }
 
@@ -989,6 +992,9 @@ void Server::diagnostic(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
+  if (!cache_.get(*document).ok()) {
+    log_message(2, "the package could not be analyzed");
+  }
   send_result(id, diagnostics_.pull(*document, cache_,
                                     string_field(params, "previousResultId")));
 }
@@ -1257,6 +1263,7 @@ void Server::register_watchers() {
 void Server::watched_files_changed(const text::JsonValue& params) {
   (void)params;
   cache_.clear();
+  log_message(4, "watched files changed; package analyses dropped");
   for (const auto& [uri, document] : documents_.documents()) {
     (void)uri;
     publish_diagnostics(document);
@@ -1297,6 +1304,13 @@ void Server::send_error(const text::JsonValue& id,
   message.set("id", id);
   message.set("error", std::move(error));
   transport_.write_message(text::to_json(message));
+}
+
+void Server::log_message(i32 type, std::string_view message) {
+  text::JsonValue params = text::JsonValue::make_object();
+  params.set("type", text::JsonValue::make_number(static_cast<f64>(type)));
+  params.set("message", text::JsonValue::make_string(std::string(message)));
+  send_notification("window/logMessage", std::move(params));
 }
 
 void Server::send_request(std::string_view id,

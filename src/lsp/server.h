@@ -97,6 +97,7 @@ class Server {
                   i32 code,
                   std::string_view message);
   void send_notification(std::string_view method, text::JsonValue params);
+  void log_message(i32 type, std::string_view message);
   void send_request(std::string_view id,
                     std::string_view method,
                     text::JsonValue params);
