@@ -182,6 +182,7 @@ class CompEvaluator {
                      u32& index_out);
 
   ir::TypeIdx expr_type_in(u32 mod, ast::ExprIdx expr);
+  ir::TypeIdx expr_type_in_fallback(u32 mod, ast::ExprIdx expr);
   const CheckedModule::CallTarget* call_target_in(u32 mod,
                                                   ast::ExprIdx callee) const;
   const CheckedModule::ValueSplice* value_splice_in(u32 mod,
@@ -208,6 +209,10 @@ class CompEvaluator {
                           const CompVal& value,
                           CompScope& scope,
                           diag::Span span);
+  bool comp_eval_range(u32 mod,
+                       ast::ExprIdx expr,
+                       CompScope& scope,
+                       CompVal& out);
   bool comp_eval_struct(u32 mod,
                         ast::ExprIdx expr,
                         CompScope& scope,

@@ -4637,6 +4637,9 @@ ir::TypeIdx Checker::check_stmt(u32 module, ast::StmtIdx stmt) {
       }
       if ((decl.is_const || verify_comp_known) &&
           !comp_checked_in_scope(decl.init) &&
+          (!decl.for_cursor ||
+           (ast.exprs[decl.init].kind != ast::ExprKind::Call &&
+            ast.exprs[decl.init].kind != ast::ExprKind::MethodCall)) &&
           !comp_known_value(module, decl.init, init)) {
         const diag::Span span = ast.exprs[decl.init].span;
         const u32 index =

@@ -86,7 +86,7 @@ bool CompEvaluator::struct_field_index(ir::TypeIdx type,
 bool CompEvaluator::variant_index(ir::TypeIdx enum_type,
                                   std::string_view name,
                                   u32& index_out) {
-  const auto found = enums_.find(enum_type.idx);
+  const auto found = enums_.find(type_origin(enum_type).idx);
   if (found == enums_.end()) {
     return false;
   }
@@ -192,13 +192,22 @@ const CheckedModule::VariantUse* CompEvaluator::variant_use_in(
     u32 inst) const {
   const auto found = variants_.find((static_cast<u64>(path.idx) << 32) |
                                     static_cast<u64>(inst));
-  return found == variants_.end() ? nullptr : found->second;
+  if (found != variants_.end()) {
+    return found->second;
+  }
+  if (inst == PARAM_INST) {
+    return nullptr;
+  }
+  const auto declared = variants_.find((static_cast<u64>(path.idx) << 32) |
+                                       static_cast<u64>(PARAM_INST));
+  return declared == variants_.end() ? nullptr : declared->second;
 }
 
 std::vector<ir::TypeIdx> CompEvaluator::variant_payload(ir::TypeIdx enum_type,
                                                         u32 variant) const {
   const ir::EnumType& enum_ty =
-      builder.state().enum_types[builder.state().types[enum_type].as_enum()];
+      builder.state()
+          .enum_types[builder.state().types[type_origin(enum_type)].as_enum()];
   std::vector<ir::TypeIdx> payloads;
   u32 at = enum_ty.variants.head().idx + variant;
   const ir::EnumVariantType variant_ty =
@@ -275,10 +284,31 @@ ir::TypeIdx CompEvaluator::expr_type_in(u32 mod, ast::ExprIdx expr) {
   return entry != nullptr ? entry->type : error_type();
 }
 
+ir::TypeIdx CompEvaluator::expr_type_in_fallback(u32 mod, ast::ExprIdx expr) {
+  const ir::TypeIdx concrete = expr_type_in(mod, expr);
+  if (tag_of(concrete) != ir::TypeTag::Error) {
+    return concrete;
+  }
+  const u32 saved = inst_;
+  inst_ = PARAM_INST;
+  const ir::TypeIdx declared = expr_type_in(mod, expr);
+  inst_ = saved;
+  return declared;
+}
+
 const analyzer::CheckedModule::CallTarget* CompEvaluator::call_target_in(
     u32 mod,
     ast::ExprIdx callee) const {
-  return inputs_.modules[mod].callee_of(callee, inst_);
+  const analyzer::CheckedModule& module = inputs_.modules[mod];
+  if (const auto* target = module.callee_of(callee, inst_)) {
+    return target;
+  }
+  // A generic body reached from a comp call is checked once at its
+  // definition site, so its inner calls are keyed by PARAM_INST rather
+  // than the caller's concrete instantiation. The call target itself
+  // names the method to dispatch; its body's expressions carry their
+  // own instantiation keys.
+  return module.callee_of(callee, PARAM_INST);
 }
 
 const CheckedModule::ValueSplice*
@@ -292,7 +322,7 @@ bool CompEvaluator::comp_eval_literal(u32 mod,
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::Literal& lit =
       ast.literals[node.payload.get<ast::ExprLiteral>().value];
-  const ir::TypeIdx type = expr_type_in(mod, expr);
+  const ir::TypeIdx type = expr_type_in_fallback(mod, expr);
   if (tag_of(type) == ir::TypeTag::Error) {
     return fail(node.span, "comp operand without type");
   }
@@ -529,6 +559,60 @@ bool CompEvaluator::comp_match_pattern(u32 mod,
       return false;
     }
   }
+}
+
+// A range expression is `Range<T>` data: a struct of two `Bound<T>`
+// values. The checker records the variant uses and payload types, so
+// this builds the same value the runtime lowering stores.
+bool CompEvaluator::comp_eval_range(u32 mod,
+                                    ast::ExprIdx expr,
+                                    CompScope& scope,
+                                    CompVal& out) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprRange& range = node.payload.get<ast::ExprRange>();
+  out.type = expr_type_in(mod, expr);
+  if (tag_of(out.type) != ir::TypeTag::Struct) {
+    return fail(node.span, "range without a type");
+  }
+  const auto* info = struct_info(out.type);
+  if (info == nullptr || info->fields.size() != 2) {
+    return fail(node.span, "range without bounds");
+  }
+  const ir::StructType range_shape =
+      builder.state()
+          .struct_types[builder.types()[type_origin(out.type)].as_struct()];
+  const ir::TypeIdx bound_ty = type_origin(range_shape.fields[0]);
+  out.value = CompValue{};
+  out.value.tag = CompValue::Tag::Struct;
+  for (usize i = 0; i < 2; ++i) {
+    const ast::ExprIdx endpoint = i == 0 ? range.start : range.end;
+    const bool included = i == 0 || range.inclusive;
+    const std::string_view name = !endpoint.is_valid()
+                                      ? "Unbounded"
+                                      : (included ? "Included" : "Excluded");
+    u32 variant = 0;
+    if (!variant_index(bound_ty, name, variant)) {
+      return fail(node.span, "bound without a declaration");
+    }
+    CompValue bound;
+    bound.tag = CompValue::Tag::Enum;
+    bound.variant = variant;
+    if (endpoint.is_valid()) {
+      CompVal value;
+      if (!comp_eval_expr(mod, endpoint, scope, value)) {
+        return false;
+      }
+      const std::vector<ir::TypeIdx> payloads =
+          variant_payload(bound_ty, variant);
+      if (payloads.size() != 1) {
+        return fail(node.span, "bound without a payload");
+      }
+      value.type = payloads[0];
+      bound.fields.push_back(std::move(value.value));
+    }
+    out.value.fields.push_back(std::move(bound));
+  }
+  return true;
 }
 
 bool CompEvaluator::comp_eval_struct(u32 mod,
@@ -965,12 +1049,8 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
   std::vector<usize> bound_params;
   bool ok = true;
   for (usize i = 0; i < args.size() && ok; ++i) {
-    // A `comp fn`'s arguments all bind as comp values; an ordinary
-    // callee binds only its `comp` parameters and leaves the rest to
-    // the runtime call the evaluator cannot make.
-    if (!fn.params[i].is_comp && !fn.is_comp) {
-      continue;
-    }
+    // Every argument of a callee reached in a comp context is evaluated
+    // here; one that cannot produce a comp value fails closed.
     // An argument is an expression of the caller's body, so its types
     // answer the caller's instantiation; the callee's takes over for
     // its parameters and its body.
@@ -1266,6 +1346,11 @@ bool CompEvaluator::comp_eval_method_call(u32 mod,
   if (call_depth_ >= COMP_MAX_CALL_DEPTH) {
     return fail(node.span, "comp call depth exhausted");
   }
+  // A mutable receiver is bound by value, so its changes live in the
+  // callee's frame until they are written back to the caller's place.
+  const bool mut_receiver = tag_of(info.params[0]) == ir::TypeTag::MutRef;
+  const Place receiver_place =
+      mut_receiver ? comp_place(mod, method.receiver, scope) : Place{};
   ++call_depth_;
   CompScope callee_scope;
   callee_scope.frames.emplace_back();
@@ -1294,6 +1379,10 @@ bool CompEvaluator::comp_eval_method_call(u32 mod,
       ok = false;
     }
     inst_ = saved_inst;
+  }
+  if (ok && mut_receiver && receiver_place.value != nullptr &&
+      !callee_scope.frames.empty() && !callee_scope.frames[0].empty()) {
+    *receiver_place.value = callee_scope.frames[0].front().second.value;
   }
   --call_depth_;
   if (!ok) {
@@ -1488,6 +1577,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
           return fail(field.name.span, "unknown tuple field");
         }
         out.value = base.value.fields[index];
+        out.type = field_type_of(base.type, index, field.name.span);
         return true;
       }
       if (base.value.tag == CompValue::Tag::Struct) {
@@ -1497,6 +1587,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
           return fail(field.name.span, "unknown field");
         }
         out.value = base.value.fields[index];
+        out.type = field_type_of(base.type, index, field.name.span);
         return true;
       }
       return fail(node.span, "field without value");
@@ -1715,7 +1806,7 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
       *flow_out = std::move(flow);
       return true;
     }
-    case ast::ExprKind::Range:
+    case ast::ExprKind::Range: return comp_eval_range(mod, expr, scope, out);
     case ast::ExprKind::Closure: break;
     case ast::ExprKind::Tuple: {
       out.type = expr_type_in(mod, expr);
