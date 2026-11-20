@@ -1,6 +1,5 @@
 # Build artifacts
 /out/
-/e2e/cases/*/out/
 compile_commands.json
 
 # Virtual Environments
@@ -72,9 +71,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-
-# The program `alcy test --no-run` builds beside the package it tests
-lib/std/*/out/
 
 # debug information files
 *.dw
