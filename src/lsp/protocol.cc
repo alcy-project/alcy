@@ -29,8 +29,12 @@ text::JsonValue range_json(const Document& document, u32 offset, u32 length) {
   return out;
 }
 
-text::JsonValue range_json(std::string_view text, u32 offset, u32 length) {
+text::JsonValue range_json(std::string_view text,
+                           u32 offset,
+                           u32 length,
+                           PositionEncoding encoding) {
   PositionIndex index;
+  index.set_encoding(encoding);
   index.reset(text);
   text::JsonValue out = text::JsonValue::make_object();
   out.set("start", position_json(index.position_at(text, offset)));
@@ -40,15 +44,17 @@ text::JsonValue range_json(std::string_view text, u32 offset, u32 length) {
 }
 
 text::JsonValue location_json(const Document& document, diag::Span span) {
-  return location_json(document.uri(), document.text(), span);
+  return location_json(document.uri(), document.text(), span,
+                       document.encoding());
 }
 
 text::JsonValue location_json(std::string_view uri,
                               std::string_view text,
-                              diag::Span span) {
+                              diag::Span span,
+                              PositionEncoding encoding) {
   text::JsonValue out = text::JsonValue::make_object();
   out.set("uri", text::JsonValue::make_string(std::string(uri)));
-  out.set("range", range_json(text, span.offset, span.length));
+  out.set("range", range_json(text, span.offset, span.length, encoding));
   return out;
 }
 

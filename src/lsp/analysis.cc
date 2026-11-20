@@ -159,8 +159,10 @@ void analyze_package(PackageAnalysis& out,
 std::unique_ptr<PackageAnalysis> build_analysis(
     std::span<const workspace::BufferView> buffers,
     std::string_view focus_uri,
-    i18n::Language language) {
+    i18n::Language language,
+    PositionEncoding encoding) {
   auto out = std::make_unique<PackageAnalysis>(language);
+  out->encoding = encoding;
   const std::optional<std::string> focus_path =
       workspace::uri_to_path(focus_uri);
   const std::optional<path::Path> root =

@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "doctest/doctest.h"
+#include "lsp/protocol.h"
+#include "text/json.h"
 
 namespace lsp {
 
@@ -41,6 +43,16 @@ TEST_CASE("Positions can count UTF-8 bytes when the client asks") {
   CHECK(index.byte_offset(text, Position{0, 3}) == 3);
   CHECK(index.position_at(text, 3) == Position{0, 3});
   CHECK(index.position_at(text, 4) == Position{0, 4});
+}
+
+TEST_CASE("Cross-file ranges use the negotiated encoding") {
+  const std::string text =
+      "a\xC3\xA9"
+      "z";
+  const text::JsonValue utf8 = range_json(text, 3, 1, PositionEncoding::Utf8);
+  const text::JsonValue utf16 = range_json(text, 3, 1, PositionEncoding::Utf16);
+  CHECK(utf8.find("start")->find("character")->as_number() == 3);
+  CHECK(utf16.find("start")->find("character")->as_number() == 2);
 }
 
 TEST_CASE("A carriage-return pair is one line break") {

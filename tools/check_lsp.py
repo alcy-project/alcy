@@ -120,7 +120,11 @@ def main() -> int:
             "jsonrpc": "2.0",
             "id": 1,
             "method": "initialize",
-            "params": {"processId": None, "rootUri": None, "capabilities": {}},
+            "params": {
+                "processId": None,
+                "rootUri": None,
+                "capabilities": {"general": {"positionEncoding": ["utf-8"]}},
+            },
         },
         {"jsonrpc": "2.0", "method": "initialized", "params": {}},
         {
@@ -513,7 +517,7 @@ def main() -> int:
     capabilities = initialize.get("capabilities", {})
     if capabilities.get("documentFormattingProvider") is not True:
         return fail("initialize did not advertise documentFormattingProvider")
-    if capabilities.get("positionEncoding") != "utf-16":
+    if capabilities.get("positionEncoding") != "utf-8":
         return fail("initialize did not negotiate the client's position encoding")
     if capabilities.get("documentRangeFormattingProvider") is not True:
         return fail("initialize did not advertise rangeFormattingProvider")
@@ -871,7 +875,7 @@ def package_session(alcy: Path) -> int:
                     "processId": None,
                     "rootUri": root.as_uri(),
                     "workspaceFolders": None,
-                    "capabilities": {"general": {"positionEncoding": ["utf-16"]}},
+                    "capabilities": {"general": {"positionEncoding": ["utf-8"]}},
                 },
             },
             {"jsonrpc": "2.0", "method": "initialized", "params": {}},

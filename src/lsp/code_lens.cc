@@ -47,7 +47,8 @@ text::JsonValue lens_json(const Document& document,
     if (!source.has_value()) {
       continue;
     }
-    locations.push(location_json(source->uri, source->text, site));
+    locations.push(location_json(source->uri, source->text, site,
+                                 analysis.owner().encoding));
   }
 
   const u32 count = static_cast<u32>(locations.as_array().size());

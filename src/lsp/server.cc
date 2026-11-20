@@ -529,6 +529,7 @@ void Server::initialize(const text::JsonValue& id,
       }
     }
     encoding_ = negotiate_encoding(*params);
+    cache_.set_encoding(encoding_);
   }
   text::JsonValue sync = text::JsonValue::make_object();
   sync.set("openClose", text::JsonValue::make_bool(true));
@@ -879,7 +880,7 @@ void Server::references(const text::JsonValue& id,
     if (!text.has_value()) {
       return;
     }
-    result.push(location_json(*uri, *text, span));
+    result.push(location_json(*uri, *text, span, encoding_));
   };
   if (include_declaration) {
     if (const std::optional<diag::Span> location =

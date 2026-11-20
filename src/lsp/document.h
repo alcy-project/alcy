@@ -57,6 +57,7 @@ class PositionIndex {
   Position position_at(std::string_view text, usize offset) const;
 
   void set_encoding(PositionEncoding encoding) { encoding_ = encoding; }
+  [[nodiscard]] PositionEncoding encoding() const { return encoding_; }
 
  private:
   u32 units(char byte) const;
@@ -86,6 +87,7 @@ class Document {
   void set_encoding(PositionEncoding encoding) {
     index_.set_encoding(encoding);
   }
+  [[nodiscard]] PositionEncoding encoding() const { return index_.encoding(); }
 
  private:
   void rebuild();

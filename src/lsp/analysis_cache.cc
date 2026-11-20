@@ -87,8 +87,8 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
 
   auto inserted = packages_.find(cache_key);
   if (inserted == packages_.end()) {
-    std::shared_ptr<PackageAnalysis> owner =
-        build_analysis(buffers, document.uri(), i18n::Language::EnUs);
+    std::shared_ptr<PackageAnalysis> owner = build_analysis(
+        buffers, document.uri(), i18n::Language::EnUs, encoding_);
     owner->fingerprint = signature;
     inserted = packages_.emplace(cache_key, std::move(owner)).first;
   }

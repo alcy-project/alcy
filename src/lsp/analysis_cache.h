@@ -41,6 +41,8 @@ class AnalysisCache {
     workspace_root_ = std::move(root);
   }
 
+  void set_encoding(PositionEncoding encoding) { encoding_ = encoding; }
+
   // Whether two buffers share a package key, for re-publishing diagnostics
   // to a sibling when one file of the package changes.
   bool same_package(const Document& lhs, const Document& rhs) const {
@@ -68,6 +70,7 @@ class AnalysisCache {
 
   const DocumentStore* documents_ = nullptr;
   std::optional<path::Path> workspace_root_;
+  PositionEncoding encoding_ = PositionEncoding::Utf16;
   std::unordered_map<std::string, Entry> entries_;
   std::unordered_map<std::string, std::shared_ptr<PackageAnalysis>> packages_;
 };

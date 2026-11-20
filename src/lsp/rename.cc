@@ -180,7 +180,8 @@ std::optional<text::JsonValue> workspace_rename(
     text::JsonValue edits = text::JsonValue::make_array();
     for (const diag::Span span : spans) {
       text::JsonValue edit = text::JsonValue::make_object();
-      edit.set("range", range_json(*text, span.offset, span.length));
+      edit.set("range", range_json(*text, span.offset, span.length,
+                                   analysis.owner().encoding));
       edit.set("newText", text::JsonValue::make_string(std::string(new_name)));
       edits.push(std::move(edit));
     }

@@ -44,6 +44,7 @@ struct PackageAnalysis {
   std::unordered_map<std::string, source::FileId> files_by_uri;
   path::Path root = path::Path::from_native(".").unwrap();
   std::string fingerprint;
+  PositionEncoding encoding = PositionEncoding::Utf16;
   bool ok = false;
 };
 
@@ -54,7 +55,8 @@ struct PackageAnalysis {
 std::unique_ptr<PackageAnalysis> build_analysis(
     std::span<const workspace::BufferView> buffers,
     std::string_view focus_uri,
-    i18n::Language language);
+    i18n::Language language,
+    PositionEncoding encoding = PositionEncoding::Utf16);
 
 // One document's view into a package analysis. The public shape is what
 // the semantic features read; how the tree was assembled is private to

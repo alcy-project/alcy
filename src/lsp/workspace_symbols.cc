@@ -95,9 +95,11 @@ text::JsonValue workspace_symbols(const DocumentStore& documents,
                                   AnalysisCache& cache,
                                   std::string_view query) {
   std::map<std::string, std::string> sources;
+  PositionEncoding encoding = PositionEncoding::Utf16;
   for (const auto& [uri, document] : documents.documents()) {
     (void)uri;
     const DocumentAnalysis& analysis = cache.get(document);
+    encoding = analysis.owner().encoding;
     if (!analysis.ok()) {
       continue;
     }
@@ -116,7 +118,8 @@ text::JsonValue workspace_symbols(const DocumentStore& documents,
   }
   text::JsonValue out = text::JsonValue::make_array();
   for (const auto& [uri, text] : sources) {
-    const Document document(uri, "alcy", 1, text);
+    Document document(uri, "alcy", 1, text);
+    document.set_encoding(encoding);
     const text::JsonValue symbols = document_symbols(document);
     collect(uri, symbols, {}, query, &out);
   }
