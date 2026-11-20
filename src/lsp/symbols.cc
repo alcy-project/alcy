@@ -8,12 +8,14 @@
 #include <string_view>
 #include <utility>
 
+#include "analyzer/resolve.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/language.h"
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "pipeline/parse.h"
@@ -246,6 +248,23 @@ text::JsonValue document_symbols(const Document& document) {
   }
   for (const ast::ItemIdx index : file->items) {
     symbols.push(item_symbol(document, context.ast, index));
+  }
+  return symbols;
+}
+
+text::JsonValue document_symbols(const Document& document,
+                                 const DocumentAnalysis& analysis) {
+  text::JsonValue symbols = text::JsonValue::make_array();
+  if (!analysis.ok()) {
+    return document_symbols(document);
+  }
+  for (const analyzer::ModuleNode* module : analysis.package().tree.modules) {
+    if (module->file != analysis.root()) {
+      continue;
+    }
+    for (const ast::ItemIdx index : module->items) {
+      symbols.push(item_symbol(document, analysis.context().ast, index));
+    }
   }
   return symbols;
 }

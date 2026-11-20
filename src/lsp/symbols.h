@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "text/json.h"
 
@@ -13,5 +14,7 @@ namespace lsp {
 // children. Parsing alone answers it, so an outline survives the errors
 // that stop analysis.
 text::JsonValue document_symbols(const Document& document);
+text::JsonValue document_symbols(const Document& document,
+                                 const DocumentAnalysis& analysis);
 
 }  // namespace lsp

@@ -660,7 +660,7 @@ void Server::document_symbol(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, document_symbols(*document));
+  send_result(id, document_symbols(*document, cache_.get(*document)));
 }
 
 void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
