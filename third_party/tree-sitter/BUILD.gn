@@ -14,6 +14,13 @@ config("tree_sitter_config") {
 source_set("tree-sitter") {
   configs = []
   configs = default_third_party_configs
+
+  # The dot-graph logger calls fdopen, which the emscripten libc
+  # declares only under a POSIX feature macro, and the wasm build
+  # compiles the library with strict C11.
+  if (is_wasm) {
+    defines = [ "_POSIX_C_SOURCE=200809L" ]
+  }
   sources = [
     "src/lib/src/alloc.c",
     "src/lib/src/get_changed_ranges.c",
