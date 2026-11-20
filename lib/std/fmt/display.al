@@ -539,3 +539,206 @@ pub fn display_f64(value: f64, precision: usize, trim: bool, out: *mut u8, cap: 
   }
   ret n + written
 }
+
+fn write_signed(value: i64, out: *mut u8, cap: usize) -> usize {
+  negative := value < 0i64
+  mut n := 0 as usize
+  if negative {
+    if cap > 0 {
+      unsafe { *ptr_offset_mut(out, 0) = 45u8 }
+    }
+    n = 1
+  }
+  mut magnitude := value as u64
+  if negative {
+    magnitude = wrapping_sub(0u64, value as u64)
+  }
+  mut rest := 0 as usize
+  if cap > n {
+    rest = cap - n
+  }
+  written := display_u64(magnitude, unsafe { ptr_offset_mut(out, n as isize) }, rest)
+  ret n + written
+}
+
+impl Display for i8 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := write_signed(*self as i64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for i16 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := write_signed(*self as i64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for i32 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := write_signed(*self as i64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for i64 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := write_signed(*self as i64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for isize {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := write_signed(*self as i64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for u8 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_u64(*self as u64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for u16 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_u64(*self as u64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for u32 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_u64(*self as u64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for u64 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_u64(*self as u64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for usize {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_u64(*self as u64, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for bool {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_bool(*self, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for str {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_str(*self, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for f32 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_f64(*self as f64, 6, true, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}
+
+impl Display for f64 {
+  fn display(self: &Self, out: &mut [u8]) -> usize {
+    mut scratch := [0u8; 64]
+    n := display_f64(*self, 6, true, &mut scratch[0] as *mut u8, scratch.len())
+    mut i := 0 as usize
+    while i < n && i < out.len() {
+      out[i] = scratch[i]
+      i += 1
+    }
+    ret n
+  }
+}

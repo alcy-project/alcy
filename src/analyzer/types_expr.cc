@@ -854,7 +854,7 @@ void Checker::check_call_args(u32 module,
 // package its item is declared in, never by a user module (locals
 // shadow the prelude first, and a user `write` is not staged).
 bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
-  if (fn->name != "write" && fn->name != "format") {
+  if (!is_expanded_name(fn->name, FMT_EXPANDED_NAMES)) {
     return false;
   }
   return tree.is_staged_item("fmt", fn->item);
@@ -863,8 +863,7 @@ bool Checker::is_core_fmt(const CheckedModule::FnSig* fn) const {
 // A standard-output write of the staged `io` package: recognized by the
 // package its item is declared in, like fmt's.
 bool Checker::is_io_print(const CheckedModule::FnSig* fn) const {
-  if (fn->name != "print" && fn->name != "println" && fn->name != "eprint" &&
-      fn->name != "eprintln") {
+  if (!is_expanded_name(fn->name, IO_EXPANDED_NAMES)) {
     return false;
   }
   return tree.is_staged_item("io", fn->item);

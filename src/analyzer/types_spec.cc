@@ -12,7 +12,6 @@
 
 #include "analyzer/checker.h"
 #include "analyzer/diag_code.h"
-#include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
@@ -1182,12 +1181,7 @@ bool Checker::check_declared_bounds(
         }
         spec_args.push_back(resolved);
       }
-      // `{}` formats a builtin convertible with no impl at all, so a
-      // `Display` bound accepts those types too.
-      const bool builtin_display =
-          analyzer::is_formattable_tag(tag_of(*bound_type)) &&
-          specs[spec].name == "Display" &&
-          tree.is_staged_item("fmt", specs[spec].item);
+
       // A scalar carries its operators builtin, so an
       // arithmetic bound it already satisfies, the way a formattable
       // scalar satisfies `Display`. The spec is the compiler-owned one
@@ -1210,7 +1204,7 @@ bool Checker::check_declared_bounds(
           param_declares_bound(
               builder.types()[bound_type->idx].as_param().value, spec,
               spec_args, module);
-      if (!builtin_display && !builtin_arithmetic && !implied &&
+      if (!builtin_arithmetic && !implied &&
           !implements_spec(*bound_type, spec, spec_args, module)) {
         // An owning-function slot reports its own spelling :
         // the witness does not carry the `fn(...)` signature that was

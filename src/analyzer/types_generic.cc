@@ -12,6 +12,7 @@
 
 #include "analyzer/checker.h"
 #include "analyzer/diag_code.h"
+#include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
@@ -126,11 +127,10 @@ bool Checker::is_expanded_variadic(ast::ItemIdx item) const {
   }
   const std::string_view name =
       ast.items[item].payload.get<ast::ItemFn>().name.name;
-  if (name == "write" || name == "format") {
+  if (is_expanded_name(name, FMT_EXPANDED_NAMES)) {
     return tree.is_staged_item("fmt", item);
   }
-  if (name == "print" || name == "println" || name == "eprint" ||
-      name == "eprintln") {
+  if (is_expanded_name(name, IO_EXPANDED_NAMES)) {
     return tree.is_staged_item("io", item);
   }
   return false;

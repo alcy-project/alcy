@@ -24,6 +24,24 @@ inline constexpr u8 FMT_NO_PRECISION = 0xFF;
 // compile-time constants sized from it.
 inline constexpr u8 FMT_MAX_PRECISION = 17;
 
+// The compiler-expanded items, named once for the checker and lowering.
+// Staged-package membership is checked at each use; the names alone
+// never decide recognition.
+inline constexpr std::string_view FMT_EXPANDED_NAMES[] = {"write", "format"};
+inline constexpr std::string_view IO_EXPANDED_NAMES[] = {"print", "println",
+                                                         "eprint", "eprintln"};
+
+template <usize N>
+bool is_expanded_name(std::string_view name,
+                      const std::string_view (&names)[N]) {
+  for (std::string_view candidate : names) {
+    if (candidate == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
 struct FmtPiece {
   bool is_arg = false;
   std::string literal;

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
@@ -1529,14 +1530,14 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   if (sig.is_extern) {
     return lower_extern_call(expr, sig);
   }
-  if (sig.name == "write" && pkg.tree.is_staged_item("fmt", sig.item)) {
-    return fmt_lowering_.lower_write(expr, sig);
-  }
-  if (sig.name == "format" && pkg.tree.is_staged_item("fmt", sig.item)) {
+  if (analyzer::is_expanded_name(sig.name, analyzer::FMT_EXPANDED_NAMES) &&
+      pkg.tree.is_staged_item("fmt", sig.item)) {
+    if (sig.name == "write") {
+      return fmt_lowering_.lower_write(expr, sig);
+    }
     return fmt_lowering_.lower_format(expr, sig);
   }
-  if ((sig.name == "print" || sig.name == "println" || sig.name == "eprint" ||
-       sig.name == "eprintln") &&
+  if (analyzer::is_expanded_name(sig.name, analyzer::IO_EXPANDED_NAMES) &&
       pkg.tree.is_staged_item("io", sig.item)) {
     return fmt_lowering_.lower_print(expr, sig);
   }
