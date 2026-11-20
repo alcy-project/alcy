@@ -161,14 +161,16 @@ class Selector {
            const ir::Function& function,
            diag::DiagBag& bag,
            const ir::PointerWidth width,
-           RoData& rodata)
+           RoData& rodata,
+           const overlay::Overlay* checks)
       : storage_(storage),
         strings_(strings),
         spans_(spans),
         function_(function),
         bag_(bag),
         width_(width),
-        rodata_(rodata) {}
+        rodata_(rodata),
+        checks_(checks) {}
 
   base::Result<Body, codegen::EmitError> run();
 
@@ -188,7 +190,9 @@ class Selector {
 
   // One instruction's lowering. Returns false when it reported a
   // construct it has no lowering for.
-  [[nodiscard]] bool emit(const ir::Instruction& instr, const diag::Span span);
+  [[nodiscard]] bool emit(const ir::Instruction& instr,
+                          const diag::Span span,
+                          const overlay::Entry* check);
 
   // The enum opcodes, which read a place rather than a value, and the
   // call, which marshals every shape the ABI names.
@@ -269,6 +273,7 @@ class Selector {
   diag::DiagBag& bag_;
   ir::PointerWidth width_;
   RoData& rodata_;
+  const overlay::Overlay* checks_ = nullptr;
 
   Body body_;
   std::unordered_map<u32, u32> vreg_of_register_;
@@ -446,7 +451,12 @@ base::Result<Body, codegen::EmitError> Selector::run() {
     }
     for (const ir::InstructionIdx instr_idx : block.instrs) {
       const ir::Instruction& instr = storage_.instrs()[instr_idx];
-      if (!emit(instr, span_of(instr_idx))) {
+      const overlay::Entry* check = nullptr;
+      if (checks_ != nullptr && instr_idx.idx < checks_->entries.size() &&
+          checks_->entries[instr_idx.idx].kind != overlay::Check::None) {
+        check = &checks_->entries[instr_idx.idx];
+      }
+      if (!emit(instr, span_of(instr_idx), check)) {
         return base::make_err(codegen::EmitError::Unsupported);
       }
     }
@@ -567,7 +577,9 @@ bool Selector::receive_parameters(const ir::Block& entry) {
   return true;
 }
 
-bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
+bool Selector::emit(const ir::Instruction& instr,
+                    const diag::Span span,
+                    const overlay::Entry* check) {
   using O = ir::Opcode;
   const ir::OperandIdxRange ops = instr.operands;
   const usize count = ops.size();
@@ -585,6 +597,25 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
   };
   // A fresh label, for the shapes one instruction grows into.
   const auto fresh_label = [&]() { return body_.label_count++; };
+  // A checked operation that overflows ends the process through the
+  // runtime panic; the carry flag serves unsigned arithmetic and the
+  // overflow flag signed arithmetic.
+  const auto check_overflow = [&](const Cond condition) {
+    const u32 ok = fresh_label();
+    const Cond no_overflow = condition == Cond::O   ? Cond::No
+                             : condition == Cond::B ? Cond::Ae
+                                                    : condition;
+    push(make_jcc(no_overflow, Operand{Label{ok}}));
+    const SymbolRef message = string_ref(rodata_.intern("integer overflow"));
+    push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi}, Operand{message}));
+    push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{Imm{16}}));
+    push(make_inst(MOp::Xor, 8, Operand{Reg::Rdx}, Operand{Reg::Rdx}));
+    push(make_inst(MOp::Xor, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx}));
+    push(make_inst(MOp::Call, 8, Operand{SymbolRef{string_ref("alcy_panic")}}));
+    MInst join = make_inst(MOp::Nop, 8);
+    join.label = ok;
+    push(join);
+  };
 
   // The register an index rides on, when it is one. A constant index is
   // the caller's to fold into a displacement.
@@ -1191,6 +1222,10 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         right = Operand{Reg::Rdx};
       }
       push(make_inst(alu_of(instr.op), compute, dst_operand(), right));
+      if ((instr.op == O::IntAdd || instr.op == O::IntSub) && check != nullptr &&
+          check->kind == overlay::Check::Overflow) {
+        check_overflow(is_signed(dst_tag()) ? Cond::O : Cond::B);
+      }
       return true;
     }
     case O::IntMul:
@@ -1209,6 +1244,10 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         push(make_inst(MOp::Imul, compute, dst_operand(), Operand{Reg::Rcx}));
       } else {
         push(make_inst(MOp::Imul, compute, dst_operand(), *rhs));
+      }
+      if (instr.op == O::IntMul && check != nullptr &&
+          check->kind == overlay::Check::Overflow) {
+        check_overflow(is_signed(dst_tag()) ? Cond::O : Cond::B);
       }
       return true;
     }
@@ -1635,8 +1674,10 @@ base::Result<Body, codegen::EmitError> select_function(
     const ir::Function& function,
     diag::DiagBag& bag,
     const ir::PointerWidth width,
-    RoData& rodata) {
-  Selector selector(storage, strings, spans, function, bag, width, rodata);
+    RoData& rodata,
+    const overlay::Overlay* checks) {
+  Selector selector(storage, strings, spans, function, bag, width, rodata,
+                    checks);
   return selector.run();
 }
 

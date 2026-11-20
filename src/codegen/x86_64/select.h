@@ -16,6 +16,7 @@
 #include "ir/function.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
+#include "overlay/overlay.h"
 #include "ir/type.h"
 
 namespace codegen::x86_64 {
@@ -40,6 +41,7 @@ namespace codegen::x86_64 {
     const ir::Function& function,
     diag::DiagBag& bag,
     ir::PointerWidth width,
-    RoData& rodata);
+    RoData& rodata,
+    const overlay::Overlay* overlay);
 
 }  // namespace codegen::x86_64

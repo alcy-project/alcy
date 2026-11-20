@@ -68,7 +68,7 @@ using Operand = std::
     variant<std::monostate, VReg, Reg, Imm, Mem, Label, SymbolRef, SlotRef>;
 
 // The branch conditions, in the order the encoder's opcode offset uses.
-enum class Cond : u8 { E, Ne, L, Le, G, Ge, B, Be, A, Ae, S, Ns };
+enum class Cond : u8 { O, No, E, Ne, L, Le, G, Ge, B, Be, A, Ae, S, Ns };
 
 enum class MOp : u8 {
   Mov,

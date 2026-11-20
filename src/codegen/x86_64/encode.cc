@@ -198,6 +198,8 @@ u32 modrm_mem(std::vector<u8>& out, const Reg reg, const Mem& mem) {
 // in.
 u8 cond_code(const Cond cond) {
   switch (cond) {
+    case Cond::O: return 0x0;
+    case Cond::No: return 0x1;
     case Cond::E: return 0x4;
     case Cond::Ne: return 0x5;
     case Cond::B: return 0x2;
@@ -361,7 +363,7 @@ Encoded encode(const Body& body) {
         // Widens an unsigned value: `movzx r, r/m8` and its 16-bit form,
         // from a register or from memory.
         const Reg to = std::get<Reg>(inst.at(0));
-        prefix(out, 8, w, to, std::nullopt, std::nullopt);
+        prefix(out, 8, true, to, std::nullopt, std::nullopt);
         out.push_back(0x0f);
         out.push_back(width == 1 ? 0xb6 : 0xb7);
         if (const Reg* reg_from = std::get_if<Reg>(&inst.at(1));
@@ -378,7 +380,7 @@ Encoded encode(const Body& body) {
         // narrow forms have their own opcodes and the 32-bit one is
         // named for itself.
         const Reg to = std::get<Reg>(inst.at(0));
-        prefix(out, 8, w, to, std::nullopt, std::nullopt);
+        prefix(out, 8, true, to, std::nullopt, std::nullopt);
         out.push_back(0x0f);
         if (width == 1) {
           out.push_back(0xbe);

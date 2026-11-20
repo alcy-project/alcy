@@ -127,6 +127,34 @@ SymbolRef callee(Body& body, const std::string_view name) {
   return SymbolRef{static_cast<u32>(body.symbols.size() - 1)};
 }
 
+// Maps the platform's errno numbers to the portable error kinds the
+// std asks for. Linux numbering is the hosted target here.
+Body build_error_kind() {
+  Body body;
+  struct Mapping {
+    i32 number;
+    i32 kind;
+  };
+  constexpr Mapping mappings[] = {{4, 1}, {11, 2}, {2, 3},
+                                  {13, 4}, {32, 5}, {22, 6}};
+  for (const Mapping& mapping : mappings) {
+    body.insts.push_back(
+        make_inst(MOp::Cmp, 4, Operand{Reg::Rdi}, Operand{Imm{mapping.number}}));
+    const u32 next = body.label_count++;
+    body.insts.push_back(make_jcc(Cond::E, Operand{Label{next}}));
+    body.insts.push_back(
+        make_inst(MOp::Mov, 4, Operand{Reg::Rax}, Operand{Imm{mapping.kind}}));
+    body.insts.push_back(make_inst(MOp::Ret, 8));
+    MInst at_next = make_inst(MOp::Nop, 8);
+    at_next.label = next;
+    body.insts.push_back(at_next);
+  }
+  body.insts.push_back(
+      make_inst(MOp::Xor, 4, Operand{Reg::Rax}, Operand{Reg::Rax}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
 // The allocator. The platform's own aligned allocator answers, and a
 // block it refuses ends the process the way a panic does; the program
 // has nothing to run without the memory it asked for.
@@ -203,8 +231,8 @@ bool defines(const std::string_view name) {
   return name == "alcy_print" || name == "alcy_println" ||
          name == "alcy_eprint" || name == "alcy_eprintln" ||
          name == "alcy_panic" || name == "alcy_sys_write" ||
-         name == "alcy_sys_read" || name == "alcy_alloc" ||
-         name == "alcy_dealloc";
+         name == "alcy_sys_read" || name == "alcy_error_kind" ||
+         name == "alcy_alloc" || name == "alcy_dealloc";
 }
 
 Body build(const std::string_view name, RoData& rodata) {
@@ -228,6 +256,9 @@ Body build(const std::string_view name, RoData& rodata) {
   }
   if (name == "alcy_sys_read") {
     return build_syscall_body(0);
+  }
+  if (name == "alcy_error_kind") {
+    return build_error_kind();
   }
   if (name == "alcy_alloc") {
     return build_alloc(rodata);
