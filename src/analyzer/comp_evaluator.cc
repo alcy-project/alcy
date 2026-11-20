@@ -669,11 +669,125 @@ bool CompEvaluator::comp_eval_struct(u32 mod,
   return true;
 }
 
+bool CompEvaluator::comp_eval_for_block(u32 mod,
+                                        ast::BlockIdx block,
+                                        CompScope& scope,
+                                        CompFlow& out) {
+  const ast::Block& node = ast.blocks[block];
+  if (node.statements.size() != 1 || !node.value.is_valid()) {
+    return false;
+  }
+  const ast::StmtIdx cursor = node.statements[0];
+  if (ast.stmts[cursor].kind != ast::StmtKind::Decl ||
+      !ast.stmts[cursor].payload.get<ast::StmtDecl>().for_cursor) {
+    return false;
+  }
+  const ast::ExprIdx into = ast.stmts[cursor].payload.get<ast::StmtDecl>().init;
+  if (ast.exprs[into].kind != ast::ExprKind::MethodCall) {
+    return false;
+  }
+  const ast::ExprIdx head =
+      ast.exprs[into].payload.get<ast::ExprMethodCall>().receiver;
+  if (ast.exprs[node.value].kind != ast::ExprKind::Loop) {
+    return false;
+  }
+  const ast::ExprLoop& loop =
+      ast.exprs[node.value].payload.get<ast::ExprLoop>();
+  if (!loop.is_comp || !loop.from_for) {
+    return false;
+  }
+  const ast::ExprIdx match_expr = ast.blocks[loop.body].value;
+  if (!match_expr.is_valid() ||
+      ast.exprs[match_expr].kind != ast::ExprKind::Match) {
+    return fail(ast.exprs[node.value].span, "comp for without match");
+  }
+  const ast::ExprMatch& match =
+      ast.exprs[match_expr].payload.get<ast::ExprMatch>();
+  if (match.arms.empty() ||
+      ast.patterns[match.arms[0].pattern].kind != ast::PatternKind::Tuple ||
+      ast.patterns[match.arms[0].pattern].payload.tuple.elements.empty()) {
+    return fail(ast.exprs[node.value].span, "comp for without binding");
+  }
+  const ast::PatternIdx element =
+      ast.patterns[match.arms[0].pattern].payload.tuple.elements[0];
+  CompVal sequence;
+  if (!comp_eval_expr(mod, head, scope, sequence)) {
+    return false;
+  }
+  std::vector<CompValue> elements;
+  ir::TypeIdx element_type = builder.primitive(ir::TypeTag::Void);
+  if (sequence.value.tag == CompValue::Tag::Array) {
+    elements = sequence.value.fields;
+    if (tag_of(sequence.type) == ir::TypeTag::Array) {
+      element_type =
+          builder.array_types()[builder.types()[sequence.type].as_array()]
+              .element;
+    }
+  } else if (sequence.value.tag == CompValue::Tag::Struct &&
+             ast.exprs[head].kind == ast::ExprKind::Range &&
+             sequence.value.fields.size() == 2) {
+    const ast::ExprRange& range = ast.exprs[head].payload.get<ast::ExprRange>();
+    if (!range.start.is_valid() || !range.end.is_valid() ||
+        sequence.value.fields[0].fields.size() != 1 ||
+        sequence.value.fields[1].fields.size() != 1) {
+      return fail(ast.exprs[head].span, "comp for range without bounds");
+    }
+    const u64 first = sequence.value.fields[0].fields[0].int_value;
+    const u64 last = sequence.value.fields[1].fields[0].int_value;
+    element_type = usize_type();
+    for (u64 value = first; range.inclusive ? value <= last : value < last;
+         ++value) {
+      CompValue item;
+      item.tag = CompValue::Tag::Int;
+      item.int_value = value;
+      elements.push_back(std::move(item));
+    }
+  } else {
+    return fail(ast.exprs[head].span, "comp for without a comp-known array");
+  }
+  for (const CompValue& item : elements) {
+    scope.frames.emplace_back();
+    const bool bound =
+        comp_bind_pattern(mod, element, CompVal{item, element_type}, scope,
+                          ast.exprs[node.value].span);
+    if (!bound) {
+      return false;
+    }
+    CompFlow body;
+    const bool ok = comp_eval_block(
+        mod, ast.exprs[match.arms[0].body].payload.get<ast::ExprBlock>().block,
+        scope, body);
+    scope.frames.pop_back();
+    if (!ok) {
+      return false;
+    }
+    if (body.kind == CompFlow::Kind::Break) {
+      out.kind = CompFlow::Kind::Value;
+      out.value.value.tag = CompValue::Tag::Void;
+      return true;
+    }
+    if (body.kind == CompFlow::Kind::Return) {
+      out = std::move(body);
+      return true;
+    }
+  }
+  out.kind = CompFlow::Kind::Value;
+  out.value.value.tag = CompValue::Tag::Void;
+  return true;
+}
+
 bool CompEvaluator::comp_eval_block(u32 mod,
                                     ast::BlockIdx block,
                                     CompScope& scope,
                                     CompFlow& out) {
   const ast::Block& node = ast.blocks[block];
+  if (node.statements.size() == 1 && node.value.is_valid() &&
+      ast.stmts[node.statements[0]].kind == ast::StmtKind::Decl &&
+      ast.stmts[node.statements[0]].payload.get<ast::StmtDecl>().for_cursor &&
+      ast.exprs[node.value].kind == ast::ExprKind::Loop &&
+      ast.exprs[node.value].payload.get<ast::ExprLoop>().is_comp) {
+    return comp_eval_for_block(mod, block, scope, out);
+  }
   scope.frames.emplace_back();
   for (ast::StmtIdx stmt : node.statements) {
     if (failed()) {

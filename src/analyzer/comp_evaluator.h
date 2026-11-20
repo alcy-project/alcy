@@ -223,6 +223,11 @@ class CompEvaluator {
                        ast::BlockIdx block,
                        CompScope& scope,
                        CompFlow& out);
+  // Unrolls the desugared shape of `comp for` over a comp-known array.
+  bool comp_eval_for_block(u32 mod,
+                           ast::BlockIdx block,
+                           CompScope& scope,
+                           CompFlow& out);
   bool comp_eval_stmt(u32 mod,
                       ast::StmtIdx stmt,
                       CompScope& scope,
