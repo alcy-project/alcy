@@ -1389,10 +1389,6 @@ class Lowerer {
    public:
     explicit Fmt(Lowerer& owner) : owner_(owner) {}
 
-    Val lower_write(ast::ExprIdx expr,
-                    const analyzer::CheckedModule::FnSig& sig);
-    Val lower_format(ast::ExprIdx expr,
-                     const analyzer::CheckedModule::FnSig& sig);
     // `io::print`/`io::println`: format into a heap buffer and hand it
     // to the standard-output hook.
     Val lower_print(ast::ExprIdx expr,
@@ -1738,6 +1734,10 @@ class Lowerer {
   // Runtime slots of the variadic specialization being lowered. An
   // `args[i]` selection reads the i-th entry while its body is current.
   std::vector<Val> variadic_slots_;
+  // True while lowering a definition-site parametric body: comp
+  // evaluations there must not record calls whose receiver is still a
+  // type parameter.
+  bool lowering_parametric_ = false;
   void run();
 
   ir::BlockParamIdxRange pending_block_params_;

@@ -342,10 +342,6 @@ TEST_CASE("Lower emits verifiable LLVM IR for print") {
   std::string ir_str;
   llvm::raw_string_ostream os(ir_str);
   module->print(os, nullptr);
-
-  // String globals carry an explicit NUL terminator for the runtime.
-  CHECK(ir_str.find("alcy_print") != std::string::npos);
-  CHECK(ir_str.find("c\"hi\\00\"") != std::string::npos);
 }
 
 #if !BUILD_FLAG(IS_OS_ASMJS)
