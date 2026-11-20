@@ -160,6 +160,11 @@ void Server::handle(std::string_view payload) {
     send_error(text::JsonValue{}, INVALID_REQUEST, "invalid request");
     return;
   }
+  if (field(message, "method") == nullptr &&
+      (field(message, "result") != nullptr ||
+       field(message, "error") != nullptr)) {
+    return;
+  }
   if (field(message, "id") != nullptr) {
     handle_request(message);
   } else {
@@ -472,6 +477,7 @@ void Server::handle_notification(const text::JsonValue& message) {
   }
   if (method == "initialized") {
     initialized_ = true;
+    register_watchers();
     return;
   }
   if (!initialized_ || shutdown_) {
@@ -487,6 +493,8 @@ void Server::handle_notification(const text::JsonValue& message) {
     did_change(*params);
   } else if (method == "textDocument/didClose") {
     did_close(*params);
+  } else if (method == "workspace/didChangeWatchedFiles") {
+    watched_files_changed(*params);
   }
 }
 
@@ -1225,6 +1233,36 @@ void Server::range_formatting(const text::JsonValue& id,
                                             read_position(*end)));
 }
 
+void Server::register_watchers() {
+  text::JsonValue watchers = text::JsonValue::make_array();
+  for (const char* pattern : {"**/*.al", "**/alcy.toml", "**/lint.toml"}) {
+    text::JsonValue watcher = text::JsonValue::make_object();
+    watcher.set("globPattern", make_string(pattern));
+    watchers.push(std::move(watcher));
+  }
+  text::JsonValue options = text::JsonValue::make_object();
+  options.set("watchers", std::move(watchers));
+  text::JsonValue registration = text::JsonValue::make_object();
+  registration.set("id", make_string("alcy-watched-files"));
+  registration.set("method", make_string("workspace/didChangeWatchedFiles"));
+  registration.set("registerOptions", std::move(options));
+  text::JsonValue registrations = text::JsonValue::make_array();
+  registrations.push(std::move(registration));
+  text::JsonValue params = text::JsonValue::make_object();
+  params.set("registrations", std::move(registrations));
+  send_request("alcy-register-watchers", "client/registerCapability",
+               std::move(params));
+}
+
+void Server::watched_files_changed(const text::JsonValue& params) {
+  (void)params;
+  cache_.clear();
+  for (const auto& [uri, document] : documents_.documents()) {
+    (void)uri;
+    publish_diagnostics(document);
+  }
+}
+
 void Server::publish_diagnostics(const Document& document) {
   text::JsonValue params = text::JsonValue::make_object();
   params.set("uri", make_string(document.uri()));
@@ -1258,6 +1296,17 @@ void Server::send_error(const text::JsonValue& id,
   message.set("jsonrpc", make_string("2.0"));
   message.set("id", id);
   message.set("error", std::move(error));
+  transport_.write_message(text::to_json(message));
+}
+
+void Server::send_request(std::string_view id,
+                          std::string_view method,
+                          text::JsonValue params) {
+  text::JsonValue message = text::JsonValue::make_object();
+  message.set("jsonrpc", make_string("2.0"));
+  message.set("id", make_string(id));
+  message.set("method", make_string(method));
+  message.set("params", std::move(params));
   transport_.write_message(text::to_json(message));
 }
 

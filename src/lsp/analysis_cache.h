@@ -49,6 +49,13 @@ class AnalysisCache {
 
   void erase(std::string_view uri);
 
+  // Drops every reading, for a notification that a file outside the
+  // client's open set changed on disk.
+  void clear() {
+    entries_.clear();
+    packages_.clear();
+  }
+
  private:
   struct Entry {
     std::unique_ptr<DocumentAnalysis> analysis;

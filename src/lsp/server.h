@@ -37,6 +37,8 @@ class Server {
   void did_open(const text::JsonValue& params);
   void did_change(const text::JsonValue& params);
   void did_close(const text::JsonValue& params);
+  void register_watchers();
+  void watched_files_changed(const text::JsonValue& params);
   void formatting(const text::JsonValue& id, const text::JsonValue& params);
   void range_formatting(const text::JsonValue& id,
                         const text::JsonValue& params);
@@ -95,6 +97,9 @@ class Server {
                   i32 code,
                   std::string_view message);
   void send_notification(std::string_view method, text::JsonValue params);
+  void send_request(std::string_view id,
+                    std::string_view method,
+                    text::JsonValue params);
 
   Transport& transport_;
   DocumentStore documents_;
