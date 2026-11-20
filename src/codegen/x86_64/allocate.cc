@@ -314,8 +314,11 @@ void allocate(Body& body, const Frame& frame) {
     // Reads resolve first, destination first, so a two-operand opcode
     // finds its own value in the register it will write. A write into a
     // memory operand resolves its base the same way.
+    // A write into memory resolves the reference it writes through,
+    // which a slot reference spells as plainly as a pointer does.
     if (shape.read0 ||
-        (shape.write0 && std::holds_alternative<Mem>(inst.ops[0]))) {
+        (shape.write0 && (std::holds_alternative<Mem>(inst.ops[0]) ||
+                          std::holds_alternative<SlotRef>(inst.ops[0])))) {
       encoded.ops[0] = resolve(inst.ops[0]);
     }
     if (shape.read1) {

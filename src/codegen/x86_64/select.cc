@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -244,13 +245,15 @@ class Selector {
 
   void note_pointee(ir::RegisterIdx reg, ir::TypeIdx type);
 
+  void note_alloca(ir::RegisterIdx reg);
+
   // The symbol reference one string's bytes answer to, in this body's
   // own table.
   [[nodiscard]] SymbolRef string_ref(const std::string& symbol);
 
   // The memory reference one place reads, at the offset from it. A
-  // register an `alloca` or a projection named names its own storage;
-  // any other holds the address, and the reference goes through it.
+  // register an `alloca` named names its own storage; any other holds
+  // the address, and the reference goes through it.
   [[nodiscard]] Operand place_of(const ir::Operand& place, i32 offset);
 
   const ir::Storage& storage_;
@@ -264,6 +267,10 @@ class Selector {
   Body body_;
   std::unordered_map<u32, u32> vreg_of_register_;
   std::unordered_map<u32, ir::TypeIdx> pointee_of_register_;
+  // The vregs an `alloca` named, whose slot is the storage itself. A
+  // projection's destination is not one: it holds the address, and a
+  // read through it dereferences like any pointer.
+  std::unordered_set<u32> alloca_storage_;
   // The vreg that holds the caller's return slot, when the answer is
   // wider than two words; `NO_SRET` when the answer rides in registers.
   static constexpr u32 NO_SRET = 0xffffffff;
@@ -290,6 +297,10 @@ void Selector::note_pointee(const ir::RegisterIdx reg, const ir::TypeIdx type) {
   pointee_of_register_.emplace(reg.idx, type);
 }
 
+void Selector::note_alloca(const ir::RegisterIdx reg) {
+  alloca_storage_.insert(vreg_of(reg, storage_.registers()[reg].type));
+}
+
 std::optional<ir::TypeIdx> Selector::pointee_hint(
     const ir::RegisterIdx reg) const {
   const auto found = pointee_of_register_.find(reg.idx);
@@ -308,7 +319,7 @@ std::optional<ir::TypeIdx> Selector::pointee_hint(
 
 Operand Selector::place_of(const ir::Operand& place, const i32 offset) {
   const u32 vreg = vreg_of(place.as_register(), place.type);
-  if (pointee_of_register_.find(vreg) != pointee_of_register_.end()) {
+  if (alloca_storage_.count(vreg) != 0) {
     return Operand{SlotRef{vreg, offset}};
   }
   return Operand{Mem{
@@ -501,10 +512,11 @@ bool Selector::receive_parameters(const ir::Block& entry) {
         }
         // The caller hands the parameter's bytes over by address, and
         // the slot is where this body reads them from, so the copy is
-        // the whole of receiving it.
-        push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi},
+        // the whole of receiving it. The copy runs from `rsi` to `rdi`,
+        // which is the order the instruction reads them in.
+        push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi},
                        Operand{ARG_REGS[next_register++]}));
-        push(make_inst(MOp::Lea, 8, Operand{Reg::Rsi},
+        push(make_inst(MOp::Lea, 8, Operand{Reg::Rdi},
                        Operand{SlotRef{vreg, 0}}));
         push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
                        Operand{Imm{static_cast<i64>(layout.size)}}));
@@ -766,6 +778,7 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
           .size = layout.size * elements,
           .align = layout.align,
       });
+      note_alloca(instr.dst);
       note_pointee(instr.dst, dst_type_of());
       return true;
     }
