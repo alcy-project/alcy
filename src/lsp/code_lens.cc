@@ -3,6 +3,7 @@
 
 #include "lsp/code_lens.h"
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -29,16 +30,27 @@ std::string reference_title(u32 count) {
 }
 
 text::JsonValue lens_json(const Document& document,
+                          const DocumentAnalysis& analysis,
                           diag::Span name,
                           const std::vector<diag::Span>& sites) {
   text::JsonValue lens = text::JsonValue::make_object();
   lens.set("range", range_json(document, name.offset, name.length));
 
   text::JsonValue locations = text::JsonValue::make_array();
+  std::unordered_set<FullSpanKey, FullSpanKeyHash> seen;
   for (const diag::Span site : sites) {
-    locations.push(location_json(document, site));
+    if (!seen.insert({site.file, span_key(site)}).second) {
+      continue;
+    }
+    const std::optional<SourceText> source =
+        source_text_of(analysis, site.file);
+    if (!source.has_value()) {
+      continue;
+    }
+    locations.push(location_json(source->uri, source->text, site));
   }
 
+  const u32 count = static_cast<u32>(locations.as_array().size());
   text::JsonValue arguments = text::JsonValue::make_array();
   arguments.push(text::JsonValue::make_string(document.uri()));
   arguments.push(position_json(
@@ -46,8 +58,7 @@ text::JsonValue lens_json(const Document& document,
   arguments.push(std::move(locations));
 
   text::JsonValue command = text::JsonValue::make_object();
-  command.set("title", text::JsonValue::make_string(
-                           reference_title(static_cast<u32>(sites.size()))));
+  command.set("title", text::JsonValue::make_string(reference_title(count)));
   command.set("command",
               text::JsonValue::make_string("editor.action.showReferences"));
   command.set("arguments", std::move(arguments));
@@ -69,23 +80,27 @@ text::JsonValue code_lenses(const Document& document,
 
   // One pass over the references groups their sites by the declaration
   // they resolved to, so every lens reads a count without a second walk.
-  std::unordered_map<u64, std::vector<diag::Span>> by_declaration;
+  std::unordered_map<FullSpanKey, std::vector<diag::Span>, FullSpanKeyHash>
+      by_declaration;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
       if (reference.declaration.file != root) {
         continue;
       }
-      by_declaration[span_key(reference.declaration)].push_back(reference.site);
+      by_declaration[FullSpanKey{reference.declaration.file,
+                                 span_key(reference.declaration)}]
+          .push_back(reference.site);
     }
   }
 
   const auto emit = [&](diag::Span name) {
-    const auto found = by_declaration.find(span_key(name));
+    const auto found =
+        by_declaration.find(FullSpanKey{name.file, span_key(name)});
     const std::vector<diag::Span> empty;
     const std::vector<diag::Span>& sites =
         found == by_declaration.end() ? empty : found->second;
-    lenses.push(lens_json(document, name, sites));
+    lenses.push(lens_json(document, analysis, name, sites));
   };
 
   std::unordered_set<u32> seen;

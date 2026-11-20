@@ -56,6 +56,11 @@ u64 span_key(diag::Span span) {
   return (static_cast<u64>(span.offset) << 32) | static_cast<u64>(span.length);
 }
 
+usize FullSpanKeyHash::operator()(const FullSpanKey& key) const {
+  const u64 combined = key.span ^ (static_cast<u64>(key.file) << 32);
+  return static_cast<usize>(combined * 1099511628211ULL);
+}
+
 bool same_span(diag::Span left, diag::Span right) {
   return left.file == right.file && left.offset == right.offset &&
          left.length == right.length;

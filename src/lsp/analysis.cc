@@ -222,6 +222,20 @@ std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
   return std::nullopt;
 }
 
+std::optional<SourceText> source_text_of(const DocumentAnalysis& analysis,
+                                         source::FileId file) {
+  const std::optional<std::string> uri = uri_of_file(analysis, file);
+  if (!uri.has_value()) {
+    return std::nullopt;
+  }
+  const std::optional<std::string_view> text =
+      analysis.context().sources.bytes(file);
+  if (!text.has_value()) {
+    return std::nullopt;
+  }
+  return SourceText{*uri, *text};
+}
+
 std::optional<ir::TypeIdx> checked_expr_type(
     const analyzer::CheckedPackage& package,
     ast::ExprIdx expr) {

@@ -93,6 +93,15 @@ class DocumentAnalysis {
 std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
                                        source::FileId file);
 
+// A file an editor can address: its URI and the bytes the analysis read.
+// Toolchain sources without an editor URI answer nothing.
+struct SourceText {
+  std::string uri;
+  std::string_view text;
+};
+std::optional<SourceText> source_text_of(const DocumentAnalysis& analysis,
+                                         source::FileId file);
+
 // The type the checker recorded for an expression, if it recorded one.
 // An entry exists once per instantiation; the declaration's own entry is
 // the one a query without a call site wants.

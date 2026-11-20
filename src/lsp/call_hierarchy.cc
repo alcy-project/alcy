@@ -109,7 +109,7 @@ std::optional<ItemRef> enclosing_function(
 std::vector<CallEdge> call_edges(const pipeline::PipelineContext& context,
                                  const analyzer::CheckedPackage& package,
                                  source::FileId root) {
-  std::unordered_set<u64> sites;
+  std::unordered_set<FullSpanKey, FullSpanKeyHash> sites;
   context.ast.exprs.for_each_node([&](const ast::ExprIdx index) {
     const ast::ExprNode& node = context.ast.exprs[index];
     if (root != source::UNKNOWN_FILE && node.span.file != root) {
@@ -117,23 +117,37 @@ std::vector<CallEdge> call_edges(const pipeline::PipelineContext& context,
     }
     if (node.kind == ast::ExprKind::Call) {
       const ast::ExprIdx callee = node.payload.get<ast::ExprCall>().callee;
-      sites.insert(span_key(context.ast.exprs[callee].span));
+      const diag::Span span = context.ast.exprs[callee].span;
+      sites.insert(FullSpanKey{span.file, span_key(span)});
     } else if (node.kind == ast::ExprKind::MethodCall) {
-      sites.insert(span_key(node.payload.get<ast::ExprMethodCall>().name.span));
+      const diag::Span span = node.payload.get<ast::ExprMethodCall>().name.span;
+      sites.insert(FullSpanKey{span.file, span_key(span)});
     }
   });
 
+  struct EdgeKey {
+    FullSpanKey site;
+    FullSpanKey declaration;
+    bool operator==(const EdgeKey&) const = default;
+  };
+  struct EdgeKeyHash {
+    usize operator()(const EdgeKey& key) const {
+      const FullSpanKeyHash hash;
+      return hash(key.site) ^ (hash(key.declaration) << 1);
+    }
+  };
   std::vector<CallEdge> edges;
-  std::unordered_set<u64> seen;
+  std::unordered_set<EdgeKey, EdgeKeyHash> seen;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
-      if (!sites.contains(span_key(reference.site))) {
+      const FullSpanKey site{reference.site.file, span_key(reference.site)};
+      if (!sites.contains(site)) {
         continue;
       }
-      const u64 key =
-          span_key(reference.site) ^ (span_key(reference.declaration) << 1);
-      if (!seen.insert(key).second) {
+      const FullSpanKey declaration{reference.declaration.file,
+                                    span_key(reference.declaration)};
+      if (!seen.insert(EdgeKey{site, declaration}).second) {
         continue;
       }
       edges.push_back(CallEdge{reference.site, reference.declaration});
@@ -182,12 +196,6 @@ text::JsonValue item_json(std::string_view uri,
   return item;
 }
 
-text::JsonValue item_json(const Document& document,
-                          const pipeline::PipelineContext& context,
-                          ItemRef ref) {
-  return item_json(document.uri(), document.text(), context, ref);
-}
-
 // The URI and bytes of a file the analysis registered, when it has both.
 bool source_text(const DocumentAnalysis& analysis,
                  source::FileId file,
@@ -234,7 +242,12 @@ text::JsonValue prepare_call_hierarchy(const Document& document,
   if (!ref.has_value()) {
     return items;
   }
-  items.push(item_json(document, analysis.context(), *ref));
+  std::string uri;
+  std::string_view text;
+  if (!source_text(analysis, declaration->file, uri, text)) {
+    return items;
+  }
+  items.push(item_json(uri, text, analysis.context(), *ref));
   return items;
 }
 

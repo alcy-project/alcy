@@ -352,14 +352,15 @@ std::vector<diag::Span> references_at(const Document& document,
   }
 
   std::vector<diag::Span> out;
-  std::unordered_set<u64> seen;
+  std::unordered_set<FullSpanKey, FullSpanKeyHash> seen;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
       if (!same_span(reference.declaration, *declaration)) {
         continue;
       }
-      if (seen.insert(span_key(reference.site)).second) {
+      const FullSpanKey key{reference.site.file, span_key(reference.site)};
+      if (seen.insert(key).second) {
         out.push_back(reference.site);
       }
     }

@@ -9,6 +9,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lsp/document.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -34,10 +35,21 @@ text::JsonValue location_json(std::string_view uri,
                               std::string_view text,
                               diag::Span span);
 
-// A span's identity as one integer, for a key in a table. Features
-// compare spans within one root file, so the file is not part of the
-// key.
+// A span's identity as one integer, for a key in a table that only
+// compares spans inside one file.
 u64 span_key(diag::Span span);
+
+// A span's identity across the package. References in different files
+// can share an offset and length, so the file has to be part of the key.
+struct FullSpanKey {
+  source::FileId file = source::UNKNOWN_FILE;
+  u64 span = 0;
+
+  bool operator==(const FullSpanKey&) const = default;
+};
+struct FullSpanKeyHash {
+  usize operator()(const FullSpanKey& key) const;
+};
 
 // Whether two spans cover the same range of the same file.
 bool same_span(diag::Span left, diag::Span right);

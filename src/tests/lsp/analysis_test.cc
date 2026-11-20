@@ -12,15 +12,18 @@
 #include "analyzer/types.h"
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/span.h"
 #include "doctest/doctest.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "lsp/analysis_cache.h"
 #include "lsp/code_actions.h"
+#include "lsp/code_lens.h"
 #include "lsp/completion.h"
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/highlights.h"
+#include "lsp/navigation.h"
 #include "lsp/rename.h"
 #include "lsp/workspace.h"
 #include "lsp/workspace_symbols.h"
@@ -314,6 +317,70 @@ TEST_CASE("Workspace symbols search files the client has not opened") {
     }
   }
   CHECK(found);
+}
+
+TEST_CASE("Cross-file references survive equal spans in two files") {
+  Fixture f;
+  std::string main_source =
+      "pub fn main_fn() -> i32 { ret 0 }\n"
+      "fn m() -> i32 { ret main_fn() }\n";
+  std::string helper_source =
+      "use package::main::main_fn;\n"
+      "fn h() -> i32 { ret main_fn() }\n";
+  const usize main_at = main_source.rfind("main_fn");
+  const usize helper_at = helper_source.rfind("main_fn");
+  if (main_at > helper_at) {
+    helper_source.insert(0, main_at - helper_at, ' ');
+  } else {
+    main_source.insert(0, helper_at - main_at, ' ');
+  }
+  CHECK(f.dir.write_file("proj/main.al", main_source));
+  CHECK(f.dir.write_file("proj/helper.al", helper_source));
+
+  const Document document(f.main_uri, "alcy", 1, main_source);
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const usize offset = main_source.rfind("main_fn");
+  const Position position = document.index().position_at(main_source, offset);
+  const std::vector<diag::Span> sites =
+      references_at(document, analysis, position);
+  CHECK(sites.size() == 2);
+  if (sites.size() == 2) {
+    CHECK(sites[0].file != sites[1].file);
+  }
+}
+
+TEST_CASE("Code lens locations point at the file that holds the reference") {
+  const Fixture f;
+  const Document document(f.main_uri, "alcy", 1, std::string(MAIN));
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const text::JsonValue lenses = code_lenses(document, analysis);
+  for (const text::JsonValue& lens : lenses.as_array()) {
+    const text::JsonValue* command = lens.find("command");
+    if (command == nullptr) {
+      continue;
+    }
+    const text::JsonValue* arguments = command->find("arguments");
+    if (arguments == nullptr || arguments->as_array().size() < 3) {
+      continue;
+    }
+    const text::JsonValue& locations = arguments->as_array()[2];
+    for (const text::JsonValue& location : locations.as_array()) {
+      const text::JsonValue* uri = location.find("uri");
+      if (uri == nullptr) {
+        continue;
+      }
+      const bool known =
+          uri->as_string() == f.main_uri || uri->as_string() == f.helper_uri;
+      CHECK(known);
+    }
+    return;
+  }
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {
