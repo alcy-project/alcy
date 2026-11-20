@@ -18,17 +18,18 @@ An expect.toml file declares the outcome:
 all appear in the combined output, `not_contains` lines must all be absent.
 An optional `args` list is inserted after the selected subcommand, so a
 case can name the subcommand's own flags as well as the global ones, and
-an optional `env` table sets environment variables for the run. A `build`
-case gets `-o` pointed at a scratch path unless it sets
-`default_output = true`, which keeps the compiler's own placement.
+an optional `env` table sets environment variables for the run. Each case
+runs in its own copy under the repository's `out/`, so the artifacts and
+the build cache the compiler leaves behind land there too and are removed
+with that one directory.
 """
 
 import argparse
 import concurrent.futures
 import os
+import shutil
 import subprocess
 import sys
-import tempfile
 import tomllib
 from pathlib import Path
 
@@ -68,13 +69,6 @@ def parse_expect(path: Path):
     ):
         sys.exit(f"{path}: 'env' must be a table of strings")
 
-    # Set by a case that wants the compiler's own output placement, which
-    # names the artifact from the target; every other build is redirected
-    # to scratch instead.
-    default_output = data.get("default_output", False)
-    if not isinstance(default_output, bool):
-        sys.exit(f"{path}: 'default_output' must be a bool")
-
     return (
         expected_exit,
         contains,
@@ -82,8 +76,32 @@ def parse_expect(path: Path):
         args,
         subcommand,
         env,
-        default_output,
     )
+
+
+def staged_case(case_dir: Path) -> Path:
+    """A private copy of a case under the repository's out/.
+
+    Running from the copy keeps the compiler's own output placement and
+    the case's relative paths intact, while every artifact it writes
+    stays under out/. A case that times out or fails leaves its copy for
+    inspection, and the next run starts from the checked-in source again.
+    """
+    target = project_root_dir / "out" / "e2e" / case_dir.name / "case"
+    if target.exists():
+        shutil.rmtree(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(case_dir, target)
+    return target
+
+
+def check_env(extra: dict[str, str]) -> dict[str, str]:
+    """Environment for a case, with its temporary files under out/ too."""
+    temp = project_root_dir / "out" / "tmp"
+    temp.mkdir(parents=True, exist_ok=True)
+    env = dict(extra)
+    env.update({"TMPDIR": str(temp), "TMP": str(temp), "TEMP": str(temp)})
+    return run_environment(env)
 
 
 def run_case(alcy: Path, case_dir: Path):
@@ -98,56 +116,29 @@ def run_case(alcy: Path, case_dir: Path):
         extra_args,
         subcommand,
         env,
-        default_output,
     ) = parse_expect(expect_path)
     # An unset variable in the table is the case's business, so the run
     # starts from the environment it inherits with the table applied.
-    process_env = run_environment(env)
-    if (case_dir / "alcy.toml").is_file():
+    process_env = check_env(env)
+    work = staged_case(case_dir)
+    if (work / "alcy.toml").is_file():
         argv = [str(alcy), subcommand, *extra_args, "."]
-        cwd = case_dir
-    elif (case_dir / "main.al").is_file():
+    elif (work / "main.al").is_file():
         # Single files name their verb explicitly: `check` takes --file
         # and `build` is spelled `compile`.
         if subcommand == "build":
-            argv = [
-                str(alcy),
-                "compile",
-                *extra_args,
-                str(case_dir / "main.al"),
-            ]
+            argv = [str(alcy), "compile", *extra_args, "main.al"]
         else:
-            argv = [
-                str(alcy),
-                subcommand,
-                *extra_args,
-                "--file",
-                str(case_dir / "main.al"),
-            ]
-        cwd = project_root_dir
+            argv = [str(alcy), subcommand, *extra_args, "--file", "main.al"]
     else:
         return False, "no alcy.toml or main.al found"
 
-    # A case that builds would otherwise drop an artifact into its own
-    # source tree, so send the output to a scratch directory instead.
-    if subcommand == "build" and not default_output:
-        with tempfile.TemporaryDirectory() as scratch:
-            argv = [*argv, "-o", str(Path(scratch) / "out")]
-            proc = subprocess.run(
-                argv,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                cwd=cwd,
-                env=process_env,
-            )
-            return compare(proc, expected_exit, contains, not_contains)
     proc = subprocess.run(
         argv,
         capture_output=True,
         text=True,
         encoding="utf-8",
-        cwd=cwd,
+        cwd=work,
         env=process_env,
     )
     return compare(proc, expected_exit, contains, not_contains)

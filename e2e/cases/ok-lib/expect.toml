@@ -3,7 +3,6 @@
 # since the result line names the package.
 exit = 0
 subcommand = "build"
-default_output = true
 args = ["--json"]
 contains = ["\"output_path\":\"out/hash.o\"", "\"subject\":\"package hash (1 target)\""]
 not_contains = ["error"]

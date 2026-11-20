@@ -1,3 +1,3 @@
 exit = 0
-contains = ["WD003", "unreachable"]
+contains = ["WD003", "Unreachable statement"]
 not_contains = ["error[E"]
