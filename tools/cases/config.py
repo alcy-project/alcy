@@ -76,6 +76,7 @@ class Case:
     path: Path
     cli: CliStep | None = None
     program: ProgramStep | None = None
+    freestanding: bool = False
 
     @property
     def name(self) -> str:
@@ -185,4 +186,9 @@ def read_case(path: Path) -> Case:
 
     if cli is None and program is None:
         raise CaseError(f"{config}: a case needs [cli] or [program]")
-    return Case(path=path, cli=cli, program=program)
+    toolchain = path / ".alcy" / "toolchain.toml"
+    freestanding = False
+    if toolchain.is_file():
+        with open(toolchain, "rb") as f:
+            freestanding = bool(tomllib.load(f).get("freestanding", False))
+    return Case(path=path, cli=cli, program=program, freestanding=freestanding)

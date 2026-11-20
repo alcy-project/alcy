@@ -76,12 +76,28 @@ def main() -> int:
         return log.die("a wasm run needs bun on PATH")
 
     names = {name.strip() for name in args.cases.split(",") if name.strip()} or None
-    selected = [
-        (root, case)
-        for root, case in discover(roots, names)
-        if ("cli" in steps and case.cli is not None)
-        or ("program" in steps and case.program is not None)
-    ]
+    # A freestanding program owns its entry and links no C runtime.
+    # Linux and Windows can provide one; macOS has libSystem as the only
+    # sanctioned route, so those cases are not answers this host can give.
+    # A wasm sweep already names its refusals in the case file.
+    skip_freestanding = args.mode != "wasm" and sys.platform.startswith("darwin")
+    selected = []
+    skipped_freestanding = 0
+    for root, case in discover(roots, names):
+        if not (
+            ("cli" in steps and case.cli is not None)
+            or ("program" in steps and case.program is not None)
+        ):
+            continue
+        if skip_freestanding and case.freestanding:
+            skipped_freestanding += 1
+            continue
+        selected.append((root, case))
+    if skipped_freestanding:
+        print(
+            f"note: {skipped_freestanding} freestanding case(s) skipped: "
+            f"{sys.platform} is not a Linux syscall host"
+        )
     jobs = args.jobs or min(os.cpu_count() or 2, 8)
     label = ",".join(root.name for root in roots)
     result = build_result(alcy, selected, steps, args.mode, jobs, label)
