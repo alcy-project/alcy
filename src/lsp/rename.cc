@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -130,47 +131,62 @@ std::optional<text::JsonValue> workspace_rename(
   if (!declaration.has_value()) {
     return std::nullopt;
   }
-  const std::string_view source = document.text();
-  const std::string name(
-      source.substr(declaration->offset, declaration->length));
-  const std::vector<cst::Lexeme> lexemes = cst::lex(source);
+  const std::optional<std::string_view> declaration_text =
+      analysis.context().sources.bytes(declaration->file);
+  if (!declaration_text.has_value()) {
+    return std::nullopt;
+  }
+  const std::string_view name =
+      declaration_text->substr(declaration->offset, declaration->length);
 
-  std::vector<diag::Span> spans;
-  spans.push_back(*declaration);
+  std::unordered_map<source::FileId, std::vector<diag::Span>> by_file;
+  by_file[declaration->file].push_back(*declaration);
   for (const diag::Span site : references_at(document, analysis, position)) {
-    if (site.file != analysis.root()) {
+    const std::optional<std::string_view> text =
+        analysis.context().sources.bytes(site.file);
+    if (!text.has_value()) {
       continue;
     }
+    const std::vector<cst::Lexeme> lexemes = cst::lex(*text);
     const std::optional<diag::Span> segment =
-        named_segment_in(lexemes, site, name, source);
+        named_segment_in(lexemes, site, name, *text);
     if (!segment.has_value()) {
-      return std::nullopt;
+      continue;
     }
-    spans.push_back(*segment);
+    by_file[site.file].push_back(*segment);
   }
 
-  std::sort(spans.begin(), spans.end(), [](diag::Span left, diag::Span right) {
-    if (left.offset != right.offset) {
-      return left.offset < right.offset;
-    }
-    return left.length < right.length;
-  });
-  spans.erase(std::unique(spans.begin(), spans.end(),
-                          [](diag::Span left, diag::Span right) {
-                            return left.offset == right.offset &&
-                                   left.length == right.length;
-                          }),
-              spans.end());
-
-  text::JsonValue edits = text::JsonValue::make_array();
-  for (const diag::Span span : spans) {
-    text::JsonValue edit = text::JsonValue::make_object();
-    edit.set("range", range_json(document, span.offset, span.length));
-    edit.set("newText", text::JsonValue::make_string(std::string(new_name)));
-    edits.push(std::move(edit));
-  }
   text::JsonValue changes = text::JsonValue::make_object();
-  changes.set(document.uri(), std::move(edits));
+  for (auto& [file, spans] : by_file) {
+    const std::optional<std::string> uri = uri_of_file(analysis, file);
+    const std::optional<std::string_view> text =
+        analysis.context().sources.bytes(file);
+    if (!uri.has_value() || !text.has_value()) {
+      continue;
+    }
+    std::sort(spans.begin(), spans.end(),
+              [](diag::Span left, diag::Span right) {
+                if (left.offset != right.offset) {
+                  return left.offset < right.offset;
+                }
+                return left.length < right.length;
+              });
+    spans.erase(std::unique(spans.begin(), spans.end(),
+                            [](diag::Span left, diag::Span right) {
+                              return left.offset == right.offset &&
+                                     left.length == right.length;
+                            }),
+                spans.end());
+    text::JsonValue edits = text::JsonValue::make_array();
+    for (const diag::Span span : spans) {
+      text::JsonValue edit = text::JsonValue::make_object();
+      edit.set("range", range_json(*text, span.offset, span.length));
+      edit.set("newText", text::JsonValue::make_string(std::string(new_name)));
+      edits.push(std::move(edit));
+    }
+    changes.set(*uri, std::move(edits));
+  }
+
   text::JsonValue result = text::JsonValue::make_object();
   result.set("changes", std::move(changes));
   return result;

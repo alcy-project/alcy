@@ -210,6 +210,15 @@ std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
       return uri;
     }
   }
+  const std::optional<std::string_view> name =
+      analysis.context().sources.name(file);
+  if (name.has_value()) {
+    if (const base::Result<path::Path, path::PathError> parsed =
+            path::Path::from_native(*name);
+        parsed.is_ok() && parsed.value().is_absolute()) {
+      return workspace::path_to_uri(*name);
+    }
+  }
   return std::nullopt;
 }
 

@@ -19,6 +19,7 @@
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/highlights.h"
+#include "lsp/rename.h"
 #include "lsp/workspace.h"
 #include "path/path.h"
 #include "text/json.h"
@@ -206,6 +207,26 @@ TEST_CASE("Highlights do not paint a sibling definition into this buffer") {
   const text::JsonValue highlights =
       document_highlights(document, analysis, Position{8, 8});
   CHECK(highlights.as_array().size() == 1);
+}
+
+TEST_CASE("Rename edits both the importer and the defining module") {
+  const Fixture f;
+  const Document document(f.main_uri, "alcy", 1, std::string(MAIN));
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const std::optional<text::JsonValue> result =
+      workspace_rename(document, analysis, Position{8, 8}, "renamed");
+  if (!result.has_value()) {
+    return;
+  }
+  const text::JsonValue* changes = result->find("changes");
+  if (changes == nullptr) {
+    return;
+  }
+  CHECK(changes->find(f.main_uri) != nullptr);
+  CHECK(changes->find(f.helper_uri) != nullptr);
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {
