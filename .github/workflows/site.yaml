@@ -67,7 +67,7 @@ jobs:
         uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984
 
       - name: Setup GN
-        uses: pug523/actions/setup-gn@e928297142f4b109644eea60af39da820d4ef755
+        uses: pug523/actions/setup-gn@0a6b6f0723099427ce80f8f1cff0a222fb9482a8
 
       - name: Install Ninja
         shell: bash
