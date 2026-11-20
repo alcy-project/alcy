@@ -592,6 +592,24 @@ TEST_CASE("A Windows COFF runtime carries the kernel and nothing else") {
   }
   // The ELF entry is never built for a Windows target.
   CHECK(module.getFunction("_start") == nullptr);
+
+  // A second object of one image defines the runtime again, so every
+  // discardable definition answers through a comdat: the format
+  // resolves a weak definition without one into a conflicting pair the
+  // linker refuses.
+  for (const char* name :
+       {"alcy_env_buf", "alcy_env_name", "alcy_wide_path", "alcy_args_arena",
+        "alcy_args_table", "alcy_args_temp"}) {
+    const llvm::GlobalVariable* global = module.getNamedGlobal(name);
+    CHECK(global != nullptr);
+    if (global != nullptr) {
+      CHECK(global->hasComdat());
+    }
+  }
+  CHECK(module.getFunction("__chkstk") != nullptr);
+  if (const llvm::Function* chkstk = module.getFunction("__chkstk")) {
+    CHECK(chkstk->hasComdat());
+  }
 }
 
 TEST_CASE("A 32-bit Windows runtime carries the same kernel set") {

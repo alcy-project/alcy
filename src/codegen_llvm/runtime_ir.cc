@@ -137,7 +137,7 @@ class RuntimeBuilder {
           cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
               "alcy_env_buf",
               llvm::ArrayType::get(builder_.getInt8Ty(), 262144)));
-      env_buf->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+      link_once_odr(*env_buf);
       if (!env_buf->hasInitializer()) {
         env_buf->setInitializer(
             llvm::ConstantAggregateZero::get(env_buf->getValueType()));
@@ -146,7 +146,7 @@ class RuntimeBuilder {
           cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
               "alcy_env_name",
               llvm::ArrayType::get(builder_.getInt16Ty(), 32768)));
-      env_name->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+      link_once_odr(*env_name);
       if (!env_name->hasInitializer()) {
         env_name->setInitializer(
             llvm::ConstantAggregateZero::get(env_name->getValueType()));
@@ -492,7 +492,7 @@ class RuntimeBuilder {
     llvm::GlobalVariable* buffer =
         cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
             "alcy_wide_path", llvm::ArrayType::get(i16, 32768)));
-    buffer->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    link_once_odr(*buffer);
     if (!buffer->hasInitializer()) {
       buffer->setInitializer(
           llvm::ConstantAggregateZero::get(buffer->getValueType()));
@@ -1329,7 +1329,8 @@ class RuntimeBuilder {
     llvm::FunctionType* type =
         llvm::FunctionType::get(builder_.getVoidTy(), false);
     llvm::Function* function = llvm::Function::Create(
-        type, llvm::GlobalValue::LinkOnceODRLinkage, "__chkstk", module_);
+        type, llvm::GlobalValue::ExternalLinkage, "__chkstk", module_);
+    link_once_odr(*function);
     function->addFnAttr(llvm::Attribute::Naked);
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "", function);
@@ -1819,7 +1820,7 @@ class RuntimeBuilder {
     llvm::GlobalVariable* arena =
         cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
             "alcy_args_arena", llvm::ArrayType::get(i8, 262144)));
-    arena->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    link_once_odr(*arena);
     if (!arena->hasInitializer()) {
       arena->setInitializer(
           llvm::ConstantAggregateZero::get(arena->getValueType()));
@@ -1827,7 +1828,7 @@ class RuntimeBuilder {
     llvm::GlobalVariable* table =
         cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
             "alcy_args_table", llvm::ArrayType::get(ptr, 1024)));
-    table->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    link_once_odr(*table);
     if (!table->hasInitializer()) {
       table->setInitializer(
           llvm::ConstantAggregateZero::get(table->getValueType()));
@@ -1835,7 +1836,7 @@ class RuntimeBuilder {
     llvm::GlobalVariable* temp =
         cast<llvm::GlobalVariable>(module_.getOrInsertGlobal(
             "alcy_args_temp", llvm::ArrayType::get(i16, 32768)));
-    temp->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+    link_once_odr(*temp);
     if (!temp->hasInitializer()) {
       temp->setInitializer(
           llvm::ConstantAggregateZero::get(temp->getValueType()));
