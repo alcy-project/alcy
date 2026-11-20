@@ -1,0 +1,7 @@
+paths:
+  third_party/**/*.yml:
+    ignore:
+      - ".+"
+  third_party/**/*.yaml:
+    ignore:
+      - ".+"
