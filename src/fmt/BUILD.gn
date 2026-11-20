@@ -20,6 +20,12 @@ source_set("alcy_fmt") {
     "doc.h",
     "formatter.cc",
     "formatter.h",
+    "printer.cc",
+    "printer.h",
+    "printer_chunks.cc",
+    "printer_flow.cc",
+    "token_facts.cc",
+    "token_facts.h",
   ]
   deps = [
     "//src:base_modules",
