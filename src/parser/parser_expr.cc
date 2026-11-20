@@ -971,7 +971,7 @@ ast::ExprIdx Parser::parse_closure() {
   return ast_.exprs.push_back(closure_node);
 }
 
-ast::ExprIdx Parser::parse_if() {
+ast::ExprIdx Parser::parse_if(bool is_comp) {
   const usize mark = pos_;
   if (!expect(lexer::TokenKind::If, "if")) {
     return ast::ExprIdx::invalid();
@@ -1011,6 +1011,7 @@ ast::ExprIdx Parser::parse_if() {
       .cond = cond,
       .then_block = then_block,
       .else_block = else_block,
+      .is_comp = is_comp,
   });
   return ast_.exprs.push_back(node);
 }
@@ -1120,7 +1121,7 @@ ast::ExprIdx Parser::parse_while() {
   return ast_.exprs.push_back(node);
 }
 
-ast::ExprIdx Parser::parse_for() {
+ast::ExprIdx Parser::parse_for(bool is_comp) {
   const usize mark = pos_;
   const diag::Span keyword = peek().span;
   if (!expect(lexer::TokenKind::For, "for")) {
@@ -1290,6 +1291,7 @@ ast::ExprIdx Parser::parse_for() {
   loop.span = span;
   loop.payload.set(ast::ExprLoop{
       .body = ast_.blocks.push_back(loop_body),
+      .is_comp = is_comp,
   });
   const ast::ExprIdx loop_expr = ast_.exprs.push_back(loop);
 
@@ -1424,6 +1426,12 @@ ast::ExprIdx Parser::parse_comp_block() {
   const usize mark = pos_;
   if (!match(lexer::TokenKind::Comp)) {
     return ast::ExprIdx::invalid();
+  }
+  if (check(lexer::TokenKind::If)) {
+    return parse_if(/*is_comp=*/true);
+  }
+  if (check(lexer::TokenKind::For)) {
+    return parse_for(/*is_comp=*/true);
   }
   if (!check(lexer::TokenKind::LBrace)) {
     const u32 index = bag_.emit<i18n::Key::ParserCompOnlyOnBindings>(

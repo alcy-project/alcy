@@ -162,6 +162,7 @@
   F(AnalyzerCompConditionInitializer, Error, Analyzer, "Comp condition initializer is not comp-known") \
   F(AnalyzerConditionAlwaysMatches, Error, Analyzer, "This pattern always matches; write a plain condition or a refutable pattern") \
   F(AnalyzerCompForIterable, Error, Analyzer, "Comp `for` iterable is not comp-known") \
+  F(AnalyzerCompMarkerContext, Error, Analyzer, "A `comp` branch needs a comp context") \
   F(AnalyzerCompFunctionOutsideComp, Error, Analyzer, "Function '{}' is a `comp fn`; it can only be used during compilation") \
   F(AnalyzerCompMatchScrutinee, Error, Analyzer, "Comp match scrutinee is not comp-known") \
   F(AnalyzerCompParameterArgument, Error, Analyzer, "Argument for `comp` parameter must be comp-known") \

@@ -38,12 +38,12 @@ decl_stmt := "const" pattern [ ":" type ] ":=" expr
 - `comp` marks parameters and blocks only. A `comp` in declaration
   position is a spelling diagnostic pointing at `const`, because
   `comp` says when code runs and `const` says what a value is.
-- `comp if` picks a branch during compilation in an otherwise runtime
-  body; `comp for` unrolls its head at compile time. A plain `if`
-  inside a comp block or comp fn already evaluates and stays as it is;
-  a `comp if` there is redundant and diagnosed. The two markers are
-  the explicit surface for code the compiler performs, not a second
-  way to spell an existing evaluation.
+- `comp if` and `comp for` name a branch and an unrolling the compiler
+  performs. Both require a comp context: a comp block, a comp fn, or
+  a compiler-expanded body. A plain `if` inside a comp block or comp
+  fn already evaluates; the marker is accepted there but adds no
+  further effect. Outside a comp context the marker is a diagnostic,
+  so a runtime branch must spell itself as a plain `if`.
 
 ## Comp-known values
 

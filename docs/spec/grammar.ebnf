@@ -257,9 +257,9 @@ while_expr  = "while" , ( expr | pattern , ":=" , expr ) , block ;
 loop_expr   = "loop" , block ;
 for_expr    = [ "comp" ] , "for" , pattern , "in" , expr , block ;
               (* `comp` on `if` or `for` marks the branch or unrolling
-                 that compilation performs. A plain `if` inside a comp
-                 block already evaluates; `comp if` there is redundant
-                 and diagnosed. See docs/spec/comp.md. *)
+                 that compilation performs; the marker needs a comp
+                 context. A plain `if` inside a comp block already
+                 evaluates. See docs/spec/comp.md. *)
 match_expr  = "match" , expr , "{" , { match_arm , [ ( "," | ";" ) ] } , "}" ;
 match_arm   = pattern , "=>" , expr ;
 

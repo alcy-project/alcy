@@ -554,6 +554,8 @@ struct ExprIf {
   CondIdx cond = CondIdx::invalid();
   BlockIdx then_block = BlockIdx::invalid();
   BlockIdx else_block = BlockIdx::invalid();
+  // `comp if` marks a branch the compiler selects during evaluation.
+  bool is_comp = false;
 };
 
 struct ExprMatchArm {
@@ -571,6 +573,8 @@ struct ExprMatch {
 
 struct ExprLoop {
   BlockIdx body = BlockIdx::invalid();
+  // Set on the loop a `comp for` desugars into.
+  bool is_comp = false;
 };
 
 struct ExprWhile {

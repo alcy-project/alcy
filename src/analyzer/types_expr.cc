@@ -4276,12 +4276,22 @@ ir::TypeIdx Checker::check_expr_inner(u32 module,
       return check_question(module, expr, expected);
     }
     case ast::ExprKind::If: {
+      if (node.payload.get<ast::ExprIf>().is_comp && comp_eval_depth == 0) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerCompMarkerContext>(
+            DiagCode::InvalidComp, node.span);
+        (void)index;
+      }
       return check_if(module, expr, expected);
     }
     case ast::ExprKind::Match: {
       return check_match(module, expr, expected);
     }
     case ast::ExprKind::Loop: {
+      if (node.payload.get<ast::ExprLoop>().is_comp && comp_eval_depth == 0) {
+        const u32 index = bag.emit<i18n::Key::AnalyzerCompMarkerContext>(
+            DiagCode::InvalidComp, node.span);
+        (void)index;
+      }
       const ir::TypeIdx unit = builder.primitive(ir::TypeTag::Void);
       // A `break` anywhere in the body may end the loop, so only a
       // body with none is known to run forever; that loop is `!`. A
