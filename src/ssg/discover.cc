@@ -175,7 +175,12 @@ base::Result<std::vector<DocSource>, std::string> discover_guide(
     if (number_len == 0) {
       return base::make_err(source_rel + ": guide files are named NN-slug.md");
     }
-    const usize order = std::stoul(stem.substr(0, number_len));
+    // The digits are verified above, so the value is read by hand:
+    // stoul would throw, and the build runs with -fno-exceptions.
+    usize order = 0;
+    for (usize i = 0; i < number_len; i++) {
+      order = order * 10 + static_cast<usize>(stem[i] - '0');
+    }
     const auto previous = orders.find(order);
     if (previous != orders.end()) {
       return base::make_err(source_rel + ": the number " +

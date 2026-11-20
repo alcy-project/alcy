@@ -368,7 +368,8 @@ std::unordered_map<std::string, std::string> template_values_for(
   const std::string stamp_text = ssg::escape_html(context.stamp.text);
   values["stamp"] = context.stamp.url.empty()
                         ? stamp_text
-                        : "<a href=\"" + context.stamp.url +
+                        : "<a href=\"" +
+                              ssg::escape_attribute(context.stamp.url) +
                               "\" rel=\"noopener\">" + stamp_text + "</a>";
   values["settings"] = "";
   return values;
@@ -689,7 +690,8 @@ i32 run(i32 argc, char** argv) {
   }
   for (usize index = 0; index < indexed.size(); index++) {
     const ssg::DocSource& source = indexed[index];
-    search_json += "  {\n    \"route\": \"" + source.path + "\",\n";
+    search_json +=
+        "  {\n    \"route\": \"" + json_escape(source.path) + "\",\n";
     search_json += "    \"title\": \"" + json_escape(source.title) + "\",\n";
     const std::vector<ssg::GuideSection> sections =
         ssg::sections_of(source.blocks);
