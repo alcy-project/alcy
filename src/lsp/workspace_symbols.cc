@@ -98,6 +98,9 @@ text::JsonValue workspace_symbols(const DocumentStore& documents,
   for (const auto& [uri, document] : documents.documents()) {
     (void)uri;
     const DocumentAnalysis& analysis = cache.get(document);
+    if (!analysis.ok()) {
+      continue;
+    }
     for (const analyzer::ModuleNode* module : analysis.package().tree.modules) {
       if (module->file == source::UNKNOWN_FILE) {
         continue;

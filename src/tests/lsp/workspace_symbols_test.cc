@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "doctest/doctest.h"
+#include "lsp/analysis_cache.h"
 #include "lsp/document.h"
 #include "text/json.h"
 
@@ -36,6 +37,16 @@ TEST_CASE("An empty query returns every open document's symbols") {
   const std::vector<std::string> found =
       names(workspace_symbols(documents, ""));
   CHECK(found.size() == 3);
+}
+
+TEST_CASE("A document that cannot be analyzed is skipped, not dereferenced") {
+  DocumentStore documents;
+  documents.open("file:///ok.al", "alcy", 1, "struct Point {\n  x: i32,\n}\n");
+  documents.open("file:///bad.al", "alcy", 1, "fn broken( -> i32 {\n}\n");
+  AnalysisCache cache(documents);
+  const std::vector<std::string> found =
+      names(workspace_symbols(documents, cache, ""));
+  CHECK(found.size() == 2);
 }
 
 TEST_CASE("A query matches a case-insensitive substring") {
