@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <cstdlib>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -62,7 +63,9 @@ const analyzer::CheckedModule::FnSig* Lowerer::Fmt::find_helper(
   for (u32 i = 0; i < owner_.pkg.modules.size(); ++i) {
     for (const analyzer::CheckedModule::FnSig& sig :
          owner_.pkg.modules[i].functions) {
-      if (sig.name == name) {
+      // Only the staged fmt package owns these helpers. A user function
+      // of the same name must not redirect a format expansion.
+      if (sig.name == name && owner_.pkg.tree.is_staged_item("fmt", sig.item)) {
         module = i;
         return &sig;
       }
@@ -71,13 +74,36 @@ const analyzer::CheckedModule::FnSig* Lowerer::Fmt::find_helper(
   return nullptr;
 }
 
+bool Lowerer::Fmt::helper_signature_ok(
+    const analyzer::CheckedModule::FnSig& sig,
+    usize value_count,
+    std::optional<ir::TypeTag> value_tag) const {
+  if (sig.params.size() != value_count + 2 ||
+      owner_.tag_of(sig.ret) != ir::TypeTag::Usize) {
+    return false;
+  }
+  const ir::TypeIdx out = sig.params[value_count];
+  const ir::TypeIdx cap = sig.params[value_count + 1];
+  if (owner_.tag_of(out) != ir::TypeTag::RawMutPtr ||
+      owner_.tag_of(cap) != ir::TypeTag::Usize) {
+    return false;
+  }
+  const ir::TypeIdx pointee =
+      owner_.builder.ref_types()[owner_.builder.types()[out].as_ref()].pointee;
+  if (owner_.tag_of(pointee) != ir::TypeTag::U8) {
+    return false;
+  }
+  return !value_tag.has_value() || owner_.tag_of(sig.params[0]) == *value_tag;
+}
+
 bool Lowerer::Fmt::emit_primitive_helper(diag::Span span,
                                          std::string_view name,
                                          ir::OperandIdx value,
+                                         std::optional<ir::TypeTag> value_tag,
                                          State& state) {
   u32 module = 0;
   const analyzer::CheckedModule::FnSig* sig = find_helper(name, module);
-  if (sig == nullptr || sig->params.size() != 3) {
+  if (sig == nullptr || !helper_signature_ok(*sig, 1, value_tag)) {
     return false;
   }
   const ir::TypeIdx usize_ty = owner_.usize_type();
@@ -153,7 +179,7 @@ bool Lowerer::Fmt::emit_float_helper(diag::Span span,
   u32 module = 0;
   const analyzer::CheckedModule::FnSig* sig =
       find_helper("display_f64", module);
-  if (sig == nullptr || sig->params.size() != 5) {
+  if (sig == nullptr || !helper_signature_ok(*sig, 3, ir::TypeTag::F64)) {
     return false;
   }
   const ir::TypeIdx f64_ty = owner_.builder.primitive(ir::TypeTag::F64);
@@ -259,7 +285,8 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
       const ir::RegisterIdx loaded = owner_.emit(
           ir::Opcode::Load, elem_ty, {owner_.to_operand(elem_addr, elem_ty)});
       if (!emit_primitive_helper(span, "display_str",
-                                 owner_.to_operand(loaded, elem_ty), state)) {
+                                 owner_.to_operand(loaded, elem_ty),
+                                 ir::TypeTag::Str, state)) {
         owner_.internal(span, "fmt string helper unavailable");
         return false;
       }
@@ -269,7 +296,8 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
       const ir::RegisterIdx loaded = owner_.emit(
           ir::Opcode::Load, elem_ty, {owner_.to_operand(elem_addr, elem_ty)});
       if (!emit_primitive_helper(span, "display_bool",
-                                 owner_.to_operand(loaded, elem_ty), state)) {
+                                 owner_.to_operand(loaded, elem_ty),
+                                 ir::TypeTag::I1, state)) {
         owner_.internal(span, "fmt bool helper unavailable");
         return false;
       }
@@ -357,7 +385,8 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
                          {owner_.to_operand(loaded, elem_ty)});
     }
     if (!emit_primitive_helper(span, "display_u64",
-                               owner_.to_operand(wide, u64_ty), state)) {
+                               owner_.to_operand(wide, u64_ty),
+                               ir::TypeTag::U64, state)) {
       owner_.internal(span, "fmt integer helper unavailable");
       return false;
     }

@@ -1437,11 +1437,17 @@ class Lowerer {
     // packages. Returns the module the signature belongs to.
     const analyzer::CheckedModule::FnSig* find_helper(std::string_view name,
                                                       u32& module) const;
+    // Checks a helper's signature against the call the lane emits, so
+    // an identity-matched name with the wrong types cannot miscompile.
+    bool helper_signature_ok(const analyzer::CheckedModule::FnSig& sig,
+                             usize value_count,
+                             std::optional<ir::TypeTag> value_tag) const;
     // Formats a primitive through an alcy free helper: the body owns
     // the spelling or digits, the lane supplies the destination view.
     bool emit_primitive_helper(diag::Span span,
                                std::string_view name,
                                ir::OperandIdx value,
+                               std::optional<ir::TypeTag> value_tag,
                                State& state);
     // Formats a finite value in the fixed range through `display_f64`.
     // Returns false without emitting when the helper is not selected or

@@ -1,2 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
 exit = 4
 contains = ["Index out of bounds in constant evaluation"]
