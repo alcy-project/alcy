@@ -88,6 +88,11 @@ class DocumentAnalysis {
   bool ok_ = false;
 };
 
+// The URI an open buffer registered for a source file, when there is one.
+// Toolchain sources have names but no editor URI and answer nothing.
+std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
+                                       source::FileId file);
+
 // The type the checker recorded for an expression, if it recorded one.
 // An entry exists once per instantiation; the declaration's own entry is
 // the one a query without a call site wants.

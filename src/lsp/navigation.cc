@@ -356,8 +356,7 @@ std::vector<diag::Span> references_at(const Document& document,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
-      if (reference.site.file != root ||
-          !same_span(reference.declaration, *declaration)) {
+      if (!same_span(reference.declaration, *declaration)) {
         continue;
       }
       if (seen.insert(span_key(reference.site)).second) {

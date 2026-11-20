@@ -203,6 +203,16 @@ DocumentAnalysis::DocumentAnalysis(std::shared_ptr<PackageAnalysis> owner,
   }
 }
 
+std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
+                                       source::FileId file) {
+  for (const auto& [uri, id] : analysis.owner().files_by_uri) {
+    if (id == file) {
+      return uri;
+    }
+  }
+  return std::nullopt;
+}
+
 std::optional<ir::TypeIdx> checked_expr_type(
     const analyzer::CheckedPackage& package,
     ast::ExprIdx expr) {

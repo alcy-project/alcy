@@ -798,14 +798,26 @@ void Server::references(const text::JsonValue& id,
   }
   const DocumentAnalysis& analysis = cache_.get(*document);
   text::JsonValue result = text::JsonValue::make_array();
+  const auto push = [&](diag::Span span) {
+    const std::optional<std::string> uri = uri_of_file(analysis, span.file);
+    if (!uri.has_value()) {
+      return;
+    }
+    const std::optional<std::string_view> text =
+        analysis.context().sources.bytes(span.file);
+    if (!text.has_value()) {
+      return;
+    }
+    result.push(location_json(*uri, *text, span));
+  };
   if (include_declaration) {
     if (const std::optional<diag::Span> location =
             definition_at(*document, analysis, position)) {
-      result.push(location_json(*document, *location));
+      push(*location);
     }
   }
   for (const diag::Span site : references_at(*document, analysis, position)) {
-    result.push(location_json(*document, site));
+    push(site);
   }
   send_result(id, std::move(result));
 }

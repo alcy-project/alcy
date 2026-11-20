@@ -73,7 +73,7 @@ text::JsonValue code_lenses(const Document& document,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
-      if (reference.site.file != root || reference.declaration.file != root) {
+      if (reference.declaration.file != root) {
         continue;
       }
       by_declaration[span_key(reference.declaration)].push_back(reference.site);

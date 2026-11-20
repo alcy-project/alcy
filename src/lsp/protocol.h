@@ -22,8 +22,17 @@ text::JsonValue position_json(Position position);
 // ends are converted through the document's own position index.
 text::JsonValue range_json(const Document& document, u32 offset, u32 length);
 
+// A range in an arbitrary source buffer, for spans the checker recorded
+// in a file other than the one the request opened.
+text::JsonValue range_json(std::string_view text, u32 offset, u32 length);
+
 // A location in this document for a span the checker recorded.
 text::JsonValue location_json(const Document& document, diag::Span span);
+
+// A location in another file, named by URI and source bytes.
+text::JsonValue location_json(std::string_view uri,
+                              std::string_view text,
+                              diag::Span span);
 
 // A span's identity as one integer, for a key in a table. Features
 // compare spans within one root file, so the file is not part of the

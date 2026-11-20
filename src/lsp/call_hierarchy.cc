@@ -78,7 +78,7 @@ std::optional<ItemRef> enclosing_function(
     const pipeline::PipelineContext& context,
     const analyzer::CheckedPackage& package,
     usize offset,
-    source::FileId root) {
+    source::FileId site_file) {
   std::optional<ItemRef> best;
   usize best_length = 0;
   for (const analyzer::CheckedModule& module : package.modules) {
@@ -87,7 +87,7 @@ std::optional<ItemRef> enclosing_function(
         continue;
       }
       const ast::ItemNode& node = context.ast.items[sig.item];
-      if (node.kind != ast::ItemKind::Fn || node.span.file != root) {
+      if (node.kind != ast::ItemKind::Fn || node.span.file != site_file) {
         continue;
       }
       if (node.span.offset <= offset &&
@@ -112,7 +112,7 @@ std::vector<CallEdge> call_edges(const pipeline::PipelineContext& context,
   std::unordered_set<u64> sites;
   context.ast.exprs.for_each_node([&](const ast::ExprIdx index) {
     const ast::ExprNode& node = context.ast.exprs[index];
-    if (node.span.file != root) {
+    if (root != source::UNKNOWN_FILE && node.span.file != root) {
       return;
     }
     if (node.kind == ast::ExprKind::Call) {
@@ -128,8 +128,7 @@ std::vector<CallEdge> call_edges(const pipeline::PipelineContext& context,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
          module.references) {
-      if (reference.site.file != root ||
-          !sites.contains(span_key(reference.site))) {
+      if (!sites.contains(span_key(reference.site))) {
         continue;
       }
       const u64 key =
@@ -160,7 +159,8 @@ diag::Span span_of(const text::JsonValue& data,
   return span;
 }
 
-text::JsonValue item_json(const Document& document,
+text::JsonValue item_json(std::string_view uri,
+                          std::string_view text,
                           const pipeline::PipelineContext& context,
                           ItemRef ref) {
   const ast::ItemNode& node = context.ast.items[ref.item];
@@ -170,9 +170,9 @@ text::JsonValue item_json(const Document& document,
   item.set("kind",
            text::JsonValue::make_number(static_cast<f64>(
                ref.is_method ? SymbolKind::Method : SymbolKind::Function)));
-  item.set("uri", text::JsonValue::make_string(document.uri()));
-  item.set("range", range_json(document, node.span.offset, node.span.length));
-  item.set("selectionRange", range_json(document, name.offset, name.length));
+  item.set("uri", text::JsonValue::make_string(std::string(uri)));
+  item.set("range", range_json(text, node.span.offset, node.span.length));
+  item.set("selectionRange", range_json(text, name.offset, name.length));
   text::JsonValue data = text::JsonValue::make_object();
   data.set("nameOffset", text::JsonValue::make_number(name.offset));
   data.set("nameLength", text::JsonValue::make_number(name.length));
@@ -180,6 +180,31 @@ text::JsonValue item_json(const Document& document,
   data.set("rangeLength", text::JsonValue::make_number(node.span.length));
   item.set("data", std::move(data));
   return item;
+}
+
+text::JsonValue item_json(const Document& document,
+                          const pipeline::PipelineContext& context,
+                          ItemRef ref) {
+  return item_json(document.uri(), document.text(), context, ref);
+}
+
+// The URI and bytes of a file the analysis registered, when it has both.
+bool source_text(const DocumentAnalysis& analysis,
+                 source::FileId file,
+                 std::string& uri,
+                 std::string_view& text) {
+  const std::optional<std::string> found = uri_of_file(analysis, file);
+  if (!found.has_value()) {
+    return false;
+  }
+  const std::optional<std::string_view> bytes =
+      analysis.context().sources.bytes(file);
+  if (!bytes.has_value()) {
+    return false;
+  }
+  uri = *found;
+  text = *bytes;
+  return true;
 }
 
 const text::JsonValue* item_data(const text::JsonValue& item) {
@@ -216,6 +241,7 @@ text::JsonValue prepare_call_hierarchy(const Document& document,
 text::JsonValue incoming_calls(const Document& document,
                                const DocumentAnalysis& analysis,
                                const text::JsonValue& item) {
+  (void)document;
   text::JsonValue calls = text::JsonValue::make_array();
   const text::JsonValue* data = item_data(item);
   if (!analysis.ok() || data == nullptr) {
@@ -225,38 +251,48 @@ text::JsonValue incoming_calls(const Document& document,
       span_of(*data, "nameOffset", "nameLength", analysis.root());
   const pipeline::PipelineContext& context = analysis.context();
 
-  std::vector<ItemRef> callers;
+  struct Caller {
+    ItemRef ref;
+    source::FileId file = source::UNKNOWN_FILE;
+  };
+  std::vector<Caller> callers;
   std::vector<std::vector<diag::Span>> ranges;
   for (const CallEdge& edge :
-       call_edges(context, analysis.package(), analysis.root())) {
+       call_edges(context, analysis.package(), source::UNKNOWN_FILE)) {
     if (!same_span(edge.declaration, target)) {
       continue;
     }
     const std::optional<ItemRef> caller = enclosing_function(
-        context, analysis.package(), edge.site.offset, analysis.root());
+        context, analysis.package(), edge.site.offset, edge.site.file);
     if (!caller.has_value()) {
       continue;
     }
     usize at = callers.size();
     for (usize i = 0; i < callers.size(); ++i) {
-      if (callers[i].item == caller->item) {
+      if (callers[i].ref.item == caller->item &&
+          callers[i].file == edge.site.file) {
         at = i;
         break;
       }
     }
     if (at == callers.size()) {
-      callers.push_back(*caller);
+      callers.push_back(Caller{*caller, edge.site.file});
       ranges.emplace_back();
     }
     ranges[at].push_back(edge.site);
   }
 
   for (usize i = 0; i < callers.size(); ++i) {
+    std::string uri;
+    std::string_view text;
+    if (!source_text(analysis, callers[i].file, uri, text)) {
+      continue;
+    }
     text::JsonValue call = text::JsonValue::make_object();
-    call.set("from", item_json(document, context, callers[i]));
+    call.set("from", item_json(uri, text, context, callers[i].ref));
     text::JsonValue from_ranges = text::JsonValue::make_array();
     for (const diag::Span range : ranges[i]) {
-      from_ranges.push(range_json(document, range.offset, range.length));
+      from_ranges.push(range_json(text, range.offset, range.length));
     }
     call.set("fromRanges", std::move(from_ranges));
     calls.push(std::move(call));
@@ -276,7 +312,11 @@ text::JsonValue outgoing_calls(const Document& document,
       span_of(*data, "rangeOffset", "rangeLength", analysis.root());
   const pipeline::PipelineContext& context = analysis.context();
 
-  std::vector<ItemRef> callees;
+  struct Callee {
+    ItemRef ref;
+    source::FileId file = source::UNKNOWN_FILE;
+  };
+  std::vector<Callee> callees;
   std::vector<std::vector<diag::Span>> ranges;
   for (const CallEdge& edge :
        call_edges(context, analysis.package(), analysis.root())) {
@@ -290,21 +330,27 @@ text::JsonValue outgoing_calls(const Document& document,
     }
     usize at = callees.size();
     for (usize i = 0; i < callees.size(); ++i) {
-      if (callees[i].item == callee->item) {
+      if (callees[i].ref.item == callee->item &&
+          callees[i].file == edge.declaration.file) {
         at = i;
         break;
       }
     }
     if (at == callees.size()) {
-      callees.push_back(*callee);
+      callees.push_back(Callee{*callee, edge.declaration.file});
       ranges.emplace_back();
     }
     ranges[at].push_back(edge.site);
   }
 
   for (usize i = 0; i < callees.size(); ++i) {
+    std::string uri;
+    std::string_view text;
+    if (!source_text(analysis, callees[i].file, uri, text)) {
+      continue;
+    }
     text::JsonValue call = text::JsonValue::make_object();
-    call.set("to", item_json(document, context, callees[i]));
+    call.set("to", item_json(uri, text, context, callees[i].ref));
     text::JsonValue from_ranges = text::JsonValue::make_array();
     for (const diag::Span range : ranges[i]) {
       from_ranges.push(range_json(document, range.offset, range.length));
