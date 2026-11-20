@@ -1994,9 +1994,15 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   // the marker, which lowering resolves against the slot's actual type.
   CheckedModule::MethodInfo* slot_method = nullptr;
   const bool slot_receiver = receiver.idx == variadic_slot_type().idx;
-  if (slot_receiver && name == "display" &&
-      node.payload.get<ast::ExprMethodCall>().args.size() == 1) {
-    if (SpecEntry* entry = find_spec_in_scope(module, "Display")) {
+  const usize slot_args = node.payload.get<ast::ExprMethodCall>().args.size();
+  const bool plain_display =
+      slot_receiver && name == "display" && slot_args == 1;
+  const bool precision_display =
+      slot_receiver && name == "display_precision" && slot_args == 3;
+  if (plain_display || precision_display) {
+    const std::string_view spec_name =
+        plain_display ? "Display" : "DisplayPrecision";
+    if (SpecEntry* entry = find_spec_in_scope(module, spec_name)) {
       const u32 spec = static_cast<u32>(entry - specs.data());
       std::vector<ir::TypeIdx> params;
       ir::TypeIdx ret = ir::TypeIdx::invalid();

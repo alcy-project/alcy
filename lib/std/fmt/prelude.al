@@ -12,6 +12,7 @@
 // time and neither declared body executes.
 
 pub use package::display::Display;
+pub use package::display::DisplayPrecision;
 pub use package::write::WriteOutcome;
 pub use package::write::write;
 pub use package::format::format;

@@ -1551,10 +1551,7 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_extern_call(expr, sig);
   }
   if (analyzer::is_expanded_name(sig.name, analyzer::FMT_EXPANDED_NAMES) &&
-      pkg.tree.is_staged_item("fmt", sig.item)) {
-    if (sig.name == "write") {
-      return fmt_lowering_.lower_write(expr, sig);
-    }
+      pkg.tree.is_staged_item("fmt", sig.item) && sig.name == "format") {
     return fmt_lowering_.lower_format(expr, sig);
   }
   if (analyzer::is_expanded_name(sig.name, analyzer::IO_EXPANDED_NAMES) &&
@@ -5496,6 +5493,46 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   if (has_slot) {
     slot = result_slot(result_type, node.span);
   }
+  const ast::Cond& cond_node = ast.conds[if_expr.cond];
+  // A `comp if` selects its arm during lowering: an unselected arm may
+  // name a method the concrete specialization cannot answer, so it
+  // must never reach codegen.
+  if (if_expr.is_comp && !cond_node.is_pattern) {
+    CompVal selected;
+    if (!comp_lowering_.evaluate(module, cond_node.value, selected)) {
+      return stopped_value();
+    }
+    if (selected.value.tag != CompValue::Tag::Bool) {
+      internal(node.span, "comp condition without a value");
+      return stopped_value();
+    }
+    const ast::BlockIdx chosen =
+        selected.value.bool_value ? if_expr.then_block : if_expr.else_block;
+    if (!chosen.is_valid()) {
+      if (has_slot) {
+        internal(node.span, "value comp if without else");
+        return stopped_value();
+      }
+      return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    }
+    const u32 arm_mark = static_cast<u32>(locals.size());
+    Val produced = lower_block(chosen, expected);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    if (has_slot && !terminated_cur()) {
+      store_result(slot, produced);
+    } else if (!has_slot) {
+      mark_move(produced);
+    }
+    if (!terminated_cur()) {
+      record_end(arm_mark, node.span);
+    }
+    if (has_slot) {
+      return materialize(slot);
+    }
+    return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+  }
   ir::BlockIdx else_block = reserve_block();
   ir::BlockIdx join = ir::BlockIdx(base::INVALID_IDX);
   const ir::BlockIdx then_epilogue = reserve_block();
@@ -5522,7 +5559,6 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
   };
 
-  const ast::Cond& cond_node = ast.conds[if_expr.cond];
   if (!cond_node.is_pattern) {
     ir::BlockIdx then_block = reserve_block();
     Val cond = lower_expr(cond_node.value, nullptr);
