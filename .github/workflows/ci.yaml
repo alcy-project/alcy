@@ -35,14 +35,14 @@ jobs:
       role: ci
 
   wasm-debug:
-    name: WebAssembly Debug Build & Test
+    name: Wasm Debug
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: debug
       role: ci
 
   wasm-release:
-    name: WebAssembly Release Build & Test
+    name: Wasm Release
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: release
@@ -56,7 +56,7 @@ jobs:
   # and it belongs beside the builds that produce the compilation
   # database it reads.
   lint:
-    name: Tree Lint (${{ matrix.shard }})
+    name: Lint (${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -85,7 +85,7 @@ jobs:
   # the compiler falls below build/coverage_baseline.json, so it needs
   # its own instrumented build and cannot share the matrix's.
   coverage:
-    name: Coverage Ratchet
+    name: Coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -120,7 +120,7 @@ jobs:
   # --emit=llvm-ir and clang. Refuses rather than degrading where clang
   # is absent, so this job cannot pass without having run.
   sanitizers:
-    name: Generated-Code Sanitizers
+    name: Sanitizers
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -152,7 +152,7 @@ jobs:
   # matrix would have asked it. The corpus half of the same check needs no
   # build at all and runs in the Grammar job.
   grammar-vs-compiler:
-    name: Grammar Against the Compiler
+    name: Grammar
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -205,13 +205,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Format (alcy fmt)
+          - name: Format
             command: uv run ./tools/check_fmt.py --build-subdir=build
             bun: false
-          - name: Borrow Rules (alcy check)
+          - name: Borrow Rules
             command: uv run ./tools/check_borrow_rules.py --build-subdir=build
             bun: false
-          - name: Wasm Acceptance (alcy build --target=wasm)
+          - name: Wasm Acceptance
             command: uv run ./tools/check_cases.py --cases-root=e2e/wasm --steps=cli,program --mode=wasm --build-subdir=build
             bun: true
     uses: ./.github/workflows/harness.yaml
@@ -226,7 +226,7 @@ jobs:
   # nothing about timing, and it used to run in every matrix entry, which
   # multiplied the cost for one answer.
   benchmarks:
-    name: Benchmark Harness
+    name: Benchmarks
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -256,7 +256,7 @@ jobs:
   # artifacts are all recognised is the pass, and a fresh crash fails
   # the job with the bytes libFuzzer minimised it to.
   fuzz:
-    name: Fuzz Smoke
+    name: Fuzz
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -298,7 +298,7 @@ jobs:
   # otherwise surface. Gen-only asks nothing of the compilers it
   # configures for, so the answer costs a minute.
   cross-gen:
-    name: Cross-Target Gen
+    name: Cross Gen
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -320,6 +320,7 @@ jobs:
         run: uv run ./tools/cross.py --gen-only
 
   summary:
+    name: Summary
     needs: [debug, release, wasm-debug, wasm-release]
     if: always()
     uses: ./.github/workflows/artifacts-summary.yaml

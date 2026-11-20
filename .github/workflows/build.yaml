@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   build:
-    name: Build & Test (${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}-${{ inputs.role }}${{ matrix.nix && '-nix' || '' }})
+    name: ${{ matrix.label }}${{ matrix.nix && ' (nix)' || '' }}
     runs-on: ${{ matrix.os }}
     # The slowest entry finishes inside fifteen minutes, and a cold cache
     # roughly doubles that; an hour still returns a stuck job's slot.
@@ -31,41 +31,49 @@ jobs:
           - os: ubuntu-24.04
             plat: linux
             arch: x86_64
+            label: Linux x86_64
             archive: tar.zst
             nix: false
           - os: ubuntu-24.04
             plat: linux
             arch: x86_64
+            label: Linux x86_64
             archive: tar.zst
             nix: true
           - os: ubuntu-24.04-arm
             plat: linux
             arch: arm64
+            label: Linux arm64
             archive: tar.zst
             nix: false
           - os: macos-26
             plat: macos
             arch: arm64
+            label: macOS arm64
             archive: tar.zst
             nix: false
           - os: macos-26
             plat: macos
             arch: arm64
+            label: macOS arm64
             archive: tar.zst
             nix: true
           - os: macos-26-intel
             plat: macos
             arch: x86_64
+            label: macOS x86_64
             archive: tar.zst
             nix: false
           - os: windows-2025-vs2026
             plat: windows
             arch: x64
+            label: Windows x64
             archive: zip
             nix: false
           - os: windows-11-arm
             plat: windows
             arch: arm64
+            label: Windows arm64
             archive: zip
             nix: false
 

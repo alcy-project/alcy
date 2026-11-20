@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    name: WebAssembly (${{ inputs.build_type }})
+    name: wasm32
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:

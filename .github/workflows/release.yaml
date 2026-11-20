@@ -16,12 +16,14 @@ permissions:
 
 jobs:
   build-release:
+    name: Build & Test (Release)
     uses: ./.github/workflows/build.yaml
     with:
       build_type: release
       role: release
 
   build-wasm:
+    name: Build & Test (Wasm Release)
     uses: ./.github/workflows/build-wasm.yaml
     with:
       build_type: release
