@@ -77,22 +77,19 @@ bool Lowerer::Fmt::emit_primitive_helper(diag::Span span,
                                          State& state) {
   u32 module = 0;
   const analyzer::CheckedModule::FnSig* sig = find_helper(name, module);
-  if (sig == nullptr || sig->params.size() != 2) {
+  if (sig == nullptr || sig->params.size() != 3) {
     return false;
   }
   const ir::TypeIdx usize_ty = owner_.usize_type();
   const ir::TypeIdx boolean = owner_.builder.primitive(ir::TypeTag::I1);
   const ir::TypeIdx u8_ty = owner_.builder.primitive(ir::TypeTag::U8);
-  const ir::TypeIdx view_ty =
-      owner_.builder.reference_type(owner_.builder.slice_type(u8_ty), true);
-  ir::OperandIdx view_op = ir::OperandIdx::invalid();
+  ir::OperandIdx ptr_op = ir::OperandIdx::invalid();
+  ir::OperandIdx cap_op = usize_imm(0);
   if (state.measure_only) {
     const ir::RegisterIdx scratch =
         owner_.emit(ir::Opcode::Alloca, u8_ty, {owner_.size_one});
-    const Val empty = owner_.build_slice_value(
-        owner_.to_operand(scratch, owner_.builder.reference_type(u8_ty, true)),
-        usize_imm(0), view_ty, span);
-    view_op = empty.op;
+    ptr_op =
+        owner_.to_operand(scratch, owner_.builder.reference_type(u8_ty, true));
   } else {
     const ir::RegisterIdx off =
         owner_.emit(ir::Opcode::Load, usize_ty,
@@ -105,9 +102,8 @@ bool Lowerer::Fmt::emit_primitive_helper(diag::Span span,
     if (owner_.failed) {
       return false;
     }
-    const Val view = owner_.build_slice_value(
-        dst, owner_.to_operand(remaining, usize_ty), view_ty, span);
-    view_op = view.op;
+    ptr_op = dst;
+    cap_op = owner_.to_operand(remaining, usize_ty);
   }
   if (owner_.failed) {
     return false;
@@ -123,7 +119,8 @@ bool Lowerer::Fmt::emit_primitive_helper(diag::Span span,
   ops.push_back(owner_.builder.operand(ir::Operand::from_function(
       fn, owner_.builder.primitive(ir::TypeTag::Function))));
   ops.push_back(value);
-  ops.push_back(view_op);
+  ops.push_back(ptr_op);
+  ops.push_back(cap_op);
   const ir::RegisterIdx dst = owner_.emit(ir::Opcode::Call, sig->ret, ops);
   if (owner_.failed) {
     return false;

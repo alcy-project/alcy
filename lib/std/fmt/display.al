@@ -106,25 +106,25 @@ test {
   }
 }
 
-pub fn display_str(value: str, out: &mut [u8]) -> usize {
+// Primitive conversions live here as free functions rather than spec
+// methods: method lookup resolves `Display` on nominal types only.
+// The destination is a raw pointer and a capacity so the expansion
+// never lends an owned temporary: a mutable borrow would make drop
+// elaboration end that temporary early.
+pub fn display_str(value: str, out: *mut u8, cap: usize) -> usize {
   n := str_len(value)
-  if out.len() < n {
+  if cap < n {
     ret n
   }
   mut i := 0 as usize
   while i < n {
-    unsafe { *slice_at_mut(out, i) = str_byte(value, i) }
+    unsafe { *ptr_offset_mut(out, i as isize) = str_byte(value, i) }
     i += 1
   }
   ret n
 }
 
-// Primitive conversions live here as free functions rather than spec
-// methods: method lookup resolves `Display` on nominal types only.
-// The format expansion calls these where it used to copy the two
-// spellings itself; the free-function bridge keeps the C++ lane in
-// charge of choosing a conversion while alcy owns the digits.
-pub fn display_bool(value: bool, out: &mut [u8]) -> usize {
+pub fn display_bool(value: bool, out: *mut u8, cap: usize) -> usize {
   yes := [0x74u8, 0x72u8, 0x75u8, 0x65u8]
   no := [0x66u8, 0x61u8, 0x6cu8, 0x73u8, 0x65u8]
   mut bytes := no.as_slice()
@@ -132,9 +132,37 @@ pub fn display_bool(value: bool, out: &mut [u8]) -> usize {
     bytes = yes.as_slice()
   }
   n := bytes.len()
-  if out.len() < n {
+  if cap < n {
     ret n
   }
-  unsafe { memcopy(slice_at_mut(out, 0), slice_at(bytes, 0), n) }
+  mut i := 0 as usize
+  while i < n {
+    unsafe { *ptr_offset_mut(out, i as isize) = bytes[i] }
+    i += 1
+  }
   ret n
+}
+
+pub fn display_u64(value: u64, out: *mut u8, cap: usize) -> usize {
+  mut scratch := [0u8; 20]
+  mut n := value
+  mut count := 0 as usize
+  loop {
+    digit := n % 10u64
+    n = n / 10u64
+    scratch[19 - count] = (digit as u8) + 48u8
+    count += 1
+    if n == 0u64 {
+      break
+    }
+  }
+  if cap < count {
+    ret count
+  }
+  mut i := 0 as usize
+  while i < count {
+    unsafe { *ptr_offset_mut(out, i as isize) = scratch[20 - count + i] }
+    i += 1
+  }
+  ret count
 }
