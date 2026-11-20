@@ -819,13 +819,14 @@ TEST_CASE("Build links the arguments toolchain.toml names") {
                     "  ret 0\n"
                     "}\n") &&
       write_toolchain(dir, "proj",
-                      "link-args = [\"--alcy-no-such-link-flag-xyz\"]\n");
+                      "link-args = [\"/alcy-no-such-link-flag-xyz\"]\n");
   CHECK(setup);
   if (!setup) {
     return;
   }
-  // The driver is handed the file's own list, and names an argument it
-  // does not have.
+  // The driver is handed the file's own list, and names an input it
+  // cannot open. A slash keeps every linker from reading it as an
+  // unknown option it may only warn about.
   SilencedOutput silenced;
   CHECK(run_build_on(dir, "proj") != 0);
 }
@@ -1009,7 +1010,7 @@ TEST_CASE("A link argument flag replaces the file's list rather than join it") {
                     "  ret 0\n"
                     "}\n") &&
       write_toolchain(dir, "proj",
-                      "link-args = [\"--alcy-no-such-link-flag-xyz\"]\n");
+                      "link-args = [\"/alcy-no-such-link-flag-xyz\"]\n");
   CHECK(setup);
   if (!setup) {
     return;
@@ -1037,7 +1038,7 @@ TEST_CASE("compile links the arguments it was given") {
   }
   const std::string target = dir.join("main.al");
   std::vector<std::string> storage{"alcy", "compile", target,
-                                   "--link-args=--alcy-no-such-link-flag-xyz"};
+                                   "--link-args=/alcy-no-such-link-flag-xyz"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
@@ -1059,7 +1060,7 @@ TEST_CASE("run links the arguments it was given") {
   }
   const std::string target = dir.join("proj");
   std::vector<std::string> storage{"alcy", "run", target,
-                                   "--link-args=--alcy-no-such-link-flag-xyz"};
+                                   "--link-args=/alcy-no-such-link-flag-xyz"};
   std::vector<char*> argv;
   argv.reserve(storage.size());
   for (std::string& arg : storage) {
