@@ -14,6 +14,7 @@
 #include "path/path.h"
 #include "pipeline/check.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 
 namespace pipeline {
 
@@ -195,10 +196,12 @@ TEST_CASE("Hostile input never crashes the checker") {
     INFO("case: " << name << " source: " << source);
     PipelineContext ctx{i18n::Language::EnUs};
     // The call returning at all is the assertion: a crash would take
-    // the process with it. The source is held in memory, so a case costs
-    // a string rather than a file.
+    // the process with it. The source is held in memory, and no suite
+    // is staged: what is under test is the front end's recovery on
+    // arbitrary text, which the embedded standard library cannot reach.
     const base::Result<CheckOutcome, diag::Reported> result =
-        check_source(ctx, "main.al", source);
+        check_root_selected(ctx, ctx.sources.add_virtual("main.al", source),
+                            StdSelection{});
     (void)result;
   }
 }
@@ -218,8 +221,11 @@ TEST_CASE("Hostile input never crashes on raw bytes") {
     INFO("case: " << i);
 
     PipelineContext ctx{i18n::Language::EnUs};
+    // The bytes never reach a name the suite could define; staging it
+    // would only parse the same embedded sources once per seed.
     const base::Result<CheckOutcome, diag::Reported> result =
-        check_source(ctx, "main.al", source);
+        check_root_selected(ctx, ctx.sources.add_virtual("main.al", source),
+                            StdSelection{});
     (void)result;
   }
 }

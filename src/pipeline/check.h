@@ -11,6 +11,7 @@
 #include "fpag/base/result.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
+#include "pipeline/std_select.h"
 #include "source/source.h"
 
 namespace pipeline {
@@ -44,6 +45,14 @@ base::Result<CheckOutcome, diag::Reported> check_source(PipelineContext& ctx,
 // came from.
 base::Result<CheckOutcome, diag::Reported> check_root(PipelineContext& ctx,
                                                       source::FileId root);
+
+// The same tail with an explicit standard-library selection. Staging
+// and parsing the suite is the expensive half of a check, so a caller
+// that only exercises the front end on arbitrary bytes asks for none.
+base::Result<CheckOutcome, diag::Reported> check_root_selected(
+    PipelineContext& ctx,
+    source::FileId root,
+    const StdSelection& selection);
 
 base::Result<CheckOutcome, diag::Reported> check_package(
     PipelineContext& ctx,

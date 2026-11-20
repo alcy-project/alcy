@@ -84,8 +84,15 @@ base::Result<CheckOutcome, diag::Reported> check_source(
 // suite's own sources checks as the member it is.
 base::Result<CheckOutcome, diag::Reported> check_root(PipelineContext& ctx,
                                                       source::FileId root) {
+  return check_root_selected(ctx, root, full_std_selection());
+}
+
+base::Result<CheckOutcome, diag::Reported> check_root_selected(
+    PipelineContext& ctx,
+    source::FileId root,
+    const StdSelection& selection) {
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
-      front_end_root(ctx, root, full_std_selection());
+      front_end_root(ctx, root, selection);
   if (tree.is_err()) {
     return fail();
   }
