@@ -54,6 +54,7 @@ Shape shape_of(const MOp op) {
     case MOp::Jmp:
     case MOp::Jcc:
     case MOp::Call:
+    case MOp::CallReg:
     case MOp::Ret:
     case MOp::Syscall:
     case MOp::Nop:
@@ -174,8 +175,20 @@ void allocate(Body& body, const Frame& frame) {
     return into;
   };
 
+  // The frame displacement one vreg's storage starts at, which a slot
+  // reference is relative to. A vreg an `alloca` defines names its own
+  // storage, so that is the base its fields read from.
+  const auto disp_of = [&](const u32 vreg) -> i32 {
+    if (vreg < frame.vreg_pointee.size() &&
+        frame.vreg_pointee[vreg] != Frame::NO_POINTEE) {
+      return frame.vreg_pointee[vreg];
+    }
+    return frame.vreg_disp[vreg];
+  };
+
   // Rewrites one read operand: a vreg becomes the register it was
-  // brought into, and a memory operand's vreg base and index theirs.
+  // brought into, a memory operand's vreg base and index theirs, and a
+  // slot reference the frame reference it names.
   const auto resolve = [&](const Operand& operand) -> Operand {
     if (const VReg* vreg = std::get_if<VReg>(&operand); vreg != nullptr) {
       return Operand{load_value(*vreg)};
@@ -195,6 +208,9 @@ void allocate(Body& body, const Frame& frame) {
         }
       }
       return Operand{resolved};
+    }
+    if (const SlotRef* ref = std::get_if<SlotRef>(&operand); ref != nullptr) {
+      return Operand{slot(static_cast<i32>(disp_of(ref->vreg) + ref->offset))};
     }
     return operand;
   };
@@ -230,6 +246,10 @@ void allocate(Body& body, const Frame& frame) {
     const bool wide = shape.write0 &&
                       std::holds_alternative<VReg>(inst.ops[0]) &&
                       !register_sized(size_of(std::get<VReg>(inst.ops[0])));
+    if (wide && size_of(std::get<VReg>(inst.ops[0])) == 0) {
+      // A value with no bytes has nothing to move.
+      continue;
+    }
     if (wide) {
       DCHECK_MSG(inst.op == MOp::Mov,
                  "only a move crosses a slot wider than a register");
@@ -313,6 +333,18 @@ void allocate(Body& body, const Frame& frame) {
         result = pool[next_scratch++];
         DCHECK(next_scratch <= pool.size());
         encoded.ops[0] = Operand{*result};
+      }
+    }
+    // A store's immediate carries 32 bits, so a wider constant reaches
+    // the slot through a register this instruction is free to spend.
+    if (encoded.op == MOp::Mov && std::holds_alternative<Mem>(encoded.ops[0]) &&
+        std::holds_alternative<Imm>(encoded.ops[1])) {
+      const Imm& value = std::get<Imm>(encoded.ops[1]);
+      if (value.value > 0x7fffffffLL || value.value < -0x80000000LL) {
+        const Reg into = pool[next_scratch++];
+        DCHECK(next_scratch <= pool.size());
+        push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[1]));
+        encoded.ops[1] = Operand{into};
       }
     }
     push_labeled(encoded);

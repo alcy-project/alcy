@@ -7,7 +7,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -55,8 +54,18 @@ struct SymbolRef {
   u32 id = 0;
 };
 
-using Operand =
-    std::variant<std::monostate, VReg, Reg, Imm, Mem, Label, SymbolRef>;
+// A word of one vreg's own storage, at the offset from where its slot
+// starts. This is how a field of an aggregate the body holds, or the
+// second word of a two-word value, is named before allocation knows
+// where the slot sits; allocation answers it with a plain frame
+// reference and emits nothing.
+struct SlotRef {
+  u32 vreg = 0;
+  i32 offset = 0;
+};
+
+using Operand = std::
+    variant<std::monostate, VReg, Reg, Imm, Mem, Label, SymbolRef, SlotRef>;
 
 // The branch conditions, in the order the encoder's opcode offset uses.
 enum class Cond : u8 { E, Ne, L, Le, G, Ge, B, Be, A, Ae, S, Ns };
@@ -85,6 +94,8 @@ enum class MOp : u8 {
   Jmp,
   Jcc,
   Call,
+  // An indirect call through the register the operand names.
+  CallReg,
   Ret,
   // The system-call instruction, which reads the number in `rax` and
   // answers in it.

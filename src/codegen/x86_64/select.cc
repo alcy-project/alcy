@@ -66,9 +66,8 @@ u8 compute_width_of(const ir::TypeTag tag) {
 }
 
 constexpr bool is_signed(const ir::TypeTag tag) {
-  return tag == ir::TypeTag::I1 || tag == ir::TypeTag::I8 ||
-         tag == ir::TypeTag::I16 || tag == ir::TypeTag::I32 ||
-         tag == ir::TypeTag::I64;
+  return tag == ir::TypeTag::I8 || tag == ir::TypeTag::I16 ||
+         tag == ir::TypeTag::I32 || tag == ir::TypeTag::I64;
 }
 
 constexpr bool is_integer(const ir::TypeTag tag) {
@@ -184,6 +183,21 @@ class Selector {
   // construct it has no lowering for.
   [[nodiscard]] bool emit(const ir::Instruction& instr, const diag::Span span);
 
+  // Appends one instruction, carrying the block's label on the first one
+  // the block lowers to.
+  void push(MInst inst);
+
+  // Brings the function's own parameters in from where the ABI put
+  // them, at the head of the entry block. A wide answer takes the
+  // caller's slot first, which is the pointer the first register held.
+  [[nodiscard]] bool receive_parameters(const ir::Block& entry);
+
+  // The type one parameter rides in, which is what decides how it
+  // crosses a call.
+  enum class Passage : u8 { Register, TwoWord, ByAddress };
+
+  [[nodiscard]] Passage passage_of(ir::TypeIdx type) const;
+
   // The operand as the machine reads it: a register as its vreg, an
   // immediate as itself, a block as its label.
   [[nodiscard]] std::optional<Operand> operand_of(const ir::Operand& op);
@@ -217,6 +231,10 @@ class Selector {
   Body body_;
   std::unordered_map<u32, u32> vreg_of_register_;
   std::unordered_map<u32, ir::TypeIdx> pointee_of_register_;
+  // The vreg that holds the caller's return slot, when the answer is
+  // wider than two words; `NO_SRET` when the answer rides in registers.
+  static constexpr u32 NO_SRET = 0xffffffff;
+  u32 sret_vreg_ = NO_SRET;
   bool failed_ = false;
   // Whether this block's first instruction has been placed, which is
   // what decides where its label sits.
@@ -319,9 +337,20 @@ std::optional<Operand> Selector::scalar_of(const ir::Operand& op,
 }
 
 base::Result<Body, codegen::EmitError> Selector::run() {
+  // A function whose answer is wider than two words takes the slot the
+  // caller named: one hidden vreg holds the pointer, and the return
+  // stores through it.
+  const ir::TypeTag returned =
+      storage_.types()[function_.meta.return_type.idx].tag;
+  if (is_aggregate(returned)) {
+    sret_vreg_ = static_cast<u32>(body_.vreg_types.size());
+    body_.vreg_types.push_back(ir::primitive_idx(ir::TypeTag::Ptr).idx);
+  }
+
   // Every block the body carries gets a label, whether or not a branch
   // names it: a block's first instruction is where its label sits, and
   // the map from block to label is what the branches read.
+  bool entry = true;
   for (const ir::BlockIdx block_idx : function_.blocks) {
     body_.block_labels.emplace(block_idx.idx, body_.label_count++);
   }
@@ -329,6 +358,15 @@ base::Result<Body, codegen::EmitError> Selector::run() {
     label_ = body_.block_labels[block_idx.idx];
     placed_ = false;
     const ir::Block& block = storage_.blocks()[block_idx];
+    if (entry) {
+      entry = false;
+      // The entry block's parameters are the function's own, and they
+      // arrive where the ABI put them. Every one moves to the slot its
+      // vreg holds, which is where the body reads it from.
+      if (!receive_parameters(block)) {
+        return base::make_err(codegen::EmitError::Unsupported);
+      }
+    }
     for (const ir::InstructionIdx instr_idx : block.instrs) {
       const ir::Instruction& instr = storage_.instrs()[instr_idx];
       if (!emit(instr, span_of(instr_idx))) {
@@ -342,6 +380,91 @@ base::Result<Body, codegen::EmitError> Selector::run() {
   return base::make_ok(std::move(body_));
 }
 
+void Selector::push(const MInst inst) {
+  MInst lowered = inst;
+  if (!placed_) {
+    // The label rides on the first instruction the block lowers to,
+    // which is what makes a jump land on its own materialization.
+    lowered.label = label_;
+    placed_ = true;
+  }
+  body_.insts.push_back(lowered);
+}
+
+Selector::Passage Selector::passage_of(const ir::TypeIdx type) const {
+  const ir::TypeTag tag = storage_.types()[type.idx].tag;
+  if (is_aggregate(tag)) {
+    return Passage::ByAddress;
+  }
+  if (is_two_word(tag)) {
+    return Passage::TwoWord;
+  }
+  return Passage::Register;
+}
+
+bool Selector::receive_parameters(const ir::Block& entry) {
+  // The argument registers the call filled, in the order the
+  // declaration names its parameters. A wide answer took the first one
+  // for the caller's slot.
+  u32 next_register = 0;
+  if (sret_vreg_ != NO_SRET) {
+    push(make_inst(MOp::Mov, 8, Operand{SlotRef{sret_vreg_, 0}},
+                   Operand{ARG_REGS[next_register++]}));
+  }
+  for (const ir::BlockParamIdx param_idx : entry.block_params) {
+    const ir::BlockParam& param = storage_.block_params()[param_idx];
+    const u32 vreg = vreg_of(param.reg, param.type);
+    const ir::TypeLayout layout = storage_.layout_of(param.type, width_);
+    switch (passage_of(param.type)) {
+      case Passage::Register: {
+        if (next_register >= ARG_REG_COUNT) {
+          (void)unsupported(diag::Span{},
+                            "a parameter past the argument "
+                            "registers");
+          return false;
+        }
+        const ir::TypeTag tag = storage_.types()[param.type.idx].tag;
+        push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
+                       Operand{ARG_REGS[next_register++]}));
+        break;
+      }
+      case Passage::TwoWord: {
+        if (next_register + 1 >= ARG_REG_COUNT) {
+          (void)unsupported(diag::Span{},
+                            "a parameter past the argument "
+                            "registers");
+          return false;
+        }
+        push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 0}},
+                       Operand{ARG_REGS[next_register++]}));
+        push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 8}},
+                       Operand{ARG_REGS[next_register++]}));
+        break;
+      }
+      case Passage::ByAddress: {
+        if (next_register >= ARG_REG_COUNT) {
+          (void)unsupported(diag::Span{},
+                            "a parameter past the argument "
+                            "registers");
+          return false;
+        }
+        // The caller hands the parameter's bytes over by address, and
+        // the slot is where this body reads them from, so the copy is
+        // the whole of receiving it.
+        push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi},
+                       Operand{ARG_REGS[next_register++]}));
+        push(make_inst(MOp::Lea, 8, Operand{Reg::Rsi},
+                       Operand{SlotRef{vreg, 0}}));
+        push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
+                       Operand{Imm{static_cast<i64>(layout.size)}}));
+        push(make_inst(MOp::RepMovsb, 8));
+        break;
+      }
+    }
+  }
+  return true;
+}
+
 bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
   using O = ir::Opcode;
   const ir::OperandIdxRange ops = instr.operands;
@@ -349,14 +472,6 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
     return storage_.operands()[ops.head() + index];
   };
   const usize count = ops.size();
-
-  const auto push = [&](MInst inst) {
-    if (!placed_) {
-      inst.label = label_;
-      placed_ = true;
-    }
-    body_.insts.push_back(inst);
-  };
 
   const bool has_dst = instr.dst.is_valid();
   const auto dst_type_of = [&]() {
@@ -415,21 +530,35 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         const ir::TypeTag tag = storage_.types()[value.type].tag;
         if (tag != ir::TypeTag::Void && tag != ir::TypeTag::Never) {
           const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
-          if (layout.size > 16) {
-            (void)unsupported(span, "a return value wider than two words");
-            return false;
-          }
-          if (value.is<ir::RegisterIdx>()) {
+          const Passage passage = passage_of(value.type);
+          if (passage == Passage::ByAddress) {
+            // The caller named the slot; the bytes move there whole.
+            if (!value.is<ir::RegisterIdx>()) {
+              (void)unsupported(span,
+                                "a constant return the backend cannot "
+                                "spell");
+              return false;
+            }
+            if (sret_vreg_ == NO_SRET) {
+              (void)unsupported(span, "a wide answer with no slot");
+              return false;
+            }
+            push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi},
+                           Operand{SlotRef{sret_vreg_, 0}}));
+            push(make_inst(
+                MOp::Lea, 8, Operand{Reg::Rsi},
+                Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}}));
+            push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
+                           Operand{Imm{static_cast<i64>(layout.size)}}));
+            push(make_inst(MOp::RepMovsb, 8));
+          } else if (value.is<ir::RegisterIdx>()) {
             const u32 vreg = vreg_of(value.as_register(), value.type);
             // One word answers in `rax`; two ride in the pair.
             push(
                 make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{VReg{vreg}}));
-            if (layout.size > 8) {
+            if (passage == Passage::TwoWord) {
               push(make_inst(MOp::Mov, 8, Operand{Reg::Rdx},
-                             Operand{Mem{.base = VReg{vreg},
-                                         .index = std::nullopt,
-                                         .scale = 1,
-                                         .disp = 8}}));
+                             Operand{SlotRef{vreg, 8}}));
             }
           } else if (const std::optional<Operand> constant = operand_of(value);
                      constant.has_value() &&
@@ -704,7 +833,12 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         (void)unsupported(span, "a projection into a scalar");
         return false;
       }
-      push(make_inst(MOp::Lea, 8, dst_operand(),
+      // A projection's destination names the element it reaches, and
+      // the register holds its address, so the vreg is a pointer's
+      // width whatever the element is.
+      const u32 address =
+          vreg_of(instr.dst, ir::primitive_idx(ir::TypeTag::Ptr));
+      push(make_inst(MOp::Lea, 8, Operand{VReg{address}},
                      Operand{Mem{.base = VReg{vreg_of(base, at(0).type)},
                                  .index = regref_of(index),
                                  .scale = static_cast<u8>(scale),
@@ -853,71 +987,123 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       return false;
     }
     case O::Call: {
-      // operands = [callee, arguments...].
-      DCHECK(count >= 1);
-      // The name the call reaches: a program's own function, or the one
-      // an extern declaration spells.
-      std::string symbol;
-      if (at(0).is<ir::FunctionIdx>()) {
-        symbol = internal_symbol(at(0).as_function());
-      } else if (at(0).is<ir::ExternalFunctionIdx>()) {
-        symbol = std::string(strings_.get(
-            storage_.external_functions()[at(0).as_external_function()]
-                .meta.name));
-      } else {
-        (void)unsupported(span, "a call through a value");
-        return false;
-      }
-      u32 symbol_id = body_.symbols.size();
-      for (u32 existing = 0; existing < body_.symbols.size(); ++existing) {
-        if (body_.symbols[existing] == symbol) {
-          symbol_id = existing;
-          break;
+      // operands = [callee, arguments...]. A callee this body names by
+      // symbol takes a direct call; one it holds in a register takes an
+      // indirect one through the code word.
+      const bool indirect = at(0).is<ir::RegisterIdx>();
+      u32 symbol_id = 0;
+      if (!indirect) {
+        std::string symbol;
+        if (at(0).is<ir::FunctionIdx>()) {
+          symbol = internal_symbol(at(0).as_function());
+        } else if (at(0).is<ir::ExternalFunctionIdx>()) {
+          symbol = std::string(strings_.get(
+              storage_.external_functions()[at(0).as_external_function()]
+                  .meta.name));
+        } else {
+          (void)unsupported(span, "a call the backend cannot name");
+          return false;
+        }
+        symbol_id = body_.symbols.size();
+        for (u32 existing = 0; existing < body_.symbols.size(); ++existing) {
+          if (body_.symbols[existing] == symbol) {
+            symbol_id = existing;
+            break;
+          }
+        }
+        if (symbol_id == body_.symbols.size()) {
+          body_.symbols.push_back(symbol);
         }
       }
-      if (symbol_id == body_.symbols.size()) {
-        body_.symbols.push_back(symbol);
+
+      // The argument registers, in the order the call fills them. A
+      // wide answer took the first for the caller's slot.
+      u32 next_register = 0;
+      if (has_dst && passage_of(dst_type_of()) == Passage::ByAddress) {
+        // The answer lands in the slot the destination vreg holds, and
+        // the callee writes it there; nothing reads `rax`.
+        push(make_inst(MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
+                       Operand{SlotRef{vreg_of(instr.dst, dst_type_of()), 0}}));
       }
       for (u32 arg = 1; arg < count; ++arg) {
         const ir::Operand& value = at(arg);
         const ir::TypeTag tag = storage_.types()[value.type].tag;
-        if (is_aggregate(tag) || is_two_word(tag)) {
-          (void)unsupported(span, "an argument wider than a register");
-          return false;
-        }
         if (is_float(tag)) {
           (void)unsupported(span, "a floating point argument");
           return false;
+        }
+        const Passage passage = passage_of(value.type);
+        if (passage == Passage::ByAddress) {
+          if (next_register >= ARG_REG_COUNT) {
+            (void)unsupported(span,
+                              "a parameter past the argument "
+                              "registers");
+            return false;
+          }
+          // The bytes cross by address: the slot the value's vreg holds
+          // is the copy the callee reads.
+          if (!value.is<ir::RegisterIdx>()) {
+            (void)unsupported(span, "a constant aggregate argument");
+            return false;
+          }
+          push(make_inst(
+              MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
+              Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}}));
+          continue;
         }
         const std::optional<Operand> side = scalar_of(value, span);
         if (!side.has_value()) {
           return false;
         }
-        if (arg - 1 < 6) {
-          push(make_inst(MOp::Mov, width_of(tag), Operand{ARG_REGS[arg - 1]},
-                         *side));
-        } else {
-          // The rest ride on the stack the callee reads them from,
-          // which the frame reserves below its own slots.
-          const u32 slot = static_cast<u32>(arg - 7) * 8;
-          body_.outgoing = std::max(body_.outgoing, slot + 8);
-          push(make_inst(MOp::Mov, 8,
-                         Operand{Mem{.base = Reg::Rsp,
-                                     .index = std::nullopt,
-                                     .scale = 1,
-                                     .disp = static_cast<i32>(slot)}},
-                         *side));
+        if (passage == Passage::TwoWord) {
+          if (next_register + 1 >= ARG_REG_COUNT) {
+            (void)unsupported(span,
+                              "a parameter past the argument "
+                              "registers");
+            return false;
+          }
+          // The pair rides in two registers, which is the slot's two
+          // words read whole.
+          const u32 vreg = vreg_of(value.as_register(), value.type);
+          push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                         Operand{SlotRef{vreg, 0}}));
+          push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                         Operand{SlotRef{vreg, 8}}));
+          continue;
         }
-      }
-      push(make_inst(MOp::Call, 8, Operand{SymbolRef{symbol_id}}));
-      if (has_dst) {
-        const ir::TypeTag tag = dst_tag();
-        if (is_aggregate(tag) || is_two_word(tag)) {
-          (void)unsupported(span, "a return wider than a register");
+        if (next_register >= ARG_REG_COUNT) {
+          (void)unsupported(span, "a parameter past the argument registers");
           return false;
         }
-        push(make_inst(MOp::Mov, width_of(tag), dst_operand(),
-                       Operand{Reg::Rax}));
+        push(make_inst(MOp::Mov, width_of(tag),
+                       Operand{ARG_REGS[next_register++]}, *side));
+      }
+      if (indirect) {
+        // A function value is the code and the environment it owns; the
+        // call goes through the code word, and the environment rides
+        // ahead of every argument.
+        const u32 vreg = vreg_of(at(0).as_register(), at(0).type);
+        push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                       Operand{SlotRef{vreg, 8}}));
+        push(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
+                       Operand{SlotRef{vreg, 0}}));
+        push(make_inst(MOp::CallReg, 8, Operand{Reg::Rax}));
+      } else {
+        push(make_inst(MOp::Call, 8, Operand{SymbolRef{symbol_id}}));
+      }
+      if (has_dst) {
+        const Passage passage = passage_of(dst_type_of());
+        if (passage == Passage::Register) {
+          push(make_inst(MOp::Mov, width_of(dst_tag()), dst_operand(),
+                         Operand{Reg::Rax}));
+        } else if (passage == Passage::TwoWord) {
+          const u32 vreg = vreg_of(instr.dst, dst_type_of());
+          push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 0}},
+                         Operand{Reg::Rax}));
+          push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 8}},
+                         Operand{Reg::Rdx}));
+        }
+        // By address, the callee already wrote the slot.
       }
       return true;
     }
@@ -1054,6 +1240,9 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       if (!rhs.has_value()) {
         return false;
       }
+      // The compare runs at its operands' width, which is the width the
+      // value holds and not the bool it answers.
+      const u8 compare = compute_width_of(storage_.types()[at(0).type].tag);
       // The compare reads its left side from a register, and its right
       // side from one when the constant is wider than the opcode's
       // immediate carries. Both take registers the instruction is free
@@ -1062,7 +1251,7 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       Operand right = *rhs;
       const bool left_constant = std::holds_alternative<Imm>(left);
       if (left_constant) {
-        push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, left));
+        push(make_inst(MOp::Mov, compare, Operand{Reg::Rcx}, left));
         left = Operand{Reg::Rcx};
       }
       if (std::holds_alternative<Imm>(right)) {
@@ -1070,13 +1259,14 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         const bool fits =
             value.value >= -0x80000000LL && value.value <= 0x7fffffffLL;
         if (left_constant || !fits) {
-          push(make_inst(MOp::Mov, compute, Operand{Reg::Rdx}, right));
+          push(make_inst(MOp::Mov, compare, Operand{Reg::Rdx}, right));
           right = Operand{Reg::Rdx};
         }
       }
-      push(make_inst(MOp::Cmp, compute, left, right));
-      push(make_setcc(compare_of(instr.op, is_signed(dst_tag())),
-                      dst_operand()));
+      push(make_inst(MOp::Cmp, compare, left, right));
+      push(make_setcc(
+          compare_of(instr.op, is_signed(storage_.types()[at(0).type].tag)),
+          dst_operand()));
       return true;
     }
     case O::TypeCast: {

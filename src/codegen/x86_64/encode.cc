@@ -520,6 +520,14 @@ Encoded encode(const Body& body) {
         put_i32(out, 0);
         break;
       }
+      case MOp::CallReg: {
+        // `call r64`, which reads its target from the register.
+        const Reg target = std::get<Reg>(inst.at(0));
+        prefix(out, 8, false, std::nullopt, target, std::nullopt);
+        out.push_back(0xff);
+        out.push_back(static_cast<u8>(0xc0 | 2 << 3 | reg_code(target)));
+        break;
+      }
       case MOp::Ret: {
         out.push_back(0xc3);
         break;

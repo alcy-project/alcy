@@ -3,10 +3,9 @@
 
 #include "codegen/x86_64/frame.h"
 
-#include <algorithm>
-
 #include "codegen/x86_64/minst.h"
 #include "debug/dcheck.h"
+#include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
@@ -25,7 +24,6 @@ u64 align_up(const u64 value, const u64 align) {
 bool is_signed_narrow(const ir::TypeTag tag, const u64 size) {
   const bool narrow = size == 1 || size == 2;
   switch (tag) {
-    case ir::TypeTag::I1:
     case ir::TypeTag::I8:
     case ir::TypeTag::I16: return narrow;
     default: return false;
