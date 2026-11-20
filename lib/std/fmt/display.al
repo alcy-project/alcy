@@ -105,3 +105,23 @@ test {
     }
   }
 }
+
+// Primitive conversions live here as free functions rather than spec
+// methods: method lookup resolves `Display` on nominal types only.
+// The format expansion calls these where it used to copy the two
+// spellings itself; the free-function bridge keeps the C++ lane in
+// charge of choosing a conversion while alcy owns the digits.
+pub fn display_bool(value: bool, out: &mut [u8]) -> usize {
+  yes := [0x74u8, 0x72u8, 0x75u8, 0x65u8]
+  no := [0x66u8, 0x61u8, 0x6cu8, 0x73u8, 0x65u8]
+  mut bytes := no.as_slice()
+  if value {
+    bytes = yes.as_slice()
+  }
+  n := bytes.len()
+  if out.len() < n {
+    ret n
+  }
+  unsafe { memcopy(slice_at_mut(out, 0), slice_at(bytes, 0), n) }
+  ret n
+}

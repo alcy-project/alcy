@@ -56,6 +56,99 @@ bool Lowerer::Fmt::check_arguments(diag::Span span,
   return true;
 }
 
+const analyzer::CheckedModule::FnSig* Lowerer::Fmt::find_helper(
+    std::string_view name,
+    u32& module) const {
+  for (u32 i = 0; i < owner_.pkg.modules.size(); ++i) {
+    for (const analyzer::CheckedModule::FnSig& sig :
+         owner_.pkg.modules[i].functions) {
+      if (sig.name == name) {
+        module = i;
+        return &sig;
+      }
+    }
+  }
+  return nullptr;
+}
+
+bool Lowerer::Fmt::emit_bool_helper(diag::Span span,
+                                    ir::OperandIdx value,
+                                    State& state) {
+  u32 module = 0;
+  const analyzer::CheckedModule::FnSig* sig =
+      find_helper("display_bool", module);
+  if (sig == nullptr || sig->params.size() != 2) {
+    return false;
+  }
+  const ir::TypeIdx usize_ty = owner_.usize_type();
+  const ir::TypeIdx boolean = owner_.builder.primitive(ir::TypeTag::I1);
+  const ir::TypeIdx u8_ty = owner_.builder.primitive(ir::TypeTag::U8);
+  const ir::TypeIdx view_ty =
+      owner_.builder.reference_type(owner_.builder.slice_type(u8_ty), true);
+  ir::OperandIdx view_op = ir::OperandIdx::invalid();
+  if (state.measure_only) {
+    const ir::RegisterIdx scratch =
+        owner_.emit(ir::Opcode::Alloca, u8_ty, {owner_.size_one});
+    const Val empty = owner_.build_slice_value(
+        owner_.to_operand(scratch, owner_.builder.reference_type(u8_ty, true)),
+        usize_imm(0), view_ty, span);
+    view_op = empty.op;
+  } else {
+    const ir::RegisterIdx off =
+        owner_.emit(ir::Opcode::Load, usize_ty,
+                    {owner_.to_operand(state.off_addr, usize_ty)});
+    const ir::RegisterIdx remaining =
+        owner_.emit(ir::Opcode::IntSub, usize_ty,
+                    {state.capacity, owner_.to_operand(off, usize_ty)});
+    const ir::OperandIdx dst = owner_.advance_ptr(
+        state.dst_base, owner_.to_operand(off, usize_ty), span);
+    if (owner_.failed) {
+      return false;
+    }
+    const Val view = owner_.build_slice_value(
+        dst, owner_.to_operand(remaining, usize_ty), view_ty, span);
+    view_op = view.op;
+  }
+  if (owner_.failed) {
+    return false;
+  }
+  const ir::FunctionIdx fn =
+      owner_.fn_index(module, sig->item, sig->name, sig->params, sig->ret,
+                      sig->inst, std::vector<comp::CompVal>{});
+  if (!fn.is_valid()) {
+    owner_.internal(span, "fmt helper without a function");
+    return false;
+  }
+  std::vector<ir::OperandIdx> ops;
+  ops.push_back(owner_.builder.operand(ir::Operand::from_function(
+      fn, owner_.builder.primitive(ir::TypeTag::Function))));
+  ops.push_back(value);
+  ops.push_back(view_op);
+  const ir::RegisterIdx dst = owner_.emit(ir::Opcode::Call, sig->ret, ops);
+  if (owner_.failed) {
+    return false;
+  }
+  if (!state.measure_only) {
+    const ir::RegisterIdx off =
+        owner_.emit(ir::Opcode::Load, usize_ty,
+                    {owner_.to_operand(state.off_addr, usize_ty)});
+    const ir::RegisterIdx remaining =
+        owner_.emit(ir::Opcode::IntSub, usize_ty,
+                    {state.capacity, owner_.to_operand(off, usize_ty)});
+    const ir::RegisterIdx fits =
+        owner_.emit(ir::Opcode::Lt, boolean,
+                    {owner_.to_operand(dst, sig->ret),
+                     owner_.to_operand(remaining, usize_ty)});
+    const ir::RegisterIdx chunk = owner_.emit(
+        ir::Opcode::Select, usize_ty,
+        {owner_.to_operand(fits, boolean), owner_.to_operand(dst, sig->ret),
+         owner_.to_operand(remaining, usize_ty)});
+    advance(owner_.to_operand(chunk, usize_ty), state);
+  }
+  accumulate(owner_.to_operand(dst, sig->ret), state);
+  return !owner_.failed;
+}
+
 bool Lowerer::Fmt::emit_pieces(diag::Span span,
                                const std::vector<analyzer::FmtPiece>& pieces,
                                State& state) {
@@ -108,6 +201,14 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
     if (tag == ir::TypeTag::I1) {
       const ir::RegisterIdx loaded = owner_.emit(
           ir::Opcode::Load, elem_ty, {owner_.to_operand(elem_addr, elem_ty)});
+      if (emit_bool_helper(span, owner_.to_operand(loaded, elem_ty), state)) {
+        continue;
+      }
+      if (owner_.failed) {
+        return false;
+      }
+      // No helper in the selected packages: the inline spelling stays
+      // the fallback while the expansion is staged in.
       ir::OperandIdx true_ptr = ir::OperandIdx::invalid();
       ir::OperandIdx true_len = ir::OperandIdx::invalid();
       ir::OperandIdx false_ptr = ir::OperandIdx::invalid();

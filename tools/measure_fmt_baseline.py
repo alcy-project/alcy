@@ -43,6 +43,7 @@ ROOT = project_root_dir
 BENCH_CASES = "check/fmt-heavy,compile/fmt-heavy"
 FIXTURE = ROOT / "benchmarks" / "fixtures" / "fmt-heavy" / "main.al"
 DIGIT_CASE = ROOT / "exe" / "cases" / "exe-fmt-exact" / "main.al"
+PRIMITIVE_CASE = ROOT / "benchmarks" / "fixtures" / "fmt-primitives" / "main.al"
 EXE_CASES = (
     "exe-fmt,exe-fmt-carry,exe-fmt-exact,exe-fmt-exponent,exe-fmt-float,exe-fmt-min"
 )
@@ -119,12 +120,25 @@ def record(scratch: Path, full: bool) -> dict:
     digits = run([str(digit_exe)], cwd=digit_dir)
     (scratch / "digits.txt").write_text(digits.stdout, encoding="utf-8")
 
+    primitive_dir = scratch / "primitives"
+    primitive_dir.mkdir(parents=True, exist_ok=True)
+    primitive_exe = primitive_dir / "case"
+    built = run([str(alcy), "compile", str(PRIMITIVE_CASE), "-o", str(primitive_exe)])
+    if built.returncode != 0 or not primitive_exe.is_file():
+        sys.exit(f"error: primitive case did not compile\n{built.stderr}")
+    primitives = run([str(primitive_exe)], cwd=primitive_dir)
+    (scratch / "primitives.txt").write_text(primitives.stdout, encoding="utf-8")
+
     result = {
         "recorded_utc": datetime.now(UTC).isoformat(),
         "machine": machine(),
         "git_head": git_head(),
         "digit_sha256": hashlib.sha256(digits.stdout.encode("utf-8")).hexdigest(),
         "digit_exit": digits.returncode,
+        "primitive_sha256": hashlib.sha256(
+            primitives.stdout.encode("utf-8")
+        ).hexdigest(),
+        "primitive_exit": primitives.returncode,
         "image_bytes": image.stat().st_size,
         "benchmarks": benchmark_records(jsonl),
         "verdicts": {},
@@ -166,6 +180,12 @@ def compare(before: dict, after: dict) -> int:
         problems.append("digit output changed")
     if before["digit_exit"] != 0 or after["digit_exit"] != 0:
         problems.append("the digit case exited nonzero")
+    if before.get("primitive_sha256") and (
+        before["primitive_sha256"] != after.get("primitive_sha256")
+    ):
+        problems.append("primitive output changed")
+    if after.get("primitive_exit", 0) != 0:
+        problems.append("the primitive case exited nonzero")
     for name, old in before["verdicts"].items():
         new = after["verdicts"].get(name)
         if new is None:
@@ -185,6 +205,11 @@ def compare(before: dict, after: dict) -> int:
     print(
         f"digit digest: {before['digit_sha256'][:12]} -> {after['digit_sha256'][:12]}"
     )
+    if before.get("primitive_sha256") and after.get("primitive_sha256"):
+        print(
+            f"primitive digest: {before['primitive_sha256'][:12]} -> "
+            f"{after['primitive_sha256'][:12]}"
+        )
     for name in sorted(before["verdicts"]):
         print(
             f"{name}: {before['verdicts'][name]['last']} | "
