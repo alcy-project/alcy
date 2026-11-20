@@ -47,6 +47,20 @@ body {
   gap: 8px;
 }
 
+/* Run stays outside the menu so it is always visible; the other actions
+   fold into a popover on a narrow screen. The details holds only the
+   toggle: wrapping the actions in one would give them a zero intrinsic
+   width while it is closed. */
+.run-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions-menu > summary {
+  display: none;
+}
+
 button {
   font: inherit;
   min-height: 28px;
@@ -617,5 +631,52 @@ body.resizing {
 
   .compiler-state {
     min-width: 0;
+  }
+
+  .run-group {
+    position: relative;
+  }
+
+  .actions-menu > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--fg-soft);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .actions-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .actions-menu > summary svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+
+  .toolbar-actions {
+    display: none;
+  }
+
+  .actions-menu[open] + .toolbar-actions {
+    display: flex;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 10;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 160px;
+    padding: 8px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
   }
 }

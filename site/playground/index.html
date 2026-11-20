@@ -36,25 +36,36 @@
           <span class="dot"></span>
           <span id="compiler-state-text">{{t:compiler.idle}}</span>
         </div>
-        <div class="toolbar-actions">
-          <button id="copy-link" type="button" title="{{t:playground.copyLink}}">
-            <span class="label">
-              <span>{{t:playground.copyLink}}</span>
-              <span aria-hidden="true">{{t:playground.linkCopied}}</span>
-            </span>
-          </button>
-          <button id="download" type="button" title="{{t:button.download}}">
-            <span>{{t:button.download}}</span>
-          </button>
-          <button id="format" type="button" title="{{t:button.format}}">
-            <span>{{t:button.format}}</span>
-          </button>
-          <button id="lint" type="button" title="{{t:button.lint}}">
-            <span>{{t:button.lint}}</span>
-          </button>
-          <button id="check" type="button" title="{{t:button.checkTitle}}">
-            <span>{{t:button.check}}</span>
-          </button>
+        <div class="run-group">
+          <details class="actions-menu">
+            <summary aria-label="{{t:playground.moreActions}}">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <circle cx="8" cy="3" r="1.4" />
+                <circle cx="8" cy="8" r="1.4" />
+                <circle cx="8" cy="13" r="1.4" />
+              </svg>
+            </summary>
+          </details>
+          <div class="toolbar-actions">
+            <button id="copy-link" type="button" title="{{t:playground.copyLink}}">
+              <span class="label">
+                <span>{{t:playground.copyLink}}</span>
+                <span aria-hidden="true">{{t:playground.linkCopied}}</span>
+              </span>
+            </button>
+            <button id="download" type="button" title="{{t:button.download}}">
+              <span>{{t:button.download}}</span>
+            </button>
+            <button id="format" type="button" title="{{t:button.format}}">
+              <span>{{t:button.format}}</span>
+            </button>
+            <button id="lint" type="button" title="{{t:button.lint}}">
+              <span>{{t:button.lint}}</span>
+            </button>
+            <button id="check" type="button" title="{{t:button.checkTitle}}">
+              <span>{{t:button.check}}</span>
+            </button>
+          </div>
           <button
             id="run"
             type="button"
