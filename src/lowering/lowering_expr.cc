@@ -1551,8 +1551,9 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     return lower_extern_call(expr, sig);
   }
   if (analyzer::is_expanded_name(sig.name, analyzer::FMT_EXPANDED_NAMES) &&
-      pkg.tree.is_staged_item("fmt", sig.item) && sig.name == "format") {
-    return fmt_lowering_.lower_format(expr, sig);
+      pkg.tree.is_staged_item("fmt", sig.item)) {
+    // Both expanded fmt bodies are alcy specializations now; only the
+    // io print wrappers still use the C++ lane.
   }
   if (analyzer::is_expanded_name(sig.name, analyzer::IO_EXPANDED_NAMES) &&
       pkg.tree.is_staged_item("io", sig.item)) {

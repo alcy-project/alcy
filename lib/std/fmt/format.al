@@ -3,6 +3,66 @@
 
 // `alcy/std/fmt`: formatting into an owned string.
 
+use core::string::str_byte;
+use core::string::str_len;
+use fmt::display::comp_pieces;
+use fmt::display::Display;
+use fmt::display::DisplayPrecision;
+use text::string::String;
+
+// The expansion body measures every piece first, then reserves exactly
+// that many bytes and writes into the spare capacity. A rendering must
+// not depend on the destination length, so both passes agree.
 pub fn format(comp fmt: str, args: ..) -> String {
-  panic("fmt::format must expand")
+  mut total := 0usize
+  comp for p in comp_pieces(fmt) {
+    comp if p.is_arg {
+      comp if p.precision == 255 {
+        mut empty := [0u8; 0]
+        total += args[p.arg].display(&mut empty[..])
+      } else {
+        mut empty := [0u8; 0]
+        mut prec := p.precision
+        mut trim := false
+        if prec == 255 {
+          prec = 6
+          trim = true
+        }
+        total += args[p.arg].display_precision(prec, trim, &mut empty[..])
+      }
+    } else {
+      total += str_len(p.literal)
+    }
+  }
+  mut out := String::with_capacity(total)
+  mut off := 0usize
+  comp for p in comp_pieces(fmt) {
+    comp if p.is_arg {
+      comp if p.precision == 255 {
+        off += args[p.arg].display(unsafe { out.spare_capacity_mut() } [off..])
+      } else {
+        mut prec := p.precision
+        mut trim := false
+        if prec == 255 {
+          prec = 6
+          trim = true
+        }
+        off +=
+          args[p.arg]
+          .display_precision(prec, trim, unsafe { out.spare_capacity_mut() } [off..])
+      }
+    } else {
+      lit := p.literal
+      n := str_len(lit)
+      mut i := 0usize
+      spare := unsafe { out.spare_capacity_mut() }
+      while i < n {
+        spare[off + i] = str_byte(lit, i)
+        i += 1
+      }
+      off += n
+    }
+  }
+  unsafe { out.set_len(off) }
+  ret out
 }

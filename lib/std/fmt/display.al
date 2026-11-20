@@ -706,11 +706,11 @@ impl Display for bool {
 
 impl Display for str {
   fn display(self: &Self, out: &mut [u8]) -> usize {
-    mut scratch := [0u8; 64]
-    n := display_str(*self, &mut scratch[0] as *mut u8, scratch.len())
+    text := *self
+    n := str_len(text)
     mut i := 0 as usize
     while i < n && i < out.len() {
-      out[i] = scratch[i]
+      out[i] = str_byte(text, i)
       i += 1
     }
     ret n
