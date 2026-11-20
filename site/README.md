@@ -39,11 +39,13 @@ that directory to GitHub Pages.
   URL, so a page in another language's tree finds the one set of assets.
   Its own README covers the page and the compiler module it expects.
 
-The generator itself is not TypeScript: it is the C++ module under
-`../src/ssg/`, built as the `alcy-docsite` binary — a parser for the
-Markdown subset the guide is written in, the page shell, the link
-audit, the build-time highlighter, and the template stamper. Its
-tests are in `../src/tests/ssg/`. `tsconfig.json` and
+The generator itself is not TypeScript: the library is the C++
+module under `../src/ssg/` — a parser for the Markdown subset the
+guide is written in, the page shell, the link audit, the build-time
+highlighter, and the template stamper — and the tool that drives it
+is the `alcy-docsite` binary under `../src/docsite/`, which also
+compiles every alcy fence through the compiler it links. The
+library's tests are in `../src/tests/ssg/`. `tsconfig.json` and
 `tsconfig.workers.json` are the two remaining TypeScript builds: the
 pages (DOM) and the playground's two workers (WebWorker).
 
@@ -143,7 +145,7 @@ uv run ./tools/site.py serve          # http://127.0.0.1:8000/
 `build` assembles nothing until the generator is built:
 
 ```sh
-uv run ./tools/build.py --target=src/ssg:docsite \
+uv run ./tools/build.py --target=docsite \
   --mode=release --build-subdir=docsite
 ```
 

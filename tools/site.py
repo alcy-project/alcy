@@ -696,7 +696,7 @@ def build_guide(dist_dir: Path) -> None:
     if docsite is None:
         raise RuntimeError(
             "alcy-docsite is not built; build it with "
-            "tools/build.py --target=src/ssg:docsite --mode=release "
+            "tools/build.py --target=docsite --mode=release "
             "--build-subdir=docsite"
         )
     stamp, stamp_url = build_stamp(project_root_dir)

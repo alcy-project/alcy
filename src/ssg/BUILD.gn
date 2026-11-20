@@ -1,10 +1,11 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# The site generator: stamps the site from the sources under docs/.
-# The module is split so `alcy doc` can reuse the same core for a
-# generated API reference: the core has no compiler dependencies,
-# and the docsite binary wires it to the fence compiler.
+# The site generator's library: parses the Markdown subset the guide
+# and the reference are written in, renders the page trees, and stamps
+# the catalog from the site's shared catalog.json. The core has no
+# compiler dependencies; the tool that wires it to the fence compiler
+# lives in src/docsite/.
 source_set("ssg") {
   sources = [
     "catalog.cc",
@@ -39,21 +40,5 @@ source_set("ssg") {
     "//third_party/fpag",
     "//third_party/tree-sitter",
     "//treesitter:grammar",
-  ]
-}
-
-# The binary the documentation builds invoke. It needs the whole
-# compiler to check a page's `alcy` fences before it lets them onto
-# the page.
-executable("docsite") {
-  output_name = "alcy-docsite"
-  sources = [ "docsite.cc" ]
-
-  configs += [ "//src:alcy_config" ]
-
-  deps = [
-    ":ssg",
-    "//src:base_modules",
-    "//src/playground",
   ]
 }

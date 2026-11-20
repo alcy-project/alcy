@@ -1,0 +1,20 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The tool that stamps the site: it links the ssg module for the
+# page trees and the compiler through the playground's C ABI for the
+# fence check, so a guide example that compiles here compiles the
+# same way in the browser. A separate target from ssg because the
+# module itself stays free of compiler dependencies.
+executable("docsite") {
+  output_name = "alcy-docsite"
+  sources = [ "docsite.cc" ]
+
+  configs += [ "//src:alcy_config" ]
+
+  deps = [
+    "//src:base_modules",
+    "//src/playground",
+    "//src/ssg",
+  ]
+}

@@ -167,12 +167,12 @@ what implements it lives in `src/`.
   root, `/ja/` beside it), the shared shell under `site/shared/`, and the
   browser playground under `site/playground/`; the guide under `docs/guide/` and
   the specification under `docs/spec/` are rendered by the site's own generator,
-  the C++ module under `src/ssg/` built as the `alcy-docsite` binary, which also
-  stamps the landing and playground templates per language and compiles every
-  guide fence through the compiler it links. `tools/site.py` builds the pages
-  into `site/dist/`, combining those sources with the grammar and the compiler's
-  wasm module; `.github/workflows/site.yaml` deploys that directory to GitHub
-  Pages.
+  the library under `src/ssg/` and the tool that drives it, `src/docsite/`,
+  which also stamps the landing and playground templates per language and
+  compiles every guide fence through the compiler it links. `tools/site.py`
+  builds the pages into `site/dist/`, combining those sources with the grammar
+  and the compiler's wasm module; `.github/workflows/site.yaml` deploys that
+  directory to GitHub Pages.
 
 ## Compiler modules
 
