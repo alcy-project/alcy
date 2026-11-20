@@ -27,6 +27,9 @@ const mirrorRefreshes: Array<() => void> = [];
 // Every press after the module is loaded arrives here again; wire a block
 // once so its Open button does not collect a second listener.
 const wiredBlocks = new WeakSet<CodeBlock>();
+// One open editor per page: opening another block closes this one, so a
+// second editing frame cannot stay behind.
+let activeEditor: (() => void) | null = null;
 
 function ensureHighlighter(): Promise<Highlighter | null> {
   if (highlighterPromise === null) {
@@ -153,8 +156,26 @@ export function wireEditor(block: CodeBlock, pressed = false): void {
   // Copy and Run follow the reader, not the published text.
   block.source = () => (editor === null ? working : editor.value);
 
+  const closeEditor = (): void => {
+    if (editor === null) {
+      return;
+    }
+    working = editor.value;
+    editor.remove();
+    editor = null;
+    block.root.classList.remove("editing");
+    showWorking();
+    edit.textContent = t("guide.edit");
+    edit.setAttribute("aria-pressed", "false");
+    syncReset();
+    if (activeEditor === closeEditor) {
+      activeEditor = null;
+    }
+  };
+
   const toggleEditor = (): void => {
     if (editor === null) {
+      activeEditor?.();
       const created = createEditor(working);
       editor = created;
       created.addEventListener("input", () => {
@@ -169,17 +190,11 @@ export function wireEditor(block: CodeBlock, pressed = false): void {
       created.focus();
       edit.textContent = t("guide.done");
       edit.setAttribute("aria-pressed", "true");
+      activeEditor = closeEditor;
       void ensureHighlighter();
     } else {
-      working = editor.value;
-      editor.remove();
-      editor = null;
-      block.root.classList.remove("editing");
-      showWorking();
-      edit.textContent = t("guide.edit");
-      edit.setAttribute("aria-pressed", "false");
+      closeEditor();
     }
-    syncReset();
   };
 
   edit.addEventListener("click", toggleEditor);
