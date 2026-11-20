@@ -77,6 +77,27 @@ repetitions = 10
 warmup = 2
 output_kind = "scratch"
 
+# The fmt pilot's baseline: the same work before and after the C++
+# conversion lane retires. The process times come from the runner;
+# produced-image size and the digit outputs are recorded by
+# tools/measure_fmt_baseline.py beside them.
+[[case]]
+id = "check/fmt-heavy"
+fixture = "fmt-heavy"
+argv = ["check", "--file", "main.al"]
+expected_exit = 0
+repetitions = 15
+warmup = 3
+
+[[case]]
+id = "compile/fmt-heavy"
+fixture = "fmt-heavy"
+argv = ["compile", "main.al", "-o", "out/main", "--release"]
+expected_exit = 0
+repetitions = 10
+warmup = 2
+output_kind = "scratch"
+
 [[case]]
 id = "build/executable"
 fixture = "build-package"
