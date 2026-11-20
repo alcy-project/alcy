@@ -30,6 +30,15 @@ The formatter proper holds the layout side:
 - `doc`: a small layout algebra - text, line, group, nest - and a
   renderer that chooses between a flat and a broken rendering for each
   group against the width it was given.
+- `token_facts`: the pure decisions over tokens and CST nodes - what an
+  error span carries, when two tokens would merge, whether a bracket is
+  a delimiter or an operator. No state, just the tree and the source
+  bytes, so the rules can be read and tested on their own.
+- `printer`: the stateful layout, split into the flow of one line
+  (`printer_flow`), the chunking of a file into lines
+  (`printer_chunks`), and the run that joins them (`printer`). The
+  pieces are private to the class; the files are a reading order, not
+  a public surface.
 - `formatter`: the public entry point, `format(source, config)`. The
   header is named for the thing the module declares, per the naming
   rule the tree documents.
