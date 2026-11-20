@@ -380,14 +380,15 @@ Encoded encode(const Body& body) {
         // narrow forms have their own opcodes and the 32-bit one is
         // named for itself.
         const Reg to = std::get<Reg>(inst.at(0));
-        prefix(out, 8, true, to, std::nullopt, std::nullopt);
-        out.push_back(0x0f);
-        if (width == 1) {
-          out.push_back(0xbe);
-        } else if (width == 2) {
-          out.push_back(0xbf);
-        } else {
+        if (width == 4) {
+          // `movsxd r64, r/m32` has no 0f prefix; the wider form of the
+          // two-byte movsx would be an MMX instruction.
+          prefix(out, 8, true, to, std::nullopt, std::nullopt);
           out.push_back(0x63);
+        } else {
+          prefix(out, 8, true, to, std::nullopt, std::nullopt);
+          out.push_back(0x0f);
+          out.push_back(width == 1 ? 0xbe : 0xbf);
         }
         if (const Reg* reg_from = std::get_if<Reg>(&inst.at(1));
             reg_from != nullptr) {
