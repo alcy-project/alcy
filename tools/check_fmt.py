@@ -17,7 +17,8 @@ formatting: a formatter that broke either would turn a no-op run into a
 review, or worse, a program that stopped checking. Idempotence is
 asked with --check over the formatted copies, which is the same
 comparison and names every file that fails it; the verdict is asked by
-checking each file before and after.
+checking each file before and after only when formatting changed its
+bytes, the only case in which the answer could differ.
 
 The corpus is the one the grammar's differential check reads, so the
 two halves of the tree agree about what a source file is.
@@ -145,7 +146,12 @@ def main() -> int:
             )
         return formatted.stdout
 
-    def checked(path: Path, copy: Path):
+    def checked(path: Path, copy: Path, text: bytes):
+        # A format that wrote the same bytes cannot have changed what
+        # the compiler says. Asking both sides then would be the same
+        # question twice, and on a formatted tree that is every file.
+        if text == path.read_bytes():
+            return None
         return verdict(alcy, path), verdict(alcy, copy)
 
     moved = []
@@ -163,8 +169,11 @@ def main() -> int:
         copies = [mirror / path.relative_to(project_root_dir) for path in corpus]
         moved = unformatted(alcy, copies)
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-            verdicts = list(pool.map(checked, corpus, copies))
-        for path, (before, after) in zip(corpus, verdicts, strict=True):
+            verdicts = list(pool.map(checked, corpus, copies, formatted))
+        for path, pair in zip(corpus, verdicts, strict=True):
+            if pair is None:
+                continue
+            before, after = pair
             if before != after:
                 verdict_changed.append(
                     f"{path.relative_to(project_root_dir)}: "
