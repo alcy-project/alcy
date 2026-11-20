@@ -1574,13 +1574,22 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
     }
     comp_args.push_back(std::move(arg));
   }
+  // Trailing arguments of a specialized variadic call become runtime
+  // parameters of the generated body. Their types are part of the key,
+  // so each call site gets a body with its own slot types.
+  std::vector<ir::TypeIdx> specialized_params = sig.params;
+  if (call.args.size() > sig.params.size()) {
+    for (usize i = sig.params.size(); i < call.args.size(); ++i) {
+      specialized_params.push_back(expr_type(call.args[i]));
+    }
+  }
   const ir::FunctionIdx fn =
-      fn_index(target->module, sig.item, sig.name, sig.params, sig.ret,
+      fn_index(target->module, sig.item, sig.name, specialized_params, sig.ret,
                callee_inst(target), std::move(comp_args));
   if (!fn.is_valid()) {
     return Val{size_one, error_type(), false, false};
   }
-  if (call.args.size() != sig.params.size()) {
+  if (call.args.size() < sig.params.size()) {
     internal(node.span, "call arity");
     return Val{size_one, error_type(), false, false};
   }
@@ -1589,8 +1598,8 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
       fn, builder.primitive(ir::TypeTag::Function))));
   // The places this call lends to the callee: a value it keeps can land
   // in any of them, so it has to outlive them.
-  if (!lower_call_arguments(call.args, sig.params, comp, std::nullopt, ops,
-                            sig.item, 0)) {
+  if (!lower_call_arguments(call.args, specialized_params, comp, std::nullopt,
+                            ops, sig.item, 0)) {
     return stopped_value();
   }
   if (tag_of(sig.ret) == ir::TypeTag::Never) {
@@ -3514,6 +3523,23 @@ ir::OperandIdx Lowerer::str_operand(std::string_view message) {
 
 Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   const ast::ExprNode& method = ast.exprs[expr];
+  const ast::ExprMethodCall& call = method.payload.get<ast::ExprMethodCall>();
+  // `args.len()` on a variadic specialization is a compile-time count
+  // of the collected runtime slots, not a method call.
+  if (call.name.name == "len" && call.args.empty() &&
+      !variadic_slots_.empty()) {
+    const ir::TypeIdx recv = expr_type(call.receiver);
+    if (tag_of(recv) == ir::TypeTag::Tuple) {
+      const ir::TupleType& shape =
+          builder.tuple_types()[builder.types()[recv].as_tuple()];
+      if (shape.elements.empty()) {
+        const ir::TypeIdx usize = builder.primitive(ir::TypeTag::Usize);
+        return Val{
+            imm_from_u64(ir::TypeTag::Usize, usize, variadic_slots_.size()),
+            usize, false, false};
+      }
+    }
+  }
   const analyzer::CheckedModule::CallTarget* target = call_target(expr);
   if (target == nullptr || !target->is_method) {
     internal(method.span, "method call without target");
@@ -5592,6 +5618,84 @@ Val Lowerer::lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 
+Val Lowerer::lower_comp_for(ast::BlockIdx block,
+                            ast::ExprIdx loop_expr,
+                            const ir::TypeIdx* expected) {
+  const diag::Span span = ast.exprs[loop_expr].span;
+  const ast::Block& desugared = ast.blocks[block];
+  const ast::StmtIdx cursor_stmt = desugared.statements[0];
+  const ast::StmtDecl& decl =
+      ast.stmts[cursor_stmt].payload.get<ast::StmtDecl>();
+  const ast::ExprIdx into = decl.init;
+  if (ast.exprs[into].kind != ast::ExprKind::MethodCall) {
+    internal(span, "comp for without iterator");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ast::ExprIdx head =
+      ast.exprs[into].payload.get<ast::ExprMethodCall>().receiver;
+  CompVal sequence;
+  if (!comp_lowering_.evaluate(module, head, sequence)) {
+    return Val{size_one, error_type(), false, false};
+  }
+  std::vector<CompValue> elements;
+  if (sequence.value.tag == CompValue::Tag::Array) {
+    elements = sequence.value.fields;
+  } else if (sequence.value.tag == CompValue::Tag::Struct &&
+             ast.exprs[head].kind == ast::ExprKind::Range &&
+             sequence.value.fields.size() == 2) {
+    const ast::ExprRange& range = ast.exprs[head].payload.get<ast::ExprRange>();
+    if (!range.start.is_valid() || !range.end.is_valid() ||
+        sequence.value.fields[0].fields.size() != 1 ||
+        sequence.value.fields[1].fields.size() != 1) {
+      internal(span, "comp for range without bounds");
+      return Val{size_one, error_type(), false, false};
+    }
+    const u64 first = sequence.value.fields[0].fields[0].int_value;
+    const u64 last = sequence.value.fields[1].fields[0].int_value;
+    for (u64 value = first; range.inclusive ? value <= last : value < last;
+         ++value) {
+      CompValue item;
+      item.tag = CompValue::Tag::Int;
+      item.int_value = value;
+      elements.push_back(std::move(item));
+    }
+  } else {
+    internal(span, "comp for head without sequence");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ast::ExprLoop& loop = ast.exprs[loop_expr].payload.get<ast::ExprLoop>();
+  const ast::ExprIdx match_expr = ast.blocks[loop.body].value;
+  const ast::ExprMatch& match =
+      ast.exprs[match_expr].payload.get<ast::ExprMatch>();
+  const ast::PatternIdx wrapper = match.arms[0].pattern;
+  const ast::PatternIdx element =
+      ast.patterns[wrapper].payload.tuple.elements[0];
+  ir::TypeIdx element_type = builder.primitive(ir::TypeTag::Void);
+  if (tag_of(sequence.type) == ir::TypeTag::Array) {
+    element_type =
+        builder.array_types()[builder.types()[sequence.type].as_array()]
+            .element;
+  }
+  for (const CompValue& item : elements) {
+    CompScope scope;
+    scope.frames.emplace_back();
+    if (!comp_lowering_.bind_pattern(
+            module, element, CompVal{item, element_type}, scope, span)) {
+      return Val{size_one, error_type(), false, false};
+    }
+    const usize mark = comp_scope_.size();
+    for (auto& binding : scope.frames.back()) {
+      comp_scope_.push_back(std::move(binding));
+    }
+    Val produced = lower_expr(match.arms[0].body, expected);
+    comp_scope_.resize(mark);
+    if (failed || terminated_cur()) {
+      return produced;
+    }
+  }
+  return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+}
+
 Val Lowerer::lower_loop(ast::ExprIdx expr) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::ExprLoop& loop_expr = node.payload.get<ast::ExprLoop>();
@@ -6032,6 +6136,26 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
     }
     case ast::ExprKind::Index: {
       const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      // A variadic slot selection resolves during specialization: the
+      // comp-known index picks the runtime parameter bound to that slot.
+      const ir::TypeIdx selected = expr_type(expr);
+      if (!variadic_slots_.empty() && tag_of(selected) == ir::TypeTag::Tuple) {
+        const ir::TupleType& shape =
+            builder.tuple_types()[builder.types()[selected].as_tuple()];
+        if (shape.elements.size() == 1 &&
+            tag_of(shape.elements[0]) == ir::TypeTag::Error) {
+          CompVal position;
+          if (!comp_lowering_.evaluate(module, index.index, position)) {
+            return stopped_value();
+          }
+          if (position.value.tag != CompValue::Tag::Int ||
+              position.value.int_value >= variadic_slots_.size()) {
+            internal(node.span, "variadic slot out of range");
+            return stopped_value();
+          }
+          return variadic_slots_[static_cast<usize>(position.value.int_value)];
+        }
+      }
       if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
           target != nullptr) {
         return lower_spec_index(expr, target, false);
@@ -6330,6 +6454,15 @@ Val Lowerer::lower_block(ast::BlockIdx block,
   }
   const base::NestingScope scope(nesting_);
   const ast::Block& node = ast.blocks[block];
+  // A desugared `comp for` in a specialization body unrolls at lowering
+  // time: its body's runtime operations are emitted once per element.
+  if (node.statements.size() == 1 &&
+      ast.stmts[node.statements[0]].payload.get<ast::StmtDecl>().for_cursor &&
+      node.value.is_valid() &&
+      ast.exprs[node.value].kind == ast::ExprKind::Loop &&
+      ast.exprs[node.value].payload.get<ast::ExprLoop>().is_comp) {
+    return lower_comp_for(block, node.value, expected);
+  }
   const u32 mark = static_cast<u32>(locals.size());
   // Comp bindings declared in this block leave with it, so a name from
   // an inner block is not visible after the block ends.

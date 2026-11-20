@@ -1335,6 +1335,10 @@ class Lowerer {
   Val lower_match(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_if(ast::ExprIdx expr, const ir::TypeIdx* expected);
   Val lower_loop(ast::ExprIdx expr);
+  // Unrolls a `comp for` into one lowered body per comp-known element.
+  Val lower_comp_for(ast::BlockIdx block,
+                     ast::ExprIdx loop_expr,
+                     const ir::TypeIdx* expected);
   Val lower_while(ast::ExprIdx expr);
   Val lower_question(ast::ExprIdx expr);
 
@@ -1725,6 +1729,9 @@ class Lowerer {
   // Registers backing the current entry-block parameter list, consumed
   // by lower_fn while binding patterns.
   std::vector<ir::RegisterIdx> pending_params_;
+  // Runtime slots of the variadic specialization being lowered. An
+  // `args[i]` selection reads the i-th entry while its body is current.
+  std::vector<Val> variadic_slots_;
   void run();
 
   ir::BlockParamIdxRange pending_block_params_;

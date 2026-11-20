@@ -465,6 +465,16 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
   if (is_never(actual)) {
     return expected;
   }
+  // A variadic slot's element type is fixed at the call site. Inside
+  // the definition-site body it carries a marker, so it unifies with
+  // whatever the context expects and is resolved during specialization.
+  const ir::TypeIdx slot = variadic_slot_type();
+  if (actual.idx == slot.idx) {
+    return expected;
+  }
+  if (expected.idx == slot.idx) {
+    return actual;
+  }
   // `&mut T` where `&T` is expected is a shared reborrow, not a
   // mismatch. The exclusive reference is consumed at the call, so
   // nothing can write through it while the shared one is live.

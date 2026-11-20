@@ -554,6 +554,9 @@ class Checker {
   // Verifies comp-known-ness while block scopes are still alive
   // (comp blocks and their nested bodies).
   bool verify_comp_known = false;
+  // A function with comp parameters lowers a specialized body: comp
+  // markers there select which runtime operations are emitted.
+  bool allow_comp_markers = false;
   ir::TypeIdx fn_ret = ir::TypeIdx(0);
   void register_nominals();
   // Every annotated generic parameter names the type of a compile-time
@@ -887,6 +890,7 @@ class Checker {
   bool fn_is_unsafe(ast::ItemIdx item) const;
   // Whether the function item carries the `comp fn` marker.
   bool fn_is_comp(ast::ItemIdx item) const;
+  bool fn_has_comp_param(ast::ItemIdx item) const;
   // A type parameter a declared parameter type pins on its own. The
   // flags say where in the argument the bound type sits: `through_ref`
   // takes a reference's pointee, `through_raw` takes a raw pointer's,

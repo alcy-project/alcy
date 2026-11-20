@@ -3787,6 +3787,19 @@ bool Checker::fn_is_comp(ast::ItemIdx item) const {
          node.payload.get<ast::ItemFn>().is_comp;
 }
 
+bool Checker::fn_has_comp_param(ast::ItemIdx item) const {
+  if (!item.is_valid() || ast.items[item].kind != ast::ItemKind::Fn) {
+    return false;
+  }
+  for (const ast::ItemFnParam& param :
+       ast.items[item].payload.get<ast::ItemFn>().params) {
+    if (param.is_comp) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const Checker::OwnFnSlot* Checker::own_fn_slot(std::string_view name) const {
   for (const OwnFnSlot& slot : ownFnTables_.own_fn_slots_) {
     if (slot.name == name) {
@@ -4869,6 +4882,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   const u32 saved_comp = comp_depth;
   const bool saved_verify_comp = verify_comp_known;
   const bool saved_bind_comp = bind_comp_known;
+  const bool saved_allow_comp_markers = allow_comp_markers;
   const bool saved_reported_too_deep = reported_too_deep_;
   // One report per function: the budget is per function, and every
   // frame past it would otherwise repeat the same diagnostic.
@@ -4895,6 +4909,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   // caller's context out of its own checks. The same holds for the
   // comp-knownness the caller happened to be verifying.
   comp_eval_depth = fn_is_comp(fn) ? saved_comp_eval + 1 : 0;
+  allow_comp_markers = fn_has_comp_param(fn);
   verify_comp_known = comp_eval_depth > 0;
   bind_comp_known = false;
   // A comp block bounds the `ret` of the body that encloses it, not
@@ -4908,7 +4923,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
     // pattern to a marker type so controlled shape access can type;
     // an expanded function's body never reads the slot directly.
     if (param.is_variadic) {
-      if (fn_is_comp(fn)) {
+      if (fn_is_comp(fn) || fn_has_comp_param(fn)) {
         bind_pattern(module, param.pattern, variadic_shape_type(), false,
                      false);
       }
@@ -4967,6 +4982,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   comp_depth = saved_comp;
   verify_comp_known = saved_verify_comp;
   bind_comp_known = saved_bind_comp;
+  allow_comp_markers = saved_allow_comp_markers;
   reported_too_deep_ = saved_reported_too_deep;
   bool recorded = false;
   if (recording) {

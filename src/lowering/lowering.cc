@@ -2371,6 +2371,8 @@ void Lowerer::lower_fn(const FnEntry& entry) {
     return;
   }
   const std::vector<u32> comp = comp_positions(entry.item);
+  variadic_slots_.clear();
+  const bool variadic = !fn.params.empty() && fn.params.back().is_variadic;
   switch_to(reserve_block());
   cur_span_ = fn.name.span;
   // Entry block parameters arrive in declaration order, skipping
@@ -2400,10 +2402,45 @@ void Lowerer::lower_fn(const FnEntry& entry) {
   reported_too_deep_ = false;
   binding_param_ = true;
   const std::span<const ast::ItemFnParam> params = fn.params;
+  const usize variadic_at = variadic ? params.size() - 1 : params.size();
+  // Map each pending runtime register to its entry parameter, skipping
+  // comp parameters which ride the specialization.
+  std::vector<usize> runtime_param_idx;
+  usize idx_at = 0;
+  for (usize e = 0; e < entry.params.size(); ++e) {
+    if (idx_at < comp.size() && comp[idx_at] == e) {
+      ++idx_at;
+      continue;
+    }
+    runtime_param_idx.push_back(e);
+  }
   usize pending_at = 0;
   comp_at = 0;
   usize comp_arg_at = 0;
   for (usize i = 0; i < params.size() && !failed; ++i) {
+    if (variadic && i == variadic_at) {
+      // Trailing runtime parameters are the collected variadic slots;
+      // an `args[i]` selection reads the i-th one from this list.
+      CompVal shape;
+      shape.value.tag = CompValue::Tag::Variadic;
+      for (; pending_at < runtime_param_idx.size(); ++pending_at) {
+        const ir::TypeIdx ptype = entry.params[runtime_param_idx[pending_at]];
+        const ir::RegisterIdx preg = pending_params_[pending_at];
+        variadic_slots_.push_back(
+            Val{to_operand(preg, ptype), ptype, false, true});
+        shape.value.slot_types.push_back(ptype);
+      }
+      CompScope scope;
+      scope.frames.emplace_back();
+      if (!comp_lowering_.bind_pattern(mod, params[i].pattern, shape, scope,
+                                       fn.name.span)) {
+        return;
+      }
+      for (auto& binding : scope.frames.back()) {
+        comp_scope_.push_back(std::move(binding));
+      }
+      break;
+    }
     const ir::TypeIdx ptype = entry.params[i];
     if (comp_at < comp.size() && comp[comp_at] == i) {
       ++comp_at;
