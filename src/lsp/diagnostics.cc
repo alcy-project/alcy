@@ -9,6 +9,7 @@
 
 #include "diag/bag.h"
 #include "diag/diagnostic.h"
+#include "diag/stage.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "lsp/analysis.h"
@@ -33,6 +34,17 @@ f64 severity_number(diag::Severity severity) {
       return static_cast<f64>(DiagnosticSeverity::Information);
   }
   return static_cast<f64>(DiagnosticSeverity::Error);
+}
+
+std::string code_string(diag::Code code) {
+  std::string out;
+  out.push_back(stage_letter(code.stage));
+  std::string id = std::to_string(code.id);
+  while (id.size() < 3) {
+    id.insert(id.begin(), '0');
+  }
+  out += id;
+  return out;
 }
 
 text::JsonValue diagnostics_for(const Document& document,
@@ -61,6 +73,10 @@ text::JsonValue diagnostics_for(const Document& document,
     entry.set("severity", text::JsonValue::make_number(
                               severity_number(diagnostic->severity)));
     entry.set("source", text::JsonValue::make_string("alcy"));
+    if (diagnostic->code.has_value()) {
+      entry.set("code",
+                text::JsonValue::make_string(code_string(*diagnostic->code)));
+    }
     entry.set("message",
               text::JsonValue::make_string(std::string(diagnostic->message)));
     diagnostics.push(std::move(entry));

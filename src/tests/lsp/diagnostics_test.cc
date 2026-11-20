@@ -26,6 +26,13 @@ TEST_CASE("The pull report wraps the same diagnostics") {
   CHECK(items != nullptr);
   if (items != nullptr) {
     CHECK(!items->as_array().empty());
+    bool coded = false;
+    for (const text::JsonValue& item : items->as_array()) {
+      if (item.find("code") != nullptr) {
+        coded = true;
+      }
+    }
+    CHECK(coded);
   }
 }
 
