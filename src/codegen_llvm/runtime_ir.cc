@@ -607,14 +607,14 @@ class RuntimeBuilder {
       // The kernel reports an error as a small negative value; the
       // caller's signed compare reads the bits, and widening keeps
       // them, so the loop stops on an error exactly as it does here.
-      return builder_.CreateZExt(count, usize_);
+      return builder_.CreateZExtOrTrunc(count, usize_);
     }
     llvm::SmallVector<llvm::Value*, 3> args{fd_value, data};
     if (windows_) {
       llvm::Value* count =
           descriptor_io(/*is_write=*/true, fd_value, data, len);
       if (count->getType() != usize_) {
-        count = builder_.CreateSExt(count, usize_, "count.wide");
+        count = builder_.CreateSExtOrTrunc(count, usize_, "count.wide");
       }
       return count;
     }
@@ -1197,7 +1197,8 @@ class RuntimeBuilder {
     llvm::Value* stopped = builder_.CreateOr(call_stopped, no_bytes, "stopped");
     builder_.CreateCondBr(stopped, done, progress);
     builder_.SetInsertPoint(progress);
-    llvm::Value* advance = builder_.CreateZExt(count32, usize_, "advance");
+    llvm::Value* advance =
+        builder_.CreateZExtOrTrunc(count32, usize_, "advance");
     llvm::Value* next_total = builder_.CreateAdd(total, advance, "next_total");
     llvm::Value* added =
         builder_.CreateGEP(builder_.getInt8Ty(), into, advance, "added");
@@ -1300,7 +1301,8 @@ class RuntimeBuilder {
     llvm::Value* stopped = builder_.CreateOr(call_stopped, no_bytes, "stopped");
     builder_.CreateCondBr(stopped, done, progress);
     builder_.SetInsertPoint(progress);
-    llvm::Value* advance = builder_.CreateZExt(count32, usize_, "advance");
+    llvm::Value* advance =
+        builder_.CreateZExtOrTrunc(count32, usize_, "advance");
     llvm::Value* next_total = builder_.CreateAdd(total, advance, "next_total");
     llvm::Value* added =
         builder_.CreateGEP(builder_.getInt8Ty(), from, advance, "added");

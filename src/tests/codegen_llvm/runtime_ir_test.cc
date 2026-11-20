@@ -590,6 +590,57 @@ TEST_CASE("A Windows COFF runtime carries the kernel and nothing else") {
   CHECK(module.getFunction("_start") == nullptr);
 }
 
+TEST_CASE("A 32-bit Windows runtime carries the same kernel set") {
+  llvm::LLVMContext context;
+  llvm::Module module("runtime_ir_windows_w32_test", context);
+  const auto usize = llvm::Type::getInt32Ty(context);
+  const auto i64 = llvm::Type::getInt64Ty(context);
+  const auto i32 = llvm::Type::getInt32Ty(context);
+  const auto void_ty = llvm::Type::getVoidTy(context);
+  const auto pointer = opaque_pointer(context);
+  const auto view = llvm::StructType::get(context, {pointer, usize});
+
+  // The same declarations the 64-bit case makes, with the shapes the
+  // helpers keep on a 32-bit target: the io answers stay i64 and the
+  // argument index is an i64 on both widths.
+  declare(module, "alcy_print", signature(void_ty, {pointer, usize}));
+  declare(module, "alcy_panic",
+          signature(void_ty, {pointer, usize, pointer, usize}));
+  declare(module, "alcy_sys_write", signature(i64, {i32, pointer, usize}));
+  declare(module, "alcy_sys_read", signature(i64, {i32, pointer, usize}));
+  declare(module, "alcy_error_kind", signature(i32, {i32}));
+  declare(module, "alcy_alloc", signature(pointer, {usize, usize}));
+  declare(module, "alcy_dealloc", signature(void_ty, {pointer, usize, usize}));
+  declare(module, "alcy_file_size", signature(i64, {pointer, usize}));
+  declare(module, "alcy_read_file_into",
+          signature(i64, {pointer, usize, pointer, usize}));
+  declare(module, "alcy_write_file",
+          signature(i64, {pointer, usize, pointer, usize}));
+  declare(module, "alcy_arg_count", signature(i64, {}));
+  declare(module, "alcy_arg", signature(view, {i64}));
+  declare(module, "alcy_env_exists", signature(i32, {view}));
+  declare(module, "alcy_env_get", signature(view, {view}));
+
+  const codegen_llvm::Target windows{"x86_64-pc-windows-msvc",
+                                     ir::PointerWidth::W32};
+  add_runtime_definitions(module, windows);
+
+  CHECK(!llvm::verifyModule(module, &llvm::errs()));
+  const std::string text = module_text(module);
+  for (const char* needle :
+       {"GetStdHandle", "WriteFile", "ReadFile", "CreateFileW", "GetFileSizeEx",
+        "CloseHandle", "VirtualAlloc", "VirtualFree", "ExitProcess",
+        "GetCommandLineW", "WideCharToMultiByte", "MultiByteToWideChar",
+        "GetEnvironmentStringsW", "__chkstk", "_fltused", "alcy_init_args"}) {
+    CHECK(text.find(needle) != std::string::npos);
+  }
+  for (const char* forbidden :
+       {"fopen", "fwrite", "fread", "posix_memalign", "_aligned_malloc", "free",
+        "_write", "_read", "alcy_syscall"}) {
+    CHECK(module.getFunction(forbidden) == nullptr);
+  }
+}
+
 TEST_CASE("A Windows target with freestanding still carries kernel32") {
   llvm::LLVMContext context;
   llvm::Module module("runtime_ir_windows_freestanding_test", context);
