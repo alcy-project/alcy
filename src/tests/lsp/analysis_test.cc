@@ -23,6 +23,7 @@
 #include "lsp/highlights.h"
 #include "lsp/rename.h"
 #include "lsp/workspace.h"
+#include "lsp/workspace_symbols.h"
 #include "path/path.h"
 #include "text/json.h"
 
@@ -291,6 +292,28 @@ TEST_CASE("An unresolved standard library name offers a manifest fix") {
     }
   }
   CHECK(manifest_fix);
+}
+
+TEST_CASE("Workspace symbols search files the client has not opened") {
+  const Fixture f;
+  DocumentStore documents;
+  documents.open(f.main_uri, "alcy", 1, std::string(MAIN));
+  AnalysisCache cache(documents);
+
+  const text::JsonValue symbols =
+      workspace_symbols(documents, cache, "helper_fn");
+  bool found = false;
+  for (const text::JsonValue& symbol : symbols.as_array()) {
+    const text::JsonValue* location = symbol.find("location");
+    if (location == nullptr) {
+      continue;
+    }
+    const text::JsonValue* uri = location->find("uri");
+    if (uri != nullptr && uri->as_string() == f.helper_uri) {
+      found = true;
+    }
+  }
+  CHECK(found);
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {

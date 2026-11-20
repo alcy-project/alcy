@@ -808,7 +808,8 @@ void Server::call_hierarchy_outgoing(const text::JsonValue& id,
 
 void Server::workspace_symbol(const text::JsonValue& id,
                               const text::JsonValue& params) {
-  send_result(id, workspace_symbols(documents_, string_field(params, "query")));
+  send_result(
+      id, workspace_symbols(documents_, cache_, string_field(params, "query")));
 }
 
 void Server::implementation(const text::JsonValue& id,

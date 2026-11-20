@@ -3,14 +3,20 @@
 
 #include "lsp/workspace_symbols.h"
 
+#include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "analyzer/resolve.h"
 #include "fpag/base/numeric.h"
+#include "lsp/analysis.h"
+#include "lsp/analysis_cache.h"
 #include "lsp/document.h"
 #include "lsp/symbols.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -47,7 +53,7 @@ std::string child_container(std::string_view container, std::string_view name) {
   return out;
 }
 
-void collect(const Document& document,
+void collect(std::string_view uri,
              const text::JsonValue& symbols,
              std::string_view container,
              std::string_view query,
@@ -69,7 +75,7 @@ void collect(const Document& document,
                  text::JsonValue::make_string(std::string(container)));
       }
       text::JsonValue location = text::JsonValue::make_object();
-      location.set("uri", text::JsonValue::make_string(document.uri()));
+      location.set("uri", text::JsonValue::make_string(std::string(uri)));
       location.set("range", *range);
       info.set("location", std::move(location));
       out->push(std::move(info));
@@ -78,7 +84,7 @@ void collect(const Document& document,
     if (children != nullptr && children->is_array() &&
         !children->as_array().empty()) {
       const std::string nested = child_container(container, name);
-      collect(document, *children, nested, query, out);
+      collect(uri, *children, nested, query, out);
     }
   }
 }
@@ -86,13 +92,38 @@ void collect(const Document& document,
 }  // namespace
 
 text::JsonValue workspace_symbols(const DocumentStore& documents,
+                                  AnalysisCache& cache,
                                   std::string_view query) {
+  std::map<std::string, std::string> sources;
+  for (const auto& [uri, document] : documents.documents()) {
+    (void)uri;
+    const DocumentAnalysis& analysis = cache.get(document);
+    for (const analyzer::ModuleNode* module : analysis.package().tree.modules) {
+      if (module->file == source::UNKNOWN_FILE) {
+        continue;
+      }
+      const std::optional<std::string> file_uri =
+          uri_of_file(analysis, module->file);
+      const std::optional<std::string_view> text =
+          analysis.context().sources.bytes(module->file);
+      if (file_uri.has_value() && text.has_value()) {
+        sources.insert_or_assign(*file_uri, std::string(*text));
+      }
+    }
+  }
   text::JsonValue out = text::JsonValue::make_array();
-  for (const auto& entry : documents.documents()) {
-    const text::JsonValue symbols = document_symbols(entry.second);
-    collect(entry.second, symbols, {}, query, &out);
+  for (const auto& [uri, text] : sources) {
+    const Document document(uri, "alcy", 1, text);
+    const text::JsonValue symbols = document_symbols(document);
+    collect(uri, symbols, {}, query, &out);
   }
   return out;
+}
+
+text::JsonValue workspace_symbols(const DocumentStore& documents,
+                                  std::string_view query) {
+  AnalysisCache cache(documents);
+  return workspace_symbols(documents, cache, query);
 }
 
 }  // namespace lsp
