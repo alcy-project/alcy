@@ -168,9 +168,13 @@ GUIDE_EDIT_BUDGET = 3_000
 
 # The heaviest files the playground can fetch on demand: `tree-sitter-alcy`
 # for the editor's colors, and the binding that loads it. A page that is only
-# read fetches neither.
+# read fetches neither. The grammar is the one asset a build can skip, so
+# it has a name the budget walk can leave out when it was not built.
+GRAMMAR_BUDGET = Budget(
+    "playground/grammar/tree-sitter-alcy.wasm", 64_000, "the grammar"
+)
 ASSET_BUDGETS = (
-    Budget("playground/grammar/tree-sitter-alcy.wasm", 64_000, "the grammar"),
+    GRAMMAR_BUDGET,
     Budget("playground/vendor/web-tree-sitter.js", 40_000, "the binding"),
 )
 
@@ -240,11 +244,18 @@ def weigh_guide_scripts(dist_dir: Path, errors: list[str]) -> list[Weighing]:
     return rows
 
 
-def measure_budgets(dist_dir: Path, errors: list[str]) -> list[Weighing]:
+def measure_budgets(
+    dist_dir: Path, errors: list[str], skip_grammar: bool = False
+) -> list[Weighing]:
     """Measures every budget, recording the ones past their number."""
+    assets = (
+        tuple(budget for budget in ASSET_BUDGETS if budget != GRAMMAR_BUDGET)
+        if skip_grammar
+        else ASSET_BUDGETS
+    )
     weighed = (
         weigh(dist_dir, budget, errors)
-        for budget in PAGE_BUDGETS + ASSET_BUDGETS + (COMPILER_MODULE_CEILING,)
+        for budget in PAGE_BUDGETS + assets + (COMPILER_MODULE_CEILING,)
     )
     rows = [row for row in weighed if row is not None]
     return rows + weigh_guide_scripts(dist_dir, errors)
@@ -765,7 +776,7 @@ def command_build(args: argparse.Namespace) -> int:
     check_page_catalogs(dist_dir)
 
     errors: list[str] = []
-    log_weights(measure_budgets(dist_dir, errors))
+    log_weights(measure_budgets(dist_dir, errors, skip_grammar=args.skip_grammar))
     if errors:
         for message in errors:
             print(f"site: {message}", file=sys.stderr)
