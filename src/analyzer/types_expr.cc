@@ -1989,21 +1989,50 @@ ir::TypeIdx Checker::check_method_call(u32 module,
   }
   const std::span<const ast::TypeIdx> method_type_args =
       node.payload.get<ast::ExprMethodCall>().type_args;
-  // A call that spells type arguments can only resolve a method that
-  // declares them; one without reaches the eager methods and the spec
-  // implementations first.
-  // A call that spells type arguments reaches the spec path too: a
-  // spec impl's generic method instantiates against its declaration.
-  const CheckedModule::MethodInfo* method = lookup_method(
-      nominal, name, module, node.span, spec_only, U32_MAX, method_type_args);
-  // The fallback does not rescue a refusal a bound already reported
-  // : the definition-site dispatch named the parameter, and
-  // the generic message would only repeat it.
-  if (method == nullptr && !spec_only && !bound_failure_) {
-    bound_failure_ = false;
-    method = instantiate_generic_method(
-        module, nominal, name, method_type_args,
-        node.payload.get<ast::ExprMethodCall>().args, span);
+  // A variadic slot has no static type at the definition-site check.
+  // Its Display capability is the spec's: record a dispatch row keyed on
+  // the marker, which lowering resolves against the slot's actual type.
+  CheckedModule::MethodInfo* slot_method = nullptr;
+  const bool slot_receiver = receiver.idx == variadic_slot_type().idx;
+  if (slot_receiver && name == "display" &&
+      node.payload.get<ast::ExprMethodCall>().args.size() == 1) {
+    if (SpecEntry* entry = find_spec_in_scope(module, "Display")) {
+      const u32 spec = static_cast<u32>(entry - specs.data());
+      std::vector<ir::TypeIdx> params;
+      ir::TypeIdx ret = ir::TypeIdx::invalid();
+      CheckedModule::ReceiverKind receiver_kind =
+          CheckedModule::ReceiverKind::None;
+      if (spec_method_sig(spec, name, {}, receiver, module, {}, params, ret,
+                          receiver_kind)) {
+        slot_method = &add_method(module, {.self_type = receiver,
+                                           .name = name,
+                                           .params = std::move(params),
+                                           .ret = ret,
+                                           .receiver = receiver_kind,
+                                           .item = ast::ItemIdx::invalid(),
+                                           .spec = spec,
+                                           .method_args = {}});
+      }
+    }
+  }
+  const CheckedModule::MethodInfo* method = slot_method;
+  if (method == nullptr) {
+    // A call that spells type arguments can only resolve a method that
+    // declares them; one without reaches the eager methods and the spec
+    // implementations first.
+    // A call that spells type arguments reaches the spec path too:
+    // a spec impl's generic method instantiates against its declaration.
+    method = lookup_method(nominal, name, module, node.span, spec_only, U32_MAX,
+                           method_type_args);
+    // The fallback does not rescue a refusal a bound already reported
+    // : the definition-site dispatch named the parameter, and
+    // the generic message would only repeat it.
+    if (method == nullptr && !spec_only && !bound_failure_) {
+      bound_failure_ = false;
+      method = instantiate_generic_method(
+          module, nominal, name, method_type_args,
+          node.payload.get<ast::ExprMethodCall>().args, span);
+    }
   }
   // A method whose declaration is `unsafe` needs the opt-in at its call
   // site, the way a free function does.

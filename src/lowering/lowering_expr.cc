@@ -365,6 +365,26 @@ Val Lowerer::place_addr(ast::ExprIdx expr) {
     }
     case ast::ExprKind::Index: {
       const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();
+      // A variadic slot is a runtime parameter, not a place inside an
+      // aggregate; lending it by reference borrows that parameter.
+      const ir::TypeIdx selected = expr_type(expr);
+      if (!variadic_slots_.empty() && tag_of(selected) == ir::TypeTag::Tuple) {
+        const ir::TupleType& shape =
+            builder.tuple_types()[builder.types()[selected].as_tuple()];
+        if (shape.elements.size() == 1 &&
+            tag_of(shape.elements[0]) == ir::TypeTag::Error) {
+          CompVal position;
+          if (!comp_lowering_.evaluate(module, index.index, position)) {
+            return Val{size_one, error_type(), true, false};
+          }
+          if (position.value.tag != CompValue::Tag::Int ||
+              position.value.int_value >= variadic_slots_.size()) {
+            internal(node.span, "variadic slot out of range");
+            return Val{size_one, error_type(), true, false};
+          }
+          return variadic_slots_[static_cast<usize>(position.value.int_value)];
+        }
+      }
       if (const analyzer::CheckedModule::CallTarget* target = call_target(expr);
           target != nullptr) {
         return lower_spec_index(expr, target, true);
@@ -3582,18 +3602,40 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
   if (!info.item.is_valid()) {
     // A call on a type parameter: the parametric form knows the bound's
     // spec and the method, and the specialization resolves the
-    // implementation.
+    // implementation. A variadic slot carries only a marker at check
+    // time; its receiver's lowered type names the concrete dispatch.
     const usize expected = info.params.empty() ? 0 : info.params.size() - 1;
     if (method_args.size() != expected) {
       internal(method.span, "call arity");
       return Val{size_one, error_type(), false, false};
+    }
+    ir::TypeIdx dispatch_self = info.self_type;
+    std::vector<ir::TypeIdx> dispatch_params = info.params;
+    bool slot_receiver = false;
+    if (tag_of(info.self_type) == ir::TypeTag::Tuple) {
+      const ir::TupleType& shape =
+          builder.tuple_types()[builder.types()[info.self_type].as_tuple()];
+      slot_receiver = shape.elements.size() == 1 &&
+                      tag_of(shape.elements[0]) == ir::TypeTag::Error;
+    }
+    if (slot_receiver) {
+      dispatch_self = receiver.type;
+      if (!dispatch_params.empty()) {
+        const ir::TypeTag param_tag = tag_of(dispatch_params[0]);
+        if (param_tag == ir::TypeTag::Ref || param_tag == ir::TypeTag::MutRef) {
+          dispatch_params[0] = builder.reference_type(
+              dispatch_self, param_tag == ir::TypeTag::MutRef);
+        } else {
+          dispatch_params[0] = dispatch_self;
+        }
+      }
     }
     const str::StringPoolId spec_name =
         info.spec < pkg.specs.size() ? intern_name(pkg.specs[info.spec].name)
                                      : str::INVALID_STRING_POOL_ID;
     const ir::ParametricCalleeIdx callee = parametric_callee_record(
         ir::ParametricCalleeKind::Dispatch, ir::FunctionIdx::invalid(),
-        spec_name, intern_name(info.name), {info.self_type});
+        spec_name, intern_name(info.name), {dispatch_self});
     if (failed) {
       return stopped_value();
     }
@@ -3617,7 +3659,7 @@ Val Lowerer::lower_method_call(ast::ExprIdx expr) {
             {}, receiver_place, ops, dispatch_item, 1)) {
       return stopped_value();
     }
-    return emit_parametric_call(ops, info.params, info.ret, callee,
+    return emit_parametric_call(ops, dispatch_params, info.ret, callee,
                                 method.span);
   }
   if (info.method_inst == analyzer::PARAM_INST ||

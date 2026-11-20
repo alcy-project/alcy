@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/fmt.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "base/name.h"
@@ -1188,6 +1189,46 @@ bool CompEvaluator::comp_eval_intrinsic(
   const ast::ItemIntrinsic& intrinsic =
       ast.items[sig.item].payload.get<ast::ItemIntrinsic>();
   const std::string_view name = intrinsic.name.name;
+  if (name == "comp_pieces") {
+    if (args.size() != 1) {
+      return fail(span, "intrinsic arity");
+    }
+    CompVal decoded;
+    if (!comp_eval_expr(mod, args[0], scope, decoded)) {
+      return false;
+    }
+    if (decoded.value.tag != CompValue::Tag::Str) {
+      return fail(span, "format string without value");
+    }
+    const analyzer::FmtTemplate parsed =
+        analyzer::parse_format_string(decoded.value.str_value);
+    if (parsed.error != analyzer::FmtError::None) {
+      return fail(span, "invalid format string");
+    }
+    out.type = sig.ret;
+    if (tag_of(out.type) != ir::TypeTag::Array) {
+      return fail(span, "pieces without array type");
+    }
+    out.value = {};
+    out.value.tag = CompValue::Tag::Array;
+    for (const analyzer::FmtPiece& piece : parsed.pieces) {
+      CompValue item;
+      item.tag = CompValue::Tag::Struct;
+      item.fields.resize(5);
+      item.fields[0].tag = CompValue::Tag::Bool;
+      item.fields[0].bool_value = piece.is_arg;
+      item.fields[1].tag = CompValue::Tag::Str;
+      item.fields[1].str_value = piece.literal;
+      item.fields[2].tag = CompValue::Tag::Int;
+      item.fields[2].int_value = piece.precision;
+      item.fields[3].tag = CompValue::Tag::Int;
+      item.fields[3].int_value = piece.arg;
+      item.fields[4].tag = CompValue::Tag::Bool;
+      item.fields[4].bool_value = piece.explicit_float;
+      out.value.fields.push_back(std::move(item));
+    }
+    return true;
+  }
   if (name == "wrapping_add" || name == "wrapping_sub" ||
       name == "wrapping_mul") {
     if (args.size() != 2) {

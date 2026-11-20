@@ -742,3 +742,16 @@ impl Display for f64 {
     ret n
   }
 }
+
+// The compile-time view of a format string. `comp_pieces` decodes the
+// literal into these pieces so an alcy body can decide what each
+// placeholder emits; the value exists only during compilation.
+pub struct Piece {
+  pub is_arg: bool,
+  pub literal: str,
+  pub precision: usize,
+  pub arg: usize,
+  pub explicit_float: bool,
+}
+
+pub intrinsic fn comp_pieces(fmt: str) -> [Piece; 0];

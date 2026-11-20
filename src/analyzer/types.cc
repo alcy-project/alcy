@@ -1423,9 +1423,9 @@ ir::TypeIdx Checker::resolve_type(u32 module,
 // declared by io and expanded by package ; `memcopy`
 // requires a declaration.
 bool Checker::is_known_intrinsic(std::string_view name) {
-  return name == "memcopy" || name == "panic" || name == "str_len" ||
-         name == "str_byte" || name == "str_slice" || name == "sys_write" ||
-         name == "sys_read" || name == "error_kind" ||
+  return name == "memcopy" || name == "panic" || name == "comp_pieces" ||
+         name == "str_len" || name == "str_byte" || name == "str_slice" ||
+         name == "sys_write" || name == "sys_read" || name == "error_kind" ||
          name == "str_from_parts" || name == "slice_len" ||
          name == "slice_from_parts" || name == "slice_from_parts_mut" ||
          name == "alloc" || name == "dealloc" || name == "elem_ptr" ||
@@ -1692,7 +1692,16 @@ bool Checker::check_intrinsic_signature(u32 module,
                     same(pointee(params[0]), pointee(params[1])) &&
                     builder.types()[ret.idx].tag == ir::TypeTag::Void);
   }
-  if (name == "panic") {
+  if (name == "comp_pieces") {
+    // `comp_pieces(fmt: str) -> [Piece; 0]`: the declared element gives
+    // every piece its field types; the evaluator fills in the runtime
+    // length from the decoded format string.
+    expected.push_back(str);
+    if (tag_of(ret) != ir::TypeTag::Array) {
+      return wrong();
+    }
+    expected_ret = ret;
+  } else if (name == "panic") {
     expected.push_back(str);
     expected_ret = builder.never_type();
   } else if (name == "str_len") {
