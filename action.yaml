@@ -33,9 +33,12 @@ runs:
         ACTION_REPO: ${{ github.action_repository }}
       run: |
         case "${RUNNER_OS}-${RUNNER_ARCH}" in
-          Linux-X64)   plat=linux;   arch=x86_64; ext=tar.zst ;;
-          macOS-ARM64) plat=macos;   arch=arm64;  ext=tar.zst ;;
-          Windows-X64) plat=windows; arch=x64;    ext=zip ;;
+          Linux-X64)     plat=linux;   arch=x86_64; ext=tar.zst ;;
+          Linux-ARM64)   plat=linux;   arch=arm64;  ext=tar.zst ;;
+          macOS-ARM64)   plat=macos;   arch=arm64;  ext=tar.zst ;;
+          macOS-X64)     plat=macos;   arch=x86_64; ext=tar.zst ;;
+          Windows-X64)   plat=windows; arch=x64;    ext=zip ;;
+          Windows-ARM64) plat=windows; arch=arm64;  ext=zip ;;
           *)
             echo "::error::alcy publishes no archive for ${RUNNER_OS}-${RUNNER_ARCH}"
             exit 1
