@@ -11,6 +11,11 @@
   loop reaches `next` through that spec and never through an inherent
   method of the same name, so an `Iterator` implementation must be in
   scope or the loop is an error.
+- A container's cursor is chosen by the head, not by the loop. A range
+  names its cursor directly; a `Vec` does not: `for x in v` calls
+  `v.into_iter()` and consumes `v`, while `for x in v.iter()` borrows
+  it and yields references. The `.iter()` is the spelling of that
+  choice, not a redundant adapter; `iter_mut` is the exclusive one.
 - `Some(item)` binds `pat` against the item, and `None` ends the
   loop. The pattern must match every item: a refutable pattern is an
   error naming the loop, never a filter. Write the `loop` out when
