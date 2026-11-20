@@ -27,10 +27,13 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from utils.env import run_environment
 from utils.paths import project_root_dir
+
+BUILD_SUBDIR = "build"
 
 MAIN_URI = "file:///main.al"
 BROKEN_URI = "file:///broken.al"
@@ -104,6 +107,8 @@ def main() -> int:
         help="Subdirectory inside out/ holding the alcy binary",
     )
     args = parser.parse_args()
+    global BUILD_SUBDIR
+    BUILD_SUBDIR = args.build_subdir
 
     alcy = alcy_binary(args.build_subdir)
     if not alcy.is_file():
@@ -818,5 +823,151 @@ def main() -> int:
     return 0
 
 
+PACKAGE_MANIFEST = """[package]
+name = "app"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main", "helper"]
+
+[[bin]]
+path = "main.al"
+"""
+PACKAGE_MAIN = """use package::helper::Helper;
+
+pub fn use_it(value: Helper) -> i32 {
+  ret value.x
+}
+
+fn main() -> i32 {
+  ret 0
+}
+"""
+PACKAGE_HELPER = """pub struct Helper {
+  pub x: i32,
+}
+"""
+
+
+def package_session(alcy: Path) -> int:
+    with tempfile.TemporaryDirectory(prefix="alcy_lsp_smoke_") as scratch:
+        root = Path(scratch)
+        (root / "alcy.toml").write_text(PACKAGE_MANIFEST)
+        (root / "main.al").write_text(PACKAGE_MAIN)
+        (root / "helper.al").write_text(PACKAGE_HELPER)
+        main_uri = (root / "main.al").as_uri()
+        helper_uri = (root / "helper.al").as_uri()
+        session = [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "processId": None,
+                    "rootUri": root.as_uri(),
+                    "capabilities": {},
+                },
+            },
+            {"jsonrpc": "2.0", "method": "initialized", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": main_uri,
+                        "languageId": "alcy",
+                        "version": 1,
+                        "text": PACKAGE_MAIN,
+                    }
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": helper_uri,
+                        "languageId": "alcy",
+                        "version": 1,
+                        "text": PACKAGE_HELPER,
+                    }
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "textDocument/diagnostic",
+                "params": {"textDocument": {"uri": main_uri}},
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {"uri": helper_uri, "version": 2},
+                    "contentChanges": [
+                        {"text": "pub struct Renamed {\n  pub x: i32,\n}\n"}
+                    ],
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "textDocument/diagnostic",
+                "params": {"textDocument": {"uri": main_uri}},
+            },
+            {"jsonrpc": "2.0", "id": 4, "method": "shutdown", "params": None},
+            {"jsonrpc": "2.0", "method": "exit"},
+        ]
+        proc = subprocess.run(
+            [str(alcy), "lsp"],
+            input=b"".join(frame(message) for message in session),
+            capture_output=True,
+            env=run_environment(),
+            timeout=300,
+        )
+        if proc.returncode != 0:
+            print(f"alcy lsp package session exited {proc.returncode}")
+            print(proc.stderr.decode("utf-8", "replace"))
+            return 1
+        responses = unframe(proc.stdout)
+        by_id = {message["id"]: message for message in responses if "id" in message}
+
+        def fail(reason: str) -> int:
+            print(f"lsp package smoke: {reason}")
+            print(json.dumps(responses, indent=2))
+            return 1
+
+        diagnostic = by_id.get(2, {}).get("result", {})
+        items = diagnostic.get("items", [])
+        if any("Unresolved import" in item.get("message", "") for item in items):
+            return fail(f"a sibling import was reported unresolved: {items!r}")
+
+        changed = by_id.get(3, {}).get("result", {})
+        changed_items = changed.get("items", [])
+        if not any(
+            "Unresolved import" in item.get("message", "") for item in changed_items
+        ):
+            return fail(f"a sibling edit did not reach the import: {changed_items!r}")
+
+        republished = [
+            entry["params"]["diagnostics"]
+            for entry in responses
+            if entry.get("method") == "textDocument/publishDiagnostics"
+            and entry.get("params", {}).get("uri") == main_uri
+        ]
+        if not republished or not any(
+            any("Unresolved import" in item.get("message", "") for item in items)
+            for items in republished
+        ):
+            return fail("the sibling edit was not published for the importer")
+
+    print("lsp: package session passed")
+    return 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    code = main()
+    if code != 0:
+        sys.exit(code)
+    sys.exit(package_session(alcy_binary(BUILD_SUBDIR)))

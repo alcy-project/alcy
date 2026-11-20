@@ -21,7 +21,8 @@ namespace lsp {
 // serves one client over one transport.
 class Server {
  public:
-  explicit Server(Transport& transport) : transport_(transport) {}
+  explicit Server(Transport& transport)
+      : transport_(transport), cache_(documents_) {}
 
   // Runs until the client sends `exit` or closes the input, and returns
   // the process exit code the protocol asks for.
@@ -31,7 +32,7 @@ class Server {
   void handle(std::string_view payload);
   void handle_request(const text::JsonValue& message);
   void handle_notification(const text::JsonValue& message);
-  void initialize(const text::JsonValue& id);
+  void initialize(const text::JsonValue& id, const text::JsonValue& message);
   void shutdown(const text::JsonValue& id);
   void did_open(const text::JsonValue& params);
   void did_change(const text::JsonValue& params);

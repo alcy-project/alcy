@@ -66,8 +66,18 @@ base::Result<LintOutcome, diag::Reported> lint_root(
   if (tree.is_err() || ctx.bag.has_errors()) {
     return fail();
   }
+  return lint_tree(ctx, std::move(tree).unwrap(), config, 1);
+}
+
+}  // namespace
+
+base::Result<LintOutcome, diag::Reported> lint_tree(
+    pipeline::PipelineContext& ctx,
+    const analyzer::ModuleTree& tree,
+    const LintConfig& config,
+    usize file_count) {
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
-      pipeline::analyze_tree(ctx, std::move(tree).unwrap());
+      pipeline::analyze_tree(ctx, tree);
   if (checked.is_err() || ctx.bag.has_errors()) {
     return fail();
   }
@@ -77,7 +87,7 @@ base::Result<LintOutcome, diag::Reported> lint_root(
       package.modules.size() > staged ? package.modules.size() - staged : 0;
   const LintStats stats = run_lints(ctx, package, config);
   if (!config.borrow_checks) {
-    return base::make_ok(LintOutcome{.file_count = 1,
+    return base::make_ok(LintOutcome{.file_count = file_count,
                                      .module_count = module_count,
                                      .warning_count = stats.warnings,
                                      .error_count = stats.errors});
@@ -91,13 +101,11 @@ base::Result<LintOutcome, diag::Reported> lint_root(
     return fail();
   }
   const pipeline::FrontendOutput out = std::move(finished).unwrap();
-  return base::make_ok(LintOutcome{.file_count = 1,
+  return base::make_ok(LintOutcome{.file_count = file_count,
                                    .module_count = out.module_count,
                                    .warning_count = stats.warnings,
                                    .error_count = stats.errors});
 }
-
-}  // namespace
 
 base::Result<LintConfig, diag::Reported> load_config(
     pipeline::PipelineContext& ctx,

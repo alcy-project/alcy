@@ -130,6 +130,10 @@ what implements it lives in `src/`.
   outline, and the CST's folds over JSON-RPC, and re-implements none of
   the analysis behind them, and definition and references read the
   checker's recorded resolutions rather than resolving a name again.
+  It reads the manifest of a buffer's package, so the tree it checks
+  holds the sibling modules and dependencies a command-line build sees;
+  a buffer without a manifest, or a staged standard-library source,
+  keeps the single-file entry.
   `src/fuzz/` holds
   the fuzz targets, which need libFuzzer and are therefore outside
   `all`.

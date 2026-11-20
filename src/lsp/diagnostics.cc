@@ -11,20 +11,18 @@
 #include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "i18n/language.h"
-#include "linter/config.h"
-#include "linter/lint.h"
+#include "lsp/analysis.h"
+#include "lsp/analysis_cache.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
 
 namespace {
 
-// LSP DiagnosticSeverity: error, warning, information, hint. The
-// compiler's notes are information; it has no hint.
 f64 severity_number(diag::Severity severity) {
   switch (severity) {
     case diag::Severity::Error:
@@ -37,22 +35,21 @@ f64 severity_number(diag::Severity severity) {
   return static_cast<f64>(DiagnosticSeverity::Error);
 }
 
-}  // namespace
-
-text::JsonValue document_diagnostics(const Document& document) {
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  // The linter's single-source entry runs the frontend and the rules, so
-  // one pass publishes both the compiler's errors and the lint findings
-  // rather than checking the buffer twice.
-  const linter::LintConfig config{};
-  const base::Result<linter::LintOutcome, diag::Reported> result =
-      linter::lint_source(context, document.uri(), document.text(), config);
-  (void)result;
+text::JsonValue diagnostics_for(const Document& document,
+                                AnalysisCache& cache) {
+  const DocumentAnalysis& analysis = cache.get(document);
+  const PackageAnalysis& owner = analysis.owner();
+  const source::FileId file = analysis.root();
+  const diag::DiagBag& bag = owner.context.bag;
 
   text::JsonValue diagnostics = text::JsonValue::make_array();
-  for (u32 i = 0; i < context.bag.size(); ++i) {
-    const diag::Diagnostic* diagnostic = context.bag.at(i);
+  for (u32 i = 0; i < bag.size(); ++i) {
+    const diag::Diagnostic* diagnostic = bag.at(i);
     if (diagnostic == nullptr) {
+      continue;
+    }
+    if (file != source::UNKNOWN_FILE && diagnostic->has_primary_span &&
+        diagnostic->primary_span.file != file) {
       continue;
     }
     const u32 offset =
@@ -71,14 +68,54 @@ text::JsonValue document_diagnostics(const Document& document) {
   return diagnostics;
 }
 
-text::JsonValue document_diagnostic_report(const Document& document) {
+}  // namespace
+
+text::JsonValue document_diagnostics(const Document& document,
+                                     AnalysisCache& cache) {
+  return diagnostics_for(document, cache);
+}
+
+text::JsonValue document_diagnostics(const Document& document) {
+  AnalysisCache cache;
+  return diagnostics_for(document, cache);
+}
+
+text::JsonValue document_diagnostic_report(const Document& document,
+                                           AnalysisCache& cache) {
   text::JsonValue report = text::JsonValue::make_object();
   report.set("kind", text::JsonValue::make_string("full"));
-  report.set("items", document_diagnostics(document));
+  report.set("items", document_diagnostics(document, cache));
   return report;
 }
 
+text::JsonValue document_diagnostic_report(const Document& document) {
+  AnalysisCache cache;
+  return document_diagnostic_report(document, cache);
+}
+
+text::JsonValue workspace_diagnostic_report(const DocumentStore& documents,
+                                            AnalysisCache& cache) {
+  text::JsonValue items = text::JsonValue::make_array();
+  for (const auto& [uri, document] : documents.documents()) {
+    (void)uri;
+    text::JsonValue report = document_diagnostic_report(document, cache);
+    report.set("uri", text::JsonValue::make_string(document.uri()));
+    report.set("version", text::JsonValue::make_number(
+                              static_cast<f64>(document.version())));
+    items.push(std::move(report));
+  }
+  text::JsonValue out = text::JsonValue::make_object();
+  out.set("items", std::move(items));
+  return out;
+}
+
+text::JsonValue workspace_diagnostic_report(const DocumentStore& documents) {
+  AnalysisCache cache(documents);
+  return workspace_diagnostic_report(documents, cache);
+}
+
 text::JsonValue DiagnosticsCache::pull(const Document& document,
+                                       AnalysisCache& cache,
                                        std::string_view previous_result_id) {
   const std::string& uri = document.uri();
   const auto found = entries_.find(uri);
@@ -93,28 +130,19 @@ text::JsonValue DiagnosticsCache::pull(const Document& document,
   }
   const std::string id = std::to_string(next_id_++);
   entries_.insert_or_assign(uri, Entry{id, document.version()});
-  text::JsonValue report = document_diagnostic_report(document);
+  text::JsonValue report = document_diagnostic_report(document, cache);
   report.set("resultId", text::JsonValue::make_string(id));
   return report;
 }
 
-void DiagnosticsCache::erase(std::string_view uri) {
-  entries_.erase(std::string(uri));
+text::JsonValue DiagnosticsCache::pull(const Document& document,
+                                       std::string_view previous_result_id) {
+  AnalysisCache cache;
+  return pull(document, cache, previous_result_id);
 }
 
-text::JsonValue workspace_diagnostic_report(const DocumentStore& documents) {
-  text::JsonValue items = text::JsonValue::make_array();
-  for (const auto& entry : documents.documents()) {
-    const Document& document = entry.second;
-    text::JsonValue report = document_diagnostic_report(document);
-    report.set("uri", text::JsonValue::make_string(document.uri()));
-    report.set("version", text::JsonValue::make_number(
-                              static_cast<f64>(document.version())));
-    items.push(std::move(report));
-  }
-  text::JsonValue out = text::JsonValue::make_object();
-  out.set("items", std::move(items));
-  return out;
+void DiagnosticsCache::erase(std::string_view uri) {
+  entries_.erase(std::string(uri));
 }
 
 }  // namespace lsp

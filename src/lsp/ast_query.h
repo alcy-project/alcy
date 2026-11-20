@@ -7,6 +7,7 @@
 
 #include "ast/ast.h"
 #include "diag/span.h"
+#include "fpag/base/numeric.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 

@@ -35,7 +35,9 @@
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
 #include "lsp/type_hierarchy.h"
+#include "lsp/workspace.h"
 #include "lsp/workspace_symbols.h"
+#include "path/path.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -136,7 +138,7 @@ void Server::handle_request(const text::JsonValue& message) {
     return;
   }
   if (method == "initialize") {
-    initialize(*id);
+    initialize(*id, message);
     return;
   }
   if (!initialized_) {
@@ -442,10 +444,26 @@ void Server::handle_notification(const text::JsonValue& message) {
   }
 }
 
-void Server::initialize(const text::JsonValue& id) {
+void Server::initialize(const text::JsonValue& id,
+                        const text::JsonValue& message) {
   if (initialized_) {
     send_error(id, INVALID_REQUEST, "server is already initialized");
     return;
+  }
+  if (const text::JsonValue* params = field(message, "params");
+      params != nullptr && params->is_object()) {
+    const std::string_view root_uri = string_field(*params, "rootUri");
+    if (!root_uri.empty()) {
+      if (const std::optional<std::string> path =
+              workspace::uri_to_path(root_uri);
+          path.has_value()) {
+        if (base::Result<path::Path, path::PathError> parsed =
+                path::Path::from_native(*path);
+            parsed.is_ok()) {
+          cache_.set_workspace_root(std::move(parsed).unwrap());
+        }
+      }
+    }
   }
   text::JsonValue sync = text::JsonValue::make_object();
   sync.set("openClose", text::JsonValue::make_bool(true));
@@ -506,7 +524,7 @@ void Server::initialize(const text::JsonValue& id) {
   capabilities.set("codeLensProvider", text::JsonValue::make_object());
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
-                          text::JsonValue::make_bool(false));
+                          text::JsonValue::make_bool(true));
   diagnostic_provider.set("workspaceDiagnostics",
                           text::JsonValue::make_bool(true));
   capabilities.set("diagnosticProvider", std::move(diagnostic_provider));
@@ -891,12 +909,12 @@ void Server::diagnostic(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  send_result(id, diagnostics_.pull(*document,
+  send_result(id, diagnostics_.pull(*document, cache_,
                                     string_field(params, "previousResultId")));
 }
 
 void Server::workspace_diagnostic(const text::JsonValue& id) {
-  send_result(id, workspace_diagnostic_report(documents_));
+  send_result(id, workspace_diagnostic_report(documents_, cache_));
 }
 
 void Server::prepare_rename(const text::JsonValue& id,
@@ -1072,7 +1090,12 @@ void Server::did_change(const text::JsonValue& params) {
   }
   document->apply(changes,
                   int_field(*text_document, "version", document->version()));
-  publish_diagnostics(*document);
+  for (const auto& [other_uri, other] : documents_.documents()) {
+    (void)other_uri;
+    if (cache_.same_package(*document, other)) {
+      publish_diagnostics(other);
+    }
+  }
 }
 
 void Server::did_close(const text::JsonValue& params) {
@@ -1107,7 +1130,7 @@ void Server::formatting(const text::JsonValue& id,
 void Server::publish_diagnostics(const Document& document) {
   text::JsonValue params = text::JsonValue::make_object();
   params.set("uri", make_string(document.uri()));
-  params.set("diagnostics", document_diagnostics(document));
+  params.set("diagnostics", document_diagnostics(document, cache_));
   send_notification("textDocument/publishDiagnostics", std::move(params));
 }
 

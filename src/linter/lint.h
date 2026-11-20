@@ -5,6 +5,7 @@
 
 #include <string_view>
 
+#include "analyzer/resolve.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
@@ -47,6 +48,16 @@ base::Result<LintOutcome, diag::Reported> lint_source(
     std::string_view name,
     std::string_view bytes,
     const LintConfig& config);
+
+// Lints an already resolved tree, running the same analysis and optional
+// lowering tail the single-file and package entries run. A caller that
+// built the tree itself - an editor analyzing a whole package - uses this
+// instead of re-reading source through lint_source.
+base::Result<LintOutcome, diag::Reported> lint_tree(
+    pipeline::PipelineContext& ctx,
+    const analyzer::ModuleTree& tree,
+    const LintConfig& config,
+    usize file_count = 1);
 
 // Lints every target of the package rooted at root, after the analysis
 // that build and check share. A package that does not analyze is not

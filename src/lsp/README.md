@@ -12,11 +12,15 @@ of the compiler, so it owns no analysis of its own:
   changes in protocol order, and maps LSP positions to byte offsets.
 - `folding.{h,cc}` folds every multi-line brace pair and every run of
   comments on adjacent lines, from the lossless CST.
-- `analysis.{h,cc}` owns one checked reading of a buffer: the frontend
-  context and the package it produced. Every semantic feature reads it
-  through a `DocumentAnalysis`.
-- `analysis_cache.{h,cc}` keys those readings by URI and version, so a
-  request for a buffer that did not change reuses the previous one.
+- `analysis.{h,cc}` owns one checked reading of a package: the frontend
+  context and the checked artifact it produced. Every semantic feature
+  reads its own buffer through a `DocumentAnalysis` view; an import
+  reaching a sibling module is resolved against that sibling's source.
+- `workspace.{h,cc}` maps URIs to paths, finds the nearest `alcy.toml`,
+  and fingerprints everything that can invalidate a package's reading.
+- `analysis_cache.{h,cc}` keys those readings by package root and that
+  fingerprint, so a request for a buffer whose package did not change
+  reuses the previous reading.
 - `ast_query.{h,cc}` names the span a declaration's name occupies,
   shared by hover and navigation.
 - `code_actions.{h,cc}` returns the lint repairs that intersect a
@@ -27,8 +31,8 @@ of the compiler, so it owns no analysis of its own:
   should change together.
 - `completion.{h,cc}` offers the names the checked package holds, plus
   the language's keywords, filtered by the prefix the cursor typed.
-- `diagnostics.{h,cc}` runs `linter::lint_source` over one buffer and
-  renders the bag as LSP diagnostics, so a compiler error and a lint
+- `diagnostics.{h,cc}` renders the shared package reading's diagnostic
+  bag, filtered to one buffer's spans, so a compiler error and a lint
   finding arrive from the same pass.
 - `formatting.{h,cc}` returns the `alcy_fmt` edit that canonicalizes a
   buffer, or none when the buffer already has that layout.
@@ -107,10 +111,10 @@ each change triggers, so a line-start table built with one scan is the
 simple side of that trade; a future incremental index belongs behind
 the same interface.
 
-Diagnostics run the linter's single-source entry, which runs the
-frontend the rules need and then the rules. The semantic features share
-one cached reading instead; pointing the linter's rules at that reading
-is a later step, not a second analysis path.
+The frontend reads the whole package the manifest declares, with open
+buffers standing in for the files on disk. Diagnostics and the semantic
+features read that same resolved tree; a buffer without a manifest keeps
+the single-file entry, as does a staged standard-library source.
 
 The checked package also holds the standard library, whose spans
 belong to other files. A feature compares a span against the cursor
@@ -132,3 +136,5 @@ reads the checked package through an analyzer query.
 6. A per-document analysis cache, so a request does not re-run the
    frontend.
 7. Quick fixes for the linter's machine-applicable findings.
+8. Package-aware analysis, so an import resolves against the manifest's
+   sibling modules and dependencies.
