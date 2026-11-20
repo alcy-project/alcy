@@ -11,38 +11,32 @@
 import { findBlocks, wireCopy, type CodeBlock } from "./guide-copy.js";
 import { wireRun } from "./guide-run.js";
 
-// One promise per page: two Edits in the same tick share the fetch, and
-// a load that fails leaves the buttons that were already wired alone.
-let editorLoad: Promise<void> | null = null;
-// The blocks whose Edit press is waiting for the module, in press order,
-// so the press that opened the editor is the one that starts editing.
-const pending: CodeBlock[] = [];
+// One import per page: two Edits in the same tick share the fetch. The
+// module is what is cached, not a wiring pass, so a press after the load
+// still reaches the block that made it. A failed load is forgotten so the
+// next press retries.
+type EditorModule = typeof import("./guide-edit.js");
+let editorPromise: Promise<EditorModule> | null = null;
 
-function loadEditor(): Promise<void> {
-  if (editorLoad === null) {
-    editorLoad = import("./guide-edit.js").then(
-      (module) => {
-        for (const block of pending) {
-          module.wireEditor(block, block === pending[0]);
-        }
-        pending.length = 0;
-      },
-      () => {
-        // Without the editor half the block keeps its published text and
-        // its Run, which is the page it shipped with.
-        editorLoad = null;
-      },
-    );
+function editorModule(): Promise<EditorModule> {
+  if (editorPromise === null) {
+    editorPromise = import("./guide-edit.js").catch((error: unknown) => {
+      editorPromise = null;
+      throw error;
+    });
   }
-  return editorLoad;
+  return editorPromise;
 }
 
 // The press that asks for the editor is answered by the editor, so the
 // button waits for the half that will act on it rather than appearing to
-// do nothing.
+// do nothing. `wireEditor` owns the once-only guard; a press that arrives
+// while the import is in flight gets its own editor too.
 function onEditPress(block: CodeBlock): void {
-  pending.push(block);
-  void loadEditor();
+  void editorModule().then(
+    (module) => module.wireEditor(block, true),
+    () => undefined,
+  );
 }
 
 // Copy is every block's, so the row is revealed before the `alcy`-only
@@ -55,6 +49,6 @@ for (const block of findBlocks()) {
   wireRun(block);
   const edit = block.actions.querySelector<HTMLButtonElement>('[data-action="edit"]');
   if (edit !== null) {
-    edit.addEventListener("click", () => onEditPress(block), { once: true });
+    edit.addEventListener("click", () => onEditPress(block));
   }
 }

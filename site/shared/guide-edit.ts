@@ -24,6 +24,9 @@ const PLAYGROUND_BASE = new URL("../playground/", import.meta.url);
 let highlighterPromise: Promise<Highlighter | null> | null = null;
 let highlighter: Highlighter | null = null;
 const mirrorRefreshes: Array<() => void> = [];
+// Every press after the module is loaded arrives here again; wire a block
+// once so its Open button does not collect a second listener.
+const wiredBlocks = new WeakSet<CodeBlock>();
 
 function ensureHighlighter(): Promise<Highlighter | null> {
   if (highlighterPromise === null) {
@@ -74,6 +77,11 @@ function createEditor(source: string): HTMLTextAreaElement {
 // Installs the whole editor on a block and, when `pressed` is set, treats
 // the press that caused this module to load as the Edit it asked for.
 export function wireEditor(block: CodeBlock, pressed = false): void {
+  if (wiredBlocks.has(block)) {
+    return;
+  }
+  wiredBlocks.add(block);
+
   const edit = block.actions.querySelector<HTMLButtonElement>('[data-action="edit"]');
   const reset = block.actions.querySelector<HTMLButtonElement>('[data-action="reset"]');
   const open = block.actions.querySelector<HTMLButtonElement>('[data-action="open"]');
@@ -95,14 +103,6 @@ export function wireEditor(block: CodeBlock, pressed = false): void {
   if (edit === null || reset === null) {
     return;
   }
-  // The page hands over a block whose Edit was pressed while this module
-  // was still arriving; a second press in that window would open the
-  // editor twice, so the flag is spent once and the button is the owner.
-  if (edit.dataset.wired === "true") {
-    return;
-  }
-  edit.dataset.wired = "true";
-
   const published = block.code.textContent ?? "";
   // The highlighted markup, put back whenever the working copy is the
   // published text again.
