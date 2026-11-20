@@ -7,9 +7,11 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
@@ -68,12 +70,56 @@ std::string function_detail(const pipeline::PipelineContext& context,
   return out;
 }
 
+// The names the root module can actually spell: its own declarations and
+// everything its `use` statements and the prelude brought into scope.
+std::unordered_set<std::string_view> visible_names(
+    const DocumentAnalysis& analysis) {
+  std::unordered_set<std::string_view> names;
+  const analyzer::CheckedPackage& package = analysis.package();
+  u32 root_module = analyzer::NO_MODULE;
+  for (u32 i = 0; i < package.tree.modules.size(); ++i) {
+    if (package.tree.modules[i]->file == analysis.root()) {
+      root_module = i;
+      break;
+    }
+  }
+  if (root_module == analyzer::NO_MODULE) {
+    return names;
+  }
+  for (const analyzer::Import& import :
+       package.tree.modules[root_module]->imports) {
+    names.insert(import.name);
+  }
+  for (const analyzer::CheckedModule& module : package.modules) {
+    if (module.module != root_module) {
+      continue;
+    }
+    for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
+      names.insert(fn.name);
+    }
+    for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
+      names.insert(method.name);
+    }
+    for (const analyzer::CheckedModule::NamedType& named : module.types) {
+      names.insert(named.name);
+    }
+    for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
+      names.insert(info.name);
+    }
+  }
+  return names;
+}
+
 void collect(const pipeline::PipelineContext& context,
              const analyzer::CheckedPackage& package,
+             const std::unordered_set<std::string_view>& visible,
              std::vector<Item>* out) {
   const ir::StorageState& state = package.types->state();
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
+      if (!visible.contains(fn.name)) {
+        continue;
+      }
       out->push_back(Item{std::string(fn.name),
                           function_detail(context, package, fn.params, fn.ret),
                           fn.is_method ? CompletionItemKind::Method
@@ -83,7 +129,7 @@ void collect(const pipeline::PipelineContext& context,
       // The definition-site check registers rows for a parameter's
       // bound ; they name no declaration, so there is
       // nothing here to offer.
-      if (!method.item.is_valid()) {
+      if (!method.item.is_valid() || !visible.contains(method.name)) {
         continue;
       }
       out->push_back(
@@ -92,6 +138,9 @@ void collect(const pipeline::PipelineContext& context,
                CompletionItemKind::Method});
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
+      if (!visible.contains(named.name)) {
+        continue;
+      }
       const ir::TypeNode& type = state.types[named.type];
       out->push_back(Item{std::string(named.name),
                           ir::type_display(state, context.strings, named.type),
@@ -108,6 +157,9 @@ void collect(const pipeline::PipelineContext& context,
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
+      if (!visible.contains(info.name)) {
+        continue;
+      }
       out->push_back(Item{std::string(info.name),
                           ir::type_display(state, context.strings, info.type),
                           info.is_const ? CompletionItemKind::Constant
@@ -131,7 +183,8 @@ text::JsonValue completion_items(const Document& document,
 
   std::vector<Item> items;
   if (analysis.ok()) {
-    collect(analysis.context(), analysis.package(), &items);
+    collect(analysis.context(), analysis.package(), visible_names(analysis),
+            &items);
   }
   for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {
     if (keyword.category != lexer::KeywordCategory::Keyword) {

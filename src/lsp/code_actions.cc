@@ -3,7 +3,9 @@
 
 #include "lsp/code_actions.h"
 
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -12,11 +14,15 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/io/io_util.h"
 #include "lsp/analysis.h"
 #include "lsp/analysis_cache.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
+#include "lsp/workspace.h"
+#include "path/path.h"
 #include "pipeline/pipeline_context.h"
+#include "pkg/manifest.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -25,6 +31,67 @@ namespace {
 
 bool intersects(usize start, usize end, diag::Span span) {
   return span.offset < end && start < span.offset + span.length;
+}
+
+struct ManifestFix {
+  std::string uri;
+  std::string text;
+  usize offset = 0;
+  std::string replacement;
+};
+
+std::optional<ManifestFix> std_dependency_fix(
+    const Document& document,
+    const diag::Diagnostic& diagnostic) {
+  constexpr std::string_view marker = "(alcy/std/";
+  const usize marker_at = diagnostic.message.find(marker);
+  if (marker_at == std::string_view::npos) {
+    return std::nullopt;
+  }
+  const usize end = diagnostic.message.find(')', marker_at + marker.size());
+  if (end == std::string_view::npos) {
+    return std::nullopt;
+  }
+  const std::string_view member = diagnostic.message.substr(
+      marker_at + marker.size(), end - marker_at - marker.size());
+  if (member.empty()) {
+    return std::nullopt;
+  }
+  const std::optional<std::string> path =
+      workspace::uri_to_path(document.uri());
+  if (!path.has_value()) {
+    return std::nullopt;
+  }
+  const std::optional<path::Path> root = workspace::find_package_root(*path);
+  if (!root.has_value()) {
+    return std::nullopt;
+  }
+  const path::Path manifest = root->join(pkg::MANIFEST_FILE_NAME);
+  std::string text = io::read_file(std::string(manifest.as_view()));
+  if (text.empty()) {
+    return std::nullopt;
+  }
+  const std::string spelling = "\"alcy/std/" + std::string(member) + "\" = {}";
+  if (text.find(spelling) != std::string::npos) {
+    return std::nullopt;
+  }
+  constexpr std::string_view section = "[dependencies]";
+  const usize section_at = text.find(section);
+  usize offset = text.size();
+  std::string replacement =
+      "\n" + std::string(section) + "\n" + spelling + "\n";
+  if (section_at != std::string::npos) {
+    const usize line_end = text.find('\n', section_at);
+    if (line_end == std::string::npos) {
+      offset = text.size();
+      replacement = "\n" + spelling + "\n";
+    } else {
+      offset = line_end + 1;
+      replacement = spelling + "\n";
+    }
+  }
+  return ManifestFix{workspace::path_to_uri(manifest.as_view()),
+                     std::move(text), offset, std::move(replacement)};
 }
 
 }  // namespace
@@ -81,6 +148,37 @@ text::JsonValue code_actions(const Document& document,
     text::JsonValue action = text::JsonValue::make_object();
     action.set("title",
                text::JsonValue::make_string(std::string(diagnostic->message)));
+    action.set("kind", text::JsonValue::make_string("quickfix"));
+    action.set("edit", std::move(workspace_edit));
+    actions.push(std::move(action));
+  }
+  for (u32 i = 0; i < bag.size(); ++i) {
+    const diag::Diagnostic* diagnostic = bag.at(i);
+    if (diagnostic == nullptr || !diagnostic->has_primary_span ||
+        diagnostic->primary_span.file != analysis.root()) {
+      continue;
+    }
+    const std::optional<ManifestFix> fix =
+        std_dependency_fix(document, *diagnostic);
+    if (!fix.has_value()) {
+      continue;
+    }
+    if (!intersects(start_offset, end_offset, diagnostic->primary_span)) {
+      continue;
+    }
+    text::JsonValue edit = text::JsonValue::make_object();
+    edit.set("range", range_json(fix->text, static_cast<u32>(fix->offset), 0));
+    edit.set("newText", text::JsonValue::make_string(fix->replacement));
+    text::JsonValue edits = text::JsonValue::make_array();
+    edits.push(std::move(edit));
+    text::JsonValue changes = text::JsonValue::make_object();
+    changes.set(fix->uri, std::move(edits));
+    text::JsonValue workspace_edit = text::JsonValue::make_object();
+    workspace_edit.set("changes", std::move(changes));
+    text::JsonValue action = text::JsonValue::make_object();
+    action.set("title",
+               text::JsonValue::make_string(
+                   "Add the standard library member to [dependencies]"));
     action.set("kind", text::JsonValue::make_string("quickfix"));
     action.set("edit", std::move(workspace_edit));
     actions.push(std::move(action));

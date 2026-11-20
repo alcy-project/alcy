@@ -16,6 +16,8 @@
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
 #include "lsp/analysis_cache.h"
+#include "lsp/code_actions.h"
+#include "lsp/completion.h"
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/highlights.h"
@@ -50,6 +52,10 @@ constexpr std::string_view HELPER =
     "}\n"
     "\n"
     "pub fn helper_fn() -> i32 {\n"
+    "  ret 0\n"
+    "}\n"
+    "\n"
+    "fn hidden_from_main() -> i32 {\n"
     "  ret 0\n"
     "}\n";
 
@@ -227,6 +233,64 @@ TEST_CASE("Rename edits both the importer and the defining module") {
   }
   CHECK(changes->find(f.main_uri) != nullptr);
   CHECK(changes->find(f.helper_uri) != nullptr);
+}
+
+TEST_CASE("Completion offers only names visible from the buffer") {
+  const Fixture f;
+  const Document document(f.main_uri, "alcy", 1, std::string(MAIN));
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{0, 0});
+  const text::JsonValue* items = list.find("items");
+  if (items == nullptr) {
+    return;
+  }
+  bool imported = false;
+  for (const text::JsonValue& item : items->as_array()) {
+    const text::JsonValue* label = item.find("label");
+    if (label == nullptr) {
+      continue;
+    }
+    if (label->as_string() == "helper_fn") {
+      imported = true;
+    }
+    CHECK(label->as_string() != "hidden_from_main");
+  }
+  CHECK(imported);
+}
+
+TEST_CASE("An unresolved standard library name offers a manifest fix") {
+  Fixture f;
+  constexpr std::string_view source =
+      "fn main() -> i32 {\n"
+      "  ret 0\n"
+      "}\n"
+      "fn take(s: String) -> i32 {\n"
+      "  ret 0\n"
+      "}\n";
+  CHECK(f.dir.write_file("proj/main.al", source));
+  const Document document(f.main_uri, "alcy", 1, std::string(source));
+  AnalysisCache cache;
+  CHECK(cache.get(document).ok());
+
+  const text::JsonValue actions =
+      code_actions(document, cache, Position{0, 0}, Position{4, 1});
+  bool manifest_fix = false;
+  for (const text::JsonValue& action : actions.as_array()) {
+    const text::JsonValue* edit = action.find("edit");
+    if (edit == nullptr) {
+      continue;
+    }
+    const text::JsonValue* changes = edit->find("changes");
+    if (changes != nullptr && changes->find(workspace::path_to_uri(
+                                  f.root + "/alcy.toml")) != nullptr) {
+      manifest_fix = true;
+    }
+  }
+  CHECK(manifest_fix);
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {
