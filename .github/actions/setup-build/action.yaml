@@ -41,14 +41,18 @@ runs:
       shell: bash
       run: |
         py=$(command -v python3 || command -v python)
-        echo "llvm_toolchain_version=$("$py" tools/config_values.py --get llvm_toolchain_version)" >> "$GITHUB_OUTPUT"
+        llvm_version=$("$py" tools/config_values.py --get llvm_toolchain_version)
+        if [[ "${{ runner.os }}" == "macOS" && "${{ runner.arch }}" == "X64" ]]; then
+          llvm_version=$("$py" tools/config_values.py --get llvm_toolchain_version_macos_x64)
+        fi
+        echo "llvm_version=$llvm_version" >> "$GITHUB_OUTPUT"
 
     - name: Setup Build Environment (Standard)
       if: inputs.nix != 'true' && inputs.toolchain == 'true'
       uses: pug523/actions/cxx-gn-setup@03c2a10fb3e77507cc699ea0b571bb8b58226867
       with:
         os: ${{ inputs.os }}
-        llvm_version: ${{ steps.versions.outputs.llvm_toolchain_version }}
+        llvm_version: ${{ steps.versions.outputs.llvm_version }}
         directory: ${{ runner.temp }}/llvm
 
     # GN resolves libc++ headers and libraries through these variables

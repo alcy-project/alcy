@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 KEYS = (
     "llvm_toolchain_version",
+    "llvm_toolchain_version_macos_x64",
     "llvm_fork_tag",
     "taplo_version",
     "tree_sitter_cli_version",

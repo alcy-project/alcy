@@ -1,4 +1,7 @@
 llvm_toolchain_version = "23.1.5"
+# macOS Intel has no 23.x binary upstream; 20.1.7 is the last published
+# darwin/x64 toolchain and still carries the libc++ the build uses.
+llvm_toolchain_version_macos_x64 = "20.1.7"
 llvm_fork_tag = "alcy-llvm-23.1.6-1"
 taplo_version = "0.10.0"
 tree_sitter_cli_version = "0.27.0"
