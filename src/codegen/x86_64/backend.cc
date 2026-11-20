@@ -156,7 +156,20 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     }
     Body body = std::move(selected).unwrap();
     for (const std::string& name : body.symbols) {
-      if (runtime::defines(name)) {
+      if (!runtime::defines(name)) {
+        continue;
+      }
+      // A runtime piece this backend has not written yet is a refusal
+      // at the construct that reached it, not an object the link
+      // refuses over a name nobody carries.
+      bool already = false;
+      for (const std::string& known : runtime_names) {
+        if (known == name) {
+          already = true;
+          break;
+        }
+      }
+      if (!already) {
         runtime_names.push_back(name);
       }
     }
@@ -232,6 +245,27 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       });
     }
     object.sections.push_back(std::move(data));
+  }
+
+  // The names the bodies reach but this object does not carry: the
+  // platform's own allocator, and whatever else a runtime body asked
+  // for. They ride the symbol table as undefined, and the link resolves
+  // them.
+  for (const object::Relocation& reloc : object.relocations) {
+    bool carried = false;
+    for (const object::Symbol& symbol : object.symbols) {
+      if (symbol.name == reloc.symbol) {
+        carried = true;
+        break;
+      }
+    }
+    if (!carried) {
+      object.symbols.push_back(object::Symbol{
+          .name = reloc.symbol,
+          .section = object::Symbol::UNDEFINED,
+          .bind = object::SymbolBind::Global,
+      });
+    }
   }
 
   return base::make_ok(object::write_elf64_x86_64(object));

@@ -157,30 +157,38 @@ u32 modrm_mem(std::vector<u8>& out, const Reg reg, const Mem& mem) {
 
   // Base and index, or `[rsp]`, which always needs a SIB byte. An index
   // of `rsp` is spelled as no index at all.
+  // A scale of one byte per element is the field the SIB carries
+  // literally; `00` is what a scale of one is spelled as.
+  const u8 scale_field = mem.scale == 1   ? 0
+                         : mem.scale == 2 ? 1
+                         : mem.scale == 4 ? 2
+                                          : 3;
   const u8 index_code = has_index ? reg_code(reg_of(*mem.index)) : 4;
-  const u8 sib =
-      static_cast<u8>(mem.scale << 6 | index_code << 3 | reg_code(base));
+  const u8 sib = static_cast<u8>(scale_field << 6 | index_code << 3 |
+                                 reg_code(base));
+  // Every SIB form spells `rm = 100`, which is what tells the decoder
+  // a SIB byte follows.
   if (reg_code(base) == 5) {
     if (disp >= -128 && disp <= 127) {
-      out.push_back(static_cast<u8>(0x40 | reg_code(reg) << 3));
+      out.push_back(static_cast<u8>(0x40 | reg_code(reg) << 3 | 4));
       out.push_back(sib);
       return 1;
     }
-    out.push_back(static_cast<u8>(0x80 | reg_code(reg) << 3));
+    out.push_back(static_cast<u8>(0x80 | reg_code(reg) << 3 | 4));
     out.push_back(sib);
     return 4;
   }
   if (disp == 0) {
-    out.push_back(static_cast<u8>(reg_code(reg) << 3));
+    out.push_back(static_cast<u8>(reg_code(reg) << 3 | 4));
     out.push_back(sib);
     return 0;
   }
   if (disp >= -128 && disp <= 127) {
-    out.push_back(static_cast<u8>(0x40 | reg_code(reg) << 3));
+    out.push_back(static_cast<u8>(0x40 | reg_code(reg) << 3 | 4));
     out.push_back(sib);
     return 1;
   }
-  out.push_back(static_cast<u8>(0x80 | reg_code(reg) << 3));
+  out.push_back(static_cast<u8>(0x80 | reg_code(reg) << 3 | 4));
   out.push_back(sib);
   return 4;
 }

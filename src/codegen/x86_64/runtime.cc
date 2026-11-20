@@ -44,6 +44,7 @@ SymbolRef text(Body& body, RoData& rodata, const std::string_view bytes) {
   return SymbolRef{static_cast<u32>(body.symbols.size() - 1)};
 }
 
+
 // The one writer a print family shares: `write` of the two words the
 // caller handed over, to the descriptor the family is for. The entry and
 // exit sequences are allocation's to put in, the same as a program's own
@@ -115,13 +116,95 @@ Body build_syscall_body(const i64 number) {
   return body;
 }
 
+// The name one external callee answers to, in this body's own table.
+SymbolRef callee(Body& body, const std::string_view name) {
+  for (u32 at = 0; at < body.symbols.size(); ++at) {
+    if (body.symbols[at] == name) {
+      return SymbolRef{at};
+    }
+  }
+  body.symbols.emplace_back(name);
+  return SymbolRef{static_cast<u32>(body.symbols.size() - 1)};
+}
+
+// The allocator. The platform's own aligned allocator answers, and a
+// block it refuses ends the process the way a panic does; the program
+// has nothing to run without the memory it asked for.
+Body build_alloc(RoData& rodata) {
+  Body body;
+  // posix_memalign(&slot, align, size): the size arrived in `rdi` and
+  // the alignment in `rsi`, which is not the order the call reads them.
+  // The alignment itself has to reach the pointer's width: the platform
+  // refuses a smaller one, where the source's alignment of a word is
+  // four and the answer it wants is a block the word fits in.
+  body.insts.push_back(
+      make_inst(MOp::Mov, 8, Operand{Reg::Rdx}, Operand{Reg::Rdi}));
+  body.insts.push_back(
+      make_inst(MOp::Cmp, 8, Operand{Reg::Rsi}, Operand{Imm{8}}));
+  const u32 wide_enough = body.label_count++;
+  body.insts.push_back(make_jcc(Cond::Ae, Operand{Label{wide_enough}}));
+  body.insts.push_back(
+      make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{Imm{8}}));
+  MInst widened = make_inst(MOp::Nop, 8);
+  widened.label = wide_enough;
+  body.insts.push_back(widened);
+  // The slot the result lands in, reserved below `rsp` for the call:
+  // the callee pushes its own frame past it, and the frame the entry
+  // sequence made is what the exit restores.
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{16}}));
+  body.insts.push_back(make_inst(MOp::Lea, 8, Operand{Reg::Rdi},
+                                 Operand{Mem{.base = Reg::Rsp,
+                                             .index = std::nullopt,
+                                             .scale = 1,
+                                             .disp = 0}}));
+  const SymbolRef memalign = callee(body, "posix_memalign");
+  body.insts.push_back(
+      make_inst(MOp::Call, 8, Operand{SymbolRef{memalign.id}}));
+  // A refusal is the end: there is nothing to answer with.
+  body.insts.push_back(make_inst(MOp::Cmp, 4, Operand{Reg::Rax},
+                                 Operand{Imm{0}}));
+  const u32 failed = body.label_count++;
+  const u32 ok = body.label_count++;
+  MInst to_ok = make_jcc(Cond::E, Operand{Label{ok}});
+  body.insts.push_back(to_ok);
+  MInst at_failed = make_inst(MOp::Mov, 4, Operand{Reg::Rdi}, Operand{Imm{1}});
+  at_failed.label = failed;
+  body.insts.push_back(at_failed);
+  const SymbolRef abort = callee(body, "abort");
+  body.insts.push_back(make_inst(MOp::Call, 8, Operand{SymbolRef{abort.id}}));
+  body.insts.push_back(make_inst(MOp::Ud2, 8));
+  MInst at_ok = make_inst(MOp::Mov, 8, Operand{Reg::Rax},
+                          Operand{Mem{.base = Reg::Rsp,
+                                      .index = std::nullopt,
+                                      .scale = 1,
+                                      .disp = 0}});
+  at_ok.label = ok;
+  body.insts.push_back(at_ok);
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  (void)rodata;
+  return body;
+}
+
+// The release. The platform's own free answers; a null block was never
+// a block, and free reads it the same way.
+Body build_dealloc(RoData& rodata) {
+  Body body;
+  const SymbolRef free_fn = callee(body, "free");
+  body.insts.push_back(make_inst(MOp::Call, 8, Operand{SymbolRef{free_fn.id}}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  (void)rodata;
+  return body;
+}
+
 }  // namespace
 
 bool defines(const std::string_view name) {
   return name == "alcy_print" || name == "alcy_println" ||
          name == "alcy_eprint" || name == "alcy_eprintln" ||
          name == "alcy_panic" || name == "alcy_sys_write" ||
-         name == "alcy_sys_read";
+         name == "alcy_sys_read" || name == "alcy_alloc" ||
+         name == "alcy_dealloc";
 }
 
 Body build(const std::string_view name, RoData& rodata) {
@@ -145,6 +228,12 @@ Body build(const std::string_view name, RoData& rodata) {
   }
   if (name == "alcy_sys_read") {
     return build_syscall_body(0);
+  }
+  if (name == "alcy_alloc") {
+    return build_alloc(rodata);
+  }
+  if (name == "alcy_dealloc") {
+    return build_dealloc(rodata);
   }
   DCHECK_MSG(false, "the runtime was asked for a name it does not define");
   return Body{};

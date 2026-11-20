@@ -161,9 +161,14 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
       const Symbol& symbol = object.symbols[at];
       const bool global = symbol.bind == SymbolBind::Global;
       if (global == (pass == 1)) {
-        symbol_index[at] = table.add(
-            table.names.add(symbol.name), symbol_info(symbol),
-            static_cast<u16>(symbol.section + 1), symbol.offset, symbol.size);
+        // An undefined symbol names something the link resolves; its
+        // section index is zero, which is how the format spells that.
+        const u16 shndx = symbol.section == Symbol::UNDEFINED
+                              ? 0
+                              : static_cast<u16>(symbol.section + 1);
+        symbol_index[at] = table.add(table.names.add(symbol.name),
+                                     symbol_info(symbol), shndx, symbol.offset,
+                                     symbol.size);
       }
     }
     if (pass == 0) {

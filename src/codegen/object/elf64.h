@@ -47,11 +47,15 @@ enum class SymbolType : u8 { Notype, Object, Func };
 
 struct Symbol {
   std::string name;
-  // The section the symbol names, and the offset inside it.
+  // The section the symbol names, and the offset inside it. A symbol
+  // whose section is `UNDEFINED` names something another object
+  // carries, which is how a runtime body reaches the platform's own
+  // allocator; the relocation that reaches it resolves at the link.
+  static constexpr u32 UNDEFINED = 0xffffffff;
   u32 section = 0;
   u64 offset = 0;
   u64 size = 0;
-  SymbolBind bind = SymbolBind::Local;
+  SymbolBind bind = SymbolBind::Global;
   SymbolType type = SymbolType::Notype;
 };
 

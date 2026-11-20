@@ -82,6 +82,12 @@ bool register_sized(const u32 size) {
   return size == 1 || size == 2 || size == 4 || size == 8;
 }
 
+// The register a memory operand's base names, which a copy needs before
+// it runs.
+Reg reg_of(const RegRef& ref) {
+  return std::get<Reg>(ref);
+}
+
 }  // namespace
 
 void allocate(Body& body, const Frame& frame) {
@@ -271,6 +277,13 @@ void allocate(Body& body, const Frame& frame) {
           push_labeled(
               make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{from}));
         }
+      } else if (std::holds_alternative<SlotRef>(inst.ops[1])) {
+        // The slot the selector named: its frame reference is the
+        // source the copy reads.
+        const Operand resolved = resolve(inst.ops[1]);
+        const Reg from = reg_of(std::get<Mem>(resolved).base.value());
+        (void)from;
+        push_labeled(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, resolved));
       } else {
         DCHECK_MSG(false, "a wide move reads an address");
       }
@@ -325,6 +338,15 @@ void allocate(Body& body, const Frame& frame) {
       encoded.ops[1] = resolve(inst.ops[1]);
     }
 
+    // A divide reads its divisor from a register, so a constant takes
+    // the one the dividend and its sign are not in.
+    if ((encoded.op == MOp::Idiv || encoded.op == MOp::Udiv) &&
+        std::holds_alternative<Imm>(encoded.ops[0])) {
+      const Reg into = pool[next_scratch++];
+      DCHECK(next_scratch <= pool.size());
+      push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[0]));
+      encoded.ops[0] = Operand{into};
+    }
     std::optional<Reg> result;
     if (shape.write0 && std::holds_alternative<VReg>(inst.ops[0])) {
       if (const Reg* named = std::get_if<Reg>(&encoded.ops[0]);

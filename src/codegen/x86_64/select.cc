@@ -44,7 +44,8 @@ namespace {
 // The bytes one scalar value occupies, which is what the integer
 // opcodes' width field asks for. Arithmetic runs at 32 or 64 bits and
 // stores at the value's own width, so the narrow widths name moves and
-// nothing else.
+// nothing else. The pointer-width spellings ride at the word either
+// way, which is what the layout says of them.
 u8 width_of(const ir::TypeTag tag) {
   switch (tag) {
     case ir::TypeTag::I1:
@@ -68,12 +69,17 @@ u8 compute_width_of(const ir::TypeTag tag) {
 
 constexpr bool is_signed(const ir::TypeTag tag) {
   return tag == ir::TypeTag::I8 || tag == ir::TypeTag::I16 ||
-         tag == ir::TypeTag::I32 || tag == ir::TypeTag::I64;
+         tag == ir::TypeTag::I32 || tag == ir::TypeTag::I64 ||
+         tag == ir::TypeTag::Isize;
 }
 
 constexpr bool is_integer(const ir::TypeTag tag) {
-  return is_signed(tag) || tag == ir::TypeTag::U8 || tag == ir::TypeTag::U16 ||
-         tag == ir::TypeTag::U32 || tag == ir::TypeTag::U64;
+  // A bool rides as zero or one, which is what an integer immediate
+  // spells; the compare reads it unsigned for the same reason.
+  return is_signed(tag) || tag == ir::TypeTag::I1 ||
+         tag == ir::TypeTag::U8 || tag == ir::TypeTag::U16 ||
+         tag == ir::TypeTag::U32 || tag == ir::TypeTag::U64 ||
+         tag == ir::TypeTag::Usize;
 }
 
 constexpr bool is_float(const ir::TypeTag tag) {
@@ -384,7 +390,26 @@ std::optional<Operand> Selector::scalar_of(const ir::Operand& op,
   }
   // A shape the selector has no spelling for: a float constant today,
   // whose bits are not an integer immediate.
-  (void)unsupported(span, "an operand the backend cannot spell");
+  if (op.is<ir::RegisterIdx>()) {
+    const ir::TypeTag tag = storage_.types()[op.type].tag;
+    if (passage_of(op.type) == Passage::TwoWord) {
+      // A two-word value the body reads as two words: the pair rides in
+      // its own slot, which is the reference a scalar read mistakes for
+      // one word.
+      (void)unsupported(span, "a two-word read");
+      return std::nullopt;
+    }
+    (void)tag;
+  }
+  const char* kind = "other";
+  if (op.is<ir::ImmutableIdx>()) {
+    kind = "imm";
+  } else if (op.is<ir::RegisterIdx>()) {
+    kind = "reg";
+  } else if (op.is<ir::BlockIdx>()) {
+    kind = "block";
+  }
+  (void)unsupported(span, kind);
   return std::nullopt;
 }
 
@@ -791,7 +816,23 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         (void)unsupported(span, "a memory operand the backend cannot spell");
         return false;
       }
+      const ir::TypeTag loaded = dst_tag();
+      // A value wider than one register crosses as its whole slot. The
+      // allocator turns this into the byte copy the destination needs;
+      // spelling the halves as separate moves would ask the encoder for
+      // a memory-to-memory move x86 does not have.
       const ir::TypeLayout layout = storage_.layout_of(dst_type_of(), width_);
+      if (is_two_word(loaded) || is_aggregate(loaded)) {
+        const u32 vreg = vreg_of(instr.dst, dst_type_of());
+        push(make_inst(
+            MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
+            Operand{VReg{vreg}},
+            Operand{Mem{.base = VReg{vreg_of(at(0).as_register(), at(0).type)},
+                        .index = std::nullopt,
+                        .scale = 1,
+                        .disp = 0}}));
+        return true;
+      }
       push(make_inst(
           MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
           dst_operand(),
@@ -811,11 +852,16 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
       const ir::Operand& value = at(0);
       const ir::TypeTag tag = storage_.types()[value.type].tag;
       const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
-      if (is_aggregate(tag) && value.is<ir::RegisterIdx>()) {
+      if (is_aggregate(tag) || is_two_word(tag)) {
+        if (!value.is<ir::RegisterIdx>()) {
+          (void)unsupported(span, "a constant aggregate store");
+          return false;
+        }
         // An aggregate crosses as the bytes its slot holds, which is
-        // the whole of what the store has to say.
+        // the whole of what the store has to say. A narrow aggregate
+        // must not write a whole word past its slot.
         push(make_inst(
-            MOp::Mov, 8,
+            MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
             Operand{Mem{.base = VReg{vreg_of(at(1).as_register(), at(1).type)},
                         .index = std::nullopt,
                         .scale = 1,
@@ -1028,19 +1074,37 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         return true;
       }
       // A value's field rides in its slot at the offset the layout
-      // gives it.
+      // gives it, which the aggregate's own field walk publishes.
+      if (!at(0).is<ir::RegisterIdx>()) {
+        (void)unsupported(span, "a memory operand the backend cannot spell");
+        return false;
+      }
+      if (!at(1).is<ir::ImmutableIdx>()) {
+        (void)unsupported(span, "a dynamic field projection");
+        return false;
+      }
       const ir::RegisterIdx aggregate = at(0).as_register();
-      const ir::TypeTag tag = storage_.types()[at(0).type].tag;
+      const ir::TypeIdx aggregate_type = at(0).type;
+      const ir::Immutable& index_imm =
+          storage_.immutables()[at(1).as_immutable()];
+      const u64 which =
+          index_imm.as_u64_integer(storage_.types()[index_imm.type.idx].tag);
       i64 offset = 0;
-      if (tag == ir::TypeTag::Str) {
-        if (!at(1).is<ir::ImmutableIdx>()) {
-          (void)unsupported(span, "a dynamic field projection");
-          return false;
-        }
-        const ir::Immutable& index_imm =
-            storage_.immutables()[at(1).as_immutable()];
-        const u64 which =
-            index_imm.as_u64_integer(storage_.types()[index_imm.type.idx].tag);
+      const ir::TypeTag tag = storage_.types()[aggregate_type.idx].tag;
+      if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Tuple) {
+        const ir::TypeIdxRange fields =
+            tag == ir::TypeTag::Struct
+                ? storage_.struct_types()
+                      [storage_.types()[aggregate_type.idx].as_struct()]
+                      .fields
+                : storage_
+                      .tuple_types()
+                      [storage_.types()[aggregate_type.idx].as_tuple()]
+                      .elements;
+        offset = static_cast<i64>(ir::field_offset(
+            storage_.state(), fields, static_cast<u32>(which), width_));
+      } else if (tag == ir::TypeTag::Str) {
+        // The pair the reference carries: the bytes, then the length.
         offset = static_cast<i64>(which * 8);
       } else {
         (void)unsupported(span,
@@ -1049,13 +1113,13 @@ bool Selector::emit(const ir::Instruction& instr, const diag::Span span) {
         return false;
       }
       const ir::TypeLayout layout = storage_.layout_of(dst_type_of(), width_);
+      // The pair rides in the register's own slot: reading a field is
+      // the slot reference, not a dereference of the word it holds.
       push(make_inst(MOp::Mov,
                      static_cast<u8>(layout.size > 8 ? 8 : layout.size),
                      dst_operand(),
-                     Operand{Mem{.base = VReg{vreg_of(aggregate, at(0).type)},
-                                 .index = std::nullopt,
-                                 .scale = 1,
-                                 .disp = static_cast<i32>(offset)}}));
+                     Operand{SlotRef{vreg_of(aggregate, at(0).type),
+                                     static_cast<i32>(offset)}}));
       return true;
     }
     case O::InsertValue: {
@@ -1449,43 +1513,56 @@ bool Selector::emit_call(const ir::Instruction& instr,
       return false;
     }
     const Passage passage = passage_of(value.type);
-    if (passage == Passage::ByAddress) {
-      if (next_register >= ARG_REG_COUNT) {
-        (void)unsupported(span,
-                          "a parameter past the argument "
-                          "registers");
-        return false;
+    if (passage != Passage::Register) {
+      if (passage == Passage::ByAddress) {
+        if (next_register >= ARG_REG_COUNT) {
+          (void)unsupported(span,
+                            "a parameter past the argument "
+                            "registers");
+          return false;
+        }
+        // The bytes cross by address: the slot the value's vreg holds
+        // is the copy the callee reads.
+        if (!value.is<ir::RegisterIdx>()) {
+          (void)unsupported(span, "a constant aggregate argument");
+          return false;
+        }
+        push(make_inst(
+            MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
+            Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}}));
+        continue;
       }
-      // The bytes cross by address: the slot the value's vreg holds
-      // is the copy the callee reads.
-      if (!value.is<ir::RegisterIdx>()) {
-        (void)unsupported(span, "a constant aggregate argument");
-        return false;
-      }
-      push(make_inst(
-          MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
-          Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}}));
-      continue;
-    }
-    const std::optional<Operand> side = scalar_of(value, span);
-    if (!side.has_value()) {
-      return false;
-    }
-    if (passage == Passage::TwoWord) {
+      // A two-word value rides in two registers, which is the pair its
+      // slot holds. A literal pair the body carries is the same two
+      // words: the bytes the data section holds, and the count of them.
       if (next_register + 1 >= ARG_REG_COUNT) {
         (void)unsupported(span,
                           "a parameter past the argument "
                           "registers");
         return false;
       }
-      // The pair rides in two registers, which is the slot's two
-      // words read whole.
+      if (!value.is<ir::RegisterIdx>()) {
+        const ir::Immutable& imm =
+            storage_.immutables()[value.as_immutable()];
+        const SymbolRef bytes = string_ref(
+            rodata_.intern(strings_.get(imm.data.str_id_value)));
+        push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                       Operand{bytes}));
+        push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                       Operand{Imm{static_cast<i64>(
+                           strings_.get(imm.data.str_id_value).size())}}));
+        continue;
+      }
       const u32 vreg = vreg_of(value.as_register(), value.type);
       push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
                      Operand{SlotRef{vreg, 0}}));
       push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
                      Operand{SlotRef{vreg, 8}}));
       continue;
+    }
+    const std::optional<Operand> side = scalar_of(value, span);
+    if (!side.has_value()) {
+      return false;
     }
     if (next_register >= ARG_REG_COUNT) {
       (void)unsupported(span, "a parameter past the argument registers");
@@ -1521,7 +1598,6 @@ bool Selector::emit_call(const ir::Instruction& instr,
     }
     // By address, the callee already wrote the slot.
   }
-  return true;
   return true;
 }
 
