@@ -42,7 +42,7 @@ bool backend_supports(codegen::Backend backend,
     case codegen::Backend::DirectWasm:
       return codegen::wasm::Wasm::supports(kind, target);
     case codegen::Backend::DirectX86_64:
-      return codegen::x86_64::X86_64::supports(kind, target);
+      return codegen::x86_64::X8664::supports(kind, target);
   }
   return false;
 }
@@ -133,7 +133,7 @@ emit_artifacts_with_backend(codegen::Backend backend,
       return codegen::emit_artifacts_with<codegen::wasm::Wasm>(
           std::move(request));
     case codegen::Backend::DirectX86_64:
-      return codegen::emit_artifacts_with<codegen::x86_64::X86_64>(
+      return codegen::emit_artifacts_with<codegen::x86_64::X8664>(
           std::move(request));
   }
   return base::make_err(codegen::EmitError::Unsupported);
@@ -157,7 +157,7 @@ base::Result<std::vector<u8>, codegen::EmitError> emit_with_backend(
     case codegen::Backend::DirectWasm:
       return codegen::emit_with<codegen::wasm::Wasm>(std::move(request));
     case codegen::Backend::DirectX86_64:
-      return codegen::emit_with<codegen::x86_64::X86_64>(std::move(request));
+      return codegen::emit_with<codegen::x86_64::X8664>(std::move(request));
   }
   return base::make_err(codegen::EmitError::Unsupported);
 }

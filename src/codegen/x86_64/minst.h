@@ -6,6 +6,8 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -84,6 +86,12 @@ enum class MOp : u8 {
   Jcc,
   Call,
   Ret,
+  // The system-call instruction, which reads the number in `rax` and
+  // answers in it.
+  Syscall,
+  // One byte of nothing, which is what carries a label the body only
+  // falls through to.
+  Nop,
   Push,
   Pop,
   Cqo,
@@ -91,6 +99,8 @@ enum class MOp : u8 {
   // set by the instructions before it; the copy runs on registers no
   // value lives in.
   RepMovsb,
+  // Fills `rcx` bytes at `rdi` with the byte in `al`.
+  RepStosb,
   Ud2,
 };
 
@@ -125,7 +135,7 @@ inline MInst make_inst(const MOp op, const u8 width, Operand a) {
   MInst inst;
   inst.op = op;
   inst.width = width;
-  inst.ops[0] = std::move(a);
+  inst.ops[0] = a;
   inst.count = 1;
   return inst;
 }
@@ -134,8 +144,8 @@ inline MInst make_inst(const MOp op, const u8 width, Operand a, Operand b) {
   MInst inst;
   inst.op = op;
   inst.width = width;
-  inst.ops[0] = std::move(a);
-  inst.ops[1] = std::move(b);
+  inst.ops[0] = a;
+  inst.ops[1] = b;
   inst.count = 2;
   return inst;
 }
@@ -148,9 +158,9 @@ inline MInst make_inst(const MOp op,
   MInst inst;
   inst.op = op;
   inst.width = width;
-  inst.ops[0] = std::move(a);
-  inst.ops[1] = std::move(b);
-  inst.ops[2] = std::move(c);
+  inst.ops[0] = a;
+  inst.ops[1] = b;
+  inst.ops[2] = c;
   inst.count = 3;
   return inst;
 }
@@ -160,7 +170,7 @@ inline MInst make_jcc(const Cond cond, Operand target) {
   inst.op = MOp::Jcc;
   inst.width = 8;
   inst.cond = cond;
-  inst.ops[0] = std::move(target);
+  inst.ops[0] = target;
   inst.count = 1;
   return inst;
 }
@@ -170,7 +180,7 @@ inline MInst make_setcc(const Cond cond, Operand dst) {
   inst.op = MOp::Setcc;
   inst.width = 1;
   inst.cond = cond;
-  inst.ops[0] = std::move(dst);
+  inst.ops[0] = dst;
   inst.count = 1;
   return inst;
 }
@@ -182,9 +192,10 @@ struct Body {
   std::vector<MInst> insts;
   // One entry per vreg: the IR type it holds.
   std::vector<u32> vreg_types;
-  // The label each IR block was given, by block index. A block the body
-  // never branches to still gets one.
-  std::vector<u32> block_labels;
+  // The label each IR block was given, by block index. Block indexes
+  // are the module's, so a map is what keeps a body's labels dense; a
+  // block the body never branches to still gets one.
+  std::unordered_map<u32, u32> block_labels;
   u32 label_count = 0;
   // The names `SymbolRef` indexes: callees, runtime entries, data.
   std::vector<std::string> symbols;

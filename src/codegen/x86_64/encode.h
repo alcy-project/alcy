@@ -8,6 +8,7 @@
 
 #include "codegen/object/elf64.h"
 #include "codegen/x86_64/minst.h"
+#include "fpag/base/numeric.h"
 
 namespace codegen::x86_64 {
 

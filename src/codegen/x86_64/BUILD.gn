@@ -16,6 +16,10 @@ source_set("x86_64") {
     "frame.h",
     "isa.h",
     "minst.h",
+    "rodata.cc",
+    "rodata.h",
+    "runtime.cc",
+    "runtime.h",
     "select.cc",
     "select.h",
   ]

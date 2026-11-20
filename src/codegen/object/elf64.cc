@@ -4,6 +4,7 @@
 #include "codegen/object/elf64.h"
 
 #include <string_view>
+#include <vector>
 
 #include "debug/check.h"
 #include "debug/dcheck.h"

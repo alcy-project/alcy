@@ -6,8 +6,9 @@
 #include <vector>
 
 #include "codegen/x86_64/minst.h"
-#include "ir/common.h"
+#include "fpag/base/numeric.h"
 #include "ir/storage.h"
+#include "ir/type.h"
 
 namespace codegen::x86_64 {
 
@@ -25,8 +26,13 @@ struct Frame {
   // One entry per vreg: the bytes the slot holds. A slot wider than a
   // register moves as bytes, which is what an aggregate is.
   std::vector<u32> vreg_size;
+  // One entry per vreg: whether the value is signed, which is what a
+  // narrow read uses to extend itself. A signed byte reads as -128, not
+  // as 128, or the compare against it lies.
+  std::vector<bool> vreg_signed;
   // For a vreg an `alloca` defines, the displacement of the storage it
-  // addresses. -1 for a vreg that holds an ordinary value.
+  // addresses. `NO_POINTEE` for a vreg that holds an ordinary value.
+  static constexpr i32 NO_POINTEE = -0x7fffffff - 1;
   std::vector<i32> vreg_pointee;
 };
 

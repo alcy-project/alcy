@@ -3,6 +3,8 @@
 
 #include "codegen/x86_64/backend.h"
 
+#include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,9 +17,21 @@
 #include "codegen/x86_64/allocate.h"
 #include "codegen/x86_64/encode.h"
 #include "codegen/x86_64/frame.h"
+#include "codegen/x86_64/isa.h"
+#include "codegen/x86_64/minst.h"
+#include "codegen/x86_64/rodata.h"
+#include "codegen/x86_64/runtime.h"
 #include "codegen/x86_64/select.h"
-#include "debug/dcheck.h"
+#include "diag/bag.h"
+#include "diag/span.h"
+#include "fpag/base/numeric.h"
+#include "fpag/base/result.h"
 #include "i18n/messages.h"
+#include "ir/common.h"
+#include "ir/function.h"
+#include "ir/storage.h"
+#include "ir/symbol_table.h"
+#include "ir/type.h"
 
 namespace codegen::x86_64 {
 
@@ -43,14 +57,14 @@ bool is_entry_candidate(const ir::Storage& storage,
 
 }  // namespace
 
-bool X86_64::supports(const codegen::OutputKind kind,
-                      const codegen::Target& target) {
+bool X8664::supports(const codegen::OutputKind kind,
+                     const codegen::Target& target) {
   return kind == codegen::OutputKind::Object &&
          target.triple.rfind("x86_64", 0) == 0 &&
          target.triple.find("linux") != std::string::npos;
 }
 
-base::Result<std::vector<u8>, codegen::EmitError> X86_64::emit(
+base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     codegen::EmitRequest request) {
   if (request.options.freestanding) {
     // The freestanding entry and the runtime it calls are the next thing
@@ -60,6 +74,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X86_64::emit(
   ir::Storage storage = std::move(request.storage).unwrap();
   const ir::SymbolTable& strings = *request.strings;
   diag::DiagBag& bag = *request.bag;
+  RoData rodata;
 
   // The entry the program starts at, which is also what reachability
   // grows from: a program's object carries what it reaches and nothing
@@ -95,32 +110,22 @@ base::Result<std::vector<u8>, codegen::EmitError> X86_64::emit(
   // and a program that calls `main` itself calls a name of its own.
   const std::string entry_symbol = "alcy_main";
 
-  for (const ir::FunctionIdx index : storage.functions().idx_range()) {
-    if (!reachable[index.idx]) {
-      continue;
-    }
-    const ir::Function& function = storage.functions()[index];
-    base::Result<Body, codegen::EmitError> selected =
-        select_function(storage, strings, request.instr_spans, function, bag,
-                        request.target.width);
-    if (selected.is_err()) {
-      return base::make_err(std::move(selected).unwrap_err());
-    }
-    Body body = std::move(selected).unwrap();
+  // One body's bytes, its symbol, and the patches its references asked
+  // for, moved by the offset it landed at.
+  const auto emit_body = [&](Body& body, const std::string& symbol,
+                             const object::SymbolBind bind) {
     const Frame frame = layout_frame(body, storage, request.target.width);
     allocate(body, frame);
     Encoded encoded = encode(body);
-
     const u64 at = text.bytes.size();
     text.bytes.insert(text.bytes.end(), encoded.bytes.begin(),
                       encoded.bytes.end());
     object.symbols.push_back(object::Symbol{
-        .name = index == *entry ? entry_symbol
-                                : "alcy.fn." + std::to_string(index.idx),
+        .name = symbol,
         .section = 0,
         .offset = at,
         .size = encoded.bytes.size(),
-        .bind = object::SymbolBind::Local,
+        .bind = bind,
         .type = object::SymbolType::Func,
     });
     for (Encoded::Patch& patch : encoded.patches) {
@@ -132,6 +137,39 @@ base::Result<std::vector<u8>, codegen::EmitError> X86_64::emit(
           .addend = patch.addend,
       });
     }
+  };
+
+  // The runtime names the selected bodies reach, which is what this
+  // object has to define.
+  std::vector<std::string> runtime_names;
+
+  for (const ir::FunctionIdx index : storage.functions().idx_range()) {
+    if (!reachable[index.idx]) {
+      continue;
+    }
+    const ir::Function& function = storage.functions()[index];
+    base::Result<Body, codegen::EmitError> selected =
+        select_function(storage, strings, request.instr_spans, function, bag,
+                        request.target.width, rodata);
+    if (selected.is_err()) {
+      return base::make_err(std::move(selected).unwrap_err());
+    }
+    Body body = std::move(selected).unwrap();
+    for (const std::string& name : body.symbols) {
+      if (runtime::defines(name)) {
+        runtime_names.push_back(name);
+      }
+    }
+    emit_body(body, index == *entry ? entry_symbol : internal_symbol(index),
+              object::SymbolBind::Local);
+  }
+
+  // The runtime, for the names the program reaches. A body is built
+  // before the data section is written, because the text it prints is
+  // data too.
+  for (const std::string& name : runtime_names) {
+    Body body = runtime::build(name, rodata);
+    emit_body(body, name, object::SymbolBind::Local);
   }
 
   // The wrapper the startup calls. It hands the program's own `main`
@@ -170,6 +208,32 @@ base::Result<std::vector<u8>, codegen::EmitError> X86_64::emit(
   }
 
   object.sections.push_back(std::move(text));
+
+  // The read-only data, after every body and runtime piece has said
+  // what it names. It is the second section, which is the index its
+  // symbols spell.
+  if (!rodata.names().empty()) {
+    object::Section data{.name = ".rodata",
+                         .bytes = {},
+                         .align = 1,
+                         .alloc = true,
+                         .bits = true};
+    for (usize at = 0; at < rodata.names().size(); ++at) {
+      const u64 offset = data.bytes.size();
+      const std::string& bytes = rodata.bytes()[at];
+      data.bytes.insert(data.bytes.end(), bytes.begin(), bytes.end());
+      object.symbols.push_back(object::Symbol{
+          .name = rodata.names()[at],
+          .section = 1,
+          .offset = offset,
+          .size = bytes.size(),
+          .bind = object::SymbolBind::Local,
+          .type = object::SymbolType::Object,
+      });
+    }
+    object.sections.push_back(std::move(data));
+  }
+
   return base::make_ok(object::write_elf64_x86_64(object));
 }
 

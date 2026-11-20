@@ -8,12 +8,23 @@
 
 #include "codegen/backend.h"
 #include "codegen/x86_64/minst.h"
+#include "codegen/x86_64/rodata.h"
 #include "diag/bag.h"
+#include "diag/span.h"
 #include "fpag/base/result.h"
+#include "ir/common.h"
+#include "ir/function.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
+#include "ir/type.h"
 
 namespace codegen::x86_64 {
+
+// The symbol one function's definition carries inside the object it is
+// part of. The entry is named by the wrapper the backend writes; every
+// other body is this object's own, and the name only has to be stable
+// within the one object a call reaches it from.
+[[nodiscard]] std::string internal_symbol(ir::FunctionIdx index);
 
 // Selects one function's body: verified IR in, machine instructions out,
 // with a virtual register for every IR register the body reads. The
@@ -28,6 +39,7 @@ namespace codegen::x86_64 {
     std::span<const diag::Span> spans,
     const ir::Function& function,
     diag::DiagBag& bag,
-    ir::PointerWidth width);
+    ir::PointerWidth width,
+    RoData& rodata);
 
 }  // namespace codegen::x86_64

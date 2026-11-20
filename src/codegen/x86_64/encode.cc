@@ -4,19 +4,37 @@
 #include "codegen/x86_64/encode.h"
 
 #include <optional>
+#include <utility>
+#include <variant>
+#include <vector>
 
+#include "codegen/object/elf64.h"
+#include "codegen/x86_64/isa.h"
+#include "codegen/x86_64/minst.h"
 #include "debug/check.h"
 #include "debug/dcheck.h"
+#include "fpag/base/numeric.h"
 
 namespace codegen::x86_64 {
 
 namespace {
 
 // The alu family's opcode slot, shared by every width.
-enum class Alu : u8 { Add = 0, Or = 1, And = 4, Sub = 5, Xor = 6, Cmp = 7 };
+enum class Alu : u8 {
+  Add = 0,
+  Or = 1,
+  And = 4,
+  Sub = 5,
+  Xor = 6,
+  Cmp = 7,
+};
 
 // The shift family's opcode slot.
-enum class Shift : u8 { Shl = 4, Shr = 5, Sar = 7 };
+enum class Shift : u8 {
+  Shl = 4,
+  Shr = 5,
+  Sar = 7,
+};
 
 // The register a memory operand names. Allocation has answered every
 // one; a vreg here is an emitter bug the encoder refuses to guess at.
@@ -79,15 +97,16 @@ void prefix(std::vector<u8>& out,
             const bool w,
             const std::optional<Reg> reg,
             const std::optional<Reg> rm,
-            const std::optional<Reg> index) {
+            const std::optional<Reg> index,
+            const bool rm_register = true) {
   if (width == 2) {
     out.push_back(0x66);
   }
   const bool byte = width == 1;
   const bool r =
       reg.has_value() && (rex_bit(*reg) || (byte && byte_needs_rex(*reg)));
-  const bool b =
-      rm.has_value() && (rex_bit(*rm) || (byte && byte_needs_rex(*rm)));
+  const bool b = rm.has_value() &&
+                 (rex_bit(*rm) || (rm_register && byte && byte_needs_rex(*rm)));
   const bool x = index.has_value() && rex_bit(*index);
   if (w || r || b || x) {
     out.push_back(static_cast<u8>(0x40 | (w ? 8 : 0) | (r ? 4 : 0) |
@@ -166,8 +185,25 @@ u32 modrm_mem(std::vector<u8>& out, const Reg reg, const Mem& mem) {
   return 4;
 }
 
+// The condition slot the opcode family reads, which is the order the
+// set and branch forms share and not the order the selector names them
+// in.
 u8 cond_code(const Cond cond) {
-  return static_cast<u8>(cond);
+  switch (cond) {
+    case Cond::E: return 0x4;
+    case Cond::Ne: return 0x5;
+    case Cond::B: return 0x2;
+    case Cond::Be: return 0x6;
+    case Cond::A: return 0x7;
+    case Cond::Ae: return 0x3;
+    case Cond::L: return 0xc;
+    case Cond::Le: return 0xe;
+    case Cond::G: return 0xf;
+    case Cond::Ge: return 0xd;
+    case Cond::S: return 0x8;
+    case Cond::Ns: return 0x9;
+  }
+  return 0x4;
 }
 
 void alu_rr(std::vector<u8>& out,
@@ -187,23 +223,26 @@ void alu_rm_imm(std::vector<u8>& out,
                 const Reg dst,
                 const i64 value) {
   prefix(out, width, width == 8, std::nullopt, dst, std::nullopt);
-  out.push_back(
-      static_cast<u8>(0xc0 | static_cast<u8>(alu) << 3 | reg_code(dst)));
+  // The opcode comes first and the register rides in the ModRM; a
+  // 64-bit immediate does not exist, so a value that wide reaches an
+  // alu opcode through a register instead.
   if (width == 1) {
     DCHECK(value >= -128 && value <= 127);
     out.push_back(0x80);
-    put(out, static_cast<u64>(value) & 0xff, 1);
-    return;
-  }
-  if (value >= -128 && value <= 127) {
+  } else if (value >= -128 && value <= 127) {
     out.push_back(0x83);
-    put(out, static_cast<u64>(value) & 0xff, 1);
-    return;
+  } else {
+    DCHECK_MSG(width != 8 || (value >= -0x80000000LL && value <= 0x7fffffffLL),
+               "a 64-bit immediate needs a register");
+    out.push_back(0x81);
   }
-  DCHECK_MSG(width != 8 || (value >= -0x80000000LL && value <= 0x7fffffffLL),
-             "a 64-bit immediate needs a register");
-  out.push_back(0x81);
-  put_i32(out, static_cast<i32>(value));
+  out.push_back(
+      static_cast<u8>(0xc0 | static_cast<u8>(alu) << 3 | reg_code(dst)));
+  if (width == 1 || (value >= -128 && value <= 127)) {
+    put(out, static_cast<u64>(value) & 0xff, 1);
+  } else {
+    put_i32(out, static_cast<i32>(value));
+  }
 }
 
 void mem_disp(std::vector<u8>& out, const u32 disp_bytes, const i32 disp) {
@@ -251,36 +290,58 @@ Encoded encode(const Body& body) {
             modrm_rr(out, *from, *to);
           } else if (const Imm* value = std::get_if<Imm>(&src);
                      value != nullptr) {
-            // A 32-bit immediate is what every other form carries; past
-            // it, only the register form holds the whole value.
+            // A 32-bit immediate is what most forms carry; past it,
+            // only the register form holds the whole value. At 64 bits
+            // the register-immediate opcode reads a whole 64 bits, so a
+            // smaller constant takes the store form instead.
             constexpr i64 I32_MAX = 0x7fffffff;
             constexpr i64 I32_MIN = -0x7fffffff - 1;
             if (w && (value->value > I32_MAX || value->value < I32_MIN)) {
-              // A whole 64-bit immediate takes the one form that
-              // carries it.
               prefix(out, width, true, std::nullopt, *to, std::nullopt);
               out.push_back(static_cast<u8>(0xb8 + reg_code(*to)));
               put_i64(out, value->value);
+            } else if (w) {
+              prefix(out, width, true, std::nullopt, *to, std::nullopt);
+              out.push_back(0xc7);
+              out.push_back(static_cast<u8>(0xc0 | reg_code(*to)));
+              put_i32(out, static_cast<i32>(value->value));
             } else {
               prefix(out, width, w, std::nullopt, *to, std::nullopt);
               out.push_back(static_cast<u8>(width == 1 ? 0xb0 : 0xb8) +
                             reg_code(*to));
-              put(out, static_cast<u64>(value->value), width == 8 ? 4 : width);
+              put(out, static_cast<u64>(value->value), width);
             }
           } else if (const Mem* from = std::get_if<Mem>(&src);
                      from != nullptr) {
-            prefix(out, width, w, *to, base_of(*from), index_of(*from));
+            prefix(out, width, w, *to, base_of(*from), index_of(*from),
+                   /*rm_register=*/false);
             out.push_back(static_cast<u8>(width == 1 ? 0x8a : 0x8b));
             mem_disp(out, modrm_mem(out, *to, *from), from->disp);
+          } else if (const SymbolRef* from = std::get_if<SymbolRef>(&src);
+                     from != nullptr) {
+            // An address this object cannot know: the whole value rides
+            // in the one immediate form that carries 64 bits, and the
+            // link fills it.
+            prefix(out, 8, true, std::nullopt, *to, std::nullopt);
+            out.push_back(static_cast<u8>(0xb8 + reg_code(*to)));
+            Encoded::Patch patch;
+            patch.offset = out.size();
+            patch.kind = object::RelocKind::Abs64;
+            patch.symbol = body.symbols[from->id];
+            patch.addend = 0;
+            encoded.patches.push_back(std::move(patch));
+            put_i64(out, 0);
           }
         } else if (const Mem* to = std::get_if<Mem>(&dst); to != nullptr) {
           if (const Reg* from = std::get_if<Reg>(&src); from != nullptr) {
-            prefix(out, width, w, *from, base_of(*to), index_of(*to));
+            prefix(out, width, w, *from, base_of(*to), index_of(*to),
+                   /*rm_register=*/false);
             out.push_back(static_cast<u8>(width == 1 ? 0x88 : 0x89));
             mem_disp(out, modrm_mem(out, *from, *to), to->disp);
           } else if (const Imm* value = std::get_if<Imm>(&src);
                      value != nullptr) {
-            prefix(out, width, w, std::nullopt, base_of(*to), index_of(*to));
+            prefix(out, width, w, std::nullopt, base_of(*to), index_of(*to),
+                   /*rm_register=*/false);
             out.push_back(width == 1 ? 0xc6 : 0xc7);
             mem_disp(out, modrm_mem(out, Reg::Rax, *to), to->disp);
             put(out, static_cast<u64>(value->value), width == 8 ? 4 : width);
@@ -289,35 +350,49 @@ Encoded encode(const Body& body) {
         break;
       }
       case MOp::Movzx: {
-        // Widens an unsigned value: `movzx r, r/m8` and its 16-bit form.
+        // Widens an unsigned value: `movzx r, r/m8` and its 16-bit form,
+        // from a register or from memory.
         const Reg to = std::get<Reg>(inst.at(0));
-        const Reg from = std::get<Reg>(inst.at(1));
-        prefix(out, 8, w, to, from, std::nullopt);
+        prefix(out, 8, w, to, std::nullopt, std::nullopt);
         out.push_back(0x0f);
         out.push_back(width == 1 ? 0xb6 : 0xb7);
-        modrm_rr(out, to, from);
+        if (const Reg* reg_from = std::get_if<Reg>(&inst.at(1));
+            reg_from != nullptr) {
+          modrm_rr(out, to, *reg_from);
+        } else {
+          const Mem& mem_from = std::get<Mem>(inst.at(1));
+          mem_disp(out, modrm_mem(out, to, mem_from), mem_from.disp);
+        }
         break;
       }
       case MOp::Movsx: {
+        // Widens a signed value, from a register or from memory: the
+        // narrow forms have their own opcodes and the 32-bit one is
+        // named for itself.
         const Reg to = std::get<Reg>(inst.at(0));
-        const Reg from = std::get<Reg>(inst.at(1));
-        prefix(out, 8, w, to, from, std::nullopt);
+        prefix(out, 8, w, to, std::nullopt, std::nullopt);
         out.push_back(0x0f);
         if (width == 1) {
           out.push_back(0xbe);
         } else if (width == 2) {
           out.push_back(0xbf);
         } else {
-          // The 32-bit form has a name of its own.
           out.push_back(0x63);
         }
-        modrm_rr(out, to, from);
+        if (const Reg* reg_from = std::get_if<Reg>(&inst.at(1));
+            reg_from != nullptr) {
+          modrm_rr(out, to, *reg_from);
+        } else {
+          const Mem& mem_from = std::get<Mem>(inst.at(1));
+          mem_disp(out, modrm_mem(out, to, mem_from), mem_from.disp);
+        }
         break;
       }
       case MOp::Lea: {
         const Reg to = std::get<Reg>(inst.at(0));
         const Mem& from = std::get<Mem>(inst.at(1));
-        prefix(out, 8, true, to, base_of(from), index_of(from));
+        prefix(out, 8, true, to, base_of(from), index_of(from),
+               /*rm_register=*/false);
         out.push_back(0x8d);
         mem_disp(out, modrm_mem(out, to, from), from.disp);
         break;
@@ -449,6 +524,15 @@ Encoded encode(const Body& body) {
         out.push_back(0xc3);
         break;
       }
+      case MOp::Syscall: {
+        out.push_back(0x0f);
+        out.push_back(0x05);
+        break;
+      }
+      case MOp::Nop: {
+        out.push_back(0x90);
+        break;
+      }
       case MOp::Push: {
         const Reg reg = std::get<Reg>(inst.at(0));
         if (rex_bit(reg)) {
@@ -478,6 +562,12 @@ Encoded encode(const Body& body) {
         out.push_back(0xfc);
         out.push_back(0xf3);
         out.push_back(0xa4);
+        break;
+      }
+      case MOp::RepStosb: {
+        out.push_back(0xfc);
+        out.push_back(0xf3);
+        out.push_back(0xaa);
         break;
       }
       case MOp::Ud2: {

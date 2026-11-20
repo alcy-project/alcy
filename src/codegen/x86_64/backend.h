@@ -7,6 +7,7 @@
 
 #include "codegen/backend.h"
 #include "codegen/target.h"
+#include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 
 namespace codegen::x86_64 {
@@ -15,7 +16,7 @@ namespace codegen::x86_64 {
 // x86_64 target with a relocatable object the link step turns into a
 // program. It exists so a debug build does not wait on LLVM, and it
 // grows its lowering op by op rather than inheriting one.
-struct X86_64 {
+struct X8664 {
   static constexpr codegen::Backend ID = codegen::Backend::DirectX86_64;
 
   static bool supports(codegen::OutputKind kind, const codegen::Target& target);
