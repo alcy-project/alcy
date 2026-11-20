@@ -701,6 +701,19 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
     return (flags[i] & NODE_GENERIC) != 0;
   };
   const auto is_unary = [&](usize i) { return (flags[i] & NODE_UNARY) != 0; };
+  // Malformed source reaches the printer as Error nodes with gaps pinned
+  // verbatim. A later pass reads those gaps as real breaks and can make a
+  // group break where the first pass kept it flat, so a dot or an operator
+  // in such a flow is not a wrapping point: the layout stays flat and a
+  // second pass reads it the same way.
+  bool has_error = false;
+  for (const cst::Node* node : nodes) {
+    if (node->kind == cst::NodeKind::Token &&
+        node->token == lexer::TokenKind::Error) {
+      has_error = true;
+      break;
+    }
+  }
 
   std::vector<Piece> pieces;
   pieces.reserve(nodes.size() + 2);
@@ -827,7 +840,7 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
       }
       sep = Sep::None;
     } else if (pending_break) {
-      sep = allow_wrap ? Sep::Line : Sep::Space;
+      sep = allow_wrap && !has_error ? Sep::Line : Sep::Space;
     } else if (node.kind == cst::NodeKind::Token &&
                node.token == lexer::TokenKind::Dot && prev != nullptr &&
                prev->kind == cst::NodeKind::Token &&
@@ -851,7 +864,7 @@ Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
       // the middle of a run of dots it must not: a break there
       // re-pairs the dots into range tokens on the next pass, and the
       // layout moves with the pairing.
-      sep = allow_wrap ? Sep::SoftLine : Sep::None;
+      sep = allow_wrap && !has_error ? Sep::SoftLine : Sep::None;
     } else if (space_before(prev, prev_generic, prev_unary, node,
                             is_generic(i))) {
       sep = Sep::Space;
