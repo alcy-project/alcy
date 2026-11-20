@@ -37,8 +37,8 @@ struct Catalog {
   std::vector<std::string> languages;
   std::string default_language;
   std::unordered_map<std::string, std::string> language_names;
-  // The default language's message table, keyed order preserved for
-  // the doctest that counts the entries.
+  // The default language's message table. Unordered: lookups are by
+  // key, and the catalog file's own order carries no meaning.
   std::unordered_map<std::string, std::string> messages;
   std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
       per_language;

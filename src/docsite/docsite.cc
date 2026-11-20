@@ -125,33 +125,56 @@ base::Result<std::optional<Options>, std::string> parse_args(i32 argc,
 }
 
 // io::create_directory is one level deep, and a route sits a few
-// levels under the dist root, so the parents are made one by one.
-void create_directories(const std::string& path) {
+// levels under the dist root, so the parents are made one by one. A
+// level that exists already is fine; a level that cannot be made is
+// not, and the caller hears about it.
+bool create_directories(const std::string& path) {
   usize index = 0;
   while (index < path.size()) {
     const usize slash = path.find('/', index);
     if (slash == std::string::npos) {
       break;
     }
-    io::create_directory(path.substr(0, slash));
+    // An absolute path's first component is empty; the root exists.
+    if (slash > index && !io::create_directory(path.substr(0, slash))) {
+      return false;
+    }
     index = slash + 1;
   }
-  io::create_directory(path);
+  return io::create_directory(path);
 }
 
-std::string read_whole_file(std::string_view path) {
-  return io::read_file(std::string(path));
+// Reads a file the build depends on: a template, an image, a script.
+// An empty read is a missing or unreadable file, and both stop the
+// build - half a site published as a success is the one failure the
+// reader cannot see past.
+base::Result<std::string, std::string> read_input_file(std::string_view path) {
+  if (!io::is_file(std::string(path))) {
+    return base::make_err("cannot read " + std::string(path) +
+                          ": it does not exist");
+  }
+  std::string bytes = io::read_file(std::string(path));
+  if (bytes.empty()) {
+    return base::make_err("cannot read " + std::string(path) +
+                          ": the file is empty");
+  }
+  return base::make_ok(std::move(bytes));
 }
 
-void write_string_to_file(std::string_view root,
-                          std::string_view route,
-                          std::string_view content) {
+base::Result<void, std::string> write_string_to_file(std::string_view root,
+                                                     std::string_view route,
+                                                     std::string_view content) {
   const std::string target = ssg::join_posix({root, route});
-  create_directories(ssg::dirname_posix(target));
+  if (!create_directories(ssg::dirname_posix(target))) {
+    return base::make_err("cannot create the directory for " + target);
+  }
   const std::string bytes(content);
   const std::span<const u8> view(reinterpret_cast<const u8*>(bytes.data()),
                                  bytes.size());
-  io::write_file(view, target);
+  if (!io::write_file(view, target)) {
+    return base::make_err("cannot write " + target);
+  }
+  return base::make_ok();
 }
 
 bool site_exists_relative(std::string_view root, std::string_view candidate) {
@@ -211,11 +234,15 @@ struct Context {
   std::unordered_set<std::string> planned;
 };
 
-std::string boot_text(std::string_view site) {
-  std::string boot =
-      read_whole_file(ssg::join_posix({site, "shared", "boot.js"}));
-  if (boot.find("</script") != std::string::npos) {
-    return std::string();
+base::Result<std::string, std::string> boot_text(std::string_view site) {
+  base::Result<std::string, std::string> boot =
+      read_input_file(ssg::join_posix({site, "shared", "boot.js"}));
+  if (boot.is_err()) {
+    return boot;
+  }
+  if (boot.value().find("</script") != std::string::npos) {
+    return base::make_err(
+        std::string("shared/boot.js cannot be inlined: it contains </script>"));
   }
   return boot;
 }
@@ -347,25 +374,32 @@ std::unordered_map<std::string, std::string> template_values_for(
   return values;
 }
 namespace {
-void write_spec_assets(Context& context,
-                       std::string_view site_root,
-                       std::string_view dist_root) {
+base::Result<void, std::string> write_spec_assets(Context& context,
+                                                  std::string_view site_root,
+                                                  std::string_view dist_root) {
   base::Result<std::vector<ssg::SpecAsset>, std::string> assets =
       ssg::discover_spec_assets(
           ssg::join_posix({site_root, context.options.spec}));
   if (assets.is_err()) {
-    return;  // An empty spec tree was caught earlier at the discover step.
+    return base::make_ok();  // An empty spec tree was caught at discover.
   }
   const std::vector<ssg::SpecAsset> asset_list = std::move(assets).unwrap();
   for (const std::string& language : context.catalog.languages) {
     const std::string prefix = ssg::prefix_of(context.catalog, language);
     for (const ssg::SpecAsset& asset : asset_list) {
-      write_string_to_file(
-          dist_root, prefix + asset.path,
-          read_whole_file(ssg::join_posix(
-              {site_root, context.options.spec, asset.source_rel})));
+      base::Result<std::string, std::string> bytes = read_input_file(
+          ssg::join_posix({site_root, context.options.spec, asset.source_rel}));
+      if (bytes.is_err()) {
+        return base::make_err(std::move(bytes).unwrap_err());
+      }
+      base::Result<void, std::string> written = write_string_to_file(
+          dist_root, prefix + asset.path, std::move(bytes).unwrap());
+      if (written.is_err()) {
+        return written;
+      }
     }
   }
+  return base::make_ok();
 }
 struct FenceResult {
   usize count = 0;
@@ -376,12 +410,12 @@ struct FenceResult {
 
 FenceResult fence_validate_all(const std::vector<ssg::DocSource>& sources);
 namespace {
-void write_article_tree(Context& context,
-                        const std::vector<ssg::DocSource>& sources,
-                        const ssg::Tree& tree,
-                        std::string_view dist,
-                        ssg::LinkAudit* audit,
-                        std::vector<std::vector<ssg::DocPage>>* by_language);
+base::Result<void, std::string> write_article_tree(
+    Context& context,
+    const std::vector<ssg::DocSource>& sources,
+    const ssg::Tree& tree,
+    std::string_view dist,
+    ssg::LinkAudit* audit);
 }  // namespace
 
 i32 run(i32 argc, char** argv) {
@@ -406,12 +440,12 @@ i32 run(i32 argc, char** argv) {
     return 1;
   }
   context.catalog = std::move(loaded).unwrap();
-  context.boot = boot_text(context.options.site);
-  if (context.boot.empty()) {
-    std::cerr << "alcy-docsite: shared/boot.js cannot be inlined: it contains "
-                 "</script>\n";
+  base::Result<std::string, std::string> boot = boot_text(context.options.site);
+  if (boot.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(boot).unwrap_err() << "\n";
     return 1;
   }
+  context.boot = std::move(boot).unwrap();
 
   const std::string docs_dir =
       ssg::join_posix({context.options.repo_root, context.options.docs});
@@ -518,13 +552,21 @@ i32 run(i32 argc, char** argv) {
 
   // Landing and playground stamped from their templates.
   const std::string& site_dir = context.options.site;
-  const std::string landing =
-      read_whole_file(ssg::join_posix({site_dir, "index.html"}));
-  const std::string playground =
-      read_whole_file(ssg::join_posix({site_dir, "playground", "index.html"}));
+  base::Result<std::string, std::string> landing =
+      read_input_file(ssg::join_posix({site_dir, "index.html"}));
+  if (landing.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(landing).unwrap_err() << "\n";
+    return 1;
+  }
+  base::Result<std::string, std::string> playground =
+      read_input_file(ssg::join_posix({site_dir, "playground", "index.html"}));
+  if (playground.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(playground).unwrap_err() << "\n";
+    return 1;
+  }
   const std::vector<std::pair<std::string_view, std::string_view>> templates = {
-      {"index.html", landing},
-      {"playground/index.html", playground},
+      {"index.html", landing.value()},
+      {"playground/index.html", playground.value()},
   };
   for (const std::string& language : context.catalog.languages) {
     const std::string prefix = ssg::prefix_of(context.catalog, language);
@@ -538,12 +580,22 @@ i32 run(i32 argc, char** argv) {
                   << "\n";
         return 1;
       }
-      write_string_to_file(dist, prefix + std::string(tree_path),
-                           std::move(stamped).unwrap());
+      base::Result<void, std::string> written = write_string_to_file(
+          dist, prefix + std::string(tree_path), std::move(stamped).unwrap());
+      if (written.is_err()) {
+        std::cerr << "alcy-docsite: " << std::move(written).unwrap_err()
+                  << "\n";
+        return 1;
+      }
     }
   }
 
-  write_spec_assets(context, context.options.repo_root, dist);
+  base::Result<void, std::string> assets =
+      write_spec_assets(context, context.options.repo_root, dist);
+  if (assets.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(assets).unwrap_err() << "\n";
+    return 1;
+  }
 
   // Articles in every tree, with the link audit watching every
   // resolve. The contents pages come out per tree-owned set.
@@ -555,21 +607,48 @@ i32 run(i32 argc, char** argv) {
           {&ssg::TOOLS_TREE, &tools_pages},
   };
   for (const auto& [tree, sources] : trees) {
-    write_article_tree(context, *sources, *tree, dist, &audit, nullptr);
+    base::Result<void, std::string> written =
+        write_article_tree(context, *sources, *tree, dist, &audit);
+    if (written.is_err()) {
+      std::cerr << "alcy-docsite: " << std::move(written).unwrap_err() << "\n";
+      return 1;
+    }
   }
 
   // The files every static site needs at the root, and the ones the
   // reference links to. The 404 carries one runnable block: the page
   // is missing, the compiler is not.
-  const std::string og = read_whole_file(ssg::join_posix({site_dir, "og.png"}));
-  write_string_to_file(dist, "og.png", og);
-  write_string_to_file(
-      dist, "favicon.svg",
-      read_whole_file(ssg::join_posix({site_dir, "favicon.svg"})));
-  write_string_to_file(
+  base::Result<std::string, std::string> og =
+      read_input_file(ssg::join_posix({site_dir, "og.png"}));
+  if (og.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(og).unwrap_err() << "\n";
+    return 1;
+  }
+  base::Result<std::string, std::string> favicon =
+      read_input_file(ssg::join_posix({site_dir, "favicon.svg"}));
+  if (favicon.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(favicon).unwrap_err() << "\n";
+    return 1;
+  }
+  base::Result<void, std::string> copied =
+      write_string_to_file(dist, "og.png", og.value());
+  if (copied.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(copied).unwrap_err() << "\n";
+    return 1;
+  }
+  copied = write_string_to_file(dist, "favicon.svg", favicon.value());
+  if (copied.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(copied).unwrap_err() << "\n";
+    return 1;
+  }
+  base::Result<void, std::string> written = write_string_to_file(
       dist, "robots.txt",
       "User-agent: *\nAllow: /\n\n"
       "Sitemap: https://alcy-project.github.io/alcy/sitemap.xml\n");
+  if (written.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(written).unwrap_err() << "\n";
+    return 1;
+  }
   std::string sitemap_sources = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
   sitemap_sources +=
       "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
@@ -592,7 +671,11 @@ i32 run(i32 argc, char** argv) {
         "  <url>\n    <loc>" + ssg::canonical_url(route) + "</loc>\n  </url>\n";
   }
   sitemap_sources += "</urlset>\n";
-  write_string_to_file(dist, "sitemap.xml", sitemap_sources);
+  written = write_string_to_file(dist, "sitemap.xml", sitemap_sources);
+  if (written.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(written).unwrap_err() << "\n";
+    return 1;
+  }
 
   // The search index covers the English trees once; the module that
   // reads it resolves a route into the reader's own tree.
@@ -627,7 +710,11 @@ i32 run(i32 argc, char** argv) {
     search_json += index + 1 == indexed.size() ? "\n" : ",\n";
   }
   search_json += "]\n";
-  write_string_to_file(dist, "search-index.json", search_json);
+  written = write_string_to_file(dist, "search-index.json", search_json);
+  if (written.is_err()) {
+    std::cerr << "alcy-docsite: " << std::move(written).unwrap_err() << "\n";
+    return 1;
+  }
 
   // The 404 page: GitHub Pages serves it under whatever path was
   // asked for, so its links are written from the deployment root.
@@ -636,9 +723,13 @@ i32 run(i32 argc, char** argv) {
         [&](std::string_view code) {
           return context.highlight.highlight_code(code);
         };
-    write_string_to_file(
+    base::Result<void, std::string> written = write_string_to_file(
         dist, "404.html",
         ssg::render_not_found(context.boot, context.stamp, renderer));
+    if (written.is_err()) {
+      std::cerr << "alcy-docsite: " << std::move(written).unwrap_err() << "\n";
+      return 1;
+    }
   }
 
   const std::vector<std::string>& checker_errors = audit.errors();
@@ -703,28 +794,23 @@ namespace {
 // One pass writes one tree of pages: its contents indexes and its
 // articles, per language. The contents pages are written first, so
 // a build that stops midway has not published half a tree.
-void write_article_tree(Context& context,
-                        const std::vector<ssg::DocSource>& sources,
-                        const ssg::Tree& tree,
-                        std::string_view dist,
-                        ssg::LinkAudit* audit,
-                        std::vector<std::vector<ssg::DocPage>>* by_language) {
-  for (usize language_index = 0;
-       language_index < context.catalog.languages.size(); language_index++) {
-    const std::string& language = context.catalog.languages[language_index];
+base::Result<void, std::string> write_article_tree(
+    Context& context,
+    const std::vector<ssg::DocSource>& sources,
+    const ssg::Tree& tree,
+    std::string_view dist,
+    ssg::LinkAudit* audit) {
+  for (const std::string& language : context.catalog.languages) {
     std::vector<ssg::DocPage> pages =
         ssg::pages_for_language(context.catalog, sources, language);
-    if (by_language != nullptr) {
-      while (by_language->size() <= language_index) {
-        by_language->emplace_back();
-      }
-      (*by_language)[language_index] = pages;
-    }
     const std::string prefix = ssg::prefix_of(context.catalog, language);
-    write_string_to_file(
+    base::Result<void, std::string> written = write_string_to_file(
         dist, prefix + std::string(tree.segment) + "/index.html",
         ssg::render_tree_index(pages, context.catalog, language, context.boot,
                                context.stamp, tree));
+    if (written.is_err()) {
+      return written;
+    }
     for (const ssg::DocPage& page : pages) {
       AuditContext audit_ctx{.audit = audit, .page = &page};
       ssg::PageOptions page_options;
@@ -739,10 +825,14 @@ void write_article_tree(Context& context,
       };
       page_options.resolve_link = &audit_link;
       page_options.resolve_context = &audit_ctx;
-      write_string_to_file(dist, page.route,
-                           ssg::render_guide_page(page, page_options));
+      written = write_string_to_file(
+          dist, page.route, ssg::render_guide_page(page, page_options));
+      if (written.is_err()) {
+        return written;
+      }
     }
   }
+  return base::make_ok();
 }
 
 }  // namespace

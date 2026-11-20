@@ -140,6 +140,7 @@ executable("tests") {
       "ssg/guide_render_test.cc",
       "ssg/links_test.cc",
       "ssg/markdown_test.cc",
+      "ssg/page_contract_test.cc",
       "ssg/spec_test.cc",
       "ssg/sw_test.cc",
       "ssg/templates_test.cc",

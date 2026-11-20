@@ -83,11 +83,13 @@ nowhere earlier.
 
 - **The page reads without JavaScript.** The generator stamps the article, the
   highlighting, the labels, and the language; scripts only reveal controls and
-  wire them. the doctests under `../src/tests/ssg/` hold this: every character
-  of the text is in the document, nothing that needs a script to work is shown,
-  and no styling comes from a script. the render and header tests state a page's
-  contract — its modules, its landmarks, its language — so a property is stated
-  once and a template change is answered in one place.
+  wire them. The doctests under `../src/tests/ssg/` hold this: the article's
+  words are in the document, every element that ships `hidden` hides a
+  control or a panel and never the article, a page names only the scripts it
+  needs (the shell alone, `guide.js` when a block runs, no editor until
+  Edit), and the language each document declares is the language its strings
+  are in. The page-contract tests state these once, so a template change is
+  answered in one place.
 - **The first paint needs nothing but the HTML.** `boot.js` is inlined
   into every head and resolves the theme before the body paints, so a
   reader who chose dark never sees a light flash, offline or not.

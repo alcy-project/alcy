@@ -62,6 +62,11 @@ struct Json {
             // arrives in the authored file as literal UTF-8 bytes.
             u32 code = 0;
             for (i32 i = 0; i < 4; i++) {
+              // The NUL sentinel is what a truncated escape ends with;
+              // reading it is in bounds, answering for it is the fix.
+              if (cursor[i + 1] == '\0') {
+                return base::make_err(error_at("truncated \\u escape"));
+              }
               const char hex = cursor[i + 1];
               code <<= 4;
               if (hex >= '0' && hex <= '9') {

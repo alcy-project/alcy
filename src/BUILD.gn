@@ -7,7 +7,6 @@ group("alcy") {
   deps = [
     ":libs",
     "cli:alcy",
-    "docsite",
   ]
 }
 
