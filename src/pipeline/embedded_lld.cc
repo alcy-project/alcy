@@ -306,6 +306,7 @@ const std::optional<WindowsStartup>& windows_startup_inputs() {
 struct MacStartup {
   path::Path sysroot;
   path::Path crt1;
+  std::string sdk_version;
 };
 
 std::string macos_arch() {
@@ -313,16 +314,38 @@ std::string macos_arch() {
   return arch == "x86_64" ? "x86_64" : "arm64";
 }
 
-std::optional<path::Path> newest_macos_sdk(const path::Path& sdks_root) {
+struct Sdk {
+  path::Path root;
+  std::string version;
+};
+
+// The version the SDK's directory name carries, or the arm64 floor
+// when the name carries none (the MacOSX.sdk symlink, an SDKROOT that
+// points straight at a versioned directory).
+std::string sdk_version_of(const path::Path& sdk) {
+  const std::string value = as_string(sdk);
+  std::string_view name = value;
+  while (name.size() > 1 && name.back() == '/') {
+    name.remove_suffix(1);
+  }
+  const usize slash = name.find_last_of('/');
+  if (slash != std::string_view::npos) {
+    name = name.substr(slash + 1);
+  }
+  if (name.starts_with("MacOSX") && name.ends_with(".sdk") &&
+      name.size() > 10) {
+    return std::string(name.substr(6, name.size() - 10));
+  }
+  return "11.0";
+}
+
+std::optional<Sdk> newest_macos_sdk(const path::Path& sdks_root) {
   // The command-line tools and Xcode both keep a MacOSX.sdk symlink next
   // to the versioned directories; it names the same newest SDK the
-  // versioned scan would find.
-  const path::Path unversioned = sdks_root.join("MacOSX.sdk");
-  if (io::is_dir(as_string(unversioned))) {
-    return unversioned;
-  }
-  std::optional<path::Path> best;
-  std::string best_version;
+  // versioned scan would find, but without a version in the name, so
+  // the scan answers first and the symlink stands in when nothing is
+  // versioned.
+  std::optional<Sdk> best;
   for (const std::string& name : list_directory(sdks_root)) {
     if (!name.starts_with("MacOSX") || !name.ends_with(".sdk")) {
       continue;
@@ -332,21 +355,31 @@ std::optional<path::Path> newest_macos_sdk(const path::Path& sdks_root) {
       continue;
     }
     const std::string version = name.substr(6, name.size() - 6 - 4);
-    if (best.has_value() && !version_less(best_version, version)) {
+    if (version.empty()) {
       continue;
     }
-    best = full;
-    best_version = version;
+    if (best.has_value() && !version_less(best->version, version)) {
+      continue;
+    }
+    best = Sdk{.root = full, .version = version};
   }
-  return best;
+  if (best.has_value()) {
+    return best;
+  }
+  const path::Path unversioned = sdks_root.join("MacOSX.sdk");
+  if (io::is_dir(as_string(unversioned))) {
+    return Sdk{.root = unversioned, .version = sdk_version_of(unversioned)};
+  }
+  return std::nullopt;
 }
 
 const std::optional<MacStartup>& macos_startup_inputs() {
   static const std::optional<MacStartup> FOUND =
       []() -> std::optional<MacStartup> {
-    std::vector<path::Path> sdks;
+    std::vector<Sdk> sdks;
     if (const char* sdkroot = std::getenv("SDKROOT"); sdkroot != nullptr) {
-      sdks.push_back(as_path(sdkroot));
+      const path::Path root = as_path(sdkroot);
+      sdks.push_back(Sdk{.root = root, .version = sdk_version_of(root)});
     }
     if (const char* developer_dir = std::getenv("DEVELOPER_DIR");
         developer_dir != nullptr) {
@@ -359,31 +392,32 @@ const std::optional<MacStartup>& macos_startup_inputs() {
           root.join("Platforms/MacOSX.platform").join("Developer").join("SDKs");
       const path::Path plain = root.join("SDKs");
       if (io::is_dir(as_string(xcode))) {
-        if (std::optional<path::Path> sdk = newest_macos_sdk(xcode);
-            sdk.has_value()) {
-          sdks.push_back(*sdk);
+        if (std::optional<Sdk> sdk = newest_macos_sdk(xcode); sdk.has_value()) {
+          sdks.push_back(std::move(*sdk));
         }
-      } else if (std::optional<path::Path> sdk = newest_macos_sdk(plain);
+      } else if (std::optional<Sdk> sdk = newest_macos_sdk(plain);
                  sdk.has_value()) {
-        sdks.push_back(*sdk);
+        sdks.push_back(std::move(*sdk));
       }
     }
     for (const char* root : {"/Library/Developer/CommandLineTools/SDKs",
                              "/Applications/Xcode.app/Contents/Developer/"
                              "Platforms/MacOSX.platform/Developer/SDKs"}) {
-      if (std::optional<path::Path> sdk = newest_macos_sdk(as_path(root));
+      if (std::optional<Sdk> sdk = newest_macos_sdk(as_path(root));
           sdk.has_value()) {
-        sdks.push_back(*sdk);
+        sdks.push_back(std::move(*sdk));
       }
     }
-    for (const path::Path& sdk : sdks) {
-      const path::Path crt1 = sdk.join("usr").join("lib").join("crt1.o");
+    for (const Sdk& sdk : sdks) {
+      const path::Path crt1 = sdk.root.join("usr").join("lib").join("crt1.o");
       const path::Path libsystem =
-          sdk.join("usr").join("lib").join("libSystem.tbd");
+          sdk.root.join("usr").join("lib").join("libSystem.tbd");
       if (!io::is_file(as_string(crt1)) || !io::is_file(as_string(libsystem))) {
         continue;
       }
-      return MacStartup{.sysroot = sdk, .crt1 = std::move(crt1)};
+      return MacStartup{.sysroot = sdk.root,
+                        .crt1 = std::move(crt1),
+                        .sdk_version = sdk.version};
     }
     return std::nullopt;
   }();
@@ -455,10 +489,15 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
   args.emplace_back(macos_arch());
   args.emplace_back("-syslibroot");
   args.emplace_back(as_string(startup.sysroot));
-  // The version floor gates the load commands lld emits and picks the
-  // symbol variants libSystem.tbd carries; arm64 requires 11.0 anyway.
-  args.emplace_back("-macosx_version_min");
+  // ld64 takes the platform, the deployment floor and the SDK in one
+  // flag, and nothing of the version-min spellings feeds its platform
+  // state; the arm64 floor of 11.0 keeps the load command usable on
+  // every SDK a runner names, and the SDK version is the one the load
+  // command records.
+  args.emplace_back("-platform_version");
+  args.emplace_back("macos");
   args.emplace_back("11.0");
+  args.emplace_back(startup.sdk_version);
   args.push_back(as_string(startup.crt1));
   for (const std::string& object_path : object_paths) {
     args.push_back(object_path);
