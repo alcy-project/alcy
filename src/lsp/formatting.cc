@@ -66,7 +66,8 @@ std::string join_lines(const std::vector<Line>& lines, usize from, usize to) {
 }
 
 void append_edit(const Document& document,
-                 std::string_view original,
+                 std::string_view full_text,
+                 std::string_view hunk,
                  std::string_view replacement,
                  usize start,
                  usize end,
@@ -77,31 +78,34 @@ void append_edit(const Document& document,
     return;
   }
   usize prefix = 0;
-  while (prefix < original.size() && prefix < replacement.size() &&
-         original[prefix] == replacement[prefix]) {
+  while (prefix < hunk.size() && prefix < replacement.size() &&
+         hunk[prefix] == replacement[prefix]) {
     ++prefix;
   }
   usize suffix = 0;
-  while (suffix < original.size() - prefix &&
+  while (suffix < hunk.size() - prefix &&
          suffix < replacement.size() - prefix &&
-         original[original.size() - 1 - suffix] ==
+         hunk[hunk.size() - 1 - suffix] ==
              replacement[replacement.size() - 1 - suffix]) {
     ++suffix;
   }
   const usize from = start + prefix;
   const usize to = end - suffix;
-  if (from >= to || to <= asked_start || from >= asked_end) {
+  const std::string_view inserted =
+      replacement.substr(prefix, replacement.size() - prefix - suffix);
+  if (from > to || (from == to && inserted.empty())) {
+    return;
+  }
+  if (to <= asked_start || from >= asked_end) {
     return;
   }
   text::JsonValue range = text::JsonValue::make_object();
   range.set("start",
-            position_json(document.index().position_at(original, from)));
-  range.set("end", position_json(document.index().position_at(original, to)));
+            position_json(document.index().position_at(full_text, from)));
+  range.set("end", position_json(document.index().position_at(full_text, to)));
   text::JsonValue edit = text::JsonValue::make_object();
   edit.set("range", std::move(range));
-  edit.set("newText",
-           text::JsonValue::make_string(std::string(replacement.substr(
-               prefix, replacement.size() - prefix - suffix))));
+  edit.set("newText", text::JsonValue::make_string(std::string(inserted)));
   edits->push(std::move(edit));
 }
 
@@ -132,15 +136,17 @@ text::JsonValue document_range_formatting(const Document& document,
 
   usize i = 0;
   usize j = 0;
-  usize hunk_start = 0;
+  usize hunk_before = 0;
   usize hunk_after = 0;
   const auto flush = [&]() {
-    if (i == hunk_start && j == hunk_after) {
+    if (hunk_before > i || hunk_after > j ||
+        (hunk_before == i && hunk_after == j)) {
       return;
     }
-    const usize from = before[hunk_start].start;
+    const usize from =
+        hunk_before < n ? before[hunk_before].start : original.size();
     const usize to = i < n ? before[i].start : original.size();
-    append_edit(document, original.substr(from, to - from),
+    append_edit(document, original, original.substr(from, to - from),
                 join_lines(after, hunk_after, j), from, to, asked_start,
                 asked_end, &edits);
   };
@@ -149,7 +155,7 @@ text::JsonValue document_range_formatting(const Document& document,
       flush();
       ++i;
       ++j;
-      hunk_start = i;
+      hunk_before = i;
       hunk_after = j;
     } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
       ++i;
@@ -157,9 +163,6 @@ text::JsonValue document_range_formatting(const Document& document,
       ++j;
     }
   }
-  flush();
-  i = n;
-  j = m;
   flush();
   return edits;
 }

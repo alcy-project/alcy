@@ -484,6 +484,19 @@ def main() -> int:
                 "previousResultId": "0",
             },
         },
+        {
+            "jsonrpc": "2.0",
+            "id": 37,
+            "method": "textDocument/rangeFormatting",
+            "params": {
+                "textDocument": {"uri": MAIN_URI},
+                "range": {
+                    "start": {"line": 0, "character": 0},
+                    "end": {"line": 0, "character": 8},
+                },
+                "options": {"tabSize": 2, "insertSpaces": True},
+            },
+        },
         {"jsonrpc": "2.0", "id": 36, "method": "shutdown", "params": None},
         {"jsonrpc": "2.0", "method": "exit"},
     ]
@@ -823,6 +836,12 @@ def main() -> int:
     unchanged = by_id.get(35, {}).get("result")
     if not isinstance(unchanged, dict) or unchanged.get("kind") != "unchanged":
         return fail(f"diagnostic did not skip an unchanged buffer: {unchanged!r}")
+
+    range_edits = by_id.get(37, {}).get("result", [])
+    if len(range_edits) != 1:
+        return fail(f"rangeFormatting returned {len(range_edits)} edits")
+    if range_edits[0]["range"]["start"]["line"] != 0:
+        return fail("rangeFormatting edited a line outside the request")
 
     if by_id.get(36, {}).get("result", "missing") is not None:
         return fail("shutdown did not answer with null")

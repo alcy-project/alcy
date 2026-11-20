@@ -38,6 +38,30 @@ TEST_CASE("Range formatting does not edit changes outside the range") {
   }
 }
 
+TEST_CASE("Range formatting emits one edit when the formatter adds lines") {
+  const Document document("file:///main.al", "alcy", 1, "struct  Point{x:i32}");
+  const text::JsonValue edits =
+      document_range_formatting(document, Position{0, 0}, Position{0, 8});
+  CHECK(edits.as_array().size() == 1);
+}
+
+TEST_CASE("Range formatting uses absolute offsets for later lines") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() {\n  let  x = 1\n}\n");
+  const text::JsonValue edits =
+      document_range_formatting(document, Position{1, 0}, Position{1, 12});
+  CHECK(edits.as_array().size() == 1);
+  if (edits.as_array().empty()) {
+    return;
+  }
+  const text::JsonValue* range = edits.as_array().front().find("range");
+  const text::JsonValue* start = range->find("start");
+  const text::JsonValue* end = range->find("end");
+  CHECK(start->find("line")->as_number() == 1);
+  CHECK(start->find("character")->as_number() == 6);
+  CHECK(end->find("character")->as_number() == 7);
+}
+
 TEST_CASE("Range formatting leaves canonical text alone") {
   const Document document("file:///main.al", "alcy", 1,
                           "struct Point {\n  x: i32,\n}\n");
