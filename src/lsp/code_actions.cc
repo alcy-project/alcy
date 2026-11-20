@@ -12,9 +12,8 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
-#include "i18n/language.h"
-#include "linter/config.h"
-#include "linter/lint.h"
+#include "lsp/analysis.h"
+#include "lsp/analysis_cache.h"
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
@@ -31,25 +30,21 @@ bool intersects(usize start, usize end, diag::Span span) {
 }  // namespace
 
 text::JsonValue code_actions(const Document& document,
+                             AnalysisCache& cache,
                              Position start,
                              Position end) {
   const usize start_offset =
       document.index().byte_offset(document.text(), start);
   const usize end_offset = document.index().byte_offset(document.text(), end);
 
-  pipeline::PipelineContext context{i18n::Language::EnUs};
-  // The linter's single-source entry is the one that knows a repair, so
-  // the action reads the same bag the diagnostics were published from.
-  const linter::LintConfig config{};
-  const base::Result<linter::LintOutcome, diag::Reported> linted =
-      linter::lint_source(context, document.uri(), document.text(), config);
-  (void)linted;
-
+  const DocumentAnalysis& analysis = cache.get(document);
+  const diag::DiagBag& bag = analysis.owner().context.bag;
   text::JsonValue actions = text::JsonValue::make_array();
   std::vector<std::pair<usize, usize>> seen;
-  for (u32 i = 0; i < context.bag.size(); ++i) {
-    const diag::Diagnostic* diagnostic = context.bag.at(i);
-    if (diagnostic == nullptr || diagnostic->fix == nullptr) {
+  for (u32 i = 0; i < bag.size(); ++i) {
+    const diag::Diagnostic* diagnostic = bag.at(i);
+    if (diagnostic == nullptr || diagnostic->fix == nullptr ||
+        diagnostic->fix->span.file != analysis.root()) {
       continue;
     }
     const diag::Fix& fix = *diagnostic->fix;
@@ -91,6 +86,13 @@ text::JsonValue code_actions(const Document& document,
     actions.push(std::move(action));
   }
   return actions;
+}
+
+text::JsonValue code_actions(const Document& document,
+                             Position start,
+                             Position end) {
+  AnalysisCache cache;
+  return code_actions(document, cache, start, end);
 }
 
 }  // namespace lsp

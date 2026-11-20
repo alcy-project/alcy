@@ -868,8 +868,8 @@ void Server::code_action(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(
-      id, code_actions(*document, read_position(*start), read_position(*end)));
+  send_result(id, code_actions(*document, cache_, read_position(*start),
+                               read_position(*end)));
 }
 
 void Server::linked_editing_range(const text::JsonValue& id,
