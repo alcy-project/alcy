@@ -385,6 +385,51 @@ TEST_CASE("Code lens locations point at the file that holds the reference") {
   }
 }
 
+TEST_CASE("Completion offers the alias an import gives a name") {
+  Fixture f;
+  constexpr std::string_view main_source =
+      "use package::helper::helper_fn as renamed_fn;\n"
+      "\n"
+      "fn main() -> i32 {\n"
+      "  ret renamed_fn()\n"
+      "}\n";
+  constexpr std::string_view helper_source =
+      "pub fn helper_fn() -> i32 {\n"
+      "  ret 0\n"
+      "}\n";
+  CHECK(f.dir.write_file("proj/main.al", main_source));
+  CHECK(f.dir.write_file("proj/helper.al", helper_source));
+  const Document document(f.main_uri, "alcy", 1, std::string(main_source));
+  const DocumentAnalysis analysis(document);
+  CHECK(analysis.ok());
+  if (!analysis.ok()) {
+    return;
+  }
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{0, 0});
+  const text::JsonValue* items = list.find("items");
+  CHECK(items != nullptr);
+  if (items == nullptr) {
+    return;
+  }
+  bool alias = false;
+  bool original = false;
+  for (const text::JsonValue& item : items->as_array()) {
+    const text::JsonValue* label = item.find("label");
+    if (label == nullptr) {
+      continue;
+    }
+    if (label->as_string() == "renamed_fn") {
+      alias = true;
+    }
+    if (label->as_string() == "helper_fn") {
+      original = true;
+    }
+  }
+  CHECK(alias);
+  CHECK_FALSE(original);
+}
+
 TEST_CASE("Completion does not duplicate a name from an unimported module") {
   Fixture f;
   constexpr std::string_view manifest =

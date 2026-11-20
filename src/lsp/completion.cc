@@ -73,8 +73,12 @@ std::string function_detail(const pipeline::PipelineContext& context,
 
 // The names the root module can actually spell: its own declarations and
 // everything its `use` statements and the prelude brought into scope.
-using VisibleNames =
-    std::unordered_map<u32, std::unordered_set<std::string_view>>;
+// For each module, the declared name -> the names the root module can
+// spell for it. An `as` import contributes its alias, which is the only
+// usable label for that declaration in the buffer.
+using VisibleNames = std::unordered_map<
+    u32,
+    std::unordered_map<std::string_view, std::vector<std::string_view>>>;
 
 VisibleNames visible_names(const DocumentAnalysis& analysis) {
   VisibleNames names;
@@ -91,33 +95,38 @@ VisibleNames visible_names(const DocumentAnalysis& analysis) {
   }
   for (const analyzer::Import& import :
        package.tree.modules[root_module]->imports) {
-    names[import.target_module].insert(import.member);
+    names[import.target_module][import.member].push_back(import.name);
   }
   for (const analyzer::CheckedModule& module : package.modules) {
     if (module.module != root_module) {
       continue;
     }
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
-      names[root_module].insert(fn.name);
+      names[root_module][fn.name].push_back(fn.name);
     }
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
-      names[root_module].insert(method.name);
+      names[root_module][method.name].push_back(method.name);
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
-      names[root_module].insert(named.name);
+      names[root_module][named.name].push_back(named.name);
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
-      names[root_module].insert(info.name);
+      names[root_module][info.name].push_back(info.name);
     }
   }
   return names;
 }
 
-bool is_visible(const VisibleNames& visible,
-                u32 module,
-                std::string_view name) {
+std::vector<std::string_view> visible_labels(const VisibleNames& visible,
+                                             u32 module,
+                                             std::string_view name) {
   const auto found = visible.find(module);
-  return found != visible.end() && found->second.contains(name);
+  if (found == visible.end()) {
+    return {};
+  }
+  const auto labels = found->second.find(name);
+  return labels == found->second.end() ? std::vector<std::string_view>{}
+                                       : labels->second;
 }
 
 void collect(const pipeline::PipelineContext& context,
@@ -125,42 +134,40 @@ void collect(const pipeline::PipelineContext& context,
              const VisibleNames& visible,
              std::vector<Item>* out) {
   const ir::StorageState& state = package.types->state();
+  const auto emit = [&](u32 module, std::string_view declared,
+                        std::string_view detail, CompletionItemKind kind) {
+    for (const std::string_view label :
+         visible_labels(visible, module, declared)) {
+      out->push_back(Item{std::string(label), std::string(detail), kind});
+    }
+  };
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
-      if (!is_visible(visible, module.module, fn.name)) {
-        continue;
-      }
-      out->push_back(Item{std::string(fn.name),
-                          function_detail(context, package, fn.params, fn.ret),
-                          fn.is_method ? CompletionItemKind::Method
-                                       : CompletionItemKind::Function});
+      emit(module.module, fn.name,
+           function_detail(context, package, fn.params, fn.ret),
+           fn.is_method ? CompletionItemKind::Method
+                        : CompletionItemKind::Function);
     }
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
       // The definition-site check registers rows for a parameter's
       // bound ; they name no declaration, so there is
       // nothing here to offer.
-      if (!method.item.is_valid() ||
-          !is_visible(visible, module.module, method.name)) {
+      if (!method.item.is_valid()) {
         continue;
       }
-      out->push_back(
-          Item{std::string(method.name),
-               function_detail(context, package, method.params, method.ret),
-               CompletionItemKind::Method});
+      emit(module.module, method.name,
+           function_detail(context, package, method.params, method.ret),
+           CompletionItemKind::Method);
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
-      if (!is_visible(visible, module.module, named.name)) {
-        continue;
-      }
       const ir::TypeNode& type = state.types[named.type];
-      out->push_back(Item{std::string(named.name),
-                          ir::type_display(state, context.strings, named.type),
-                          type.tag == ir::TypeTag::Enum
-                              ? CompletionItemKind::Enum
-                              : CompletionItemKind::Struct});
+      emit(module.module, named.name,
+           ir::type_display(state, context.strings, named.type),
+           type.tag == ir::TypeTag::Enum ? CompletionItemKind::Enum
+                                         : CompletionItemKind::Struct);
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
-      if (!is_visible(visible, module.module, info.name)) {
+      if (visible_labels(visible, module.module, info.name).empty()) {
         continue;
       }
       for (const std::string_view variant : info.variants) {
@@ -171,13 +178,10 @@ void collect(const pipeline::PipelineContext& context,
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
-      if (!is_visible(visible, module.module, info.name)) {
-        continue;
-      }
-      out->push_back(Item{std::string(info.name),
-                          ir::type_display(state, context.strings, info.type),
-                          info.is_const ? CompletionItemKind::Constant
-                                        : CompletionItemKind::Variable});
+      emit(module.module, info.name,
+           ir::type_display(state, context.strings, info.type),
+           info.is_const ? CompletionItemKind::Constant
+                         : CompletionItemKind::Variable);
     }
   }
 }
