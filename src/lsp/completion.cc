@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -72,9 +73,11 @@ std::string function_detail(const pipeline::PipelineContext& context,
 
 // The names the root module can actually spell: its own declarations and
 // everything its `use` statements and the prelude brought into scope.
-std::unordered_set<std::string_view> visible_names(
-    const DocumentAnalysis& analysis) {
-  std::unordered_set<std::string_view> names;
+using VisibleNames =
+    std::unordered_map<u32, std::unordered_set<std::string_view>>;
+
+VisibleNames visible_names(const DocumentAnalysis& analysis) {
+  VisibleNames names;
   const analyzer::CheckedPackage& package = analysis.package();
   u32 root_module = analyzer::NO_MODULE;
   for (u32 i = 0; i < package.tree.modules.size(); ++i) {
@@ -88,36 +91,43 @@ std::unordered_set<std::string_view> visible_names(
   }
   for (const analyzer::Import& import :
        package.tree.modules[root_module]->imports) {
-    names.insert(import.name);
+    names[import.target_module].insert(import.member);
   }
   for (const analyzer::CheckedModule& module : package.modules) {
     if (module.module != root_module) {
       continue;
     }
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
-      names.insert(fn.name);
+      names[root_module].insert(fn.name);
     }
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
-      names.insert(method.name);
+      names[root_module].insert(method.name);
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
-      names.insert(named.name);
+      names[root_module].insert(named.name);
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
-      names.insert(info.name);
+      names[root_module].insert(info.name);
     }
   }
   return names;
 }
 
+bool is_visible(const VisibleNames& visible,
+                u32 module,
+                std::string_view name) {
+  const auto found = visible.find(module);
+  return found != visible.end() && found->second.contains(name);
+}
+
 void collect(const pipeline::PipelineContext& context,
              const analyzer::CheckedPackage& package,
-             const std::unordered_set<std::string_view>& visible,
+             const VisibleNames& visible,
              std::vector<Item>* out) {
   const ir::StorageState& state = package.types->state();
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
-      if (!visible.contains(fn.name)) {
+      if (!is_visible(visible, module.module, fn.name)) {
         continue;
       }
       out->push_back(Item{std::string(fn.name),
@@ -129,7 +139,8 @@ void collect(const pipeline::PipelineContext& context,
       // The definition-site check registers rows for a parameter's
       // bound ; they name no declaration, so there is
       // nothing here to offer.
-      if (!method.item.is_valid() || !visible.contains(method.name)) {
+      if (!method.item.is_valid() ||
+          !is_visible(visible, module.module, method.name)) {
         continue;
       }
       out->push_back(
@@ -138,7 +149,7 @@ void collect(const pipeline::PipelineContext& context,
                CompletionItemKind::Method});
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
-      if (!visible.contains(named.name)) {
+      if (!is_visible(visible, module.module, named.name)) {
         continue;
       }
       const ir::TypeNode& type = state.types[named.type];
@@ -149,6 +160,9 @@ void collect(const pipeline::PipelineContext& context,
                               : CompletionItemKind::Struct});
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
+      if (!is_visible(visible, module.module, info.name)) {
+        continue;
+      }
       for (const std::string_view variant : info.variants) {
         out->push_back(
             Item{std::string(variant),
@@ -157,7 +171,7 @@ void collect(const pipeline::PipelineContext& context,
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
-      if (!visible.contains(info.name)) {
+      if (!is_visible(visible, module.module, info.name)) {
         continue;
       }
       out->push_back(Item{std::string(info.name),

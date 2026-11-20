@@ -383,6 +383,36 @@ TEST_CASE("Code lens locations point at the file that holds the reference") {
   }
 }
 
+TEST_CASE("Completion does not duplicate a name from an unimported module") {
+  Fixture f;
+  constexpr std::string_view manifest =
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"\"\n\n"
+      "[modules]\ninclude = [\"main\", \"helper\", \"other\"]\n\n"
+      "[[bin]]\npath = \"main.al\"\n";
+  CHECK(f.dir.write_file("proj/alcy.toml", manifest));
+  CHECK(f.dir.write_file("proj/other.al",
+                         "pub fn helper_fn() -> i32 { ret 0 }\n"));
+  const Document document(f.main_uri, "alcy", 1, std::string(MAIN));
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{0, 0});
+  const text::JsonValue* items = list.find("items");
+  if (items == nullptr) {
+    return;
+  }
+  u32 count = 0;
+  for (const text::JsonValue& item : items->as_array()) {
+    const text::JsonValue* label = item.find("label");
+    if (label != nullptr && label->as_string() == "helper_fn") {
+      ++count;
+    }
+  }
+  CHECK(count == 1);
+}
+
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn main() -> i32 {\n  ret 0\n}\n");

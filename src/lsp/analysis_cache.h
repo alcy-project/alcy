@@ -51,6 +51,10 @@ class AnalysisCache {
 
   void erase(std::string_view uri);
 
+  [[nodiscard]] const Document* open_document(std::string_view uri) const {
+    return documents_ == nullptr ? nullptr : documents_->find(uri);
+  }
+
   // Drops every reading, for a notification that a file outside the
   // client's open set changed on disk.
   void clear() {

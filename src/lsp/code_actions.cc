@@ -42,7 +42,8 @@ struct ManifestFix {
 
 std::optional<ManifestFix> std_dependency_fix(
     const Document& document,
-    const diag::Diagnostic& diagnostic) {
+    const diag::Diagnostic& diagnostic,
+    AnalysisCache& cache) {
   constexpr std::string_view marker = "(alcy/std/";
   const usize marker_at = diagnostic.message.find(marker);
   if (marker_at == std::string_view::npos) {
@@ -67,7 +68,11 @@ std::optional<ManifestFix> std_dependency_fix(
     return std::nullopt;
   }
   const path::Path manifest = root->join(pkg::MANIFEST_FILE_NAME);
-  std::string text = io::read_file(std::string(manifest.as_view()));
+  const std::string manifest_uri = workspace::path_to_uri(manifest.as_view());
+  const Document* open = cache.open_document(manifest_uri);
+  std::string text = open == nullptr
+                         ? io::read_file(std::string(manifest.as_view()))
+                         : std::string(open->text());
   if (text.empty()) {
     return std::nullopt;
   }
@@ -159,7 +164,7 @@ text::JsonValue code_actions(const Document& document,
       continue;
     }
     const std::optional<ManifestFix> fix =
-        std_dependency_fix(document, *diagnostic);
+        std_dependency_fix(document, *diagnostic, cache);
     if (!fix.has_value()) {
       continue;
     }

@@ -37,7 +37,8 @@ of the compiler, so it owns no analysis of its own:
   finding arrive from the same pass. Pull results carry the package
   fingerprint so a sibling's edit cannot leave a stale result behind.
 - `formatting.{h,cc}` returns the `alcy_fmt` edit that canonicalizes a
-  buffer, or none when the buffer already has that layout.
+  buffer, or none when the buffer already has that layout. A range request
+  returns the minimal edit that intersects the requested range.
 - `inlay_hints.{h,cc}` shows the inferred type of a binding that wrote
   none, and the size, alignment, and field offsets of every struct or
   enum, from the checked package.
