@@ -28,6 +28,10 @@ struct Range {
   Position end;
 };
 
+// How the client counts characters in a line. The compiler works in byte
+// offsets; LSP positions are counted in one of these encodings.
+enum class PositionEncoding : u8 { Utf16, Utf8 };
+
 // One entry of a `textDocument/didChange`. An absent range replaces the
 // whole document.
 struct ContentChange {
@@ -52,8 +56,13 @@ class PositionIndex {
   // inside a code point rounds down to its start.
   Position position_at(std::string_view text, usize offset) const;
 
+  void set_encoding(PositionEncoding encoding) { encoding_ = encoding; }
+
  private:
+  u32 units(char byte) const;
+
   std::vector<u32> line_starts_;
+  PositionEncoding encoding_ = PositionEncoding::Utf16;
 };
 
 // One open document: its buffer, its version, and the line index over it.
@@ -73,6 +82,10 @@ class Document {
   // Applies `changes` in order; each one sees the document the previous
   // ones left. Records `version` once they are applied.
   void apply(std::span<const ContentChange> changes, i64 version);
+
+  void set_encoding(PositionEncoding encoding) {
+    index_.set_encoding(encoding);
+  }
 
  private:
   void rebuild();

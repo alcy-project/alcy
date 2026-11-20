@@ -513,6 +513,8 @@ def main() -> int:
     capabilities = initialize.get("capabilities", {})
     if capabilities.get("documentFormattingProvider") is not True:
         return fail("initialize did not advertise documentFormattingProvider")
+    if capabilities.get("positionEncoding") != "utf-16":
+        return fail("initialize did not negotiate the client's position encoding")
     if capabilities.get("documentSymbolProvider") is not True:
         return fail("initialize did not advertise documentSymbolProvider")
     if capabilities.get("foldingRangeProvider") is not True:
@@ -866,7 +868,8 @@ def package_session(alcy: Path) -> int:
                 "params": {
                     "processId": None,
                     "rootUri": root.as_uri(),
-                    "capabilities": {},
+                    "workspaceFolders": None,
+                    "capabilities": {"general": {"positionEncoding": ["utf-16"]}},
                 },
             },
             {"jsonrpc": "2.0", "method": "initialized", "params": {}},

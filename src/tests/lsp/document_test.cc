@@ -29,6 +29,20 @@ TEST_CASE("Positions count UTF-16 code units, not bytes") {
   CHECK(index.position_at(text, 3) == Position{0, 1});
 }
 
+TEST_CASE("Positions can count UTF-8 bytes when the client asks") {
+  const std::string text =
+      "a\xC3\xA9"
+      "z";
+  PositionIndex index;
+  index.set_encoding(PositionEncoding::Utf8);
+  index.reset(text);
+
+  CHECK(index.byte_offset(text, Position{0, 1}) == 1);
+  CHECK(index.byte_offset(text, Position{0, 3}) == 3);
+  CHECK(index.position_at(text, 3) == Position{0, 3});
+  CHECK(index.position_at(text, 4) == Position{0, 4});
+}
+
 TEST_CASE("A carriage-return pair is one line break") {
   const std::string text = "ab\r\ncd";
   PositionIndex index;

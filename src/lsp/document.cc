@@ -46,6 +46,13 @@ bool is_line_break(char c) {
 
 }  // namespace
 
+u32 PositionIndex::units(char byte) const {
+  if (encoding_ == PositionEncoding::Utf8) {
+    return static_cast<u32>(utf8_length(byte));
+  }
+  return utf16_units(byte);
+}
+
 void PositionIndex::reset(std::string_view text) {
   line_starts_.clear();
   line_starts_.push_back(0);
@@ -74,13 +81,13 @@ usize PositionIndex::byte_offset(std::string_view text,
                                ? line_starts_[position.line + 1]
                                : text.size();
   usize offset = line_start;
-  u32 units = 0;
-  while (offset < line_limit && units < position.character) {
+  u32 count = 0;
+  while (offset < line_limit && count < position.character) {
     if (is_line_break(text[offset])) {
       break;
     }
     const usize length = utf8_length(text[offset]);
-    units += utf16_units(text[offset]);
+    count += this->units(text[offset]);
     offset += length;
   }
   return std::min(offset, line_limit);
@@ -95,7 +102,7 @@ Position PositionIndex::position_at(std::string_view text, usize offset) const {
                                    static_cast<u32>(target));
   const usize line = static_cast<usize>(it - line_starts_.begin()) - 1;
   usize cursor = line_starts_[line];
-  u32 units = 0;
+  u32 count = 0;
   while (cursor < target) {
     if (is_line_break(text[cursor])) {
       break;
@@ -104,10 +111,10 @@ Position PositionIndex::position_at(std::string_view text, usize offset) const {
     if (cursor + length > target) {
       break;
     }
-    units += utf16_units(text[cursor]);
+    count += this->units(text[cursor]);
     cursor += length;
   }
-  return Position{static_cast<u32>(line), units};
+  return Position{static_cast<u32>(line), count};
 }
 
 Document::Document(std::string uri,

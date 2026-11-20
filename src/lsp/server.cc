@@ -56,6 +56,43 @@ const text::JsonValue* field(const text::JsonValue& object,
   return object.find(key);
 }
 
+bool offers_utf16(const text::JsonValue& value) {
+  if (value.is_string()) {
+    return value.as_string() == "utf-16";
+  }
+  if (!value.is_array()) {
+    return false;
+  }
+  for (const text::JsonValue& entry : value.as_array()) {
+    if (entry.is_string() && entry.as_string() == "utf-16") {
+      return true;
+    }
+  }
+  return false;
+}
+
+PositionEncoding negotiate_encoding(const text::JsonValue& params) {
+  const text::JsonValue* capabilities = params.find("capabilities");
+  if (capabilities == nullptr || !capabilities->is_object()) {
+    return PositionEncoding::Utf16;
+  }
+  const text::JsonValue* general = capabilities->find("general");
+  if (general != nullptr && general->is_object()) {
+    if (const text::JsonValue* encoding = general->find("positionEncoding");
+        encoding != nullptr) {
+      return offers_utf16(*encoding) ? PositionEncoding::Utf16
+                                     : PositionEncoding::Utf8;
+    }
+  }
+  // The LSP 3.16 spelling of the same preference.
+  if (const text::JsonValue* encoding = capabilities->find("positionEncoding");
+      encoding != nullptr) {
+    return offers_utf16(*encoding) ? PositionEncoding::Utf16
+                                   : PositionEncoding::Utf8;
+  }
+  return PositionEncoding::Utf16;
+}
+
 std::string_view string_field(const text::JsonValue& object,
                               std::string_view key) {
   const text::JsonValue* value = field(object, key);
@@ -452,7 +489,15 @@ void Server::initialize(const text::JsonValue& id,
   }
   if (const text::JsonValue* params = field(message, "params");
       params != nullptr && params->is_object()) {
-    const std::string_view root_uri = string_field(*params, "rootUri");
+    std::string_view root_uri = string_field(*params, "rootUri");
+    if (const text::JsonValue* folders = params->find("workspaceFolders");
+        folders != nullptr && folders->is_array() &&
+        !folders->as_array().empty()) {
+      const text::JsonValue& first = folders->as_array().front();
+      if (first.is_object()) {
+        root_uri = string_field(first, "uri");
+      }
+    }
     if (!root_uri.empty()) {
       if (const std::optional<std::string> path =
               workspace::uri_to_path(root_uri);
@@ -464,6 +509,7 @@ void Server::initialize(const text::JsonValue& id,
         }
       }
     }
+    encoding_ = negotiate_encoding(*params);
   }
   text::JsonValue sync = text::JsonValue::make_object();
   sync.set("openClose", text::JsonValue::make_bool(true));
@@ -476,7 +522,9 @@ void Server::initialize(const text::JsonValue& id,
   capabilities.set("textDocumentSync", std::move(sync));
   // Position encoding defaults to UTF-16; advertising it keeps the
   // choice explicit for clients that read it.
-  capabilities.set("positionEncoding", make_string("utf-16"));
+  capabilities.set(
+      "positionEncoding",
+      make_string(encoding_ == PositionEncoding::Utf8 ? "utf-8" : "utf-16"));
   capabilities.set("documentFormattingProvider",
                    text::JsonValue::make_bool(true));
   capabilities.set("documentSymbolProvider", text::JsonValue::make_bool(true));
@@ -1078,6 +1126,7 @@ void Server::did_open(const text::JsonValue& params) {
                       std::string(string_field(*text_document, "languageId")),
                       int_field(*text_document, "version", 0),
                       std::string(string_field(*text_document, "text")));
+  document.set_encoding(encoding_);
   publish_diagnostics(document);
 }
 

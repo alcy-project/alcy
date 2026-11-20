@@ -99,6 +99,7 @@ class Server {
   AnalysisCache cache_;
   SemanticTokensCache tokens_;
   DiagnosticsCache diagnostics_;
+  PositionEncoding encoding_ = PositionEncoding::Utf16;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;
