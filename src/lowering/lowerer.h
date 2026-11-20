@@ -1478,30 +1478,6 @@ class Lowerer {
                             ir::TypeIdx elem_ty,
                             const analyzer::CheckedModule::CallTarget* target,
                             State& state);
-    // Writes the decimal digits of `wide`, most significant first.
-    bool emit_u64_digits(diag::Span span, ir::RegisterIdx wide, State& state);
-    // Writes a non-negative float below 1e16 as its truncated integer
-    // part followed by `digits` fractional digits, rounded half-up.
-    // Trailing zeros drop when `trim` is set. `fold` makes a fraction
-    // that carries all the way print one digit and report it through
-    // `carry_out`, which is what a mantissa needs.
-    void emit_magnitude(diag::Span span,
-                        ir::RegisterIdx v,
-                        u32 digits,
-                        bool trim,
-                        bool fold,
-                        ir::RegisterIdx& carry_out,
-                        State& state);
-    // Builds ten to the power of `places` from one table entry and a
-    // remainder held exactly. A place past 308 yields an infinity.
-    ir::RegisterIdx emit_decimal_scale(ir::RegisterIdx places);
-    // Writes a float in the decimal magnitude form the format string
-    // selects, whose placeholders become a mantissa and exponent
-    // outside [1e-4, 1e16).
-    void emit_float(diag::Span span,
-                    ir::RegisterIdx value,
-                    u8 precision,
-                    State& state);
     // Lowers a variadic call's remaining arguments into the tuple the
     // expansion reads: one field per argument, allocated and
     // stored like a tuple literal. `first` is the index of the first

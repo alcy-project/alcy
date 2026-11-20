@@ -1513,7 +1513,10 @@ void DropElaborator::run() {
         continue;
       }
       const ir::OperandIdx place = to_operand(info.addr, info.type);
-      if (root == State::Maybe) {
+      // A later site can end the same place. Guard even an Owned end
+      // when a flag exists: the guarded end latches the flag, so the
+      // later site cannot end the value twice.
+      if (root == State::Maybe || root == State::Owned) {
         const u32 pi = place_index(local, {});
         if (pi != base::INVALID_IDX && flag[pi].is_valid()) {
           emit_guard(out, flag[pi], site.span, [&](Output& drop_out) {
