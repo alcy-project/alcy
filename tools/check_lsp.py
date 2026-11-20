@@ -515,6 +515,8 @@ def main() -> int:
         return fail("initialize did not advertise documentFormattingProvider")
     if capabilities.get("positionEncoding") != "utf-16":
         return fail("initialize did not negotiate the client's position encoding")
+    if capabilities.get("documentRangeFormattingProvider") is not True:
+        return fail("initialize did not advertise rangeFormattingProvider")
     if capabilities.get("documentSymbolProvider") is not True:
         return fail("initialize did not advertise documentSymbolProvider")
     if capabilities.get("foldingRangeProvider") is not True:

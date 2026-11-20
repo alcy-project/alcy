@@ -199,6 +199,15 @@ void Server::handle_request(const text::JsonValue& message) {
     formatting(*id, *params);
     return;
   }
+  if (method == "textDocument/rangeFormatting") {
+    const text::JsonValue* params = field(message, "params");
+    if (params == nullptr || !params->is_object()) {
+      send_error(*id, INVALID_REQUEST, "range formatting needs params");
+      return;
+    }
+    range_formatting(*id, *params);
+    return;
+  }
   if (method == "textDocument/foldingRange") {
     const text::JsonValue* params = field(message, "params");
     if (params == nullptr || !params->is_object()) {
@@ -526,6 +535,8 @@ void Server::initialize(const text::JsonValue& id,
       "positionEncoding",
       make_string(encoding_ == PositionEncoding::Utf8 ? "utf-8" : "utf-16"));
   capabilities.set("documentFormattingProvider",
+                   text::JsonValue::make_bool(true));
+  capabilities.set("documentRangeFormattingProvider",
                    text::JsonValue::make_bool(true));
   capabilities.set("documentSymbolProvider", text::JsonValue::make_bool(true));
   capabilities.set("foldingRangeProvider", text::JsonValue::make_bool(true));
@@ -1187,6 +1198,31 @@ void Server::formatting(const text::JsonValue& id,
     return;
   }
   send_result(id, document_formatting(*document));
+}
+
+void Server::range_formatting(const text::JsonValue& id,
+                              const text::JsonValue& params) {
+  const text::JsonValue* text_document = field(params, "textDocument");
+  const text::JsonValue* range = field(params, "range");
+  if (text_document == nullptr || !text_document->is_object() ||
+      range == nullptr || !range->is_object()) {
+    send_error(id, INVALID_REQUEST, "range formatting needs a range");
+    return;
+  }
+  const Document* document =
+      documents_.find(string_field(*text_document, "uri"));
+  const text::JsonValue* start = range->find("start");
+  const text::JsonValue* end = range->find("end");
+  if (document == nullptr) {
+    send_error(id, INVALID_REQUEST, "document is not open");
+    return;
+  }
+  if (start == nullptr || end == nullptr) {
+    send_error(id, INVALID_REQUEST, "range formatting needs both ends");
+    return;
+  }
+  send_result(id, document_range_formatting(*document, read_position(*start),
+                                            read_position(*end)));
 }
 
 void Server::publish_diagnostics(const Document& document) {
