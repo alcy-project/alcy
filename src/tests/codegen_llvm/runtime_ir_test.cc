@@ -237,7 +237,11 @@ TEST_CASE("Runtime fills in the program's declarations") {
 
   const std::string text = module_text(module);
   CHECK(text.find("call void @alcy_write_all") != std::string::npos);
-  CHECK(text.find("call void @abort") != std::string::npos);
+  // A hosted abort is libc's; a Windows target carries none and exits
+  // with the status an abort reports.
+  CHECK(text.find(host_triple().find("windows") == std::string::npos
+                      ? "call void @abort"
+                      : "call void @ExitProcess") != std::string::npos);
 }
 
 TEST_CASE("Runtime follows the target width") {
