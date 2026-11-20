@@ -228,3 +228,63 @@ fn collect(comp args: ..) -> i32 {
     (block
       (return_expression
         (integer)))))
+
+================================================================================
+A comp if
+================================================================================
+
+fn f() -> i32 {
+  comp if true {
+    ret 1
+  } else {
+    ret 2
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (if_expression
+        (boolean)
+        (block
+          (return_expression
+            (integer)))
+        (block
+          (return_expression
+            (integer)))))))
+
+================================================================================
+A comp for
+================================================================================
+
+fn f() {
+  comp for i in 0..<4 {
+    _ := i
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters)
+    (block
+      (for_expression
+        (identifier_pattern
+          (identifier))
+        (range_expression
+          (integer)
+          (integer))
+        (block
+          (declaration_statement
+            (wildcard_pattern)
+            (path_expression
+              (path
+                (identifier)))))))))

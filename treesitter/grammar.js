@@ -994,6 +994,10 @@ module.exports = grammar({
     // same way means reading ahead, and the scanner has no way to put back
     // what it read.
     if_expression: $ => seq(
+      // `comp if` marks a branch the compiler selects during evaluation
+      // (comp.md). Only `if` and `for` take the marker; a `comp` before
+      // anything else opens a comp block.
+      optional(field('comp', 'comp')),
       'if',
       field('condition', $._condition),
       field('consequence', $.block),
@@ -1015,6 +1019,7 @@ module.exports = grammar({
     // A `for` head never reads a struct literal or a block as a range end,
     // so `for i in 0.. { }` is the open range and the loop body.
     for_expression: $ => seq(
+      optional(field('comp', 'comp')),
       'for',
       field('pattern', $._pattern),
       'in',

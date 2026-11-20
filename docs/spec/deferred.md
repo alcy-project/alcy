@@ -83,8 +83,6 @@ it is implemented.
 - Comp-time `for` over arrays and slices is deferred: their cursors
   hold raw pointers and a comp value has no pointer form. Range
   heads already unroll through the Iterator chain (comp.md).
-- `comp if` and `comp for` support in tree-sitter and the language
-  server. The parser, AST, formatter, and checker carry the markers.
 - An effect or purity system for comp evaluation. The fail-closed
   refusal of intrinsics without a comp form and of external
   declarations is the policy today; a classification system would

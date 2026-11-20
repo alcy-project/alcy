@@ -2360,6 +2360,16 @@
           }
         ]
       },
+      "comp": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "comp",
+            "named": false
+          }
+        ]
+      },
       "iterator": {
         "multiple": false,
         "required": true,
@@ -2524,6 +2534,16 @@
           {
             "type": "if_expression",
             "named": true
+          }
+        ]
+      },
+      "comp": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "comp",
+            "named": false
           }
         ]
       },
