@@ -40,9 +40,9 @@ alcy compiles to stand-alone binaries (LLVM backend) or to WebAssembly
 linker behind it). There is no interpreter and no runtime to ship: a
 compiled program runs on its own.
 
-It builds and tests on Linux (x86_64), macOS (aarch64), and Windows
-(x64), which is what CI runs; `wasm32-unknown-emscripten` is also a
-target.
+It builds and tests on Linux (x86_64 and arm64), macOS (aarch64 and
+x86_64), and Windows (x64 and arm64), which is what CI runs;
+`wasm32-unknown-emscripten` is also a target.
 
 A freestanding build - `.alcy/toolchain.toml` with `freestanding = true` -
 links without a C runtime and without libc: the compiler emits `_start`,

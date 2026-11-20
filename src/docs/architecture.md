@@ -141,9 +141,11 @@ what implements it lives in `src/`.
 - `lib/` - the toolchain standard library as source suites
   (`lib/std/<member>/`); embedded into the compiler binary and
   injected as prelude modules, never built as separate packages.
-- `e2e/`, `exe/`, `samples/` - the acceptance suites: what the compiler
-  accepts, what it compiles into a running program, and the programs kept as
-  examples.
+- `e2e/`, `samples/` - the acceptance cases. Each case is a directory with
+  a `case.toml`: `[cli]` names the compiler invocation and its answer,
+  `[program]` the answer of the program it built. `e2e/wasm/` uses the
+  same shape for the direct wasm backend; `samples/` holds the programs
+  kept as examples.
 - `benchmarks/` - the measurement contract: which cases exist and what a
   number from each means. The engine that runs a phase is in
   `src/benchmarks/`.
@@ -548,15 +550,16 @@ contributor-facing rules are in
 | Fuzzing | Coverage-guided mutation | on demand | No input reaches a state the existing oracles miss |
 | Coverage | A recorded baseline | `ci.yaml`, and `check.py` | Line coverage of `src/` did not decrease |
 
-Two of these are in CI and two are not, and the reason is what each one can
-discriminate. The sanitizers on alcy's own output and the coverage ratchet
-have an answer for every input, so running them on every change is worth its
-cost. The fuzzer's answer depends on where its corpus has got to, so a
-per-push run would mostly re-verify what it already knows.
+All but fuzzing run in CI. The sanitizers on alcy's own output and the
+coverage ratchet have an answer for every input, so running them on every
+change is worth its cost. The fuzzer's answer depends on where its corpus
+has got to, so a per-push run would mostly re-verify what it already
+knows.
 
 CI asks the checks as their own jobs (`ci.yaml`, `build.yaml`,
-`style.yaml`), and `tools/check.py` runs the union as one local pass, so
-the check a contributor runs is the check the server runs. Which job
+`style.yaml`), every job running on every event, and `tools/check.py`
+runs the union as one local pass, so the check a contributor runs is the
+check the server runs. Which job
 each check lives in is recorded beside the workflow definitions.
 `tools/measure_checks.py` times every check against lint, the largest, and is a
 report rather than a check.

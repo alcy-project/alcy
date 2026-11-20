@@ -162,11 +162,11 @@ jobs:
 
       # A corpus whose cases link a program or run one is a question the
       # platform answers: what the linker names the objects, what the frame
-      # walk finds, what the runtime prints. Both corpora are asked in every
-      # entry, then. The checks that read source without producing a host
+      # walk finds, what the runtime prints. Both steps of a case are asked
+      # in every entry, then. The checks that read source without producing a host
       # binary - the formatter, the borrow rules, the wasm output - run
       # once each in the CI workflow's `harness` job.
-      - name: Run E2E Cases
+      - name: Run CLI Cases
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_cases.py --steps=cli --build-subdir=build
 
@@ -178,7 +178,7 @@ jobs:
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_stdlib_tests.py --build-subdir=build
 
-      - name: Run Exe Cases
+      - name: Run Program Cases
         shell: bash
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/check_cases.py --steps=program --build-subdir=build
 

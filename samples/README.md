@@ -1,11 +1,11 @@
 # Samples
 
 Programs written in alcy, kept because they are worth reading. Each is a
-directory holding a `main.al` and an `expect.toml`, which is the same
-shape as a case under `exe/cases`, and the same harness runs them:
+directory holding a `main.al` and a `case.toml`, which is the same shape
+as a case under `e2e/cases`, and the same harness runs them:
 
 ```sh
-uv run ./tools/check_exe.py --cases-root=samples
+uv run ./tools/check_cases.py --steps=program --cases-root=samples
 ```
 
 Sharing the harness is the point. A sample that stops compiling, or that
@@ -31,13 +31,15 @@ about the algorithm.
 
 ## Writing one
 
-Add a directory with a `main.al` and an `expect.toml`. `exit` is
-required; `stdout`, `stdout_contains`, and `stderr_contains` are optional.
-The `stdout` block is TOML, so it is flush-left — TOML keeps the
-indentation of a multi-line string, and an indented one would compare
-against output that has no leading spaces:
+Add a directory with a `main.al` and a `case.toml`. A sample is a program
+case, so its answers go under `[program.expect]`: `exit` is required;
+`stdout`, `stdout_contains`, and `stderr_contains` are optional. The
+`stdout` block is TOML, so it is flush-left — TOML keeps the indentation
+of a multi-line string, and an indented one would compare against output
+that has no leading spaces:
 
 ```toml
+[program.expect]
 exit = 0
 stdout = """
 2
