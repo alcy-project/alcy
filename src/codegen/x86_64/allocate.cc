@@ -229,6 +229,9 @@ void allocate(Body& body, const Frame& frame) {
   };
 
   for (MInst& inst : body.insts) {
+    next_scratch = 0;
+    pending_label = inst.label;
+    inst.label = MInst::NO_LABEL;
     if (inst.op == MOp::Ret) {
       // The exit, where the IR ended: the frame is given back and the
       // caller resumed.
@@ -238,9 +241,6 @@ void allocate(Body& body, const Frame& frame) {
       push_labeled(make_inst(MOp::Ret, 8));
       continue;
     }
-    next_scratch = 0;
-    pending_label = inst.label;
-    inst.label = MInst::NO_LABEL;
     pool =
         inst.op == MOp::Idiv || inst.op == MOp::Udiv ? divisor_pool : read_pool;
     const Shape shape = shape_of(inst.op);
@@ -345,6 +345,21 @@ void allocate(Body& body, const Frame& frame) {
       const Reg into = pool[next_scratch++];
       DCHECK(next_scratch <= pool.size());
       push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[0]));
+      encoded.ops[0] = Operand{into};
+    }
+    // The compare and ALU forms read their first operand from a register;
+    // a constant there needs a scratch the instruction may clobber.
+    if ((encoded.op == MOp::Cmp || encoded.op == MOp::Add ||
+         encoded.op == MOp::Sub || encoded.op == MOp::And ||
+         encoded.op == MOp::Or || encoded.op == MOp::Xor ||
+         encoded.op == MOp::Imul || encoded.op == MOp::Shl ||
+         encoded.op == MOp::Shr || encoded.op == MOp::Sar ||
+         encoded.op == MOp::Not || encoded.op == MOp::Neg) &&
+        std::holds_alternative<Imm>(encoded.ops[0])) {
+      const Reg into = pool[next_scratch++];
+      DCHECK(next_scratch <= pool.size());
+      push_labeled(make_inst(MOp::Mov, inst.width, Operand{into},
+                             encoded.ops[0]));
       encoded.ops[0] = Operand{into};
     }
     std::optional<Reg> result;

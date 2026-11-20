@@ -450,6 +450,11 @@ base::Result<Body, codegen::EmitError> Selector::run() {
         return base::make_err(codegen::EmitError::Unsupported);
       }
     }
+    if (!placed_) {
+      // A block with no instructions still needs its label to name a
+      // byte, or a branch to it lands at offset zero.
+      push(make_inst(MOp::Nop, 8));
+    }
   }
   if (failed_) {
     return base::make_err(codegen::EmitError::Unsupported);
