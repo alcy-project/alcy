@@ -24,6 +24,7 @@
 #include "lsp/diagnostics.h"
 #include "lsp/document.h"
 #include "lsp/highlights.h"
+#include "lsp/hover.h"
 #include "lsp/navigation.h"
 #include "lsp/rename.h"
 #include "lsp/workspace.h"
@@ -57,6 +58,7 @@ constexpr std::string_view HELPER =
     "  pub x: i32,\n"
     "}\n"
     "\n"
+    "/// Helps.\n"
     "pub fn helper_fn() -> i32 {\n"
     "  ret 0\n"
     "}\n"
@@ -481,6 +483,22 @@ TEST_CASE("Incoming calls resolve for a declaration in an unopened file") {
   const text::JsonValue calls =
       incoming_calls(document, analysis, items.as_array().front(), *item_file);
   CHECK_FALSE(calls.as_array().empty());
+}
+
+TEST_CASE("Hover on a reference shows the declaration and its docs") {
+  const Fixture f;
+  const Document document(f.main_uri, "alcy", 1, std::string(MAIN));
+  const DocumentAnalysis analysis(document);
+  if (!analysis.ok()) {
+    return;
+  }
+  const std::optional<std::string> markdown =
+      hover_markdown(document, analysis, Position{8, 8});
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("fn helper_fn") != std::string::npos);
+    CHECK(markdown->find("Helps.") != std::string::npos);
+  }
 }
 
 TEST_CASE("A buffer without a manifest keeps the single-file reading") {

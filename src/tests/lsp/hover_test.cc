@@ -113,7 +113,7 @@ TEST_CASE("Hover on a type reference resolves the declared type") {
   CHECK(markdown.has_value());
   if (markdown.has_value()) {
     CHECK(markdown->find("Point") != std::string::npos);
-    CHECK(markdown->find("size 4") != std::string::npos);
+    CHECK(markdown->find("size **4**") != std::string::npos);
   }
 }
 

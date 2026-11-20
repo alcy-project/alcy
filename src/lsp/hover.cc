@@ -21,16 +21,14 @@
 #include "lsp/ast_query.h"
 #include "lsp/document.h"
 #include "lsp/layout.h"
+#include "lsp/navigation.h"
+#include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
 
 namespace lsp {
 
 namespace {
-
-bool span_contains(diag::Span span, usize offset) {
-  return span.offset <= offset && offset < span.offset + span.length;
-}
 
 std::string signature_markdown(const pipeline::PipelineContext& context,
                                const analyzer::CheckedPackage& package,
@@ -75,19 +73,6 @@ const analyzer::CheckedModule::FnSig* find_signature(
     }
   }
   return fallback;
-}
-
-const analyzer::CheckedModule::StaticInfo* find_static(
-    const analyzer::CheckedPackage& package,
-    std::string_view name) {
-  for (const analyzer::CheckedModule& module : package.modules) {
-    for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
-      if (info.name == name) {
-        return &info;
-      }
-    }
-  }
-  return nullptr;
 }
 
 std::string_view span_text(std::string_view source, diag::Span span) {
@@ -174,6 +159,150 @@ std::string type_reference_markdown(const pipeline::PipelineContext& context,
   return "~~~alcy\n" + std::string(written) + "\n~~~\n";
 }
 
+constexpr u32 NO_MEMBER = U32_MAX;
+
+struct HoverTarget {
+  ast::ItemIdx item = ast::ItemIdx::invalid();
+  u32 member = NO_MEMBER;
+};
+
+// The declaration a recorded span names, when it belongs to an item.
+std::optional<HoverTarget> target_of(const pipeline::PipelineContext& context,
+                                     const analyzer::CheckedPackage& package,
+                                     diag::Span declaration) {
+  for (const analyzer::ModuleNode* module : package.tree.modules) {
+    for (const ast::ItemIdx index : module->items) {
+      const ast::ItemNode& item = context.ast.items[index];
+      if (same_span(::ast::item_name_span(context.ast, item), declaration)) {
+        return HoverTarget{index, NO_MEMBER};
+      }
+      using K = ast::ItemKind;
+      if (item.kind == K::Struct) {
+        const auto& fields = item.payload.get<ast::ItemStruct>().fields;
+        for (u32 i = 0; i < fields.size(); ++i) {
+          if (same_span(fields[i].name.span, declaration)) {
+            return HoverTarget{index, i};
+          }
+        }
+      } else if (item.kind == K::Enum) {
+        const auto& variants = item.payload.get<ast::ItemEnum>().variants;
+        for (u32 i = 0; i < variants.size(); ++i) {
+          if (same_span(variants[i].name.span, declaration)) {
+            return HoverTarget{index, i};
+          }
+        }
+      } else if (item.kind == K::Impl) {
+        for (const ast::ItemIdx method :
+             item.payload.get<ast::ItemImpl>().methods) {
+          if (same_span(
+                  ::ast::item_name_span(context.ast, context.ast.items[method]),
+                  declaration)) {
+            return HoverTarget{method, NO_MEMBER};
+          }
+        }
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+const analyzer::CheckedModule::StaticInfo* find_static_of(
+    const analyzer::CheckedPackage& package,
+    ast::ItemIdx item) {
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
+      if (info.item == item) {
+        return &info;
+      }
+    }
+  }
+  return nullptr;
+}
+
+std::optional<std::string> render_target(const DocumentAnalysis& analysis,
+                                         const HoverTarget& target,
+                                         std::string_view source) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const ast::ItemNode& item = context.ast.items[target.item];
+  using K = ast::ItemKind;
+  switch (item.kind) {
+    case K::Struct: {
+      const std::optional<StructLayout> layout =
+          struct_layout_of(analysis, source, target.item);
+      if (!layout.has_value()) {
+        return std::nullopt;
+      }
+      if (target.member == NO_MEMBER) {
+        return struct_layout_markdown(*layout) +
+               doc_markdown(source, item.docs);
+      }
+      if (target.member >= layout->fields.size()) {
+        return std::nullopt;
+      }
+      const FieldLayout& field = layout->fields[target.member];
+      return "~~~alcy\n" + layout->name + "." + field.name + ": " + field.type +
+             "\n~~~\n\nsize " + std::to_string(field.size) + " bytes, align " +
+             std::to_string(field.align) + ", offset " +
+             std::to_string(field.offset) + "\n";
+    }
+    case K::Enum: {
+      const std::optional<EnumLayout> layout =
+          enum_layout_of(analysis, source, target.item);
+      if (!layout.has_value()) {
+        return std::nullopt;
+      }
+      if (target.member == NO_MEMBER) {
+        return enum_layout_markdown(*layout) + doc_markdown(source, item.docs);
+      }
+      if (target.member >= layout->variants.size()) {
+        return std::nullopt;
+      }
+      const EnumVariantLayout& variant = layout->variants[target.member];
+      std::string out = "~~~alcy\n" + layout->name + "::" + variant.name;
+      if (!variant.fields.empty()) {
+        out += '(';
+        for (usize j = 0; j < variant.fields.size(); ++j) {
+          if (j != 0) {
+            out += ", ";
+          }
+          out += variant.fields[j].type;
+        }
+        out += ')';
+      }
+      out += "\n~~~\n";
+      return out;
+    }
+    case K::Fn:
+    case K::Intrinsic: {
+      const analyzer::CheckedModule::FnSig* signature =
+          find_signature(package, target.item);
+      if (signature == nullptr) {
+        return std::nullopt;
+      }
+      return signature_markdown(
+                 context, package, item.kind == K::Fn ? "fn" : "intrinsic",
+                 item.name(), signature->params, signature->ret) +
+             doc_markdown(source, item.docs);
+    }
+    case K::Static:
+    case K::Const: {
+      const analyzer::CheckedModule::StaticInfo* info =
+          find_static_of(package, target.item);
+      if (info == nullptr) {
+        return std::nullopt;
+      }
+      const ir::StorageState& state = package.types->state();
+      return "~~~alcy\n" +
+             std::string(item.kind == K::Const ? "const " : "static ") +
+             std::string(item.name()) + ": " +
+             ir::type_display(state, context.strings, info->type) + "\n~~~\n" +
+             doc_markdown(source, item.docs);
+    }
+    default: return std::nullopt;
+  }
+}
+
 }  // namespace
 
 std::optional<std::string> hover_markdown(const Document& document,
@@ -188,117 +317,16 @@ std::optional<std::string> hover_markdown(const Document& document,
   const source::FileId root = analysis.root();
   const std::string_view source = document.text();
 
-  for (const analyzer::ModuleNode* module : package.tree.modules) {
-    for (const ast::ItemIdx index : module->items) {
-      const ast::ItemNode& item = context.ast.items[index];
-      if (::ast::item_name_span(context.ast, item).file != root) {
-        continue;
-      }
-      using K = ast::ItemKind;
-      switch (item.kind) {
-        case K::Struct: {
-          const ast::ItemStruct& declaration =
-              item.payload.get<ast::ItemStruct>();
-          if (span_contains(declaration.name.span, offset)) {
-            const std::optional<StructLayout> layout =
-                struct_layout_of(analysis, source, index);
-            if (!layout.has_value()) {
-              return std::nullopt;
-            }
-            return struct_layout_markdown(*layout) +
-                   doc_markdown(source, item.docs);
-          }
-          for (u32 i = 0; i < declaration.fields.size(); ++i) {
-            if (!span_contains(declaration.fields[i].name.span, offset)) {
-              continue;
-            }
-            const std::optional<StructLayout> layout =
-                struct_layout_of(analysis, source, index);
-            if (!layout.has_value() || i >= layout->fields.size()) {
-              return std::nullopt;
-            }
-            const FieldLayout& field = layout->fields[i];
-            return "~~~alcy\n" + layout->name + "." + field.name + ": " +
-                   field.type + "\n~~~\n\nsize " + std::to_string(field.size) +
-                   " bytes, align " + std::to_string(field.align) +
-                   ", offset " + std::to_string(field.offset) + "\n";
-          }
-          break;
-        }
-        case K::Enum: {
-          const ast::ItemEnum& declaration = item.payload.get<ast::ItemEnum>();
-          if (span_contains(declaration.name.span, offset)) {
-            const std::optional<EnumLayout> layout =
-                enum_layout_of(analysis, source, index);
-            if (!layout.has_value()) {
-              return std::nullopt;
-            }
-            return enum_layout_markdown(*layout) +
-                   doc_markdown(source, item.docs);
-          }
-          for (u32 i = 0; i < declaration.variants.size(); ++i) {
-            if (!span_contains(declaration.variants[i].name.span, offset)) {
-              continue;
-            }
-            const std::optional<EnumLayout> layout =
-                enum_layout_of(analysis, source, index);
-            if (!layout.has_value() || i >= layout->variants.size()) {
-              return std::nullopt;
-            }
-            const EnumVariantLayout& variant = layout->variants[i];
-            std::string out = "~~~alcy\n" + layout->name + "::" + variant.name;
-            if (!variant.fields.empty()) {
-              out += '(';
-              for (u32 j = 0; j < variant.fields.size(); ++j) {
-                if (j != 0) {
-                  out += ", ";
-                }
-                out += variant.fields[j].type;
-              }
-              out += ')';
-            }
-            out += "\n~~~\n";
-            return out;
-          }
-          break;
-        }
-        case K::Fn:
-        case K::Intrinsic: {
-          const std::string_view name = item.name();
-          if (!span_contains(::ast::item_name_span(context.ast, item),
-                             offset)) {
-            break;
-          }
-          const analyzer::CheckedModule::FnSig* signature =
-              find_signature(package, index);
-          if (signature == nullptr) {
-            return std::nullopt;
-          }
-          return signature_markdown(context, package,
-                                    item.kind == K::Fn ? "fn" : "intrinsic",
-                                    name, signature->params, signature->ret) +
-                 doc_markdown(source, item.docs);
-        }
-        case K::Static:
-        case K::Const: {
-          const std::string_view name = item.name();
-          if (!span_contains(::ast::item_name_span(context.ast, item),
-                             offset)) {
-            break;
-          }
-          const analyzer::CheckedModule::StaticInfo* info =
-              find_static(package, name);
-          if (info == nullptr) {
-            return std::nullopt;
-          }
-          const ir::StorageState& state = package.types->state();
-          return "~~~alcy\n" +
-                 std::string(item.kind == K::Const ? "const " : "static ") +
-                 std::string(name) + ": " +
-                 ir::type_display(state, context.strings, info->type) +
-                 "\n~~~\n" + doc_markdown(source, item.docs);
-        }
-        default: break;
+  const std::optional<diag::Span> declaration =
+      definition_at(document, analysis, position);
+  if (declaration.has_value()) {
+    const std::optional<HoverTarget> target =
+        target_of(context, package, *declaration);
+    if (target.has_value()) {
+      const std::optional<std::string_view> declaration_source =
+          analysis.context().sources.bytes(declaration->file);
+      if (declaration_source.has_value()) {
+        return render_target(analysis, *target, *declaration_source);
       }
     }
   }
