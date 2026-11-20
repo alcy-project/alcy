@@ -78,6 +78,21 @@ it is implemented.
   Attributes on statements, expressions, and parameters, and
   feature flags of a package's own, are not adopted.
 
+## Compile-time evaluation
+
+- Comp-time `for` over arrays and slices is deferred: their cursors
+  hold raw pointers and a comp value has no pointer form. Range
+  heads already unroll through the Iterator chain (comp.md).
+- `comp if` and `comp for` support in tree-sitter and the language
+  server. The parser, AST, formatter, and checker carry the markers.
+- An effect or purity system for comp evaluation. The fail-closed
+  refusal of intrinsics without a comp form and of external
+  declarations is the policy today; a classification system would
+  add call-site diagnostics, not a new runtime path.
+- Shape access for an expanded function's variadic parameter lands
+  with the fmt pilot, the only place compiler-expanded bodies are
+  evaluated today.
+
 ## Toolchain
 
 - The `alcy/std` suite is selected per manifest and staged in pieces:

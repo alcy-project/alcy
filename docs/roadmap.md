@@ -234,21 +234,37 @@ peripheral work lives in `backlog.md`. The language record lives in
   throughout, and its intrinsics take `&[u8]`. The `err-io-file`
   corpus passes on both hosts - the Windows build runs under wine.
 
-- [ ] `comp` expands what it knows, and the `fmt` pilot.
+- [x] `comp` evaluates the values it knows.
 
-. Explicit `comp for`/`comp if` control flow whose remaining
-  operations are emitted in the function's per-instantiation body,
-  with the variadic tuple's shape readable at compile time (length,
-  comp-known indexing that keeps each element's type) and
-  variadic rule restated. The pilot rewrites `fmt`'s parse and its
-  conversions in alcy (the builtins gain conversion impls; a float
-  carries its precision), retires the C++ conversion lane once the
-  tests, code size, compile time, runtime performance, wasm parity,
-  and the float-digit accuracy item pass, and lets `print` ride the
-  same expansion. Then removals follow: `builtin_display`
-  retires, the fmt/io recognition moves under the mechanism, and the
-  agreement test pinning the scalar comparisons to their impls lands
-  early.
+  The explicit `comp for` / `comp if` markers parse, format, and
+  require a comp context. Inside one, a `for` head whose
+  `into_iter`/`next` chain is comp-evaluable unrolls: ranges go
+  through the standard library's value cursor, ordinary calls with
+  comp-known arguments evaluate, and the result splices as a
+  comp-known value. The evaluator is fail-closed: intrinsics with no
+  comp form, external declarations, I/O, and allocation are refused.
+  A range head is capped at 4,096 unrolled iterations and the global
+  quota stays at one million steps; arrays and slices are deferred
+  for their raw-pointer cursor. The specification records the
+  contract. Shape access for a variadic parameter moved to the fmt
+  pilot below, where expanded bodies are actually evaluated.
+
+- [ ] The `fmt` pilot.
+
+  Give compiler-expanded functions a shape-only view of a variadic
+  parameter (`args.len()` and `args[i]` with a comp-known index), and
+  rewrite `fmt`'s parse and conversions in alcy (the builtins gain
+  conversion impls; a float carries its precision). Capture the code
+  size, compile time, runtime, wasm, and digit baselines before the
+  conversion moves. Retire the C++ conversion lane only after the
+  tests and those measurements pass, and let `print` ride the same
+  expansion.
+
+- [ ] Retire the old `fmt` recognition.
+
+  `builtin_display` retires, the fmt/io recognition moves under the
+  expansion mechanism, and the agreement test pinning the scalar
+  comparisons to their impls lands early.
 
 ## 1.0
 
