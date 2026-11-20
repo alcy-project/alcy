@@ -65,6 +65,9 @@ class RuntimeBuilder {
       build_memcpy();
       build_memset();
     }
+    if (windows_) {
+      build_wcslen();
+    }
     // A piece is defined only when the program declares it. A module
     // that never allocates carries no allocator, and a freestanding
     // program that never prints carries no libc call: the declaration
@@ -677,6 +680,46 @@ class RuntimeBuilder {
 
     builder_.SetInsertPoint(done);
     builder_.CreateRetVoid();
+  }
+
+  // The command-line scan counts the wide characters before the first
+  // zero, which an optimizing LLVM recognizes and calls `wcslen` for.
+  // A Windows image carries no C runtime to answer it, so the runtime
+  // defines the routine itself. Loop idiom recognition leaves a loop in
+  // a function of this name alone, so the definition stays a loop.
+  void build_wcslen() {
+    llvm::Type* i16 = builder_.getInt16Ty();
+    llvm::Type* i64 = builder_.getInt64Ty();
+    llvm::FunctionType* type =
+        llvm::FunctionType::get(i64, {builder_.getPtrTy()}, false);
+    llvm::Function* function = runtime("wcslen", type);
+    // The call only appears once LTO has inlined the argument scan, so
+    // at compile time this definition is unreferenced and a discardable
+    // one would be collected. External linkage keeps it; the comdat
+    // still lets two objects of one image share a copy.
+    function->setLinkage(llvm::GlobalValue::ExternalLinkage);
+    function->setDoesNotThrow();
+    llvm::BasicBlock* entry =
+        llvm::BasicBlock::Create(module_.getContext(), "entry", function);
+    llvm::BasicBlock* loop =
+        llvm::BasicBlock::Create(module_.getContext(), "loop", function);
+    llvm::BasicBlock* done =
+        llvm::BasicBlock::Create(module_.getContext(), "done", function);
+    builder_.SetInsertPoint(entry);
+    builder_.CreateBr(loop);
+    builder_.SetInsertPoint(loop);
+    llvm::PHINode* at = builder_.CreatePHI(i64, 2, "at");
+    at->addIncoming(llvm::ConstantInt::get(i64, 0), entry);
+    llvm::Value* character = builder_.CreateLoad(
+        i16, builder_.CreateGEP(i16, function->getArg(0), at), "character");
+    llvm::Value* next =
+        builder_.CreateAdd(at, llvm::ConstantInt::get(i64, 1), "next");
+    llvm::Value* ended =
+        builder_.CreateICmpEQ(character, llvm::ConstantInt::get(i16, 0));
+    at->addIncoming(next, loop);
+    builder_.CreateCondBr(ended, done, loop);
+    builder_.SetInsertPoint(done);
+    builder_.CreateRet(at);
   }
 
   // A byte loop stands in for the libc routine a freestanding program

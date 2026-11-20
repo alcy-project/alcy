@@ -615,6 +615,16 @@ TEST_CASE("A Windows COFF runtime carries the kernel and nothing else") {
   if (const llvm::Function* chkstk = module.getFunction("__chkstk")) {
     CHECK(chkstk->hasComdat());
   }
+  // -O turns the command-line scan into this call, and a Windows image
+  // has no C runtime to answer it.
+  CHECK(module.getFunction("wcslen") != nullptr);
+  if (const llvm::Function* wide_len = module.getFunction("wcslen")) {
+    CHECK(!wide_len->isDeclaration());
+    CHECK(wide_len->hasComdat());
+    // LTO makes the call after the compile-time dead-code pass, so a
+    // discardable definition would already be gone by then.
+    CHECK(wide_len->getLinkage() == llvm::GlobalValue::ExternalLinkage);
+  }
 }
 
 TEST_CASE("A 32-bit Windows runtime carries the same kernel set") {
