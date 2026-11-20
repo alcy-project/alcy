@@ -1378,4 +1378,96 @@ TEST_CASE("IR interpreter copies bytes a touching range already wrote") {
   check_int_value(storage, result.value(), 0x42);
 }
 
+// The AST engine's new paths are value-observable here: a mutable
+// receiver written back across calls, ordinary callees bound from a comp
+// context, and a field read whose type comes from the value.
+TEST_CASE("AST engine writes a mutable receiver back across calls") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built =
+      build_scenario(dir,
+                     "enum Maybe<T> {\n"
+                     "  Some(T),\n"
+                     "  None,\n"
+                     "}\n"
+                     "spec Cur<T> {\n"
+                     "  fn next(mut self: &mut Self) -> Maybe<T>;\n"
+                     "}\n"
+                     "struct Counter {\n"
+                     "  pos: i32,\n"
+                     "  end: i32,\n"
+                     "}\n"
+                     "impl Cur<i32> for Counter {\n"
+                     "  fn next(mut self: &mut Self) -> Maybe<i32> {\n"
+                     "    if self.pos >= self.end {\n"
+                     "      ret Maybe::None\n"
+                     "    }\n"
+                     "    v := self.pos\n"
+                     "    self.pos += 1\n"
+                     "    ret Maybe::Some(v)\n"
+                     "  }\n"
+                     "}\n"
+                     "const V: i32 := comp {\n"
+                     "  mut c := Counter { pos: 0, end: 5 }\n"
+                     "  mut s := 0\n"
+                     "  loop {\n"
+                     "    match c.next() {\n"
+                     "      Maybe::Some(v) => { s += v },\n"
+                     "      Maybe::None => break,\n"
+                     "    }\n"
+                     "  }\n"
+                     "  s\n"
+                     "}\n"
+                     "fn main() {\n"
+                     "  _ := V\n"
+                     "}\n",
+                     {"V"}, scenario);
+  CHECK(built);
+  if (!built || scenario.storage == nullptr || scenario.asts.size() != 1) {
+    return;
+  }
+  check_int_value(*scenario.storage, scenario.asts[0], 10);
+}
+
+TEST_CASE("AST engine binds an ordinary callee's comp-known argument") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "fn double(x: i32) -> i32 {\n"
+                                    "  ret x + x\n"
+                                    "}\n"
+                                    "const V: i32 := double(21)\n"
+                                    "fn main() {\n"
+                                    "  _ := V\n"
+                                    "}\n",
+                                    {"V"}, scenario);
+  CHECK(built);
+  if (!built || scenario.storage == nullptr || scenario.asts.size() != 1) {
+    return;
+  }
+  check_int_value(*scenario.storage, scenario.asts[0], 42);
+}
+
+TEST_CASE("AST engine reads a field with the value's type") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built = build_scenario(dir,
+                                    "struct Boxed {\n"
+                                    "  n: i32,\n"
+                                    "}\n"
+                                    "fn get(b: Boxed) -> i32 {\n"
+                                    "  ret b.n\n"
+                                    "}\n"
+                                    "const V: i32 := get(Boxed { n: 7 })\n"
+                                    "fn main() {\n"
+                                    "  _ := V\n"
+                                    "}\n",
+                                    {"V"}, scenario);
+  CHECK(built);
+  if (!built || scenario.storage == nullptr || scenario.asts.size() != 1) {
+    return;
+  }
+  check_int_value(*scenario.storage, scenario.asts[0], 7);
+}
+
 }  // namespace lowering

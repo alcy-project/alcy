@@ -1292,6 +1292,7 @@ ast::ExprIdx Parser::parse_for(bool is_comp) {
   loop.payload.set(ast::ExprLoop{
       .body = ast_.blocks.push_back(loop_body),
       .is_comp = is_comp,
+      .from_for = true,
   });
   const ast::ExprIdx loop_expr = ast_.exprs.push_back(loop);
 

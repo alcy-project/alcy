@@ -575,6 +575,9 @@ struct ExprLoop {
   BlockIdx body = BlockIdx::invalid();
   // Set on the loop a `comp for` desugars into.
   bool is_comp = false;
+  // Set on every loop the `for` desugar builds, so the evaluator's
+  // expansion cap does not depend on the shape of its body.
+  bool from_for = false;
 };
 
 struct ExprWhile {

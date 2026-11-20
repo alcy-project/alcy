@@ -240,7 +240,8 @@ class CompEvaluator {
                       CompScope& scope,
                       CompFlow& out,
                       diag::Span span,
-                      const ast::Cond* cond = nullptr);
+                      const ast::Cond* cond = nullptr,
+                      bool unrolled = false);
   bool comp_run_fn(u32 def_module,
                    ast::ItemIdx item,
                    const std::vector<ir::TypeIdx>& params,

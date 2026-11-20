@@ -957,21 +957,12 @@ bool CompEvaluator::comp_eval_loop(u32 mod,
                                    CompScope& scope,
                                    CompFlow& out,
                                    diag::Span span,
-                                   const ast::Cond* cond) {
+                                   const ast::Cond* cond,
+                                   bool unrolled) {
   constexpr u32 COMP_EXPANSION_CAP = 4096;
-  // A `for` desugars to a `loop` whose body is a match on `next()`;
-  // its `Some` pattern carries the marker. Cap that unrolling, while
-  // `while` and `loop` stay on the global quota, which is their
-  // unbounded-evaluation diagnostic.
-  bool unrolled = false;
-  const ast::Block& loop_block = ast.blocks[body];
-  if (loop_block.value.is_valid() &&
-      ast.exprs[loop_block.value].kind == ast::ExprKind::Match) {
-    const ast::ExprMatch& match =
-        ast.exprs[loop_block.value].payload.get<ast::ExprMatch>();
-    unrolled =
-        !match.arms.empty() && ast.patterns[match.arms[0].pattern].for_pattern;
-  }
+  // The desugar marks its loop, so the cap follows the source construct
+  // rather than the shape of a body a later desugar could change.
+  // `while` and `loop` stay on the global quota.
   u32 iterations = 0;
   while (!failed()) {
     if (unrolled && ++iterations > COMP_EXPANSION_CAP) {
@@ -1402,8 +1393,24 @@ bool CompEvaluator::comp_eval_method_call(u32 mod,
     inst_ = saved_inst;
   }
   if (ok && mut_receiver && receiver_place.value != nullptr &&
-      !callee_scope.frames.empty() && !callee_scope.frames[0].empty()) {
-    *receiver_place.value = callee_scope.frames[0].front().second.value;
+      !callee_scope.frames.empty()) {
+    // The receiver is the first parameter's binding. Find it by the
+    // pattern's name rather than by position: a destructure could bind
+    // more than one name and would otherwise write back the wrong one.
+    const ast::PatternNode& receiver_pattern =
+        ast.patterns[fn.params[0].pattern];
+    std::string_view receiver_name;
+    if (receiver_pattern.kind == ast::PatternKind::Ident) {
+      receiver_name = receiver_pattern.payload.ident.name.name;
+    } else if (receiver_pattern.kind == ast::PatternKind::MutIdent) {
+      receiver_name = receiver_pattern.payload.mut_ident.name.name;
+    }
+    for (const auto& binding : callee_scope.frames[0]) {
+      if (!receiver_name.empty() && binding.first == receiver_name) {
+        *receiver_place.value = binding.second.value;
+        break;
+      }
+    }
   }
   --call_depth_;
   if (!ok) {
@@ -1777,8 +1784,9 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
     case ast::ExprKind::Loop: {
       out.type = expr_type_in(mod, expr);
       CompFlow flow;
-      if (!comp_eval_loop(mod, node.payload.get<ast::ExprLoop>().body, scope,
-                          flow, node.span)) {
+      const ast::ExprLoop& loop = node.payload.get<ast::ExprLoop>();
+      if (!comp_eval_loop(mod, loop.body, scope, flow, node.span, nullptr,
+                          loop.from_for)) {
         return false;
       }
       out.value.tag = CompValue::Tag::Void;
