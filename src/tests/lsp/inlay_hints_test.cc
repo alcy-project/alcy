@@ -37,6 +37,16 @@ TEST_CASE("A binding without a type shows the inferred type") {
   const text::JsonValue* hint = find_hint(hints, ": i32");
   CHECK(hint != nullptr);
   if (hint != nullptr) {
+    const text::JsonValue* left = hint->find("paddingLeft");
+    const text::JsonValue* right = hint->find("paddingRight");
+    CHECK(left != nullptr);
+    CHECK(right != nullptr);
+    if (left != nullptr) {
+      CHECK(left->as_bool() == false);
+    }
+    if (right != nullptr) {
+      CHECK(right->as_bool() == true);
+    }
     const text::JsonValue* position = hint->find("position");
     CHECK(position != nullptr);
     if (position != nullptr) {

@@ -287,7 +287,8 @@ text::JsonValue inlay_hints(const Document& document,
       entry.set("kind", text::JsonValue::make_number(
                             static_cast<f64>(InlayHintKind::Parameter)));
     }
-    entry.set("paddingLeft", text::JsonValue::make_bool(!hint.is_parameter));
+    entry.set("paddingLeft",
+              text::JsonValue::make_bool(!hint.is_parameter && !hint.is_type));
     entry.set("paddingRight", text::JsonValue::make_bool(true));
     array.push(std::move(entry));
   }
