@@ -204,7 +204,7 @@ jobs:
   # The grammar is a second reading of the language, and the compiler is
   # the oracle for it: every source this job's build accepts must parse
   # there without an ERROR or a MISSING node. It needs a build, so it does
-  # not run in the matrix, and it asks one question rather than the ten the
+  # not run in the matrix, and it asks one question rather than the ones the
   # matrix would have asked it. The corpus half of the same check needs no
   # build at all and runs in the Grammar job.
   grammar-vs-compiler:
@@ -281,8 +281,8 @@ jobs:
   # The engine is built and run, and what comes out is checked for shape:
   # every case present, every sample counted, a clock named, a figure
   # above zero, and a generated source the compiler accepts. It judges
-  # nothing about timing, and it used to run in all ten matrix entries,
-  # which is ten times the cost for one answer.
+  # nothing about timing, and it used to run in every matrix entry, which
+  # multiplied the cost for one answer.
   benchmarks:
     name: Benchmark Harness
     needs: [changes]

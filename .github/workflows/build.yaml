@@ -38,6 +38,11 @@ jobs:
             arch: x86_64
             archive: tar.zst
             nix: true
+          - os: ubuntu-24.04-arm
+            plat: linux
+            arch: arm64
+            archive: tar.zst
+            nix: false
           - os: macos-26
             plat: macos
             arch: arm64
@@ -48,9 +53,19 @@ jobs:
             arch: arm64
             archive: tar.zst
             nix: true
+          - os: macos-26-intel
+            plat: macos
+            arch: x86_64
+            archive: tar.zst
+            nix: false
           - os: windows-2025-vs2026
             plat: windows
             arch: x64
+            archive: zip
+            nix: false
+          - os: windows-11-arm
+            plat: windows
+            arch: arm64
             archive: zip
             nix: false
 
@@ -118,8 +133,8 @@ jobs:
             *.${{ matrix.archive }}
             *.sha256
           if-no-files-found: error
-          # Ten archives per run: two weeks keeps a merged commit's build
-          # reachable without paying for ninety days of them.
+          # One archive per entry and role: two weeks keeps a merged commit's
+          # build reachable without paying for ninety days of them.
           retention-days: 14
 
       # The checks that read the compiler without compiling anything take
@@ -179,9 +194,9 @@ jobs:
         run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/verify_static_linkage.py --build-dir=out/build
 
       # The benchmark harness is checked once, in the CI workflow's
-      # `benchmarks` job, rather than in each of the ten matrix entries.
-      # It judges shape and not timing, so every entry was answering the
-      # same question ten times over.
+      # `benchmarks` job, rather than in each matrix entry. It judges shape
+      # and not timing, so every entry was answering the same question over
+      # and over.
 
       - name: Run Smoke Test
         shell: bash
