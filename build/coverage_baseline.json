@@ -5,130 +5,130 @@
     "coverage of src/ drops below this. Move it only on purpose."
   ],
   "lines": {
-    "count": 96629,
-    "covered": 80804,
-    "percent": 83.62292893437788
+    "count": 111538,
+    "covered": 92968,
+    "percent": 83.35096559020245
   },
   "modules": {
     "analyzer": {
-      "count": 16090,
-      "covered": 12904
+      "count": 17192,
+      "covered": 13737
     },
     "ast": {
-      "count": 801,
-      "covered": 658
+      "count": 851,
+      "covered": 699
     },
     "base": {
-      "count": 108,
-      "covered": 106
+      "count": 145,
+      "covered": 143
     },
     "benchmarks": {
       "count": 556,
       "covered": 174
     },
     "borrow": {
-      "count": 1936,
-      "covered": 1794
+      "count": 2168,
+      "covered": 1973
     },
     "cli": {
-      "count": 3039,
-      "covered": 2631
+      "count": 3567,
+      "covered": 3054
     },
     "codegen": {
-      "count": 2921,
-      "covered": 1334
+      "count": 3113,
+      "covered": 1477
     },
     "codegen_llvm": {
-      "count": 3405,
-      "covered": 3109
+      "count": 5474,
+      "covered": 4938
     },
     "comp": {
-      "count": 1295,
-      "covered": 752
-    },
-    "config": {
-      "count": 0,
-      "covered": 0
+      "count": 1376,
+      "covered": 825
     },
     "cst": {
-      "count": 350,
-      "covered": 311
+      "count": 356,
+      "covered": 309
     },
     "debug": {
       "count": 0,
       "covered": 0
     },
     "diag": {
-      "count": 771,
-      "covered": 687
+      "count": 871,
+      "covered": 785
     },
     "fmt": {
-      "count": 1510,
-      "covered": 1326
+      "count": 1502,
+      "covered": 1313
     },
     "i18n": {
       "count": 55,
       "covered": 37
     },
     "ir": {
-      "count": 4326,
-      "covered": 3549
+      "count": 5764,
+      "covered": 4766
     },
     "lexer": {
-      "count": 789,
-      "covered": 744
+      "count": 975,
+      "covered": 919
     },
     "linter": {
-      "count": 2774,
-      "covered": 2054
+      "count": 2935,
+      "covered": 2159
     },
     "lowering": {
-      "count": 10363,
-      "covered": 8749
+      "count": 13896,
+      "covered": 11137
     },
     "lsp": {
-      "count": 4871,
-      "covered": 3406
+      "count": 4790,
+      "covered": 3331
     },
     "opt": {
-      "count": 287,
-      "covered": 252
+      "count": 288,
+      "covered": 253
     },
     "overlay": {
       "count": 185,
       "covered": 169
     },
     "parser": {
-      "count": 4368,
-      "covered": 3842
+      "count": 5062,
+      "covered": 4321
     },
     "path": {
-      "count": 85,
-      "covered": 82
+      "count": 134,
+      "covered": 131
     },
     "pipeline": {
-      "count": 3629,
-      "covered": 2933
+      "count": 4278,
+      "covered": 3472
     },
     "pkg": {
       "count": 1414,
       "covered": 1188
     },
     "playground": {
-      "count": 134,
-      "covered": 115
+      "count": 171,
+      "covered": 152
     },
     "source": {
       "count": 83,
       "covered": 79
     },
     "symbol": {
-      "count": 466,
-      "covered": 388
+      "count": 470,
+      "covered": 390
+    },
+    "testgen": {
+      "count": 330,
+      "covered": 305
     },
     "tests": {
-      "count": 29423,
-      "covered": 26945
+      "count": 32942,
+      "covered": 30246
     },
     "text": {
       "count": 595,
