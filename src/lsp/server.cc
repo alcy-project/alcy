@@ -941,6 +941,7 @@ void Server::references(const text::JsonValue& id,
   }
   const DocumentAnalysis& analysis = cache_.get(*document);
   text::JsonValue result = text::JsonValue::make_array();
+  PositionCache positions;
   const auto push = [&](diag::Span span) {
     const std::optional<std::string> uri = uri_of_file(analysis, span.file);
     if (!uri.has_value()) {
@@ -951,7 +952,7 @@ void Server::references(const text::JsonValue& id,
     if (!text.has_value()) {
       return;
     }
-    result.push(location_json(*uri, *text, span, encoding_));
+    result.push(location_json(*uri, *text, span, encoding_, &positions));
   };
   if (include_declaration) {
     if (const std::optional<diag::Span> location =
@@ -1337,8 +1338,7 @@ void Server::register_watchers() {
 
 void Server::watched_files_changed(const text::JsonValue& params) {
   (void)params;
-  cache_.clear();
-  log_message(4, "watched files changed; package analyses dropped");
+  log_message(4, "watched files changed; refreshing package analyses");
   for (const auto& [uri, document] : documents_.documents()) {
     (void)uri;
     publish_diagnostics(document);

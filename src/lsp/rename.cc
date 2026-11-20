@@ -156,6 +156,7 @@ std::optional<text::JsonValue> workspace_rename(
     by_file[site.file].push_back(*segment);
   }
 
+  PositionCache positions;
   text::JsonValue changes = text::JsonValue::make_object();
   for (auto& [file, spans] : by_file) {
     const std::optional<std::string> uri = uri_of_file(analysis, file);
@@ -181,7 +182,7 @@ std::optional<text::JsonValue> workspace_rename(
     for (const diag::Span span : spans) {
       text::JsonValue edit = text::JsonValue::make_object();
       edit.set("range", range_json(*text, span.offset, span.length,
-                                   analysis.owner().encoding));
+                                   analysis.owner().encoding, &positions));
       edit.set("newText", text::JsonValue::make_string(std::string(new_name)));
       edits.push(std::move(edit));
     }

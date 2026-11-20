@@ -32,7 +32,8 @@ std::string reference_title(u32 count) {
 text::JsonValue lens_json(const Document& document,
                           const DocumentAnalysis& analysis,
                           diag::Span name,
-                          const std::vector<diag::Span>& sites) {
+                          const std::vector<diag::Span>& sites,
+                          PositionCache& positions) {
   text::JsonValue lens = text::JsonValue::make_object();
   lens.set("range", range_json(document, name.offset, name.length));
 
@@ -48,7 +49,7 @@ text::JsonValue lens_json(const Document& document,
       continue;
     }
     locations.push(location_json(source->uri, source->text, site,
-                                 analysis.owner().encoding));
+                                 analysis.owner().encoding, &positions));
   }
 
   const u32 count = static_cast<u32>(locations.as_array().size());
@@ -78,6 +79,7 @@ text::JsonValue code_lenses(const Document& document,
   const pipeline::PipelineContext& context = analysis.context();
   const analyzer::CheckedPackage& package = analysis.package();
   const source::FileId root = analysis.root();
+  PositionCache positions;
 
   // One pass over the references groups their sites by the declaration
   // they resolved to, so every lens reads a count without a second walk.
@@ -101,7 +103,7 @@ text::JsonValue code_lenses(const Document& document,
     const std::vector<diag::Span> empty;
     const std::vector<diag::Span>& sites =
         found == by_declaration.end() ? empty : found->second;
-    lenses.push(lens_json(document, analysis, name, sites));
+    lenses.push(lens_json(document, analysis, name, sites, positions));
   };
 
   std::unordered_set<u32> seen;

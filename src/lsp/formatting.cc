@@ -121,8 +121,15 @@ text::JsonValue document_range_formatting(const Document& document,
   }
   const std::vector<Line> before = split_lines(original);
   const std::vector<Line> after = split_lines(formatted);
+  const usize asked_start = document.index().byte_offset(original, start);
+  const usize asked_end = document.index().byte_offset(original, end);
   const usize n = before.size();
   const usize m = after.size();
+  if (n != 0 && m != 0 && n > 4000000 / m) {
+    append_edit(document, original, original, formatted, 0, original.size(),
+                asked_start, asked_end, &edits);
+    return edits;
+  }
   std::vector<std::vector<u32>> lcs(n + 1, std::vector<u32>(m + 1, 0));
   for (usize i = n; i > 0; --i) {
     for (usize j = m; j > 0; --j) {
@@ -131,9 +138,6 @@ text::JsonValue document_range_formatting(const Document& document,
                               : std::max(lcs[i][j - 1], lcs[i - 1][j]);
     }
   }
-  const usize asked_start = document.index().byte_offset(original, start);
-  const usize asked_end = document.index().byte_offset(original, end);
-
   usize i = 0;
   usize j = 0;
   usize hunk_before = 0;

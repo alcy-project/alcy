@@ -29,16 +29,37 @@ text::JsonValue range_json(const Document& document, u32 offset, u32 length) {
   return out;
 }
 
+const PositionIndex& PositionCache::index(std::string_view text,
+                                          PositionEncoding encoding) {
+  for (const Entry& entry : entries_) {
+    if (entry.encoding == encoding && entry.text == text) {
+      return entry.index;
+    }
+  }
+  entries_.push_back(Entry{std::string(text), encoding, PositionIndex{}});
+  Entry& entry = entries_.back();
+  entry.index.set_encoding(encoding);
+  entry.index.reset(entry.text);
+  return entry.index;
+}
+
 text::JsonValue range_json(std::string_view text,
                            u32 offset,
                            u32 length,
-                           PositionEncoding encoding) {
-  PositionIndex index;
-  index.set_encoding(encoding);
-  index.reset(text);
+                           PositionEncoding encoding,
+                           PositionCache* cache) {
+  PositionIndex local;
+  const PositionIndex* index = nullptr;
+  if (cache != nullptr) {
+    index = &cache->index(text, encoding);
+  } else {
+    local.set_encoding(encoding);
+    local.reset(text);
+    index = &local;
+  }
   text::JsonValue out = text::JsonValue::make_object();
-  out.set("start", position_json(index.position_at(text, offset)));
-  out.set("end", position_json(index.position_at(
+  out.set("start", position_json(index->position_at(text, offset)));
+  out.set("end", position_json(index->position_at(
                      text, static_cast<usize>(offset) + length)));
   return out;
 }
@@ -51,10 +72,11 @@ text::JsonValue location_json(const Document& document, diag::Span span) {
 text::JsonValue location_json(std::string_view uri,
                               std::string_view text,
                               diag::Span span,
-                              PositionEncoding encoding) {
+                              PositionEncoding encoding,
+                              PositionCache* cache) {
   text::JsonValue out = text::JsonValue::make_object();
   out.set("uri", text::JsonValue::make_string(std::string(uri)));
-  out.set("range", range_json(text, span.offset, span.length, encoding));
+  out.set("range", range_json(text, span.offset, span.length, encoding, cache));
   return out;
 }
 

@@ -171,9 +171,10 @@ text::JsonValue code_actions(const Document& document,
     if (!intersects(start_offset, end_offset, diagnostic->primary_span)) {
       continue;
     }
+    PositionCache positions;
     text::JsonValue edit = text::JsonValue::make_object();
     edit.set("range", range_json(fix->text, static_cast<u32>(fix->offset), 0,
-                                 analysis.owner().encoding));
+                                 analysis.owner().encoding, &positions));
     edit.set("newText", text::JsonValue::make_string(fix->replacement));
     text::JsonValue edits = text::JsonValue::make_array();
     edits.push(std::move(edit));

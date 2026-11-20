@@ -45,6 +45,16 @@ TEST_CASE("Positions can count UTF-8 bytes when the client asks") {
   CHECK(index.position_at(text, 4) == Position{0, 4});
 }
 
+TEST_CASE("A position cache reuses an index for the same buffer") {
+  const std::string text = "fn main() {\n  ret 0\n}\n";
+  PositionCache cache;
+  const PositionIndex& first = cache.index(text, PositionEncoding::Utf16);
+  const PositionIndex& again = cache.index(text, PositionEncoding::Utf16);
+  const PositionIndex& utf8 = cache.index(text, PositionEncoding::Utf8);
+  CHECK(&first == &again);
+  CHECK(&first != &utf8);
+}
+
 TEST_CASE("Cross-file ranges use the negotiated encoding") {
   const std::string text =
       "a\xC3\xA9"

@@ -177,6 +177,7 @@ text::JsonValue item_json(std::string_view uri,
                           std::string_view text,
                           const pipeline::PipelineContext& context,
                           PositionEncoding encoding,
+                          PositionCache& positions,
                           ItemRef ref) {
   const ast::ItemNode& node = context.ast.items[ref.item];
   const diag::Span name = name_of(context, ref.item);
@@ -186,10 +187,10 @@ text::JsonValue item_json(std::string_view uri,
            text::JsonValue::make_number(static_cast<f64>(
                ref.is_method ? SymbolKind::Method : SymbolKind::Function)));
   item.set("uri", text::JsonValue::make_string(std::string(uri)));
-  item.set("range",
-           range_json(text, node.span.offset, node.span.length, encoding));
+  item.set("range", range_json(text, node.span.offset, node.span.length,
+                               encoding, &positions));
   item.set("selectionRange",
-           range_json(text, name.offset, name.length, encoding));
+           range_json(text, name.offset, name.length, encoding, &positions));
   text::JsonValue data = text::JsonValue::make_object();
   data.set("nameOffset", text::JsonValue::make_number(name.offset));
   data.set("nameLength", text::JsonValue::make_number(name.length));
@@ -250,8 +251,9 @@ text::JsonValue prepare_call_hierarchy(const Document& document,
   if (!source_text(analysis, declaration->file, uri, text)) {
     return items;
   }
+  PositionCache positions;
   items.push(item_json(uri, text, analysis.context(), analysis.owner().encoding,
-                       *ref));
+                       positions, *ref));
   return items;
 }
 
@@ -300,6 +302,7 @@ text::JsonValue incoming_calls(const Document& document,
     ranges[at].push_back(edge.site);
   }
 
+  PositionCache positions;
   for (usize i = 0; i < callers.size(); ++i) {
     std::string uri;
     std::string_view text;
@@ -308,11 +311,11 @@ text::JsonValue incoming_calls(const Document& document,
     }
     text::JsonValue call = text::JsonValue::make_object();
     call.set("from", item_json(uri, text, context, analysis.owner().encoding,
-                               callers[i].ref));
+                               positions, callers[i].ref));
     text::JsonValue from_ranges = text::JsonValue::make_array();
     for (const diag::Span range : ranges[i]) {
       from_ranges.push(range_json(text, range.offset, range.length,
-                                  analysis.owner().encoding));
+                                  analysis.owner().encoding, &positions));
     }
     call.set("fromRanges", std::move(from_ranges));
     calls.push(std::move(call));
@@ -370,6 +373,7 @@ text::JsonValue outgoing_calls(const Document& document,
   if (!source_text(analysis, item_file, item_uri, item_text)) {
     return calls;
   }
+  PositionCache positions;
   for (usize i = 0; i < callees.size(); ++i) {
     std::string uri;
     std::string_view text;
@@ -378,11 +382,11 @@ text::JsonValue outgoing_calls(const Document& document,
     }
     text::JsonValue call = text::JsonValue::make_object();
     call.set("to", item_json(uri, text, context, analysis.owner().encoding,
-                             callees[i].ref));
+                             positions, callees[i].ref));
     text::JsonValue from_ranges = text::JsonValue::make_array();
     for (const diag::Span range : ranges[i]) {
       from_ranges.push(range_json(item_text, range.offset, range.length,
-                                  analysis.owner().encoding));
+                                  analysis.owner().encoding, &positions));
     }
     call.set("fromRanges", std::move(from_ranges));
     calls.push(std::move(call));
