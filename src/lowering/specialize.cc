@@ -658,9 +658,11 @@ ir::RegisterIdx Lowerer::clone_register(ir::RegisterIdx source,
   const ir::RegisterIdx clone = builder.reg(
       ir::Register{.type = type, .def_idx = ir::InstructionIdx::invalid()});
   state.registers.emplace(source.idx, clone);
-  const auto name = state.addr_names.find(source.idx);
-  if (name != state.addr_names.end()) {
-    const LoweredPackage::AddrInfo info = name->second;
+  const u32 named = source.idx < addr_name_positions_.size()
+                        ? addr_name_positions_[source.idx]
+                        : base::INVALID_IDX;
+  if (named != base::INVALID_IDX) {
+    const LoweredPackage::AddrInfo info = addr_names_[named];
     addr_names_.push_back(LoweredPackage::AddrInfo{
         clone, info.name, info.is_param, info.is_capture});
   }
@@ -909,9 +911,19 @@ void Lowerer::clone_body(ir::FunctionIdx source_idx,
   state.args = &args;
   state.instantiation_span = instantiation_span;
   // The clone keeps the address names its allocas had, so the borrow
-  // pass can still name the places it reports.
-  for (const LoweredPackage::AddrInfo& info : addr_names_) {
-    state.addr_names.emplace(info.addr.idx, info);
+  // pass can still name the places it reports. The index is built once
+  // for the phase, not per clone: a clone reads only the registers its
+  // source body names, and walking every alloca the package holds per
+  // clone made the phase cost the square of the package's size.
+  if (addr_name_positions_.empty() && !addr_names_.empty()) {
+    addr_name_positions_.assign(builder.state().registers.size(),
+                                base::INVALID_IDX);
+    for (u32 i = 0; i < addr_names_.size(); ++i) {
+      const u32 reg = addr_names_[i].addr.idx;
+      if (reg < addr_name_positions_.size()) {
+        addr_name_positions_[reg] = i;
+      }
+    }
   }
   // Reserve every block first: a nested specialization appends its own
   // while this body is translated, and the clone's range must stay

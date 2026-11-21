@@ -111,6 +111,11 @@ class Lowerer {
   diag::Span cur_span_{};
   std::vector<diag::Span> instr_spans_;
   std::vector<LoweredPackage::AddrInfo> addr_names_;
+  // Register index -> position in `addr_names_`. Built once before the
+  // first body is cloned: a clone's sources are bodies the original
+  // lowering recorded, and a clone appends its own allocas past the
+  // index, which are never sources of a further clone.
+  std::vector<u32> addr_name_positions_;
 
   // Compile-time values and their integer semantics live in the comp
   // component; the lowerer is one of its two readers.
@@ -772,13 +777,11 @@ class Lowerer {
   // backends meet monomorphic code only.
   //
   // One clone in flight: the source register and block of every part,
-  // the address names the clone's allocas keep, and the substitution
-  // its types take.
+  // and the substitution its types take.
   struct CloneState {
     const std::vector<ir::TypeIdx>* args = nullptr;
     std::unordered_map<u32, ir::RegisterIdx> registers;
     std::unordered_map<u32, ir::BlockIdx> blocks;
-    std::unordered_map<u32, LoweredPackage::AddrInfo> addr_names;
     // The call that instantiates the clone. A carried body's
     // instructions have no spans of their own, so a diagnostic from the
     // clone names the dependent's call instead.
