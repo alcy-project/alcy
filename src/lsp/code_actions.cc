@@ -38,35 +38,24 @@ std::string_view code_action_kind_name(diag::FixKind kind) {
 
 namespace {
 
+constexpr std::string_view STD_MARKER = "(alcy/std/";
+
 bool intersects(usize start, usize end, diag::Span span) {
   return span.offset < end && start < span.offset + span.length;
 }
 
-struct ManifestFix {
+struct ManifestSource {
   std::string uri;
   std::string text;
+};
+
+struct ManifestFix {
   usize offset = 0;
   std::string replacement;
 };
 
-std::optional<ManifestFix> std_dependency_fix(
-    const Document& document,
-    const diag::Diagnostic& diagnostic,
-    AnalysisCache& cache) {
-  constexpr std::string_view marker = "(alcy/std/";
-  const usize marker_at = diagnostic.message.find(marker);
-  if (marker_at == std::string_view::npos) {
-    return std::nullopt;
-  }
-  const usize end = diagnostic.message.find(')', marker_at + marker.size());
-  if (end == std::string_view::npos) {
-    return std::nullopt;
-  }
-  const std::string_view member = diagnostic.message.substr(
-      marker_at + marker.size(), end - marker_at - marker.size());
-  if (member.empty()) {
-    return std::nullopt;
-  }
+std::optional<ManifestSource> manifest_source(const Document& document,
+                                              AnalysisCache& cache) {
   const std::optional<std::string> path =
       workspace::uri_to_path(document.uri());
   if (!path.has_value()) {
@@ -83,6 +72,25 @@ std::optional<ManifestFix> std_dependency_fix(
                          ? io::read_file(std::string(manifest.as_view()))
                          : std::string(open->text());
   if (text.empty()) {
+    return std::nullopt;
+  }
+  return ManifestSource{manifest_uri, std::move(text)};
+}
+
+std::optional<ManifestFix> std_dependency_fix(
+    const diag::Diagnostic& diagnostic,
+    const std::string& text) {
+  const usize marker_at = diagnostic.message.find(STD_MARKER);
+  if (marker_at == std::string_view::npos) {
+    return std::nullopt;
+  }
+  const usize end = diagnostic.message.find(')', marker_at + STD_MARKER.size());
+  if (end == std::string_view::npos) {
+    return std::nullopt;
+  }
+  const std::string_view member = diagnostic.message.substr(
+      marker_at + STD_MARKER.size(), end - marker_at - STD_MARKER.size());
+  if (member.empty()) {
     return std::nullopt;
   }
   const std::string spelling = "\"alcy/std/" + std::string(member) + "\" = {}";
@@ -104,8 +112,7 @@ std::optional<ManifestFix> std_dependency_fix(
       replacement = spelling + "\n";
     }
   }
-  return ManifestFix{workspace::path_to_uri(manifest.as_view()),
-                     std::move(text), offset, std::move(replacement)};
+  return ManifestFix{offset, std::move(replacement)};
 }
 
 }  // namespace
@@ -167,14 +174,24 @@ text::JsonValue code_actions(const Document& document,
     action.set("edit", std::move(workspace_edit));
     actions.push(std::move(action));
   }
+  std::optional<ManifestSource> manifest;
+  bool manifest_checked = false;
   for (u32 i = 0; i < bag.size(); ++i) {
     const diag::Diagnostic* diagnostic = bag.at(i);
     if (diagnostic == nullptr || !diagnostic->has_primary_span ||
-        diagnostic->primary_span.file != analysis.root()) {
+        diagnostic->primary_span.file != analysis.root() ||
+        diagnostic->message.find(STD_MARKER) == std::string_view::npos) {
+      continue;
+    }
+    if (!manifest_checked) {
+      manifest = manifest_source(document, cache);
+      manifest_checked = true;
+    }
+    if (!manifest.has_value()) {
       continue;
     }
     const std::optional<ManifestFix> fix =
-        std_dependency_fix(document, *diagnostic, cache);
+        std_dependency_fix(*diagnostic, manifest->text);
     if (!fix.has_value()) {
       continue;
     }
@@ -183,13 +200,13 @@ text::JsonValue code_actions(const Document& document,
     }
     PositionCache positions;
     text::JsonValue edit = text::JsonValue::make_object();
-    edit.set("range", range_json(fix->text, static_cast<u32>(fix->offset), 0,
-                                 analysis.owner().encoding, &positions));
+    edit.set("range", range_json(manifest->text, static_cast<u32>(fix->offset),
+                                 0, analysis.owner().encoding, &positions));
     edit.set("newText", text::JsonValue::make_string(fix->replacement));
     text::JsonValue edits = text::JsonValue::make_array();
     edits.push(std::move(edit));
     text::JsonValue changes = text::JsonValue::make_object();
-    changes.set(fix->uri, std::move(edits));
+    changes.set(manifest->uri, std::move(edits));
     text::JsonValue workspace_edit = text::JsonValue::make_object();
     workspace_edit.set("changes", std::move(changes));
     text::JsonValue action = text::JsonValue::make_object();
