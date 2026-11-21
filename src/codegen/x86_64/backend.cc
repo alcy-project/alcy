@@ -3,6 +3,7 @@
 
 #include "codegen/x86_64/backend.h"
 
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <string>
@@ -33,10 +34,40 @@
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "symbol/mangle.h"
 
 namespace codegen::x86_64 {
 
 namespace {
+
+// The name a dependent links against for an exported function: the
+// same mangling every other backend gives the IR signature.
+std::string linkable_name(const ir::Function& function,
+                          const ir::Storage& storage,
+                          const ir::SymbolTable& strings) {
+  symbol::Signature signature;
+  signature.path = std::string(strings.get(function.meta.path));
+  signature.name = std::string(strings.get(function.meta.name));
+  signature.owner = function.meta.owner;
+  switch (function.meta.kind) {
+    case ir::SymbolKind::Free:
+      signature.kind = symbol::Signature::Kind::Free;
+      break;
+    case ir::SymbolKind::Assoc:
+      signature.kind = symbol::Signature::Kind::Assoc;
+      break;
+    case ir::SymbolKind::Method:
+      signature.kind = symbol::Signature::Kind::Method;
+      break;
+    default: break;
+  }
+  const ir::TypeIdxRange generics = function.meta.generics;
+  signature.generics.reserve(generics.size());
+  for (u32 i = 0; i < generics.size(); ++i) {
+    signature.generics.emplace_back(generics.head().idx + i);
+  }
+  return symbol::mangle(signature, storage, strings);
+}
 
 // Whether this function is the program's entry: a free, argumentless
 // `main`, the same test the analyzer applies.
@@ -77,20 +108,39 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // grows from: a program's object carries what it reaches and nothing
   // else.
   std::optional<ir::FunctionIdx> entry;
-  for (const ir::FunctionIdx index : storage.functions().idx_range()) {
-    if (is_entry_candidate(storage, strings, storage.functions()[index])) {
-      entry = index;
-      break;
+  if (request.emit_entry) {
+    for (const ir::FunctionIdx index : storage.functions().idx_range()) {
+      if (is_entry_candidate(storage, strings, storage.functions()[index])) {
+        entry = index;
+        break;
+      }
+    }
+    if (!entry.has_value()) {
+      (void)bag.emit<i18n::Key::CodegenX86Unsupported>(
+          codegen::DiagCode::Unsupported, diag::Span{}, "main");
+      return base::make_err(codegen::EmitError::Unsupported);
     }
   }
-  if (!entry.has_value()) {
-    (void)bag.emit<i18n::Key::CodegenX86Unsupported>(
-        codegen::DiagCode::Unsupported, diag::Span{}, "main");
-    return base::make_err(codegen::EmitError::Unsupported);
-  }
 
-  const std::vector<bool> reachable =
-      codegen::reachable_functions(storage, std::span(&*entry, 1));
+  // A library has no entry to prune from: every free function is a
+  // root, narrowed to the surface when visibility reaches the IR.
+  std::vector<ir::FunctionIdx> roots;
+  if (entry.has_value()) {
+    roots.push_back(*entry);
+  } else {
+    std::vector<bool> parametric(storage.functions().size(), false);
+    for (const ir::FunctionIdx index : storage.parametric_functions()) {
+      parametric[index.idx] = true;
+    }
+    for (const ir::FunctionIdx index : storage.functions().idx_range()) {
+      if (storage.functions()[index].meta.kind == ir::SymbolKind::Free &&
+          !parametric[index.idx]) {
+        roots.push_back(index);
+      }
+    }
+  }
+  const std::vector<bool> reachable = codegen::reachable_functions(
+      storage, std::span(roots.data(), roots.size()));
 
   // One section for the code, every function at its own offset, and the
   // patches each body's references asked for, moved by that offset.
@@ -170,8 +220,20 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
         runtime_names.push_back(name);
       }
     }
-    emit_body(body, index == *entry ? entry_symbol : internal_symbol(index),
-              object::SymbolBind::Local);
+    const bool exported = request.exported_functions.has_value() &&
+                          std::find(request.exported_functions->begin(),
+                                    request.exported_functions->end(),
+                                    index) != request.exported_functions->end();
+    // A library's surface is named as the IR spells it: a dependent's
+    // object refers to the mangled name, not this backend's private
+    // numbering.
+    const std::string symbol = index == entry ? entry_symbol
+                               : exported
+                                   ? linkable_name(function, storage, strings)
+                                   : internal_symbol(index);
+    emit_body(
+        body, symbol,
+        exported ? object::SymbolBind::Global : object::SymbolBind::Local);
   }
 
   // The runtime, for the names the program reaches. A body is built
@@ -184,7 +246,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
 
   // The wrapper the startup calls. It hands the program's own `main`
   // the call and answers 0 when `main` returned nothing.
-  {
+  if (request.emit_entry) {
     Body wrapper;
     wrapper.symbols.push_back(entry_symbol);
     const ir::TypeIdx return_type =
@@ -337,8 +399,9 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   }
 
   // The process arguments the entry wrapper saved, in the third section.
-  // Only hosted builds have a `main` that received them.
-  if (!request.options.freestanding) {
+  // Only the program's own object has a `main` that received them; a
+  // library leaves these to the binary it links into.
+  if (request.emit_entry && !request.options.freestanding) {
     object::Section globals{.name = ".data",
                             .bytes = std::vector<u8>(16, 0),
                             .align = 8,

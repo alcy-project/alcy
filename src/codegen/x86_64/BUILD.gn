@@ -31,6 +31,7 @@ source_set("x86_64") {
     "//src/i18n",
     "//src/ir",
     "//src/overlay",
+    "//src/symbol",
   ]
   configs += [ "//src:alcy_config" ]
 }
