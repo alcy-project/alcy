@@ -349,6 +349,17 @@ void DiagBag::merge(const DiagBag& other) {
     }
     entries_[at].labels = labels;
     entries_[at].label_count = from.label_count;
+    entries_[at].check_name = from.check_name;
+  }
+  for (u32 i = 0; i < other.size_; ++i) {
+    const Diagnostic& from = other.entries_[i];
+    if (i >= size_ || from.fix == nullptr) {
+      continue;
+    }
+    // The replacement is a view into the other bag's arena, so it is
+    // copied here; the span itself is source bytes and crosses as-is.
+    (void)attach_fix(
+        i, Fix{from.fix->span, from.fix->replacement, from.fix->kind});
   }
   // What the other bag could not hold crosses too: the count is what a
   // caller reports, and an error among them still fails this bag.

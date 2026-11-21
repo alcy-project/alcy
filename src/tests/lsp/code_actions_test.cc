@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "diag/diagnostic.h"
 #include "doctest/doctest.h"
 #include "lsp/document.h"
 #include "text/json.h"
@@ -64,6 +65,12 @@ TEST_CASE("A while-true finding offers one quick fix") {
   if (replacement != nullptr) {
     CHECK(replacement->as_string() == "loop");
   }
+}
+
+TEST_CASE("Repair kinds map to distinct LSP CodeAction kinds") {
+  CHECK(code_action_kind_name(diag::FixKind::QuickFix) == "quickfix");
+  CHECK(code_action_kind_name(diag::FixKind::Refactor) == "refactor");
+  CHECK(code_action_kind_name(diag::FixKind::Source) == "source");
 }
 
 TEST_CASE("A clean buffer offers no quick fix") {

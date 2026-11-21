@@ -27,6 +27,15 @@
 
 namespace lsp {
 
+std::string_view code_action_kind_name(diag::FixKind kind) {
+  switch (kind) {
+    case diag::FixKind::Refactor: return "refactor";
+    case diag::FixKind::Source: return "source";
+    case diag::FixKind::QuickFix: return "quickfix";
+  }
+  return "quickfix";
+}
+
 namespace {
 
 bool intersects(usize start, usize end, diag::Span span) {
@@ -153,7 +162,8 @@ text::JsonValue code_actions(const Document& document,
     text::JsonValue action = text::JsonValue::make_object();
     action.set("title",
                text::JsonValue::make_string(std::string(diagnostic->message)));
-    action.set("kind", text::JsonValue::make_string("quickfix"));
+    action.set("kind", text::JsonValue::make_string(
+                           std::string(code_action_kind_name(fix.kind))));
     action.set("edit", std::move(workspace_edit));
     actions.push(std::move(action));
   }

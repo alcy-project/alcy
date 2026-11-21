@@ -3,11 +3,17 @@
 
 #pragma once
 
+#include <string_view>
+
+#include "diag/diagnostic.h"
 #include "lsp/analysis_cache.h"
 #include "lsp/document.h"
 #include "text/json.h"
 
 namespace lsp {
+
+// The LSP CodeAction kind for a repair: quickfix, refactor, or source.
+std::string_view code_action_kind_name(diag::FixKind kind);
 
 // The quick fixes for the findings that intersect the range: one
 // CodeAction per machine-applicable repair, carrying the edit the linter

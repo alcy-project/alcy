@@ -25,6 +25,10 @@ struct Label {
   std::string_view message;
 };
 
+// What a repair is for, so an editor can group quick fixes apart from
+// refactors and source actions.
+enum class FixKind : u8 { QuickFix, Refactor, Source };
+
 // A machine-applicable repair to the source: replace the bytes the span
 // covers with the replacement, which is empty to delete them. A producer
 // attaches one only when it is sure of the repair, because a client
@@ -32,6 +36,7 @@ struct Label {
 struct Fix {
   Span span;
   std::string_view replacement;
+  FixKind kind = FixKind::QuickFix;
 };
 
 // A single diagnostic: severity, numeric code, message, one

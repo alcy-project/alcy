@@ -215,11 +215,14 @@ struct LintContext {
   // Attaches a machine-applicable repair to a finding already reported:
   // the replacement is the bytes to put where the span is, empty to
   // delete them. A rule offers one only when it is sure of the repair.
-  void fix(u32 finding, diag::Span span, std::string_view replacement) {
+  void fix(u32 finding,
+           diag::Span span,
+           std::string_view replacement,
+           diag::FixKind kind = diag::FixKind::QuickFix) {
     if (finding >= bag.size()) {
       return;
     }
-    (void)bag.attach_fix(finding, diag::Fix{span, replacement});
+    (void)bag.attach_fix(finding, diag::Fix{span, replacement, kind});
   }
 };
 
