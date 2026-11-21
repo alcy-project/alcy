@@ -24,16 +24,17 @@ peripheral work lives in `backlog.md`. The language record lives in
   an authoritative boundary. Glue reaches a struct's or tuple's
   fields, an enum's live variant, and an array's elements; the unsafe
   intrinsic `drop_in_place<T>(p: &mut T)` lets `Vec` end its live
-  elements in `clear` and `drop` (`Map` and `Set` already did by
-  moving entries into bindings); and discarding - `_ := expr`, a bare
+  elements in `clear` and `drop` (`HashMap` and `HashSet` already did
+  by moving entries into bindings); and discarding - `_ := expr`, a bare
   statement, or a wildcard binding - ends the value where it stands.
 
 - [x] Container iteration.
 
   The adapters landed, and the standard containers now have cursors:
   `Vec` consumes (`VecIntoIter`), borrows (`VecIter`), and borrows
-  exclusively (`VecIterMut`); `Map` and `Set` hand out entries, keys,
-  and values from shared cursors, and `Map` consumes (`MapIntoIter`).
+  exclusively (`VecIterMut`); `HashMap` and `HashSet` hand out entries,
+  keys, and values from shared cursors, and `HashMap` consumes
+  (`HashMapIntoIter`).
   `for x in v` and `for (k, v) in m` walk them, a break ends what the
   loop never took, and the free algorithms (`count`, `any`, `all`,
   `position`, `find`, `last`, `collect_into`) ride any iterator -

@@ -333,9 +333,11 @@ impl<K: Hash + Eq, V> HashMap<K, V> {
 }
 
 impl<K, V> HashMap<K, V> {
-  // Takes the first live key at or after `pos` out of the table,
-  // returning it with the next position to scan. The slot is marked
-  // empty so the map's destructor will not end the key a second time.
+  // Iteration primitive for `HashSetIntoIter`: takes the first live
+  // key at or after `pos` out of the table and returns it with the
+  // next position to scan. The slot is marked empty so the map's
+  // destructor will not end the key again, but `len` is left stale;
+  // callers must be consuming the map, not reading `len` afterwards.
   pub fn take_key(mut self: &mut Self, pos: usize) -> Option<(usize, K)> {
     mut at := pos
     while at < self.cap {
@@ -520,6 +522,7 @@ impl<K, V> Iterator < (K, V) > for HashMapIntoIter<K, V> {
 // `m[key]` reads and writes the value under `key`, panicking when the
 // key is absent. The lookup scans the table by equality; the hash is
 // used by the map's own methods, which find the same slot faster.
+// Prefer `get` and `get_mut` for a hashed lookup, especially in a loop.
 impl<K: Eq, V> Index < K, V > for HashMap<K, V> {
   fn index(self: &Self, i: K) -> &V {
     mut slot := 0 as usize

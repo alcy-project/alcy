@@ -268,26 +268,33 @@ is past the end is `None` rather than a fault; `v[i]` instead panics
 when the index is out of range. This is the `Option` the match section
 already covers, so a read is a decision rather than an assumption.
 
-A `Map<V>` keys by `str` and stores a `V` per key. `insert` copies the
-key and returns the value it replaced, if any, which is why the result
-is discarded with `_ :=` when the old value is not wanted:
+A `HashMap<K, V>` stores a `V` per key. The key type needs `Hash + Eq`:
+the digest picks a slot and equality resolves two keys that land in
+one. Integer keys work directly, so a frequency table is
+`HashMap::<i64, i32>`; `String` keys work too and are owned by the
+table. `insert` returns the value it replaced, if any, which is why
+the result is discarded with `_ :=` when the old value is not wanted:
 
 ```alcy
 fn main() {
-  mut titles := Map::<str>::new()
-  _ := titles.insert("alcy", "a compiler")
-  if Option::Some(t) := titles.get("alcy") {
-    println("alcy: {}", *t)
+  mut scores := HashMap::<String, i32>::new()
+  _ := scores.insert(String::from("alcy"), 10)
+  if Option::Some(score) := scores.get(String::from("alcy")) {
+    println("alcy: {}", *score)
   }
-  println("{} entries", titles.len())
+  println("{} entries", scores.len())
 }
 ```
 
-`get` borrows the value, and `keys`, `values`, and `iter` walk the
-table; `Set` is built on the same table and keys by `str` too. Neither
-promises an order, so a report that needs one collects the keys into a
-`Vec` and sorts it (`sort` needs `T: Ord`) rather than depending on
-the order the entries went in.
+Lookups take the key by value because alcy keeps a borrowed temporary
+live until the enclosing scope ends; pass a fresh `String` when the
+caller only holds a `str`. `get` borrows the value, and `keys`,
+`values`, and `iter` walk the table. `HashSet<T>` is built on the same
+table and also takes `T: Hash + Eq`. Neither container promises an
+order, so a report that needs one collects the keys into a `Vec` and
+sorts it (`sort` needs `T: Ord`) rather than depending on the order
+the entries went in. `m[key]` reads through `Index`, but it scans by
+equality; use `get` or `get_mut` for a hashed lookup.
 
 ## Printing
 

@@ -154,7 +154,11 @@ replaced. The foundations are in `roadmap.md`.
   a borrowing spelling, or a `Borrow`-like spec that can be
   implemented for primitives, is still wanted. `keys()` traversal
   and `Vec` sorting moved to the roadmap's iteration and operator
-  items.
+  items. `Hash` and `Eq` are sealed, so today's keys are the suite's
+  `str`, `String`, and integers: a user-defined type needs an explicit
+  `[spec] implement = ["Hash", "Eq"]` opt-in before it can be a key.
+  `m[key]` scans by `Eq` because a `Hash` bound on a spec
+  implementation trips ED002; `get` and `get_mut` hash.
 
 - [ ] A mutator that answers `bool` is discarded by a plain
   statement with a warning: `HashSet::insert`, `HashSet::remove` and

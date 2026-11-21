@@ -121,9 +121,9 @@
   their builtin indexing, and a nominal type with no implementation is
   not indexable.
 - The standard containers implement the pair: `Vec<T>` with `usize`
-  and `T`, `String` with `usize` and `u8`, and `Map<V>` with `str` and
-  `V`. The specs are sealed to the `alcy/std` suite, so the operator
-  covers these types until a package lists the spec in its own
+  and `T`, `String` with `usize` and `u8`, and `HashMap<K, V>` with
+  `K` and `V`. The specs are sealed to the `alcy/std` suite, so the
+  operator covers these types until a package lists the spec in its own
   `[spec] implement` (see `modules.md`).
 
 ## Equality over specs
@@ -143,6 +143,23 @@
   body itself is checked once at its definition: comparing
   a vector of a type without `PartialEq` names that use rather than a
   line inside the implementation.
+
+## Hashing over specs
+
+- `Hash` is a sealed spec in `alcy/std/hash`: `fn hash(self: &Self) ->
+  u64` returns a digest of the value. It declares no equality: a
+  digest summarizes bytes, and the promise that equal keys hash equal
+  belongs to the consumer that uses digests to identify slots.
+- `HashMap<K, V>` and `HashSet<T>` ask for `K: Hash + Eq`. The table
+  hashes to pick a slot and compares with `Eq` to resolve a probe
+  chain; a type with a digest but no equality can be hashed without
+  ever being a key.
+- `str`, `String`, and the integer widths implement `Hash` in the
+  suite. A string hashes the bytes it views, so a `str` and a `String`
+  with the same bytes share a digest. Like `Eq`, `Hash` is sealed: a
+  package outside the suite opts in by listing it in `[spec]
+  implement = [...]` (see `modules.md`); without that opt-in a
+  user-defined type cannot be a table key.
 
 ## Comparison over specs
 
