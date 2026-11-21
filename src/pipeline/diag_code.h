@@ -85,11 +85,11 @@ enum class DiagCode : u8 {
   // A binary target declares no free `main`: the program reaches the
   // linker, whose failure names the tool rather than the entry point.
   NoEntryPoint = 24,
-  // A test entry writes a return type. A run reports a test by whether it
+  // A `#[test] fn` writes a return type. A run reports a test by whether it
   // returned, so a value has no reader; a helper beside the entries is
   // what a test that needs one calls.
   TestEntryReturns = 25,
-  // A test entry named `main`. The run writes the entry point its
+  // A `#[test] fn` named `main`. The run writes the entry point its
   // module needs, so a block cannot declare one.
   TestEntryNamedMain = 26,
   // A block item takes a name its module declares at its own level:

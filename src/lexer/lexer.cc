@@ -359,7 +359,6 @@ constexpr Keyword KEYWORDS[] = {
     {"static", TokenKind::Static},
     {"str", TokenKind::Str},
     {"struct", TokenKind::Struct},
-    {"test", TokenKind::Test},
     {"true", TokenKind::True},
     {"u128", TokenKind::U128},
     {"u16", TokenKind::U16},
@@ -1378,7 +1377,6 @@ bool is_keyword(TokenKind kind) {
     case TokenKind::Static:
     case TokenKind::Str:
     case TokenKind::Struct:
-    case TokenKind::Test:
     case TokenKind::True:
     case TokenKind::U8:
     case TokenKind::U16:

@@ -5,6 +5,6 @@ fn main() -> i32 {
   ret 0
 }
 
-test {
-  test gives_a_value() -> i32 { ret 1 }
+#[when(testing)] {
+  #[test] fn gives_a_value() -> i32 { ret 1 }
 }

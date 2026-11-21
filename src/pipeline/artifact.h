@@ -133,7 +133,7 @@ struct TestPackage {
 };
 
 // Resolves a package's tests: the modules its manifest selects with their
-// `test` blocks spliced into functions, and a driver module that calls
+// `#[test] fn`s gathered from groups, and a driver module that calls
 // them. A package needs no target to be tested, which is why this does not
 // go through resolve_artifacts. `execution` decides how the driver
 // reaches the tests, and the driver is part of the tree, so it is read

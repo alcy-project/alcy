@@ -229,9 +229,9 @@ fn slice_eq(a: &[u8], b: &[u8]) -> bool {
   ret true
 }
 
-test {
+#[when(testing)] {
   #[when(target.os != "windows")]
-  test from_str_round_trips_through_to_str() {
+  #[test] fn from_str_round_trips_through_to_str() {
     p := Path::from_str("/usr/lib")
     match p.to_str() {
       Option::Some(text) => {
@@ -244,23 +244,23 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test from_bytes_refuses_bytes_that_are_not_utf8() {
+  #[test] fn from_bytes_refuses_bytes_that_are_not_utf8() {
     bad := [0xffu8, 0xfeu8]
     assert(Path::from_bytes(bad.as_slice()).is_none(), "not scalar-shaped bytes are refused")
   }
 
   #[when(target.os != "windows")]
-  test a_relative_path_is_not_absolute() {
+  #[test] fn a_relative_path_is_not_absolute() {
     assert(!Path::from_str("some/relative/name").is_absolute(), "no root, no absolute")
   }
 
   #[when(target.os != "windows")]
-  test a_root_path_is_absolute() {
+  #[test] fn a_root_path_is_absolute() {
     assert(Path::from_str("/").is_absolute(), "the separator itself is a root")
   }
 
   #[when(target.os != "windows")]
-  test join_puts_one_separator_between_two_components() {
+  #[test] fn join_puts_one_separator_between_two_components() {
     p := Path::from_str("/usr").join(&Path::from_str("lib"))
     match p.to_str() {
       Option::Some(text) => {
@@ -273,7 +273,7 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test join_prefers_an_absolute_argument() {
+  #[test] fn join_prefers_an_absolute_argument() {
     p := Path::from_str("/usr").join(&Path::from_str("/etc"))
     match p.to_str() {
       Option::Some(text) => {
@@ -286,7 +286,7 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test file_name_strips_trailing_separators() {
+  #[test] fn file_name_strips_trailing_separators() {
     p := Path::from_str("/usr/lib/")
     match p.file_name() {
       Option::Some(name) => {
@@ -299,17 +299,17 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test file_name_of_a_root_is_none() {
+  #[test] fn file_name_of_a_root_is_none() {
     assert(Path::from_str("/").file_name().is_none(), "a root has no last component")
   }
 
   #[when(target.os != "windows")]
-  test parent_of_a_root_is_none() {
+  #[test] fn parent_of_a_root_is_none() {
     assert(Path::from_str("/").parent().is_none(), "a root has no parent")
   }
 
   #[when(target.os != "windows")]
-  test parent_of_a_relative_component_is_the_empty_path() {
+  #[test] fn parent_of_a_relative_component_is_the_empty_path() {
     match Path::from_str("one").parent() {
       Option::Some(p) => {
         assert(p.len_bytes() == 0, "the empty path is the parent")
@@ -321,7 +321,7 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test parent_climbs_one_component() {
+  #[test] fn parent_climbs_one_component() {
     match Path::from_str("/usr/lib").parent() {
       Option::Some(p) => {
         match p.to_str() {
@@ -340,7 +340,7 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test extension_reads_the_suffix() {
+  #[test] fn extension_reads_the_suffix() {
     match Path::from_str("lib/libz.a").extension() {
       Option::Some(ext) => {
         assert(ext.as_str() == "a", "the suffix after the last dot")
@@ -352,17 +352,17 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test extension_of_a_dotfile_is_none() {
+  #[test] fn extension_of_a_dotfile_is_none() {
     assert(Path::from_str(".hidden").extension().is_none(), "a leading dot is not an extension")
   }
 
   #[when(target.os != "windows")]
-  test extension_of_a_name_without_a_dot_is_none() {
+  #[test] fn extension_of_a_name_without_a_dot_is_none() {
     assert(Path::from_str("Makefile").extension().is_none(), "no dot, no extension")
   }
 
   #[when(target.os != "windows")]
-  test starts_with_matches_components_not_bytes() {
+  #[test] fn starts_with_matches_components_not_bytes() {
     assert(
       Path::from_str("/usr/lib").starts_with(&Path::from_str("/usr")),
       "the prefix is a component",
@@ -374,7 +374,7 @@ test {
   }
 
   #[when(target.os != "windows")]
-  test ends_with_matches_components_not_bytes() {
+  #[test] fn ends_with_matches_components_not_bytes() {
     assert(
       Path::from_str("/usr/lib").ends_with(&Path::from_str("lib")),
       "the suffix is a component",

@@ -2234,11 +2234,6 @@ void Checker::process_module(u32 module) {
       }
       case ast::ItemKind::Spec: break;
       case ast::ItemKind::Use: break;
-      // A test block holds nothing a program under analysis runs: the
-      // entries and their helpers come back as ordinary items in the
-      // compilation that tests them.
-      case ast::ItemKind::Test:
-      case ast::ItemKind::TestEntry: break;
     }
   }
 }

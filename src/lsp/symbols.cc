@@ -209,22 +209,6 @@ text::JsonValue item_symbol(const Document& document,
                          range_of(document, item.span),
                          range_of(document, selection));
     }
-    case K::Test: {
-      text::JsonValue children = text::JsonValue::make_array();
-      for (const ast::ItemIdx entry : item.payload.get<ast::ItemTest>().items) {
-        children.push(item_symbol(document, ast, entry));
-      }
-      return with_children(make_symbol("<test>", SymbolKind::Object,
-                                       range_of(document, item.span),
-                                       range_of(document, item.span)),
-                           std::move(children));
-    }
-    case K::TestEntry: {
-      const ast::ItemTestEntry& entry = item.payload.get<ast::ItemTestEntry>();
-      return make_symbol(std::string(entry.name.name), SymbolKind::Function,
-                         range_of(document, item.span),
-                         range_of(document, entry.name.span));
-    }
   }
   return text::JsonValue{};
 }

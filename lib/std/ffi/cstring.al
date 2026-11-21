@@ -60,13 +60,13 @@ impl CString {
   }
 }
 
-test {
-  test new_refuses_bytes_with_a_terminator() {
+#[when(testing)] {
+  #[test] fn new_refuses_bytes_with_a_terminator() {
     bad := [0x68u8, 0x00u8, 0x69u8]
     assert(CString::new(bad.as_slice()).is_none(), "an interior NUL is refused")
   }
 
-  test from_str_round_trips_through_as_bytes() {
+  #[test] fn from_str_round_trips_through_as_bytes() {
     match CString::from_str("hello") {
       Option::Some(owned) => {
         assert(owned.len() == 5, "the bytes, terminator aside")
@@ -80,7 +80,7 @@ test {
     }
   }
 
-  test an_empty_string_is_one_terminator() {
+  #[test] fn an_empty_string_is_one_terminator() {
     match CString::from_str("") {
       Option::Some(owned) => {
         assert(owned.is_empty(), "no content, one terminator")

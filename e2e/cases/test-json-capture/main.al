@@ -4,8 +4,8 @@ fn main() -> i32 {
   ret 0
 }
 
-test {
-  test prints() {
+#[when(testing)] {
+  #[test] fn prints() {
     print("hello from a test")
   }
 }

@@ -320,18 +320,6 @@ class Desugarer {
         }
         break;
       }
-      case ast::ItemKind::Test: {
-        for (ast::ItemIdx entry : node.payload.get<ast::ItemTest>().items) {
-          visit_item(entry);
-        }
-        break;
-      }
-      case ast::ItemKind::TestEntry: {
-        push_scope();
-        visit_block(node.payload.get<ast::ItemTestEntry>().body);
-        pop_scope();
-        break;
-      }
       case ast::ItemKind::Struct:
       case ast::ItemKind::Enum:
       case ast::ItemKind::Use: break;

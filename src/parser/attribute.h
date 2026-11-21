@@ -29,7 +29,8 @@ struct BuildFacts {
 // not know spells `unknown` everywhere, so an unrecognized target loses
 // no platform arm silently: the `when` gate evaluates `unknown` as the
 // value and the source's unknown arms are the ones that survive.
-BuildFacts build_facts(std::string_view triple, bool freestanding,
+BuildFacts build_facts(std::string_view triple,
+                       bool freestanding,
                        bool testing);
 
 // What the `when(EXPR)` on an item evaluates to on this target.

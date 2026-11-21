@@ -26,14 +26,14 @@ pub fn collect<I: Iterator<T>, T>(mut iter: I) -> Vec<T> {
   ret out
 }
 
-test {
-  test an_empty_iterator_collects_to_an_empty_vec() {
+#[when(testing)] {
+  #[test] fn an_empty_iterator_collects_to_an_empty_vec() {
     src := Vec::<i32>::new()
     out := collect(src.into_iter())
     assert(out.is_empty(), "an iterator with nothing in it collects nothing")
   }
 
-  test collect_takes_every_element_in_order() {
+  #[test] fn collect_takes_every_element_in_order() {
     mut src := Vec::<i32>::new()
     src.push(1)
     src.push(2)
@@ -45,7 +45,7 @@ test {
     assert(value(&out, 2) == 3, "and the last item is the last element")
   }
 
-  test collect_into_appends_after_the_elements_already_there() {
+  #[test] fn collect_into_appends_after_the_elements_already_there() {
     mut src := Vec::<i32>::new()
     src.push(2)
     src.push(3)
@@ -57,7 +57,7 @@ test {
     assert(value(&out, 2) == 3, "the last item ends the vec")
   }
 
-  test a_partly_drained_iterator_collects_only_what_is_left() {
+  #[test] fn a_partly_drained_iterator_collects_only_what_is_left() {
     mut src := Vec::<i32>::new()
     src.push(1)
     src.push(2)

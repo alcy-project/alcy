@@ -35,8 +35,8 @@ pub fn env_str(name: str) -> Option<String> {
   }
 }
 
-test {
-  test a_variable_the_process_has_is_found() {
+#[when(testing)] {
+  #[test] fn a_variable_the_process_has_is_found() {
     match env_str("ALCY_STD_TEST_ENV") {
       Option::Some(value) => {
         assert(value.as_str() == "alcy-std-test-value", "the value arrives as bytes")
@@ -47,11 +47,11 @@ test {
     }
   }
 
-  test a_variable_the_process_does_not_have_is_none() {
+  #[test] fn a_variable_the_process_does_not_have_is_none() {
     assert(env_str("ALCY_STD_ENV_NOT_SET").is_none(), "a missing variable is not there")
   }
 
-  test env_and_env_str_agree() {
+  #[test] fn env_and_env_str_agree() {
     match env("ALCY_STD_TEST_ENV") {
       Option::Some(bytes) => {
         assert(bytes.len() == 19, "alcy-std-test-value is 19 bytes")

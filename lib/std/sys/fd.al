@@ -35,24 +35,24 @@ impl Fd {
   }
 }
 
-test {
-  test stdin_names_descriptor_zero() {
+#[when(testing)] {
+  #[test] fn stdin_names_descriptor_zero() {
     assert(Fd::stdin().raw() == 0, "the standard input is descriptor zero")
   }
 
-  test stdout_names_descriptor_one() {
+  #[test] fn stdout_names_descriptor_one() {
     assert(Fd::stdout().raw() == 1, "the standard output is descriptor one")
   }
 
-  test stderr_names_descriptor_two() {
+  #[test] fn stderr_names_descriptor_two() {
     assert(Fd::stderr().raw() == 2, "the standard error is descriptor two")
   }
 
-  test from_raw_keeps_the_number_it_was_given() {
+  #[test] fn from_raw_keeps_the_number_it_was_given() {
     assert(Fd::from_raw(7).raw() == 7, "a descriptor names the number it was built from")
   }
 
-  test from_raw_round_trips_the_number_of_a_known_descriptor() {
+  #[test] fn from_raw_round_trips_the_number_of_a_known_descriptor() {
     assert(Fd::from_raw(Fd::stdout().raw()).raw() == 1, "the number comes back out unchanged")
   }
 

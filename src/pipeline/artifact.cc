@@ -923,7 +923,7 @@ base::Result<TestPackage, diag::Reported> resolve_test_package(
 
   TestPackage result;
   // Splicing replaces a file's items before the modules are paired with
-  // their files, so the tree resolves the functions a test block became.
+  // their files, so the tree resolves the functions a `#[test] fn` became.
   // A file reached by two module inputs is spliced once, and the second
   // input keeps the items the first wrote.
   std::vector<source::FileId> spliced;

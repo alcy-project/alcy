@@ -2,8 +2,8 @@ fn main() -> i32 {
   ret 0
 }
 
-test {
-  test adds() {
+#[when(testing)] {
+  #[test] fn adds() {
     assert_eq(util::twice(2), 4)
   }
 

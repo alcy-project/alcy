@@ -16,8 +16,8 @@
 namespace testgen {
 
 // The name an item declares in the module's namespace, when the item is
-// one that names itself: a block item takes a name of its own, so it may
-// not repeat one of these.
+// one that names itself. All names live in one namespace, so a gather
+// compares them without regard to the kind that declared them.
 std::optional<ast::Ident> declared_ident(const ast::ItemNode& item) {
   switch (item.kind) {
     case ast::ItemKind::Fn: return item.payload.get<ast::ItemFn>().name;
@@ -28,8 +28,6 @@ std::optional<ast::Ident> declared_ident(const ast::ItemNode& item) {
     case ast::ItemKind::Spec: return item.payload.get<ast::ItemSpec>().name;
     case ast::ItemKind::Static: return item.payload.get<ast::ItemStatic>().name;
     case ast::ItemKind::Const: return item.payload.get<ast::ItemConst>().name;
-    case ast::ItemKind::TestEntry:
-      return item.payload.get<ast::ItemTestEntry>().name;
     default: return std::nullopt;
   }
 }
@@ -60,116 +58,76 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
                            std::string_view module,
                            ast::AstArena& ast) {
   SplicedModule spliced;
-  spliced.items = items;
   std::vector<ast::ItemIdx> grown(items.begin(), items.end());
-  // The names the module declares at its own level. A block item has to
-  // pick a name none of them uses.
+  // Names the module declares outside its tests: a test cannot take one
+  // of those, because the run's driver calls it in that namespace.
   std::vector<std::string_view> level;
   for (const ast::ItemIdx index : items) {
     if (!ast.items.bound(index)) {
       continue;
     }
-    if (const std::optional<std::string_view> name =
-            declared_name(ast.items[index]);
+    const ast::ItemNode& node = ast.items[index];
+    if (node.kind == ast::ItemKind::Fn &&
+        node.payload.get<ast::ItemFn>().is_test) {
+      continue;
+    }
+    if (const std::optional<std::string_view> name = declared_name(node);
         name.has_value()) {
       level.push_back(*name);
     }
   }
-  // The names the blocks have taken so far, in the order they took them.
-  std::vector<std::string_view> blocks;
-  // Records why `name` cannot be spliced, which is when it is not free; a
-  // free name joins the blocks' names.
-  const auto refused = [&spliced, &level, &blocks](const ast::Ident& name) {
-    if (name.name == ENTRY_POINT) {
-      spliced.refused.push_back(RefusedItem{Refusal::NamedMain, name});
-      return true;
-    }
-    if (std::find(level.begin(), level.end(), name.name) != level.end()) {
-      spliced.refused.push_back(RefusedItem{Refusal::Collides, name});
-      return true;
-    }
-    if (std::find(blocks.begin(), blocks.end(), name.name) != blocks.end()) {
-      spliced.refused.push_back(RefusedItem{Refusal::Duplicates, name});
-      return true;
-    }
-    blocks.push_back(name.name);
-    return false;
-  };
-  for (const ast::ItemIdx index : items) {
+  // Names the tests already gathered. Two tests with one name are a
+  // duplicate, which has its own diagnostic rather than a collision
+  // with the module.
+  std::vector<std::string_view> taken;
+  for (usize at = 0; at < items.size(); ++at) {
+    const ast::ItemIdx index = items[at];
     if (!ast.items.bound(index)) {
       continue;
     }
-    const ast::ItemNode& block = ast.items[index];
-    if (block.kind != ast::ItemKind::Test) {
+    ast::ItemNode node = ast.items[index];
+    if (node.kind != ast::ItemKind::Fn ||
+        !node.payload.get<ast::ItemFn>().is_test) {
       continue;
     }
-    for (const ast::ItemIdx entry_index :
-         block.payload.get<ast::ItemTest>().items) {
-      if (!ast.items.bound(entry_index)) {
-        continue;
-      }
-      const ast::ItemNode& entry = ast.items[entry_index];
-      if (entry.kind == ast::ItemKind::Fn) {
-        if (refused(entry.payload.get<ast::ItemFn>().name)) {
-          continue;
-        }
-        // A helper is a function the block's tests call, so it joins the
-        // module the way an entry does. It is private: a block declares no
-        // interface to anything outside the run.
-        ast::ItemNode helper = entry;
-        helper.is_pub = false;
-        const ast::ItemIdx at = ast.items.push_back(helper);
-        if (!at.is_valid()) {
-          return spliced;
-        }
-        grown.push_back(at);
-        continue;
-      }
-      if (entry.kind != ast::ItemKind::TestEntry) {
-        continue;
-      }
-      const ast::ItemTestEntry& declared =
-          entry.payload.get<ast::ItemTestEntry>();
-      if (refused(declared.name)) {
-        continue;
-      }
-      if (declared.return_type.is_valid()) {
-        spliced.refused.push_back(RefusedItem{Refusal::Returns, declared.name});
-        continue;
-      }
-      ast::ItemNode node;
-      node.kind = ast::ItemKind::Fn;
-      node.span = entry.span;
-      // An entry is public where a helper is not: the driver calls it from
-      // outside the module it was declared in, through the alias it
-      // imported, or by its own name when the two share a module.
-      node.is_pub = true;
-      node.payload.set(ast::ItemFn{
-          .name = declared.name,
-          .generic = {},
-          .params = {},
-          .return_type = ast::TypeIdx::invalid(),
-          .body = declared.body,
-          .is_unsafe = false,
-          .is_comp = false,
-      });
-      const ast::ItemIdx at = ast.items.push_back(node);
-      if (!at.is_valid()) {
-        // The arena is spent; the caller answers with the diagnostic that
-        // names the reservation rather than with a half-spliced module.
-        return spliced;
-      }
-      grown.push_back(at);
-      spliced.tests.push_back(TestCase{
-          .module = std::string(module),
-          .name = std::string(declared.name.name),
-          .label = joined_label(module, declared.name.name),
-      });
+    const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+    if (fn.name.name == ENTRY_POINT) {
+      spliced.refused.push_back(RefusedItem{Refusal::NamedMain, fn.name});
+      continue;
     }
+    if (std::find(level.begin(), level.end(), fn.name.name) != level.end()) {
+      spliced.refused.push_back(RefusedItem{Refusal::Collides, fn.name});
+      continue;
+    }
+    if (std::find(taken.begin(), taken.end(), fn.name.name) != taken.end()) {
+      spliced.refused.push_back(RefusedItem{Refusal::Duplicates, fn.name});
+      continue;
+    }
+    if (fn.return_type.is_valid()) {
+      spliced.refused.push_back(RefusedItem{Refusal::Returns, fn.name});
+      continue;
+    }
+    taken.push_back(fn.name.name);
+    // The driver calls the test from outside its module: the function
+    // has to be visible where the module's other items need not be.
+    node.is_pub = true;
+    ast::ItemFn published = node.payload.get<ast::ItemFn>();
+    published.is_test = false;
+    node.payload.set(published);
+    const ast::ItemIdx replacement = ast.items.push_back(node);
+    if (!replacement.is_valid()) {
+      // The arena is spent; the caller reports the reservation rather
+      // than a half-spliced module.
+      return spliced;
+    }
+    grown[at] = replacement;
+    spliced.tests.push_back(TestCase{
+        .module = std::string(module),
+        .name = std::string(fn.name.name),
+        .label = joined_label(module, fn.name.name),
+    });
   }
-  if (grown.size() != items.size()) {
-    spliced.items = ast::copy_to_arena(ast.spans, grown);
-  }
+  spliced.items = ast::copy_to_arena(ast.spans, grown);
   return spliced;
 }
 

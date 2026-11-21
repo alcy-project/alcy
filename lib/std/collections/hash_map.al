@@ -613,15 +613,15 @@ impl<K: Hash + Eq, V> Entry<K, V> {
 }
 
 // Tests for the table: one entry per property `HashMap` promises.
-test {
-  test a_new_map_is_empty() {
+#[when(testing)] {
+  #[test] fn a_new_map_is_empty() {
     m := HashMap::<i32, i32>::new()
     assert(m.is_empty(), "a map that was never inserted into holds nothing")
     assert(m.len() == 0, "a map that was never inserted into is of length zero")
     assert(m.get(0).is_none(), "an empty table has no key to find")
   }
 
-  test insert_of_a_new_key_then_get_returns_its_value() {
+  #[test] fn insert_of_a_new_key_then_get_returns_its_value() {
     mut m := HashMap::<i32, i32>::new()
     first := m.insert(0, 1)
     assert(first.is_none(), "the key was not there before")
@@ -629,7 +629,7 @@ test {
     assert(value_at(&m, 0) == 1, "the entry holds the value it was given")
   }
 
-  test inserting_an_existing_key_replaces_the_value() {
+  #[test] fn inserting_an_existing_key_replaces_the_value() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     replaced := m.insert(0, 2)
@@ -641,14 +641,14 @@ test {
     assert(value_at(&m, 0) == 2, "the entry holds the newer value")
   }
 
-  test get_of_an_absent_key_is_none() {
+  #[test] fn get_of_an_absent_key_is_none() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     assert(m.get(9).is_none(), "the table holds a different key")
     assert(m.len() == 1, "a failed lookup changes nothing")
   }
 
-  test remove_of_a_present_key_returns_its_value() {
+  #[test] fn remove_of_a_present_key_returns_its_value() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     _ := m.insert(1, 2)
@@ -662,14 +662,14 @@ test {
     assert(value_at(&m, 1) == 2, "the other entry is untouched")
   }
 
-  test remove_of_an_absent_key_reports_nothing() {
+  #[test] fn remove_of_an_absent_key_reports_nothing() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     assert(m.remove(9).is_none(), "a key the map does not hold comes back empty-handed")
     assert(m.len() == 1, "the failed removal keeps the length")
   }
 
-  test clear_drops_every_entry_and_keeps_the_room() {
+  #[test] fn clear_drops_every_entry_and_keeps_the_room() {
     mut m := HashMap::<i32, i32>::with_capacity(8)
     _ := m.insert(0, 1)
     _ := m.insert(1, 2)
@@ -682,7 +682,7 @@ test {
     assert(value_at(&m, 2) == 3, "the cleared table takes a new key")
   }
 
-  test owned_string_keys_are_hashed_and_compared() {
+  #[test] fn owned_string_keys_are_hashed_and_compared() {
     mut m := HashMap::<String, i32>::new()
     _ := m.insert(String::from("alpha"), 1)
     _ := m.insert(String::from("beta"), 2)
@@ -691,7 +691,7 @@ test {
     assert(m.len() == 2, "two distinct strings are two entries")
   }
 
-  test every_key_is_found_after_the_table_grows() {
+  #[test] fn every_key_is_found_after_the_table_grows() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 0)
     first_cap := m.capacity()
@@ -709,7 +709,7 @@ test {
     }
   }
 
-  test iteration_visits_every_entry_once() {
+  #[test] fn iteration_visits_every_entry_once() {
     mut m := HashMap::<i32, i32>::new()
     mut i := 0
     while i < 40 {
@@ -726,7 +726,7 @@ test {
     assert(total == 780, "each value is yielded exactly once")
   }
 
-  test into_iter_yields_every_entry() {
+  #[test] fn into_iter_yields_every_entry() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     _ := m.insert(1, 2)
@@ -740,7 +740,7 @@ test {
     assert(total == 3, "the values come back with their keys")
   }
 
-  test a_key_inserted_after_a_remove_is_found() {
+  #[test] fn a_key_inserted_after_a_remove_is_found() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     _ := m.insert(1, 2)
@@ -753,7 +753,7 @@ test {
 
   // A freed slot must not end a lookup: find two keys that start at the
   // same slot, then remove the first one.
-  test a_lookup_passes_over_a_freed_slot() {
+  #[test] fn a_lookup_passes_over_a_freed_slot() {
     mut m := HashMap::<i32, i32>::with_capacity(4)
     cap := m.capacity()
     first := 0
@@ -767,7 +767,7 @@ test {
     assert(value_at(&m, second) == 2, "a key whose probe passed the freed slot is still found")
   }
 
-  test removals_do_not_hide_the_keys_that_remain() {
+  #[test] fn removals_do_not_hide_the_keys_that_remain() {
     mut m := HashMap::<i32, i32>::new()
     mut i := 0
     while i < 30 {
@@ -801,7 +801,7 @@ test {
     }
   }
 
-  test a_value_written_through_get_mut_is_the_one_read_back() {
+  #[test] fn a_value_written_through_get_mut_is_the_one_read_back() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     slot := m.get_mut(0).or_panic_with_message("the key is there")
@@ -809,7 +809,7 @@ test {
     assert(value_at(&m, 0) == 7, "the write lands in the entry")
   }
 
-  test get_or_insert_keeps_an_existing_value() {
+  #[test] fn get_or_insert_keeps_an_existing_value() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     slot := m.get_or_insert(0, 2)
@@ -818,7 +818,7 @@ test {
     assert(m.len() == 1, "the call adds nothing for a key that is there")
   }
 
-  test get_or_insert_fills_an_absent_key() {
+  #[test] fn get_or_insert_fills_an_absent_key() {
     mut m := HashMap::<i32, i32>::new()
     slot := m.get_or_insert(0, 2)
     got := *slot
@@ -827,7 +827,7 @@ test {
     assert(m.len() == 1, "the call inserts one entry")
   }
 
-  test entry_or_insert_fills_only_the_vacant_key() {
+  #[test] fn entry_or_insert_fills_only_the_vacant_key() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     occupied := m.entry(0).or_insert(2)
@@ -839,7 +839,7 @@ test {
     assert(m.len() == 2, "the second call adds an entry")
   }
 
-  test maps_with_the_same_entries_compare_equal() {
+  #[test] fn maps_with_the_same_entries_compare_equal() {
     mut a := HashMap::<i32, i32>::new()
     _ := a.insert(0, 1)
     _ := a.insert(1, 2)

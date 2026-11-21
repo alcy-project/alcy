@@ -60,20 +60,20 @@ pub fn error_from(code: i32) -> OsError {
   ret OsError { code: code, kind: kind_of(code) }
 }
 
-test {
-  test error_from_keeps_the_number_the_call_reported() {
+#[when(testing)] {
+  #[test] fn error_from_keeps_the_number_the_call_reported() {
     assert(error_from(13).code == 13, "the raw number is kept as it arrived")
   }
 
-  test error_from_keeps_a_number_no_kind_covers() {
+  #[test] fn error_from_keeps_a_number_no_kind_covers() {
     assert(error_from(9999999).code == 9999999, "no number is clamped on the way in")
   }
 
-  test kind_of_a_number_outside_the_table_is_other() {
+  #[test] fn kind_of_a_number_outside_the_table_is_other() {
     assert(kind_is_other(kind_of(9999999)), "a number the table does not name is Other")
   }
 
-  test error_from_takes_the_kind_from_the_number() {
+  #[test] fn error_from_takes_the_kind_from_the_number() {
     assert(kind_is_other(error_from(9999999).kind), "an error carries the kind of its number")
   }
 

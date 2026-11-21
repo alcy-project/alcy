@@ -422,13 +422,12 @@ TEST_CASE("The keyword table is the frozen set, with reserved words marked") {
   CHECK(has_spelling("i32"));
   CHECK(has_spelling("Self"));
   CHECK(has_spelling("package"));
-  CHECK(has_spelling("test"));
+  CHECK_FALSE(has_spelling("test"));
   CHECK(has_spelling("async"));
   CHECK_EQ(category_of("fn"), KeywordCategory::Keyword);
   CHECK_EQ(category_of("i32"), KeywordCategory::Keyword);
   CHECK_EQ(category_of("async"), KeywordCategory::Reserved);
   CHECK_EQ(category_of("i128"), KeywordCategory::Reserved);
-  CHECK(is_keyword(TokenKind::Test));
   CHECK(is_keyword(TokenKind::Await));
   CHECK_FALSE(is_keyword(TokenKind::Ident));
   CHECK(is_operator(TokenKind::ColonEq));

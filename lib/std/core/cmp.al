@@ -528,64 +528,64 @@ impl PartialOrd for f64 {
   }
 }
 
-// A module's own tests: `alcy test` splices the block into a driver and
-// runs each entry as a process of its own.
-test {
-  test less_is_lt() {
+// A module's own tests: `#[when(testing)]` keeps them out of a build,
+// and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
+#[when(testing)] {
+  #[test] fn less_is_lt() {
     assert(Ordering::Less.is_lt(), "Less is the strictly below outcome")
   }
 
-  test less_is_not_eq() {
+  #[test] fn less_is_not_eq() {
     assert(!Ordering::Less.is_eq(), "a value below is not equal")
   }
 
-  test less_is_not_gt() {
+  #[test] fn less_is_not_gt() {
     assert(!Ordering::Less.is_gt(), "a value below is not above")
   }
 
-  test equal_is_not_lt() {
+  #[test] fn equal_is_not_lt() {
     assert(!Ordering::Equal.is_lt(), "an equal value is not below")
   }
 
-  test equal_is_eq() {
+  #[test] fn equal_is_eq() {
     assert(Ordering::Equal.is_eq(), "Equal names the equal outcome")
   }
 
-  test equal_is_not_gt() {
+  #[test] fn equal_is_not_gt() {
     assert(!Ordering::Equal.is_gt(), "an equal value is not above")
   }
 
-  test greater_is_not_lt() {
+  #[test] fn greater_is_not_lt() {
     assert(!Ordering::Greater.is_lt(), "a value above is not below")
   }
 
-  test greater_is_not_eq() {
+  #[test] fn greater_is_not_eq() {
     assert(!Ordering::Greater.is_eq(), "a value above is not equal")
   }
 
-  test greater_is_gt() {
+  #[test] fn greater_is_gt() {
     assert(Ordering::Greater.is_gt(), "Greater is the strictly above outcome")
   }
 
-  test cmp_of_a_smaller_integer_is_less() {
+  #[test] fn cmp_of_a_smaller_integer_is_less() {
     a := -5
     b := 3
     assert(a.cmp(&b).is_lt(), "-5 sorts below 3")
   }
 
-  test cmp_of_equal_integers_is_equal() {
+  #[test] fn cmp_of_equal_integers_is_equal() {
     a := 7
     b := 7
     assert(a.cmp(&b).is_eq(), "7 compares equal to 7")
   }
 
-  test cmp_of_a_larger_integer_is_greater() {
+  #[test] fn cmp_of_a_larger_integer_is_greater() {
     a := 9
     b := -2
     assert(a.cmp(&b).is_gt(), "9 sorts above -2")
   }
 
-  test cmp_orders_signed_values_around_zero() {
+  #[test] fn cmp_orders_signed_values_around_zero() {
     below := -1
     zero := 0
     above := 1
@@ -594,14 +594,14 @@ test {
     assert(below.cmp(&above).is_lt(), "a negative value sorts below a positive one")
   }
 
-  test cmp_orders_the_top_of_an_unsigned_width() {
+  #[test] fn cmp_orders_the_top_of_an_unsigned_width() {
     top := 18446744073709551615u64
     below := 18446744073709551614u64
     assert(top.cmp(&below).is_gt(), "the maximum sorts above every other width value")
     assert(below.cmp(&top).is_lt(), "and every other width value sorts below it")
   }
 
-  test partial_cmp_of_integers_always_has_an_order() {
+  #[test] fn partial_cmp_of_integers_always_has_an_order() {
     low := 1 as i8
     high := 2 as i8
     assert(
@@ -618,7 +618,7 @@ test {
     )
   }
 
-  test a_float_compares_with_itself() {
+  #[test] fn a_float_compares_with_itself() {
     low := 1.5f32
     high := 2.5f32
     assert(
@@ -635,14 +635,14 @@ test {
     )
   }
 
-  test a_nan_has_no_order_against_anything() {
+  #[test] fn a_nan_has_no_order_against_anything() {
     zero := 0.0f32
     nan := zero / zero
     assert(nan.partial_cmp(&zero).is_none(), "a NaN is incomparable with a number")
     assert(nan.partial_cmp(&nan).is_none(), "a NaN is incomparable with itself")
   }
 
-  test text_compares_by_its_first_differing_byte() {
+  #[test] fn text_compares_by_its_first_differing_byte() {
     a := "abc"
     b := "abd"
     assert(a.cmp(&b).is_lt(), "c sorts below d")
@@ -650,20 +650,20 @@ test {
     assert("b".cmp(&"a").is_gt(), "the first byte alone decides")
   }
 
-  test a_text_prefix_sorts_before_the_longer_text() {
+  #[test] fn a_text_prefix_sorts_before_the_longer_text() {
     a := "ab"
     b := "abc"
     assert(a.cmp(&b).is_lt(), "the shorter text runs out of bytes first")
     assert(b.cmp(&a).is_gt(), "and the longer text sorts above it")
   }
 
-  test equal_text_compares_equal() {
+  #[test] fn equal_text_compares_equal() {
     a := "abc"
     b := "abc"
     assert(a.cmp(&b).is_eq(), "the same bytes compare equal")
   }
 
-  test empty_text_sorts_before_any_other() {
+  #[test] fn empty_text_sorts_before_any_other() {
     empty := ""
     a := "a"
     assert(empty.cmp(&a).is_lt(), "no bytes sorts below some bytes")
@@ -671,35 +671,35 @@ test {
     assert(empty.cmp(&empty).is_eq(), "two empty texts compare equal")
   }
 
-  test equal_text_is_equal() {
+  #[test] fn equal_text_is_equal() {
     a := "abc"
     b := "abc"
     assert(a == b, "the same bytes are equal")
     assert(!(a != b), "and the negation agrees")
   }
 
-  test texts_of_different_length_are_not_equal() {
+  #[test] fn texts_of_different_length_are_not_equal() {
     a := "ab"
     b := "abc"
     assert(!(a == b), "a prefix is not the longer text")
     assert(a != b, "and the two are unequal")
   }
 
-  test texts_differing_in_one_byte_are_not_equal() {
+  #[test] fn texts_differing_in_one_byte_are_not_equal() {
     a := "abc"
     b := "abd"
     assert(!(a == b), "one differing byte makes the texts unequal")
     assert(a != b, "and the negation agrees")
   }
 
-  test empty_text_is_equal_only_to_empty_text() {
+  #[test] fn empty_text_is_equal_only_to_empty_text() {
     empty := ""
     a := "a"
     assert(empty == "", "two empty texts are equal")
     assert(!(empty == a), "an empty text is not a text with a byte")
   }
 
-  test bool_differences_are_unequal() {
+  #[test] fn bool_differences_are_unequal() {
     assert(true == true, "two trues are equal")
     assert(false == false, "two falses are equal")
     assert(true != false, "true and false are unequal")

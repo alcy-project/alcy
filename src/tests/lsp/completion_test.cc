@@ -85,7 +85,7 @@ TEST_CASE("Completion offers the lexer's keywords, not reserved words") {
   CHECK(find_item(list, "bool") != nullptr);
   CHECK(find_item(list, "Self") != nullptr);
   CHECK(find_item(list, "package") != nullptr);
-  CHECK(find_item(list, "test") != nullptr);
+  CHECK(find_item(list, "test") == nullptr);
 }
 
 TEST_CASE("Completion offers a keyword for its prefix") {

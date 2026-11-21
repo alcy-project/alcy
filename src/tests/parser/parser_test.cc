@@ -2018,38 +2018,32 @@ TEST_CASE("A spelled item reports the alcy form once") {
   }
 }
 
-TEST_CASE("A test block refuses the items it cannot hold") {
-  // A run splices the entries and the helpers and drops everything
-  // else, so an item the block cannot hold is a parse error rather than
-  // code that is checked here and discarded there.
+TEST_CASE("The test marker only leads a function") {
   const std::string_view sources[] = {
-      "test {\n  use foo::Bar;\n}\n",
-      "test {\n  struct F {\n  }\n}\n",
-      "test {\n  enum E {\n  }\n}\n",
-      "test {\n  impl F {\n  }\n}\n",
+      "#[test]\nstruct S {}\n",
+      "#[test]\nenum E {}\n",
+      "#[test]\nuse foo::Bar;\n",
+      "#[test]\nstatic N: i32 := 1\n",
   };
   for (const std::string_view source : sources) {
     Fixture f;
     const ParseResult result = parse(source, f);
     CHECK(!result.ok);
-    CHECK(has_message(f.bag,
-                      "a `test` block holds tests and helpers; move this item "
-                      "outside the block"));
+    CHECK(has_message(f.bag, "`#[test]` marks a function; put it on `fn`"));
     CHECK(f.bag.error_count() == 1);
   }
 }
 
-TEST_CASE("A test block and its entries refuse the shapes they cannot take") {
+TEST_CASE("A test marker refuses the shapes a test cannot take") {
   struct Case {
     std::string_view source;
     std::string_view message;
   };
   const Case cases[] = {
-      {"unsafe test a() {\n}\n", "`unsafe` applies to functions"},
-      {"pub test a() {\n}\n", "a `test` block and its items are never `pub`"},
-      {"test {\n  test {\n  }\n}\n",
-       "a `test` block holds tests and helpers; it does not nest"},
-      {"test {\n  test a(x: i32) {\n  }\n}\n", "a test takes no arguments"},
+      {"#[test(foo)]\nfn a() {}\n",
+       "`test` takes no arguments; write `#[test]` alone"},
+      {"#[when(testing)] {\n  #[test] fn a(x: i32) {\n  }\n}\n",
+       "a test takes no arguments"},
   };
   for (const Case& c : cases) {
     Fixture f;
@@ -2058,18 +2052,15 @@ TEST_CASE("A test block and its entries refuse the shapes they cannot take") {
     CHECK(has_message(f.bag, c.message));
   }
 
-  // The block and its entries have punctuation of their own, so a source
-  // that loses a piece fails to parse rather than reading as a block of
-  // nothing.
+  // A conditional group and a test's header still have punctuation of
+  // their own, so a source that loses a piece fails to parse rather than
+  // reading as a group of nothing.
   const std::string_view malformed[] = {
-      "test a {\n}\n",
-      "test {\n  test () {\n  }\n}\n",
-      "test {\n  test a {\n  }\n}\n",
-      "test {\n  test a(x: i32 {\n  }\n}\n",
-      "test {\n  test a() -> {\n  }\n}\n",
-      "test {\n  test a()\n}\n",
-      "test {\n  test a() {\n  }\n",
-      "test {\n  fn\n}\n",
+      "#[when(testing)] fn a() {\n",
+      "#[when(testing)] {\n  fn a() {\n  }\n",
+      "#[when(testing)] {\n  #[test] fn a()\n}\n",
+      "#[when(testing)] {\n  #[test] fn a() -> {\n  }\n}\n",
+      "#[when(testing)] {\n  #[test] fn\n}\n",
   };
   for (const std::string_view source : malformed) {
     Fixture f;

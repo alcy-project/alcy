@@ -19,7 +19,7 @@ struct TestCase {
   // `text`, or `collections/vector` for a module in a subdirectory.
   // Never empty, because a run's entry module is the driver.
   std::string module;
-  // The identifier the entry writes after `test`.
+  // The identifier of the `#[test] fn` that declares it.
   std::string name;
   // What a run prints for this test: `<module>::<name>`.
   std::string label;
@@ -29,23 +29,22 @@ struct TestCase {
   bool in_root = false;
 };
 
-// Why a block item got no function. Each reason has its own diagnostic,
-// which is why one list of refusals is enough to report them all.
+// Why a `#[test] fn` got no call in the driver. Each reason has its own
+// diagnostic, which is why one list of refusals is enough to report them all.
 enum class Refusal : u8 {
-  // The entry writes a return type. A test returns unit, so a value has no
-  // reader.
+  // The function writes a return type. A test returns unit, so a value
+  // has no reader.
   Returns,
-  // The name the run writes itself: the entry point of the module it
-  // enters through.
+  // The name the run writes itself: the entry point of the module.
   NamedMain,
-  // A name the module declares at its own level. Both are items of one
-  // namespace, so the module would hold the name twice.
+  // A name the module declares outside its tests: one namespace, so the
+  // module would hold the name twice.
   Collides,
-  // A name another block item already took, with the same consequence.
+  // A name another test already took, with the same consequence.
   Duplicates,
 };
 
-// A block item a splice left out, and why.
+// A test a gather left out, and why.
 struct RefusedItem {
   Refusal reason = Refusal::Returns;
   ast::Ident name;
@@ -56,33 +55,26 @@ struct RefusedItem {
 // caller reports it, so it carries its span too.
 std::optional<ast::Ident> declared_ident(const ast::ItemNode& item);
 
-// What a test block contributes once it is a function.
+// What a module's tests contribute once they are callable.
 struct SplicedModule {
-  // The module's items, with one free function per spliced test appended
-  // in declaration order. A module that declares no test gets its own
+  // The module's items, with every gathered test replaced by a public
+  // copy of its function. A module that declares no test gets its own
   // list back.
   std::span<const ast::ItemIdx> items;
-  // The tests that got a function, in declaration order.
+  // The tests that got a call in the driver, in declaration order.
   std::vector<TestCase> tests;
-  // The block items that got none, in declaration order.
+  // The tests that got none, in declaration order.
   std::vector<RefusedItem> refused;
 };
 
-// Turns every `test` block in `items` into free functions, which is the
-// only form in which a test is called: the block itself is a declaration
-// of intent, and a function is what runs.
+// Gathers the `#[test] fn`s in `items` and makes them public, which is
+// the form the driver calls. The functions keep their bodies as written;
+// skipping the copy keeps the desugared tree the one that runs.
 //
-// The entries keep their bodies as written - skipping the copy keeps the
-// desugared tree the one that runs - and gain `pub`, because a run calls
-// them from another module of the same package. The block stays in the
-// list: the tree keeps saying what the source said.
-//
-// An entry or helper joins the module's namespace, so the ones that cannot
-// take a free name there are left out instead of spliced, and `refused`
-// names them and the reason: a reader wants the name a test clashed with
-// rather than a duplicate-definition notice from resolution. The caller
-// reports them, because a diagnostic carries a message and a source span
-// that belong with the command's other input reports.
+// A test shares its module's namespace with the other items, so one that
+// cannot take a free name there is left out and `refused` names it and
+// the reason: a reader wants the name a test clashed with rather than a
+// duplicate-definition notice from resolution. The caller reports them.
 //
 // Every node and list is allocated in `ast`, whose lifetime outlives the
 // module's items.

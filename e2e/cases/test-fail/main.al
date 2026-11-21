@@ -2,12 +2,12 @@ fn main() -> i32 {
   ret 0
 }
 
-test {
-  test passing() {
+#[when(testing)] {
+  #[test] fn passing() {
     ret
   }
 
-  test failing() {
+  #[test] fn failing() {
     panic("boom")
   }
 }

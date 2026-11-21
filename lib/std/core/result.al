@@ -110,84 +110,84 @@ impl<T: PartialEq, E: PartialEq> PartialEq for Result<T, E> {
 impl<T: Eq, E: Eq> Eq for Result<T, E> {
 }
 
-test {
-  test an_ok_is_ok() {
+#[when(testing)] {
+  #[test] fn an_ok_is_ok() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(ok.is_ok(), "an Ok is a success")
   }
 
-  test an_ok_is_not_err() {
+  #[test] fn an_ok_is_not_err() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(!ok.is_err(), "an Ok is not a failure")
   }
 
-  test an_err_is_err() {
+  #[test] fn an_err_is_err() {
     bad: Result<i32, str> := Result::Err("bad")
     assert(bad.is_err(), "an Err is a failure")
   }
 
-  test an_err_is_not_ok() {
+  #[test] fn an_err_is_not_ok() {
     bad: Result<i32, str> := Result::Err("bad")
     assert(!bad.is_ok(), "an Err is not a success")
   }
 
-  test or_on_an_ok_yields_the_value() {
+  #[test] fn or_on_an_ok_yields_the_value() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(ok.or(9) == 7, "a success keeps its value")
   }
 
-  test or_on_an_err_yields_the_default() {
+  #[test] fn or_on_an_err_yields_the_default() {
     bad: Result<i32, str> := Result::Err("bad")
     assert(bad.or(9) == 9, "the default stands in for a failure")
   }
 
-  test or_else_on_an_ok_yields_the_value() {
+  #[test] fn or_else_on_an_ok_yields_the_value() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(ok.or_else(() -> 9) == 7, "a success keeps its value")
   }
 
-  test or_else_on_an_err_builds_the_default() {
+  #[test] fn or_else_on_an_err_builds_the_default() {
     bad: Result<i32, str> := Result::Err("bad")
     assert(bad.or_else(() -> 9) == 9, "the fallback runs for a failure")
   }
 
-  test or_panic_with_message_yields_the_value_of_an_ok() {
+  #[test] fn or_panic_with_message_yields_the_value_of_an_ok() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(ok.or_panic_with_message("a success has a value") == 7, "a success carries its value")
   }
 
-  test or_panic_with_yields_the_value_of_an_ok() {
+  #[test] fn or_panic_with_yields_the_value_of_an_ok() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(ok.or_panic_with((e: str) -> e) == 7, "the message builder never runs for a success")
   }
 
-  test two_oks_with_equal_values_are_equal() {
+  #[test] fn two_oks_with_equal_values_are_equal() {
     a: Result<i32, str> := Result::Ok(7)
     b: Result<i32, str> := Result::Ok(7)
     assert(a == b, "equal payloads make equal results")
   }
 
-  test oks_with_different_values_are_unequal() {
+  #[test] fn oks_with_different_values_are_unequal() {
     a: Result<i32, str> := Result::Ok(7)
     b: Result<i32, str> := Result::Ok(8)
     assert(a != b, "different payloads make unequal results")
   }
 
-  test map_applies_f_to_the_value_of_an_ok() {
+  #[test] fn map_applies_f_to_the_value_of_an_ok() {
     ok: Result<i32, str> := Result::Ok(7)
     mapped := ok.map((v: i32) -> v + 1)
     want: Result<i32, str> := Result::Ok(8)
     assert(mapped == want, "the value reaches f")
   }
 
-  test map_leaves_an_err_alone() {
+  #[test] fn map_leaves_an_err_alone() {
     bad: Result<i32, str> := Result::Err("bad")
     mapped := bad.map((v: i32) -> v + 1)
     want: Result<i32, str> := Result::Err("bad")
     assert(mapped == want, "a failure stays a failure")
   }
 
-  test map_err_applies_f_to_the_error_of_an_err() {
+  #[test] fn map_err_applies_f_to_the_error_of_an_err() {
     bad: Result<i32, str> := Result::Err("bad")
     erring := bad.map_err((e: str) -> str_len(e))
     three: usize := 3
@@ -195,14 +195,14 @@ test {
     assert(erring == want, "the error reaches f")
   }
 
-  test map_err_leaves_an_ok_alone() {
+  #[test] fn map_err_leaves_an_ok_alone() {
     ok: Result<i32, str> := Result::Ok(7)
     erring := ok.map_err((e: str) -> str_len(e))
     want: Result<i32, usize> := Result::Ok(7)
     assert(erring == want, "a success stays a success")
   }
 
-  test and_then_chains_a_result_returning_f() {
+  #[test] fn and_then_chains_a_result_returning_f() {
     ok: Result<i32, str> := Result::Ok(7)
     half: (i32) -> Result<i32, str> := (v: i32) -> match v {
       0 => Result::Err("zero"),
@@ -217,26 +217,26 @@ test {
     assert(blocked == want_err, "f's error stands in for the chain")
   }
 
-  test and_then_leaves_an_err_alone() {
+  #[test] fn and_then_leaves_an_err_alone() {
     bad: Result<i32, str> := Result::Err("bad")
     chained := bad.and_then::<i32>((v: i32) -> Result::Ok(v + 1))
     want: Result<i32, str> := Result::Err("bad")
     assert(chained == want, "a failure stays a failure")
   }
 
-  test two_errs_with_equal_errors_are_equal() {
+  #[test] fn two_errs_with_equal_errors_are_equal() {
     a: Result<i32, str> := Result::Err("bad")
     b: Result<i32, str> := Result::Err("bad")
     assert(a == b, "equal errors make equal results")
   }
 
-  test errs_with_different_errors_are_unequal() {
+  #[test] fn errs_with_different_errors_are_unequal() {
     a: Result<i32, str> := Result::Err("bad")
     b: Result<i32, str> := Result::Err("worse")
     assert(a != b, "different errors make unequal results")
   }
 
-  test a_success_and_a_failure_are_unequal() {
+  #[test] fn a_success_and_a_failure_are_unequal() {
     ok: Result<i32, str> := Result::Ok(7)
     bad: Result<i32, str> := Result::Err("bad")
     assert(ok != bad, "a success is not a failure")

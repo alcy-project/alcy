@@ -27,20 +27,6 @@ namespace parser {
 
 namespace {
 
-// Keeps a `test` block open for as long as the block is parsed, so the
-// items inside it read as the block's however deep the descent goes.
-class TestBlockDepth {
- public:
-  explicit TestBlockDepth(u32& depth) : depth_(depth) { ++depth_; }
-  ~TestBlockDepth() { --depth_; }
-
-  TestBlockDepth(const TestBlockDepth&) = delete;
-  TestBlockDepth& operator=(const TestBlockDepth&) = delete;
-
- private:
-  u32& depth_;
-};
-
 // The primitive type tokens, for the declaration a neighboring
 // language spells with the type first.
 bool is_primitive_type_token(lexer::TokenKind kind) {
@@ -181,6 +167,7 @@ Parser::Attributes Parser::parse_attribute_list() {
   while (peek_kind() == lexer::TokenKind::Hash) {
     const Attributes one = parse_attribute();
     attributes.when_false = attributes.when_false || one.when_false;
+    attributes.is_test = attributes.is_test || one.is_test;
     if (one.repr_c) {
       attributes.repr_c = true;
       attributes.repr_span = one.repr_span;
@@ -248,6 +235,27 @@ Parser::Attributes Parser::parse_attribute() {
   const std::string_view attr_name =
       bytes_.substr(name.span.offset, name.span.length);
   advance();
+  if (attr_name == "test") {
+    // A role marker, never a gate: `#[test]` stands alone and the
+    // existence question belongs to `#[when(testing)]`.
+    if (check(lexer::TokenKind::LParen)) {
+      const u32 index = bag_.emit<i18n::Key::ParserTestMalformed>(
+          DiagCode::WhenMalformed, name.span);
+      (void)index;
+      synchronize_attribute();
+      return nothing;
+    }
+    if (!match(lexer::TokenKind::RBracket)) {
+      const u32 index = bag_.emit<i18n::Key::ParserTestMalformed>(
+          DiagCode::WhenMalformed, name.span);
+      (void)index;
+      synchronize_attribute();
+      return nothing;
+    }
+    Attributes result;
+    result.is_test = true;
+    return result;
+  }
   if (attr_name == "repr") {
     return parse_repr_attribute(name.span);
   }
@@ -539,7 +547,15 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
     if (match(lexer::TokenKind::Semicolon)) {
       continue;
     }
-    ast::ItemIdx item = parse_documented_item();
+    Attributes attributes;
+    if (peek_kind() == lexer::TokenKind::Hash) {
+      attributes = parse_attribute_list();
+    }
+    if (peek_kind() == lexer::TokenKind::LBrace) {
+      parse_group(attributes, items);
+      continue;
+    }
+    ast::ItemIdx item = parse_documented_item(attributes);
     if (!item.is_valid()) {
       if (ast_.exhausted()) {
         break;
@@ -618,12 +634,57 @@ std::optional<ast::ItemIdx> Parser::parse_spelled_item(bool is_pub,
   return std::nullopt;
 }
 
-ast::ItemIdx Parser::parse_documented_item() {
+void Parser::parse_group(Attributes attributes,
+                         std::vector<ast::ItemIdx>& out) {
+  using K = lexer::TokenKind;
+  if (!expect(K::LBrace, "`{`")) {
+    return;
+  }
+  while (!check(K::RBrace) && !at_end()) {
+    if (match(K::Semicolon)) {
+      continue;
+    }
+    Attributes child = attributes;
+    if (peek_kind() == K::Hash) {
+      const Attributes own = parse_attribute_list();
+      child.when_false = child.when_false || own.when_false;
+      child.is_test = child.is_test || own.is_test;
+      if (own.repr_c) {
+        child.repr_c = true;
+        child.repr_span = own.repr_span;
+      }
+    }
+    if (peek_kind() == K::LBrace) {
+      parse_group(child, out);
+      continue;
+    }
+    ast::ItemIdx item = parse_documented_item(child);
+    if (!item.is_valid()) {
+      if (ast_.exhausted()) {
+        break;
+      }
+      synchronize();
+      continue;
+    }
+    // The group writes straight into the module's list, so the gate
+    // check the module loop performs never sees these items. Apply it
+    // here: an item the group's gate dropped exists nowhere.
+    if (ast_.items[item].when_false) {
+      continue;
+    }
+    out.push_back(item);
+  }
+  if (!expect(K::RBrace, "`}`")) {
+    return;
+  }
+}
+
+ast::ItemIdx Parser::parse_documented_item(Attributes attributes) {
   // The doc comments above the item are the item's own; the ones the
   // parse skips inside it wait for the next item.
   skip_insignificant();
   const usize docs = pending_docs_.size();
-  ast::ItemIdx item = parse_item();
+  ast::ItemIdx item = parse_item(attributes);
   if (!item.is_valid()) {
     pending_docs_.erase(pending_docs_.begin(), pending_docs_.begin() + docs);
     return item;
@@ -635,20 +696,33 @@ ast::ItemIdx Parser::parse_documented_item() {
   return item;
 }
 
-ast::ItemIdx Parser::parse_item() {
+ast::ItemIdx Parser::parse_item(Attributes attributes) {
   // A spent arena builds nothing further: what it refused would leave a
   // node half made and a diagnostic about the wrong thing.
   if (ast_.exhausted()) {
     return ast::ItemIdx::invalid();
   }
-  Attributes attributes;
-  if (peek_kind() == lexer::TokenKind::Hash) {
-    attributes = parse_attribute_list();
-  }
   const auto finish = [&](ast::ItemIdx item) {
     if (item.is_valid()) {
       ast::ItemNode& node = ast_.items[item];
       node.when_false = attributes.when_false;
+      if (attributes.is_test) {
+        if (node.kind != ast::ItemKind::Fn) {
+          const u32 index = bag_.emit<i18n::Key::ParserTestOnlyOnFunctions>(
+              DiagCode::UnexpectedToken, node.span);
+          (void)index;
+          return ast::ItemIdx::invalid();
+        }
+        if (node.payload.get<ast::ItemFn>().params.size() != 0) {
+          const u32 index = bag_.emit<i18n::Key::ParserTestTakesNoArguments>(
+              DiagCode::UnexpectedToken, node.span);
+          (void)index;
+          return ast::ItemIdx::invalid();
+        }
+        ast::ItemFn fn = node.payload.get<ast::ItemFn>();
+        fn.is_test = true;
+        node.payload.set(fn);
+      }
       if (attributes.repr_c) {
         if (node.kind != ast::ItemKind::Struct) {
           const u32 index = bag_.emit<i18n::Key::ParserReprNotOnStruct>(
@@ -665,14 +739,7 @@ ast::ItemIdx Parser::parse_item() {
     }
     return item;
   };
-  const lexer::Token pub_token = peek();
   const bool is_pub = match(lexer::TokenKind::Pub);
-  if (is_pub && in_test_block()) {
-    const u32 index = bag_.emit<i18n::Key::ParserTestItemNotPublic>(
-        DiagCode::UnexpectedToken, pub_token.span);
-    (void)index;
-    return finish(ast::ItemIdx::invalid());
-  }
   const bool is_unsafe = match(lexer::TokenKind::Unsafe);
   // `comp` in item position marks a free function ; a
   // receiver method keeps the marker for a later slice. The two
@@ -745,8 +812,6 @@ ast::ItemIdx Parser::parse_item() {
     case lexer::TokenKind::Use:
       only_functions();
       return finish(parse_use(is_pub));
-    case lexer::TokenKind::Test:
-      return finish(parse_test_item(is_pub, is_unsafe));
     default: break;
   }
   if (at_end()) {
@@ -760,145 +825,6 @@ ast::ItemIdx Parser::parse_item() {
       DiagCode::UnexpectedToken, span, bytes_.substr(span.offset, span.length));
   (void)index;
   return ast::ItemIdx::invalid();
-}
-
-ast::ItemIdx Parser::parse_test_item(bool is_pub, bool is_unsafe) {
-  using K = lexer::TokenKind;
-  if (is_unsafe) {
-    const u32 index = bag_.emit<i18n::Key::ParserUnsafeOnlyOnFunctions>(
-        DiagCode::UnexpectedToken, peek().span);
-    (void)index;
-    return ast::ItemIdx::invalid();
-  }
-  if (!in_test_block()) {
-    if (is_pub) {
-      const u32 index = bag_.emit<i18n::Key::ParserTestItemNotPublic>(
-          DiagCode::UnexpectedToken, peek().span);
-      (void)index;
-      return ast::ItemIdx::invalid();
-    }
-    return parse_test_block();
-  }
-  // Inside a block the keyword opens an entry, unless a brace follows:
-  // a block of tests inside a block would declare tests nothing runs.
-  if (peek_kind(1) == K::LBrace) {
-    const u32 index = bag_.emit<i18n::Key::ParserTestBlockNested>(
-        DiagCode::UnexpectedToken, peek().span);
-    (void)index;
-    return ast::ItemIdx::invalid();
-  }
-  return parse_test_entry();
-}
-
-ast::ItemIdx Parser::parse_test_block() {
-  using K = lexer::TokenKind;
-  if (ast_.exhausted()) {
-    return ast::ItemIdx::invalid();
-  }
-  const usize mark = pos_;
-  if (!expect(K::Test, "test")) {
-    return ast::ItemIdx::invalid();
-  }
-  if (!expect_header_lbrace()) {
-    return ast::ItemIdx::invalid();
-  }
-  // The items below sit in a block's item position until the closing
-  // brace, so the depth is what tells them apart from a module's.
-  const TestBlockDepth block(test_block_depth_);
-  std::vector<ast::ItemIdx> items;
-  while (!check(K::RBrace) && !at_end()) {
-    if (match(K::Semicolon)) {
-      continue;
-    }
-    ast::ItemIdx item = parse_documented_item();
-    if (!item.is_valid()) {
-      if (ast_.exhausted()) {
-        break;
-      }
-      synchronize();
-      continue;
-    }
-    // A gate that evaluated to false on this target excludes the entry
-    // or helper before the run sees it, the way it excludes any item.
-    if (ast_.items[item].when_false) {
-      continue;
-    }
-    // A block holds entries and helpers, so every item it names is one
-    // a run compiles. Anything else would be parsed and then dropped by
-    // the splice, which reports nothing about the code it discarded.
-    const ast::ItemNode& parsed = ast_.items[item];
-    if (parsed.kind != ast::ItemKind::Fn &&
-        parsed.kind != ast::ItemKind::TestEntry) {
-      const u32 index =
-          bag_.emit<i18n::Key::ParserTestBlockHoldsTestsAndHelpers>(
-              DiagCode::UnexpectedToken, parsed.span);
-      (void)index;
-      continue;
-    }
-    items.push_back(item);
-  }
-  if (!expect(K::RBrace, "`}`")) {
-    return ast::ItemIdx::invalid();
-  }
-  ast::ItemNode node;
-  node.kind = ast::ItemKind::Test;
-  node.span = span_from(mark);
-  node.is_pub = false;
-  node.payload.set(ast::ItemTest{
-      .items = ast::copy_to_arena(ast_.spans, items),
-  });
-  return ast_.items.push_back(node);
-}
-
-ast::ItemIdx Parser::parse_test_entry() {
-  using K = lexer::TokenKind;
-  const usize mark = pos_;
-  if (!expect(K::Test, "test")) {
-    return ast::ItemIdx::invalid();
-  }
-  base::Result<ast::Ident, diag::Reported> name = parse_ident("test name");
-  if (name.is_err()) {
-    return ast::ItemIdx::invalid();
-  }
-  if (!expect(K::LParen, "`(`")) {
-    return ast::ItemIdx::invalid();
-  }
-  if (!check(K::RParen)) {
-    // A test runs with no arguments, so a parameter list has no caller
-    // to fill it; the whole list goes as one report.
-    const u32 index = bag_.emit<i18n::Key::ParserTestEntryTakesNoArguments>(
-        DiagCode::UnexpectedToken, peek().span);
-    (void)index;
-    while (!at_end() && !check(K::RParen) && !check(K::LBrace)) {
-      advance();
-    }
-  }
-  if (!expect(K::RParen, "`)`")) {
-    return ast::ItemIdx::invalid();
-  }
-  ast::TypeIdx return_type = ast::TypeIdx::invalid();
-  if (match(K::Arrow)) {
-    // The annotation is read so that `alcy test` can report it once
-    // with guidance, instead of every target refusing the syntax.
-    return_type = parse_closed_type();
-    if (!return_type.is_valid()) {
-      return ast::ItemIdx::invalid();
-    }
-  }
-  ast::BlockIdx body = parse_header_block();
-  if (!body.is_valid()) {
-    return ast::ItemIdx::invalid();
-  }
-  ast::ItemNode node;
-  node.kind = ast::ItemKind::TestEntry;
-  node.span = span_from(mark);
-  node.is_pub = false;
-  node.payload.set(ast::ItemTestEntry{
-      .name = std::move(name).unwrap(),
-      .return_type = return_type,
-      .body = body,
-  });
-  return ast_.items.push_back(node);
 }
 
 base::Result<ast::Ident, diag::Reported> Parser::parse_ident(

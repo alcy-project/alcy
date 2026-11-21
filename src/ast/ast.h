@@ -889,8 +889,6 @@ enum class ItemKind : u8 {
   Static,
   Const,
   Use,
-  Test,
-  TestEntry,
 };
 
 struct Item {
@@ -934,6 +932,9 @@ struct ItemFn {
   bool is_unsafe = false;
   // A `comp fn`: the call is evaluated during compilation only
   bool is_comp = false;
+  // A `#[test] fn`: a run gathers it as a test. Existence on a build is
+  // decided by `#[when(testing)]`, not by this marker.
+  bool is_test = false;
 };
 
 // A compiler-provided function: signature without a body. Calls
@@ -1045,22 +1046,6 @@ struct ItemUse {
   Ident alias;
 };
 
-// One `test name() { ... }` entry of a test block. A test returns
-// unit, so a written `->` annotation is a diagnostic rather than a
-// type; `alcy test` is what runs the body.
-struct ItemTestEntry {
-  Ident name;
-  TypeIdx return_type = TypeIdx::invalid();
-  BlockIdx body = BlockIdx::invalid();
-};
-
-// A `test { ... }` block: the tests plus the helpers they call, in
-// source order. No other target analyzes its items, so a program that
-// is not being tested compiles as if the block were a comment.
-struct ItemTest {
-  std::span<const ItemIdx> items;
-};
-
 struct ItemNode {
   ItemKind kind;
   diag::Span span;
@@ -1091,9 +1076,7 @@ struct ItemNode {
                                   ItemSpec,
                                   ItemStatic,
                                   ItemConst,
-                                  ItemUse,
-                                  ItemTest,
-                                  ItemTestEntry>;
+                                  ItemUse>;
   ItemPayload payload;
 
   std::string_view name() const {
@@ -1106,8 +1089,6 @@ struct ItemNode {
       case I::Intrinsic: return payload.get<ItemIntrinsic>().name.name;
       case I::Static: return payload.get<ItemStatic>().name.name;
       case I::Const: return payload.get<ItemConst>().name.name;
-      case I::TestEntry: return payload.get<ItemTestEntry>().name.name;
-      case I::Test:
       case I::Use:
       case I::Impl:
       default: return "unknown";
@@ -1309,7 +1290,7 @@ struct AstArena {
 };
 
 // The span an item's name occupies. An impl is named by its target type;
-// items without a name (a use, a test block, an extern group) answer the
+// items without a name (a use, a conditional group, an extern group) answer the
 // whole item span.
 diag::Span item_name_span(const AstArena& ast, const ItemNode& item);
 diag::Span item_name_span(const AstArena& ast, ItemIdx item);

@@ -15,29 +15,29 @@ pub spec Fn<P, R> {
   fn call(self: &Self, args: P) -> R;
 }
 
-// A module's own tests: 'alcy test' splices the block into a driver and
-// runs each entry as a process of its own.
-test {
-  test a_named_function_satisfies_the_signature() {
+// A module's own tests: `#[when(testing)]` keeps them out of a build,
+// and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
+#[when(testing)] {
+  #[test] fn a_named_function_satisfies_the_signature() {
     assert(apply(double, 3) == 6, "the body calls through the bound")
   }
 
-  test a_closure_literal_satisfies_the_signature() {
+  #[test] fn a_closure_literal_satisfies_the_signature() {
     assert(apply((v: i32) -> v + 1i32, 2) == 3, "the literal's own code runs")
   }
 
-  test a_signature_of_no_parameters_is_callable() {
+  #[test] fn a_signature_of_no_parameters_is_callable() {
     assert(run(() -> 5i32) == 10, "each call yields a value of its own")
   }
 
-  test two_parameters_pass_as_one_tuple() {
+  #[test] fn two_parameters_pass_as_one_tuple() {
     assert(
       combine((x: i32, y: i32) -> x * y, 3, 4) == 12,
       "the arguments reach the two parameters in order",
     )
   }
 
-  test the_bound_reads_the_result_type() {
+  #[test] fn the_bound_reads_the_result_type() {
     assert(apply((v: i32) -> 0i32 - v, 7) == 0i32 - 7i32, "a negative result arrives intact")
   }
 

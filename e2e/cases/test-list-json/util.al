@@ -8,8 +8,8 @@ pub fn assert_eq(left: i64, right: i64) {
   }
 }
 
-test {
-  test doubles() {
+#[when(testing)] {
+  #[test] fn doubles() {
     assert_eq(twice(3), 6)
   }
 }

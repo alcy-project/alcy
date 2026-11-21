@@ -28,8 +28,7 @@ constexpr std::string_view KNOWN_OS_VALUES =
 constexpr std::string_view KNOWN_ARCH_VALUES =
     "x86_64, aarch64, riscv64, wasm32, unknown";
 
-BuildFacts facts_for(std::string_view triple, bool freestanding,
-                     bool testing) {
+BuildFacts facts_for(std::string_view triple, bool freestanding, bool testing) {
   BuildFacts facts;
   facts.freestanding = freestanding;
   facts.testing = testing;
@@ -409,7 +408,8 @@ struct Evaluator {
 
 }  // namespace
 
-BuildFacts build_facts(std::string_view triple, bool freestanding,
+BuildFacts build_facts(std::string_view triple,
+                       bool freestanding,
                        bool testing) {
   return facts_for(triple, freestanding, testing);
 }

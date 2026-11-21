@@ -3,4 +3,4 @@ subcommand = "test"
 
 [cli.expect]
 exit = 4
-contains = ["move this item outside the block"]
+contains = ["put it on `fn`"]

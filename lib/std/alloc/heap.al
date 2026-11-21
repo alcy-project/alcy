@@ -49,24 +49,24 @@ pub unsafe intrinsic fn uninit_assume<T>(slot: &mut MaybeUninit<T>) -> &mut T;
 // before anything was written yields whatever was there.
 pub intrinsic fn uninit_ref<T>(slot: &MaybeUninit<T>) -> &T;
 
-test {
-  test doubled_capacity_takes_a_nonzero_capacity_to_twice_itself() {
+#[when(testing)] {
+  #[test] fn doubled_capacity_takes_a_nonzero_capacity_to_twice_itself() {
     assert(doubled_capacity(1) == 2, "one element's room doubles to two")
     assert(doubled_capacity(4) == 8, "four elements' room doubles to eight")
   }
 
-  test doubled_capacity_of_zero_is_zero() {
+  #[test] fn doubled_capacity_of_zero_is_zero() {
     assert(doubled_capacity(0) == 0, "the doubling keeps an empty block empty")
   }
 
-  test a_written_slot_reads_back() {
+  #[test] fn a_written_slot_reads_back() {
     mut slot := unsafe { alloc::<i32>(1) }
     uninit_write(slot, 7)
     assert(*unsafe { uninit_assume(slot) } == 7, "the slot holds the value written into it")
     unsafe { dealloc(slot, 1) }
   }
 
-  test every_slot_of_a_block_holds_its_own_value() {
+  #[test] fn every_slot_of_a_block_holds_its_own_value() {
     mut block := unsafe { alloc::<i32>(4) }
     mut i := 0 as usize
     while i < 4 {
@@ -78,7 +78,7 @@ test {
     unsafe { dealloc(block, 4) }
   }
 
-  test a_block_of_no_elements_is_still_freeable() {
+  #[test] fn a_block_of_no_elements_is_still_freeable() {
     empty := unsafe { alloc::<i32>(0) }
     unsafe { dealloc(empty, 0) }
   }

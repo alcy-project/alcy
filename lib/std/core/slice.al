@@ -450,49 +450,49 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
   }
 }
 
-// A module's own tests: 'alcy test' splices the block into a driver and
-// runs each entry as a process of its own.
-test {
-  test len_counts_the_elements() {
+// A module's own tests: `#[when(testing)]` keeps them out of a build,
+// and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
+#[when(testing)] {
+  #[test] fn len_counts_the_elements() {
     a := [1i32, 2i32, 3i32]
     assert(a.len() == 3, "an array counts its own N")
     assert(a.as_slice().len() == 3, "a view counts the same elements")
   }
 
-  test a_view_of_no_elements_is_empty() {
+  #[test] fn a_view_of_no_elements_is_empty() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(empty.is_empty(), "nothing is left before the first element")
     assert(empty.len() == 0, "the count of nothing is zero")
   }
 
-  test at_reads_both_ends() {
+  #[test] fn at_reads_both_ends() {
     a := [1i32, 2i32, 3i32]
     s := a.as_slice()
     assert(*s.at(0).or_panic_with_message("the first index is in bounds") == 1, "the first element")
     assert(*s.at(2).or_panic_with_message("the last index is in bounds") == 3, "the last element")
   }
 
-  test at_past_the_last_index_is_none() {
+  #[test] fn at_past_the_last_index_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(a.as_slice().at(3).is_none(), "one past the last index reads nothing")
   }
 
-  test first_and_last_answer_the_ends() {
+  #[test] fn first_and_last_answer_the_ends() {
     a := [1i32, 2i32, 3i32]
     s := a.as_slice()
     assert(*s.first().or_panic_with_message("the view is not empty") == 1, "the first element")
     assert(*s.last().or_panic_with_message("the view is not empty") == 3, "the last element")
   }
 
-  test the_ends_of_an_empty_view_are_none() {
+  #[test] fn the_ends_of_an_empty_view_are_none() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(empty.first().is_none(), "an empty view has no first element")
     assert(empty.last().is_none(), "an empty view has no last element")
   }
 
-  test position_reports_the_first_match() {
+  #[test] fn position_reports_the_first_match() {
     a := [1i32, 2i32, 1i32]
     s := a.as_slice()
     assert(
@@ -505,7 +505,7 @@ test {
     )
   }
 
-  test position_of_an_absent_element_is_none() {
+  #[test] fn position_of_an_absent_element_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(
       a.as_slice().position((x: &i32) -> *x == 9).is_none(),
@@ -513,18 +513,18 @@ test {
     )
   }
 
-  test find_answers_the_first_match() {
+  #[test] fn find_answers_the_first_match() {
     a := [1i32, 2i32, 1i32]
     v := a.as_slice().find((x: &i32) -> *x > 1).or_panic_with_message("2 is in the view")
     assert(*v == 2, "the first element past the threshold")
   }
 
-  test find_of_an_absent_element_is_none() {
+  #[test] fn find_of_an_absent_element_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(a.as_slice().find((x: &i32) -> *x == 9).is_none(), "no element satisfies the predicate")
   }
 
-  test rposition_reports_the_last_match() {
+  #[test] fn rposition_reports_the_last_match() {
     a := [1i32, 2i32, 1i32]
     assert(
       a.as_slice().rposition((x: &i32) -> *x == 1).or_panic_with_message("1 is in the view") == 2,
@@ -532,7 +532,7 @@ test {
     )
   }
 
-  test rposition_of_an_absent_element_is_none() {
+  #[test] fn rposition_of_an_absent_element_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(
       a.as_slice().rposition((x: &i32) -> *x == 9).is_none(),
@@ -540,7 +540,7 @@ test {
     )
   }
 
-  test is_sorted_by_accepts_an_ordered_view() {
+  #[test] fn is_sorted_by_accepts_an_ordered_view() {
     a := [1i32, 2i32, 2i32, 3i32]
     assert(
       a.as_slice().is_sorted_by((x: &i32, y: &i32) -> *x < *y),
@@ -548,7 +548,7 @@ test {
     )
   }
 
-  test is_sorted_by_rejects_a_descent() {
+  #[test] fn is_sorted_by_rejects_a_descent() {
     a := [1i32, 3i32, 2i32]
     assert(
       !(a.as_slice().is_sorted_by((x: &i32, y: &i32) -> *x < *y)),
@@ -556,7 +556,7 @@ test {
     )
   }
 
-  test is_sorted_by_accepts_a_view_of_at_most_one_element() {
+  #[test] fn is_sorted_by_accepts_a_view_of_at_most_one_element() {
     a := [1i32, 2i32, 3i32]
     s := a.as_slice()
     assert(
@@ -569,7 +569,7 @@ test {
     )
   }
 
-  test binary_search_by_finds_both_ends() {
+  #[test] fn binary_search_by_finds_both_ends() {
     a := [1i32, 2i32, 3i32, 4i32, 5i32]
     s := a.as_slice()
     assert(
@@ -582,7 +582,7 @@ test {
     )
   }
 
-  test binary_search_by_of_an_absent_element_is_none() {
+  #[test] fn binary_search_by_of_an_absent_element_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(
       a.as_slice().binary_search_by((x: &i32) -> *x - 9).is_none(),
@@ -590,7 +590,7 @@ test {
     )
   }
 
-  test binary_search_by_on_an_empty_view_is_none() {
+  #[test] fn binary_search_by_on_an_empty_view_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(
       a.as_slice().split_at(0).0.binary_search_by((x: &i32) -> *x).is_none(),
@@ -598,7 +598,7 @@ test {
     )
   }
 
-  test split_at_reports_the_elements_either_side() {
+  #[test] fn split_at_reports_the_elements_either_side() {
     a := [1i32, 2i32, 3i32]
     pair := a.as_slice().split_at(2)
     assert(pair.0.len() == 2, "two elements sit before the split")
@@ -613,45 +613,45 @@ test {
     )
   }
 
-  test split_at_zero_puts_the_whole_view_in_the_tail() {
+  #[test] fn split_at_zero_puts_the_whole_view_in_the_tail() {
     a := [1i32, 2i32, 3i32]
     pair := a.as_slice().split_at(0)
     assert(pair.0.is_empty(), "nothing sits before the first element")
     assert(pair.1.len() == 3, "all of it sits after")
   }
 
-  test split_at_the_end_puts_the_whole_view_in_the_head() {
+  #[test] fn split_at_the_end_puts_the_whole_view_in_the_head() {
     a := [1i32, 2i32, 3i32]
     pair := a.as_slice().split_at(3)
     assert(pair.0.len() == 3, "all of it sits before")
     assert(pair.1.is_empty(), "nothing sits after the last element")
   }
 
-  test split_first_reports_the_head_and_the_rest() {
+  #[test] fn split_first_reports_the_head_and_the_rest() {
     a := [1i32, 2i32, 3i32]
     pair := a.as_slice().split_first().or_panic_with_message("the view is not empty")
     assert(*pair.0 == 1, "the element that left")
     assert(pair.1.len() == 2, "the elements that stayed")
   }
 
-  test split_last_reports_the_tail_and_the_front() {
+  #[test] fn split_last_reports_the_tail_and_the_front() {
     a := [1i32, 2i32, 3i32]
     pair := a.as_slice().split_last().or_panic_with_message("the view is not empty")
     assert(*pair.0 == 3, "the element that left")
     assert(pair.1.len() == 2, "the elements that stayed")
   }
 
-  test split_first_of_an_empty_view_is_none() {
+  #[test] fn split_first_of_an_empty_view_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(a.as_slice().split_at(0).0.split_first().is_none(), "there is no head to take")
   }
 
-  test split_last_of_an_empty_view_is_none() {
+  #[test] fn split_last_of_an_empty_view_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(a.as_slice().split_at(0).0.split_last().is_none(), "there is no tail to take")
   }
 
-  test iter_yields_each_element_in_order() {
+  #[test] fn iter_yields_each_element_in_order() {
     a := [1i32, 2i32, 3i32]
     mut total := 0i32
     for x in a.as_slice().iter() {
@@ -660,7 +660,7 @@ test {
     assert(total == 123, "the cursor walks the elements once, in order")
   }
 
-  test the_cursor_stops_after_the_last_element() {
+  #[test] fn the_cursor_stops_after_the_last_element() {
     a := [1i32, 2i32]
     mut it := a.as_slice().iter()
     first := *it.next().or_panic_with_message("the view holds an index 0")
@@ -670,7 +670,7 @@ test {
     assert(it.next().is_none(), "one past the last element reads nothing")
   }
 
-  test iter_mut_writes_through_every_element() {
+  #[test] fn iter_mut_writes_through_every_element() {
     mut a := [1i32, 2i32, 3i32]
     for x in a.iter_mut() {
       *x = *x * 2
@@ -679,7 +679,7 @@ test {
     assert(a[2] == 6, "the last element was written")
   }
 
-  test into_iter_yields_every_element_by_value() {
+  #[test] fn into_iter_yields_every_element_by_value() {
     a := [1i32, 2i32, 3i32]
     mut total := 0i32
     for x in a.into_iter() {
@@ -688,59 +688,59 @@ test {
     assert(total == 6, "the consuming cursor hands each element out once")
   }
 
-  test contains_finds_an_element_in_the_middle() {
+  #[test] fn contains_finds_an_element_in_the_middle() {
     a := [1i32, 2i32, 3i32]
     assert(a.as_slice().contains(&2i32), "the value sits between the ends")
   }
 
-  test contains_of_an_absent_element_is_false() {
+  #[test] fn contains_of_an_absent_element_is_false() {
     a := [1i32, 2i32, 3i32]
     assert(!(a.as_slice().contains(&9i32)), "the value appears nowhere")
   }
 
-  test starts_with_a_matching_prefix() {
+  #[test] fn starts_with_a_matching_prefix() {
     a := [1i32, 2i32, 3i32]
     b := [1i32, 2i32]
     assert(a.as_slice().starts_with(b.as_slice()), "the view opens with both prefix elements")
   }
 
-  test starts_with_of_a_longer_prefix_is_false() {
+  #[test] fn starts_with_of_a_longer_prefix_is_false() {
     a := [1i32, 2i32]
     b := [1i32, 2i32, 3i32]
     assert(!(a.as_slice().starts_with(b.as_slice())), "a prefix longer than the view cannot match")
   }
 
-  test starts_with_rejects_a_prefix_that_differs() {
+  #[test] fn starts_with_rejects_a_prefix_that_differs() {
     a := [1i32, 2i32, 3i32]
     b := [1i32, 9i32]
     assert(!(a.as_slice().starts_with(b.as_slice())), "the second element already differs")
   }
 
-  test the_empty_prefix_matches_every_view() {
+  #[test] fn the_empty_prefix_matches_every_view() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(a.as_slice().starts_with(empty), "a view begins with nothing")
   }
 
-  test ends_with_a_matching_suffix() {
+  #[test] fn ends_with_a_matching_suffix() {
     a := [1i32, 2i32, 3i32]
     b := [2i32, 3i32]
     assert(a.as_slice().ends_with(b.as_slice()), "the view closes with both suffix elements")
   }
 
-  test ends_with_of_a_longer_suffix_is_false() {
+  #[test] fn ends_with_of_a_longer_suffix_is_false() {
     a := [2i32, 3i32]
     b := [1i32, 2i32, 3i32]
     assert(!(a.as_slice().ends_with(b.as_slice())), "a suffix longer than the view cannot match")
   }
 
-  test ends_with_rejects_a_suffix_that_differs() {
+  #[test] fn ends_with_rejects_a_suffix_that_differs() {
     a := [1i32, 2i32, 3i32]
     b := [9i32, 3i32]
     assert(!(a.as_slice().ends_with(b.as_slice())), "the earlier element already differs")
   }
 
-  test the_empty_suffix_matches_every_view() {
+  #[test] fn the_empty_suffix_matches_every_view() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(a.as_slice().ends_with(empty), "a view ends with nothing")
@@ -753,8 +753,8 @@ test {
   }
 }
 
-test {
-  test starts_with_compares_a_prefix() {
+#[when(testing)] {
+  #[test] fn starts_with_compares_a_prefix() {
     b :=
       [0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8, 0x20u8, 0x77u8, 0x6fu8, 0x72u8, 0x6cu8, 0x64u8]
       .as_slice()
@@ -788,7 +788,7 @@ test {
     assert(!b.starts_with(long), "a longer prefix does not fit")
   }
 
-  test ends_with_compares_a_suffix() {
+  #[test] fn ends_with_compares_a_suffix() {
     b :=
       [0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8, 0x20u8, 0x77u8, 0x6fu8, 0x72u8, 0x6cu8, 0x64u8]
       .as_slice()
@@ -805,7 +805,7 @@ test {
     assert(!b.ends_with(the_world), "a longer suffix does not fit")
   }
 
-  test find_locates_the_first_occurrence() {
+  #[test] fn find_locates_the_first_occurrence() {
     b := [0x62u8, 0x61u8, 0x6eu8, 0x61u8, 0x6eu8, 0x61u8].as_slice()
     assert(find(b, [0x61u8].as_slice()) == Option::Some(1 as usize), "the first match is at one")
     assert(find(b, [0x6eu8].as_slice()) == Option::Some(2 as usize), "the first match is at two")
@@ -815,7 +815,7 @@ test {
     assert(find(b, needle).is_none(), "an oversized needle is none")
   }
 
-  test rfind_locates_the_last_occurrence() {
+  #[test] fn rfind_locates_the_last_occurrence() {
     b := [0x62u8, 0x61u8, 0x6eu8, 0x61u8, 0x6eu8, 0x61u8].as_slice()
     assert(rfind(b, [0x61u8].as_slice()) == Option::Some(5 as usize), "the last match is at five")
     assert(rfind(b, [0x6eu8].as_slice()) == Option::Some(4 as usize), "the last match is at four")
@@ -823,7 +823,7 @@ test {
     assert(rfind(b, [0x7au8, 0x7au8, 0x7au8].as_slice()).is_none(), "a missing needle is none")
   }
 
-  test trim_ascii_drops_space_and_controls() {
+  #[test] fn trim_ascii_drops_space_and_controls() {
     arr := [0x20u8, 0x20u8, 0x20u8, 0x68u8, 0x69u8, 0x09u8]
     out := trim_ascii(arr.as_slice())
     assert(out.len() == 2, "leading and trailing whitespace are gone")

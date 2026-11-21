@@ -163,8 +163,8 @@ impl BufReader {
   }
 }
 
-test {
-  test a_reader_holds_its_capacity_as_bytes_from_the_start() {
+#[when(testing)] {
+  #[test] fn a_reader_holds_its_capacity_as_bytes_from_the_start() {
     r := BufReader::new(Fd::from_raw(-1), 4)
     assert(r.buf.len() == 4, "four bytes exist to read into")
     assert(r.buf[0] == 0u8, "the first is zeroed")
@@ -173,12 +173,12 @@ test {
     assert(r.len == 0, "nothing is read")
   }
 
-  test a_zero_capacity_still_holds_one_byte() {
+  #[test] fn a_zero_capacity_still_holds_one_byte() {
     r := BufReader::new(Fd::from_raw(-1), 0)
     assert(r.buf.len() == 1, "a read always has a byte to land in")
   }
 
-  test read_byte_consumes_the_buffered_bytes_in_order() {
+  #[test] fn read_byte_consumes_the_buffered_bytes_in_order() {
     mut r := buffered("ab")
     assert(next_byte(&mut r) == 0x61u8, "the first byte is a")
     assert(r.pos == 1, "one byte is consumed")
@@ -186,7 +186,7 @@ test {
     assert(r.pos == 2, "two bytes are consumed")
   }
 
-  test peek_byte_leaves_the_position_where_it_was() {
+  #[test] fn peek_byte_leaves_the_position_where_it_was() {
     mut r := buffered("ab")
     assert(peeked_byte(&mut r) == 0x61u8, "the first byte is a")
     assert(peeked_byte(&mut r) == 0x61u8, "a second peek sees the same byte")
@@ -194,7 +194,7 @@ test {
     assert(next_byte(&mut r) == 0x61u8, "the peeked byte is still the next one")
   }
 
-  test a_line_drops_the_newline_that_ends_it() {
+  #[test] fn a_line_drops_the_newline_that_ends_it() {
     mut r := buffered("ab\ncd\n")
     first := line(&mut r)
     assert(first.as_str() == "ab", "the newline is not part of the line")
@@ -203,19 +203,19 @@ test {
     assert(second.as_str() == "cd", "the rest of the buffer is the next line")
   }
 
-  test a_line_drops_one_carriage_return_before_the_newline() {
+  #[test] fn a_line_drops_one_carriage_return_before_the_newline() {
     mut r := buffered("ab\r\n")
     got := line(&mut r)
     assert(got.as_str() == "ab", "the pair ends the line and neither byte is in it")
   }
 
-  test a_line_keeps_a_carriage_return_that_is_not_the_last_byte() {
+  #[test] fn a_line_keeps_a_carriage_return_that_is_not_the_last_byte() {
     mut r := buffered("a\r\r\n")
     got := line(&mut r)
     assert(got.as_str() == "a\r", "only one carriage return goes with the newline")
   }
 
-  test an_empty_line_is_a_line() {
+  #[test] fn an_empty_line_is_a_line() {
     mut r := buffered("\n")
     got := line(&mut r)
     assert(got.len_bytes() == 0, "the line is there and empty")

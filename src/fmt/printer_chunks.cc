@@ -367,7 +367,7 @@ Doc Printer::print_body_lines(const std::vector<Chunk>& chunks,
   const bool member = top_level || role == cst::BraceRole::ImplBody ||
                       role == cst::BraceRole::SpecBody ||
                       role == cst::BraceRole::ExternBody ||
-                      role == cst::BraceRole::TestBody;
+                      role == cst::BraceRole::GroupBody;
   std::vector<Doc> parts;
   parts.reserve(chunks.size() * 2);
   for (usize k = 0; k < chunks.size(); ++k) {

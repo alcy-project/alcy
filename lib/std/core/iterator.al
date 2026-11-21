@@ -253,10 +253,10 @@ pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
   ret SkipIter { iter: iter, remaining: n, started: false }
 }
 
-// A module's own tests: 'alcy test' splices the block into a driver and
-// runs each entry as a process of its own.
-test {
-  test a_cursor_yields_none_after_the_last_value() {
+// A module's own tests: `#[when(testing)]` keeps them out of a build,
+// and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
+#[when(testing)] {
+  #[test] fn a_cursor_yields_none_after_the_last_value() {
     a := [1i32, 2i32]
     mut it := a.as_slice().iter()
     first := *it.next().or_panic_with_message("the view holds an index 0")
@@ -266,13 +266,13 @@ test {
     assert(it.next().is_none(), "the exhausted cursor answers none")
   }
 
-  test filter_keeps_only_the_values_the_predicate_accepts() {
+  #[test] fn filter_keeps_only_the_values_the_predicate_accepts() {
     a := [1i32, 2i32, 3i32, 4i32]
     kept := filter(a.into_iter(), (v: i32) -> v % 2i32 == 0i32)
     assert(fold(kept, 0i32, (acc: i32, v: i32) -> acc + v) == 6, "the even values are 2 and 4")
   }
 
-  test filter_over_a_source_no_value_passes_yields_nothing() {
+  #[test] fn filter_over_a_source_no_value_passes_yields_nothing() {
     a := [1i32, 3i32]
     assert(
       count(filter(a.into_iter(), (v: i32) -> v % 2i32 == 0i32)) == 0,
@@ -280,13 +280,13 @@ test {
     )
   }
 
-  test filter_over_an_empty_source_yields_nothing() {
+  #[test] fn filter_over_an_empty_source_yields_nothing() {
     a := [1i32, 2i32]
     empty := a.as_slice().split_at(0).0
     assert(count(filter(empty.iter(), (v: &i32) -> *v > 0)) == 0, "there is nothing to accept")
   }
 
-  test enumerate_pairs_each_value_with_its_position() {
+  #[test] fn enumerate_pairs_each_value_with_its_position() {
     a := [10i32, 20i32, 30i32]
     mut paired := enumerate(a.into_iter())
     first := paired.next().or_panic_with_message("the source holds three values")
@@ -299,13 +299,13 @@ test {
     assert(paired.next().is_none(), "the source is exhausted")
   }
 
-  test enumerate_of_an_empty_source_counts_nothing() {
+  #[test] fn enumerate_of_an_empty_source_counts_nothing() {
     a := [1i32, 2i32]
     empty := a.as_slice().split_at(0).0
     assert(count(enumerate(empty.iter())) == 0, "there is no value to count")
   }
 
-  test take_stops_after_the_count() {
+  #[test] fn take_stops_after_the_count() {
     a := [1i32, 2i32, 3i32]
     kept := take(a.into_iter(), 2)
     assert(
@@ -314,17 +314,17 @@ test {
     )
   }
 
-  test take_of_zero_yields_nothing() {
+  #[test] fn take_of_zero_yields_nothing() {
     a := [1i32, 2i32, 3i32]
     assert(count(take(a.into_iter(), 0)) == 0, "a count of zero ends before the first pull")
   }
 
-  test take_past_the_end_yields_the_whole_source() {
+  #[test] fn take_past_the_end_yields_the_whole_source() {
     a := [1i32, 2i32, 3i32]
     assert(count(take(a.into_iter(), 5)) == 3, "the source runs out first")
   }
 
-  test skip_drops_the_leading_values() {
+  #[test] fn skip_drops_the_leading_values() {
     a := [1i32, 2i32, 3i32]
     kept := skip(a.into_iter(), 2)
     assert(
@@ -333,12 +333,12 @@ test {
     )
   }
 
-  test skip_of_zero_yields_every_value() {
+  #[test] fn skip_of_zero_yields_every_value() {
     a := [1i32, 2i32, 3i32]
     assert(count(skip(a.into_iter(), 0)) == 3, "the source is handed out untouched")
   }
 
-  test skip_past_the_end_yields_nothing() {
+  #[test] fn skip_past_the_end_yields_nothing() {
     a := [1i32, 2i32, 3i32]
     assert(
       count(skip(a.into_iter(), 5)) == 0,
@@ -346,13 +346,13 @@ test {
     )
   }
 
-  test fold_accumulates_in_order() {
+  #[test] fn fold_accumulates_in_order() {
     a := [1i32, 2i32, 3i32]
     total := fold(a.into_iter(), 0i32, (acc: i32, v: i32) -> acc * 10i32 + v)
     assert(total == 123, "each value lands to the right of the ones before it")
   }
 
-  test fold_over_an_empty_iterator_answers_the_initial_value() {
+  #[test] fn fold_over_an_empty_iterator_answers_the_initial_value() {
     a := [1i32, 2i32]
     empty := a.as_slice().split_at(0).0
     assert(
@@ -361,44 +361,44 @@ test {
     )
   }
 
-  test count_counts_the_values() {
+  #[test] fn count_counts_the_values() {
     a := [1i32, 2i32, 3i32]
     assert(count(a.into_iter()) == 3, "one per value")
   }
 
-  test count_of_an_empty_iterator_is_zero() {
+  #[test] fn count_of_an_empty_iterator_is_zero() {
     a := [1i32, 2i32]
     empty := a.as_slice().split_at(0).0
     assert(count(empty.iter()) == 0, "there is nothing to count")
   }
 
-  test any_accepts_one_passing_value() {
+  #[test] fn any_accepts_one_passing_value() {
     a := [1i32, 2i32, 3i32]
     assert(any(a.into_iter(), (v: i32) -> v > 0i32), "the first value already passes")
   }
 
-  test any_of_no_passing_value_is_false() {
+  #[test] fn any_of_no_passing_value_is_false() {
     a := [1i32, 2i32, 3i32]
     assert(!(any(a.into_iter(), (v: i32) -> v > 9i32)), "no value passes")
   }
 
-  test all_accepts_every_passing_value() {
+  #[test] fn all_accepts_every_passing_value() {
     a := [1i32, 2i32, 3i32]
     assert(all(a.into_iter(), (v: i32) -> v > 0i32), "every value passes")
   }
 
-  test all_is_false_when_one_value_fails() {
+  #[test] fn all_is_false_when_one_value_fails() {
     a := [1i32, 2i32, 3i32]
     assert(!(all(a.into_iter(), (v: i32) -> v > 1i32)), "the first value fails")
   }
 
-  test all_over_an_empty_iterator_is_true() {
+  #[test] fn all_over_an_empty_iterator_is_true() {
     a := [1i32, 2i32]
     empty := a.as_slice().split_at(0).0
     assert(all(empty.iter(), (v: &i32) -> *v > 9), "no value breaks the rule")
   }
 
-  test position_reports_the_first_passing_value() {
+  #[test] fn position_reports_the_first_passing_value() {
     a := [1i32, 2i32, 3i32]
     assert(
       position(a.into_iter(), (v: i32) -> v > 1i32).or_panic_with_message("a value passes") == 1,
@@ -406,12 +406,12 @@ test {
     )
   }
 
-  test position_of_no_passing_value_is_none() {
+  #[test] fn position_of_no_passing_value_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(position(a.into_iter(), (v: i32) -> v > 9i32).is_none(), "no value passes")
   }
 
-  test find_answers_the_first_passing_value() {
+  #[test] fn find_answers_the_first_passing_value() {
     a := [1i32, 2i32, 3i32]
     assert(
       find(a.into_iter(), (v: i32) -> v > 1i32).or_panic_with_message("a value passes") == 2,
@@ -419,12 +419,12 @@ test {
     )
   }
 
-  test find_without_a_match_is_none() {
+  #[test] fn find_without_a_match_is_none() {
     a := [1i32, 2i32, 3i32]
     assert(find(a.into_iter(), (v: i32) -> v > 9i32).is_none(), "no value passes")
   }
 
-  test last_answers_the_final_value() {
+  #[test] fn last_answers_the_final_value() {
     a := [1i32, 2i32, 3i32]
     assert(
       last(a.into_iter()).or_panic_with_message("the source yields values") == 3,
@@ -432,13 +432,13 @@ test {
     )
   }
 
-  test last_of_an_empty_iterator_is_none() {
+  #[test] fn last_of_an_empty_iterator_is_none() {
     a := [1i32, 2i32]
     empty := a.as_slice().split_at(0).0
     assert(last(empty.iter()).is_none(), "there is no last value")
   }
 
-  test map_applies_the_function_to_each_value() {
+  #[test] fn map_applies_the_function_to_each_value() {
     a := [1i32, 2i32, 3i32]
     it: MapIter<ArrayIntoIter<i32, 3>, i32, i32> :=
       MapIter { iter: a.into_iter(), f: (v: i32) -> v * 2i32 }

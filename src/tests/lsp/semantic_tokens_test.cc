@@ -107,15 +107,6 @@ TEST_CASE("Keywords, types, and literals are classified") {
   CHECK(type_at(tokens, 1, 6) == 15);  // 0
 }
 
-TEST_CASE("Every lexer keyword is classified, including test") {
-  const Document document("file:///main.al", "alcy", 1, "test {\n  ret 0\n}\n");
-  const DocumentAnalysis analysis(document);
-  const std::vector<Decoded> tokens =
-      decode(semantic_tokens(document, analysis));
-  CHECK(type_at(tokens, 0, 0) == 11);  // test
-  CHECK(type_at(tokens, 1, 2) == 11);  // ret
-}
-
 TEST_CASE("A binding and its use are variables") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn main() -> i32 {\n  x := 1\n  ret x\n}\n");

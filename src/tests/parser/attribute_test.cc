@@ -26,20 +26,20 @@
 namespace {
 
 constexpr parser::BuildFacts LINUX_X86_64{.os = "linux",
-                                           .arch = "x86_64",
-                                           .freestanding = false};
-constexpr parser::BuildFacts LINUX_AARCH64{.os = "linux",
-                                            .arch = "aarch64",
-                                            .freestanding = false};
-constexpr parser::BuildFacts WINDOWS_X86_64{.os = "windows",
-                                             .arch = "x86_64",
-                                             .freestanding = false};
-constexpr parser::BuildFacts WASI_WASM32{.os = "wasi",
-                                          .arch = "wasm32",
+                                          .arch = "x86_64",
                                           .freestanding = false};
+constexpr parser::BuildFacts LINUX_AARCH64{.os = "linux",
+                                           .arch = "aarch64",
+                                           .freestanding = false};
+constexpr parser::BuildFacts WINDOWS_X86_64{.os = "windows",
+                                            .arch = "x86_64",
+                                            .freestanding = false};
+constexpr parser::BuildFacts WASI_WASM32{.os = "wasi",
+                                         .arch = "wasm32",
+                                         .freestanding = false};
 constexpr parser::BuildFacts LINUX_FREESTANDING{.os = "linux",
-                                                 .arch = "x86_64",
-                                                 .freestanding = true};
+                                                .arch = "x86_64",
+                                                .freestanding = true};
 
 struct Fixture {
   mem::Arena arena;

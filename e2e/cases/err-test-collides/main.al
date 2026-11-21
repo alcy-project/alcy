@@ -6,8 +6,8 @@ fn helper() {
   ret
 }
 
-test {
-  test helper() {
+#[when(testing)] {
+  #[test] fn helper() {
     ret
   }
 }

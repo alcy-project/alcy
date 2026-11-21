@@ -217,6 +217,9 @@ class Parser {
     bool when_false = false;
     bool repr_c = false;
     diag::Span repr_span;
+    // `#[test]` marks a function the run gathers; existence on a build
+    // is a separate question answered by `#[when(testing)]`.
+    bool is_test = false;
   };
 
   Attributes parse_attribute_list();
@@ -275,19 +278,15 @@ class Parser {
   // valid program reads differently.
   bool scan_closure() const;
 
-  // Items. An item is read in the position it appears in: inside a `test`
-  // block `test <name>()` declares a test and nothing may be `pub`, and
-  // how many blocks the cursor is in is what says the position is one.
-  ast::ItemIdx parse_item();
+  // Items. Attributes already read at module level are passed in so a
+  // conditional group can hand its gate to each item it contains.
+  ast::ItemIdx parse_item(Attributes attributes);
   // One item with the doc comments written above it attached.
-  ast::ItemIdx parse_documented_item();
-  // `test` in item position: a block at module level, an entry inside
-  // one.
-  ast::ItemIdx parse_test_item(bool is_pub, bool is_unsafe);
-  // Whether the item position being parsed is a `test` block's.
-  bool in_test_block() const { return test_block_depth_ != 0; }
-  ast::ItemIdx parse_test_block();
-  ast::ItemIdx parse_test_entry();
+  ast::ItemIdx parse_documented_item(Attributes attributes);
+  // A `#[when(...)] { ... }` group: parse its items into `out` with the
+  // group's gate inherited. The group is only source-level grouping, so
+  // it leaves no node of its own in the tree.
+  void parse_group(Attributes attributes, std::vector<ast::ItemIdx>& out);
   // An item spelled like a neighboring language's keyword (`func`,
   // `trait`, `import`) is parsed as the item it meant; `mod` has no alcy
   // form and is reported and skipped.
@@ -433,10 +432,6 @@ class Parser {
   // Set once the budget is spent, so the many frames that then fail
   // report one diagnostic rather than one per level.
   bool reported_too_deep_ = false;
-  // The `test` blocks the cursor is inside. A block does not nest, so
-  // this is one inside one and zero at every other position.
-  u32 test_block_depth_ = 0;
-
   // Reports the nesting budget once and returns true when the caller
   // must stop descending.
   bool nesting_exhausted(diag::Span span) {

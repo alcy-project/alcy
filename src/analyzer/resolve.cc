@@ -533,9 +533,7 @@ class Resolver {
             break;
           }
           case I::Use:
-          case I::Impl:
-          case I::Test:
-          case I::TestEntry: break;
+          case I::Impl: break;
         }
       }
       for (u32 child : module_children[m]) {

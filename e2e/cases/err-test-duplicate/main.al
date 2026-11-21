@@ -2,12 +2,12 @@ fn main() -> i32 {
   ret 0
 }
 
-test {
-  test twice() {
+#[when(testing)] {
+  #[test] fn twice() {
     ret
   }
 
-  test twice() {
+  #[test] fn twice() {
     ret
   }
 }

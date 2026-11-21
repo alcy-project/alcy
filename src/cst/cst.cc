@@ -108,7 +108,6 @@ class Header {
       case lexer::TokenKind::Impl: has_impl_ = true; break;
       case lexer::TokenKind::Spec: has_spec_ = true; break;
       case lexer::TokenKind::Extern: has_extern_ = true; break;
-      case lexer::TokenKind::Test: has_test_ = true; break;
       case lexer::TokenKind::Fn:
       case lexer::TokenKind::Intrinsic: has_fn_ = true; break;
       case lexer::TokenKind::If:
@@ -123,16 +122,10 @@ class Header {
   }
 
   BraceRole brace_role() const {
-    if (has_test_) {
-      // The keyword directly owns the brace of a block of items; after a
-      // parameter list it heads an entry, whose brace holds statements
-      // the way a function body does.
-      if (last_ == lexer::TokenKind::Test) {
-        return BraceRole::TestBody;
-      }
-      if (last_ == lexer::TokenKind::RParen) {
-        return BraceRole::FnBody;
-      }
+    // A brace right after an attribute closes a conditional group of
+    // items, laid out like an impl body.
+    if (last_ == lexer::TokenKind::RBracket) {
+      return BraceRole::GroupBody;
     }
     if (has_match_) {
       return BraceRole::MatchBody;
@@ -182,7 +175,6 @@ class Header {
   bool has_impl_;
   bool has_spec_;
   bool has_extern_;
-  bool has_test_;
   bool has_fn_;
   bool has_control_;
   bool has_any_;

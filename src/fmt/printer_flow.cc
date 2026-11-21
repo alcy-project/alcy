@@ -318,7 +318,7 @@ Doc Printer::print_brace_body(const cst::Node& group) {
 
   const bool member_body =
       role == cst::BraceRole::ImplBody || role == cst::BraceRole::SpecBody ||
-      role == cst::BraceRole::ExternBody || role == cst::BraceRole::TestBody;
+      role == cst::BraceRole::ExternBody || role == cst::BraceRole::GroupBody;
   if (chunks.empty()) {
     // A member body still opens its lines: an impl that owns nothing
     // reads as the pair of braces the grammar gives it.

@@ -2,8 +2,8 @@ fn main() -> i32 {
   ret 0
 }
 
-test {
-  test main() {
+#[when(testing)] {
+  #[test] fn main() {
     ret
   }
 }

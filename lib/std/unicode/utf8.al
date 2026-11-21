@@ -10,48 +10,48 @@ pub fn valid(bytes: &[u8]) -> bool {
   ret is_utf8(bytes)
 }
 
-test {
-  test empty_bytes_are_valid() {
+#[when(testing)] {
+  #[test] fn empty_bytes_are_valid() {
     bytes := &[0u8; 0]
     assert(valid(bytes), "no bytes decode")
   }
 
-  test ascii_is_valid() {
+  #[test] fn ascii_is_valid() {
     assert(valid(&[0x68u8, 0x65u8, 0x6cu8, 0x6cu8, 0x6fu8]), "every byte is a scalar of its own")
   }
 
-  test multibyte_is_valid() {
+  #[test] fn multibyte_is_valid() {
     assert(
       valid(&[0xe6u8, 0x97u8, 0xa5u8, 0xe6u8, 0x9cu8, 0xacu8, 0xe8u8, 0xa9u8, 0x9eu8]),
       "three scalars of three bytes each",
     )
   }
 
-  test a_truncated_sequence_is_not_valid() {
+  #[test] fn a_truncated_sequence_is_not_valid() {
     assert(!valid(&[0xe1u8, 0x80u8]), "a lead byte alone decodes nothing")
   }
 
-  test a_sequence_that_starts_on_a_continuation_is_not_valid() {
+  #[test] fn a_sequence_that_starts_on_a_continuation_is_not_valid() {
     assert(!valid(&[0xa5u8, 0xe6u8, 0x97u8, 0xa5u8]), "a continuation can never open a scalar")
   }
 
-  test the_first_scalar_alone_is_valid() {
+  #[test] fn the_first_scalar_alone_is_valid() {
     assert(valid(&[0xe6u8, 0x97u8, 0xa5u8]), "the lead and continuations agree")
   }
 
-  test a_stray_continuation_is_not_valid() {
+  #[test] fn a_stray_continuation_is_not_valid() {
     assert(!valid(&[0x80u8]), "a continuation with no lead is not a scalar")
   }
 
-  test an_overlong_form_is_not_valid() {
+  #[test] fn an_overlong_form_is_not_valid() {
     assert(!valid(&[0xf0u8, 0x80u8, 0x80u8]), "an overlong start is not a scalar")
   }
 
-  test a_surrogate_is_not_valid() {
+  #[test] fn a_surrogate_is_not_valid() {
     assert(!valid(&[0xedu8, 0xa0u8, 0x80u8]), "no scalar has a surrogate's shape")
   }
 
-  test past_the_last_scalar_is_not_valid() {
+  #[test] fn past_the_last_scalar_is_not_valid() {
     assert(!valid(&[0xf4u8, 0x90u8, 0x80u8, 0x80u8]), "one past the last scalar is none")
   }
 
