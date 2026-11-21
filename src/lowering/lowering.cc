@@ -939,7 +939,12 @@ void Lowerer::merge_summary_module(u32 module) {
   };
   const auto anchor_answer = [&](ir::TypeIdx type) -> u8 {
     const auto origin = [this](ir::TypeIdx idx) { return canonical_type(idx); };
-    return ir::is_movable_type(builder.state(), type, pkg.not_movable, origin)
+    // A const argument is never a value; the movability question does not
+    // apply to it. The non-summary path makes the same exemption before
+    // it asks the same question.
+    return builder.state().types[type].tag == ir::TypeTag::Const ||
+                   ir::is_movable_type(builder.state(), type, pkg.not_movable,
+                                       origin)
                ? 0
                : 1;
   };
