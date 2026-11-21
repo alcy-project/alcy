@@ -12,6 +12,7 @@ packages = [
   "sys",
   "fmt",
   "alloc",
+  "hash",
   "collections",
   "atomic",
   "sync",

@@ -148,8 +148,8 @@ replaced. The foundations are in `roadmap.md`.
   (`struct H { f: fn(...) }`) needs generics threaded by hand.
 
 - [ ] `Map` key ergonomics, the rest: an `Entry` once the borrow rules
-  allow, generic keys, which wait for a `Hash` spec, and
-  bounds; `keys()` traversal and `Vec` sorting moved to the roadmap's
+  allow, generic keys now that the `Hash` spec exists, and bounds;
+  `keys()` traversal and `Vec` sorting moved to the roadmap's
   iteration and operator items.
 
 - [ ] A mutator that answers `bool` is discarded by a plain

@@ -9,6 +9,7 @@ include = ["main"]
 [dependencies]
 "alcy/std/alloc" = {}
 "alcy/std/collections" = {}
+"alcy/std/hash" = {}
 "alcy/std/core" = {}
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}

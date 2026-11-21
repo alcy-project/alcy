@@ -20,3 +20,4 @@ export = ["prelude", "map", "set"]
 "alcy/std/alloc" = {}
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}
+"alcy/std/hash" = {}

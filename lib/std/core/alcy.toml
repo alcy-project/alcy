@@ -23,7 +23,6 @@ include = [
   "index",
   "cmp",
   "ops",
-  "hash",
 ]
 # The public surface, spelled as the manifest package sees it.
 # Nothing
@@ -44,7 +43,6 @@ export = [
   "index",
   "cmp",
   "ops",
-  "hash",
 ]
 
 # Specs only this suite may implement. Indexing and

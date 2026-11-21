@@ -1,14 +1,14 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/core`: XXH3-64 over bytes, the standard library's one hash.
+// `alcy/std/hash`: XXH3-64 over bytes, the standard library's byte hash.
 //
 // A scalar port of the vendored C library's `XXH3_64bits` at seed 0
 // (`third_party/xxhash`), so the same input hashes the same on both
 // sides: the parity case pins the published vectors. Every multiply
 // and add wraps explicitly, because a hash's arithmetic is defined to
-// wrap while a program's is checked. `Map` hashes its keys through
-// `xxh3_64`.
+// wrap while a program's is checked. `Hash for str` hashes its bytes
+// through this function.
 
 const PRIME_1: u64 := 0x9e3779b185ebca87u64
 

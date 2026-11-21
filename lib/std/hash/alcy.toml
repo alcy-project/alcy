@@ -1,0 +1,19 @@
+# Part of the `alcy/std` suite.
+#
+# Hash values and the algorithms that compute them.
+
+[package]
+name = "hash"
+version = "0.1.0"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[modules]
+include = ["prelude", "hash", "xxh3", "mix"]
+export = ["prelude", "hash", "xxh3", "mix"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+# Hash is a scalar target's spec, like Eq, so the suite seals it.
+[spec]
+suite-only = ["Hash"]
