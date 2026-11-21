@@ -174,7 +174,7 @@ class Lowerer {
   // literals are fixed once checking finished, so the index is built on
   // the first miss and shared by every later question.
   std::unordered_map<u32, std::pair<u32, u32>> closure_lit_by_type_;
-  bool closure_lits_indexed_ = false;
+  bool closure_literals_indexed_ = false;
   // Reservation order matches lowering order (FIFO worklist), so
   // reserved indexes line up with storage positions.
   std::vector<usize> worklist_;

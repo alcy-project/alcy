@@ -2162,8 +2162,8 @@ const Lowerer::ClosureEntry* Lowerer::closure_entry(ir::TypeIdx type) {
   if (entry != closure_entry_by_type_.end()) {
     return &closure_entries_[entry->second];
   }
-  if (!closure_lits_indexed_) {
-    closure_lits_indexed_ = true;
+  if (!closure_literals_indexed_) {
+    closure_literals_indexed_ = true;
     for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
       for (u32 c = 0; c < pkg.modules[m].closures.size(); ++c) {
         closure_lit_by_type_.emplace(pkg.modules[m].closures[c].self_type.idx,
