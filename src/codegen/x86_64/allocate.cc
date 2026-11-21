@@ -338,7 +338,10 @@ void allocate(Body& body, const Frame& frame) {
       }
       if (inst.op == MOp::CvtI2F) {
         const Reg from = load_value(std::get<VReg>(inst.ops[1]));
-        push_labeled(make_inst(MOp::CvtI2F, w, Operand{X}, Operand{from}));
+        const Operand src_width =
+            inst.count > 2 ? inst.ops[2] : Operand{Imm{static_cast<i64>(w)}};
+        push_labeled(
+            make_inst(MOp::CvtI2F, w, Operand{X}, Operand{from}, src_width));
         store_float(inst.ops[0], X);
         continue;
       }
@@ -394,9 +397,10 @@ void allocate(Body& body, const Frame& frame) {
         push_labeled(make_jcc(Cond::Ne, Operand{Label{not_sentinel}}));
         // Compare the source with +0.0 to tell the two apart.
         push_labeled(
-            make_inst(MOp::Xor, 4, Operand{Reg::R8}, Operand{Reg::R8}));
-        push_labeled(make_inst(MOp::CvtI2F, w == 4 ? 4 : 8, Operand{Reg::Xmm2},
-                               Operand{Reg::R8}));
+            make_inst(MOp::Xor, 8, Operand{Reg::R8}, Operand{Reg::R8}));
+        push_labeled(make_inst(MOp::CvtI2F, w, Operand{Reg::Xmm2},
+                               Operand{Reg::R8},
+                               Operand{Imm{static_cast<i64>(w == 4 ? 4 : 8)}}));
         push_labeled(make_inst(MOp::Fcom, w, Operand{X}, Operand{Reg::Xmm2}));
         const u32 positive = body.label_count++;
         push_labeled(make_jcc(Cond::Ae, Operand{Label{positive}}));

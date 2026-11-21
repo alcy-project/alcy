@@ -1708,7 +1708,11 @@ bool Selector::emit(const ir::Instruction& instr,
         return true;
       }
       if (is_integer(src) && is_float(dst)) {
-        push(make_inst(MOp::CvtI2F, width_of(src), dst_operand(), *lhs));
+        // The float type picks ss/sd; the integer type picks REX.W.
+        // They are different widths on a mixed conversion, so carry
+        // them separately as the opcode width and a third operand.
+        push(make_inst(MOp::CvtI2F, width_of(dst), dst_operand(), *lhs,
+                       Operand{Imm{static_cast<i64>(width_of(src))}}));
         return true;
       }
       if (is_float(src) && is_integer(dst)) {
