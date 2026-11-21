@@ -1,0 +1,12 @@
+# Rows the gate tolerates past the default threshold, for regressions a
+# change accepted on purpose. A row is the command and corpus the
+# report prints, such as "check generic300". max_delta_percent replaces
+# the --fail-percent threshold for that row; reason names the decision,
+# and the commit that adds the entry carries the numbers.
+#
+# Example:
+#
+# [[allow]]
+# row = "check generic300"
+# max_delta_percent = 5.0
+# reason = "the summary carries the field names a dependent reads"

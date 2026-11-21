@@ -685,6 +685,15 @@ that read a callgrind dump take it of the unstripped copy the linker leaves
 beside that binary, because a stripped one has no names to attribute.
 Generated corpora live under `out/perf/`, which is not tracked.
 
+`tools/check_perf.py` is the gate over these numbers: it builds the
+compiler at a base revision and at the working tree, measures both on
+corpora the working tree's `perf.py` generates, and fails when the
+working tree retires more per corpus than `tools/check_perf.toml`
+allows, or when a shape's per-module cost grows across a size step. It
+guards the count, not the decision: a change that trades instructions
+for something the trade is worth records its allowance there and
+states the reasons beside it.
+
 ## Limits
 
 - A profile's percentages are shares of a run. Compare two recordings of

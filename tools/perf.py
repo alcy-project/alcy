@@ -448,6 +448,7 @@ def manifest_source(shape: str, modules: int) -> str:
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}
 "alcy/std/io" = {}
+"alcy/std/path" = {}
 """
     elif shape not in ("plain", "wide", "arms", "args", "find"):
         dependencies = """
