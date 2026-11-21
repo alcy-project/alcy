@@ -13,6 +13,7 @@
 #include "ssg/documents.h"
 #include "ssg/render.h"
 #include "ssg/shell.h"
+#include "ssg/urls.h"
 #include "tests/ssg/cases.h"
 using ssg::Catalog;
 using ssg::DocPage;
@@ -93,6 +94,11 @@ TEST_CASE("the not-found page names a catalog too") {
   const std::string page = ssg::render_not_found(
       "BOOT", STAMP, [](std::string_view code) { return std::string(code); });
   CHECK(page.find("shared/i18n.en.js") != std::string::npos);
+}
+
+TEST_CASE("the root tree's catalog map is a resolvable URL") {
+  const std::string map = ssg::catalog_map("", "en");
+  CHECK(map.find("\"alcy:i18n\":\"./shared/i18n.en.js\"") != std::string::npos);
 }
 
 TEST_CASE("the map comes before the first module the page loads") {

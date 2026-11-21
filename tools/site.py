@@ -493,9 +493,12 @@ def expected_catalog(relative: Path) -> str:
     """The catalog module a page names, written from the page."""
     first = relative.parts[0] if len(relative.parts) > 1 else DEFAULT_LANGUAGE
     language = first if first in SITE_LANGUAGES else DEFAULT_LANGUAGE
-    return posixpath.relpath(
+    path = posixpath.relpath(
         f"shared/i18n.{language}.js", start=relative.parent.as_posix()
     )
+    # An import map value must be resolvable against the document: a
+    # root-tree path needs the "./" that the generator stamps too.
+    return path if path.startswith(".") else f"./{path}"
 
 
 def check_page_catalogs(dist_dir: Path) -> None:

@@ -68,7 +68,10 @@ std::string speculation_rules() {
 
 std::string catalog_map(std::string_view assets, std::string_view language) {
   std::string out = "<script type=\"importmap\">{\"imports\":{\"alcy:i18n\":\"";
-  out += assets;
+  // A root-tree page has no prefix. An import map value must be a URL
+  // resolvable against the document, and a bare "shared/..." is not:
+  // Chromium rejects it and every module importing the catalog fails.
+  out += assets.empty() ? "./" : assets;
   out += "shared/i18n.";
   out += language;
   out += ".js\"}}</script>";
