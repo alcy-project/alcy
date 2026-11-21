@@ -7,10 +7,19 @@ project_name = "alcy"
 # is bumped by hand at each release.
 project_version = "0.1.0"
 
-# The version reported by `--version`. Computed at gen time from the git
-# state so a new commit changes one generated translation unit rather
-# than every file that used to see a `-D`.
-alcy_version = exec_script("//tools/version.py", [ project_version ], "value")
+# The files whose content makes the compiler what it is. The generated
+# version translation unit lists them as action inputs, so a source edit
+# regenerates it, changes the build cache key, and keeps old IR from
+# answering for a compiler that no longer exists. The same list is what
+# tools/version.py digests when the tree is dirty.
+compiler_version_paths = [
+  "src",
+  "build",
+  "tools",
+  "third_party/fpag",
+]
+compiler_version_sources =
+    exec_script("//tools/list_sources.py", compiler_version_paths, "list lines")
 
 if (target_os == "") {
   target_os = host_os

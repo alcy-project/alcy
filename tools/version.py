@@ -6,8 +6,10 @@
 """Computes the version string built into the compiler.
 
 The string is baked into a single generated translation unit (see
-`src/cli/BUILD.gn`), which is what keeps a new commit from rebuilding
-every file in the cli. It is `project_version` on a clean release tag, and
+`src/cli/BUILD.gn`). GN runs this script as an action with the compiler's
+sources as inputs, so editing one changes the version even without a new
+commit, and the build cache cannot answer with IR a former compiler
+wrote. It is `project_version` on a clean release tag, and
 `project_version-snapshot` carrying the build commit otherwise; a working
 tree with uncommitted tracked changes marks the commit `-dirty` and adds
 a digest of those changes, so that two dirty trees are two compilers and
@@ -27,6 +29,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # anywhere else - a test, a sample - does not make a new compiler, and
 # naming it one would cost a cache miss for nothing.
 COMPILER_PATHS = ["src", "build", "tools", "third_party/fpag"]
+# Kept in sync with tools/list_sources.py, which names the same files as
+# GN action inputs. A dirty tree is one compiler for all of them.
 
 
 def _git(args: list[str]) -> subprocess.CompletedProcess:
@@ -92,18 +96,35 @@ def resolve_version(base: str) -> str:
     return format_version(base, commit, on_tag, dirty_digest())
 
 
-def gn_string(value: str) -> str:
-    """`value` as a GN string literal, for exec_script's value conversion."""
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Print the build version as a GN string."
+        description="Write the generated version translation unit."
     )
     parser.add_argument("base", help="the hand-maintained version, e.g. 0.1.0")
+    parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
-    print(gn_string(resolve_version(args.base)))
+    version = resolve_version(args.base)
+    source = "\n".join(
+        (
+            "// Copyright 2026 The Alcy Project Authors",
+            "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
+            "// Generated from the build's git state and the compiler sources;",
+            "// do not edit.",
+            "",
+            '#include "cli/version.h"',
+            "",
+            "namespace cli {",
+            "",
+            f'std::string_view alcy_version() {{ return "{version}"; }}',
+            "",
+            "}  // namespace cli",
+            "",
+        )
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    if args.output.is_file() and args.output.read_text(encoding="utf-8") == source:
+        return 0
+    args.output.write_text(source, encoding="utf-8")
     return 0
 
 

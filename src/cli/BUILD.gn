@@ -2,25 +2,23 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 # The version string is commit-dependent, so it lives alone in one
-# generated translation unit. Regenerating it on a new commit recompiles
-# this file and relinks; every other cli file keeps its command line. GN
-# writes the file only when the string actually changes, so an unchanged
-# version leaves the timestamp alone and nothing rebuilds.
-write_file(
-    "$target_gen_dir/version.cc",
-    [
-      "// Copyright 2026 The Alcy Project Authors",
-      "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
-      "// Generated at gen time from the build's git state; do not edit.",
-      "",
-      "#include \"cli/version.h\"",
-      "",
-      "namespace cli {",
-      "",
-      "std::string_view alcy_version() { return \"" + alcy_version + "\"; }",
-      "",
-      "}  // namespace cli",
-    ])
+# generated translation unit. It is an action rather than a gen-time
+# write_file: ninja reruns the script when a compiler source changes, so
+# editing a source without a new commit changes the version and, with
+# it, the build cache key. An unchanged version leaves the file's
+# timestamp alone and nothing rebuilds.
+action("version_cc") {
+  script = "//tools/version.py"
+  # Inputs, not sources: ninja watches them for changes, but gn check must
+  # not think the compiler's headers belong to this action.
+  inputs = compiler_version_sources
+  outputs = [ "$target_gen_dir/version.cc" ]
+  args = [
+    project_version,
+    "--output",
+    rebase_path(outputs[0], root_build_dir),
+  ]
+}
 
 source_set("cli") {
   sources = [
@@ -80,6 +78,7 @@ source_set("cli") {
     "version.h",
   ]
   deps = [
+    ":version_cc",
     "//src/fmt:alcy_fmt",
     "//src/i18n",
     "//src/linter",
@@ -96,7 +95,8 @@ source_set("cli") {
 
   # Public: cli headers include compiler and third-party headers, so
   # dependents need the same include paths (private deps would not forward
-  # them, breaking both compilation and gn check of dependents).
+  # them): the compiler and third-party headers cli exposes must reach
+  # every target that includes a cli header.
   public_deps = [ "//src:alcy_lib" ]
 }
 
