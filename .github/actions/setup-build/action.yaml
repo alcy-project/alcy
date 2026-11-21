@@ -102,7 +102,15 @@ runs:
         # and cannot choose which executable cargo starts, and exporting
         # either one globally would confuse the later C++ links.
         if [[ "$RUNNER_OS" == "Windows" ]]; then
-          export PATH="${VCToolsInstallDir}bin/HostX64/x64:$PATH"
+          # Match the target the dev prompt selected: x64 on Intel,
+          # arm64 on ARM runners. Naming HostX64/x64 on ARM would pick an
+          # x64-target cl.exe, which rejects the ARM headers in Rust
+          # crates that build native code for the runner.
+          target_arch=x64
+          if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
+            target_arch=arm64
+          fi
+          export PATH="${VCToolsInstallDir}bin/HostX64/${target_arch}:$PATH"
         fi
         uv python install
         uv sync --frozen
