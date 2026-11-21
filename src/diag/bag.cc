@@ -176,7 +176,8 @@ base::Result<void, BagError> DiagBag::attach_fix(u32 index, Fix replacement) {
   if (mem == nullptr) {
     return base::make_ok();
   }
-  *mem = Fix{replacement.span, intern(replacement.replacement)};
+  *mem =
+      Fix{replacement.span, intern(replacement.replacement), replacement.kind};
   entries_[index].fix = mem;
   return base::make_ok();
 }

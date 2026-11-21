@@ -102,6 +102,19 @@ TEST_CASE("A spent diagnostic arena drops rather than crashes") {
   CHECK(bag.error_count() > 0);
 }
 
+TEST_CASE("DiagBag keeps a repair's kind") {
+  BagFixture f;
+  const u32 index =
+      f.bag.emit_untranslated(Severity::Warning, Stage::Lint, 1, "note");
+  CHECK(f.bag.attach_fix(index, Fix{Span{}, "x", FixKind::Refactor}).is_ok());
+  const Diagnostic* stored = f.bag.at(index);
+  CHECK(stored != nullptr);
+  if (stored == nullptr || stored->fix == nullptr) {
+    return;
+  }
+  CHECK(stored->fix->kind == FixKind::Refactor);
+}
+
 TEST_CASE("A message longer than the cap is clipped") {
   mem::Arena arena;
   arena.reserve(mem::page_size());
