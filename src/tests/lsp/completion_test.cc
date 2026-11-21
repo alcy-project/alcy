@@ -104,4 +104,32 @@ TEST_CASE("Completion offers a keyword for its prefix") {
   }
 }
 
+TEST_CASE("Completion carries a text edit and doc comments") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "/// Adds two numbers.\n"
+                          "fn add(a: i32, b: i32) -> i32 {\n"
+                          "  ret a\n"
+                          "}\n"
+                          "fn f() -> i32 {\n"
+                          "  ad\n"
+                          "}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{5, 4});
+  const text::JsonValue* item = find_item(list, "add");
+  CHECK(item != nullptr);
+  if (item == nullptr) {
+    return;
+  }
+  const text::JsonValue* text_edit = item->find("textEdit");
+  CHECK(text_edit != nullptr);
+  if (text_edit != nullptr) {
+    CHECK(text_edit->find("newText")->as_string() == "add");
+  }
+  const text::JsonValue* documentation = item->find("documentation");
+  CHECK(documentation != nullptr);
+  if (documentation != nullptr) {
+    CHECK(documentation->find("value")->as_string() == "Adds two numbers.");
+  }
+}
 }  // namespace lsp

@@ -4,6 +4,7 @@
 #include "lsp/completion.h"
 
 #include <algorithm>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -14,6 +15,8 @@
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
+#include "ast/ast.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/storage.h"
@@ -33,6 +36,7 @@ namespace {
 struct Item {
   std::string label;
   std::string detail;
+  std::string documentation;
   CompletionItemKind kind = CompletionItemKind::Variable;
 };
 
@@ -129,21 +133,50 @@ std::vector<std::string_view> visible_labels(const VisibleNames& visible,
                                        : labels->second;
 }
 
-void collect(const pipeline::PipelineContext& context,
+void collect(const DocumentAnalysis& analysis,
              const analyzer::CheckedPackage& package,
              const VisibleNames& visible,
              std::vector<Item>* out) {
+  const pipeline::PipelineContext& context = analysis.context();
   const ir::StorageState& state = package.types->state();
-  const auto emit = [&](u32 module, std::string_view declared,
-                        std::string_view detail, CompletionItemKind kind) {
+  const auto doc_text = [&](ast::ItemIdx item) {
+    if (!item.is_valid()) {
+      return std::string{};
+    }
+    const ast::ItemNode& node = context.ast.items[item];
+    std::string text;
+    for (const diag::Span span : node.docs) {
+      const std::optional<std::string_view> bytes =
+          analysis.context().sources.bytes(span.file);
+      if (!bytes.has_value() || span.offset + span.length > bytes->size()) {
+        continue;
+      }
+      std::string_view line = bytes->substr(span.offset, span.length);
+      if (line.starts_with("///")) {
+        line.remove_prefix(3);
+      }
+      if (line.starts_with(' ')) {
+        line.remove_prefix(1);
+      }
+      if (!text.empty()) {
+        text.push_back('\n');
+      }
+      text.append(line);
+    }
+    return text;
+  };
+  const auto emit = [&](u32 module, ast::ItemIdx item,
+                        std::string_view declared, std::string_view detail,
+                        CompletionItemKind kind) {
     for (const std::string_view label :
          visible_labels(visible, module, declared)) {
-      out->push_back(Item{std::string(label), std::string(detail), kind});
+      out->push_back(
+          Item{std::string(label), std::string(detail), doc_text(item), kind});
     }
   };
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
-      emit(module.module, fn.name,
+      emit(module.module, fn.item, fn.name,
            function_detail(context, package, fn.params, fn.ret),
            fn.is_method ? CompletionItemKind::Method
                         : CompletionItemKind::Function);
@@ -155,13 +188,13 @@ void collect(const pipeline::PipelineContext& context,
       if (!method.item.is_valid()) {
         continue;
       }
-      emit(module.module, method.name,
+      emit(module.module, method.item, method.name,
            function_detail(context, package, method.params, method.ret),
            CompletionItemKind::Method);
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
       const ir::TypeNode& type = state.types[named.type];
-      emit(module.module, named.name,
+      emit(module.module, ast::ItemIdx::invalid(), named.name,
            ir::type_display(state, context.strings, named.type),
            type.tag == ir::TypeTag::Enum ? CompletionItemKind::Enum
                                          : CompletionItemKind::Struct);
@@ -173,12 +206,12 @@ void collect(const pipeline::PipelineContext& context,
       for (const std::string_view variant : info.variants) {
         out->push_back(
             Item{std::string(variant),
-                 std::string(info.name) + "::" + std::string(variant),
+                 std::string(info.name) + "::" + std::string(variant), "",
                  CompletionItemKind::EnumMember});
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
-      emit(module.module, info.name,
+      emit(module.module, info.item, info.name,
            ir::type_display(state, context.strings, info.type),
            info.is_const ? CompletionItemKind::Constant
                          : CompletionItemKind::Variable);
@@ -201,15 +234,14 @@ text::JsonValue completion_items(const Document& document,
 
   std::vector<Item> items;
   if (analysis.ok()) {
-    collect(analysis.context(), analysis.package(), visible_names(analysis),
-            &items);
+    collect(analysis, analysis.package(), visible_names(analysis), &items);
   }
   for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {
     if (keyword.category != lexer::KeywordCategory::Keyword) {
       continue;
     }
-    items.push_back(
-        Item{std::string(keyword.spelling), "", CompletionItemKind::Keyword});
+    items.push_back(Item{std::string(keyword.spelling), "", "",
+                         CompletionItemKind::Keyword});
   }
 
   std::sort(items.begin(), items.end(),
@@ -234,6 +266,20 @@ text::JsonValue completion_items(const Document& document,
     if (!item.detail.empty()) {
       entry.set("detail", text::JsonValue::make_string(item.detail));
     }
+    if (!item.documentation.empty()) {
+      text::JsonValue documentation = text::JsonValue::make_object();
+      documentation.set("kind", text::JsonValue::make_string("markdown"));
+      documentation.set("value",
+                        text::JsonValue::make_string(item.documentation));
+      entry.set("documentation", std::move(documentation));
+    }
+    text::JsonValue edit_range =
+        range_json(document, static_cast<u32>(offset - prefix.size()),
+                   static_cast<u32>(prefix.size()));
+    text::JsonValue text_edit = text::JsonValue::make_object();
+    text_edit.set("range", std::move(edit_range));
+    text_edit.set("newText", text::JsonValue::make_string(item.label));
+    entry.set("textEdit", std::move(text_edit));
     array.push(std::move(entry));
   }
 

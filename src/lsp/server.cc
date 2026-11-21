@@ -914,11 +914,19 @@ void Server::implementation(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
+  const DocumentAnalysis& analysis = cache_.get(*document);
   const std::vector<diag::Span> locations =
-      implementation_at(*document, cache_.get(*document), position);
+      implementation_at(*document, analysis, position);
   text::JsonValue result = text::JsonValue::make_array();
+  PositionCache positions;
   for (const diag::Span span : locations) {
-    result.push(location_json(*document, span));
+    const std::optional<std::string> uri = uri_of_file(analysis, span.file);
+    const std::optional<std::string_view> text =
+        analysis.context().sources.bytes(span.file);
+    if (!uri.has_value() || !text.has_value()) {
+      continue;
+    }
+    result.push(location_json(*uri, *text, span, encoding_, &positions));
   }
   send_result(id, std::move(result));
 }

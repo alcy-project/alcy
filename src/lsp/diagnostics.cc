@@ -3,6 +3,7 @@
 
 #include "lsp/diagnostics.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -63,6 +64,7 @@ text::JsonValue diagnostics_for(const Document& document,
   const PackageAnalysis& owner = analysis.owner();
   const source::FileId file = analysis.root();
   const diag::DiagBag& bag = owner.context.bag;
+  PositionCache positions;
 
   text::JsonValue diagnostics = text::JsonValue::make_array();
   for (u32 i = 0; i < bag.size(); ++i) {
@@ -91,6 +93,32 @@ text::JsonValue diagnostics_for(const Document& document,
     }
     entry.set("message",
               text::JsonValue::make_string(std::string(diagnostic->message)));
+    if (diagnostic->labels != nullptr && diagnostic->label_count != 0) {
+      text::JsonValue related = text::JsonValue::make_array();
+      for (u32 j = 0; j < diagnostic->label_count; ++j) {
+        const diag::Label& label = diagnostic->labels[j];
+        const std::optional<std::string> uri =
+            uri_of_file(analysis, label.span.file);
+        const std::optional<std::string_view> text =
+            owner.context.sources.bytes(label.span.file);
+        if (!uri.has_value() || !text.has_value()) {
+          continue;
+        }
+        text::JsonValue location = text::JsonValue::make_object();
+        location.set("uri", text::JsonValue::make_string(*uri));
+        location.set("range",
+                     range_json(*text, label.span.offset, label.span.length,
+                                owner.encoding, &positions));
+        text::JsonValue info = text::JsonValue::make_object();
+        info.set("location", std::move(location));
+        info.set("message",
+                 text::JsonValue::make_string(std::string(label.message)));
+        related.push(std::move(info));
+      }
+      if (!related.as_array().empty()) {
+        entry.set("relatedInformation", std::move(related));
+      }
+    }
     diagnostics.push(std::move(entry));
   }
   return diagnostics;
