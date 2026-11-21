@@ -200,6 +200,12 @@ def main() -> int:
         "build.py", "--target=all", "--mode=release", f"--build-subdir={release_subdir}"
     )
 
+    # Every target operating system is configured, not built: a toolchain
+    # definition that cannot produce one of them fails here rather than
+    # when a platform reaches it. Gn gen is all this asks for, so the
+    # answer costs a minute and needs none of the binaries above.
+    tool("cross.py", "--gen-only")
+
     tool("verify_static_linkage.py", f"--build-dir=out/{debug_subdir}")
     tool("verify_static_linkage.py", f"--build-dir=out/{release_subdir}")
 
@@ -336,6 +342,12 @@ def main() -> int:
         )
         tool("check_cases.py", "--steps=cli", f"--build-subdir={release_subdir}")
         tool("check_cases.py", "--steps=program", f"--build-subdir={release_subdir}")
+
+    # The guide's generator has its own tests and its own no-LLVM build.
+    # A change to the compiler's source can break the site's tests without
+    # breaking any of the compiler's, so the site workflow asks this too;
+    # asking it here means the answer arrives before the change is pushed.
+    tool("site.py", "test")
 
     # Lint reuses the debug build's compile database: a dedicated GN
     # tree would install its own copy of LLVM for the same bytes.

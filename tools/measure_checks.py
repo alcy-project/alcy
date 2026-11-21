@@ -75,6 +75,7 @@ CHECKS = [
             "--build-subdir=build_release",
         ],
     ),
+    ("cross gen", ["uv", "run", "./tools/cross.py", "--gen-only"]),
     (
         "e2e release",
         [
@@ -201,6 +202,7 @@ CHECKS = [
             "--build-subdir=build_wasm_playground",
         ],
     ),
+    ("site tests", ["uv", "run", "./tools/site.py", "test"]),
 ]
 
 

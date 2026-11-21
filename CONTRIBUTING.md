@@ -36,11 +36,16 @@ uv run ./tools/check_comp.py
 # The .al sources are the formatter's own check: laid out as alcy fmt
 # writes them, idempotent under a second pass, unchanged in verdict.
 uv run ./tools/check_fmt.py
-# lint.py also runs the format dry run and the tree's TOML, Markdown,
-# rule, and Python checks.
+# lint.py also runs the format dry run, the license headers, and the
+# tree's TOML, Markdown, rule, and Python checks.
 uv run ./tools/lint.py
 uv run ./tools/format.py --dry-run
 uv run ./tools/verify_static_linkage.py --build-dir=out/build
+# Every target operating system is configured, not built: a toolchain
+# definition that cannot produce one fails here.
+uv run ./tools/cross.py --gen-only
+# The guide's generator has its own tests and its own no-LLVM build:
+uv run ./tools/site.py test
 
 # The grammar needs no toolchain but the tree-sitter CLI and Bun:
 uv run ./tools/check_treesitter.py --grammar

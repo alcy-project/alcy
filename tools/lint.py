@@ -12,6 +12,7 @@ from pathlib import Path
 
 import format
 import gn_check
+import header_license
 from utils.command import run_commands_in_parallel
 from utils.paths import (
     excluded_source_dirs,
@@ -267,12 +268,14 @@ def lint_files(
 
         target_dirs.append(d)
 
-    # The checks that read the whole tree -- the format dry run, gn check,
-    # the ASCII check, the rules' own cases -- answer once, so a sharded
-    # run asks them with the first shard and the rest carry only the
-    # clang-tidy share.
+    # The checks that read the whole tree -- the format dry run, the
+    # license headers, gn check, the ASCII check, the rules' own cases --
+    # answer once, so a sharded run asks them with the first shard and
+    # the rest carry only the clang-tidy share.
     whole_tree = shard is None or shard[0] == 1
     if whole_tree and format.format_files(dry_run=True) != 0:
+        failed = True
+    if whole_tree and not header_license.apply_to_files(dry_run=True):
         failed = True
 
     compdb = build_dir / "compile_commands.json"
