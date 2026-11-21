@@ -27,6 +27,21 @@ TEST_CASE("A cache answers every version of a document") {
   CHECK(!cache.get(broken).ok());
 }
 
+TEST_CASE("An untitled buffer keeps its own standalone signature") {
+  const Document first("untitled:Untitled-1", "alcy", 1,
+                       "fn main() -> i32 {\n  ret 0\n}\n");
+  const Document edited("untitled:Untitled-1", "alcy", 2,
+                        "fn main() -> i32 {\n  ret 1\n}\n");
+  const Document other("untitled:Untitled-2", "alcy", 1,
+                       "fn main() -> i32 {\n  ret 0\n}\n");
+  AnalysisCache cache;
+  const PackageAnalysis* const before = &cache.get(first).owner();
+  CHECK(cache.get(first).ok());
+  CHECK(&cache.get(edited).owner() != before);
+  CHECK(&cache.get(other).owner() != before);
+  CHECK(&cache.get(other).owner() != &cache.get(edited).owner());
+}
+
 TEST_CASE("Erasing an entry leaves the cache able to rebuild it") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn main() -> i32 {\n  ret 0\n}\n");

@@ -21,16 +21,12 @@ namespace lsp {
 
 namespace {
 
-std::string resolve_uri(std::string_view uri,
-                        const std::optional<path::Path>& workspace_root) {
-  if (const std::optional<std::string> path = workspace::uri_to_path(uri);
-      path.has_value()) {
-    return *path;
-  }
-  if (workspace_root.has_value() && !uri.starts_with('/')) {
-    return std::string(workspace_root->join(uri).as_view());
-  }
-  return {};
+std::string resolve_uri(std::string_view uri) {
+  // Only a file URI names a path the package walk can resolve. An
+  // untitled buffer is standalone here just as build_analysis() makes
+  // it standalone; treating it as a relative path would key the cache
+  // to a package whose fingerprint never includes the buffer's text.
+  return workspace::uri_to_path(uri).value_or(std::string{});
 }
 
 }  // namespace
@@ -52,7 +48,7 @@ std::vector<workspace::BufferView> AnalysisCache::buffers_for(
 }
 
 std::string AnalysisCache::package_key_for(const Document& focus) const {
-  const std::string path = resolve_uri(focus.uri(), workspace_root_);
+  const std::string path = resolve_uri(focus.uri());
   if (path.empty()) {
     return "standalone:" + focus.uri();
   }

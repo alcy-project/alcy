@@ -14,7 +14,6 @@
 #include "lsp/analysis.h"
 #include "lsp/document.h"
 #include "lsp/workspace.h"
-#include "path/path.h"
 
 namespace lsp {
 
@@ -34,11 +33,6 @@ class AnalysisCache {
   // context holds the whole package's findings.
   const PackageAnalysis& owner_of(const Document& document) {
     return get(document).owner();
-  }
-
-  // The workspace root from initialize, used to resolve a relative URI.
-  void set_workspace_root(std::optional<path::Path> root) {
-    workspace_root_ = std::move(root);
   }
 
   void set_encoding(PositionEncoding encoding) { encoding_ = encoding; }
@@ -88,7 +82,6 @@ class AnalysisCache {
   std::string stamp_for(const Document& focus) const;
 
   const DocumentStore* documents_ = nullptr;
-  std::optional<path::Path> workspace_root_;
   PositionEncoding encoding_ = PositionEncoding::Utf16;
   std::unordered_map<std::string, Entry> entries_;
   std::unordered_map<std::string, std::shared_ptr<PackageAnalysis>> packages_;

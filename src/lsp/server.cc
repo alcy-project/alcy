@@ -35,9 +35,7 @@
 #include "lsp/symbols.h"
 #include "lsp/transport.h"
 #include "lsp/type_hierarchy.h"
-#include "lsp/workspace.h"
 #include "lsp/workspace_symbols.h"
-#include "path/path.h"
 #include "source/source.h"
 #include "text/json.h"
 
@@ -535,26 +533,6 @@ void Server::initialize(const text::JsonValue& id,
   }
   if (const text::JsonValue* params = field(message, "params");
       params != nullptr && params->is_object()) {
-    std::string_view root_uri = string_field(*params, "rootUri");
-    if (const text::JsonValue* folders = params->find("workspaceFolders");
-        folders != nullptr && folders->is_array() &&
-        !folders->as_array().empty()) {
-      const text::JsonValue& first = folders->as_array().front();
-      if (first.is_object()) {
-        root_uri = string_field(first, "uri");
-      }
-    }
-    if (!root_uri.empty()) {
-      if (const std::optional<std::string> path =
-              workspace::uri_to_path(root_uri);
-          path.has_value()) {
-        if (base::Result<path::Path, path::PathError> parsed =
-                path::Path::from_native(*path);
-            parsed.is_ok()) {
-          cache_.set_workspace_root(std::move(parsed).unwrap());
-        }
-      }
-    }
     encoding_ = negotiate_encoding(*params);
     cache_.set_encoding(encoding_);
     watched_files_supported_ = false;
