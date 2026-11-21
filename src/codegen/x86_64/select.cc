@@ -1535,11 +1535,11 @@ bool Selector::emit(const ir::Instruction& instr,
         return true;
       }
       if (is_integer(src) && is_float(dst)) {
-        push(make_inst(MOp::CvtI2F, width_of(dst), dst_operand(), *lhs));
+        push(make_inst(MOp::CvtI2F, width_of(src), dst_operand(), *lhs));
         return true;
       }
       if (is_float(src) && is_integer(dst)) {
-        push(make_inst(MOp::CvtF2I, width_of(src), dst_operand(), *lhs));
+        push(make_inst(MOp::CvtF2I, width_of(dst), dst_operand(), *lhs));
         return true;
       }
       if (is_integer(src) && is_integer(dst)) {

@@ -306,6 +306,10 @@ void allocate(Body& body, const Frame& frame) {
                                              .disp = 0}}));
         } else if (const Mem* mem = std::get_if<Mem>(&src); mem != nullptr) {
           push_labeled(make_inst(load_op, w, Operand{into}, resolve(*mem)));
+        } else if (const Reg* from = std::get_if<Reg>(&src); from != nullptr) {
+          if (*from != into) {
+            push_labeled(make_inst(load_op, w, Operand{into}, Operand{*from}));
+          }
         }
       };
       const auto store_float = [&](const Operand& dst, Reg from) {

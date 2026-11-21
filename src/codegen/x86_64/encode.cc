@@ -103,12 +103,16 @@ void prefix(std::vector<u8>& out,
     out.push_back(0x66);
   }
   const bool byte = width == 1;
-  const bool r =
-      reg.has_value() && (rex_bit(*reg) || (byte && byte_needs_rex(*reg)));
-  const bool b = rm.has_value() &&
-                 (rex_bit(*rm) || (rm_register && byte && byte_needs_rex(*rm)));
+  // Codes 4-7 in a byte operation name ah/ch/dh/bh without a REX and
+  // spl/bpl/sil/dil with one. Their presence forces a bare REX; only
+  // codes 8-15 set the REX.R/B extension bits.
+  const bool byte_reg = byte && reg.has_value() && byte_needs_rex(*reg);
+  const bool byte_rm =
+      byte && rm.has_value() && rm_register && byte_needs_rex(*rm);
+  const bool r = reg.has_value() && rex_bit(*reg);
+  const bool b = rm.has_value() && rex_bit(*rm);
   const bool x = index.has_value() && rex_bit(*index);
-  if (w || r || b || x) {
+  if (w || r || b || x || byte_reg || byte_rm) {
     out.push_back(static_cast<u8>(0x40 | (w ? 8 : 0) | (r ? 4 : 0) |
                                   (x ? 2 : 0) | (b ? 1 : 0)));
   }
@@ -223,11 +227,12 @@ u8 cond_code(const Cond cond) {
 void sse_prefix(std::vector<u8>& out,
                 const u8 mandatory,
                 const std::optional<Reg> reg,
-                const std::optional<Reg> rm) {
+                const std::optional<Reg> rm,
+                const bool wide = false) {
   if (mandatory != 0) {
     out.push_back(mandatory);
   }
-  prefix(out, 4, false, reg, rm, std::nullopt);
+  prefix(out, 4, wide, reg, rm, std::nullopt);
 }
 
 void alu_rr(std::vector<u8>& out,
@@ -498,7 +503,7 @@ Encoded encode(const Body& body) {
         const u8 mand = inst.width == 4 ? 0xf3 : 0xf2;
         const Reg dst = std::get<Reg>(inst.at(0));
         const Reg src = std::get<Reg>(inst.at(1));
-        sse_prefix(out, mand, dst, src);
+        sse_prefix(out, mand, dst, src, /*wide=*/inst.width == 8);
         out.push_back(0x0f);
         out.push_back(0x2a);
         modrm_rr(out, dst, src);
@@ -508,7 +513,7 @@ Encoded encode(const Body& body) {
         const u8 mand = inst.width == 4 ? 0xf3 : 0xf2;
         const Reg dst = std::get<Reg>(inst.at(0));
         const Reg src = std::get<Reg>(inst.at(1));
-        sse_prefix(out, mand, dst, src);
+        sse_prefix(out, mand, dst, src, /*wide=*/inst.width == 8);
         out.push_back(0x0f);
         out.push_back(0x2c);
         modrm_rr(out, dst, src);
