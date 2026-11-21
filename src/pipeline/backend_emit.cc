@@ -92,7 +92,17 @@ codegen::OutputKind output_kind_for(EmitMode mode,
 codegen::Backend select_backend(const codegen::Target& target,
                                 codegen::OutputKind kind,
                                 bool optimize) {
-  const codegen::Backend preferred = codegen::default_backend(target);
+  // A native x86_64 Linux debug build uses the direct backend: it writes
+  // the final object without LLVM, which is the point of the backend.
+  // An optimized build keeps LLVM, which still carries the release
+  // pipeline.
+  const bool native_debug = !optimize &&
+                            target.triple.rfind("x86_64", 0) == 0 &&
+                            target.triple.find("linux") != std::string::npos &&
+                            backend_available(codegen::Backend::DirectX86_64);
+  const codegen::Backend preferred = native_debug
+                                         ? codegen::Backend::DirectX86_64
+                                         : codegen::default_backend(target);
   const auto usable = [&](codegen::Backend backend) {
     if (!codegen::backend_available(backend)) {
       return false;

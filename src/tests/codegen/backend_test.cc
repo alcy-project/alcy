@@ -147,6 +147,12 @@ TEST_CASE("The default backend answers what the request asks for") {
   CHECK(!backend_writes_final_module(codegen::Backend::DirectWasm, native));
 #if ALCY_BACKEND_LLVM
   CHECK(!backend_writes_final_module(codegen::Backend::Llvm, wasm));
+  // A native debug build prefers the direct backend; an optimized one
+  // stays with LLVM so the release pipeline keeps its optimizer.
+  CHECK(select_backend(native, codegen::OutputKind::Object, false) ==
+        codegen::Backend::DirectX86_64);
+  CHECK(select_backend(native, codegen::OutputKind::Object, true) ==
+        codegen::Backend::Llvm);
 #endif
 }
 
