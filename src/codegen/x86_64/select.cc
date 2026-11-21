@@ -1531,7 +1531,12 @@ bool Selector::emit(const ir::Instruction& instr,
       const ir::TypeTag src = storage_.types()[at(0).type].tag;
       const ir::TypeTag dst = dst_tag();
       if (is_float(src) && is_float(dst)) {
-        push(make_inst(MOp::CvtF2F, width_of(src), dst_operand(), *lhs));
+        if (src == dst) {
+          push(make_inst(src == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
+                         width_of(src), dst_operand(), *lhs));
+        } else {
+          push(make_inst(MOp::CvtF2F, width_of(src), dst_operand(), *lhs));
+        }
         return true;
       }
       if (is_integer(src) && is_float(dst)) {
