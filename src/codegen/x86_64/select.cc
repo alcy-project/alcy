@@ -461,6 +461,20 @@ base::Result<Body, codegen::EmitError> Selector::run() {
     body_.vreg_types.push_back(ir::primitive_idx(ir::TypeTag::Ptr).idx);
   }
 
+  // A pointer's pointee can be named in a block the emitter reaches
+  // later than the one that projects it (block order is not control
+  // flow order). Gather every alloca's hint up front so a projection
+  // in an earlier block still knows what its base points at.
+  for (const ir::BlockIdx block_idx : function_.blocks) {
+    for (const ir::InstructionIdx instr_idx :
+         storage_.blocks()[block_idx].instrs) {
+      const ir::Instruction& instr = storage_.instrs()[instr_idx];
+      if (instr.op == ir::Opcode::Alloca && instr.dst.is_valid()) {
+        note_pointee(instr.dst, storage_.registers()[instr.dst].type);
+      }
+    }
+  }
+
   // Every block the body carries gets a label, whether or not a branch
   // names it: a block's first instruction is where its label sits, and
   // the map from block to label is what the branches read.
