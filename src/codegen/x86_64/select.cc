@@ -542,6 +542,18 @@ bool Selector::receive_parameters(const ir::Block& entry) {
   // for the caller's slot.
   u32 next_register = 0;
   u32 next_xmm = 0;
+  u32 stack_offset = 0;
+  // An argument that did not fit a register arrives on the stack, just
+  // past the return address the call pushed.
+  const auto from_stack = [&]() {
+    const Operand slot =
+        Operand{Mem{.base = Reg::Rbp,
+                    .index = std::nullopt,
+                    .scale = 1,
+                    .disp = static_cast<i32>(16 + stack_offset)}};
+    stack_offset += 8;
+    return slot;
+  };
   if (sret_vreg_ != NO_SRET) {
     push(make_inst(MOp::Mov, 8, Operand{SlotRef{sret_vreg_, 0}},
                    Operand{ARG_REGS[next_register++]}));
@@ -552,13 +564,12 @@ bool Selector::receive_parameters(const ir::Block& entry) {
     const ir::TypeLayout layout = storage_.layout_of(param.type, width_);
     switch (passage_of(param.type)) {
       case Passage::Register: {
-        if (next_register >= ARG_REG_COUNT) {
-          (void)unsupported(diag::Span{},
-                            "a parameter past the argument "
-                            "registers");
-          return false;
-        }
         const ir::TypeTag tag = storage_.types()[param.type.idx].tag;
+        if (next_register >= ARG_REG_COUNT) {
+          push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
+                         from_stack()));
+          break;
+        }
         if (is_float(tag)) {
           if (next_xmm >= ARG_XMM_COUNT) {
             (void)unsupported(diag::Span{},
@@ -576,10 +587,10 @@ bool Selector::receive_parameters(const ir::Block& entry) {
       }
       case Passage::TwoWord: {
         if (next_register + 1 >= ARG_REG_COUNT) {
-          (void)unsupported(diag::Span{},
-                            "a parameter past the argument "
-                            "registers");
-          return false;
+          // The whole pair arrives on the stack: one wide move fills the
+          // destination slot from the two words there.
+          push(make_inst(MOp::Mov, 8, Operand{VReg{vreg}}, from_stack()));
+          break;
         }
         push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 0}},
                        Operand{ARG_REGS[next_register++]}));
@@ -589,10 +600,22 @@ bool Selector::receive_parameters(const ir::Block& entry) {
       }
       case Passage::ByAddress: {
         if (next_register >= ARG_REG_COUNT) {
-          (void)unsupported(diag::Span{},
-                            "a parameter past the argument "
-                            "registers");
-          return false;
+          // The stack holds the address itself; borrow rax so the copy
+          // below can use rdi, rsi and rcx in peace.
+          push(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, from_stack()));
+          push(make_inst(MOp::Push, 8, Operand{Reg::Rdi}));
+          push(make_inst(MOp::Push, 8, Operand{Reg::Rsi}));
+          push(make_inst(MOp::Push, 8, Operand{Reg::Rcx}));
+          push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{Reg::Rax}));
+          push(make_inst(MOp::Lea, 8, Operand{Reg::Rdi},
+                         Operand{SlotRef{vreg, 0}}));
+          push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
+                         Operand{Imm{static_cast<i64>(layout.size)}}));
+          push(make_inst(MOp::RepMovsb, 8));
+          push(make_inst(MOp::Pop, 8, Operand{Reg::Rcx}));
+          push(make_inst(MOp::Pop, 8, Operand{Reg::Rsi}));
+          push(make_inst(MOp::Pop, 8, Operand{Reg::Rdi}));
+          break;
         }
         // The caller hands the parameter's bytes over by address, and
         // the slot is where this body reads them from, so the copy is
@@ -1871,6 +1894,19 @@ bool Selector::emit_call(const ir::Instruction& instr,
   // wide answer took the first for the caller's slot.
   u32 next_register = 0;
   u32 next_xmm = 0;
+  u32 stack_offset = 0;
+  // An argument that did not fit a register is written into the frame's
+  // outgoing area, just above the current stack pointer.
+  const auto spill = [&](const Operand& value) {
+    const Operand slot = Operand{Mem{.base = Reg::Rsp,
+                                     .index = std::nullopt,
+                                     .scale = 1,
+                                     .disp = static_cast<i32>(stack_offset)}};
+    push(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, value));
+    push(make_inst(MOp::Mov, 8, slot, Operand{Reg::Rax}));
+    stack_offset += 8;
+    body_.outgoing = std::max(body_.outgoing, stack_offset);
+  };
   if (defines_dst(instr) && passage_of(dst_type(instr)) == Passage::ByAddress) {
     // The answer lands in the slot the destination vreg holds, and
     // the callee writes it there; nothing reads `rax`.
@@ -1906,10 +1942,12 @@ bool Selector::emit_call(const ir::Instruction& instr,
     if (passage != Passage::Register) {
       if (passage == Passage::ByAddress) {
         if (next_register >= ARG_REG_COUNT) {
-          (void)unsupported(span,
-                            "a parameter past the argument "
-                            "registers");
-          return false;
+          if (!value.is<ir::RegisterIdx>()) {
+            (void)unsupported(span, "a constant aggregate argument");
+            return false;
+          }
+          spill(Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}});
+          continue;
         }
         // The bytes cross by address: the slot the value's vreg holds
         // is the copy the callee reads.
@@ -1926,10 +1964,20 @@ bool Selector::emit_call(const ir::Instruction& instr,
       // slot holds. A literal pair the body carries is the same two
       // words: the bytes the data section holds, and the count of them.
       if (next_register + 1 >= ARG_REG_COUNT) {
-        (void)unsupported(span,
-                          "a parameter past the argument "
-                          "registers");
-        return false;
+        if (!value.is<ir::RegisterIdx>()) {
+          const ir::Immutable& imm =
+              storage_.immutables()[value.as_immutable()];
+          const SymbolRef bytes =
+              string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)));
+          spill(Operand{bytes});
+          spill(Operand{Imm{
+              static_cast<i64>(strings_.get(imm.data.str_id_value).size())}});
+        } else {
+          const u32 vreg = vreg_of(value.as_register(), value.type);
+          spill(Operand{SlotRef{vreg, 0}});
+          spill(Operand{SlotRef{vreg, 8}});
+        }
+        continue;
       }
       if (!value.is<ir::RegisterIdx>()) {
         const ir::Immutable& imm = storage_.immutables()[value.as_immutable()];
@@ -1954,8 +2002,8 @@ bool Selector::emit_call(const ir::Instruction& instr,
       return false;
     }
     if (next_register >= ARG_REG_COUNT) {
-      (void)unsupported(span, "a parameter past the argument registers");
-      return false;
+      spill(*side);
+      continue;
     }
     push(make_inst(MOp::Mov, width_of(tag), Operand{ARG_REGS[next_register++]},
                    *side));

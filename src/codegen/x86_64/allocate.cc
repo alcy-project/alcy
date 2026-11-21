@@ -503,11 +503,20 @@ void allocate(Body& body, const Frame& frame) {
         }
       } else if (const Mem* src = std::get_if<Mem>(&inst.ops[1]);
                  src != nullptr && src->base.has_value()) {
-        // Through a pointer the selector held: its value is the source.
-        const Reg from = load_value(std::get<VReg>(*src->base));
-        if (from != Reg::Rsi) {
-          push_labeled(
-              make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{from}));
+        if (const VReg* vreg = std::get_if<VReg>(&*src->base);
+            vreg != nullptr) {
+          // Through a pointer the selector held: its value is the source.
+          const Reg from = load_value(*vreg);
+          if (from != Reg::Rsi) {
+            push_labeled(
+                make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{from}));
+          }
+        } else {
+          // A physical base such as an incoming stack argument: the copy
+          // reads the bytes at that address, so the address itself goes
+          // into rsi, not the word stored there.
+          const Operand resolved = resolve(inst.ops[1]);
+          push_labeled(make_inst(MOp::Lea, 8, Operand{Reg::Rsi}, resolved));
         }
       } else if (std::holds_alternative<SlotRef>(inst.ops[1])) {
         // The slot the selector named: its frame reference is the

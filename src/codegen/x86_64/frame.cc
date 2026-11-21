@@ -63,6 +63,9 @@ Frame layout_frame(const Body& body,
     frame.vreg_signed[at] = is_signed_narrow(tag, layout.size);
     frame.vreg_disp[at] = static_cast<i32>(-cursor);
   }
+  // Outgoing arguments past the registers live in the bytes below the
+  // locals, so a call never writes over a live slot.
+  cursor += body.outgoing;
   frame.size = static_cast<u32>(align_up(cursor, 16));
   return frame;
 }
