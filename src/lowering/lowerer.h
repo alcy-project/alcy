@@ -1389,10 +1389,6 @@ class Lowerer {
    public:
     explicit Fmt(Lowerer& owner) : owner_(owner) {}
 
-    // `io::print`/`io::println`: format into a heap buffer and hand it
-    // to the standard-output hook.
-    Val lower_print(ast::ExprIdx expr,
-                    const analyzer::CheckedModule::FnSig& sig);
     // The inline expansion for one value of a formattable type, as a
     // function's whole body: the receiver's reference and the
     // destination view are the function's parameters, and the total the
@@ -1423,9 +1419,6 @@ class Lowerer {
     };
     // Whether every placeholder's argument is convertible and every
     // `{:.N}` precision names a float; reports the reason when not.
-    bool check_arguments(diag::Span span,
-                         const analyzer::FmtTemplate& parsed,
-                         const std::vector<ir::TypeIdx>& elem_types);
     bool emit_pieces(diag::Span span,
                      const std::vector<analyzer::FmtPiece>& pieces,
                      State& state);

@@ -1550,20 +1550,66 @@ Val Lowerer::lower_call(ast::ExprIdx expr) {
   if (sig.is_extern) {
     return lower_extern_call(expr, sig);
   }
-  if (analyzer::is_expanded_name(sig.name, analyzer::FMT_EXPANDED_NAMES) &&
-      pkg.tree.is_staged_item("fmt", sig.item)) {
-    // Both expanded fmt bodies are alcy specializations now.
-  }
-  if (analyzer::is_expanded_name(sig.name, analyzer::IO_EXPANDED_NAMES) &&
-      pkg.tree.is_staged_item("io", sig.item)) {
+  const bool expanded_fmt =
+      analyzer::is_expanded_name(sig.name, analyzer::FMT_EXPANDED_NAMES) &&
+      pkg.tree.is_staged_item("fmt", sig.item);
+  const bool expanded_io =
+      analyzer::is_expanded_name(sig.name, analyzer::IO_EXPANDED_NAMES) &&
+      pkg.tree.is_staged_item("io", sig.item);
+  if (expanded_fmt || expanded_io) {
+    // Every expanded wrapper is a parametric expansion body: the
+    // collected arguments become Param slots that each call site
+    // specializes. The format string rides the comp-argument key, so a
+    // body is generated once per spelling and arity.
+    const std::vector<u32> comp = comp_positions(sig.item);
     std::vector<ir::TypeIdx> collected;
-    for (usize i = 1; i < call.args.size(); ++i) {
+    for (usize i = sig.params.size(); i < call.args.size(); ++i) {
       collected.push_back(expr_type(call.args[i]));
     }
-    if (signature_mentions_param(collected, ir::TypeIdx::invalid(),
-                                 ir::TypeIdx::invalid())) {
-      return fmt_lowering_.lower_print(expr, sig);
+    CompVal fmt_val;
+    if (!comp_lowering_.evaluate(module, call.args[0], fmt_val) ||
+        fmt_val.value.tag != CompValue::Tag::Str) {
+      if (!failed) {
+        internal(node.span, "format string without value");
+      }
+      return stopped_value();
     }
+    std::vector<ir::TypeIdx> body_params = sig.params;
+    std::vector<ir::TypeIdx> type_args;
+    for (usize i = 0; i < collected.size(); ++i) {
+      const ir::TypeIdx slot = builder.param_type(static_cast<u32>(i));
+      body_params.push_back(slot);
+      type_args.push_back(slot);
+    }
+    const ir::FunctionIdx body_fn = fn_index(
+        pkg.modules[target->module].module, sig.item, sig.name, body_params,
+        sig.ret, analyzer::NO_INST, {std::move(fmt_val)}, ir::SymbolKind::Free,
+        type_args, ir::TypeIdx::invalid(), /*parametric=*/true);
+    if (!body_fn.is_valid()) {
+      return stopped_value();
+    }
+    builder.add_parametric_function(body_fn);
+    std::vector<ir::OperandIdx> ops;
+    if (!lower_call_arguments(call.args, body_params, comp, std::nullopt, ops,
+                              sig.item, 0)) {
+      return stopped_value();
+    }
+    const ir::ParametricCalleeIdx callee = parametric_callee_record(
+        ir::ParametricCalleeKind::Generic, body_fn, str::INVALID_STRING_POOL_ID,
+        str::INVALID_STRING_POOL_ID, collected);
+    if (failed) {
+      return stopped_value();
+    }
+    std::vector<ir::TypeIdx> call_params;
+    usize comp_at_check = 0;
+    for (usize i = 0; i < body_params.size(); ++i) {
+      if (comp_at_check < comp.size() && comp[comp_at_check] == i) {
+        ++comp_at_check;
+        continue;
+      }
+      call_params.push_back(body_params[i]);
+    }
+    return emit_parametric_call(ops, call_params, sig.ret, callee, node.span);
   }
   if (sig.inst == analyzer::PARAM_INST ||
       signature_mentions_param(sig.params, sig.ret, ir::TypeIdx::invalid()) ||
