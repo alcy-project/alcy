@@ -1375,6 +1375,7 @@ void Server::watched_files_changed(const text::JsonValue& params) {
 void Server::flush_watched_files() {
   watched_files_pending_ = false;
   log_message(4, "watched files changed; refreshing package analyses");
+  cache_.clear();
   for (const auto& [uri, document] : documents_.documents()) {
     (void)uri;
     publish_diagnostics(document);
