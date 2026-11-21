@@ -177,29 +177,29 @@ impl<T: Hash + Eq> Eq for HashSet<T> {
 }
 
 // Tests for the set: one entry per property `HashSet` promises.
-test {
-  test a_new_set_is_empty() {
+#[when(testing)] {
+  #[test] fn a_new_set_is_empty() {
     s := HashSet::<i32>::new()
     assert(s.is_empty(), "a set that was never inserted into holds nothing")
     assert(s.len() == 0, "a set that was never inserted into is of length zero")
     assert(!s.contains(0), "an empty set has no key to find")
   }
 
-  test insert_of_a_new_key_reports_it() {
+  #[test] fn insert_of_a_new_key_reports_it() {
     mut s := HashSet::<i32>::new()
     assert(s.insert(0), "the key was not a member before")
     assert(s.len() == 1, "the insert added one member")
     assert(s.contains(0), "the member is there afterwards")
   }
 
-  test a_duplicate_insert_reports_false_and_adds_nothing() {
+  #[test] fn a_duplicate_insert_reports_false_and_adds_nothing() {
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)
     assert(!s.insert(0), "a key inserted twice is still in the set")
     assert(s.len() == 1, "the duplicate adds no member")
   }
 
-  test contains_holds_only_the_inserted_keys() {
+  #[test] fn contains_holds_only_the_inserted_keys() {
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)
     _ := s.insert(1)
@@ -208,7 +208,7 @@ test {
     assert(s.len() == 2, "two inserts are two members")
   }
 
-  test remove_of_a_present_key_reports_true() {
+  #[test] fn remove_of_a_present_key_reports_true() {
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)
     _ := s.insert(1)
@@ -218,14 +218,14 @@ test {
     assert(s.len() == 1, "the removal shortens the set")
   }
 
-  test remove_of_an_absent_key_reports_false() {
+  #[test] fn remove_of_an_absent_key_reports_false() {
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)
     assert(!s.remove(9), "a key never inserted cannot be removed")
     assert(s.len() == 1, "the failed removal keeps the length")
   }
 
-  test clear_drops_every_member() {
+  #[test] fn clear_drops_every_member() {
     mut s := HashSet::<i32>::with_capacity(8)
     _ := s.insert(0)
     _ := s.insert(1)
@@ -238,7 +238,7 @@ test {
     assert(s.contains(2), "the cleared set takes a new key")
   }
 
-  test union_holds_every_key_of_either_set() {
+  #[test] fn union_holds_every_key_of_either_set() {
     (a, b) := pair()
     u := a.union_with(b)
     assert(u.len() == 3, "the shared key is one member of the union")
@@ -247,7 +247,7 @@ test {
     assert(!u.contains(3), "a key neither set holds is not in the union")
   }
 
-  test intersection_holds_only_the_shared_keys() {
+  #[test] fn intersection_holds_only_the_shared_keys() {
     (a, b) := pair()
     i := a.intersection(b)
     assert(i.len() == 1, "one key is in both sets")
@@ -255,7 +255,7 @@ test {
     assert(!i.contains(0), "a key only the left set holds is not in the intersection")
   }
 
-  test a_set_is_a_subset_of_the_one_that_holds_more() {
+  #[test] fn a_set_is_a_subset_of_the_one_that_holds_more() {
     mut small := HashSet::<i32>::new()
     _ := small.insert(0)
     mut large := HashSet::<i32>::new()
@@ -266,7 +266,7 @@ test {
     assert(small.is_subset(&small), "a set is a subset of itself")
   }
 
-  test the_empty_set_is_a_subset_of_any_set() {
+  #[test] fn the_empty_set_is_a_subset_of_any_set() {
     empty := HashSet::<i32>::new()
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)
@@ -274,7 +274,7 @@ test {
     assert(empty.is_subset(&empty), "a set with no keys is a subset of itself")
   }
 
-  test sets_with_the_same_keys_are_equal() {
+  #[test] fn sets_with_the_same_keys_are_equal() {
     mut a := HashSet::<i32>::new()
     _ := a.insert(0)
     _ := a.insert(1)
@@ -286,7 +286,7 @@ test {
     assert(!(a == b), "an extra key makes the sets differ")
   }
 
-  test extend_adds_every_key_of_the_other_set() {
+  #[test] fn extend_adds_every_key_of_the_other_set() {
     mut a := HashSet::<i32>::new()
     _ := a.insert(0)
     mut b := HashSet::<i32>::new()
@@ -297,7 +297,7 @@ test {
     assert(a.contains(1), "a key only the other set held is in this one now")
   }
 
-  test string_keys_are_members_too() {
+  #[test] fn string_keys_are_members_too() {
     mut s := HashSet::<String>::new()
     _ := s.insert(String::from("alpha"))
     _ := s.insert(String::from("beta"))
@@ -307,7 +307,7 @@ test {
     assert(s.len() == 1, "one member remains")
   }
 
-  test every_key_is_found_after_the_backing_table_grows() {
+  #[test] fn every_key_is_found_after_the_backing_table_grows() {
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)
     first_cap := s.capacity()

@@ -28,16 +28,16 @@ pub fn mix2(left: u64, right: u64) -> u64 {
   ret mix64(left ^ wrapping_add(right, 0x9e3779b97f4a7c15u64))
 }
 
-test {
-  test consecutive_words_spread_apart() {
+#[when(testing)] {
+  #[test] fn consecutive_words_spread_apart() {
     assert(mix64(1) != mix64(2), "neighbouring keys differ")
   }
 
-  test the_mix_is_stable() {
+  #[test] fn the_mix_is_stable() {
     assert(mix64(7) == mix64(7), "a value has one digest")
   }
 
-  test field_order_matters() {
+  #[test] fn field_order_matters() {
     assert(mix2(1, 2) != mix2(2, 1), "a pair is ordered")
   }
 

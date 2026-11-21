@@ -107,17 +107,17 @@ impl Hash for DigestOnly {
   }
 }
 
-test {
-  test a_digest_needs_no_equality() {
+#[when(testing)] {
+  #[test] fn a_digest_needs_no_equality() {
     d := DigestOnly { value: 7 }
     assert(d.hash() == 7, "a value can be hashed without comparing equal")
   }
 
-  test the_text_hash_matches_the_xxh3_digest() {
+  #[test] fn the_text_hash_matches_the_xxh3_digest() {
     assert("abc".hash() == xxh3_64("abc"), "the impl uses the byte digest")
   }
 
-  test integer_hashes_are_distinct_and_stable() {
+  #[test] fn integer_hashes_are_distinct_and_stable() {
     assert(1u64.hash() != 2u64.hash(), "neighbouring keys differ")
     assert(1i32.hash() == 1i32.hash(), "a value has one digest")
     assert(1usize.hash() == 1usize.hash(), "the word width has a hash")
