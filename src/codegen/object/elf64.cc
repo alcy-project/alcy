@@ -133,12 +133,6 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
     relocated[reloc.section] = true;
   }
 
-  StrTab section_names;
-  std::vector<u32> section_name_of(section_count, 0);
-  for (u32 at = 0; at < section_count; ++at) {
-    section_name_of[at] = section_names.add(object.sections[at].name);
-  }
-
   // Symbol resolution. A relocation names a symbol the emitter added; a
   // name nothing carries would write an object the linker refuses, so
   // the table is built once here and every lookup reads it.
@@ -149,8 +143,9 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
     if (!relocated[at]) {
       continue;
     }
-    section_symbol_of[at] = table.add(section_name_of[at], /*info=*/3,
-                                      /*shndx=*/at + 1, 0, 0);
+    section_symbol_of[at] =
+        table.add(table.names.add(object.sections[at].name), /*info=*/3,
+                  /*shndx=*/at + 1, 0, 0);
   }
   std::vector<u32> symbol_index(object.symbols.size(), 0);
   // The table's own order: the locals first, the globals after. A
@@ -240,6 +235,10 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
   strtab_offset = align_up(strtab_offset, 1);
   StrTab shstrtab;
   const u32 null_name = shstrtab.add("");
+  std::vector<u32> shstrtab_name_of(section_count, 0);
+  for (u32 at = 0; at < section_count; ++at) {
+    shstrtab_name_of[at] = shstrtab.add(object.sections[at].name);
+  }
   const u32 rela_name = shstrtab.add(".rela.text");
   const u32 symtab_name = shstrtab.add(".symtab");
   const u32 strtab_name = shstrtab.add(".strtab");
@@ -336,7 +335,7 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
   header(null_name, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   for (u32 at = 0; at < section_count; ++at) {
     const Section& section = object.sections[at];
-    header(section_name_of[at], section.bits ? SHT_PROGBITS : SHT_NOBITS,
+    header(shstrtab_name_of[at], section.bits ? SHT_PROGBITS : SHT_NOBITS,
            flags_of(section), 0, section_offset[at],
            section.bits ? section.bytes.size() : 0, 0, 0,
            section.align == 0 ? 1 : section.align, 0);
