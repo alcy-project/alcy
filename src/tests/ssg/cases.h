@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,11 @@ inline std::string repo_root() {
   const DWORD length = GetCurrentDirectoryA(sizeof(buffer), buffer);
   cwd = length > 0 && length < sizeof(buffer) ? std::string(buffer, length)
                                               : std::string();
+  // The posix path helpers only split on '/', so a native Windows cwd
+  // would look like one segment and the walk would stop before the
+  // repository root. Windows accepts '/' in every path these helpers
+  // build, including the one io::is_file opens.
+  std::replace(cwd.begin(), cwd.end(), '\\', '/');
 #else
   cwd = getcwd(buffer, sizeof(buffer)) != nullptr ? std::string(buffer)
                                                   : std::string();
