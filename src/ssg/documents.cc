@@ -9,12 +9,12 @@
 #include <utility>
 #include <vector>
 
-#include "fpag/build/build_flag.h"
-#include "fpag/io/io_util.h"
+#include "config/build_config.h"
+#include "fpag/base/result.h"
 #include "ssg/catalog.h"
 #include "ssg/markdown.h"
 
-#if FPAG_BUILD_FLAG(IS_OS_WIN)
+#if BUILD_FLAG(IS_OS_WIN)
 #include <windows.h>
 #else
 #include <dirent.h>
@@ -31,7 +31,7 @@ base::Result<std::vector<std::pair<std::string, bool>>, std::string>
 list_entries(std::string_view dir) {
   std::vector<std::pair<std::string, bool>> entries;  // name, is_dir
   const std::string path(dir);
-#if FPAG_BUILD_FLAG(IS_OS_WIN)
+#if BUILD_FLAG(IS_OS_WIN)
   WIN32_FIND_DATAA data;
   const HANDLE handle = FindFirstFileA((path + "\\\\*").c_str(), &data);
   if (handle == INVALID_HANDLE_VALUE) {

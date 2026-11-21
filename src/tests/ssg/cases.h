@@ -5,23 +5,25 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
-#if FPAG_BUILD_FLAG(IS_OS_WIN)
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
-
+#include "config/build_config.h"
 #include "doctest/doctest.h"
-#include "fpag/build/build_flag.h"
+#include "fpag/base/numeric.h"
 #include "fpag/io/io_util.h"
 #include "ssg/catalog.h"
 #include "ssg/documents.h"
 #include "ssg/markdown.h"
 #include "ssg/paths.h"
 #include "ssg/render.h"
-#include "ssg/urls.h"
+
+#if BUILD_FLAG(IS_OS_WIN)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace ssg_test {
 
@@ -36,7 +38,7 @@ inline std::string repo_root() {
   // climbs until the site's catalog is a regular file above it.
   char buffer[4096];
   std::string cwd;
-#if FPAG_BUILD_FLAG(IS_OS_WIN)
+#if BUILD_FLAG(IS_OS_WIN)
   const DWORD length = GetCurrentDirectoryA(sizeof(buffer), buffer);
   cwd = length > 0 && length < sizeof(buffer) ? std::string(buffer, length)
                                               : std::string();
