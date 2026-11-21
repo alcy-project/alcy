@@ -53,11 +53,19 @@ class SemanticTokensCache {
                         const DocumentAnalysis& analysis,
                         std::string_view previous_result_id);
 
+  // The tokens starting in [start, end), answered from the remembered
+  // array when the document version has not changed.
+  text::JsonValue range(const Document& document,
+                        const DocumentAnalysis& analysis,
+                        Position start,
+                        Position end);
+
   void erase(std::string_view uri);
 
  private:
   struct Entry {
     std::string result_id;
+    i64 version = 0;
     std::vector<u32> data;
   };
 

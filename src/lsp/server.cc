@@ -1210,8 +1210,7 @@ void Server::semantic_tokens_in_range(const text::JsonValue& id,
     send_result(id, semantic_tokens_empty());
     return;
   }
-  send_result(
-      id, semantic_tokens_range(*document, cache_.get(*document),
+  send_result(id, tokens_.range(*document, cache_.get(*document),
                                 read_position(*start), read_position(*end)));
 }
 

@@ -205,6 +205,28 @@ TEST_CASE("A range request answers only the tokens it covers") {
   CHECK(one_line);
 }
 
+TEST_CASE("An unchanged version reuses the remembered token array") {
+  SemanticTokensCache cache;
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() -> i32 {\n  ret 0\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue first = cache.full(document, analysis);
+  const text::JsonValue again = cache.full(document, analysis);
+  CHECK(first.find("resultId")->as_string() ==
+        again.find("resultId")->as_string());
+  CHECK(flat_data(first) == flat_data(again));
+
+  const text::JsonValue delta =
+      cache.delta(document, analysis, first.find("resultId")->as_string());
+  CHECK(delta.find("edits")->as_array().empty());
+
+  const text::JsonValue ranged =
+      cache.range(document, analysis, Position{0, 0}, Position{1, 0});
+  const text::JsonValue fresh =
+      semantic_tokens_range(document, analysis, Position{0, 0}, Position{1, 0});
+  CHECK(flat_data(ranged) == flat_data(fresh));
+}
+
 TEST_CASE("A multi-line comment becomes one token per line") {
   const Document document(
       "file:///main.al", "alcy", 1,

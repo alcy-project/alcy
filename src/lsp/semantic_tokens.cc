@@ -391,12 +391,63 @@ text::JsonValue semantic_tokens_range(const Document& document,
   return tokens_json(semantic_tokens_in(document, analysis, begin, finish), {});
 }
 
+namespace {
+
+// Keeps the tokens whose start lies in [start, end) from an already
+// computed array, re-encoding absolute positions as LSP deltas.
+std::vector<u32> filter_tokens(const std::vector<u32>& data,
+                               Position start,
+                               Position end) {
+  std::vector<u32> out;
+  u32 line = 0;
+  u32 character = 0;
+  u32 previous_line = 0;
+  u32 previous_character = 0;
+  bool first = true;
+  for (usize i = 0; i + 4 < data.size(); i += 5) {
+    if (data[i] == 0) {
+      character += data[i + 1];
+    } else {
+      line += data[i];
+      character = data[i + 1];
+    }
+    const bool after_start =
+        line > start.line ||
+        (line == start.line && character >= start.character);
+    const bool before_end =
+        line < end.line || (line == end.line && character < end.character);
+    if (!after_start || !before_end) {
+      continue;
+    }
+    out.push_back(first || line != previous_line
+                      ? line - (first ? 0 : previous_line)
+                      : 0);
+    out.push_back(first || line != previous_line
+                      ? character
+                      : character - previous_character);
+    out.push_back(data[i + 2]);
+    out.push_back(data[i + 3]);
+    out.push_back(data[i + 4]);
+    previous_line = line;
+    previous_character = character;
+    first = false;
+  }
+  return out;
+}
+
+}  // namespace
+
 text::JsonValue SemanticTokensCache::full(const Document& document,
                                           const DocumentAnalysis& analysis) {
+  const auto found = entries_.find(document.uri());
+  if (found != entries_.end() && found->second.version == document.version()) {
+    return tokens_json(found->second.data, found->second.result_id);
+  }
   std::vector<u32> data =
       semantic_tokens_in(document, analysis, 0, document.text().size());
   const std::string id = std::to_string(next_id_++);
-  entries_.insert_or_assign(document.uri(), Entry{id, std::move(data)});
+  entries_.insert_or_assign(document.uri(),
+                            Entry{id, document.version(), std::move(data)});
   const Entry& entry = entries_.at(document.uri());
   return tokens_json(entry.data, entry.result_id);
 }
@@ -405,22 +456,47 @@ text::JsonValue SemanticTokensCache::delta(
     const Document& document,
     const DocumentAnalysis& analysis,
     std::string_view previous_result_id) {
+  const auto cached = entries_.find(document.uri());
+  if (cached != entries_.end() &&
+      cached->second.version == document.version() &&
+      cached->second.result_id == previous_result_id) {
+    text::JsonValue result = text::JsonValue::make_object();
+    result.set("resultId",
+               text::JsonValue::make_string(cached->second.result_id));
+    result.set("edits", text::JsonValue::make_array());
+    return result;
+  }
   std::vector<u32> current =
       semantic_tokens_in(document, analysis, 0, document.text().size());
   const std::string id = std::to_string(next_id_++);
   const auto entry = entries_.find(document.uri());
   if (entry == entries_.end() ||
       entry->second.result_id != previous_result_id) {
-    entries_.insert_or_assign(document.uri(), Entry{id, std::move(current)});
+    entries_.insert_or_assign(
+        document.uri(), Entry{id, document.version(), std::move(current)});
     const Entry& stored = entries_.at(document.uri());
     return tokens_json(stored.data, stored.result_id);
   }
   text::JsonValue edits = compute_edits(entry->second.data, current);
-  entries_.insert_or_assign(document.uri(), Entry{id, std::move(current)});
+  entries_.insert_or_assign(document.uri(),
+                            Entry{id, document.version(), std::move(current)});
   text::JsonValue result = text::JsonValue::make_object();
   result.set("resultId", text::JsonValue::make_string(id));
   result.set("edits", std::move(edits));
   return result;
+}
+
+text::JsonValue SemanticTokensCache::range(const Document& document,
+                                           const DocumentAnalysis& analysis,
+                                           Position start,
+                                           Position end) {
+  const auto found = entries_.find(document.uri());
+  if (found != entries_.end() && found->second.version == document.version()) {
+    return tokens_json(filter_tokens(found->second.data, start, end), {});
+  }
+  const usize begin = document.index().byte_offset(document.text(), start);
+  const usize finish = document.index().byte_offset(document.text(), end);
+  return tokens_json(semantic_tokens_in(document, analysis, begin, finish), {});
 }
 
 void SemanticTokensCache::erase(std::string_view uri) {
