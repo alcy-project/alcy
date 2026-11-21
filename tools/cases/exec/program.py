@@ -320,7 +320,14 @@ def compare_streams(
     return problems, missing_walk
 
 
-def run(alcy: Path, case: Case, work: Path, env: dict[str, str], mode: str = "native"):
+def run(
+    alcy: Path,
+    case: Case,
+    work: Path,
+    env: dict[str, str],
+    mode: str = "native",
+    backend: str = "",
+):
     """Builds the case's program and runs it.
 
     Returns `(ok, detail)`, or `(None, reason)` when a sweep does not
@@ -417,8 +424,11 @@ def run(alcy: Path, case: Case, work: Path, env: dict[str, str], mode: str = "na
             if why:
                 return False, f"{why}\n--- stderr ---\n{proc.stderr}"
         else:
+            native_args = list(extra_args)
+            if backend:
+                native_args.append(f"--backend={backend}")
             proc = subprocess.run(
-                [str(alcy), command, target, *extra_args, "-o", exe_name],
+                [str(alcy), command, target, *native_args, "-o", exe_name],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",

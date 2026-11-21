@@ -52,6 +52,11 @@ def main() -> int:
         help="how a program step is built and executed",
     )
     parser.add_argument("--cases", default="", help="comma-separated case names")
+    parser.add_argument(
+        "--backend",
+        default="",
+        help="backend for native program builds (e.g. direct-x86_64)",
+    )
     parser.add_argument("--jobs", type=int, default=0, help="parallel cases")
     log.add_verbose(parser)
     args = parser.parse_args()
@@ -100,7 +105,7 @@ def main() -> int:
         )
     jobs = args.jobs or min(os.cpu_count() or 2, 8)
     label = ",".join(root.name for root in roots)
-    result = build_result(alcy, selected, steps, args.mode, jobs, label)
+    result = build_result(alcy, selected, steps, args.mode, jobs, label, args.backend)
     if result.notes:
         print("\n".join(result.notes))
     logger = log.Logger(args.verbose)

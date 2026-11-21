@@ -58,6 +58,7 @@ def build_result(
     mode: str,
     jobs: int,
     label: str,
+    backend: str = "",
 ) -> log.CheckResult:
     result = log.CheckResult(label)
     env = case_environment()
@@ -69,7 +70,9 @@ def build_result(
         if "cli" in steps and case.cli is not None:
             outcomes.append(("cli", *cli.run(alcy, case, work, env)))
         if "program" in steps and case.program is not None:
-            outcomes.append(("program", *program.run(alcy, case, work, env, mode)))
+            outcomes.append(
+                ("program", *program.run(alcy, case, work, env, mode, backend))
+            )
         return case.name, outcomes
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
