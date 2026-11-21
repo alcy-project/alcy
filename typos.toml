@@ -38,3 +38,5 @@ hel = "hel"
 pn = "pn"
 # The ELF relocation section, .rela.dyn.
 rela = "rela"
+# C++20 <bit> API std::countr_zero.
+countr = "countr"
