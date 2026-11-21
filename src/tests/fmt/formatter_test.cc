@@ -158,6 +158,36 @@ TEST_CASE("Doc comments stay attached to the item that follows") {
   CHECK(out == "/// One.\n/// Two.\nfn f() {}\n");
 }
 
+TEST_CASE("A blank line after an item with an attribute stays") {
+  // The attribute shares its line with the item, so the chunk is the
+  // whole item and not an attribute on its own. The blank line that
+  // follows separates it from the next item.
+  const std::string group =
+      "#[when(testing)] {\n"
+      "  #[test] fn a() {}\n"
+      "\n"
+      "  #[test] fn b() {}\n"
+      "}\n";
+  CHECK(once(group) == group);
+  CHECK(idempotent_default(group));
+
+  const std::string layout =
+      "#[repr(C)] struct S {\n"
+      "  x: i32,\n"
+      "}\n"
+      "\n"
+      "fn f() {}\n";
+  CHECK(once(layout) == layout);
+  CHECK(idempotent_default(layout));
+}
+
+TEST_CASE("An attribute on its own line still glues to its item") {
+  const std::string source =
+      "#[when(testing)]\n"
+      "fn a() {}\n";
+  CHECK(once(source) == source);
+}
+
 TEST_CASE("An unsafe block reads like the value it wraps") {
   // The opt-in block is an expression, so one statement that fits stays
   // on the line; a body of statements takes the lines.

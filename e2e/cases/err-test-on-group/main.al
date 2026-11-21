@@ -6,8 +6,7 @@ fn main() -> i32 {
 }
 
 #[test] {
-  fn a() {
-  }
-  fn b() {
-  }
+  fn a() {}
+
+  fn b() {}
 }

@@ -6,5 +6,7 @@ fn main() -> i32 {
 }
 
 #[when(testing)] {
-  #[test] fn gives_a_value() -> i32 { ret 1 }
+  #[test] fn gives_a_value() -> i32 {
+    ret 1
+  }
 }

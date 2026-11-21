@@ -109,15 +109,36 @@ std::vector<Printer::Chunk> Printer::collect_chunks(const cst::Node& seq,
 
 // Whether a chunk is an `#[attribute(...)]` on its own line, the piece a
 // module-level item's attribute occupies. The item reads glued to it, so
-// the blank line between chunks is suppressed there.
+// the blank line between chunks is suppressed there. An item that begins
+// with an attribute on the same line is not one of these: the chunk holds
+// the whole item, and the blank line after it belongs to that item.
 bool Printer::chunk_is_attribute(const Chunk& chunk) {
+  if (chunk.nodes.empty()) {
+    return false;
+  }
+  const cst::Node& first = *chunk.nodes.front();
+  if (first.kind != cst::NodeKind::Token ||
+      first.token != lexer::TokenKind::Hash) {
+    return false;
+  }
+  // The bracket pair is one Group node, not two tokens. Once it closes,
+  // anything else on the line is the item the attribute leads, so the
+  // chunk is not an attribute on its own.
+  bool closed = false;
   for (const cst::Node* node : chunk.nodes) {
-    if (node->kind != cst::NodeKind::Token) {
+    if (node->kind == cst::NodeKind::Token &&
+        node->token == lexer::TokenKind::Semicolon) {
+      continue;
+    }
+    if (closed && node->kind != cst::NodeKind::Comment) {
       return false;
     }
-    return node->token == lexer::TokenKind::Hash;
+    if (node->kind == cst::NodeKind::Group &&
+        node->group_role == cst::GroupRole::Bracket) {
+      closed = true;
+    }
   }
-  return false;
+  return closed;
 }
 
 // Whether a run of nodes is one the lexer would end a statement after, so
