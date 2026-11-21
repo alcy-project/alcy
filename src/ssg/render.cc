@@ -364,8 +364,7 @@ std::string footer(const Stamp& stamp) {
       stamp.url.empty()
           ? text
           : "<a href=\"" + stamp.url + "\" rel=\"noopener\">" + text + "</a>";
-  return "<footer class=\"site-footer\">\n      <span>alcy " + MIDDLE_DOT +
-         " " + mark +
+  return "<footer class=\"site-footer\">\n      <span>alcy build " + mark +
          "</span>\n      <a href=\"https://github.com/alcy-project/alcy\" "
          "rel=\"noopener\">GitHub</a>\n    </footer>";
 }
@@ -652,7 +651,7 @@ std::string render_not_found(
   out += "      <div class=\"actions\">\n";
   out += "        <a class=\"primary\" href=\"./\">Go home</a>\n";
   out += "        <a href=\"guide/\">read the guide</a>\n";
-  out += "        <a href=\"reference/\">Look up the language</a>\n";
+  out += "        <a href=\"reference/\">Read the reference</a>\n";
   out += "        <a href=\"playground/\">Open the playground</a>\n";
   out += "      </div>\n";
   out += "      <div class=\"code-block\" data-language=\"alcy\">\n";

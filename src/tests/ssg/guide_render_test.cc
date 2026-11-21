@@ -83,7 +83,7 @@ TEST_CASE("a page without sections carries no outline") {
 
 TEST_CASE("the footer carries the build stamp linked to its source") {
   const std::string html = render("en", {ssg_test::prose_block()});
-  CHECK(html.find("<span>alcy \xc2\xb7 <a "
+  CHECK(html.find("<span>alcy build <a "
                   "href=\"https://example.test/commit/TESTSTAMP\" "
                   "rel=\"noopener\">TESTSTAMP</a></span>") !=
         std::string::npos);
