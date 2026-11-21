@@ -27,11 +27,22 @@ const Stamp STAMP{.text = "TESTSTAMP",
                   .url = "https://example.test/commit/TESTSTAMP"};
 
 std::string settings_html(std::string_view language,
-                          std::string_view switch_href) {
+                          std::string_view route,
+                          std::string_view tree_path) {
+  const ssg::Catalog& catalog = ssg_test::test_catalog();
+  std::vector<ssg::LanguageOption> languages;
+  for (const std::string& target : catalog.languages) {
+    const ssg::LanguageInfo info = ssg::language_info_of(catalog, target);
+    languages.push_back(
+        {.language = target,
+         .name = info.name,
+         .href = ssg::language_href(catalog, route, target, tree_path),
+         .current = target == language});
+  }
   ssg::SettingsOptions options;
-  options.catalog = &ssg_test::test_catalog();
+  options.catalog = &catalog;
   options.language = language;
-  options.switch_href = switch_href;
+  options.languages = std::move(languages);
   return ssg::render_settings(options);
 }
 
@@ -47,11 +58,17 @@ void write_file(io::TempDir& dir,
 }
 }  // namespace
 
-TEST_CASE("the settings menu carries the theme toggle and the language link") {
-  const std::string html = settings_html("ja", "../guide/x.html");
+TEST_CASE(
+    "the settings menu carries the theme toggle and a language dropdown") {
+  const std::string html =
+      settings_html("ja", "ja/guide/x.html", "guide/x.html");
   CHECK(html.find("id=\"theme\"") != std::string::npos);
   CHECK(html.find("data-theme-mode=\"auto\"") != std::string::npos);
-  CHECK(html.find("href=\"../guide/x.html\"") != std::string::npos);
+  CHECK(html.find("class=\"language-menu\"") != std::string::npos);
+  CHECK(html.find("href=\"../../guide/x.html\" hreflang=\"en\" lang=\"en\"") !=
+        std::string::npos);
+  CHECK(html.find("href=\"x.html\" hreflang=\"ja\" lang=\"ja\" "
+                  "aria-current=\"true\"") != std::string::npos);
   CHECK(html.find("English") != std::string::npos);
   CHECK(html.find("aria-label=\"" +
                   translate(ssg_test::test_catalog(), "ja", "label.settings") +
@@ -59,7 +76,7 @@ TEST_CASE("the settings menu carries the theme toggle and the language link") {
 }
 
 TEST_CASE("the menu icon is stroked, so it is visible") {
-  const std::string html = settings_html("en", "");
+  const std::string html = settings_html("en", "index.html", "index.html");
   CHECK(html.find("<summary") != std::string::npos);
   CHECK(html.find("stroke=\"currentColor\"") != std::string::npos);
 }
@@ -136,7 +153,7 @@ TEST_CASE("the header names all five destinations") {
     CHECK(html.find(href) != std::string::npos);
   }
   CHECK(html.find("data-action=\"search\"") != std::string::npos);
-  CHECK(html.find("aria-current") == std::string::npos);
+  CHECK(html.find("aria-current=\"page\"") == std::string::npos);
 }
 
 TEST_CASE("a tree page marks its own tree current") {

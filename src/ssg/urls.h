@@ -32,6 +32,12 @@ std::string page_links(const Catalog& catalog,
                        std::string_view language,
                        std::string_view tree_path);
 
+// This page's address in another language tree, relative to the page.
+std::string language_href(const Catalog& catalog,
+                          std::string_view route,
+                          std::string_view target,
+                          std::string_view tree_path);
+
 // The social card a crawler reads.
 std::string social_meta(std::string_view title,
                         std::string_view description,

@@ -225,7 +225,7 @@ body.site {
   margin-left: auto;
 }
 
-.settings summary {
+.settings > summary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -238,18 +238,18 @@ body.site {
   list-style: none;
 }
 
-.settings summary::-webkit-details-marker {
+.settings > summary::-webkit-details-marker {
   display: none;
 }
 
-.settings summary:hover,
-.settings[open] summary {
+.settings > summary:hover,
+.settings[open] > summary {
   color: var(--fg);
   background: var(--bg);
   border-color: var(--line);
 }
 
-.settings summary svg {
+.settings > summary svg {
   width: 16px;
   height: 16px;
 }
@@ -335,14 +335,76 @@ body.site {
   --theme-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.7' stroke-linejoin='round'%3E%3Cpath d='M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'/%3E%3C/svg%3E");
 }
 
-.language-link {
-  color: var(--accent);
+.language-menu {
+  position: relative;
+  flex: none;
+}
+
+/* The settings menu's own summary is a 28px icon button; this nested
+   summary carries the language name, so it needs its own width. */
+.language-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: 28px;
+  white-space: nowrap;
+  padding: 0 8px;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+
+/* Like the theme toggle, the frame is a hover affordance rather than a
+   permanent box inside the quiet settings panel. */
+.language-menu > summary:hover,
+.language-menu[open] > summary {
+  border-color: var(--line);
+}
+
+.language-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.language-menu > summary svg {
+  width: 12px;
+  height: 12px;
+}
+
+.language-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+
+.language-option {
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  color: var(--fg-soft);
   font-size: 13px;
   text-decoration: none;
 }
 
-.language-link:hover {
-  text-decoration: underline;
+.language-option:hover {
+  background: var(--bg-soft);
+  color: var(--fg);
+}
+
+.language-option[aria-current="true"] {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .site-footer {

@@ -8,6 +8,7 @@
 
 #include "ssg/catalog.h"
 #include "ssg/markdown.h"
+#include "ssg/paths.h"
 
 namespace ssg {
 
@@ -64,6 +65,16 @@ std::string speculation_rules() {
          "\"prefetch\":[{\"source\":\"document\",\"where\":{\"href_matches\":"
          "\"/alcy/*\"},\"eagerness\":\"moderate\"}]}"
          "</script>";
+}
+
+std::string language_href(const Catalog& catalog,
+                          std::string_view route,
+                          std::string_view target,
+                          std::string_view tree_path) {
+  const std::string directory = dirname_posix(route);
+  const std::string base = directory.empty() ? std::string(".") : directory;
+  return relative_posix(base,
+                        prefix_of(catalog, target) + std::string(tree_path));
 }
 
 std::string catalog_map(std::string_view assets, std::string_view language) {

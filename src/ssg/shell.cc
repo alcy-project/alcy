@@ -20,6 +20,11 @@ constexpr std::string_view MENU_ICON =
     "stroke-linecap=\"round\"><path "
     "d=\"M3.5 6.5h17M3.5 12h17M3.5 17.5h17\"/></svg>";
 
+constexpr std::string_view CHEVRON_ICON =
+    "<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\" "
+    "fill=\"currentColor\"><path "
+    "d=\"M4.2 6.3 8 10l3.8-3.7z\"/></svg>";
+
 std::string escape_attribute_text(std::string_view text) {
   return escape_attribute(text);
 }
@@ -35,18 +40,32 @@ std::string render_settings(const SettingsOptions& options) {
       translate(catalog, options.language, "label.language");
   const std::string auto_mode =
       translate(catalog, options.language, "theme.auto");
-  const std::vector<std::string> others =
-      other_languages(catalog, options.language);
-  std::string language_link;
-  if (!others.empty()) {
-    const std::string& other = others[0];
-    const auto name = catalog.language_names.find(other);
-    language_link =
-        "<a class=\"language-link\" href=\"" +
-        escape_attribute_text(options.switch_href) + "\" hreflang=\"" + other +
-        "\" lang=\"" + other + "\">" +
-        (name != catalog.language_names.end() ? name->second : other) + "</a>";
+  std::string current_name;
+  for (const LanguageOption& item : options.languages) {
+    if (item.current) {
+      current_name = item.name;
+      break;
+    }
   }
+  std::string language_items;
+  for (const LanguageOption& item : options.languages) {
+    language_items += "          <a class=\"language-option\" href=\"" +
+                      escape_attribute_text(item.href) + "\" hreflang=\"" +
+                      escape_attribute_text(item.language) + "\" lang=\"" +
+                      escape_attribute_text(item.language) + "\"" +
+                      (item.current ? " aria-current=\"true\"" : "") + ">" +
+                      item.name + "</a>\n";
+  }
+  const std::string language_menu =
+      "<details class=\"language-menu\">\n"
+      "            <summary aria-label=\"" +
+      escape_attribute_text(language_label + ": " + current_name) + "\">" +
+      current_name + std::string(CHEVRON_ICON) +
+      "</summary>\n"
+      "            <div class=\"language-menu-list\">\n" +
+      language_items +
+      "            </div>\n"
+      "          </details>";
   std::string out;
   out += "<details class=\"settings\">\n";
   out += "        <summary aria-label=\"" +
@@ -68,7 +87,7 @@ std::string render_settings(const SettingsOptions& options) {
   out += "          <div class=\"settings-row\">\n";
   out += "            <span class=\"settings-label\">" + language_label +
          "</span>\n";
-  out += "            " + language_link + "\n";
+  out += "            " + language_menu + "\n";
   out += "          </div>\n";
   out += "        </div>\n";
   out += "      </details>";

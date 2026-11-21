@@ -48,20 +48,6 @@ std::string tree_home(const Catalog& catalog,
   return home.back() == '/' ? home : home + "/";
 }
 
-std::string language_switch(const Catalog& catalog,
-                            std::string_view route,
-                            std::string_view language,
-                            std::string_view tree_path) {
-  const std::vector<std::string> others = other_languages(catalog, language);
-  if (others.empty()) {
-    return std::string();
-  }
-  const std::string other_prefix(prefix_of(catalog, others[0]));
-  const std::string directory = dirname_posix(route);
-  const std::string base = directory.empty() ? std::string(".") : directory;
-  return relative_posix(base, other_prefix + std::string(tree_path));
-}
-
 std::string relative_route(std::string_view from, std::string_view to) {
   const std::string base = dirname_posix(from);
   return relative_posix(base.empty() ? std::string(".") : base, to);
@@ -378,10 +364,17 @@ std::string site_header(const Catalog& catalog,
   const auto t = [&catalog, language](std::string_view key) {
     return translate(catalog, language, key);
   };
+  std::vector<LanguageOption> languages;
+  for (const std::string& target : catalog.languages) {
+    const LanguageInfo info = language_info_of(catalog, target);
+    languages.push_back(
+        {.language = target,
+         .name = info.name,
+         .href = language_href(catalog, route, target, tree_path),
+         .current = target == language});
+  }
   const std::string settings = render_settings(
-      {.catalog = &catalog,
-       .language = language,
-       .switch_href = language_switch(catalog, route, language, tree_path)});
+      {.catalog = &catalog, .language = language, .languages = languages});
   const auto current = [&current_segment](std::string_view segment) {
     return segment == current_segment ? std::string(" aria-current=\"page\"")
                                       : std::string();
