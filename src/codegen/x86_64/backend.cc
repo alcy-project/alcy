@@ -160,10 +160,14 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // One body's bytes, its symbol, and the patches its references asked
   // for, moved by the offset it landed at.
   const auto emit_body = [&](Body& body, const std::string& symbol,
-                             const object::SymbolBind bind) {
+                             const object::SymbolBind bind,
+                             Encoded* captured = nullptr) -> u64 {
     const Frame frame = layout_frame(body, storage, request.target.width);
     allocate(body, frame);
     Encoded encoded = encode(body);
+    if (captured != nullptr) {
+      *captured = encoded;
+    }
     const u64 at = text.bytes.size();
     text.bytes.insert(text.bytes.end(), encoded.bytes.begin(),
                       encoded.bytes.end());
@@ -184,7 +188,22 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           .addend = patch.addend,
       });
     }
+    return at;
   };
+
+  // The names a backtrace shows, gathered while bodies are laid out.
+  struct BacktraceFunction {
+    std::string symbol;
+    std::string name;
+    u64 size;
+  };
+  struct BacktraceSite {
+    std::string symbol;
+    i64 addend;
+    std::string site;
+  };
+  std::vector<BacktraceFunction> backtrace_functions;
+  std::vector<BacktraceSite> backtrace_sites;
 
   // The runtime names the selected bodies reach, which is what this
   // object has to define.
@@ -197,7 +216,8 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     const ir::Function& function = storage.functions()[index];
     base::Result<Body, codegen::EmitError> selected =
         select_function(storage, strings, request.instr_spans, function, bag,
-                        request.target.width, rodata, request.overlay);
+                        request.target.width, rodata, request.overlay,
+                        request.instr_site_names, request.options.backtrace);
     if (selected.is_err()) {
       return base::make_err(std::move(selected).unwrap_err());
     }
@@ -231,9 +251,26 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
                                : exported
                                    ? linkable_name(function, storage, strings)
                                    : internal_symbol(index);
-    emit_body(
-        body, symbol,
-        exported ? object::SymbolBind::Global : object::SymbolBind::Local);
+    Encoded encoded;
+    emit_body(body, symbol,
+              exported ? object::SymbolBind::Global : object::SymbolBind::Local,
+              request.options.backtrace ? &encoded : nullptr);
+    if (request.options.backtrace) {
+      std::string shown = std::string(strings.get(function.meta.path));
+      if (!shown.empty()) {
+        shown += "::";
+      }
+      shown += strings.get(function.meta.name);
+      backtrace_functions.push_back(
+          BacktraceFunction{symbol, shown, encoded.bytes.size()});
+      for (const Body::CallSite& call : body.call_sites) {
+        if (call.label < encoded.label_offsets.size()) {
+          backtrace_sites.push_back(BacktraceSite{
+              symbol, static_cast<i64>(encoded.label_offsets[call.label]) + 5,
+              call.site});
+        }
+      }
+    }
   }
 
   // The runtime, for the names the program reaches. A body is built
@@ -398,6 +435,81 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       });
     }
   }
+
+  // The tables a panic walk reads. Each is an array of
+  // {address, text pointer, text length} with a zero address ending it.
+  // They ride at the end of .text so the object's single relocation
+  // section names the right segment; the strings themselves stay in
+  // rodata.
+  const u32 section = 0;
+  while (text.bytes.size() % 8 != 0) {
+    text.bytes.push_back(0);
+  }
+  const auto put_u64 = [&](u64 value) {
+    for (u32 at = 0; at < 8; ++at) {
+      text.bytes.push_back(static_cast<u8>(value >> (at * 8)));
+    }
+  };
+  const auto put_address = [&](const std::string& symbol, i64 addend) {
+    object.relocations.push_back(object::Relocation{
+        .section = section,
+        .offset = text.bytes.size(),
+        .kind = object::RelocKind::Abs64,
+        .symbol = symbol,
+        .addend = addend,
+    });
+    put_u64(0);
+  };
+  const auto put_text = [&](std::string_view text_bytes) {
+    const std::string& name = rodata.intern(text_bytes);
+    object.relocations.push_back(object::Relocation{
+        .section = section,
+        .offset = text.bytes.size(),
+        .kind = object::RelocKind::Abs64,
+        .symbol = name,
+        .addend = 0,
+    });
+    put_u64(0);
+    put_u64(text_bytes.size());
+  };
+
+  const u64 functions_at = text.bytes.size();
+  for (const BacktraceFunction& function : backtrace_functions) {
+    put_address(function.symbol, 0);
+    put_text(function.name);
+    put_u64(function.size);
+  }
+  put_u64(0);
+  put_u64(0);
+  put_u64(0);
+  put_u64(0);
+  object.symbols.push_back(object::Symbol{
+      .name = "alcy_bt_funcs_array",
+      .section = section,
+      .offset = functions_at,
+      .size = text.bytes.size() - functions_at,
+      .bind = object::SymbolBind::Local,
+      .type = object::SymbolType::Object,
+  });
+
+  const u64 sites_at = text.bytes.size();
+  for (const BacktraceSite& site : backtrace_sites) {
+    put_address(site.symbol, site.addend);
+    put_text(site.site);
+    put_u64(0);  // no size: the site table is not range-checked
+  }
+  put_u64(0);
+  put_u64(0);
+  put_u64(0);
+  put_u64(0);
+  object.symbols.push_back(object::Symbol{
+      .name = "alcy_bt_sites_array",
+      .section = section,
+      .offset = sites_at,
+      .size = text.bytes.size() - sites_at,
+      .bind = object::SymbolBind::Local,
+      .type = object::SymbolType::Object,
+  });
 
   object.sections.push_back(std::move(text));
 

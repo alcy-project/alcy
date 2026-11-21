@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include "codegen/x86_64/isa.h"
 #include "codegen/x86_64/minst.h"
@@ -65,6 +66,131 @@ Body build_writer(const std::string_view name,
   return body;
 }
 
+// Appends the stack walk to a panic body. The two tables are arrays of
+// {address, text, length}; the scan keeps the entry whose address is the
+// greatest one below a frame's return address, which names the frame's
+// function and the call it made.
+void emit_backtrace_walk(Body& body, RoData& rodata) {
+  const auto push = [&](MOp op, u8 width, Operand dst, Operand src = {}) {
+    if (std::holds_alternative<std::monostate>(src)) {
+      body.insts.push_back(make_inst(op, width, dst));
+    } else {
+      body.insts.push_back(make_inst(op, width, dst, src));
+    }
+  };
+  const auto label = [&]() { return body.label_count++; };
+  const auto jcc = [&](Cond cond, u32 target) {
+    body.insts.push_back(make_jcc(cond, Operand{Label{target}}));
+  };
+  const auto at_label = [&](u32 id) {
+    MInst inst = make_inst(MOp::Nop, 8);
+    inst.label = id;
+    body.insts.push_back(inst);
+  };
+  const auto symbol = [&](std::string_view name) {
+    body.symbols.emplace_back(name);
+    return static_cast<u32>(body.symbols.size() - 1);
+  };
+
+  const SymbolRef at_text = text(body, rodata, "  at ");
+  const SymbolRef open_text = text(body, rodata, " (");
+  const SymbolRef close_text = text(body, rodata, ")");
+  const SymbolRef newline = text(body, rodata, "\n");
+  const u32 funcs = symbol("alcy_bt_funcs_array");
+  const u32 sites = symbol("alcy_bt_sites_array");
+
+  // One lookup: scan `table` for the greatest address not past rcx,
+  // leaving the matched text pointer in r9 and its length in r10. r8
+  // holds the best address and r11 the scan cursor.
+  const auto lookup = [&](u32 table) {
+    push(MOp::Mov, 8, Operand{Reg::R11}, Operand{SymbolRef{table}});
+    push(MOp::Xor, 8, Operand{Reg::R8}, Operand{Reg::R8});
+    push(MOp::Xor, 8, Operand{Reg::R9}, Operand{Reg::R9});
+    push(MOp::Xor, 8, Operand{Reg::R10}, Operand{Reg::R10});
+    const u32 scan = label();
+    const u32 next = label();
+    const u32 done = label();
+    at_label(scan);
+    push(MOp::Mov, 8, Operand{Reg::Rdx},
+         Operand{Mem{
+             .base = Reg::R11, .index = std::nullopt, .scale = 1, .disp = 0}});
+    push(MOp::Test, 8, Operand{Reg::Rdx}, Operand{Reg::Rdx});
+    jcc(Cond::E, done);
+    push(MOp::Cmp, 8, Operand{Reg::Rdx}, Operand{Reg::Rcx});
+    jcc(Cond::A, next);
+    // A zero size names the site table; a function must actually
+    // contain the return address, not merely start below it.
+    const u32 has_size = label();
+    push(MOp::Mov, 8, Operand{Reg::Rax},
+         Operand{Mem{
+             .base = Reg::R11, .index = std::nullopt, .scale = 1, .disp = 24}});
+    push(MOp::Test, 8, Operand{Reg::Rax}, Operand{Reg::Rax});
+    jcc(Cond::E, has_size);
+    push(MOp::Add, 8, Operand{Reg::Rax}, Operand{Reg::Rdx});
+    push(MOp::Cmp, 8, Operand{Reg::Rcx}, Operand{Reg::Rax});
+    jcc(Cond::Ae, next);
+    at_label(has_size);
+    push(MOp::Cmp, 8, Operand{Reg::Rdx}, Operand{Reg::R8});
+    jcc(Cond::Be, next);
+    push(MOp::Mov, 8, Operand{Reg::R8}, Operand{Reg::Rdx});
+    push(MOp::Mov, 8, Operand{Reg::R9},
+         Operand{Mem{
+             .base = Reg::R11, .index = std::nullopt, .scale = 1, .disp = 8}});
+    push(MOp::Mov, 8, Operand{Reg::R10},
+         Operand{Mem{
+             .base = Reg::R11, .index = std::nullopt, .scale = 1, .disp = 16}});
+    at_label(next);
+    push(MOp::Add, 8, Operand{Reg::R11}, Operand{Imm{32}});
+    push(MOp::Jmp, 8, Operand{Label{scan}});
+    at_label(done);
+  };
+
+  // r15 walks the frame chain; rbp stays the panic's own frame.
+  push(MOp::Mov, 8, Operand{Reg::R15}, Operand{Reg::Rbp});
+  const u32 frame = label();
+  const u32 next_frame = label();
+  const u32 finish = label();
+  at_label(frame);
+  push(MOp::Mov, 8, Operand{Reg::Rcx},
+       Operand{Mem{
+           .base = Reg::R15, .index = std::nullopt, .scale = 1, .disp = 8}});
+  push(MOp::Test, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx});
+  jcc(Cond::E, finish);
+
+  lookup(funcs);
+  push(MOp::Test, 8, Operand{Reg::R9}, Operand{Reg::R9});
+  jcc(Cond::E, next_frame);
+  emit_write(body, 2, Operand{at_text}, Operand{Imm{5}});
+  emit_write(body, 2, Operand{Reg::R9}, Operand{Reg::R10});
+  // A syscall clobbers rcx, which held the return address; the frame
+  // still holds it, so load it again before the second lookup.
+  push(MOp::Mov, 8, Operand{Reg::Rcx},
+       Operand{Mem{
+           .base = Reg::R15, .index = std::nullopt, .scale = 1, .disp = 8}});
+
+  lookup(sites);
+  const u32 print_newline = label();
+  push(MOp::Test, 8, Operand{Reg::R9}, Operand{Reg::R9});
+  jcc(Cond::E, print_newline);
+  emit_write(body, 2, Operand{open_text}, Operand{Imm{2}});
+  emit_write(body, 2, Operand{Reg::R9}, Operand{Reg::R10});
+  emit_write(body, 2, Operand{close_text}, Operand{Imm{1}});
+
+  at_label(print_newline);
+  emit_write(body, 2, Operand{newline}, Operand{Imm{1}});
+
+  at_label(next_frame);
+  push(MOp::Mov, 8, Operand{Reg::Rdx},
+       Operand{Mem{
+           .base = Reg::R15, .index = std::nullopt, .scale = 1, .disp = 0}});
+  push(MOp::Cmp, 8, Operand{Reg::Rdx}, Operand{Reg::R15});
+  jcc(Cond::Be, finish);
+  push(MOp::Mov, 8, Operand{Reg::R15}, Operand{Reg::Rdx});
+  push(MOp::Jmp, 8, Operand{Label{frame}});
+
+  at_label(finish);
+}
+
 Body build_panic(RoData& rodata) {
   Body body;
   // The message and the place it was written arrive in the argument
@@ -93,6 +219,7 @@ Body build_panic(RoData& rodata) {
   emit_write(body, 2, Operand{colon}, Operand{Imm{2}});
   emit_write(body, 2, Operand{Reg::Rbx}, Operand{Reg::R12});
   emit_write(body, 2, Operand{newline}, Operand{Imm{1}});
+  emit_backtrace_walk(body, rodata);
 
   // A panic ends the process, and nothing past the ask runs.
   body.insts.push_back(

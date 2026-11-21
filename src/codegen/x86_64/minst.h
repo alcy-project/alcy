@@ -257,6 +257,13 @@ struct Body {
   std::vector<Alloca> allocas;
   // The stack bytes a call may need for arguments past the registers.
   u32 outgoing = 0;
+  // A call whose site a backtrace can name: the label on the marker
+  // instruction before the call, and the rendered file:line:column.
+  struct CallSite {
+    u32 label = 0;
+    std::string site;
+  };
+  std::vector<CallSite> call_sites;
 };
 
 // Renders a body as text, one instruction per line, in the spelling the

@@ -163,7 +163,9 @@ class Selector {
            diag::DiagBag& bag,
            const ir::PointerWidth width,
            RoData& rodata,
-           const overlay::Overlay* checks)
+           const overlay::Overlay* checks,
+           std::span<const str::StringPoolId> site_names,
+           bool backtrace)
       : storage_(storage),
         strings_(strings),
         spans_(spans),
@@ -171,7 +173,10 @@ class Selector {
         bag_(bag),
         width_(width),
         rodata_(rodata),
-        checks_(checks) {}
+        checks_(checks),
+        current_instr_idx_(ir::InstructionIdx::invalid()),
+        site_names_(site_names),
+        backtrace_(backtrace) {}
 
   base::Result<Body, codegen::EmitError> run();
 
@@ -196,7 +201,7 @@ class Selector {
                           const overlay::Entry* check);
 
   // The runtime panic call a failed check ends the process through.
-  void emit_panic_call(std::string_view message);
+  void emit_panic_call(std::string_view message, str::StringPoolId site);
 
   // A check that guards the operands rather than the arithmetic result:
   // a shift count past the type's width, or a signed MIN / -1.
@@ -302,6 +307,10 @@ class Selector {
   // what decides where its label sits.
   bool placed_ = false;
   u32 label_ = 0;
+  // The instruction a backtrace would name, and the build's site table.
+  ir::InstructionIdx current_instr_idx_;
+  std::span<const str::StringPoolId> site_names_;
+  bool backtrace_ = false;
 };
 
 u32 Selector::vreg_of(const ir::RegisterIdx reg, const ir::TypeIdx type) {
@@ -496,6 +505,7 @@ base::Result<Body, codegen::EmitError> Selector::run() {
       }
     }
     for (const ir::InstructionIdx instr_idx : block.instrs) {
+      current_instr_idx_ = instr_idx;
       const ir::Instruction& instr = storage_.instrs()[instr_idx];
       const overlay::Entry* check = nullptr;
       if (checks_ != nullptr && instr_idx.idx < checks_->entries.size() &&
@@ -658,13 +668,22 @@ bool Selector::receive_parameters(const ir::Block& entry) {
   return true;
 }
 
-void Selector::emit_panic_call(const std::string_view message) {
+void Selector::emit_panic_call(const std::string_view message,
+                               const str::StringPoolId site) {
   const SymbolRef text = string_ref(rodata_.intern(message));
   push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi}, Operand{text}));
   push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi},
                  Operand{Imm{static_cast<i64>(message.size())}}));
-  push(make_inst(MOp::Xor, 8, Operand{Reg::Rdx}, Operand{Reg::Rdx}));
-  push(make_inst(MOp::Xor, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx}));
+  if (site == str::EMPTY_STRING_ID) {
+    push(make_inst(MOp::Xor, 8, Operand{Reg::Rdx}, Operand{Reg::Rdx}));
+    push(make_inst(MOp::Xor, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx}));
+  } else {
+    const std::string_view where = strings_.get(site);
+    const SymbolRef name = string_ref(rodata_.intern(where));
+    push(make_inst(MOp::Mov, 8, Operand{Reg::Rdx}, Operand{name}));
+    push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
+                   Operand{Imm{static_cast<i64>(where.size())}}));
+  }
   push(make_inst(MOp::Call, 8, Operand{SymbolRef{string_ref("alcy_panic")}}));
 }
 
@@ -695,7 +714,7 @@ bool Selector::emit_check_prelude(const ir::Instruction& instr,
       push(make_inst(MOp::Cmp, width, Operand{Reg::R9}, Operand{Reg::R10}));
     }
     push(make_jcc(Cond::B, Operand{Label{ok}}));
-    emit_panic_call("shift out of range");
+    emit_panic_call("shift out of range", check.site);
     MInst join = make_inst(MOp::Nop, 8);
     join.label = ok;
     push(join);
@@ -730,7 +749,7 @@ bool Selector::emit_check_prelude(const ir::Instruction& instr,
     push(make_inst(MOp::Mov, width, Operand{Reg::R9}, *divisor));
     push(make_inst(MOp::Cmp, width, Operand{Reg::R9}, Operand{Imm{-1}}));
     push(make_jcc(Cond::Ne, Operand{Label{ok}}));
-    emit_panic_call("integer overflow");
+    emit_panic_call("integer overflow", check.site);
     MInst join = make_inst(MOp::Nop, 8);
     join.label = ok;
     push(join);
@@ -769,7 +788,8 @@ bool Selector::emit(const ir::Instruction& instr,
                              : condition == Cond::B ? Cond::Ae
                                                     : condition;
     push(make_jcc(no_overflow, Operand{Label{ok}}));
-    emit_panic_call("integer overflow");
+    emit_panic_call("integer overflow",
+                    check != nullptr ? check->site : str::EMPTY_STRING_ID);
     MInst join = make_inst(MOp::Nop, 8);
     join.label = ok;
     push(join);
@@ -2022,13 +2042,32 @@ bool Selector::emit_call(const ir::Instruction& instr,
     push(make_inst(MOp::Mov, width_of(tag), Operand{ARG_REGS[next_register++]},
                    *side));
   }
+  const bool sited =
+      backtrace_ && current_instr_idx_.idx < site_names_.size() &&
+      site_names_[current_instr_idx_.idx] != str::EMPTY_STRING_ID;
+  if (sited && !placed_) {
+    MInst block_mark = make_inst(MOp::Nop, 8);
+    block_mark.label = label_;
+    body_.insts.push_back(block_mark);
+    placed_ = true;
+  }
+  const u32 call_label = sited ? fresh_label() : MInst::NO_LABEL;
   if (indirect) {
     const u32 vreg =
         vreg_of(operand_at(instr, 0).as_register(), operand_at(instr, 0).type);
     push(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{SlotRef{vreg, 0}}));
-    push(make_inst(MOp::CallReg, 8, Operand{Reg::Rax}));
+    MInst call_inst = make_inst(MOp::CallReg, 8, Operand{Reg::Rax});
+    call_inst.label = call_label;
+    push(call_inst);
   } else {
-    push(make_inst(MOp::Call, 8, Operand{SymbolRef{symbol_id}}));
+    MInst call_inst = make_inst(MOp::Call, 8, Operand{SymbolRef{symbol_id}});
+    call_inst.label = call_label;
+    push(call_inst);
+  }
+  if (sited) {
+    body_.call_sites.push_back(Body::CallSite{
+        call_label,
+        std::string(strings_.get(site_names_[current_instr_idx_.idx]))});
   }
   if (defines_dst(instr)) {
     const Passage passage = passage_of(dst_type(instr));
@@ -2061,9 +2100,11 @@ base::Result<Body, codegen::EmitError> select_function(
     diag::DiagBag& bag,
     const ir::PointerWidth width,
     RoData& rodata,
-    const overlay::Overlay* checks) {
+    const overlay::Overlay* checks,
+    std::span<const str::StringPoolId> site_names,
+    bool backtrace) {
   Selector selector(storage, strings, spans, function, bag, width, rodata,
-                    checks);
+                    checks, site_names, backtrace);
   return selector.run();
 }
 

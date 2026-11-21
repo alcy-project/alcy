@@ -15,6 +15,8 @@ namespace codegen::x86_64 {
 // One body's bytes, plus the patches the references in it ask for.
 struct Encoded {
   std::vector<u8> bytes;
+  // Byte offset of every label in `bytes`, indexed by label id.
+  std::vector<u64> label_offsets;
   struct Patch {
     // Where in `bytes` the four bytes the patch fills start.
     u64 offset = 0;

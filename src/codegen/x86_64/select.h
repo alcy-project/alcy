@@ -12,6 +12,7 @@
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/result.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/storage.h"
@@ -42,6 +43,8 @@ namespace codegen::x86_64 {
     diag::DiagBag& bag,
     ir::PointerWidth width,
     RoData& rodata,
-    const overlay::Overlay* overlay);
+    const overlay::Overlay* overlay,
+    std::span<const str::StringPoolId> site_names = {},
+    bool backtrace = false);
 
 }  // namespace codegen::x86_64

@@ -761,6 +761,7 @@ Encoded encode(const Body& body) {
           static_cast<u8>(static_cast<u64>(delta) >> (at * 8));
     }
   }
+  encoded.label_offsets = std::move(label_at);
   return encoded;
 }
 
