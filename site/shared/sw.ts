@@ -50,6 +50,7 @@ const SHELL_NAMES = [
   "guide-run.js",
   "clipboard.js",
   "compiler-client.js",
+  "handoff.js",
 ];
 
 // The build fills this literal in when it writes the file; an empty
