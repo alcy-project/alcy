@@ -22,14 +22,17 @@ namespace parser {
 namespace {
 
 constexpr std::string_view TARGET = "target";
+constexpr std::string_view TESTING = "testing";
 constexpr std::string_view KNOWN_OS_VALUES =
     "linux, darwin, windows, wasi, unknown";
 constexpr std::string_view KNOWN_ARCH_VALUES =
     "x86_64, aarch64, riscv64, wasm32, unknown";
 
-TargetFacts facts_for(std::string_view triple, bool freestanding) {
-  TargetFacts facts;
+BuildFacts facts_for(std::string_view triple, bool freestanding,
+                     bool testing) {
+  BuildFacts facts;
   facts.freestanding = freestanding;
+  facts.testing = testing;
   if (triple.find("windows") != std::string_view::npos ||
       triple.find("mingw") != std::string_view::npos ||
       triple.find("msvc") != std::string_view::npos) {
@@ -189,7 +192,7 @@ void emit_unexpected(diag::DiagBag& bag,
 struct Evaluator {
   std::span<const lexer::Token> inside;
   std::string_view bytes;
-  TargetFacts facts;
+  BuildFacts facts;
   diag::DiagBag& bag;
   bool broken = false;
 
@@ -271,9 +274,11 @@ struct Evaluator {
       // side and which shape.
       const std::string_view left_key = left->target_key;
       const std::string_view right_key = right->target_key;
-      if (left_key == "freestanding" && right_key.empty()) {
+      if ((left_key == "freestanding" || left_key == TESTING) &&
+          right_key.empty()) {
         emit_target_is_boolean(bag, right->span);
-      } else if (right_key == "freestanding" && left_key.empty()) {
+      } else if ((right_key == "freestanding" || right_key == TESTING) &&
+                 left_key.empty()) {
         emit_target_is_boolean(bag, left->span);
       } else if ((left_key == "os" || left_key == "arch") &&
                  right_key.empty()) {
@@ -355,6 +360,12 @@ struct Evaluator {
       }
       case lexer::TokenKind::Ident: {
         const std::string spelling = spelling_of(token, bytes);
+        // `testing` names the invocation mode, not a target property,
+        // so it is read bare; every other name must be `target.<key>`.
+        if (spelling == TESTING) {
+          advance(cursor);
+          return Value::make_boolean(facts.testing, TESTING, token.span);
+        }
         if (spelling != TARGET) {
           emit_unknown_target(bag, token, bytes);
           broken = true;
@@ -398,13 +409,14 @@ struct Evaluator {
 
 }  // namespace
 
-TargetFacts target_facts(std::string_view triple, bool freestanding) {
-  return facts_for(triple, freestanding);
+BuildFacts build_facts(std::string_view triple, bool freestanding,
+                       bool testing) {
+  return facts_for(triple, freestanding, testing);
 }
 
 GateOutcome evaluate_when(std::span<const lexer::Token> inside,
                           std::string_view bytes,
-                          TargetFacts facts,
+                          BuildFacts facts,
                           diag::DiagBag& bag) {
   if (inside.empty()) {
     const u32 index = bag.emit<i18n::Key::ParserWhenUnexpectedToken>(

@@ -25,19 +25,19 @@
 
 namespace {
 
-constexpr parser::TargetFacts LINUX_X86_64{.os = "linux",
+constexpr parser::BuildFacts LINUX_X86_64{.os = "linux",
                                            .arch = "x86_64",
                                            .freestanding = false};
-constexpr parser::TargetFacts LINUX_AARCH64{.os = "linux",
+constexpr parser::BuildFacts LINUX_AARCH64{.os = "linux",
                                             .arch = "aarch64",
                                             .freestanding = false};
-constexpr parser::TargetFacts WINDOWS_X86_64{.os = "windows",
+constexpr parser::BuildFacts WINDOWS_X86_64{.os = "windows",
                                              .arch = "x86_64",
                                              .freestanding = false};
-constexpr parser::TargetFacts WASI_WASM32{.os = "wasi",
+constexpr parser::BuildFacts WASI_WASM32{.os = "wasi",
                                           .arch = "wasm32",
                                           .freestanding = false};
-constexpr parser::TargetFacts LINUX_FREESTANDING{.os = "linux",
+constexpr parser::BuildFacts LINUX_FREESTANDING{.os = "linux",
                                                  .arch = "x86_64",
                                                  .freestanding = true};
 
@@ -55,7 +55,7 @@ struct ParseResult {
 };
 
 ParseResult parse_with(std::string_view bytes,
-                       parser::TargetFacts facts,
+                       parser::BuildFacts facts,
                        Fixture& f) {
   lexer::Lexer lexer(bytes, source::UNKNOWN_FILE, f.bag);
   std::vector<lexer::Token> tokens;
@@ -324,7 +324,7 @@ TEST_CASE("A string target compared to a boolean literal is named as string") {
       f.bag, "`target.os` is a string; compare it to one of the known values"));
 }
 TEST_CASE("The wasi os value is a recognized arm") {
-  constexpr parser::TargetFacts kWasi{
+  constexpr parser::BuildFacts kWasi{
       .os = "wasi", .arch = "wasm32", .freestanding = false};
   Fixture f;
   ParseResult r = parse_with(

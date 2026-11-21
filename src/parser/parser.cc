@@ -123,7 +123,7 @@ Parser::Parser(std::span<const lexer::Token> tokens,
                source::FileId file,
                ast::AstArena& ast,
                diag::DiagBag& bag,
-               TargetFacts facts)
+               BuildFacts facts)
     : tokens_(tokens),
       bytes_(bytes),
       file_(file),

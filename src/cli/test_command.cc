@@ -122,6 +122,10 @@ i32 run_test(const CliConfig& config,
   // On those triples the test binary is always the kernel-only link, so
   // the no-libc path keeps its coverage even though a hosted build now
   // links the system C runtime by default.
+  // A test run is the only command whose `when(testing)` gate is true.
+  // Set it before any file is read so the parser drops items of every
+  // other build before resolution sees them.
+  ctx.testing = true;
   ctx.freestanding =
       tool.freestanding || force_freestanding_elf(ctx.target.triple);
   if (ctx.target.is_wasm() ||

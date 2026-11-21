@@ -88,8 +88,8 @@ bool parse_one(PipelineContext& ctx,
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "tokenize", "frontend");
     lexer.tokenize(tokens);
   }
-  const parser::TargetFacts facts =
-      parser::target_facts(ctx.target.triple, ctx.freestanding);
+  const parser::BuildFacts facts = parser::build_facts(
+      ctx.target.triple, ctx.freestanding, ctx.testing);
   parser::Parser parser(
       std::span<const lexer::Token>(tokens.data(), tokens.size()), bytes,
       file.id, ctx.ast, bag, facts);

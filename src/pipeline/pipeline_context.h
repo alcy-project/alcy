@@ -80,6 +80,10 @@ struct PipelineContext {
   // `_start` instead of `main`, and the link skips the C runtime
   //. Set from the goal package's toolchain file.
   bool freestanding = false;
+  // Whether this run builds tests: `alcy test` sets it before parsing, so
+  // a `#[when(testing)]` gate keeps its items and every other command
+  // drops them. Invocation mode, not a property of the target.
+  bool testing = false;
   // Skip the build cache for this invocation (`--no-cache`): no lookup
   // and no store, so the pipeline can be measured and debugged without
   // it.

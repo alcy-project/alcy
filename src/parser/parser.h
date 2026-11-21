@@ -166,7 +166,7 @@ class Parser {
          source::FileId file,
          ast::AstArena& arena,
          diag::DiagBag& bag,
-         TargetFacts facts = TargetFacts{});
+         BuildFacts facts = BuildFacts{});
 
   // Parses a whole file into items. The token stream is verified on
   // entry, so a caller receives items the token stream accounted for;
@@ -413,7 +413,7 @@ class Parser {
   std::vector<diag::Span> pending_docs_;
   std::string_view bytes_;
   source::FileId file_;
-  TargetFacts facts_;
+  BuildFacts facts_;
   ast::AstArena& ast_;
   diag::DiagBag& bag_;
   usize pos_ = 0;
