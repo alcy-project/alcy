@@ -408,7 +408,7 @@ impl Parse for f64 {
 // A module's own tests: `#[when(testing)]` keeps them out of a build,
 // and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
 #[when(testing)] {
-  #[test] fn an_integer_reads_its_decimal_text() {
+  #[test] fn integer_reads_its_decimal_text() {
     assert(
       i64::parse("42").or_panic_with_message("42 is a number") == 42i64,
       "two digits read as twenty-two plus twenty",
@@ -419,14 +419,14 @@ impl Parse for f64 {
     )
   }
 
-  #[test] fn a_leading_plus_is_read_and_not_counted() {
+  #[test] fn leading_plus_is_read_and_not_counted() {
     assert(
       i64::parse("+42").or_panic_with_message("+42 is a number") == 42i64,
       "the sign is not a digit",
     )
   }
 
-  #[test] fn a_leading_minus_makes_the_value_negative() {
+  #[test] fn leading_minus_makes_the_value_negative() {
     assert(
       i64::parse("-42").or_panic_with_message("-42 is a number") == 0i64 - 42i64,
       "the sign applies to the magnitude",
@@ -448,26 +448,26 @@ impl Parse for f64 {
     )
   }
 
-  #[test] fn an_empty_text_is_not_a_number() {
+  #[test] fn empty_text_is_not_a_number() {
     assert(i64::parse("").is_none(), "there is no digit to read")
   }
 
-  #[test] fn a_bare_sign_is_not_a_number() {
+  #[test] fn bare_sign_is_not_a_number() {
     assert(i64::parse("+").is_none(), "a plus with no digits is not a number")
     assert(i64::parse("-").is_none(), "and neither is a minus")
   }
 
-  #[test] fn a_letter_among_the_digits_is_rejected() {
+  #[test] fn letter_among_the_digits_is_rejected() {
     assert(i64::parse("4a").is_none(), "the trailing letter is not a digit")
     assert(i64::parse("a4").is_none(), "and the leading one is not either")
   }
 
-  #[test] fn a_space_among_the_digits_is_rejected() {
+  #[test] fn space_among_the_digits_is_rejected() {
     assert(i64::parse(" 42").is_none(), "a leading space is not a digit")
     assert(i64::parse("42 ").is_none(), "and neither is a trailing one")
   }
 
-  #[test] fn the_largest_i64_reads_back() {
+  #[test] fn largest_i64_reads_back() {
     assert(
       i64::parse("9223372036854775807")
         .or_panic_with_message("the maximum is a number") ==
@@ -476,7 +476,7 @@ impl Parse for f64 {
     )
   }
 
-  #[test] fn the_smallest_i64_reads_back() {
+  #[test] fn smallest_i64_reads_back() {
     assert(
       i64::parse("-9223372036854775808")
         .or_panic_with_message("the minimum is a number") ==
@@ -498,7 +498,7 @@ impl Parse for f64 {
     assert(i64::parse("-9223372036854775809").is_none(), "the magnitude overflows by one")
   }
 
-  #[test] fn an_i32_reads_its_own_bounds() {
+  #[test] fn i32_reads_its_own_bounds() {
     assert(
       i32::parse("2147483647").or_panic_with_message("the maximum fits") == 2147483647i32,
       "the maximum",
@@ -513,16 +513,16 @@ impl Parse for f64 {
     )
   }
 
-  #[test] fn an_i32_rejects_what_only_an_i64_holds() {
+  #[test] fn i32_rejects_what_only_an_i64_holds() {
     assert(i32::parse("2147483648").is_none(), "one past the i32 maximum")
     assert(i32::parse("-2147483649").is_none(), "one below the i32 minimum")
   }
 
-  #[test] fn a_u64_rejects_a_sign_it_does_not_hold() {
+  #[test] fn u64_rejects_a_sign_it_does_not_hold() {
     assert(u64::parse("-1").is_none(), "an unsigned reading has no negative half")
   }
 
-  #[test] fn a_u64_reads_its_own_maximum() {
+  #[test] fn u64_reads_its_own_maximum() {
     assert(
       u64::parse("18446744073709551615")
         .or_panic_with_message("the maximum fits") ==
@@ -532,7 +532,7 @@ impl Parse for f64 {
     assert(u64::parse("18446744073709551616").is_none(), "one past it overflows")
   }
 
-  #[test] fn a_u32_rejects_what_only_a_u64_holds() {
+  #[test] fn u32_rejects_what_only_a_u64_holds() {
     assert(
       u32::parse("4294967295").or_panic_with_message("the maximum fits") == 4294967295u32,
       "the maximum",
@@ -540,49 +540,49 @@ impl Parse for f64 {
     assert(u32::parse("4294967296").is_none(), "one past it overflows")
   }
 
-  #[test] fn a_fraction_reads_its_text() {
+  #[test] fn fraction_reads_its_text() {
     assert(
       f64::parse("1.5").or_panic_with_message("1.5 is a number") == 1.5f64,
       "the point separates the halves",
     )
   }
 
-  #[test] fn a_float_without_a_point_reads_as_a_whole_number() {
+  #[test] fn float_without_a_point_reads_as_a_whole_number() {
     assert(
       f64::parse("42").or_panic_with_message("42 is a number") == 42.0f64,
       "the fraction may be left out",
     )
   }
 
-  #[test] fn a_leading_point_reads_as_a_fraction() {
+  #[test] fn leading_point_reads_as_a_fraction() {
     assert(
       f64::parse(".5").or_panic_with_message(".5 is a number") == 0.5f64,
       "the digits before the point may be left out",
     )
   }
 
-  #[test] fn a_trailing_point_reads_as_a_whole_number() {
+  #[test] fn trailing_point_reads_as_a_whole_number() {
     assert(
       f64::parse("5.").or_panic_with_message("5. is a number") == 5.0f64,
       "the digits after the point may be left out",
     )
   }
 
-  #[test] fn a_second_point_is_rejected() {
+  #[test] fn second_point_is_rejected() {
     assert(f64::parse("1.2.3").is_none(), "a number carries one point")
   }
 
-  #[test] fn a_point_alone_is_not_a_number() {
+  #[test] fn point_alone_is_not_a_number() {
     assert(f64::parse(".").is_none(), "there is no digit around the point")
   }
 
-  #[test] fn a_float_keeps_the_sign_of_a_zero() {
+  #[test] fn float_keeps_the_sign_of_a_zero() {
     zero := f64::parse("-0.0").or_panic_with_message("-0.0 is a number")
     assert(zero == 0.0f64, "the value is zero")
     assert(1.0f64 / zero < 0.0f64, "and the reciprocal is negative, so the sign survived")
   }
 
-  #[test] fn an_exponent_is_read() {
+  #[test] fn exponent_is_read() {
     assert(
       f64::parse("1e10").or_panic_with_message("1e10 is a number") == 1e10f64,
       "the exponent form the formatter writes reads back",
@@ -598,7 +598,7 @@ impl Parse for f64 {
     )
   }
 
-  #[test] fn a_long_fraction_reads_as_the_nearest_float() {
+  #[test] fn long_fraction_reads_as_the_nearest_float() {
     assert(
       f64::parse("3.141592653589793238")
         .or_panic_with_message("the fraction is a number") ==
@@ -607,14 +607,14 @@ impl Parse for f64 {
     )
   }
 
-  #[test] fn a_float_past_the_numerator_is_rejected() {
+  #[test] fn float_past_the_numerator_is_rejected() {
     assert(
       f64::parse("99999999999999999999").is_none(),
       "twenty digits pass what the numerator holds",
     )
   }
 
-  #[test] fn a_letter_among_float_digits_is_rejected() {
+  #[test] fn letter_among_float_digits_is_rejected() {
     assert(f64::parse("1.5x").is_none(), "the trailing letter is not a digit")
     assert(f64::parse("x1.5").is_none(), "and the leading one is not either")
   }

@@ -59,7 +59,7 @@ pub intrinsic fn uninit_ref<T>(slot: &MaybeUninit<T>) -> &T;
     assert(doubled_capacity(0) == 0, "the doubling keeps an empty block empty")
   }
 
-  #[test] fn a_written_slot_reads_back() {
+  #[test] fn written_slot_reads_back() {
     mut slot := unsafe { alloc::<i32>(1) }
     uninit_write(slot, 7)
     assert(*unsafe { uninit_assume(slot) } == 7, "the slot holds the value written into it")
@@ -78,7 +78,7 @@ pub intrinsic fn uninit_ref<T>(slot: &MaybeUninit<T>) -> &T;
     unsafe { dealloc(block, 4) }
   }
 
-  #[test] fn a_block_of_no_elements_is_still_freeable() {
+  #[test] fn block_of_no_elements_is_still_freeable() {
     empty := unsafe { alloc::<i32>(0) }
     unsafe { dealloc(empty, 0) }
   }

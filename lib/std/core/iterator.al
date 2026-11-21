@@ -256,7 +256,7 @@ pub fn skip<I: Iterator<T>, T>(iter: I, n: usize) -> SkipIter<I, T> {
 // A module's own tests: `#[when(testing)]` keeps them out of a build,
 // and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
 #[when(testing)] {
-  #[test] fn a_cursor_yields_none_after_the_last_value() {
+  #[test] fn cursor_yields_none_after_the_last_value() {
     a := [1i32, 2i32]
     mut it := a.as_slice().iter()
     first := *it.next().or_panic_with_message("the view holds an index 0")

@@ -463,7 +463,7 @@ pub fn xxh3_64(s: str) -> u64 {
 }
 
 #[when(testing)] {
-  #[test] fn the_empty_text_hashes_to_a_known_value() {
+  #[test] fn empty_text_hashes_to_a_known_value() {
     assert(xxh3_64("") == 0x2d06800538d394c2u64, "the empty text has the common digest")
   }
 
@@ -489,7 +489,7 @@ pub fn xxh3_64(s: str) -> u64 {
     )
   }
 
-  #[test] fn a_hundred_and_twenty_nine_bytes_hash_to_a_known_value() {
+  #[test] fn hundred_and_twenty_nine_bytes_hash_to_a_known_value() {
     assert(
       xxh3_64(
         "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstu"
@@ -509,7 +509,7 @@ pub fn xxh3_64(s: str) -> u64 {
     )
   }
 
-  #[test] fn the_same_bytes_hash_the_same() {
+  #[test] fn same_bytes_hash_the_same() {
     a := "abc"
     b := "abc"
     assert(xxh3_64(a) == xxh3_64(b), "the digest depends on the bytes alone")
@@ -519,7 +519,7 @@ pub fn xxh3_64(s: str) -> u64 {
     assert(xxh3_64("abc") != xxh3_64("abd"), "a different byte gives a different digest")
   }
 
-  #[test] fn a_zero_byte_changes_the_hash() {
+  #[test] fn zero_byte_changes_the_hash() {
     assert(xxh3_64("\0") != xxh3_64(""), "one zero byte is not the empty text")
   }
 

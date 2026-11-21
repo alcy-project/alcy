@@ -18,15 +18,15 @@ pub spec Fn<P, R> {
 // A module's own tests: `#[when(testing)]` keeps them out of a build,
 // and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
 #[when(testing)] {
-  #[test] fn a_named_function_satisfies_the_signature() {
+  #[test] fn named_function_satisfies_the_signature() {
     assert(apply(double, 3) == 6, "the body calls through the bound")
   }
 
-  #[test] fn a_closure_literal_satisfies_the_signature() {
+  #[test] fn closure_literal_satisfies_the_signature() {
     assert(apply((v: i32) -> v + 1i32, 2) == 3, "the literal's own code runs")
   }
 
-  #[test] fn a_signature_of_no_parameters_is_callable() {
+  #[test] fn signature_of_no_parameters_is_callable() {
     assert(run(() -> 5i32) == 10, "each call yields a value of its own")
   }
 
@@ -37,7 +37,7 @@ pub spec Fn<P, R> {
     )
   }
 
-  #[test] fn the_bound_reads_the_result_type() {
+  #[test] fn bound_reads_the_result_type() {
     assert(apply((v: i32) -> 0i32 - v, 7) == 0i32 - 7i32, "a negative result arrives intact")
   }
 

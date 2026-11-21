@@ -794,7 +794,7 @@ impl Iterator < str > for SplitIter {
     }
   }
 
-  #[test] fn an_empty_text_holds_no_bytes() {
+  #[test] fn empty_text_holds_no_bytes() {
     assert("".len_bytes() == 0, "there are no bytes to count")
     assert("".is_empty(), "a view of no bytes is empty")
   }
@@ -843,7 +843,7 @@ impl Iterator < str > for SplitIter {
     assert(!"he".starts_with("hello"), "a longer prefix does not fit")
   }
 
-  #[test] fn the_empty_prefix_matches_every_text() {
+  #[test] fn empty_prefix_matches_every_text() {
     assert("hello".starts_with(""), "an empty prefix asks for no byte")
   }
 
@@ -857,7 +857,7 @@ impl Iterator < str > for SplitIter {
     assert(!"lo".ends_with("hello"), "a longer suffix does not fit")
   }
 
-  #[test] fn the_empty_suffix_matches_every_text() {
+  #[test] fn empty_suffix_matches_every_text() {
     assert("hello".ends_with(""), "an empty suffix asks for no byte")
   }
 
@@ -902,7 +902,7 @@ impl Iterator < str > for SplitIter {
     assert(!"banana".contains("zz"), "no byte of the needle appears")
   }
 
-  #[test] fn the_empty_needle_is_contained_everywhere() {
+  #[test] fn empty_needle_is_contained_everywhere() {
     assert("banana".contains(""), "an empty needle asks for no byte")
     assert("".contains(""), "even a view of no bytes has the empty needle at its start")
   }
@@ -1054,13 +1054,13 @@ impl Iterator < str > for SplitIter {
     assert(it.next().is_none(), "the cursor is spent after the last line")
   }
 
-  #[test] fn a_trailing_newline_does_not_yield_a_final_empty_line() {
+  #[test] fn trailing_newline_does_not_yield_a_final_empty_line() {
     mut it := "a\n".lines()
     assert(it.next().or_panic_with_message("one line") == "a", "the newline ends the last line")
     assert(it.next().is_none(), "what follows the newline is not a line")
   }
 
-  #[test] fn a_trailing_carriage_return_is_dropped() {
+  #[test] fn trailing_carriage_return_is_dropped() {
     mut it := "a\r\nb".lines()
     assert(
       it.next().or_panic_with_message("two lines") == "a",
@@ -1069,7 +1069,7 @@ impl Iterator < str > for SplitIter {
     assert(it.next().or_panic_with_message("one more line") == "b", "the later line is untouched")
   }
 
-  #[test] fn a_blank_text_yields_no_lines() {
+  #[test] fn blank_text_yields_no_lines() {
     assert("".lines().next().is_none(), "a view of no bytes has no line")
   }
 

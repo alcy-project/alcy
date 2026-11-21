@@ -618,7 +618,7 @@ impl PartialOrd for f64 {
     )
   }
 
-  #[test] fn a_float_compares_with_itself() {
+  #[test] fn float_compares_with_itself() {
     low := 1.5f32
     high := 2.5f32
     assert(
@@ -635,7 +635,7 @@ impl PartialOrd for f64 {
     )
   }
 
-  #[test] fn a_nan_has_no_order_against_anything() {
+  #[test] fn nan_has_no_order_against_anything() {
     zero := 0.0f32
     nan := zero / zero
     assert(nan.partial_cmp(&zero).is_none(), "a NaN is incomparable with a number")
@@ -650,7 +650,7 @@ impl PartialOrd for f64 {
     assert("b".cmp(&"a").is_gt(), "the first byte alone decides")
   }
 
-  #[test] fn a_text_prefix_sorts_before_the_longer_text() {
+  #[test] fn text_prefix_sorts_before_the_longer_text() {
     a := "ab"
     b := "abc"
     assert(a.cmp(&b).is_lt(), "the shorter text runs out of bytes first")

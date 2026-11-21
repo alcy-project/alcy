@@ -108,12 +108,12 @@ impl Hash for DigestOnly {
 }
 
 #[when(testing)] {
-  #[test] fn a_digest_needs_no_equality() {
+  #[test] fn digest_needs_no_equality() {
     d := DigestOnly { value: 7 }
     assert(d.hash() == 7, "a value can be hashed without comparing equal")
   }
 
-  #[test] fn the_text_hash_matches_the_xxh3_digest() {
+  #[test] fn text_hash_matches_the_xxh3_digest() {
     assert("abc".hash() == xxh3_64("abc"), "the impl uses the byte digest")
   }
 

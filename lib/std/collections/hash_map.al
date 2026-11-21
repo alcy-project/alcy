@@ -614,7 +614,7 @@ impl<K: Hash + Eq, V> Entry<K, V> {
 
 // Tests for the table: one entry per property `HashMap` promises.
 #[when(testing)] {
-  #[test] fn a_new_map_is_empty() {
+  #[test] fn new_map_is_empty() {
     m := HashMap::<i32, i32>::new()
     assert(m.is_empty(), "a map that was never inserted into holds nothing")
     assert(m.len() == 0, "a map that was never inserted into is of length zero")
@@ -740,7 +740,7 @@ impl<K: Hash + Eq, V> Entry<K, V> {
     assert(total == 3, "the values come back with their keys")
   }
 
-  #[test] fn a_key_inserted_after_a_remove_is_found() {
+  #[test] fn key_inserted_after_a_remove_is_found() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     _ := m.insert(1, 2)
@@ -753,7 +753,7 @@ impl<K: Hash + Eq, V> Entry<K, V> {
 
   // A freed slot must not end a lookup: find two keys that start at the
   // same slot, then remove the first one.
-  #[test] fn a_lookup_passes_over_a_freed_slot() {
+  #[test] fn lookup_passes_over_a_freed_slot() {
     mut m := HashMap::<i32, i32>::with_capacity(4)
     cap := m.capacity()
     first := 0
@@ -801,7 +801,7 @@ impl<K: Hash + Eq, V> Entry<K, V> {
     }
   }
 
-  #[test] fn a_value_written_through_get_mut_is_the_one_read_back() {
+  #[test] fn value_written_through_get_mut_is_the_one_read_back() {
     mut m := HashMap::<i32, i32>::new()
     _ := m.insert(0, 1)
     slot := m.get_mut(0).or_panic_with_message("the key is there")

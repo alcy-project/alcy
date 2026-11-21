@@ -40,27 +40,27 @@ pub intrinsic fn wrapping_mul<T>(a: T, b: T) -> T;
 // A module's own tests: `#[when(testing)]` keeps them out of a build,
 // and `alcy test` gathers the `#[test] fn`s into a driver that runs them.
 #[when(testing)] {
-  #[test] fn a_byte_holds_one_byte() {
+  #[test] fn byte_holds_one_byte() {
     assert(size_of::<u8>() == 1, "the unit of size is the byte")
   }
 
-  #[test] fn an_i32_holds_four_bytes() {
+  #[test] fn i32_holds_four_bytes() {
     assert(size_of::<i32>() == 4, "four bytes, as the width says")
   }
 
-  #[test] fn an_i64_holds_twice_an_i32() {
+  #[test] fn i64_holds_twice_an_i32() {
     assert(size_of::<i64>() == 2 * size_of::<i32>(), "the wider integer is twice as wide")
   }
 
-  #[test] fn an_array_holds_all_its_elements() {
+  #[test] fn array_holds_all_its_elements() {
     assert(size_of::<[i32; 3]>() == 3 * size_of::<i32>(), "three elements, three times the element")
   }
 
-  #[test] fn an_i32_sits_on_a_four_byte_boundary() {
+  #[test] fn i32_sits_on_a_four_byte_boundary() {
     assert(align_of::<i32>() == 4, "the alignment matches the width")
   }
 
-  #[test] fn a_byte_sits_on_a_one_byte_boundary() {
+  #[test] fn byte_sits_on_a_one_byte_boundary() {
     assert(align_of::<u8>() == 1, "a byte needs no padding")
   }
 

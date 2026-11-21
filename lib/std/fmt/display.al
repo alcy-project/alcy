@@ -32,7 +32,7 @@ impl Display for String {
 }
 
 #[when(testing)] {
-  #[test] fn a_rendering_is_the_bytes_of_the_string() {
+  #[test] fn rendering_is_the_bytes_of_the_string() {
     hello := String::from("hello")
     mut out := String::from("........")
     n := hello.display(unsafe { out.as_mut_slice() })
@@ -44,7 +44,7 @@ impl Display for String {
     assert(out.byte(5) == 0x2eu8, "the rest of the slice is untouched")
   }
 
-  #[test] fn an_empty_string_renders_as_no_bytes() {
+  #[test] fn empty_string_renders_as_no_bytes() {
     empty := String::from("")
     mut out := String::from("..")
     n := empty.display(unsafe { out.as_mut_slice() })
@@ -52,14 +52,14 @@ impl Display for String {
     assert(out.byte(0) == 0x2eu8, "the slice is untouched")
   }
 
-  #[test] fn an_empty_slice_is_the_measurement_pass() {
+  #[test] fn empty_slice_is_the_measurement_pass() {
     hello := String::from("hello")
     mut nothing := String::with_capacity(0)
     n := hello.display(unsafe { nothing.as_mut_slice() })
     assert(n == 5, "the count comes back with no room to write into")
   }
 
-  #[test] fn a_short_slice_takes_the_prefix_and_the_count_still_names_the_whole() {
+  #[test] fn short_slice_takes_the_prefix_and_the_count_still_names_the_whole() {
     hello := String::from("hello")
     mut out := String::from("...")
     n := hello.display(unsafe { out.as_mut_slice() })
@@ -70,7 +70,7 @@ impl Display for String {
     )
   }
 
-  #[test] fn a_zero_byte_is_a_byte_of_the_rendering() {
+  #[test] fn zero_byte_is_a_byte_of_the_rendering() {
     bytes := String::from("a\u{0000}b")
     mut out := String::from("...")
     n := bytes.display(unsafe { out.as_mut_slice() })
@@ -79,7 +79,7 @@ impl Display for String {
     assert(out.byte(2) == 0x62u8, "the byte after it follows")
   }
 
-  #[test] fn a_multibyte_character_counts_as_its_bytes() {
+  #[test] fn multibyte_character_counts_as_its_bytes() {
     e_acute := String::from("\u{00e9}")
     mut out := String::from("..")
     n := e_acute.display(unsafe { out.as_mut_slice() })
@@ -88,7 +88,7 @@ impl Display for String {
     assert(out.byte(1) == 0xa9u8, "the second byte of the encoding lands")
   }
 
-  #[test] fn a_measure_pass_then_a_write_pass_fills_the_buffer_it_sized() {
+  #[test] fn measure_pass_then_a_write_pass_fills_the_buffer_it_sized() {
     text := String::from("hello")
     mut nothing := String::with_capacity(0)
     n := text.display(unsafe { nothing.as_mut_slice() })

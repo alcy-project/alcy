@@ -52,7 +52,7 @@ impl<T> Box<T> {
 }
 
 #[when(testing)] {
-  #[test] fn a_new_box_holds_the_value_it_was_built_from() {
+  #[test] fn new_box_holds_the_value_it_was_built_from() {
     b := Box::<i32>::new(42)
     assert(*b.get() == 42, "the box reads back the value it was built from")
   }
@@ -69,7 +69,7 @@ impl<T> Box<T> {
     assert(b.into_inner() == 7, "the value comes back out of the handle")
   }
 
-  #[test] fn a_box_carries_a_value_that_is_not_a_scalar() {
+  #[test] fn box_carries_a_value_that_is_not_a_scalar() {
     mut b := Box::<Vec<i32>>::new(Vec::<i32>::new())
     held := b.get_mut()
     held.push(5)

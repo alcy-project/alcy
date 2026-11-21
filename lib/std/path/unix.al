@@ -250,12 +250,12 @@ fn slice_eq(a: &[u8], b: &[u8]) -> bool {
   }
 
   #[when(target.os != "windows")]
-  #[test] fn a_relative_path_is_not_absolute() {
+  #[test] fn relative_path_is_not_absolute() {
     assert(!Path::from_str("some/relative/name").is_absolute(), "no root, no absolute")
   }
 
   #[when(target.os != "windows")]
-  #[test] fn a_root_path_is_absolute() {
+  #[test] fn root_path_is_absolute() {
     assert(Path::from_str("/").is_absolute(), "the separator itself is a root")
   }
 

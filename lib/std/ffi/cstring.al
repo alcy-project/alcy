@@ -80,7 +80,7 @@ impl CString {
     }
   }
 
-  #[test] fn an_empty_string_is_one_terminator() {
+  #[test] fn empty_string_is_one_terminator() {
     match CString::from_str("") {
       Option::Some(owned) => {
         assert(owned.is_empty(), "no content, one terminator")

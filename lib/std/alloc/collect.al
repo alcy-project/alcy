@@ -27,7 +27,7 @@ pub fn collect<I: Iterator<T>, T>(mut iter: I) -> Vec<T> {
 }
 
 #[when(testing)] {
-  #[test] fn an_empty_iterator_collects_to_an_empty_vec() {
+  #[test] fn empty_iterator_collects_to_an_empty_vec() {
     src := Vec::<i32>::new()
     out := collect(src.into_iter())
     assert(out.is_empty(), "an iterator with nothing in it collects nothing")
@@ -57,7 +57,7 @@ pub fn collect<I: Iterator<T>, T>(mut iter: I) -> Vec<T> {
     assert(value(&out, 2) == 3, "the last item ends the vec")
   }
 
-  #[test] fn a_partly_drained_iterator_collects_only_what_is_left() {
+  #[test] fn partly_drained_iterator_collects_only_what_is_left() {
     mut src := Vec::<i32>::new()
     src.push(1)
     src.push(2)

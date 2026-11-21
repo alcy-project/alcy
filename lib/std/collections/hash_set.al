@@ -178,7 +178,7 @@ impl<T: Hash + Eq> Eq for HashSet<T> {
 
 // Tests for the set: one entry per property `HashSet` promises.
 #[when(testing)] {
-  #[test] fn a_new_set_is_empty() {
+  #[test] fn new_set_is_empty() {
     s := HashSet::<i32>::new()
     assert(s.is_empty(), "a set that was never inserted into holds nothing")
     assert(s.len() == 0, "a set that was never inserted into is of length zero")
@@ -192,7 +192,7 @@ impl<T: Hash + Eq> Eq for HashSet<T> {
     assert(s.contains(0), "the member is there afterwards")
   }
 
-  #[test] fn a_duplicate_insert_reports_false_and_adds_nothing() {
+  #[test] fn duplicate_insert_reports_false_and_adds_nothing() {
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)
     assert(!s.insert(0), "a key inserted twice is still in the set")
@@ -255,7 +255,7 @@ impl<T: Hash + Eq> Eq for HashSet<T> {
     assert(!i.contains(0), "a key only the left set holds is not in the intersection")
   }
 
-  #[test] fn a_set_is_a_subset_of_the_one_that_holds_more() {
+  #[test] fn set_is_a_subset_of_the_one_that_holds_more() {
     mut small := HashSet::<i32>::new()
     _ := small.insert(0)
     mut large := HashSet::<i32>::new()
@@ -266,7 +266,7 @@ impl<T: Hash + Eq> Eq for HashSet<T> {
     assert(small.is_subset(&small), "a set is a subset of itself")
   }
 
-  #[test] fn the_empty_set_is_a_subset_of_any_set() {
+  #[test] fn empty_set_is_a_subset_of_any_set() {
     empty := HashSet::<i32>::new()
     mut s := HashSet::<i32>::new()
     _ := s.insert(0)

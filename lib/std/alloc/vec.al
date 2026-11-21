@@ -644,7 +644,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
 }
 
 #[when(testing)] {
-  #[test] fn a_new_vec_holds_nothing_and_reserves_nothing() {
+  #[test] fn new_vec_holds_nothing_and_reserves_nothing() {
     v := Vec::<i32>::new()
     assert(v.is_empty(), "a vec that was never pushed into holds nothing")
     assert(v.len() == 0, "a vec that was never pushed into is of length zero")
@@ -667,13 +667,13 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     assert(value(&v, 1) == 2, "the second push follows it")
   }
 
-  #[test] fn the_first_push_takes_a_block_of_four() {
+  #[test] fn first_push_takes_a_block_of_four() {
     mut v := Vec::<i32>::new()
     v.push(1)
     assert(v.capacity() == 4, "an empty vec reads its first block as four elements")
   }
 
-  #[test] fn a_grown_vec_keeps_every_element_in_order() {
+  #[test] fn grown_vec_keeps_every_element_in_order() {
     mut v := Vec::<i32>::new()
     mut i := 0 as i32
     while i < 5 {
@@ -1042,7 +1042,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     assert(cursor.next().is_none(), "one past the last element hands out nothing")
   }
 
-  #[test] fn the_index_operators_reach_the_elements() {
+  #[test] fn index_operators_reach_the_elements() {
     vals := [1i32, 2i32]
     mut v := vec_of(vals.as_slice())
     assert(v[0] + v[1] == 3, "the read operator names the element at the index")

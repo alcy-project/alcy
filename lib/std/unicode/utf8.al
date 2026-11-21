@@ -27,27 +27,27 @@ pub fn valid(bytes: &[u8]) -> bool {
     )
   }
 
-  #[test] fn a_truncated_sequence_is_not_valid() {
+  #[test] fn truncated_sequence_is_not_valid() {
     assert(!valid(&[0xe1u8, 0x80u8]), "a lead byte alone decodes nothing")
   }
 
-  #[test] fn a_sequence_that_starts_on_a_continuation_is_not_valid() {
+  #[test] fn sequence_that_starts_on_a_continuation_is_not_valid() {
     assert(!valid(&[0xa5u8, 0xe6u8, 0x97u8, 0xa5u8]), "a continuation can never open a scalar")
   }
 
-  #[test] fn the_first_scalar_alone_is_valid() {
+  #[test] fn first_scalar_alone_is_valid() {
     assert(valid(&[0xe6u8, 0x97u8, 0xa5u8]), "the lead and continuations agree")
   }
 
-  #[test] fn a_stray_continuation_is_not_valid() {
+  #[test] fn stray_continuation_is_not_valid() {
     assert(!valid(&[0x80u8]), "a continuation with no lead is not a scalar")
   }
 
-  #[test] fn an_overlong_form_is_not_valid() {
+  #[test] fn overlong_form_is_not_valid() {
     assert(!valid(&[0xf0u8, 0x80u8, 0x80u8]), "an overlong start is not a scalar")
   }
 
-  #[test] fn a_surrogate_is_not_valid() {
+  #[test] fn surrogate_is_not_valid() {
     assert(!valid(&[0xedu8, 0xa0u8, 0x80u8]), "no scalar has a surrogate's shape")
   }
 

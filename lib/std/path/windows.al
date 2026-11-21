@@ -392,7 +392,7 @@ fn decode(units: &[u16]) -> Option<Vec<u8>> {
   }
 
   #[when(target.os == "windows")]
-  #[test] fn an_astral_scalar_survives_the_round_trip() {
+  #[test] fn astral_scalar_survives_the_round_trip() {
     p := Path::from_str("a 𝐁 b")
     match p.to_str() {
       Option::Some(text) => {
@@ -411,7 +411,7 @@ fn decode(units: &[u16]) -> Option<Vec<u8>> {
   }
 
   #[when(target.os == "windows")]
-  #[test] fn a_drive_root_is_absolute() {
+  #[test] fn drive_root_is_absolute() {
     assert(Path::from_str("C:\\").is_absolute(), "a drive prefix is a root")
     assert(Path::from_str("\\\\server\\share").is_absolute(), "a UNC prefix is a root")
     assert(!Path::from_str("C:relative").is_absolute(), "a drive-relative path is not absolute")

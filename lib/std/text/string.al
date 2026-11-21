@@ -537,14 +537,14 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
 #[when(testing)] {
   // Construction: a string starts with no bytes, and reports them.
 
-  #[test] fn a_new_string_is_empty() {
+  #[test] fn new_string_is_empty() {
     s := String::new()
     assert_count(s.len_bytes(), 0, "a new string has no bytes")
     assert(s.is_empty(), "a new string is empty")
     assert_text(s.as_str(), "", "the view over no bytes is empty text")
   }
 
-  #[test] fn a_string_from_text_holds_that_text() {
+  #[test] fn string_from_text_holds_that_text() {
     s := String::from("héllo")
     assert_text(s.as_str(), "héllo", "the text survives the copy")
     assert_count(s.len_bytes(), 6, "the length counts bytes, not scalars")
@@ -559,7 +559,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     assert_text(s.as_str(), "", "the view over no bytes is empty text")
   }
 
-  #[test] fn the_capacity_never_falls_below_the_length() {
+  #[test] fn capacity_never_falls_below_the_length() {
     mut s := String::new()
     assert(s.capacity() >= s.len_bytes(), "on an empty string")
     s.push_str("abcdefghijklmnopqrstuvwxyz")
@@ -586,7 +586,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     assert_count(s.len_bytes(), 3, "the length is untouched")
   }
 
-  #[test] fn a_string_built_piece_by_piece_keeps_every_byte() {
+  #[test] fn string_built_piece_by_piece_keeps_every_byte() {
     text := "abcdefghij"
     mut s := String::new()
     mut i := 0 as usize
@@ -599,7 +599,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     assert_count(s.len_bytes(), 10, "ten bytes were added")
   }
 
-  #[test] fn a_run_pushed_past_the_room_keeps_the_prefix() {
+  #[test] fn run_pushed_past_the_room_keeps_the_prefix() {
     mut s := String::from("abc")
     s.push_str("defghijklmnopqrstuvwxyz")
     assert_text(
@@ -690,7 +690,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     assert_count(s.len_bytes(), 3, "the length is unchanged")
   }
 
-  #[test] fn a_byte_pushed_after_truncate_lands_at_the_new_end() {
+  #[test] fn byte_pushed_after_truncate_lands_at_the_new_end() {
     mut s := String::from("abcd")
     s.truncate(2).or_panic_with_message("the offset is a boundary")
     s.push_str("X")
@@ -707,7 +707,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     assert(s.capacity() >= room, "the room already reserved is kept")
   }
 
-  #[test] fn a_push_after_clear_starts_at_the_beginning() {
+  #[test] fn push_after_clear_starts_at_the_beginning() {
     mut s := String::from("abc")
     s.clear()
     s.push_str("xy")
@@ -785,7 +785,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     assert(a.cmp(&a).is_eq(), "a string compares equal to itself")
   }
 
-  #[test] fn a_prefix_sorts_before_the_longer_text() {
+  #[test] fn prefix_sorts_before_the_longer_text() {
     a := String::from("ab")
     b := String::from("abc")
     assert(a.cmp(&b).is_lt(), "the shorter text is the smaller one")
@@ -822,7 +822,7 @@ pub fn join(parts: &Vec<String>, sep: str) -> String {
     )
   }
 
-  #[test] fn the_text_view_folds_case_without_an_owned_source() {
+  #[test] fn text_view_folds_case_without_an_owned_source() {
     assert_text("AbC".to_ascii_lowercase().as_str(), "abc", "a str view folds the same way")
   }
 

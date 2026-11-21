@@ -132,19 +132,19 @@ impl<T: Eq> Eq for Option<T> {
 }
 
 #[when(testing)] {
-  #[test] fn a_some_is_some() {
+  #[test] fn some_is_some() {
     assert(Option::Some(3).is_some(), "a Some holds a value")
   }
 
-  #[test] fn a_some_is_not_none() {
+  #[test] fn some_is_not_none() {
     assert(!Option::Some(3).is_none(), "a Some is not the absence")
   }
 
-  #[test] fn an_absence_is_none() {
+  #[test] fn absence_is_none() {
     assert(absent().is_none(), "a None is the absence")
   }
 
-  #[test] fn an_absence_is_not_some() {
+  #[test] fn absence_is_not_some() {
     assert(!absent().is_some(), "a None holds no value")
   }
 
@@ -269,7 +269,7 @@ impl<T: Eq> Eq for Option<T> {
     assert(absent() == absent(), "two absences are equal")
   }
 
-  #[test] fn a_value_and_an_absence_are_unequal() {
+  #[test] fn value_and_an_absence_are_unequal() {
     assert(Option::Some(3) != absent(), "a present option is not the absence")
     assert(!(Option::Some(3) == absent()), "and equality agrees")
   }

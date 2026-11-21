@@ -111,22 +111,22 @@ impl<T: Eq, E: Eq> Eq for Result<T, E> {
 }
 
 #[when(testing)] {
-  #[test] fn an_ok_is_ok() {
+  #[test] fn ok_is_ok() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(ok.is_ok(), "an Ok is a success")
   }
 
-  #[test] fn an_ok_is_not_err() {
+  #[test] fn ok_is_not_err() {
     ok: Result<i32, str> := Result::Ok(7)
     assert(!ok.is_err(), "an Ok is not a failure")
   }
 
-  #[test] fn an_err_is_err() {
+  #[test] fn err_is_err() {
     bad: Result<i32, str> := Result::Err("bad")
     assert(bad.is_err(), "an Err is a failure")
   }
 
-  #[test] fn an_err_is_not_ok() {
+  #[test] fn err_is_not_ok() {
     bad: Result<i32, str> := Result::Err("bad")
     assert(!bad.is_ok(), "an Err is not a success")
   }
@@ -236,7 +236,7 @@ impl<T: Eq, E: Eq> Eq for Result<T, E> {
     assert(a != b, "different errors make unequal results")
   }
 
-  #[test] fn a_success_and_a_failure_are_unequal() {
+  #[test] fn success_and_a_failure_are_unequal() {
     ok: Result<i32, str> := Result::Ok(7)
     bad: Result<i32, str> := Result::Err("bad")
     assert(ok != bad, "a success is not a failure")

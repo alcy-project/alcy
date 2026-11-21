@@ -459,7 +459,7 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     assert(a.as_slice().len() == 3, "a view counts the same elements")
   }
 
-  #[test] fn a_view_of_no_elements_is_empty() {
+  #[test] fn view_of_no_elements_is_empty() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(empty.is_empty(), "nothing is left before the first element")
@@ -485,7 +485,7 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     assert(*s.last().or_panic_with_message("the view is not empty") == 3, "the last element")
   }
 
-  #[test] fn the_ends_of_an_empty_view_are_none() {
+  #[test] fn ends_of_an_empty_view_are_none() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(empty.first().is_none(), "an empty view has no first element")
@@ -660,7 +660,7 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     assert(total == 123, "the cursor walks the elements once, in order")
   }
 
-  #[test] fn the_cursor_stops_after_the_last_element() {
+  #[test] fn cursor_stops_after_the_last_element() {
     a := [1i32, 2i32]
     mut it := a.as_slice().iter()
     first := *it.next().or_panic_with_message("the view holds an index 0")
@@ -716,7 +716,7 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     assert(!(a.as_slice().starts_with(b.as_slice())), "the second element already differs")
   }
 
-  #[test] fn the_empty_prefix_matches_every_view() {
+  #[test] fn empty_prefix_matches_every_view() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(a.as_slice().starts_with(empty), "a view begins with nothing")
@@ -740,7 +740,7 @@ impl<T> Iterator < &mut T > for SliceIterMut<T> {
     assert(!(a.as_slice().ends_with(b.as_slice())), "the earlier element already differs")
   }
 
-  #[test] fn the_empty_suffix_matches_every_view() {
+  #[test] fn empty_suffix_matches_every_view() {
     a := [1i32, 2i32, 3i32]
     empty := a.as_slice().split_at(0).0
     assert(a.as_slice().ends_with(empty), "a view ends with nothing")

@@ -33,7 +33,7 @@ pub fn mix2(left: u64, right: u64) -> u64 {
     assert(mix64(1) != mix64(2), "neighbouring keys differ")
   }
 
-  #[test] fn the_mix_is_stable() {
+  #[test] fn mix_is_stable() {
     assert(mix64(7) == mix64(7), "a value has one digest")
   }
 
