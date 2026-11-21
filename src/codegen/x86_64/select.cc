@@ -274,6 +274,7 @@ class Selector {
   ir::PointerWidth width_;
   RoData& rodata_;
   const overlay::Overlay* checks_ = nullptr;
+  ir::Opcode current_op_ = ir::Opcode::Noop;
 
   Body body_;
   std::unordered_map<u32, u32> vreg_of_register_;
@@ -383,6 +384,13 @@ std::optional<Operand> Selector::operand_of(const ir::Operand& op) {
       return Operand{string_ref(rodata_.intern(data))};
     }
   }
+  if (op.is<ir::FunctionIdx>()) {
+    return Operand{string_ref(internal_symbol(op.as_function()))};
+  }
+  if (op.is<ir::ExternalFunctionIdx>()) {
+    const auto& fn = storage_.external_functions()[op.as_external_function()];
+    return Operand{string_ref(std::string(strings_.get(fn.meta.name)))};
+  }
   if (op.is<ir::BlockIdx>()) {
     const ir::BlockIdx block = op.as_block();
     return Operand{Label{body_.block_labels[block.idx]}};
@@ -414,15 +422,21 @@ std::optional<Operand> Selector::scalar_of(const ir::Operand& op,
     }
     (void)tag;
   }
+  // Name the instruction and the operand shape, so a refusal points at
+  // a construct rather than at an anonymous operand.
   const char* kind = "other";
   if (op.is<ir::ImmutableIdx>()) {
     kind = "imm";
   } else if (op.is<ir::RegisterIdx>()) {
     kind = "reg";
-  } else if (op.is<ir::BlockIdx>()) {
-    kind = "block";
+  } else if (op.is<ir::FunctionIdx>()) {
+    kind = "function value";
+  } else if (op.is<ir::ExternalFunctionIdx>()) {
+    kind = "external function";
   }
-  (void)unsupported(span, kind);
+  std::string what =
+      std::string(ir::opcode_to_str(current_op_)) + " with " + kind;
+  (void)unsupported(span, what);
   return std::nullopt;
 }
 
@@ -600,6 +614,7 @@ bool Selector::receive_parameters(const ir::Block& entry) {
 bool Selector::emit(const ir::Instruction& instr,
                     const diag::Span span,
                     const overlay::Entry* check) {
+  current_op_ = instr.op;
   using O = ir::Opcode;
   const ir::OperandIdxRange ops = instr.operands;
   const usize count = ops.size();
