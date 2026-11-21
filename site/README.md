@@ -144,12 +144,12 @@ uv run ./tools/site.py budget         # check the built pages' weight
 uv run ./tools/site.py serve          # http://127.0.0.1:8000/
 ```
 
-`build` assembles nothing until the generator is built:
-
-```sh
-uv run ./tools/build.py --target=docsite \
-  --mode=release --build-subdir=docsite
-```
+`build` builds the docsite generator first when one is not on disk,
+as a host release build in `out/docsite/`. An existing binary is reused;
+the pages cannot be stamped without it. The generator is separate from
+the compiler module that `--with-compiler` builds: the guide's fences are
+compiled by the generator itself, while that module only serves the
+playground's Check and Run buttons.
 
 `tree-sitter` (the CLI, for the grammar wasm) and `bun` (TypeScript
 and `web-tree-sitter`, the versions in `config.toml` installed into

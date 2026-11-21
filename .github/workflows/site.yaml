@@ -139,17 +139,9 @@ jobs:
         shell: bash
         run: uv run ./tools/check_playground.py --build-subdir="$BUILD_SUBDIR"
 
-      # The generator stamps the pages natively: the wasm module above only
-      # serves the playground's Check and Run buttons. site.py build refuses
-      # to assemble without this binary on disk.
-      - name: Build the docsite binary
-        shell: bash
-        run: |
-          uv run ./tools/build.py \
-            --target=docsite \
-            --mode=release \
-            --build-subdir=docsite \
-            --gn-arg="$ALCY_GN_ARGS"
+      # The generator stamps the pages natively; site.py build builds it
+      # as a host release binary in out/docsite/ before assembling. The
+      # wasm module above only serves the playground's Check and Run.
 
       - name: Test the Guide's Generator
         shell: bash

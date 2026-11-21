@@ -22,10 +22,16 @@ file server can host.
     uv run ./tools/site.py budget           # check site/dist against its budgets
     uv run ./tools/site.py serve            # serve it on :8000
 
+`build` builds the docsite generator first when one is not on disk; the
+pages cannot be stamped without it. The generator is a host release
+build, independent of the build's `--mode` and `--build-subdir`.
+
 `build` takes whatever compiler artifacts it finds and warns when there
 are none, so the site still works for highlighting alone. Pass
 `--with-compiler` to build the `playground` target first; it carries the
-direct wasm backend and no LLVM (see `src/playground/README.md`).
+direct wasm backend and no LLVM (see `src/playground/README.md`). That
+module only serves the playground's Check and Run buttons; the guide's
+fences are compiled by the generator itself.
 
 The TypeScript compiler and the tree-sitter web binding are installed
 with bun into `out/site-cache/`, at the versions `config.toml` pins;
@@ -74,6 +80,11 @@ BUILD_DIR = SITE_DIR / "build"
 GRAMMAR_DIR = project_root_dir / "treesitter"
 DEFAULT_BUILD_SUBDIR = "playground"
 DEFAULT_WASM_TARGET = "playground"
+# The generator is a separate host release build: it links the compiler
+# for the fence check, so it does not share the playground's target OS,
+# mode, or build directory.
+DOCSITE_TARGET = "docsite"
+DOCSITE_BUILD_SUBDIR = "docsite"
 # The playground build carries no LLVM; `src/backends.gni` selects the
 # backends, and an empty list is what a browser needs.
 DEFAULT_GN_ARG = "alcy_backends=[]"
@@ -703,13 +714,7 @@ def build_guide(dist_dir: Path) -> None:
     # alcy-docsite stamps every page tree, verifies every fence and
     # walks the link audit natively. It links the compiler for the
     # fence check, so its build is a release build.
-    docsite = docsite_binary()
-    if docsite is None:
-        raise RuntimeError(
-            "alcy-docsite is not built; build it with "
-            "tools/build.py --target=docsite --mode=release "
-            "--build-subdir=docsite"
-        )
+    docsite = ensure_docsite()
     stamp, stamp_url = build_stamp(project_root_dir)
     command = [
         str(docsite),
@@ -733,9 +738,20 @@ def build_guide(dist_dir: Path) -> None:
     subprocess.run(command, check=True, cwd=project_root_dir)
 
 
-def docsite_binary() -> Path | None:
-    candidate = project_root_dir / "out" / "docsite" / "alcy-docsite"
-    return candidate if candidate.is_file() else None
+def ensure_docsite() -> Path:
+    candidate = project_root_dir / "out" / DOCSITE_BUILD_SUBDIR / "alcy-docsite"
+    if candidate.is_file():
+        return candidate
+    log("building the docsite generator")
+    code = build(
+        target=DOCSITE_TARGET,
+        mode="release",
+        build_subdir=DOCSITE_BUILD_SUBDIR,
+        gn_args_extra=DEFAULT_GN_ARG,
+    )
+    if code != 0:
+        raise RuntimeError(f"docsite build failed ({code})")
+    return candidate
 
 
 def command_build(args: argparse.Namespace) -> int:
