@@ -36,6 +36,19 @@ TEST_CASE("The pull report wraps the same diagnostics") {
   }
 }
 
+TEST_CASE("Borrow errors reach diagnostics after the single analysis") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "fn main() {\n  x := 1\n  m := &mut x\n  n := &mut x\n"
+      "  _ := m\n  _ := n\n}\n");
+  const text::JsonValue report = document_diagnostic_report(document);
+  const text::JsonValue* items = report.find("items");
+  CHECK(items != nullptr);
+  if (items != nullptr) {
+    CHECK(!items->as_array().empty());
+  }
+}
+
 TEST_CASE("The workspace report carries one entry per open document") {
   DocumentStore documents;
   documents.open("file:///ok.al", "alcy", 1,

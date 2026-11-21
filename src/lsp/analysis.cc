@@ -20,6 +20,7 @@
 #include "i18n/language.h"
 #include "ir/common.h"
 #include "linter/config.h"
+#include "linter/engine.h"
 #include "linter/lint.h"
 #include "lsp/document.h"
 #include "lsp/workspace.h"
@@ -54,25 +55,30 @@ std::unique_ptr<PackageAnalysis> build_single(const Document& document) {
 
 void check_tree(PackageAnalysis& out,
                 const analyzer::ModuleTree& tree,
-                const linter::LintConfig& config,
-                usize file_count) {
-  // The lint run publishes compiler errors, lint findings, and the
-  // lowering and borrow errors in one bag. The checked package the
-  // features read is a second, independent reading of the same tree.
-  (void)linter::lint_tree(out.context, tree, config, file_count);
+                const linter::LintConfig& config) {
+  // One reading of the tree feeds both the diagnostics tail (lints and
+  // lowering) and the editor features. Lowering consumes the analyzed
+  // types, so clone them first for the features that outlive this call.
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
       pipeline::analyze_tree(out.context, tree);
   if (checked.is_err()) {
     return;
   }
+  analyzer::CheckedPackage tail = std::move(checked).unwrap();
+  analyzer::CheckedPackage features = tail;
+  if (!out.context.bag.has_errors()) {
+    (void)linter::run_lints(out.context, tail, config);
+    if (config.borrow_checks) {
+      (void)pipeline::finish_frontend(out.context, std::move(tail));
+    }
+  }
   const usize index = out.checked.size();
-  analyzer::CheckedPackage package = std::move(checked).unwrap();
-  for (const analyzer::ModuleNode* module : package.tree.modules) {
+  for (const analyzer::ModuleNode* module : features.tree.modules) {
     if (module->file != source::UNKNOWN_FILE) {
       out.package_of[module->file] = index;
     }
   }
-  out.checked.push_back(std::move(package));
+  out.checked.push_back(std::move(features));
   out.ok = true;
   out.context.bag.dedup();
 }
@@ -99,7 +105,7 @@ void analyze_standalone(PackageAnalysis& out,
   if (loaded.is_ok()) {
     config = std::move(loaded).unwrap();
   }
-  check_tree(out, std::move(tree).unwrap(), config, 1);
+  check_tree(out, std::move(tree).unwrap(), config);
 }
 
 void analyze_package(PackageAnalysis& out,
@@ -150,7 +156,7 @@ void analyze_package(PackageAnalysis& out,
   }
   std::vector<pipeline::Artifact> artifacts = std::move(resolved).unwrap();
   for (pipeline::Artifact& artifact : artifacts) {
-    check_tree(out, artifact.tree, config, artifact.file_count);
+    check_tree(out, artifact.tree, config);
   }
 }
 

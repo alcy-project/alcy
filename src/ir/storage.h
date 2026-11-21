@@ -92,6 +92,42 @@ struct StorageState {
   // yes, 3 on the walk's own stack. Type nodes never change once
   // interned, so an answer holds for the state's lifetime.
   mutable std::vector<u8> names_param_memo;
+
+  // A deep copy of every table. The tables are move-only so table indices
+  // stay stable, but a caller that must hand the same analyzed types to
+  // two consumers (lowering and editor features) needs a second copy.
+  StorageState clone() const {
+    StorageState out;
+    const auto copy = [](const auto& from, auto& to) {
+      for (const auto& value : from) {
+        to.push_back(value);
+      }
+    };
+    copy(functions, out.functions);
+    copy(blocks, out.blocks);
+    copy(block_params, out.block_params);
+    copy(instrs, out.instrs);
+    copy(immutables, out.immutables);
+    copy(registers, out.registers);
+    copy(external_functions, out.external_functions);
+    copy(parametric_callees, out.parametric_callees);
+    copy(parametric_functions, out.parametric_functions);
+    copy(prelude_specializations, out.prelude_specializations);
+    copy(synthetic_functions, out.synthetic_functions);
+    copy(operands, out.operands);
+    copy(types, out.types);
+    copy(struct_types, out.struct_types);
+    copy(array_types, out.array_types);
+    copy(slice_types, out.slice_types);
+    copy(enum_types, out.enum_types);
+    copy(enum_variant_types, out.enum_variant_types);
+    copy(ref_types, out.ref_types);
+    copy(tuple_types, out.tuple_types);
+    copy(func_types, out.func_types);
+    copy(const_types, out.const_types);
+    out.names_param_memo = names_param_memo;
+    return out;
+  }
 };
 
 // Size and alignment of a type on a target, in bytes.
@@ -613,8 +649,11 @@ class Storage {
   explicit Storage(StorageState&& state) : state_(std::move(state)) {}
   ~Storage() = default;
 
-  Storage(const Storage&) = delete;
-  Storage& operator=(const Storage&) = delete;
+  Storage(const Storage& other) : state_(other.state_.clone()) {}
+  Storage& operator=(const Storage& other) {
+    state_ = other.state_.clone();
+    return *this;
+  }
 
   Storage(Storage&&) noexcept = default;
   Storage& operator=(Storage&&) noexcept = default;
@@ -709,8 +748,8 @@ class VerifiedStorage {
  public:
   ~VerifiedStorage() = default;
 
-  VerifiedStorage(const VerifiedStorage&) = delete;
-  VerifiedStorage& operator=(const VerifiedStorage&) = delete;
+  VerifiedStorage(const VerifiedStorage&) = default;
+  VerifiedStorage& operator=(const VerifiedStorage&) = default;
 
   VerifiedStorage(VerifiedStorage&&) noexcept = default;
   VerifiedStorage& operator=(VerifiedStorage&&) noexcept = default;
