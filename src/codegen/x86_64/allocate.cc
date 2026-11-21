@@ -289,8 +289,10 @@ void allocate(Body& body, const Frame& frame) {
     if (is_float_op(inst.op)) {
       const u8 w = inst.width;
       const MOp load_op = w == 4 ? MOp::Movss : MOp::Movsd;
-      constexpr Reg X = Reg::Xmm0;
-      constexpr Reg Y = Reg::Xmm1;
+      // Float scratch registers sit above the argument/return XMMs so
+      // materialising an operand never clobbers a prepared argument.
+      constexpr Reg X = Reg::Xmm14;
+      constexpr Reg Y = Reg::Xmm15;
       const auto load_float = [&](const Operand& src, Reg into) {
         if (const VReg* vreg = std::get_if<VReg>(&src); vreg != nullptr) {
           push_labeled(make_inst(load_op, w, Operand{into},
