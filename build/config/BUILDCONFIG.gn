@@ -76,6 +76,14 @@ declare_args() {
   is_fuzz = false
 }
 
+# Links against the host C++ library instead of the pinned libc++. A build
+# that has no LLVM installed needs this: the libcxx config otherwise adds
+# -nostdinc++ and points at headers the machine does not carry. Emscripten
+# and Windows never take that config in the first place.
+declare_args() {
+  alcy_use_libcxx = true
+}
+
 # Instruments the build for source-based coverage. Off by default, and
 # meant for a debug build: optimising code attributes lines to the wrong
 # place, so the report would describe the compiler rather than the
@@ -196,7 +204,8 @@ default_compiler_configs = [
 ]
 
 # Emscripten ships its own libc++; the libcxx config would conflict with it.
-if (!is_win && !is_wasm) {
+# A host without the pinned LLVM opts out through alcy_use_libcxx.
+if (!is_win && !is_wasm && alcy_use_libcxx) {
   default_compiler_configs += [ "//build/config/compiler:libcxx" ]
 }
 

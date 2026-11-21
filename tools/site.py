@@ -85,9 +85,10 @@ DEFAULT_WASM_TARGET = "playground"
 # mode, or build directory.
 DOCSITE_TARGET = "docsite"
 DOCSITE_BUILD_SUBDIR = "docsite"
-# The playground build carries no LLVM; `src/backends.gni` selects the
-# backends, and an empty list is what a browser needs.
-DEFAULT_GN_ARG = "alcy_backends=[]"
+# The site's builds carry no LLVM. The playground needs no backends, and
+# the native generator needs the host C++ library: the pinned libc++ that
+# a normal compiler build expects is not installed in the site job.
+DEFAULT_GN_ARG = "alcy_backends=[] alcy_use_libcxx=false"
 CACHE_DIR = project_root_dir / "out" / "site-cache"
 DEPS_DIR = CACHE_DIR / "deps"
 
