@@ -1337,20 +1337,23 @@ bool Selector::emit(const ir::Instruction& instr,
         // `imul` reports *signed* overflow through its carry flag, which
         // a product that fits unsigned can still trip. The one-operand
         // `mul` sets carry from the high half of an unsigned product.
-        push(make_inst(MOp::Mov, compute, Operand{Reg::Rax}, *lhs));
+        // Resolve the right factor into rcx *before* the left into rax:
+        // both may be vregs and allocation borrows rax as its first
+        // scratch. Reading rax first would let the second resolution
+        // overwrite the left factor.
         if (const Imm* immediate = std::get_if<Imm>(&*rhs);
             immediate != nullptr) {
           push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, *rhs));
-          push(make_inst(MOp::Umul, compute, Operand{Reg::Rcx}));
         } else {
           const Operand right = *rhs;
-          const Operand factor =
-              std::holds_alternative<VReg>(right) ? Operand{Reg::Rcx} : right;
           if (std::holds_alternative<VReg>(right)) {
             push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, right));
+          } else {
+            push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, right));
           }
-          push(make_inst(MOp::Umul, compute, factor));
         }
+        push(make_inst(MOp::Mov, compute, Operand{Reg::Rax}, *lhs));
+        push(make_inst(MOp::Umul, compute, Operand{Reg::Rcx}));
         push(make_inst(MOp::Mov, compute, dst_operand(), Operand{Reg::Rax}));
         check_overflow(Cond::B);
         return true;
