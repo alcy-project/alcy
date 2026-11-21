@@ -22,9 +22,10 @@ file server can host.
     uv run ./tools/site.py budget           # check site/dist against its budgets
     uv run ./tools/site.py serve            # serve it on :8000
 
-`build` builds the docsite generator first when one is not on disk; the
-pages cannot be stamped without it. The generator is a host release
-build, independent of the build's `--mode` and `--build-subdir`.
+`build` builds the docsite generator first through ninja, which keeps
+it in step with the compiler and the standard library the guide's
+fences use. An up-to-date build is a no-op. The generator is a host
+release build, independent of the build's `--mode` and `--build-subdir`.
 
 `build` takes whatever compiler artifacts it finds and warns when there
 are none, so the site still works for highlighting alone. Pass
@@ -740,9 +741,11 @@ def build_guide(dist_dir: Path) -> None:
 
 
 def ensure_docsite() -> Path:
+    # Always go through ninja, even when the binary is on disk: it links
+    # the compiler and links the standard library into the fence check,
+    # so a stale binary compiles the guide against an older language.
+    # An up-to-date build is a no-op.
     candidate = project_root_dir / "out" / DOCSITE_BUILD_SUBDIR / "alcy-docsite"
-    if candidate.is_file():
-        return candidate
     log("building the docsite generator")
     code = build(
         target=DOCSITE_TARGET,

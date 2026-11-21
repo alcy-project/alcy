@@ -144,12 +144,13 @@ uv run ./tools/site.py budget         # check the built pages' weight
 uv run ./tools/site.py serve          # http://127.0.0.1:8000/
 ```
 
-`build` builds the docsite generator first when one is not on disk,
-as a host release build in `out/docsite/`. An existing binary is reused;
-the pages cannot be stamped without it. The generator is separate from
-the compiler module that `--with-compiler` builds: the guide's fences are
-compiled by the generator itself, while that module only serves the
-playground's Check and Run buttons.
+`build` runs the docsite generator's build first, as a host release build
+in `out/docsite/`. Ninja keeps it in step with the compiler and the
+standard library the guide's fences compile against; an up-to-date build
+is a no-op. The generator is separate from the compiler module that
+`--with-compiler` builds: the guide's fences are compiled by the
+generator itself, while that module only serves the playground's Check
+and Run buttons.
 
 `tree-sitter` (the CLI, for the grammar wasm) and `bun` (TypeScript
 and `web-tree-sitter`, the versions in `config.toml` installed into
