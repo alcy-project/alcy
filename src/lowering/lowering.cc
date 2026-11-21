@@ -2426,8 +2426,21 @@ void Lowerer::lower_fn(const FnEntry& entry) {
       for (; pending_at < runtime_param_idx.size(); ++pending_at) {
         const ir::TypeIdx ptype = entry.params[runtime_param_idx[pending_at]];
         const ir::RegisterIdx preg = pending_params_[pending_at];
+        // A collected argument owns its value. Give it a local place the
+        // drop pass can end, like every other parameter, instead of
+        // leaving the register as an unowned slot that leaks whatever
+        // the caller moved in.
+        const ir::RegisterIdx addr =
+            emit(ir::Opcode::Alloca, ptype, {size_one});
+        emit_void(ir::Opcode::Store,
+                  {to_operand(preg, ptype), to_operand(addr, ptype)});
+        const u32 slot = static_cast<u32>(locals.size());
+        locals.emplace_back("", addr, ptype);
+        locals[slot].is_param = true;
+        record_event(OwnershipEvent::Kind::Bind, slot, {}, fn.name.span);
+        addr_names_.push_back({addr, "", /*is_param=*/true});
         variadic_slots_.push_back(
-            Val{to_operand(preg, ptype), ptype, false, true});
+            Val{to_operand(addr, ptype), ptype, true, true});
         shape.value.slot_types.push_back(ptype);
       }
       CompScope scope;
