@@ -359,10 +359,8 @@ std::unordered_map<std::string, std::string> template_values_for(
                                                "site.playground")
                     : std::string("alcy");
   const std::string description =
-      is_playground
-          ? ssg::translate(context.catalog, language, "meta.playground")
-          : std::string(
-                "An experimental statically-typed programming language.");
+      ssg::translate(context.catalog, language,
+                     is_playground ? "meta.playground" : "meta.landing");
   values["social"] = ssg::social_meta(title, description, route);
   values["speculation"] = ssg::speculation_rules();
   const std::string stamp_text = ssg::escape_html(context.stamp.text);

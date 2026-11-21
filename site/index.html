@@ -9,10 +9,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="alcy: an experimental statically-typed programming language, with a browser playground and a guide."
-    />
+    <meta name="description" content="{{t:meta.landing}}" />
     <title>alcy</title>
     {{boot}}
     {{catalog}}
@@ -28,24 +25,14 @@
 
     <main class="site-main" id="content" tabindex="-1">
       <h1>alcy</h1>
-      <p class="tagline">An experimental statically-typed programming language.</p>
-      <p>
-        The project is in early development and not yet usable: the language,
-        its standard library, and the compiler are still being designed. The
-        compiler is written in C++20 and targets native code through LLVM and
-        WebAssembly through a direct back end, which is what lets the
-        playground compile and run programs in the browser.
-      </p>
+      <p class="tagline">{{t:landing.tagline}}</p>
+      <p>{{t:landing.intro}}</p>
       <div class="actions">
-        <a class="primary" href="{{home}}playground/">Open the playground</a>
-        <a href="{{home}}guide/">Read the guide</a>
-        <a href="{{home}}reference/">Look up the language</a>
+        <a class="primary" href="{{home}}playground/">{{t:landing.actions.playground}}</a>
+        <a href="{{home}}guide/">{{t:landing.actions.guide}}</a>
+        <a href="{{home}}reference/">{{t:landing.actions.reference}}</a>
       </div>
-      <p>
-        The guide describes the language as it exists today, and every example
-        in it is compiled when the site is built. The reference is the
-        specification every alcy program is written against.
-      </p>
+      <p>{{t:landing.behind}}</p>
     </main>
 
     <footer class="site-footer">
