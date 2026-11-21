@@ -158,7 +158,7 @@ Body build_error_kind() {
 // The allocator. The platform's own aligned allocator answers, and a
 // block it refuses ends the process the way a panic does; the program
 // has nothing to run without the memory it asked for.
-Body build_alloc(RoData& rodata) {
+[[maybe_unused]] Body build_alloc(RoData& rodata) {
   Body body;
   // posix_memalign(&slot, align, size): the size arrived in `rdi` and
   // the alignment in `rsi`, which is not the order the call reads them.
@@ -214,7 +214,7 @@ Body build_alloc(RoData& rodata) {
 
 // The release. The platform's own free answers; a null block was never
 // a block, and free reads it the same way.
-Body build_dealloc(RoData& rodata) {
+[[maybe_unused]] Body build_dealloc(RoData& rodata) {
   Body body;
   const SymbolRef free_fn = callee(body, "free");
   body.insts.push_back(make_inst(MOp::Call, 8, Operand{SymbolRef{free_fn.id}}));
@@ -257,10 +257,12 @@ Body build_alloc_fs() {
   MInst joined = make_inst(MOp::Nop, 8);
   joined.label = ok;
   body.insts.push_back(joined);
+  // A syscall clobbers rcx and r11; the length survives in rsi, where
+  // it was handed to mmap as the mapping size.
   mov(MOp::Mov,
       Operand{
           Mem{.base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
-      Operand{Reg::Rcx});
+      Operand{Reg::Rsi});
   mov(MOp::Add, Operand{Reg::Rax}, Operand{Imm{16}});
   body.insts.push_back(make_inst(MOp::Ret, 8));
   return body;
@@ -291,7 +293,7 @@ bool defines(const std::string_view name) {
          name == "alcy_alloc" || name == "alcy_dealloc";
 }
 
-Body build(const std::string_view name, RoData& rodata, bool freestanding) {
+Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
   if (name == "alcy_print") {
     return build_writer(name, rodata, 1, /*newline=*/false);
   }
@@ -317,10 +319,10 @@ Body build(const std::string_view name, RoData& rodata, bool freestanding) {
     return build_error_kind();
   }
   if (name == "alcy_alloc") {
-    return freestanding ? build_alloc_fs() : build_alloc(rodata);
+    return build_alloc_fs();
   }
   if (name == "alcy_dealloc") {
-    return freestanding ? build_dealloc_fs() : build_dealloc(rodata);
+    return build_dealloc_fs();
   }
   DCHECK_MSG(false, "the runtime was asked for a name it does not define");
   return Body{};

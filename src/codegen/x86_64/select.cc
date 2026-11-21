@@ -1752,6 +1752,15 @@ bool Selector::emit_call(const ir::Instruction& instr,
     push(make_inst(MOp::Lea, 8, Operand{ARG_REGS[next_register++]},
                    Operand{SlotRef{vreg_of(instr.dst, dst_type(instr)), 0}}));
   }
+  if (indirect) {
+    // A function value is the code and the environment it owns. The
+    // environment is the first argument the closure body reads, before
+    // any source argument.
+    const u32 vreg =
+        vreg_of(operand_at(instr, 0).as_register(), operand_at(instr, 0).type);
+    push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
+                   Operand{SlotRef{vreg, 8}}));
+  }
   for (u32 arg = 1; arg < count; ++arg) {
     const ir::Operand& value = operand_at(instr, arg);
     const ir::TypeTag tag = storage_.types()[value.type].tag;
@@ -1827,13 +1836,8 @@ bool Selector::emit_call(const ir::Instruction& instr,
                    *side));
   }
   if (indirect) {
-    // A function value is the code and the environment it owns; the
-    // call goes through the code word, and the environment rides
-    // ahead of every argument.
     const u32 vreg =
         vreg_of(operand_at(instr, 0).as_register(), operand_at(instr, 0).type);
-    push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
-                   Operand{SlotRef{vreg, 8}}));
     push(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{SlotRef{vreg, 0}}));
     push(make_inst(MOp::CallReg, 8, Operand{Reg::Rax}));
   } else {
