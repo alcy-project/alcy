@@ -690,7 +690,7 @@ fn log(comp fmt: str, args: ..) -> i32 {
         (integer)))))
 
 ================================================================================
-A test block with one entry
+A conditional group with one test
 ================================================================================
 
 #[when(testing)] {
@@ -720,7 +720,7 @@ A test block with one entry
             (boolean)))))))
 
 ================================================================================
-A test block holds the helpers its entries share
+A conditional group holds the helpers its tests share
 ================================================================================
 
 #[when(testing)] {
@@ -789,7 +789,7 @@ A test block holds the helpers its entries share
                 (string)))))))))
 
 ================================================================================
-A test block sits among the module's other items
+A conditional group sits among the module's other items
 ================================================================================
 
 const TWICE: i64 := 2
@@ -830,7 +830,7 @@ fn main() -> i32 {
         (integer)))))
 
 ================================================================================
-A test entry may declare a return type
+A test may declare a return type
 ================================================================================
 
 #[when(testing)] {
@@ -858,7 +858,7 @@ A test entry may declare a return type
           (integer))))))
 
 ================================================================================
-A test block does not nest
+Conditional groups nest
 ================================================================================
 
 #[when(testing)] {
@@ -889,7 +889,7 @@ A test block does not nest
         (block)))))
 
 ================================================================================
-A test entry takes no arguments
+A test takes no arguments
 ================================================================================
 
 #[when(testing)] {

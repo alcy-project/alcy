@@ -1,9 +1,9 @@
 # `alcy test`
 
-Build a package as it stands, with its tests compiled as an item in
+Build a package as it stands, with its tests compiled as items in
 the tree, and run the tests in it. `alcy test` is what round-trips
 compiler changes against the package: it exercises the package's own
-`test { }` blocks with the same code the program itself uses.
+`#[test] fn`s with the same code the program itself uses.
 
 ## Usage
 
@@ -21,12 +21,13 @@ in `.al` is rejected.
 
 ## How tests enter the program
 
-The source tells the test runner where to look by writing a `test { }`
-block in any module of the package:
+The source marks a function as a test with `#[test]` and gives the whole
+set an existence condition with `#[when(testing)]` in any module of the
+package:
 
 ```text
-test {
-  test adds() {
+#[when(testing)] {
+  #[test] fn adds() {
     assert_eq(util::twice(2), 4)
   }
 
@@ -38,9 +39,14 @@ test {
 }
 ```
 
-- Only the package's own `test { }` blocks are picked up. A dependency's
-  is not, and never is.
-- The entries and helpers inside the block become ordinary free functions
+`#[test]` says what the function is; `#[when(testing)]` says when it
+exists. Other commands leave the group out entirely, so the tests never
+enter a build or a check. The gate is general: a `#[when(EXPR)] { ... }`
+group can hold any items and can use any fact of the build descriptor.
+
+- Only the package's own `#[test] fn`s are picked up. A dependency's
+  are not, and never are.
+- The test functions and the helpers beside them are ordinary functions
   of the module that wrote them. Nothing is imported for you.
 - `alcy test` links those functions into one program
   instead of the package's own `main`, then runs that program.
@@ -57,7 +63,7 @@ except through the package it operates on.
 | --- | --- |
 | `--list` | Print the tests the build would run, one full name per line, and run none |
 | `--filter TEXT` | Keep only tests whose reported name contains this text. A superstring keeps every match; e.g. `vector` keeps `my_vector` too |
-| `--no-run` | Build the seeded program the tests became, and stop before running it |
+| `--no-run` | Build the test program and stop before running it |
 | `--execution multi-process` (default) | One process per test: a test that aborts kills itself and the rest report |
 | `--execution single-thread` | Every test in one process; a failing test ends the run and the report says the run stopped early |
 
