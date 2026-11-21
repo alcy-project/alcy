@@ -36,6 +36,9 @@ text::JsonValue lens_json(const Document& document,
                           PositionCache& positions) {
   text::JsonValue lens = text::JsonValue::make_object();
   lens.set("range", range_json(document, name.offset, name.length));
+  // LSP leaves kind values to the server; a stable, namespaced value lets
+  // clients filter reference lenses apart from others they show.
+  lens.set("kind", text::JsonValue::make_string("alcy.references"));
 
   text::JsonValue locations = text::JsonValue::make_array();
   std::unordered_set<FullSpanKey, FullSpanKeyHash> seen;

@@ -61,8 +61,11 @@ std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
 
 // The kinds the checker attached to names, addressable by the span a
 // name occupies, the end of a path, or the name itself.
+enum class TokenModifier : u8 { Declaration = 0, Mutable = 1 };
+
 struct SymbolKinds {
   std::unordered_map<u64, SemanticTokenType> by_span;
+  std::unordered_map<u64, u8> modifiers;
   std::unordered_map<u32, SemanticTokenType> by_path_end;
   std::unordered_map<std::string_view, SemanticTokenType> by_name;
 };
@@ -77,6 +80,24 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
   const ast::AstArena& ast = analysis.context().ast;
   const analyzer::CheckedPackage& package = analysis.package();
   const source::FileId root = analysis.root();
+  const auto mark_declaration = [&](diag::Span span, bool is_mut = false) {
+    if (span.file != root || span.length == 0) {
+      return;
+    }
+    u8& bits = kinds.modifiers[span_key(span)];
+    bits |= static_cast<u8>(1u << static_cast<u8>(TokenModifier::Declaration));
+    if (is_mut) {
+      bits |= static_cast<u8>(1u << static_cast<u8>(TokenModifier::Mutable));
+    }
+  };
+  ast.patterns.for_each_node([&](const ast::PatternIdx index) {
+    const ast::PatternNode& node = ast.patterns[index];
+    if (node.kind == ast::PatternKind::Ident) {
+      mark_declaration(node.payload.ident.name.span);
+    } else if (node.kind == ast::PatternKind::MutIdent) {
+      mark_declaration(node.payload.mut_ident.name.span, true);
+    }
+  });
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
       if (!fn.item.is_valid()) {
@@ -86,6 +107,7 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
                                                   : SemanticTokenType::Function;
       const diag::Span name = ::ast::item_name_span(ast, ast.items[fn.item]);
       add_span(kinds, name, type);
+      mark_declaration(name);
       if (name.file == root) {
         kinds.by_name.emplace(fn.name, type);
       }
@@ -97,6 +119,7 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       const diag::Span name =
           ::ast::item_name_span(ast, ast.items[method.item]);
       add_span(kinds, name, SemanticTokenType::Method);
+      mark_declaration(name);
       kinds.by_name.emplace(method.name, SemanticTokenType::Method);
     }
     for (const analyzer::CheckedModule::StructInfo& info : module.structs) {
@@ -106,11 +129,13 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       const ast::ItemNode& item = ast.items[info.item];
       const diag::Span name = ::ast::item_name_span(ast, item);
       add_span(kinds, name, SemanticTokenType::Struct);
+      mark_declaration(name);
       kinds.by_name.emplace(item.payload.get<ast::ItemStruct>().name.name,
                             SemanticTokenType::Struct);
       for (const ast::ItemStructField& field :
            item.payload.get<ast::ItemStruct>().fields) {
         add_span(kinds, field.name.span, SemanticTokenType::Property);
+        mark_declaration(field.name.span);
       }
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
@@ -118,12 +143,14 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
         continue;
       }
       const ast::ItemNode& item = ast.items[info.item];
-      add_span(kinds, ::ast::item_name_span(ast, item),
-               SemanticTokenType::Enum);
+      const diag::Span name = ::ast::item_name_span(ast, item);
+      add_span(kinds, name, SemanticTokenType::Enum);
+      mark_declaration(name);
       kinds.by_name.emplace(info.name, SemanticTokenType::Enum);
       const ast::ItemEnum& declaration = item.payload.get<ast::ItemEnum>();
       for (const ast::ItemEnumVariant& variant : declaration.variants) {
         add_span(kinds, variant.name.span, SemanticTokenType::EnumMember);
+        mark_declaration(variant.name.span);
         kinds.by_name.emplace(variant.name.name, SemanticTokenType::EnumMember);
       }
     }
@@ -131,8 +158,9 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       if (!info.item.is_valid()) {
         continue;
       }
-      add_span(kinds, ::ast::item_name_span(ast, ast.items[info.item]),
-               SemanticTokenType::Variable);
+      const diag::Span name = ::ast::item_name_span(ast, ast.items[info.item]);
+      add_span(kinds, name, SemanticTokenType::Variable);
+      mark_declaration(name);
       kinds.by_name.emplace(info.name, SemanticTokenType::Variable);
     }
   }
@@ -206,7 +234,8 @@ std::vector<u32> semantic_tokens_in(const Document& document,
   u32 previous_line = 0;
   u32 previous_character = 0;
   bool first = true;
-  const auto emit = [&](Position start, u32 length, SemanticTokenType type) {
+  const auto emit = [&](Position start, u32 length, SemanticTokenType type,
+                        u8 modifier_bits = 0) {
     if (length == 0) {
       return;
     }
@@ -220,7 +249,7 @@ std::vector<u32> semantic_tokens_in(const Document& document,
     data.push_back(delta_character);
     data.push_back(length);
     data.push_back(static_cast<u32>(type));
-    data.push_back(0);
+    data.push_back(modifier_bits);
     previous_line = start.line;
     previous_character = start.character;
     first = false;
@@ -228,6 +257,8 @@ std::vector<u32> semantic_tokens_in(const Document& document,
   // A token cannot cross a line on the wire, so a block comment or a
   // multi-line string is emitted one line at a time.
   const auto emit_span = [&](diag::Span span, SemanticTokenType type) {
+    const auto mod = kinds.modifiers.find(span_key(span));
+    const u8 modifier_bits = mod == kinds.modifiers.end() ? 0 : mod->second;
     const usize end =
         std::min(static_cast<usize>(span.offset) + span.length, range_end);
     usize begin = span.offset;
@@ -242,7 +273,7 @@ std::vector<u32> semantic_tokens_in(const Document& document,
       }
       const Position start = document.index().position_at(source, begin);
       const Position stop = document.index().position_at(source, content_end);
-      emit(start, stop.character - start.character, type);
+      emit(start, stop.character - start.character, type, modifier_bits);
       begin = line_end + 1;
     }
   };

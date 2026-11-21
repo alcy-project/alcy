@@ -181,4 +181,8 @@ enum class SemanticTokenType : u8 {
 // is SemanticTokenType::Count.
 std::span<const std::string_view> semantic_token_type_names();
 
+// The semantic token modifiers, in bit order: a token's modifier word is
+// the bits at these positions.
+text::JsonValue semantic_token_modifier_names();
+
 }  // namespace lsp

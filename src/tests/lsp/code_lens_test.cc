@@ -27,6 +27,7 @@ TEST_CASE("A code lens counts the references of each declaration") {
   }
   CHECK(lens != nullptr);
   if (lens != nullptr) {
+    CHECK(lens->find("kind")->as_string() == "alcy.references");
     CHECK(lens->find("command")->find("title")->as_string() == "1 reference");
     CHECK(lens->find("command")->find("arguments")->as_array().size() == 3);
   }

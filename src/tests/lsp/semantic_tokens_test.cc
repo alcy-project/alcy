@@ -60,6 +60,31 @@ u32 type_at(const std::vector<Decoded>& tokens, u32 line, u32 character) {
   return 0;
 }
 
+// The modifier word at a position, or 0 when no token starts there.
+u32 modifier_at(const text::JsonValue& result, u32 line, u32 character) {
+  const text::JsonValue* data = result.find("data");
+  if (data == nullptr) {
+    return 0;
+  }
+  const std::span<const text::JsonValue> flat = data->as_array();
+  u32 current_line = 0;
+  u32 current_character = 0;
+  for (usize i = 0; i + 4 < flat.size(); i += 5) {
+    const u32 delta_line = static_cast<u32>(flat[i].as_number());
+    const u32 delta_character = static_cast<u32>(flat[i + 1].as_number());
+    if (delta_line == 0) {
+      current_character += delta_character;
+    } else {
+      current_line += delta_line;
+      current_character = delta_character;
+    }
+    if (current_line == line && current_character == character) {
+      return static_cast<u32>(flat[i + 4].as_number());
+    }
+  }
+  return 0;
+}
+
 std::vector<u32> flat_data(const text::JsonValue& result) {
   std::vector<u32> out;
   const text::JsonValue* data = result.find("data");
@@ -125,6 +150,18 @@ TEST_CASE("A struct name and its field carry their kinds") {
       decode(semantic_tokens(document, analysis));
   CHECK(type_at(tokens, 0, 7) == 2);  // Point
   CHECK(type_at(tokens, 1, 2) == 7);  // x
+}
+
+TEST_CASE("Declarations and mutable bindings carry modifiers") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "fn main() -> i32 {\n  mut n := 0\n  n = n + 1\n  ret n\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue result = semantic_tokens(document, analysis);
+  // Bit 0 is declaration, bit 1 is mutable.
+  CHECK(modifier_at(result, 0, 3) == 1);  // main: declaration
+  CHECK(modifier_at(result, 1, 6) == 3);  // mut n: declaration + mutable
+  CHECK(modifier_at(result, 2, 2) == 0);  // a use: no modifier
 }
 
 TEST_CASE("A comment is classified even when analysis fails") {

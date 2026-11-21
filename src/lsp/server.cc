@@ -611,7 +611,7 @@ void Server::initialize(const text::JsonValue& id,
   text::JsonValue semantic = text::JsonValue::make_object();
   text::JsonValue legend = text::JsonValue::make_object();
   legend.set("tokenTypes", semantic_token_types());
-  legend.set("tokenModifiers", text::JsonValue::make_array());
+  legend.set("tokenModifiers", semantic_token_modifier_names());
   semantic.set("legend", std::move(legend));
   text::JsonValue full = text::JsonValue::make_object();
   full.set("delta", text::JsonValue::make_bool(true));
@@ -631,7 +631,9 @@ void Server::initialize(const text::JsonValue& id,
   capabilities.set("workspaceSymbolProvider", text::JsonValue::make_bool(true));
   capabilities.set("callHierarchyProvider", text::JsonValue::make_bool(true));
   capabilities.set("typeHierarchyProvider", text::JsonValue::make_bool(true));
-  capabilities.set("codeLensProvider", text::JsonValue::make_object());
+  text::JsonValue code_lens = text::JsonValue::make_object();
+  code_lens.set("resolveProvider", text::JsonValue::make_bool(false));
+  capabilities.set("codeLensProvider", std::move(code_lens));
   text::JsonValue diagnostic_provider = text::JsonValue::make_object();
   diagnostic_provider.set("interFileDependencies",
                           text::JsonValue::make_bool(true));

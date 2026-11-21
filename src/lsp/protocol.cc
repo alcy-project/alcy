@@ -107,10 +107,20 @@ static_assert(
         static_cast<usize>(SemanticTokenType::Count),
     "the semantic token legend and SemanticTokenType are out of step");
 
+constexpr std::string_view TOKEN_MODIFIER_NAMES[] = {"declaration", "mutable"};
+
 }  // namespace
 
 std::span<const std::string_view> semantic_token_type_names() {
   return TOKEN_TYPE_NAMES;
+}
+
+text::JsonValue semantic_token_modifier_names() {
+  text::JsonValue out = text::JsonValue::make_array();
+  for (const std::string_view name : TOKEN_MODIFIER_NAMES) {
+    out.push(text::JsonValue::make_string(std::string(name)));
+  }
+  return out;
 }
 
 }  // namespace lsp
