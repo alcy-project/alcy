@@ -382,6 +382,23 @@ Encoded encode(const Body& body) {
         // Widens an unsigned value: `movzx r, r/m8` and its 16-bit form,
         // from a register or from memory.
         const Reg to = std::get<Reg>(inst.at(0));
+        if (width == 4) {
+          // There is no `movzx r64, r/m32`; a 32-bit mov zero-extends
+          // into the full register on its own.
+          if (const Reg* reg_from = std::get_if<Reg>(&inst.at(1));
+              reg_from != nullptr) {
+            prefix(out, 4, false, to, *reg_from, std::nullopt);
+            out.push_back(0x8b);
+            modrm_rr(out, to, *reg_from);
+          } else {
+            const Mem& mem_from = std::get<Mem>(inst.at(1));
+            prefix(out, 4, false, to, base_of(mem_from), index_of(mem_from),
+                   /*rm_register=*/false);
+            out.push_back(0x8b);
+            mem_disp(out, modrm_mem(out, to, mem_from), mem_from.disp);
+          }
+          break;
+        }
         prefix(out, 8, true, to, std::nullopt, std::nullopt);
         out.push_back(0x0f);
         out.push_back(width == 1 ? 0xb6 : 0xb7);
