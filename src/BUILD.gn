@@ -30,6 +30,7 @@ group("base_modules") {
     "base",
     "config",
     "debug",
+    "fingerprint",
     "//third_party/fpag",
   ]
 }

@@ -1,0 +1,14 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("fingerprint") {
+  sources = [
+    "fingerprint.cc",
+    "fingerprint.h",
+  ]
+  configs += [ "//src:alcy_config" ]
+  deps = [
+    "//src/base",
+    "//third_party/fpag",
+  ]
+}
