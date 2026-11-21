@@ -59,18 +59,18 @@
 
 ## Tests
 
-- A `test` block states a module's tests. It sits at module level, does
-  not nest, and its entries and helpers are never `pub`; each of those is
-  an error where it is written.
-- An entry takes no arguments, and the empty parameter list is syntax.
-  Success is returning, so an entry's return type is `()`. A written
-  return type is reported by the command that runs tests rather than by
-  the parse, which is what keeps a build from failing over a body it
-  never emits.
-- A block item's name must be free in the module the block joins. A name
-  the module already declares, a name a second block item takes, and
-  `main` are each refused: the first two put one name in one namespace
-  twice, and the third takes the entry point a test run supplies itself.
+- `#[test]` marks a function, not any other item; anything else that
+  carries it is an error where it is written. A test takes no
+  arguments. Existence on a build is a separate `#[when(testing)]`
+  gate, so a test left out of a build is not an error there.
+- Success is returning, so a test's return type is `()`. A written
+  return type is reported by the command that runs tests rather than
+  by the parse, which is what keeps a build from failing over a body
+  it never emits.
+- A test's name must be free in its module. A name the module already
+  declares, a name a second test takes, and `main` are each refused:
+  the first two put one name in one namespace twice, and the third
+  takes the entry point a test run supplies itself.
 - A test fails by panicking, and a panic is all a test can fail with:
   there is no error value and no unwinding, so an expectation is an
   ordinary expression that panics when it does not hold, and the

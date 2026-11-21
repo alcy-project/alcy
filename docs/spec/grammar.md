@@ -87,21 +87,23 @@ An item may be gated on the target: `#[when(EXPR)]` on the line above it
 includes the item in the build if `EXPR` is true and drops it otherwise, before
 anything resolves a name. The excluded item's names are nothing to the module:
 resolution, checking, and emission never see it, and its absence is never
-diagnosed. `EXPR` is a boolean expression over the `target` descriptor —
-`target.os`, `target.arch`, `target.freestanding` — with `==`, `!=`, `&&`, `||`,
-`!`, and parentheses. The descriptor's values are the ones the toolchain knows:
-a name outside its set is a diagnostic with the known set listed, not a check
-that quietly answers false. Multiple attributes conjunct, and the attribute
-applies to `use`, `static`, `const`, and impl blocks as well as to functions and
-types; a method in an `impl` block may be gated the same way. `#[when]` is the
-complete mechanism; there is no `#if` and no `any`/`not` — parentheses and `!`
-cover those. It cannot appear on statements or expressions, and it applies
-inside `test { }` blocks too — an entry whose gate fails is never compiled,
-never executed, and never counted in the test list. A gate that fails on this
+diagnosed. `EXPR` is a boolean expression over the build descriptor —
+`target.os`, `target.arch`, `target.freestanding`, and `testing` — with `==`,
+`!=`, `&&`, `||`, `!`, and parentheses. `testing` is true only for `alcy test`.
+The descriptor's values are the ones the invocation knows: a name outside its
+set is a diagnostic with the known set listed, not a check that quietly answers
+false. Multiple attributes conjunct, and the attribute applies to `use`,
+`static`, `const`, and impl blocks as well as to functions and types; a method
+in an `impl` block may be gated the same way. `#[when]` is the complete
+mechanism; there is no `#if` and no `any`/`not` — parentheses and `!` cover
+those. It cannot appear on statements or expressions, and it applies inside
+`#[when(EXPR)] { ... }` groups too — every item in a group inherits the gate,
+and one that fails is never compiled or executed. A gate that fails on this
 target drops the item before names are resolved: its body is parsed (syntax
 errors are reported), but nothing past parsing ever sees it. See items.md, "The
-`when` gate". `#[repr(C)]` is the other attribute: an FFI-layout marker on a
-struct. See ffi.md, "Layout and statics".
+`when` gate". `#[repr(C)]` is an FFI-layout marker on a struct (ffi.md, "Layout
+and statics"); `#[test]` on a `fn` marks the function a test that `alcy test`
+gathers (items.md).
 
 Methods take explicit receivers: `self`, `&self`, `&mut self`. `Self` denotes
 the implementing type inside `impl` blocks, and the spec's own type inside

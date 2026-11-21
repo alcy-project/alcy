@@ -51,21 +51,19 @@
   for the same target shape, the super must resolve to a spec in
   scope, and the chain must not cycle. A generic super-spec is
   deferred, as is a bound admitting the super's methods.
-- `test` declares a module's tests. The block holds one `test`
-  entry per test, `test name() { ... }`, and `fn` items for the
-  helpers they share. A test takes no arguments, so its parameter list
-  is empty, and it reports success by returning rather than by a value:
-  `()` is its return type. A block sits at module level and does not
-  nest, its items are never `pub`, and any other item in it is a parse
-  error: a run compiles the entries and the helpers, and nothing else.
-  A test declares nothing a program reads: the block is checked and
-  given a body only by the tool that runs tests, and a build, a check,
-  or a run of the package reads it and keeps it out of the program. The
-  tool that runs tests enters the package through a module of its own
-  making, whose items declare the `alcy_test_` prefix and the argument
-  intrinsics they need, so a module that declares those names itself is
-  refused by the run, and the diagnostic that reports it names the
-  reservation.
+- `#[test]` on a `fn` marks a test: the tool that runs tests gathers
+  those functions and calls each one. A test takes no arguments and
+  returns unit; it reports success by returning rather than by a value.
+  Existence is a separate question answered by `#[when(testing)]`:
+  a function so gated is part of the module only for a test run, while
+  a build, a check, and a run leave it out entirely. A `#[when(EXPR)]`
+  gate followed by a brace groups items without making a scope; the
+  items join the module's own list, so a group is a way to give many
+  tests one existence condition. The tool that runs tests enters the
+  package through a module of its own making, whose items declare the
+  `alcy_test_` prefix and the argument intrinsics they need, so a
+  module that declares those names itself is refused by the run, and
+  the diagnostic that reports it names the reservation.
 - `static` items have storage and MUST NOT contain `&mut`.
   `const X: T := ...` items are compile-time values: the initializer is
   evaluated during compilation, must terminate within the evaluation
@@ -87,31 +85,33 @@
 ## Item attributes
 
 The names are a closed set, and each one names its own section or
-ruler: `when(EXPR)` on an item gates it on the target descriptor,
-`repr(C)` on a `struct` fixes its FFI layout. Other names are
-rejected with guidance naming the known set; they are not read past
-or remembered silently. Both attributes sit on the line above the
-item and may repeat without interaction.
+ruler: `when(EXPR)` on an item gates it on the build descriptor,
+`repr(C)` on a `struct` fixes its FFI layout, and `test` on a `fn`
+marks the function a test. Other names are rejected with guidance
+naming the known set; they are not read past or remembered silently.
+Each attribute sits on the line above the item and may repeat without
+interaction.
 
 ## The `when` gate
 
-- `#[when(EXPR)]` on an item states a compile-time-known condition
-  over the `target` descriptor. If `EXPR` is true the item is part of
-  the module; if it is false the item does not exist there: it is
-  never resolved, checked, or emitted, and its absence is not
-  diagnosed. The gate is evaluated when the file is read, and it is
-  the only mechanism that selects items.
+- `#[when(EXPR)]` on an item states a compile-time-known condition over the
+  build descriptor: the target plus the invocation mode. If `EXPR` is true the
+  item is part of the module; if it is false the item does not exist there: it
+  is never resolved, checked, or emitted, and its absence is not diagnosed. The
+  gate is evaluated when the file is read, and it is the only mechanism that
+  selects items.
 
-- `EXPR` is a boolean expression over the `target` descriptor —
-  `target.os`, `target.arch`, `target.freestanding` — with `==`,
-  `!=`, `&&`, `||`, `!`, and parentheses. The descriptor's values are
-  the ones the toolchain knows, and the toolchain knows all of them:
+- `EXPR` is a boolean expression over the build descriptor —
+  `target.os`, `target.arch`, `target.freestanding`, and `testing` —
+  with `==`, `!=`, `&&`, `||`, `!`, and parentheses. The descriptor's
+  values are the ones the invocation knows, and it knows all of them:
 
   | key | values |
   | --- | --- |
   | `target.os` | `linux`, `darwin`, `windows`, `wasi`, `unknown` |
   | `target.arch` | `x86_64`, `aarch64`, `riscv64`, `wasm32`, `unknown` |
   | `target.freestanding` | boolean |
+  | `testing` | boolean; true only for `alcy test` |
 
   The `wasi` value is reserved for a `wasm32-wasi` target and is not
   produced by any target the toolchain ships today; the current wasm
@@ -132,8 +132,9 @@ item and may repeat without interaction.
   in `sys` and `path` possible without a separate package per OS.
 
 - Multiple `when` attributes on one item are a conjunction: every
-  gate must pass. Tests inside `test { }` blocks may be gated the
-  same way and are gone from a run where their gate fails.
+  gate must pass. Items inside a `#[when(EXPR)] { ... }` group inherit
+  the group's gate as part of that conjunction, and are gone from a
+  build where it fails.
 
 - The `use`, `static`, and `const` forms take a gate, so a facade
   may re-export the arm that belongs to this target and drop the
@@ -141,8 +142,9 @@ item and may repeat without interaction.
   inside them; a `spec` block may gate as one item, and its method
   signatures cannot gate individually.
 
-- A gate on a test entry excludes it from the run entirely: never
-  compiled, never executed, never counted in the test list.
+- `testing` is read from the invocation, not the target: `alcy test`
+  answers true, and every other command false. A test function's
+  marker is its role; this gate is what keeps it out of other builds.
 
 - Unknown attribute names are rejected with guidance; expressions that
   are not boolean are rejected; comparisons of operands of different

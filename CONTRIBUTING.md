@@ -26,7 +26,7 @@ uv run ./tools/build.py --target=all --mode=debug
 uv run ./tools/run.py --target=tests --mode=debug
 uv run ./tools/check_cases.py --steps=cli
 uv run ./tools/check_cases.py --steps=program
-# The standard library states its own behaviour in `test` blocks, and this
+# The standard library states its own behaviour in `#[test] fn`s, and this
 # runs them: one `alcy test` per member package, so a member that declares
 # no item yet is the only one excused.
 uv run ./tools/check_stdlib_tests.py

@@ -279,15 +279,15 @@ replaced. The foundations are in `roadmap.md`.
   allows, a value that lowers to the shape it should - is a statement
   about alcy source, and it is written in C++ only because the standard
   library had nowhere to state its own behaviour until `alcy test` could
-  compile a block. Such a case goes in a `test` block in the std module
+  compile a block. Such a case goes in a `#[test] fn` in the std module
   whose behaviour it describes, so `alcy test lib/std/<member>` runs it
   with the same command a user runs, over the source the module ships: a
   case that sits beside the code it describes cannot drift from that
   code's surface without the run failing. A case that asserts a program
   should be refused - a diagnostic, a rejected form - stays, because a
   refusal is only observable from the outside. What the doctest keeps of
-  the rest is the case about the compiler's own API, which no `test`
-  block can address.
+  the rest is the case about the compiler's own API, which no `#[test] fn`
+  can address.
 
 - [ ] A run starts one test process at a time, so a package's tests cost
   the sum of their times. `-j N` would start up to N of them and still
