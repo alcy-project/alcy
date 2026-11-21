@@ -1,4 +1,4 @@
-// `Set` is a thin wrapper over `Map<u8>`. Its methods reach the map
+// `Set` is a thin wrapper over `HashMap<String, u8>`. Its methods reach the map
 // through `self.map`, so the wrapper also pins that a method on a
 // field borrows the field rather than a copy of it: a copy would
 // insert into a temporary and leave the set empty.
@@ -10,26 +10,26 @@ fn key(i: i32) -> String {
 }
 
 fn main() -> i32 {
-  mut s := Set::new()
+  mut s := HashSet::<String>::new()
   if !s.is_empty() {
     ret 1
   }
-  if !s.insert("x") {
+  if !s.insert(String::from("x")) {
     ret 2
   }
-  if s.insert("x") {
+  if s.insert(String::from("x")) {
     ret 3
   }
-  if !s.contains("x") {
+  if !s.contains(String::from("x")) {
     ret 4
   }
   if s.len() != 1 {
     ret 5
   }
-  if !s.remove("x") {
+  if !s.remove(String::from("x")) {
     ret 6
   }
-  if s.remove("x") {
+  if s.remove(String::from("x")) {
     ret 7
   }
   if !s.is_empty() {
@@ -41,7 +41,7 @@ fn main() -> i32 {
   mut i := 0
   while i < 40 {
     k := key(i)
-    if !s.insert(k.as_str()) {
+    if !s.insert(k) {
       ret 9
     }
     i = i + 1
@@ -53,7 +53,7 @@ fn main() -> i32 {
   while i < 40 {
     if i % 2 == 0 {
       k := key(i)
-      if !s.remove(k.as_str()) {
+      if !s.remove(k) {
         ret 11
       }
     }
@@ -62,10 +62,10 @@ fn main() -> i32 {
   if s.len() != 20 {
     ret 12
   }
-  if s.contains("00") {
+  if s.contains(String::from("00")) {
     ret 13
   }
-  if !s.contains("01") {
+  if !s.contains(String::from("01")) {
     ret 14
   }
 
@@ -73,7 +73,7 @@ fn main() -> i32 {
   if !s.is_empty() {
     ret 15
   }
-  if s.contains("01") {
+  if s.contains(String::from("01")) {
     ret 16
   }
   ret 0

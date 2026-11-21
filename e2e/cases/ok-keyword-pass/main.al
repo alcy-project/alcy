@@ -1,6 +1,6 @@
 // The keyword table and a digit fold, the next step after scanning.
-fn classify(word: str, keywords: &Map<i32>) -> i32 {
-  match keywords.get(word) {
+fn classify(word: str, keywords: &HashMap < String, i32 >) -> i32 {
+  match keywords.get(String::from(word)) {
     Option::Some(kind) => {
       ret *kind
     }
@@ -25,9 +25,9 @@ fn parse_digits(text: str) -> i64 {
 }
 
 fn main() -> i32 {
-  mut keywords := Map::<i32>::new()
-  _ := keywords.insert("let", 10)
-  _ := keywords.insert("fn", 11)
+  mut keywords := HashMap::<String, i32>::new()
+  _ := keywords.insert(String::from("let"), 10)
+  _ := keywords.insert(String::from("fn"), 11)
   if classify("fn", &keywords) != 11 {
     ret 1
   }

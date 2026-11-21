@@ -1,16 +1,17 @@
 // Nested scopes with shadowing: a stack of maps, looked up innermost
 // first.
 struct Scopes {
-  frames: Vec<Map<i32>>,
+  frames: Vec < HashMap < String,
+  i32 >>,
 }
 
 impl Scopes {
   fn new() -> Scopes {
-    ret Scopes { frames: Vec::<Map<i32>>::new() }
+    ret Scopes { frames: Vec::< HashMap < String, i32 >> ::new() }
   }
 
   fn push(mut self: &mut Self) {
-    self.frames.push(Map::<i32>::new())
+    self.frames.push(HashMap::< String, i32 > ::new())
   }
 
   fn pop(mut self: &mut Self) -> bool {
@@ -25,7 +26,12 @@ impl Scopes {
     if self.frames.is_empty() {
       ret false
     }
-    _ := self.frames.last_mut().or_panic_with_message("expected a value").insert(name, kind)
+    _ :=
+      self
+      .frames
+      .last_mut()
+      .or_panic_with_message("expected a value")
+      .insert(String::from(name), kind)
     ret true
   }
 
@@ -33,7 +39,7 @@ impl Scopes {
     mut i := self.frames.len()
     while i > 0 {
       i = i - 1
-      match self.frames.at(i).or_panic_with_message("expected a value").get(name) {
+      match self.frames.at(i).or_panic_with_message("expected a value").get(String::from(name)) {
         Option::Some(kind) => {
           ret Option::Some(*kind)
         }

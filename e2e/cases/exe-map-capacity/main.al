@@ -2,19 +2,19 @@
 // table does at three quarters occupancy never fires for `n` inserts.
 // `Vec` and `String` report exactly the requested room.
 fn main() -> i32 {
-  mut m := Map::<i32>::with_capacity(8 as usize)
+  mut m := HashMap::<String, i32>::with_capacity(8 as usize)
   if m.capacity() < 8 as usize {
     ret 1
   }
   cap := m.capacity()
-  _ := m.insert("a", 1)
-  _ := m.insert("b", 2)
-  _ := m.insert("c", 3)
-  _ := m.insert("d", 4)
-  _ := m.insert("e", 5)
-  _ := m.insert("f", 6)
-  _ := m.insert("g", 7)
-  _ := m.insert("h", 8)
+  _ := m.insert(String::from("a"), 1)
+  _ := m.insert(String::from("b"), 2)
+  _ := m.insert(String::from("c"), 3)
+  _ := m.insert(String::from("d"), 4)
+  _ := m.insert(String::from("e"), 5)
+  _ := m.insert(String::from("f"), 6)
+  _ := m.insert(String::from("g"), 7)
+  _ := m.insert(String::from("h"), 8)
   if m.len() != 8 as usize {
     ret 2
   }
@@ -23,7 +23,7 @@ fn main() -> i32 {
   }
 
   // One more entry crosses three quarters of the reserved slots.
-  _ := m.insert("i", 9)
+  _ := m.insert(String::from("i"), 9)
   if m.capacity() == cap {
     ret 4
   }

@@ -18,14 +18,14 @@ fn main() -> i32 {
   if *v.at(1).or_panic_with_message("expected a value") != 17 {
     ret 3
   }
-  mut m := Map::<i32>::new()
-  _ := m.insert("k", 1)
-  m["k"] = m["k"] + 1
-  if *m.get("k").or_panic_with_message("expected a value") != 2 {
+  mut m := HashMap::<String, i32>::new()
+  _ := m.insert(String::from("k"), 1)
+  m[String::from("k")] = m[String::from("k")] + 1
+  if *m.get(String::from("k")).or_panic_with_message("expected a value") != 2 {
     ret 4
   }
-  m["k"] += 3
-  if *m.get("k").or_panic_with_message("expected a value") != 5 {
+  m[String::from("k")] += 3
+  if *m.get(String::from("k")).or_panic_with_message("expected a value") != 5 {
     ret 5
   }
   ret 0

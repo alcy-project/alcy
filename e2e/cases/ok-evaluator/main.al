@@ -5,13 +5,13 @@ enum Value {
   Name(String),
 }
 
-fn eval(v: &Value, env: &Map<i64>) -> Result<i64, String> {
+fn eval(v: &Value, env: &HashMap < String, i64 >) -> Result<i64, String> {
   match v {
     Value::Num(n) => {
       ret Result::Ok(*n)
     }
     Value::Name(name) => {
-      match env.get(name.as_str()) {
+      match env.get(String::from(name.as_str())) {
         Option::Some(found) => {
           ret Result::Ok(*found)
         }
@@ -24,8 +24,8 @@ fn eval(v: &Value, env: &Map<i64>) -> Result<i64, String> {
 }
 
 fn main() -> i32 {
-  mut env := Map::<i64>::new()
-  _ := env.insert("x", 10)
+  mut env := HashMap::<String, i64>::new()
+  _ := env.insert(String::from("x"), 10)
   a := Value::Name(String::from("x"))
   match eval(&a, &env) {
     Result::Ok(v) => {

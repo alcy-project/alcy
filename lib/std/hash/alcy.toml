@@ -13,6 +13,9 @@ export = ["prelude", "hash", "xxh3", "mix"]
 
 [dependencies]
 "alcy/std/core" = {}
+"alcy/std/text" = {}
+"alcy/std/alloc" = {}
+"alcy/std/unicode" = {}
 
 # Hash is a scalar target's spec, like Eq, so the suite seals it.
 [spec]

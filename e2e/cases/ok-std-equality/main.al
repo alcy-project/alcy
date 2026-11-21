@@ -21,10 +21,10 @@ fn main() -> i32 {
     ret 4
   }
 
-  mut left := Set::new()
-  _ := left.insert("x")
-  mut right := Set::new()
-  _ := right.insert("x")
+  mut left := HashSet::<String>::new()
+  _ := left.insert(String::from("x"))
+  mut right := HashSet::<String>::new()
+  _ := right.insert(String::from("x"))
   if !(left == right) {
     ret 5
   }

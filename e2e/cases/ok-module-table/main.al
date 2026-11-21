@@ -2,7 +2,8 @@
 // the table by name.
 struct Module {
   name: String,
-  symbols: Map<i32>,
+  symbols: HashMap < String,
+  i32 >,
 }
 
 fn lookup(modules: &Vec<Module>, module_name: str, name: str) -> Option<i32> {
@@ -10,7 +11,7 @@ fn lookup(modules: &Vec<Module>, module_name: str, name: str) -> Option<i32> {
   while i < modules.len() {
     m := modules.at(i).or_panic_with_message("expected a value")
     if m.name.as_str() == module_name {
-      match m.symbols.get(name) {
+      match m.symbols.get(String::from(name)) {
         Option::Some(v) => {
           ret Option::Some(*v)
         }
@@ -25,12 +26,12 @@ fn lookup(modules: &Vec<Module>, module_name: str, name: str) -> Option<i32> {
 }
 
 fn main() -> i32 {
-  mut root := Module { name: String::from("root"), symbols: Map::<i32>::new() }
-  _ := root.symbols.insert("x", 1)
-  _ := root.symbols.insert("y", 2)
+  mut root := Module { name: String::from("root"), symbols: HashMap::< String, i32 > ::new() }
+  _ := root.symbols.insert(String::from("x"), 1)
+  _ := root.symbols.insert(String::from("y"), 2)
   mut modules := Vec::<Module>::new()
   modules.push(root)
-  modules.push(Module { name: String::from("lib"), symbols: Map::<i32>::new() })
+  modules.push(Module { name: String::from("lib"), symbols: HashMap::< String, i32 > ::new() })
   match lookup(&modules, "root", "x") {
     Option::Some(v) => {
       if v != 1 {

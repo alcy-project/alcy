@@ -1,42 +1,42 @@
 // `Set` equality compares membership only: insertion order does not
 // matter, and lengths and keys must match.
 fn main() -> i32 {
-  mut a := Set::new()
-  _ := a.insert("x")
-  _ := a.insert("y")
+  mut a := HashSet::<String>::new()
+  _ := a.insert(String::from("x"))
+  _ := a.insert(String::from("y"))
 
-  mut b := Set::new()
-  _ := b.insert("y")
-  _ := b.insert("x")
+  mut b := HashSet::<String>::new()
+  _ := b.insert(String::from("y"))
+  _ := b.insert(String::from("x"))
   if !(a == b) {
     ret 1
   }
 
-  mut short := Set::new()
-  _ := short.insert("x")
+  mut short := HashSet::<String>::new()
+  _ := short.insert(String::from("x"))
   if a == short {
     ret 2
   }
 
-  mut other := Set::new()
-  _ := other.insert("x")
-  _ := other.insert("z")
+  mut other := HashSet::<String>::new()
+  _ := other.insert(String::from("x"))
+  _ := other.insert(String::from("z"))
   if a == other {
     ret 3
   }
 
-  mut left := Set::new()
-  mut right := Set::new()
+  mut left := HashSet::<String>::new()
+  mut right := HashSet::<String>::new()
   if !(left == right) {
     ret 4
   }
-  _ := left.insert("x")
+  _ := left.insert(String::from("x"))
   if left == right {
     ret 5
   }
 
-  _ := a.remove("x")
-  _ := b.remove("x")
+  _ := a.remove(String::from("x"))
+  _ := b.remove(String::from("x"))
   if !(a == b) {
     ret 6
   }

@@ -57,7 +57,7 @@ fn lex(src: str) -> Vec<Token> {
   ret out
 }
 
-fn report(src: str, tokens: &Vec<Token>, known: &Map<i32>) -> Option<String> {
+fn report(src: str, tokens: &Vec<Token>, known: &HashMap < String, i32 >) -> Option<String> {
   mut out := String::new()
   mut bad := 0
   mut i := 0 as usize
@@ -68,7 +68,7 @@ fn report(src: str, tokens: &Vec<Token>, known: &Map<i32>) -> Option<String> {
         src
         .byte_slice(t.span.start, t.span.end)
         .or_panic_with_message("spans lie on scalar boundaries")
-      if !known.contains(word) {
+      if !known.contains(String::from(word)) {
         text := format("unknown {}\n", word)
         out.push_str(text.as_str())
         bad = bad + 1
@@ -84,8 +84,8 @@ fn report(src: str, tokens: &Vec<Token>, known: &Map<i32>) -> Option<String> {
 
 fn main() -> i32 {
   src := "let x 42"
-  mut known := Map::<i32>::new()
-  _ := known.insert("let", 1)
+  mut known := HashMap::<String, i32>::new()
+  _ := known.insert(String::from("let"), 1)
   tokens := lex(src)
   if tokens.len() != 3 {
     ret 1

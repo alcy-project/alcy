@@ -8,12 +8,12 @@ version = "0.1.0"
 license = "Apache-2.0 WITH LLVM-exception"
 
 [modules]
-include = ["prelude", "map", "set"]
+include = ["prelude", "hash_map", "hash_set"]
 # The public surface, spelled as the manifest package sees it.
 # Nothing
 # enforces it yet. Its `pub` items are also the implicit surface:
 # a program depending on this package sees them with no `use`.
-export = ["prelude", "map", "set"]
+export = ["prelude", "hash_map", "hash_set"]
 
 [dependencies]
 "alcy/std/core" = {}

@@ -3,23 +3,32 @@
 
 // `alcy/std/hash`: hashing as a capability.
 //
-// A hash is the u64 the default algorithm computes for a key. A key
-// that compares equal must hash equal; the table relies on it to find
-// a slot by hashing first and comparing only inside the probe chain.
-// `Eq` is the super-spec, so one `K: Hash` bound carries both promises.
+// A hash is the u64 the default algorithm computes for a value. It
+// summarizes bytes without claiming anything about equality, so a
+// caller that uses hashes to identify buckets asks for `Hash + Eq`:
+// equal keys must hash equal for such a table to find a slot by hashing
+// first and comparing only inside the probe chain.
 // The digest is implementation-defined: a future hashing design may
 // change the algorithm without changing this spec.
 
 use package::mix::mix64;
 use package::xxh3::xxh3_64;
 
-pub spec Hash: Eq {
+pub spec Hash {
   fn hash(self: &Self) -> u64;
 }
 
 impl Hash for str {
   fn hash(self: &Self) -> u64 {
     ret xxh3_64(*self)
+  }
+}
+
+// The owned string hashes through its bytes, like `str` does, so the
+// two views of the same bytes produce the same digest.
+impl Hash for String {
+  fn hash(self: &Self) -> u64 {
+    ret self.as_str().hash()
   }
 }
 
@@ -86,7 +95,24 @@ impl Hash for usize {
   }
 }
 
+// A digest is useful without equality: this type deliberately omits
+// `Eq`, which the separated spec allows.
+struct DigestOnly {
+  value: u64,
+}
+
+impl Hash for DigestOnly {
+  fn hash(self: &Self) -> u64 {
+    ret self.value
+  }
+}
+
 test {
+  test a_digest_needs_no_equality() {
+    d := DigestOnly { value: 7 }
+    assert(d.hash() == 7, "a value can be hashed without comparing equal")
+  }
+
   test the_text_hash_matches_the_xxh3_digest() {
     assert("abc".hash() == xxh3_64("abc"), "the impl uses the byte digest")
   }

@@ -12,8 +12,8 @@ impl P {
 }
 
 fn main() {
-  mut m := Map::<P>::new()
-  _ := m.insert("a", P { id: 1 })
-  _ := m.insert("a", P { id: 2 })
+  mut m := HashMap::<String, P>::new()
+  _ := m.insert(String::from("a"), P { id: 1 })
+  _ := m.insert(String::from("a"), P { id: 2 })
   println("after")
 }

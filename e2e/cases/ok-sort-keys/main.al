@@ -1,12 +1,12 @@
 // Collect a map's keys into a vector and order them, the shape a
 // front end uses to report declarations in name order.
 fn main() -> i32 {
-  mut m := Map::<i32>::new()
-  _ := m.insert("b", 2)
-  _ := m.insert("a", 1)
+  mut m := HashMap::<String, i32>::new()
+  _ := m.insert(String::from("b"), 2)
+  _ := m.insert(String::from("a"), 1)
   mut names := Vec::<String>::new()
-  for key in m.keys() {
-    names.push(String::from(key))
+  for (key, _) in m.into_iter() {
+    names.push(key)
   }
   if names.len() != 2 {
     ret 1

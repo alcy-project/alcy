@@ -28,14 +28,14 @@ fn main() -> i32 {
     ret 4
   }
 
-  mut m := Map::<i32>::new()
-  _ := m.insert("a", 1)
-  _ := m.insert("b", 2)
-  if m["a"] + m["b"] != 3 {
+  mut m := HashMap::<String, i32>::new()
+  _ := m.insert(String::from("a"), 1)
+  _ := m.insert(String::from("b"), 2)
+  if m[String::from("a")] + m[String::from("b")] != 3 {
     ret 5
   }
-  m["b"] = 5
-  if m["b"] != 5 {
+  m[String::from("b")] = 5
+  if m[String::from("b")] != 5 {
     ret 6
   }
 

@@ -147,16 +147,20 @@ replaced. The foundations are in `roadmap.md`.
   struct field) still refuses (`err-own-func-type`); and named storage
   (`struct H { f: fn(...) }`) needs generics threaded by hand.
 
-- [ ] `Map` key ergonomics, the rest: an `Entry` once the borrow rules
-  allow, generic keys now that the `Hash` spec exists, and bounds;
-  `keys()` traversal and `Vec` sorting moved to the roadmap's
-  iteration and operator items.
+- [ ] `HashMap` key ergonomics, the rest: the map is generic over
+  `K: Hash + Eq`, `String` hashes through its bytes,
+  and `Entry` fills absent keys. Lookups take the key by value
+  because a borrowed temporary keeps the borrow live across a `ret`;
+  a borrowing spelling, or a `Borrow`-like spec that can be
+  implemented for primitives, is still wanted. `keys()` traversal
+  and `Vec` sorting moved to the roadmap's iteration and operator
+  items.
 
 - [ ] A mutator that answers `bool` is discarded by a plain
-  statement with a warning: `Set::insert`, `Set::remove` and
-  `Map::insert` report what they did, and `a.insert(k)` alone throws
-  the answer away. `#[must_use]` on the return, or a spelling that
-  names the discard, is the decision; it wants one answer for the
+  statement with a warning: `HashSet::insert`, `HashSet::remove` and
+  `HashMap::insert` report what they did, and `a.insert(k)` alone
+  throws the answer away. `#[must_use]` on the return, or a spelling
+  that names the discard, is the decision; it wants one answer for the
   whole std rather than a `_` at each call site.
 
 - [ ] A value's type is named in three places, and a place is not a

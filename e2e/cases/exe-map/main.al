@@ -1,4 +1,4 @@
-// `Map<V>` keeps its keys by value: a key built outside survives the
+// `HashMap<String, V>` keeps its keys by value: a key built outside survives the
 // source buffer being overwritten, growth rehashes every live entry,
 // and removal leaves a tombstone that a later insert reuses.
 fn key(i: i32) -> String {
@@ -9,54 +9,54 @@ fn key(i: i32) -> String {
 }
 
 fn main() -> i32 {
-  mut m := Map::<i32>::new()
+  mut m := HashMap::<String, i32>::new()
   if !m.is_empty() {
     ret 1
   }
-  if m.get("a").is_some() {
+  if m.get(String::from("a")).is_some() {
     ret 2
   }
-  _ := m.insert("a", 1i32)
-  _ := m.insert("b", 2i32)
+  _ := m.insert(String::from("a"), 1i32)
+  _ := m.insert(String::from("b"), 2i32)
   if m.len() != 2 {
     ret 3
   }
-  if *m.get("a").or_panic_with_message("expected a value") != 1 {
+  if *m.get(String::from("a")).or_panic_with_message("expected a value") != 1 {
     ret 4
   }
-  mut q := m.get_mut("b").or_panic_with_message("expected a value")
+  mut q := m.get_mut(String::from("b")).or_panic_with_message("expected a value")
   *q = 20i32
-  if *m.get("b").or_panic_with_message("expected a value") != 20 {
+  if *m.get(String::from("b")).or_panic_with_message("expected a value") != 20 {
     ret 5
   }
   // Overwriting an existing key reports the old value and keeps the
   // length.
-  if m.insert("a", 3i32).or_panic_with_message("expected a value") != 1 {
+  if m.insert(String::from("a"), 3i32).or_panic_with_message("expected a value") != 1 {
     ret 6
   }
   if m.len() != 2 {
     ret 7
   }
-  if !m.contains("a") {
+  if !m.contains(String::from("a")) {
     ret 8
   }
-  if m.remove("a").or_panic_with_message("expected a value") != 3 {
+  if m.remove(String::from("a")).or_panic_with_message("expected a value") != 3 {
     ret 9
   }
   if m.len() != 1 {
     ret 10
   }
-  if m.remove("zz").is_some() {
+  if m.remove(String::from("zz")).is_some() {
     ret 11
   }
 
-  // The map owns the key it stores.
+  // The map owns the key it stores, independent of any source buffer.
   mut src := String::with_capacity(4 as usize)
   src.push_str("name")
-  _ := m.insert(src.as_str(), 7i32)
+  _ := m.insert(String::from("name"), 7i32)
   src.clear()
   src.push_str("xxxx")
-  if !m.contains("name") {
+  if !m.contains(String::from("name")) {
     ret 12
   }
 
@@ -64,13 +64,13 @@ fn main() -> i32 {
   mut i := 0
   while i < 50 {
     k := key(i)
-    _ := m.insert(k.as_str(), i + 100)
+    _ := m.insert(k, i + 100)
     i = i + 1
   }
   i = 0
   while i < 50 {
     k := key(i)
-    if *m.get(k.as_str()).or_panic_with_message("expected a value") != i + 100 {
+    if *m.get(k).or_panic_with_message("expected a value") != i + 100 {
       ret 13
     }
     i = i + 1
@@ -84,7 +84,7 @@ fn main() -> i32 {
   while i < 50 {
     if i % 3 == 0 {
       k := key(i)
-      if m.remove(k.as_str()).is_none() {
+      if m.remove(k).is_none() {
         ret 15
       }
     }
@@ -97,7 +97,7 @@ fn main() -> i32 {
   while i < 50 {
     if i % 3 == 0 {
       k := key(i)
-      _ := m.insert(k.as_str(), i + 200)
+      _ := m.insert(k, i + 200)
     }
     i = i + 1
   }
@@ -108,7 +108,7 @@ fn main() -> i32 {
     if i % 3 == 0 {
       want = i + 200
     }
-    if *m.get(k.as_str()).or_panic_with_message("expected a value") != want {
+    if *m.get(k).or_panic_with_message("expected a value") != want {
       ret 17
     }
     i = i + 1
@@ -118,7 +118,7 @@ fn main() -> i32 {
   if !m.is_empty() {
     ret 18
   }
-  if m.contains("name") {
+  if m.contains(String::from("name")) {
     ret 19
   }
   ret 0

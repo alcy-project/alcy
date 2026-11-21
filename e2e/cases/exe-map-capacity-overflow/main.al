@@ -3,7 +3,7 @@
 // of the address space, so no allocation is attempted.
 fn main() -> i32 {
   huge := wrapping_sub(0 as usize, 1 as usize) / 4 * 3 + 1
-  mut m := Map::<i32>::with_capacity(huge)
-  _ := m.insert("x", 1)
+  mut m := HashMap::<String, i32>::with_capacity(huge)
+  _ := m.insert(String::from("x"), 1)
   ret 0
 }

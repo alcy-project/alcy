@@ -4,10 +4,10 @@ fn zero() -> i32 {
 }
 
 fn main() -> i32 {
-  mut m := Map::<i32>::new()
-  p := m.get_or_insert_with("a", zero)
+  mut m := HashMap::<String, i32>::new()
+  p := m.get_or_insert_with(String::from("a"), zero)
   *p = 7
-  q := m.get_or_insert_with("a", zero)
+  q := m.get_or_insert_with(String::from("a"), zero)
   if *q != 7 {
     ret 1
   }

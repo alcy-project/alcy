@@ -1,9 +1,9 @@
 // A map of lists: non-Copy values behind `get_mut`, the shape a
 // front end uses to group declarations by name.
 fn main() -> i32 {
-  mut buckets := Map::<Vec<i32>>::new()
-  _ := buckets.insert("a", Vec::<i32>::new())
-  match buckets.get_mut("a") {
+  mut buckets := HashMap::<String, Vec<i32>>::new()
+  _ := buckets.insert(String::from("a"), Vec::<i32>::new())
+  match buckets.get_mut(String::from("a")) {
     Option::Some(list) => {
       list.push(1)
       list.push(2)
@@ -12,7 +12,7 @@ fn main() -> i32 {
       ret 1
     }
   }
-  match buckets.get("a") {
+  match buckets.get(String::from("a")) {
     Option::Some(list) => {
       if list.len() != 2 {
         ret 2

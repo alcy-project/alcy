@@ -18,8 +18,8 @@ fn make() -> D {
 }
 
 fn main() {
-  mut m := Map::<D>::new()
-  _ := m.insert("a", make())
-  _ := m.insert("b", make())
+  mut m := HashMap::<String, D>::new()
+  _ := m.insert(String::from("a"), make())
+  _ := m.insert(String::from("b"), make())
   println("exit")
 }

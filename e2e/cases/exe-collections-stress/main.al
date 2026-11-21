@@ -4,11 +4,11 @@
 // and undefined-behavior sanitizers on.
 fn main() -> i32 {
   // A thousand keys, then every third one removed, by value.
-  mut m := Map::<i32>::new()
+  mut m := HashMap::<String, i32>::new()
   mut i := 0
   while i < 1000 {
     k := format("key{}", i)
-    _ := m.insert(k.as_str(), i)
+    _ := m.insert(k, i)
     i = i + 1
   }
   if m.len() != 1000 {
@@ -18,7 +18,7 @@ fn main() -> i32 {
   while j < 1000 {
     if j % 3 == 0 {
       k := format("key{}", j)
-      _ := m.remove(k.as_str())
+      _ := m.remove(k)
     }
     j = j + 1
   }
@@ -60,11 +60,11 @@ fn main() -> i32 {
   }
 
   // Owning values end with the map.
-  mut m2 := Map::<String>::new()
+  mut m2 := HashMap::<String, String>::new()
   mut y := 0
   while y < 300 {
     k := format("k{}", y)
-    _ := m2.insert(k.as_str(), format("v{}", y))
+    _ := m2.insert(k, format("v{}", y))
     y = y + 1
   }
   if m2.len() != 300 {
@@ -72,11 +72,11 @@ fn main() -> i32 {
   }
 
   // A set of eight hundred keys.
-  mut s := Set::new()
+  mut s := HashSet::<String>::new()
   mut z := 0
   while z < 800 {
     k := format("s{}", z)
-    _ := s.insert(k.as_str())
+    _ := s.insert(k)
     z = z + 1
   }
   if s.len() != 800 {

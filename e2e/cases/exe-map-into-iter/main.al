@@ -16,9 +16,9 @@ fn make() -> D {
 }
 
 fn main() -> i32 {
-  mut m: Map<D> := Map::<D>::new()
-  _ := m.insert("a", make())
-  _ := m.insert("b", make())
+  mut m: HashMap<String, D> := HashMap::<String, D>::new()
+  _ := m.insert(String::from("a"), make())
+  _ := m.insert(String::from("b"), make())
   mut n := 0
   for (k, v) in m {
     n = n + 1
