@@ -793,29 +793,31 @@ std::optional<u32> Lowerer::summary_module_of(ast::ItemIdx item) const {
   if (!item.is_valid()) {
     return std::nullopt;
   }
-  for (u32 m = 0; m < static_cast<u32>(pkg.tree.modules.size()); ++m) {
-    const analyzer::ModuleNode& module = *pkg.tree.modules[m];
-    if (!module.is_summary) {
-      continue;
-    }
-    for (const ast::ItemIdx candidate : module.items) {
-      if (candidate == item) {
-        return m;
-      }
-      // A method is declared inside the impl the surface spelled, not
-      // in the module's own item list.
-      if (ast.items[candidate].kind != ast::ItemKind::Impl) {
+  if (!summary_module_indexed_) {
+    summary_module_indexed_ = true;
+    for (u32 m = 0; m < static_cast<u32>(pkg.tree.modules.size()); ++m) {
+      const analyzer::ModuleNode& module = *pkg.tree.modules[m];
+      if (!module.is_summary) {
         continue;
       }
-      for (const ast::ItemIdx method :
-           ast.items[candidate].payload.get<ast::ItemImpl>().methods) {
-        if (method == item) {
-          return m;
+      for (const ast::ItemIdx candidate : module.items) {
+        summary_module_index_.emplace(candidate.idx, m);
+        // A method is declared inside the impl the surface spelled, not
+        // in the module's own item list.
+        if (ast.items[candidate].kind != ast::ItemKind::Impl) {
+          continue;
+        }
+        for (const ast::ItemIdx method :
+             ast.items[candidate].payload.get<ast::ItemImpl>().methods) {
+          summary_module_index_.emplace(method.idx, m);
         }
       }
     }
   }
-  return std::nullopt;
+  const auto found = summary_module_index_.find(item.idx);
+  return found != summary_module_index_.end()
+             ? std::optional<u32>(found->second)
+             : std::nullopt;
 }
 
 void Lowerer::merge_summary_module(u32 module) {
@@ -2156,40 +2158,45 @@ ir::TypeIdx Lowerer::closure_env_type(
 // a value of the type calls. The scan runs once per type, because the
 // call site and the creation site may sit in different modules.
 const Lowerer::ClosureEntry* Lowerer::closure_entry(ir::TypeIdx type) {
-  for (const ClosureEntry& entry : closure_entries_) {
-    if (entry.self.idx == type.idx) {
-      return &entry;
+  const auto entry = closure_entry_by_type_.find(type.idx);
+  if (entry != closure_entry_by_type_.end()) {
+    return &closure_entries_[entry->second];
+  }
+  if (!closure_lits_indexed_) {
+    closure_lits_indexed_ = true;
+    for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
+      for (u32 c = 0; c < pkg.modules[m].closures.size(); ++c) {
+        closure_lit_by_type_.emplace(pkg.modules[m].closures[c].self_type.idx,
+                                     std::pair<u32, u32>{m, c});
+      }
     }
   }
-  for (u32 m = 0; m < static_cast<u32>(pkg.modules.size()); ++m) {
-    for (const analyzer::CheckedModule::ClosureLit& lit :
-         pkg.modules[m].closures) {
-      if (lit.self_type.idx != type.idx) {
-        continue;
-      }
-      if (!lit.func_type.is_valid() ||
-          tag_of(lit.func_type) != ir::TypeTag::Func) {
-        return nullptr;
-      }
-      std::vector<ir::TypeIdx> params;
-      const ir::FuncType& shape =
-          builder.state()
-              .func_types[builder.state().types[lit.func_type].as_func()];
-      params.reserve(shape.params.size());
-      for (ir::TypeIdx param : shape.params) {
-        params.push_back(param);
-      }
-      const ir::TypeIdx env_ty = closure_env_type(lit.captures);
-      const ir::TypeIdx env_ref_ty =
-          lit.captures.empty() ? ir::TypeIdx::invalid()
-                               : builder.reference_type(env_ty, false);
-      const ir::FunctionIdx fn = closure_fn_index(
-          m, lit.expr, params, shape.ret, lit.inst, env_ref_ty);
-      closure_entries_.push_back(ClosureEntry{type, lit.func_type, fn});
-      return &closure_entries_.back();
-    }
+  const auto lit_at = closure_lit_by_type_.find(type.idx);
+  if (lit_at == closure_lit_by_type_.end()) {
+    return nullptr;
   }
-  return nullptr;
+  const auto [m, c] = lit_at->second;
+  const analyzer::CheckedModule::ClosureLit& lit = pkg.modules[m].closures[c];
+  if (!lit.func_type.is_valid() || tag_of(lit.func_type) != ir::TypeTag::Func) {
+    return nullptr;
+  }
+  std::vector<ir::TypeIdx> params;
+  const ir::FuncType& shape =
+      builder.state()
+          .func_types[builder.state().types[lit.func_type].as_func()];
+  params.reserve(shape.params.size());
+  for (ir::TypeIdx param : shape.params) {
+    params.push_back(param);
+  }
+  const ir::TypeIdx env_ty = closure_env_type(lit.captures);
+  const ir::TypeIdx env_ref_ty = lit.captures.empty()
+                                     ? ir::TypeIdx::invalid()
+                                     : builder.reference_type(env_ty, false);
+  const ir::FunctionIdx fn =
+      closure_fn_index(m, lit.expr, params, shape.ret, lit.inst, env_ref_ty);
+  closure_entries_.push_back(ClosureEntry{type, lit.func_type, fn});
+  closure_entry_by_type_.emplace(type.idx, closure_entries_.size() - 1);
+  return &closure_entries_.back();
 }
 
 bool Lowerer::closure_has_code(const ClosureEntry* entry) const {

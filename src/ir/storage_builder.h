@@ -308,10 +308,15 @@ class StorageBuilder {
     state_.struct_types[node.as_struct()].params = params;
   }
 
-  // Array, slice, and tuple shapes still intern by scanning the type table:
-  // scans start past the pre-interned block, whose placeholder payloads must
-  // never match.
+  // A slice interns by its element alone. The map answers what the
+  // factory minted or found itself; a summary merge appends carried
+  // types past it, so the table stays the source of truth and a miss
+  // falls back to one scan, which repopulates the map.
   TypeIdx slice_type(TypeIdx element) {
+    const auto fast = slice_by_element_.find(element.idx);
+    if (fast != slice_by_element_.end()) {
+      return fast->second;
+    }
     for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
          ++idx) {
       const TypeNode& node = state_.types[idx];
@@ -321,6 +326,7 @@ class StorageBuilder {
       const SliceTypeIdx sidx = node.data.get<SliceTypeIdx>();
       if (sidx.idx < state_.slice_types.size() &&
           state_.slice_types[sidx].element.idx == element.idx) {
+        slice_by_element_.emplace(element.idx, idx);
         return idx;
       }
     }
@@ -328,7 +334,9 @@ class StorageBuilder {
     node.tag = TypeTag::Slice;
     node.data.set(
         state_.slice_types.emplace_back(SliceType{.element = element}));
-    return state_.types.emplace_back(node);
+    const TypeIdx idx = state_.types.emplace_back(node);
+    slice_by_element_.emplace(element.idx, idx);
+    return idx;
   }
 
   TypeIdx array_type(TypeIdx element, u64 count) {
@@ -647,6 +655,7 @@ class StorageBuilder {
   // asked for once per type argument of an item, and it used to be found by
   // scanning every type in the package.
   std::unordered_map<u32, TypeIdx> param_by_index_;
+  std::unordered_map<u32, TypeIdx> slice_by_element_;
 };
 
 }  // namespace ir

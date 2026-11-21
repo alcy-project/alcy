@@ -103,11 +103,8 @@ inline constexpr TypeTag unsigned_integer_type(TypeTag tag) {
 // instance's arguments or fields, a reference's pointee, a sequence's
 // element, a tuple's parts, or a function's signature. A signature that
 // names one has no layout to lower; the specialization pass is what
-// settles it. `path` is the visit stack, so a recursive type
-// reaches itself once.
-[[nodiscard]] bool type_names_param(const StorageState& state,
-                                    TypeIdx type,
-                                    std::vector<u32>& path);
+// settles it. Answers are kept per type in the state, so a repeated
+// question is an array read.
 [[nodiscard]] bool type_names_param(const StorageState& state, TypeIdx type);
 
 // The fixed width a pointer-width spelling is served by on `width`:

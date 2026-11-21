@@ -167,6 +167,14 @@ class Lowerer {
   // the registered function and the signature a view coerces to.
   bool closure_has_code(const ClosureEntry* entry) const;
   std::vector<ClosureEntry> closure_entries_;
+  // Closure nominal -> position in `closure_entries_`, so a move marker
+  // asks once per type instead of scanning the entries.
+  std::unordered_map<u32, u32> closure_entry_by_type_;
+  // Closure nominal -> (module, position in the module's closures). The
+  // literals are fixed once checking finished, so the index is built on
+  // the first miss and shared by every later question.
+  std::unordered_map<u32, std::pair<u32, u32>> closure_lit_by_type_;
+  bool closure_lits_indexed_ = false;
   // Reservation order matches lowering order (FIFO worklist), so
   // reserved indexes line up with storage positions.
   std::vector<usize> worklist_;
@@ -1091,6 +1099,11 @@ class Lowerer {
   // generic instantiation records its signature in the calling module,
   // so the item's own module is what says a summary carries its body
   std::optional<u32> summary_module_of(ast::ItemIdx item) const;
+  // Item -> summary module, built over the summary modules' items and
+  // their impl methods on the first question. The tree is fixed once
+  // checking finished, so the index holds for the run.
+  mutable std::unordered_map<u32, u32> summary_module_index_;
+  mutable bool summary_module_indexed_ = false;
   // A call into a package a summary answers for: its code lives in the
   // dependency's own artifact, so the call names the symbol the
   // dependency's build wrote for it. A method's receiver is

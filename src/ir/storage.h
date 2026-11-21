@@ -88,6 +88,10 @@ struct StorageState {
   TupleTypes tuple_types;
   FuncTypes func_types;
   ConstTypes const_types;
+  // Answers `type_names_param` keeps per type: 0 unanswered, 1 no, 2
+  // yes, 3 on the walk's own stack. Type nodes never change once
+  // interned, so an answer holds for the state's lifetime.
+  mutable std::vector<u8> names_param_memo;
 };
 
 // Size and alignment of a type on a target, in bytes.
