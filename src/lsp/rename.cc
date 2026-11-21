@@ -100,30 +100,22 @@ bool is_rename_identifier(std::string_view name) {
          token.length == name.size();
 }
 
-std::optional<RenameTarget> rename_target(const Document& document,
-                                          const DocumentAnalysis& analysis,
-                                          Position position) {
+struct RenameSite {
+  diag::Span token;
+  diag::Span declaration;
+};
+
+// The identifier under the cursor and the declaration it resolves to,
+// resolved once for both the prepare and the apply entry points.
+std::optional<RenameSite> rename_site(const Document& document,
+                                      const DocumentAnalysis& analysis,
+                                      Position position) {
   const std::string_view source = document.text();
   const usize offset = document.index().byte_offset(source, position);
   const std::vector<cst::Lexeme> lexemes = cst::lex(source);
   const std::optional<diag::Span> token =
       identifier_token_at(lexemes, analysis.root(), offset);
-  if (!token.has_value() ||
-      !definition_at(document, analysis, position).has_value()) {
-    return std::nullopt;
-  }
-  return RenameTarget{*token,
-                      std::string(source.substr(token->offset, token->length))};
-}
-
-std::optional<text::JsonValue> workspace_rename(
-    const Document& document,
-    const DocumentAnalysis& analysis,
-    Position position,
-    std::string_view new_name) {
-  const std::optional<RenameTarget> target =
-      rename_target(document, analysis, position);
-  if (!target.has_value()) {
+  if (!token.has_value()) {
     return std::nullopt;
   }
   const std::optional<diag::Span> declaration =
@@ -131,29 +123,64 @@ std::optional<text::JsonValue> workspace_rename(
   if (!declaration.has_value()) {
     return std::nullopt;
   }
+  return RenameSite{*token, *declaration};
+}
+
+std::optional<RenameTarget> rename_target(const Document& document,
+                                          const DocumentAnalysis& analysis,
+                                          Position position) {
+  const std::optional<RenameSite> site =
+      rename_site(document, analysis, position);
+  if (!site.has_value()) {
+    return std::nullopt;
+  }
+  const std::string_view source = document.text();
+  return RenameTarget{
+      site->token,
+      std::string(source.substr(site->token.offset, site->token.length))};
+}
+
+std::optional<text::JsonValue> workspace_rename(
+    const Document& document,
+    const DocumentAnalysis& analysis,
+    Position position,
+    std::string_view new_name) {
+  const std::optional<RenameSite> site =
+      rename_site(document, analysis, position);
+  if (!site.has_value()) {
+    return std::nullopt;
+  }
+  const diag::Span declaration = site->declaration;
   const std::optional<std::string_view> declaration_text =
-      analysis.context().sources.bytes(declaration->file);
+      analysis.context().sources.bytes(declaration.file);
   if (!declaration_text.has_value()) {
     return std::nullopt;
   }
   const std::string_view name =
-      declaration_text->substr(declaration->offset, declaration->length);
+      declaration_text->substr(declaration.offset, declaration.length);
 
   std::unordered_map<source::FileId, std::vector<diag::Span>> by_file;
-  by_file[declaration->file].push_back(*declaration);
-  for (const ReferenceSite site : references_at(document, analysis, position)) {
+  std::unordered_map<source::FileId, std::vector<cst::Lexeme>> lexemes_by_file;
+  by_file[declaration.file].push_back(declaration);
+  for (const ReferenceSite reference :
+       references_at(document, analysis, position)) {
     const std::optional<std::string_view> text =
-        analysis.context().sources.bytes(site.span.file);
+        analysis.context().sources.bytes(reference.span.file);
     if (!text.has_value()) {
       continue;
     }
-    const std::vector<cst::Lexeme> lexemes = cst::lex(*text);
+    // One lexing per source file, not one per reference site: a symbol
+    // with many sites in the same file reused the same tokens each time.
+    auto [entry, inserted] = lexemes_by_file.try_emplace(reference.span.file);
+    if (inserted) {
+      entry->second = cst::lex(*text);
+    }
     const std::optional<diag::Span> segment =
-        named_segment_in(lexemes, site.span, name, *text);
+        named_segment_in(entry->second, reference.span, name, *text);
     if (!segment.has_value()) {
       return std::nullopt;
     }
-    by_file[site.span.file].push_back(*segment);
+    by_file[reference.span.file].push_back(*segment);
   }
 
   PositionCache positions;
