@@ -225,7 +225,9 @@ body.resizing {
      every scroll position. */
   padding: var(--editor-pad-y) 4px 0 0;
   overflow: visible;
-  min-width: 3ch;
+  /* Three digits plus a gap, so crossing a line-count boundary does not
+     move the editor sideways. `editor.ts` widens it past four digits. */
+  min-width: 4ch;
   text-align: right;
   color: var(--fg-faint);
   font-family: var(--mono);

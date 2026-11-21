@@ -13,6 +13,11 @@ import { assetBase } from "./assets.js";
 
 export const FALLBACK_SOURCE = `fn main() {\n  println("Hello, alcy!")\n}\n`;
 
+// Three digits plus a gap stay reserved so the editor does not move
+// sideways when the line count crosses a power of ten. Kept in step with
+// the gutter's min-width in style.css; past four digits JS widens it.
+const GUTTER_MIN_WIDTH_CH = 4;
+
 export interface EditorHandlers {
   onInput?: () => void;
   onRun?: () => void;
@@ -36,7 +41,12 @@ function updateGutter(): void {
   }
   state.gutterLines = lines;
   elements.gutter.textContent = Array.from({ length: lines }, (_, i) => i + 1).join("\n");
-  elements.gutter.style.minWidth = `${String(lines).length + 1}ch`;
+  const widthCh = String(lines).length + 1;
+  if (widthCh > GUTTER_MIN_WIDTH_CH) {
+    elements.gutter.style.minWidth = `${widthCh}ch`;
+  } else {
+    elements.gutter.style.removeProperty("min-width");
+  }
 }
 
 export function syncScroll(): void {
