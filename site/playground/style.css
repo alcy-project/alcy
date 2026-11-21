@@ -50,11 +50,13 @@ body {
 /* Run stays outside the menu so it is always visible; the other actions
    fold into a popover on a narrow screen. The details holds only the
    toggle: wrapping the actions in one would give them a zero intrinsic
-   width while it is closed. */
+   width while it is closed. When the compiler state and the actions
+   wrap onto separate lines, the actions keep to the right edge. */
 .run-group {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 .actions-menu > summary {
