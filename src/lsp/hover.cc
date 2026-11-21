@@ -159,6 +159,16 @@ std::string type_reference_markdown(const pipeline::PipelineContext& context,
   return "~~~alcy\n" + std::string(written) + "\n~~~\n";
 }
 
+// The type of an expression, as the hover markdown shared by a use site
+// and a declaration's initializer.
+std::string type_markdown(const pipeline::PipelineContext& context,
+                          const analyzer::CheckedPackage& package,
+                          ir::TypeIdx type) {
+  return "~~~alcy\n" +
+         ir::type_display(package.types->state(), context.strings, type) +
+         "\n~~~\n" + layout_line(context, package, type);
+}
+
 constexpr u32 NO_MEMBER = U32_MAX;
 
 struct HoverTarget {
@@ -317,6 +327,24 @@ std::optional<std::string> hover_markdown(const Document& document,
   const source::FileId root = analysis.root();
   const std::string_view source = document.text();
 
+  if (const std::optional<BindingType> binding =
+          binding_type_at(context, offset, root);
+      binding.has_value()) {
+    if (binding->init != ast::ExprIdx::invalid()) {
+      if (const std::optional<ir::TypeIdx> type =
+              checked_expr_type(package, binding->init);
+          type.has_value()) {
+        return type_markdown(context, package, *type);
+      }
+    }
+    if (binding->written.length != 0 &&
+        binding->written.offset + binding->written.length <= source.size()) {
+      return "~~~alcy\n" +
+             std::string(source.substr(binding->written.offset,
+                                       binding->written.length)) +
+             "\n~~~\n";
+    }
+  }
   const std::optional<diag::Span> declaration =
       definition_at(document, analysis, position);
   if (declaration.has_value()) {
@@ -340,9 +368,7 @@ std::optional<std::string> hover_markdown(const Document& document,
       expr.has_value()) {
     const std::optional<ir::TypeIdx> type = checked_expr_type(package, *expr);
     if (type.has_value()) {
-      return "~~~alcy\n" +
-             ir::type_display(package.types->state(), context.strings, *type) +
-             "\n~~~\n" + layout_line(context, package, *type);
+      return type_markdown(context, package, *type);
     }
   }
   return std::nullopt;

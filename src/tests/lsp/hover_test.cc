@@ -97,6 +97,27 @@ TEST_CASE("Hover on a const shows its decided type") {
   }
 }
 
+TEST_CASE("Hover on a binding name shows the inferred type") {
+  const std::optional<std::string> declared =
+      hover("fn f() -> i32 {\n  x := 1\n  ret x\n}\n", 1, 2);
+  const std::optional<std::string> used =
+      hover("fn f() -> i32 {\n  x := 1\n  ret x\n}\n", 2, 6);
+  CHECK(declared.has_value());
+  CHECK(declared == used);
+  if (declared.has_value()) {
+    CHECK(declared->find("i32") != std::string::npos);
+  }
+}
+
+TEST_CASE("Hover on a binding with an annotation shows the written type") {
+  const std::optional<std::string> markdown =
+      hover("fn f() -> i32 {\n  x: i64 := 1\n  ret 0\n}\n", 1, 2);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("i64") != std::string::npos);
+  }
+}
+
 TEST_CASE("Hover on an expression shows its inferred type") {
   const std::optional<std::string> markdown =
       hover("fn f() -> i32 {\n  x := 1\n  ret x\n}\n", 2, 6);

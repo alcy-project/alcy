@@ -59,4 +59,41 @@ std::optional<ast::TypeIdx> innermost_type(
   return best;
 }
 
+std::optional<BindingType> binding_type_at(
+    const pipeline::PipelineContext& context,
+    usize offset,
+    source::FileId root) {
+  std::optional<BindingType> found;
+  context.ast.stmts.for_each_node([&](const ast::StmtIdx index) {
+    if (found.has_value()) {
+      return;
+    }
+    const ast::StmtNode& statement = context.ast.stmts[index];
+    if (statement.kind != ast::StmtKind::Decl || statement.span.file != root) {
+      return;
+    }
+    const ast::StmtDecl& declaration = statement.payload.get<ast::StmtDecl>();
+    if (declaration.pattern == ast::PatternIdx::invalid()) {
+      return;
+    }
+    const ast::PatternNode& pattern = context.ast.patterns[declaration.pattern];
+    diag::Span name;
+    if (pattern.kind == ast::PatternKind::Ident) {
+      name = pattern.payload.ident.name.span;
+    } else if (pattern.kind == ast::PatternKind::MutIdent) {
+      name = pattern.payload.mut_ident.name.span;
+    } else {
+      return;
+    }
+    if (name.file == root && span_contains(name, offset)) {
+      diag::Span written;
+      if (declaration.type != ast::TypeIdx::invalid()) {
+        written = context.ast.types[declaration.type].span;
+      }
+      found = BindingType{written, declaration.init};
+    }
+  });
+  return found;
+}
+
 }  // namespace lsp
