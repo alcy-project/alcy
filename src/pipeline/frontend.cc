@@ -38,7 +38,8 @@ base::Result<analyzer::CheckedPackage, diag::Reported> analyze_tree(
 
 base::Result<FrontendOutput, diag::Reported> finish_frontend(
     PipelineContext& ctx,
-    analyzer::CheckedPackage package) {
+    analyzer::CheckedPackage package,
+    std::optional<analyzer::CheckedPackage>* checked_out) {
   // Staged prelude modules check with the package but read as
   // toolchain sources, so reported counts exclude them.
   const usize staged = package.tree.staged_modules;
@@ -51,9 +52,9 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
   const u32 errors_before = ctx.bag.error_count();
   base::Result<lowering::LoweredPackage, diag::Reported> lowered = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower", "frontend");
-    return lowering::lower_package(std::move(package), ctx.target.width,
-                                   ctx.ast, ctx.strings, ctx.bag, ctx.profiler,
-                                   &ctx.sources);
+    return lowering::lower_package(
+        std::move(package), ctx.target.width, ctx.ast, ctx.strings, ctx.bag,
+        ctx.profiler, &ctx.sources, lowering::MAX_FUNCTIONS, checked_out);
   }();
   if (lowered.is_err() || ctx.bag.error_count() > errors_before) {
     return base::make_err(diag::Reported{});

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -121,6 +122,10 @@ inline constexpr usize MAX_FUNCTIONS = 65536;
 // The budget is a parameter so a caller - a case that has to spend it -
 // can say how much it wants rather than generating a package of that
 // size.
+// `checked_out`, when given, receives the package this call consumed:
+// every table but `types`, which moved into the builder that seeded
+// lowering. A reader that needs the checked metadata after lowering can
+// keep it without a second analysis or a clone. Set on every exit.
 base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
@@ -129,6 +134,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     diag::DiagBag& bag,
     debug::Profiler* profiler = nullptr,
     const source::SourceManager* sources = nullptr,
-    usize max_functions = MAX_FUNCTIONS);
+    usize max_functions = MAX_FUNCTIONS,
+    std::optional<analyzer::CheckedPackage>* checked_out = nullptr);
 
 }  // namespace lowering

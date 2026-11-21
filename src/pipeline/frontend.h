@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "diag/bag.h"
@@ -42,9 +44,13 @@ base::Result<analyzer::CheckedPackage, diag::Reported> analyze_tree(
 // The lowering and borrow half, over an already-checked package. This is
 // the tail of run_frontend, split out so a caller that analyzed the tree
 // itself can finish the pipeline without checking twice.
+// `checked_out`, when given, receives the consumed package (its types
+// moved into lowering) on every exit, so a caller that analyzes once can
+// keep the checked metadata even when lowering fails.
 base::Result<FrontendOutput, diag::Reported> finish_frontend(
     PipelineContext& ctx,
-    analyzer::CheckedPackage package);
+    analyzer::CheckedPackage package,
+    std::optional<analyzer::CheckedPackage>* checked_out = nullptr);
 
 // Whether the root module declares the free `main` a binary links.
 // Check and build both reject a binary target without one.

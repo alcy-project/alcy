@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/types.h"
 #include "codegen_llvm/common.h"
 #include "codegen_llvm/llvm_backend.h"
 #include "codegen_llvm/llvm_ir_emitter.h"
@@ -152,6 +153,32 @@ TEST_CASE("Lower straight-line arithmetic") {
   }
   CHECK(result.lowered->storage->functions().size() == 2);
   CHECK(ir::verify_storage(*result.lowered->storage).is_ok());
+}
+
+TEST_CASE("Lowering hands back the checked package it consumed") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al", "fn main() -> i32 {\n  ret 0\n}\n"}});
+
+  Fixture f;
+  CheckCase checked = check_case(dir, "main.al", {"main.al"}, f);
+  CHECK(checked.ok);
+  CHECK(checked.checked.has_value());
+  if (!checked.ok || !checked.checked.has_value()) {
+    return;
+  }
+
+  std::optional<analyzer::CheckedPackage> handed_back;
+  base::Result<LoweredPackage, diag::Reported> lowered = lower_package(
+      std::move(*checked.checked), ir::PointerWidth::W64, f.ast, f.strings,
+      f.bag, nullptr, &f.sources, f.fn_budget, &handed_back);
+  CHECK(lowered.is_ok());
+  CHECK(handed_back.has_value());
+  if (!handed_back.has_value()) {
+    return;
+  }
+  // Checked metadata survives even though the type storage moved out.
+  CHECK(!handed_back->modules.empty());
+  CHECK(!handed_back->tree.modules.empty());
 }
 
 TEST_CASE("Lower structs tuples fields and borrows") {

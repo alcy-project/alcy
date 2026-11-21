@@ -3774,10 +3774,16 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     diag::DiagBag& bag,
     debug::Profiler* profiler,
     const source::SourceManager* sources,
-    usize max_functions) {
+    usize max_functions,
+    std::optional<analyzer::CheckedPackage>* checked_out) {
   Lowerer lowerer(std::move(package), width, ast, strings, bag, max_functions,
                   profiler);
   lowerer.sources = sources;
+  const auto give_back = [&] {
+    if (checked_out != nullptr) {
+      checked_out->emplace(std::move(lowerer.pkg));
+    }
+  };
   // A dependency with no sources carries its generic bodies in the
   // summary: merging them before any body is lowered keeps every index
   // this build hands out after the merged tables, so the pass can clone
@@ -3789,10 +3795,12 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     }
   }
   if (lowerer.failed) {
+    give_back();
     return base::make_err(diag::Reported{});
   }
   lowerer.run();
   if (lowerer.failed) {
+    give_back();
     return base::make_err(diag::Reported{});
   }
   std::vector<std::vector<ir::SummaryField>> summary_fields;
@@ -3851,6 +3859,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     diag::render(diag, rendered);
     DLOG("verify failure: {} at index {}",
          std::string_view(rendered.data(), rendered.size()), error.index);
+    give_back();
     return base::make_err(diag::Reported{});
   }
   ir::VerifiedStorage storage = std::move(built).unwrap();
@@ -3894,10 +3903,12 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     const u32 index = bag.emit<i18n::Key::LowerCompEngineMismatch>(
         DiagCode::Internal, diag::Span{}, run.name);
     (void)index;
+    give_back();
     return base::make_err(diag::Reported{});
   }
   lowered.comp_engine_compared = compared;
   lowered.comp_engine_answered = comp_engine_answered;
+  give_back();
   return base::make_ok(std::move(lowered));
 }
 
