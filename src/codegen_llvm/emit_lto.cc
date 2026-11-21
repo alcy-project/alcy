@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "codegen/backend.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Analysis/ModuleSummaryAnalysis.h"
@@ -26,6 +27,18 @@
 
 namespace codegen_llvm {
 
+std::string part_scope_name(const std::string_view phase,
+                            const usize at,
+                            const usize parts) {
+  std::string name(phase);
+  name += '[';
+  name += std::to_string(at + 1);
+  name += '/';
+  name += std::to_string(parts);
+  name += ']';
+  return name;
+}
+
 // The parts, optimized and written by the ThinLTO backend: the thin link
 // resolves one prevailing copy of everything the parts share, and each
 // part's backend imports what the others define and runs the middle end and
@@ -35,7 +48,8 @@ namespace codegen_llvm {
 base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
 optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
                   u32 workers,
-                  bool freestanding) {
+                  bool freestanding,
+                  debug::Profiler* profiler) {
   llvm::lto::Config config;
   config.CPU = "generic";
   config.OptLevel = 3;
@@ -59,6 +73,9 @@ optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
   }
   std::vector<std::vector<u8>> bitcode(split.size());
   for (usize at = 0; at < split.size(); ++at) {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+        profiler, part_scope_name("thinlto-summary", at, split.size()),
+        "backend");
     // LLVM assigns the GUIDs a summary is keyed by in a pass, and a module
     // built here has none until it runs: without it the summary cannot be
     // built and the bitcode carries no symbols for the link to read.
@@ -83,44 +100,54 @@ optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
   std::vector<std::vector<llvm::lto::SymbolResolution>> resolutions;
   inputs.reserve(bitcode.size());
   resolutions.reserve(bitcode.size());
-  for (usize at = 0; at < bitcode.size(); ++at) {
-    const llvm::StringRef bytes(
-        reinterpret_cast<const char*>(bitcode[at].data()), bitcode[at].size());
-    llvm::Expected<std::unique_ptr<llvm::lto::InputFile>> input =
-        llvm::lto::InputFile::create(
-            llvm::MemoryBufferRef(bytes, part_names[at]));
-    if (!input) {
-      llvm::consumeError(input.takeError());
-      return base::make_err(codegen::EmitError::CannotEmit);
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "thinlto-inputs",
+                                             "backend");
+    for (usize at = 0; at < bitcode.size(); ++at) {
+      const llvm::StringRef bytes(
+          reinterpret_cast<const char*>(bitcode[at].data()),
+          bitcode[at].size());
+      llvm::Expected<std::unique_ptr<llvm::lto::InputFile>> input =
+          llvm::lto::InputFile::create(
+              llvm::MemoryBufferRef(bytes, part_names[at]));
+      if (!input) {
+        llvm::consumeError(input.takeError());
+        return base::make_err(codegen::EmitError::CannotEmit);
+      }
+      std::vector<llvm::lto::SymbolResolution> resolved;
+      resolved.reserve(input.get()->symbols().size());
+      for (const llvm::lto::InputFile::Symbol& symbol :
+           input.get()->symbols()) {
+        llvm::lto::SymbolResolution one;
+        const bool undefined = symbol.isUndefined();
+        // The runtime repeats in every part as `linkonce_odr`, so the first
+        // copy prevails and the rest are dropped, which is what a linker does
+        // with them. The entry is the one definition something outside the
+        // parts refers to - the startup objects call `main` - and a symbol
+        // visible to a regular object is what a partition exports; everything
+        // else may be internalized and imported.
+        // Only a definition can be the prevailing copy, and only the first
+        // one: a part holds declarations of what its neighbours define, and
+        // letting one of those take the slot would leave the definition
+        // non-prevailing and dropped, undefined at the link.
+        const bool first = !undefined && seen.insert(symbol.getName()).second;
+        one.Prevailing = first;
+        one.FinalDefinitionInLinkageUnit = false;
+        one.VisibleToRegularObj = !undefined;
+        resolved.push_back(one);
+      }
+      inputs.push_back(std::move(*input));
+      resolutions.push_back(std::move(resolved));
     }
-    std::vector<llvm::lto::SymbolResolution> resolved;
-    resolved.reserve(input.get()->symbols().size());
-    for (const llvm::lto::InputFile::Symbol& symbol : input.get()->symbols()) {
-      llvm::lto::SymbolResolution one;
-      const bool undefined = symbol.isUndefined();
-      // The runtime repeats in every part as `linkonce_odr`, so the first
-      // copy prevails and the rest are dropped, which is what a linker does
-      // with them. The entry is the one definition something outside the
-      // parts refers to - the startup objects call `main` - and a symbol
-      // visible to a regular object is what a partition exports; everything
-      // else may be internalized and imported.
-      // Only a definition can be the prevailing copy, and only the first
-      // one: a part holds declarations of what its neighbours define, and
-      // letting one of those take the slot would leave the definition
-      // non-prevailing and dropped, undefined at the link.
-      const bool first = !undefined && seen.insert(symbol.getName()).second;
-      one.Prevailing = first;
-      one.FinalDefinitionInLinkageUnit = false;
-      one.VisibleToRegularObj = !undefined;
-      resolved.push_back(one);
-    }
-    inputs.push_back(std::move(*input));
-    resolutions.push_back(std::move(resolved));
   }
-  for (usize at = 0; at < inputs.size(); ++at) {
-    if (llvm::Error added = lto.add(std::move(inputs[at]), resolutions[at])) {
-      llvm::consumeError(std::move(added));
-      return base::make_err(codegen::EmitError::CannotEmit);
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "thinlto-add",
+                                             "backend");
+    for (usize at = 0; at < inputs.size(); ++at) {
+      if (llvm::Error added = lto.add(std::move(inputs[at]), resolutions[at])) {
+        llvm::consumeError(std::move(added));
+        return base::make_err(codegen::EmitError::CannotEmit);
+      }
     }
   }
   // The link's own bound on how many objects it may write: a task is not an
@@ -135,8 +162,19 @@ optimize_in_parts(std::vector<std::unique_ptr<llvm::Module>>& split,
     return std::make_unique<llvm::CachedFileStream>(
         std::make_unique<llvm::raw_svector_ostream>(objects[task]));
   };
-  if (llvm::Error ran = lto.run(add_stream, /*Cache=*/{})) {
-    llvm::consumeError(std::move(ran));
+  // The backend's threads do the part work. LLVM's in-process ThinBackend
+  // has no hook alcy can put a scope on per task, so this one span names
+  // all of it; the serial preparation above is measured per part.
+  bool ran_ok = true;
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "thinlto-backend",
+                                             "backend");
+    if (llvm::Error ran = lto.run(add_stream, /*Cache=*/{})) {
+      llvm::consumeError(std::move(ran));
+      ran_ok = false;
+    }
+  }
+  if (!ran_ok) {
     return base::make_err(codegen::EmitError::CannotEmit);
   }
   // A task that wrote nothing contributed nothing: the links tasks and the

@@ -206,10 +206,14 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   }
   std::vector<std::unique_ptr<llvm::Module>> split;
   split.reserve(parts);
-  llvm::SplitModule(*emitted.module, parts,
-                    [&split](std::unique_ptr<llvm::Module> part) {
-                      split.push_back(std::move(part));
-                    });
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                             "split-module", "backend");
+    llvm::SplitModule(*emitted.module, parts,
+                      [&split](std::unique_ptr<llvm::Module> part) {
+                        split.push_back(std::move(part));
+                      });
+  }
   // The parts come out of the source module's context, and code generation
   // wants a context per thread. They take the trip LLVM's own parallel code
   // generation takes: written to bitcode where they stand, and read back
@@ -219,11 +223,15 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
     const bool no_libc =
         request.options.freestanding ||
         request.target.triple.find("windows") != std::string::npos;
-    return optimize_in_parts(split, workers_of(request), no_libc);
+    return optimize_in_parts(split, workers_of(request), no_libc,
+                             request.options.profiler);
   }
   std::vector<std::vector<u8>> bitcode(split.size());
   std::vector<std::unique_ptr<llvm::LLVMContext>> contexts(split.size());
   for (usize at = 0; at < split.size(); ++at) {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+        request.options.profiler,
+        part_scope_name("write-part-bitcode", at, split.size()), "backend");
     contexts[at] = std::make_unique<llvm::LLVMContext>();
     llvm::SmallVector<char, 0> buffer;
     llvm::raw_svector_ostream out(buffer);
@@ -235,23 +243,38 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   const u32 workers = workers_of(request);
   base::for_each(0, bitcode.size(), workers, [&](usize at, usize worker) {
     (void)worker;
-    const llvm::StringRef bytes(
-        reinterpret_cast<const char*>(bitcode[at].data()), bitcode[at].size());
-    llvm::Expected<std::unique_ptr<llvm::Module>> parsed =
-        llvm::parseBitcodeFile(llvm::MemoryBufferRef(bytes, "alcy_part"),
-                               *contexts[at]);
-    if (!parsed) {
-      llvm::consumeError(parsed.takeError());
-      failed.store(true);
-      return;
+    std::unique_ptr<llvm::Module> parsed_module;
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+          request.options.profiler,
+          part_scope_name("parse-bitcode", at, bitcode.size()), "backend");
+      const llvm::StringRef bytes(
+          reinterpret_cast<const char*>(bitcode[at].data()),
+          bitcode[at].size());
+      llvm::Expected<std::unique_ptr<llvm::Module>> parsed =
+          llvm::parseBitcodeFile(llvm::MemoryBufferRef(bytes, "alcy_part"),
+                                 *contexts[at]);
+      if (!parsed) {
+        llvm::consumeError(parsed.takeError());
+        failed.store(true);
+        return;
+      }
+      // Held past the parse scope so the object emission measures only
+      // the code generation, not the read that prepared it.
+      parsed_module = std::move(*parsed);
     }
-    base::Result<std::vector<u8>, ObjectEmitError> object =
-        emit_object(*parsed.get(), request.target);
-    if (object.is_err()) {
-      failed.store(true);
-      return;
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+          request.options.profiler,
+          part_scope_name("emit-object-part", at, bitcode.size()), "backend");
+      base::Result<std::vector<u8>, ObjectEmitError> object =
+          emit_object(*parsed_module, request.target);
+      if (object.is_err()) {
+        failed.store(true);
+        return;
+      }
+      objects[at] = std::move(object).unwrap();
     }
-    objects[at] = std::move(object).unwrap();
   });
   if (failed.load()) {
     return base::make_err(codegen::EmitError::CannotEmit);

@@ -101,12 +101,69 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
   // the array sits at the top level because that is what a trace viewer
   // reads.
   out += R"(,"traceEvents":[)";
-  const debug::Profiler& profiler = *envelope.trace.profiler;
-  for (usize i = 0; i < envelope.trace.events.size(); ++i) {
-    const debug::ProfileEvent& event = envelope.trace.events[i];
-    if (i > 0) {
+  bool first = true;
+
+  // Trace viewers read metadata events to name their tracks. Without
+  // them a viewer falls back to the raw pid and tid, which says nothing
+  // about which thread ran the build's split emission.
+  const auto metadata = [&](std::string_view name, u32 pid, u64 tid,
+                            std::string_view value) {
+    if (!first) {
       out += ',';
     }
+    first = false;
+    out += R"({"name":)";
+    append_json_string(out, name);
+    out += R"(,"ph":"M","pid":)";
+    append_json_number(out, pid);
+    if (tid != 0) {
+      out += R"(,"tid":)";
+      append_json_number(out, tid);
+    }
+    out += R"(,"args":{"name":)";
+    append_json_string(out, value);
+    out += "}}";
+  };
+
+  const std::vector<debug::ProfileEvent>& events = envelope.trace.events;
+  const u32 pid = events.empty() ? 0 : events.front().process_id;
+  metadata("process_name", pid, 0,
+           envelope.command.empty() ? "alcy" : envelope.command);
+  // The first thread is the one that drove the command; the rest are the
+  // emission workers. Each id appears once even though it recorded many
+  // events.
+  std::vector<u64> tids;
+  u64 main_tid = 0;
+  u64 main_start = 0;
+  for (const debug::ProfileEvent& event : events) {
+    if (main_tid == 0 || event.start_time_ns < main_start) {
+      main_tid = event.thread_id;
+      main_start = event.start_time_ns;
+    }
+    if (std::find(tids.begin(), tids.end(), event.thread_id) == tids.end()) {
+      tids.push_back(event.thread_id);
+    }
+  }
+  // The first span begins before the workers are spawned, so its thread
+  // is the command's own even when a worker finishes first and is recorded
+  // earlier in the event list.
+  usize worker = 0;
+  for (const u64 tid : tids) {
+    if (tid == main_tid) {
+      metadata("thread_name", pid, tid, "main");
+    } else {
+      ++worker;
+      metadata("thread_name", pid, tid, "worker " + std::to_string(worker));
+    }
+  }
+
+  const debug::Profiler& profiler = *envelope.trace.profiler;
+  for (usize i = 0; i < events.size(); ++i) {
+    const debug::ProfileEvent& event = events[i];
+    if (!first) {
+      out += ',';
+    }
+    first = false;
     out += R"({"name":)";
     append_json_string(out, resolve_name(profiler, event.name));
     out += R"(,"cat":)";

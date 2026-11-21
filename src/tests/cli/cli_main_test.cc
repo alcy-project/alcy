@@ -1105,6 +1105,11 @@ TEST_CASE("Time trace embeds its phases in the json result") {
   CHECK(cli_main(static_cast<i32>(argv.size()), argv.data()) == 0);
   const std::string document = captured.text();
   CHECK(document.find("\"traceEvents\"") != std::string::npos);
+  // A viewer names its tracks from metadata events; without them it
+  // shows the raw process and thread numbers instead.
+  CHECK(document.find("\"process_name\"") != std::string::npos);
+  CHECK(document.find("\"thread_name\"") != std::string::npos);
+  CHECK(document.find("\"main\"") != std::string::npos);
   CHECK(document.find("\"analyze\"") != std::string::npos);
   CHECK(document.find("\"lower\"") != std::string::npos);
   CHECK(document.find("\"borrow\"") != std::string::npos);
