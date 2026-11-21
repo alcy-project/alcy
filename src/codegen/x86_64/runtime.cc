@@ -141,7 +141,7 @@ Body build_error_kind() {
     body.insts.push_back(make_inst(MOp::Cmp, 4, Operand{Reg::Rdi},
                                    Operand{Imm{mapping.number}}));
     const u32 next = body.label_count++;
-    body.insts.push_back(make_jcc(Cond::E, Operand{Label{next}}));
+    body.insts.push_back(make_jcc(Cond::Ne, Operand{Label{next}}));
     body.insts.push_back(
         make_inst(MOp::Mov, 4, Operand{Reg::Rax}, Operand{Imm{mapping.kind}}));
     body.insts.push_back(make_inst(MOp::Ret, 8));

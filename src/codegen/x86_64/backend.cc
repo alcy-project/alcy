@@ -255,23 +255,40 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     const bool returns_enum = return_tag == ir::TypeTag::Enum;
     const bool returns_void = return_tag == ir::TypeTag::Void;
 
-    // An enum answer arrives in a slot the caller owns. The wrapper
-    // reserves it and reads the discriminant back to pick the status.
-    i64 sret_bytes = 0;
-    if (returns_enum) {
-      const ir::TypeLayout layout =
-          storage.layout_of(return_type, request.target.width);
-      sret_bytes = static_cast<i64>(ir::align_up(layout.size, 16));
+    // The argument runtime reads these globals. A hosted main receives
+    // the pair in registers; at the ELF entry the initial stack holds
+    // argc and then the argv pointers, so the freestanding wrapper
+    // gathers them from there before it touches the stack itself.
+    const u32 argc = wrapper.symbols.size();
+    wrapper.symbols.push_back("alcy_argc");
+    const u32 argv = wrapper.symbols.size();
+    wrapper.symbols.push_back("alcy_argv");
+    if (request.options.freestanding) {
+      wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
+                                        Operand{Mem{.base = Reg::Rsp,
+                                                    .index = std::nullopt,
+                                                    .scale = 1,
+                                                    .disp = 0}}));
       wrapper.insts.push_back(
-          make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{sret_bytes}}));
-    }
-    if (!request.options.freestanding) {
-      // `main(argc, argv)` hands the process arguments to the runtime
-      // globals before the program body runs.
-      const u32 argc = wrapper.symbols.size();
-      wrapper.symbols.push_back("alcy_argc");
-      const u32 argv = wrapper.symbols.size();
-      wrapper.symbols.push_back("alcy_argv");
+          make_inst(MOp::Mov, 8, Operand{Reg::Rcx}, Operand{SymbolRef{argc}}));
+      wrapper.insts.push_back(make_inst(
+          MOp::Mov, 8,
+          Operand{Mem{
+              .base = Reg::Rcx, .index = std::nullopt, .scale = 1, .disp = 0}},
+          Operand{Reg::Rax}));
+      wrapper.insts.push_back(make_inst(MOp::Lea, 8, Operand{Reg::Rax},
+                                        Operand{Mem{.base = Reg::Rsp,
+                                                    .index = std::nullopt,
+                                                    .scale = 1,
+                                                    .disp = 8}}));
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 8, Operand{Reg::Rcx}, Operand{SymbolRef{argv}}));
+      wrapper.insts.push_back(make_inst(
+          MOp::Mov, 8,
+          Operand{Mem{
+              .base = Reg::Rcx, .index = std::nullopt, .scale = 1, .disp = 0}},
+          Operand{Reg::Rax}));
+    } else {
       wrapper.insts.push_back(
           make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{SymbolRef{argc}}));
       wrapper.insts.push_back(make_inst(
@@ -286,6 +303,17 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           Operand{Mem{
               .base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
           Operand{Reg::Rsi}));
+    }
+
+    // An enum answer arrives in a slot the caller owns. The wrapper
+    // reserves it and reads the discriminant back to pick the status.
+    i64 sret_bytes = 0;
+    if (returns_enum) {
+      const ir::TypeLayout layout =
+          storage.layout_of(return_type, request.target.width);
+      sret_bytes = static_cast<i64>(ir::align_up(layout.size, 16));
+      wrapper.insts.push_back(
+          make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{sret_bytes}}));
     }
     if (returns_enum) {
       wrapper.insts.push_back(
@@ -399,12 +427,17 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   }
 
   // The process arguments the entry wrapper saved, in the third section.
-  // Only the program's own object has a `main` that received them; a
-  // library leaves these to the binary it links into.
-  if (request.emit_entry && !request.options.freestanding) {
+  // Only an object that actually uses the argument runtime carries them,
+  // so a library that never asks for args leaves these to the binary.
+  const bool uses_args = std::find(runtime_names.begin(), runtime_names.end(),
+                                   "alcy_arg") != runtime_names.end() ||
+                         std::find(runtime_names.begin(), runtime_names.end(),
+                                   "alcy_arg_count") != runtime_names.end();
+  if (request.emit_entry || uses_args) {
     object::Section globals{.name = ".data",
                             .bytes = std::vector<u8>(16, 0),
                             .align = 8,
+                            .write = true,
                             .alloc = true,
                             .bits = true};
     const u32 section = static_cast<u32>(object.sections.size());
