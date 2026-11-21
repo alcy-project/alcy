@@ -1547,8 +1547,16 @@ bool Selector::emit(const ir::Instruction& instr,
         return true;
       }
       if (is_float(src) && is_integer(dst)) {
+        const i64 bytes =
+            dst == ir::TypeTag::I8 || dst == ir::TypeTag::U8     ? 1
+            : dst == ir::TypeTag::I16 || dst == ir::TypeTag::U16 ? 2
+            : dst == ir::TypeTag::I32 || dst == ir::TypeTag::U32 ? 4
+                                                                 : 8;
+        const bool uns = dst == ir::TypeTag::U8 || dst == ir::TypeTag::U16 ||
+                         dst == ir::TypeTag::U32 || dst == ir::TypeTag::U64 ||
+                         dst == ir::TypeTag::I1;
         push(make_inst(MOp::CvtF2I, width_of(src), dst_operand(), *lhs,
-                       Operand{Imm{static_cast<i64>(width_of(dst))}}));
+                       Operand{Imm{uns ? -bytes : bytes}}));
         return true;
       }
       if (is_integer(src) && is_integer(dst)) {

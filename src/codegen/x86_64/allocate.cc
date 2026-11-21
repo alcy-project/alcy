@@ -4,6 +4,7 @@
 #include "codegen/x86_64/allocate.h"
 
 #include <bit>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <utility>
@@ -345,9 +346,104 @@ void allocate(Body& body, const Frame& frame) {
         const u8 out_width = static_cast<u8>(
             frame.vreg_size[dst.index] > 8 ? 8 : frame.vreg_size[dst.index]);
         // `w` names the source float width (ss/sd opcode); the third
-        // operand names the integer width, which decides REX.W.
+        // operand names the destination type as a signed byte count,
+        // negative when the type is unsigned.
+        const i64 tagged = std::get<Imm>(inst.ops[2]).value;
+        const bool uns = tagged < 0;
+        const i64 type_bytes = uns ? -tagged : tagged;
+        const u8 cvt_width = out_width < 4 ? 4 : out_width;
+        const i64 conv_min = cvt_width == 4 ? INT32_MIN : INT64_MIN;
+        const i64 type_min = !uns ? (type_bytes == 1   ? -128
+                                     : type_bytes == 2 ? -32768
+                                                       : conv_min)
+                                  : 0;
+        const i64 type_max =
+            uns ? (type_bytes == 8   ? -1
+                   : type_bytes == 4 ? 4294967295LL
+                   : type_bytes == 2 ? 65535
+                                     : 255)
+                : (type_bytes == 1 ? 127
+                   : type_bytes == 2
+                       ? 32767
+                       : (cvt_width == 4 ? INT32_MAX : INT64_MAX));
+
         push_labeled(make_inst(MOp::CvtF2I, w, Operand{Reg::Rax}, Operand{X},
                                Operand{Imm{static_cast<i64>(out_width)}}));
+        const u32 done = body.label_count++;
+
+        // NaN: cvtt returns conv_min, but comisd x,x sets PF for a NaN.
+        push_labeled(make_inst(MOp::Fcom, w, Operand{X}, Operand{X}));
+        const u32 not_nan = body.label_count++;
+        push_labeled(make_jcc(Cond::Np, Operand{Label{not_nan}}));
+        push_labeled(make_inst(MOp::Xor, out_width, Operand{Reg::Rax},
+                               Operand{Reg::Rax}));
+        push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+        MInst at_not_nan = make_inst(MOp::Nop, 8);
+        at_not_nan.label = not_nan;
+        push_labeled(at_not_nan);
+
+        // conv_min is the sentinel for a positive overflow (source >= 0)
+        // or, for signed types, a negative overflow (source < 0).
+        const u32 not_sentinel = body.label_count++;
+        push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R9},
+                               Operand{Imm{conv_min}}));
+        push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
+                               Operand{Reg::R9}));
+        push_labeled(make_jcc(Cond::Ne, Operand{Label{not_sentinel}}));
+        // Compare the source with +0.0 to tell the two apart.
+        push_labeled(
+            make_inst(MOp::Xor, 4, Operand{Reg::R8}, Operand{Reg::R8}));
+        push_labeled(make_inst(MOp::CvtI2F, w == 4 ? 4 : 8, Operand{Reg::Xmm2},
+                               Operand{Reg::R8}));
+        push_labeled(make_inst(MOp::Fcom, w, Operand{X}, Operand{Reg::Xmm2}));
+        const u32 positive = body.label_count++;
+        push_labeled(make_jcc(Cond::Ae, Operand{Label{positive}}));
+        // negative overflow: answer the type minimum.
+        push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                               Operand{Imm{type_min}}));
+        push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+        MInst at_positive = make_inst(MOp::Nop, 8);
+        at_positive.label = positive;
+        push_labeled(at_positive);
+        // positive overflow: answer the type maximum.
+        push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R11},
+                               Operand{Imm{type_max}}));
+        push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                               Operand{Reg::R11}));
+        push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+        MInst at_not_sentinel = make_inst(MOp::Nop, 8);
+        at_not_sentinel.label = not_sentinel;
+        push_labeled(at_not_sentinel);
+
+        // Unsigned narrow types: a negative result or one past the type
+        // maximum saturates to 0 or the maximum respectively.
+        if (uns && type_bytes < 8) {
+          const u32 nonnegative = body.label_count++;
+          push_labeled(make_inst(MOp::Test, cvt_width, Operand{Reg::Rax},
+                                 Operand{Reg::Rax}));
+          push_labeled(make_jcc(Cond::Ns, Operand{Label{nonnegative}}));
+          push_labeled(make_inst(MOp::Xor, out_width, Operand{Reg::Rax},
+                                 Operand{Reg::Rax}));
+          push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+          MInst at_nonnegative = make_inst(MOp::Nop, 8);
+          at_nonnegative.label = nonnegative;
+          push_labeled(at_nonnegative);
+          push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R11},
+                                 Operand{Imm{type_max}}));
+          push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
+                                 Operand{Reg::R11}));
+          const u32 within = body.label_count++;
+          push_labeled(make_jcc(Cond::Be, Operand{Label{within}}));
+          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                                 Operand{Reg::R11}));
+          MInst at_within = make_inst(MOp::Nop, 8);
+          at_within.label = within;
+          push_labeled(at_within);
+        }
+
+        MInst at_done = make_inst(MOp::Nop, 8);
+        at_done.label = done;
+        push_labeled(at_done);
         push_labeled(make_inst(MOp::Mov, out_width,
                                Operand{slot(disp_of(dst.index))},
                                Operand{Reg::Rax}));
