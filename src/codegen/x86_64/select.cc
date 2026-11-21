@@ -815,6 +815,23 @@ bool Selector::emit(const ir::Instruction& instr,
             push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
                            Operand{Imm{static_cast<i64>(layout.size)}}));
             push(make_inst(MOp::RepMovsb, 8));
+          } else if (passage == Passage::TwoWord &&
+                     value.is<ir::ImmutableIdx>()) {
+            // A string literal is a constant pair: the data section
+            // holds its bytes and the length rides beside the pointer.
+            const ir::Immutable& imm =
+                storage_.immutables()[value.as_immutable()];
+            if (storage_.types()[imm.type.idx].tag != ir::TypeTag::Str) {
+              (void)unsupported(span,
+                                "a constant return the backend cannot "
+                                "spell");
+              return false;
+            }
+            const std::string_view bytes = strings_.get(imm.data.str_id_value);
+            const SymbolRef text = string_ref(rodata_.intern(bytes));
+            push(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{text}));
+            push(make_inst(MOp::Mov, 8, Operand{Reg::Rdx},
+                           Operand{Imm{static_cast<i64>(bytes.size())}}));
           } else if (value.is<ir::RegisterIdx>()) {
             const u32 vreg = vreg_of(value.as_register(), value.type);
             // One word answers in `rax`; two ride in the pair.
