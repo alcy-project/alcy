@@ -49,6 +49,7 @@ Shape shape_of(const MOp op) {
     case MOp::Test: return {.read0 = true, .read1 = true, .write0 = false};
     case MOp::Idiv:
     case MOp::Udiv:
+    case MOp::Umul:
     case MOp::Push: return {.read0 = true, .read1 = false, .write0 = false};
     case MOp::Setcc:
     case MOp::Pop: return {.read0 = false, .read1 = false, .write0 = true};
@@ -151,7 +152,11 @@ void allocate(Body& body, const Frame& frame) {
     }
     DCHECK(vreg.index < frame.vreg_disp.size());
     DCHECK(vreg.index < frame.vreg_size.size());
-    const u8 width = static_cast<u8>(frame.vreg_size[vreg.index]);
+    // A register holds one word; a wider slot's later words are named
+    // by `SlotRef` with an offset, so the first word is all a plain read
+    // of the vreg can ask for.
+    const u8 width = static_cast<u8>(
+        frame.vreg_size[vreg.index] > 8 ? 8 : frame.vreg_size[vreg.index]);
     const Mem from = slot(frame.vreg_disp[vreg.index]);
     if (width == 1 || width == 2) {
       // A narrow value extends itself the way its type reads: signed to
@@ -349,6 +354,15 @@ void allocate(Body& body, const Frame& frame) {
       DCHECK(next_scratch <= pool.size());
       push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[0]));
       encoded.ops[0] = Operand{into};
+    }
+    // A store of a symbol address needs the address in a register first:
+    // x86 has no memory-to-immediate form that carries a relocation.
+    if (encoded.op == MOp::Mov && std::holds_alternative<Mem>(encoded.ops[0]) &&
+        std::holds_alternative<SymbolRef>(encoded.ops[1])) {
+      const Reg into = pool[next_scratch++];
+      DCHECK(next_scratch <= pool.size());
+      push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[1]));
+      encoded.ops[1] = Operand{into};
     }
     // A widening move reads its source from a register or memory; a
     // constant needs a scratch the instruction may clobber.

@@ -438,6 +438,13 @@ Encoded encode(const Body& body) {
         modrm_rr(out, dst, src);
         break;
       }
+      case MOp::Umul: {
+        const Reg src = std::get<Reg>(inst.at(0));
+        prefix(out, width, w, std::nullopt, src, std::nullopt);
+        out.push_back(0xf7);
+        out.push_back(static_cast<u8>(0xc0 | 4 << 3 | reg_code(src)));
+        break;
+      }
       case MOp::Idiv:
       case MOp::Udiv: {
         // One operand, the divisor. The dividend and its sign are in

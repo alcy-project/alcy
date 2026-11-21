@@ -81,6 +81,9 @@ enum class MOp : u8 {
   Or,
   Xor,
   Imul,
+  // One-operand unsigned multiply: rdx:rax = rax * r/m, with CF set
+  // when the product needs more than one word.
+  Umul,
   Idiv,
   Udiv,
   Shl,

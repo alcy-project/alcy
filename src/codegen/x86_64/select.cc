@@ -898,7 +898,27 @@ bool Selector::emit(const ir::Instruction& instr,
       const ir::TypeTag tag = storage_.types()[value.type].tag;
       const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
       if (is_aggregate(tag) || is_two_word(tag)) {
+        const u32 dst = vreg_of(at(1).as_register(), at(1).type);
         if (!value.is<ir::RegisterIdx>()) {
+          if (tag == ir::TypeTag::Str && value.is<ir::ImmutableIdx>()) {
+            const ir::Immutable& imm =
+                storage_.immutables()[value.as_immutable()];
+            const std::string_view text = strings_.get(imm.data.str_id_value);
+            const SymbolRef bytes = string_ref(rodata_.intern(text));
+            push(make_inst(MOp::Mov, 8,
+                           Operand{Mem{.base = VReg{dst},
+                                       .index = std::nullopt,
+                                       .scale = 1,
+                                       .disp = 0}},
+                           Operand{bytes}));
+            push(make_inst(MOp::Mov, 8,
+                           Operand{Mem{.base = VReg{dst},
+                                       .index = std::nullopt,
+                                       .scale = 1,
+                                       .disp = 8}},
+                           Operand{Imm{static_cast<i64>(text.size())}}));
+            return true;
+          }
           (void)unsupported(span, "a constant aggregate store");
           return false;
         }
@@ -907,7 +927,7 @@ bool Selector::emit(const ir::Instruction& instr,
         // must not write a whole word past its slot.
         push(make_inst(
             MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
-            Operand{Mem{.base = VReg{vreg_of(at(1).as_register(), at(1).type)},
+            Operand{Mem{.base = VReg{dst},
                         .index = std::nullopt,
                         .scale = 1,
                         .disp = 0}},
@@ -979,23 +999,43 @@ bool Selector::emit(const ir::Instruction& instr,
           ty = shape.element;
           continue;
         }
-        if (tag == ir::TypeTag::Struct) {
-          if (const Imm* imm = std::get_if<Imm>(&*step); imm == nullptr) {
+        if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Tuple) {
+          const Imm* imm = std::get_if<Imm>(&*step);
+          if (imm == nullptr) {
             (void)unsupported(span, "a dynamic field projection");
             return false;
+          }
+          const ir::TypeIdxRange fields =
+              tag == ir::TypeTag::Struct
+                  ? storage_
+                        .struct_types()[storage_.types()[ty->idx].as_struct()]
+                        .fields
+                  : storage_.tuple_types()[storage_.types()[ty->idx].as_tuple()]
+                        .elements;
+          offset += static_cast<i64>(ir::field_offset(
+              storage_.state(), fields, static_cast<u32>(imm->value), width_));
+          ty = fields[static_cast<u32>(imm->value)];
+          continue;
+        }
+        // A two-word value is built one word at a time: `str_from_parts`
+        // projects a `str` at indices 0 and 1, each an eight-byte word.
+        // Other scalars are indexed by their own layout size.
+        if (passage_of(*ty) == Passage::TwoWord) {
+          if (const Imm* imm = std::get_if<Imm>(&*step); imm != nullptr) {
+            offset += imm->value * 8;
           } else {
-            offset += static_cast<i64>(ir::field_offset(
-                storage_.state(),
-                storage_.struct_types()[storage_.types()[ty->idx].as_struct()]
-                    .fields,
-                static_cast<u32>(imm->value), width_));
-            ty = storage_.struct_types()[storage_.types()[ty->idx].as_struct()]
-                     .fields[static_cast<u32>(imm->value)];
+            index = *step;
+            scale = 8;
           }
           continue;
         }
-        (void)unsupported(span, "a projection into a scalar");
-        return false;
+        const ir::TypeLayout scalar = storage_.layout_of(*ty, width_);
+        if (const Imm* imm = std::get_if<Imm>(&*step); imm != nullptr) {
+          offset += static_cast<i64>(scalar.size) * imm->value;
+        } else {
+          index = *step;
+          scale = scalar.size;
+        }
       }
       // A projection's destination names the element it reaches, and
       // the register holds its address, so the vreg is a pointer's
@@ -1232,11 +1272,35 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::IntMul:
     case O::IntMulWrap: {
       DCHECK(count == 2);
-      push(make_inst(MOp::Mov, compute, dst_operand(), *lhs));
       const std::optional<Operand> rhs = scalar_of(at(1), span);
       if (!rhs.has_value()) {
         return false;
       }
+      const bool checked = instr.op == O::IntMul && check != nullptr &&
+                           check->kind == overlay::Check::Overflow;
+      if (checked && !is_signed(dst_tag())) {
+        // `imul` reports *signed* overflow through its carry flag, which
+        // a product that fits unsigned can still trip. The one-operand
+        // `mul` sets carry from the high half of an unsigned product.
+        push(make_inst(MOp::Mov, compute, Operand{Reg::Rax}, *lhs));
+        if (const Imm* immediate = std::get_if<Imm>(&*rhs);
+            immediate != nullptr) {
+          push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, *rhs));
+          push(make_inst(MOp::Umul, compute, Operand{Reg::Rcx}));
+        } else {
+          const Operand right = *rhs;
+          const Operand factor =
+              std::holds_alternative<VReg>(right) ? Operand{Reg::Rcx} : right;
+          if (std::holds_alternative<VReg>(right)) {
+            push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, right));
+          }
+          push(make_inst(MOp::Umul, compute, factor));
+        }
+        push(make_inst(MOp::Mov, compute, dst_operand(), Operand{Reg::Rax}));
+        check_overflow(Cond::B);
+        return true;
+      }
+      push(make_inst(MOp::Mov, compute, dst_operand(), *lhs));
       if (const Imm* immediate = std::get_if<Imm>(&*rhs);
           immediate != nullptr) {
         // The two-operand form reads a register, so a constant takes one
@@ -1246,9 +1310,8 @@ bool Selector::emit(const ir::Instruction& instr,
       } else {
         push(make_inst(MOp::Imul, compute, dst_operand(), *rhs));
       }
-      if (instr.op == O::IntMul && check != nullptr &&
-          check->kind == overlay::Check::Overflow) {
-        check_overflow(is_signed(dst_tag()) ? Cond::O : Cond::B);
+      if (checked) {
+        check_overflow(Cond::O);
       }
       return true;
     }
