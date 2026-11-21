@@ -478,6 +478,45 @@ line, one finding per parameter, instructions:
 The same files under `check` were flat throughout: the diagnostics were
 the term that grew, not the pipeline that reported them.
 
+## What the specialization phase costs
+
+A generic body is lowered once in its parametric form and cloned per
+instantiation. The phase's first shape read every address alloca the
+package had recorded per clone to seed the clone's rewrite state, so
+cloning cost the square of the package's size: the 1200-module
+generic corpus spent 24.9 million hash operations seeding states for
+bodies of about ten instructions, and the run reached 5.22 G
+instructions against 179 M for the same shape at 100 modules. The
+rewrite state now reads its source's allocas through a register
+index built once for the phase, and the same corpus runs in 864 M.
+
+The same per-run table shape answers the questions the pipeline asks
+per instruction: whether a type names a parameter (kept in the
+storage state, one byte per type), which module a summary item came
+from, which entry a closure nominal resolves to, and which slice a
+shape interns as. On the 1200-module corpora those tables are worth
+a fifth to a third of the run:
+
+| corpus | before | after | |
+| --- | --- | --- | --- |
+| plain1200 | 612,342,496 | 481,222,164 | -21.4% |
+| generic1200 | 863,768,375 | 614,932,664 | -28.8% |
+| drop1200 | 702,638,390 | 504,423,623 | -28.2% |
+| adapt1200 | 428,105,260 | 330,709,106 | -22.8% |
+| closure1200 | 296,419,030 | 234,740,208 | -20.8% |
+| arms2 | 57,845,147 | 13,256,510 | -77.1% |
+
+The memory the tables add is one byte per type and one word per
+index entry; both are the size of the tables they answer about.
+
+After them the profile is flat: no single routine holds more than
+about 6% of a run, and what remains at the top is the analyzer's
+name resolution over the staged standard library (`inject_name`,
+`lookup_static`) and the boundary verifiers. The formatter's
+specialized wrappers leave `print`-shaped checking at 218.6 M against
+207.7 M before the wrappers were expanded, while `comp`-shaped
+checking improved 524.5 M -> 433.8 M over the same span.
+
 ## What did not pay
 
 Measured and rejected, so the next attempt starts from a number rather than
