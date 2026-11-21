@@ -799,10 +799,10 @@ case(
     "view-then-insert",
     "reject",
     """fn main() -> i32 {
-  mut m := Map::<i32>::new()
-  _ := m.insert("a", 1i32)
-  view := m.get("a")
-  _ := m.insert("b", 2i32)
+  mut m := HashMap::<String, i32>::new()
+  _ := m.insert(String::from("a"), 1i32)
+  view := m.get(String::from("a"))
+  _ := m.insert(String::from("b"), 2i32)
   ret *view.or_panic_with_message("expected a value")
 }""",
 )
@@ -812,9 +812,9 @@ case(
     "view-then-len",
     "accept",
     """fn main() -> i32 {
-  mut m := Map::<i32>::new()
-  _ := m.insert("a", 1i32)
-  view := m.get("a")
+  mut m := HashMap::<String, i32>::new()
+  _ := m.insert(String::from("a"), 1i32)
+  view := m.get(String::from("a"))
   n := m.len()
   ret *view.or_panic_with_message("expected a value") + n as i32 - 1
 }""",
@@ -825,10 +825,10 @@ case(
     "view-then-remove",
     "reject",
     """fn main() -> i32 {
-  mut m := Map::<i32>::new()
-  _ := m.insert("a", 1i32)
-  view := m.get("a")
-  _ := m.remove("a")
+  mut m := HashMap::<String, i32>::new()
+  _ := m.insert(String::from("a"), 1i32)
+  view := m.get(String::from("a"))
+  _ := m.remove(String::from("a"))
   ret *view.or_panic_with_message("expected a value")
 }""",
 )
@@ -839,12 +839,12 @@ case(
     "map",
     "view-then-other-field",
     "accept",
-    """struct Both { a: Map<i32>, b: Map<i32> }
+    """struct Both { a: HashMap<String, i32>, b: HashMap<String, i32> }
 fn main() -> i32 {
-  mut x := Both { a: Map::<i32>::new(), b: Map::<i32>::new() }
-  _ := x.a.insert("k", 5i32)
-  view := x.a.get("k")
-  _ := x.b.insert("j", 7i32)
+  mut x := Both { a: HashMap::<String, i32>::new(), b: HashMap::<String, i32>::new() }
+  _ := x.a.insert(String::from("k"), 5i32)
+  view := x.a.get(String::from("k"))
+  _ := x.b.insert(String::from("j"), 7i32)
   ret *view.or_panic_with_message("expected a value") - 5
 }""",
 )
@@ -853,12 +853,12 @@ case(
     "map",
     "field-view-then-mutate",
     "reject",
-    """struct Both { a: Map<i32>, b: Map<i32> }
+    """struct Both { a: HashMap<String, i32>, b: HashMap<String, i32> }
 fn main() -> i32 {
-  mut x := Both { a: Map::<i32>::new(), b: Map::<i32>::new() }
-  _ := x.a.insert("k", 5i32)
-  view := x.a.get("k")
-  _ := x.a.insert("j", 7i32)
+  mut x := Both { a: HashMap::<String, i32>::new(), b: HashMap::<String, i32>::new() }
+  _ := x.a.insert(String::from("k"), 5i32)
+  view := x.a.get(String::from("k"))
+  _ := x.a.insert(String::from("j"), 7i32)
   ret *view.or_panic_with_message("expected a value") - 5
 }""",
 )
