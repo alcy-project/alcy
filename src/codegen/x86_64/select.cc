@@ -4,6 +4,7 @@
 #include "codegen/x86_64/select.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -193,6 +194,15 @@ class Selector {
   [[nodiscard]] bool emit(const ir::Instruction& instr,
                           const diag::Span span,
                           const overlay::Entry* check);
+
+  // The runtime panic call a failed check ends the process through.
+  void emit_panic_call(std::string_view message);
+
+  // A check that guards the operands rather than the arithmetic result:
+  // a shift count past the type's width, or a signed MIN / -1.
+  [[nodiscard]] bool emit_check_prelude(const ir::Instruction& instr,
+                                        const diag::Span span,
+                                        const overlay::Entry& check);
 
   // The enum opcodes, which read a place rather than a value, and the
   // call, which marshals every shape the ABI names.
@@ -611,6 +621,87 @@ bool Selector::receive_parameters(const ir::Block& entry) {
   return true;
 }
 
+void Selector::emit_panic_call(const std::string_view message) {
+  const SymbolRef text = string_ref(rodata_.intern(message));
+  push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi}, Operand{text}));
+  push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi},
+                 Operand{Imm{static_cast<i64>(message.size())}}));
+  push(make_inst(MOp::Xor, 8, Operand{Reg::Rdx}, Operand{Reg::Rdx}));
+  push(make_inst(MOp::Xor, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx}));
+  push(make_inst(MOp::Call, 8, Operand{SymbolRef{string_ref("alcy_panic")}}));
+}
+
+bool Selector::emit_check_prelude(const ir::Instruction& instr,
+                                  const diag::Span span,
+                                  const overlay::Entry& check) {
+  if (check.kind == overlay::Check::ShiftRange) {
+    const std::optional<Operand> raw =
+        scalar_of(storage_.operands()[check.operand], span);
+    if (!raw.has_value()) {
+      return false;
+    }
+    const ir::TypeTag tag =
+        storage_.types()[storage_.operands()[instr.operands.head()].type].tag;
+    const u8 width = compute_width_of(tag);
+    const u64 bits = tag == ir::TypeTag::I8 || tag == ir::TypeTag::U8     ? 8
+                     : tag == ir::TypeTag::I16 || tag == ir::TypeTag::U16 ? 16
+                     : tag == ir::TypeTag::I32 || tag == ir::TypeTag::U32 ? 32
+                                                                          : 64;
+    const u32 ok = fresh_label();
+    push(make_inst(MOp::Mov, width, Operand{Reg::R9}, *raw));
+    if (bits <= 0x7fffffffULL) {
+      push(make_inst(MOp::Cmp, width, Operand{Reg::R9},
+                     Operand{Imm{static_cast<i64>(bits)}}));
+    } else {
+      push(make_inst(MOp::Mov, width, Operand{Reg::R10},
+                     Operand{Imm{static_cast<i64>(bits)}}));
+      push(make_inst(MOp::Cmp, width, Operand{Reg::R9}, Operand{Reg::R10}));
+    }
+    push(make_jcc(Cond::B, Operand{Label{ok}}));
+    emit_panic_call("shift out of range");
+    MInst join = make_inst(MOp::Nop, 8);
+    join.label = ok;
+    push(join);
+  } else if (check.kind == overlay::Check::MinOverOne) {
+    const std::optional<Operand> dividend =
+        scalar_of(storage_.operands()[instr.operands.head()], span);
+    const std::optional<Operand> divisor =
+        scalar_of(storage_.operands()[check.operand], span);
+    if (!dividend.has_value() || !divisor.has_value()) {
+      return false;
+    }
+    const ir::TypeTag tag =
+        storage_.types()[storage_.operands()[instr.operands.head()].type].tag;
+    const u8 width = compute_width_of(tag);
+    // The dividend is sign-extended to the compute width, so the
+    // sentinel to match is the source type's own minimum, not the
+    // compute width's.
+    const i64 minimum = tag == ir::TypeTag::I8    ? -128
+                        : tag == ir::TypeTag::I16 ? -32768
+                        : width == 4              ? INT32_MIN
+                                                  : INT64_MIN;
+    const u32 ok = fresh_label();
+    push(make_inst(MOp::Mov, width, Operand{Reg::R9}, *dividend));
+    if (minimum >= INT32_MIN && minimum <= INT32_MAX) {
+      push(make_inst(MOp::Cmp, width, Operand{Reg::R9}, Operand{Imm{minimum}}));
+    } else {
+      push(
+          make_inst(MOp::Mov, width, Operand{Reg::R10}, Operand{Imm{minimum}}));
+      push(make_inst(MOp::Cmp, width, Operand{Reg::R9}, Operand{Reg::R10}));
+    }
+    push(make_jcc(Cond::Ne, Operand{Label{ok}}));
+    push(make_inst(MOp::Mov, width, Operand{Reg::R9}, *divisor));
+    push(make_inst(MOp::Cmp, width, Operand{Reg::R9}, Operand{Imm{-1}}));
+    push(make_jcc(Cond::Ne, Operand{Label{ok}}));
+    emit_panic_call("integer overflow");
+    MInst join = make_inst(MOp::Nop, 8);
+    join.label = ok;
+    push(join);
+  }
+
+  return true;
+}
+
 bool Selector::emit(const ir::Instruction& instr,
                     const diag::Span span,
                     const overlay::Entry* check) {
@@ -641,16 +732,16 @@ bool Selector::emit(const ir::Instruction& instr,
                              : condition == Cond::B ? Cond::Ae
                                                     : condition;
     push(make_jcc(no_overflow, Operand{Label{ok}}));
-    const SymbolRef message = string_ref(rodata_.intern("integer overflow"));
-    push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi}, Operand{message}));
-    push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{Imm{16}}));
-    push(make_inst(MOp::Xor, 8, Operand{Reg::Rdx}, Operand{Reg::Rdx}));
-    push(make_inst(MOp::Xor, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx}));
-    push(make_inst(MOp::Call, 8, Operand{SymbolRef{string_ref("alcy_panic")}}));
+    emit_panic_call("integer overflow");
     MInst join = make_inst(MOp::Nop, 8);
     join.label = ok;
     push(join);
   };
+  if (check != nullptr && check->kind != overlay::Check::None &&
+      check->kind != overlay::Check::Overflow &&
+      !emit_check_prelude(instr, span, *check)) {
+    return false;
+  }
 
   // The register an index rides on, when it is one. A constant index is
   // the caller's to fold into a displacement.

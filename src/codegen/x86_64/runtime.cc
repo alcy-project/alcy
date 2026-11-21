@@ -226,10 +226,21 @@ Body build_error_kind() {
 // A freestanding heap asks the kernel for whole pages. The word before
 // the block remembers the mapping's length, so release needs only one
 // `munmap`. Both paths are plain syscalls: no C library is linked.
-Body build_alloc_fs() {
+Body build_alloc_fs(RoData& rodata) {
   Body body;
   const auto mov = [&](MOp op, Operand dst, Operand src) {
     body.insts.push_back(make_inst(op, 8, dst, src));
+  };
+  // A refused mapping reports the runtime's message and ends the
+  // process; nothing past this point runs.
+  const auto fail = [&]() {
+    constexpr std::string_view kMessage = "panic: allocation failed\n";
+    const SymbolRef ref = text(body, rodata, kMessage);
+    emit_write(body, 2, Operand{ref},
+               Operand{Imm{static_cast<i64>(kMessage.size())}});
+    mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Imm{1}});
+    mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{60}});
+    body.insts.push_back(make_inst(MOp::Syscall, 8));
   };
   // length = (size + 16 + 4095) & ~4095, refusing a size whose header
   // and alignment would wrap the word.
@@ -238,9 +249,7 @@ Body build_alloc_fs() {
   // The threshold is 2^64-1-4111, spelled as a negative i64 immediate.
   mov(MOp::Cmp, Operand{Reg::Rcx}, Operand{Imm{static_cast<i64>(-4112)}});
   body.insts.push_back(make_jcc(Cond::Be, Operand{Label{no_wrap}}));
-  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Imm{1}});
-  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{60}});
-  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  fail();
   MInst wrapped = make_inst(MOp::Nop, 8);
   wrapped.label = no_wrap;
   body.insts.push_back(wrapped);
@@ -261,10 +270,7 @@ Body build_alloc_fs() {
   // A valid pointer is below -4095 when read unsigned; kernel errors are
   // the values at or above it.
   body.insts.push_back(make_jcc(Cond::B, Operand{Label{ok}}));
-  // A refused mapping ends the process with status 1.
-  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Imm{1}});
-  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{60}});
-  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  fail();
   MInst joined = make_inst(MOp::Nop, 8);
   joined.label = ok;
   body.insts.push_back(joined);
@@ -536,7 +542,7 @@ Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
     return build_file_io(true);
   }
   if (name == "alcy_alloc") {
-    return build_alloc_fs();
+    return build_alloc_fs(rodata);
   }
   if (name == "alcy_dealloc") {
     return build_dealloc_fs();
