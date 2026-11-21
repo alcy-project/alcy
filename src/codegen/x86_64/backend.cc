@@ -6,6 +6,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -52,7 +53,8 @@ bool is_entry_candidate(const ir::Storage& storage,
     return false;
   }
   const ir::TypeTag tag = storage.types()[function.meta.return_type.idx].tag;
-  return tag == ir::TypeTag::Void || tag == ir::TypeTag::I32;
+  return tag == ir::TypeTag::Void || tag == ir::TypeTag::I32 ||
+         tag == ir::TypeTag::Enum;
 }
 
 }  // namespace
@@ -185,6 +187,22 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   {
     Body wrapper;
     wrapper.symbols.push_back(entry_symbol);
+    const ir::TypeIdx return_type =
+        storage.functions()[*entry].meta.return_type;
+    const ir::TypeTag return_tag = storage.types()[return_type.idx].tag;
+    const bool returns_enum = return_tag == ir::TypeTag::Enum;
+    const bool returns_void = return_tag == ir::TypeTag::Void;
+
+    // An enum answer arrives in a slot the caller owns. The wrapper
+    // reserves it and reads the discriminant back to pick the status.
+    i64 sret_bytes = 0;
+    if (returns_enum) {
+      const ir::TypeLayout layout =
+          storage.layout_of(return_type, request.target.width);
+      sret_bytes = static_cast<i64>(ir::align_up(layout.size, 16));
+      wrapper.insts.push_back(
+          make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{sret_bytes}}));
+    }
     if (!request.options.freestanding) {
       // `main(argc, argv)` hands the process arguments to the runtime
       // globals before the program body runs.
@@ -207,11 +225,55 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
               .base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
           Operand{Reg::Rsi}));
     }
+    if (returns_enum) {
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 8, Operand{Reg::Rdi}, Operand{Reg::Rsp}));
+    }
     wrapper.insts.push_back(make_inst(MOp::Call, 8, Operand{SymbolRef{0}}));
-    if (storage.types()[storage.functions()[*entry].meta.return_type.idx].tag ==
-        ir::TypeTag::Void) {
+
+    if (returns_void) {
       wrapper.insts.push_back(
           make_inst(MOp::Xor, 4, Operand{Reg::Rax}, Operand{Reg::Rax}));
+    } else if (returns_enum) {
+      // A variant past the first is an error: the status is one and
+      // the reason goes to stderr, the same as the other backends.
+      constexpr std::string_view kError = "main returned Err\n";
+      const std::string& message = rodata.intern(kError);
+      const u32 message_id = static_cast<u32>(wrapper.symbols.size());
+      wrapper.symbols.push_back(message);
+      wrapper.insts.push_back(make_inst(MOp::Mov, 4, Operand{Reg::Rax},
+                                        Operand{Mem{.base = Reg::Rsp,
+                                                    .index = std::nullopt,
+                                                    .scale = 1,
+                                                    .disp = 0}}));
+      wrapper.insts.push_back(
+          make_inst(MOp::Cmp, 4, Operand{Reg::Rax}, Operand{Imm{0}}));
+      const u32 is_ok = wrapper.label_count++;
+      wrapper.insts.push_back(make_jcc(Cond::E, Operand{Label{is_ok}}));
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 8, Operand{Reg::Rdx},
+                    Operand{Imm{static_cast<i64>(kError.size())}}));
+      wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rsi},
+                                        Operand{SymbolRef{message_id}}));
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 4, Operand{Reg::Rdi}, Operand{Imm{2}}));
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 4, Operand{Reg::Rax}, Operand{Imm{1}}));
+      wrapper.insts.push_back(make_inst(MOp::Syscall, 8));
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 4, Operand{Reg::Rax}, Operand{Imm{1}}));
+      const u32 join = wrapper.label_count++;
+      wrapper.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{join}}));
+      MInst at_ok = make_inst(MOp::Nop, 8);
+      at_ok.label = is_ok;
+      wrapper.insts.push_back(at_ok);
+      wrapper.insts.push_back(
+          make_inst(MOp::Xor, 4, Operand{Reg::Rax}, Operand{Reg::Rax}));
+      MInst at_join = make_inst(MOp::Nop, 8);
+      at_join.label = join;
+      wrapper.insts.push_back(at_join);
+      wrapper.insts.push_back(
+          make_inst(MOp::Add, 8, Operand{Reg::Rsp}, Operand{Imm{sret_bytes}}));
     }
     if (request.options.freestanding) {
       // `_start` owns the process: the answer from `main` becomes the
