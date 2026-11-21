@@ -44,6 +44,7 @@
   F(ArgMissingValueForOption, Note, Pipeline, "A value is required for '{}' but none was supplied") \
   F(ArgNullMatchesPointer, Note, Pipeline, "Output matches pointer is null") \
   F(ArgOptions, Note, Pipeline, "Options") \
+  F(ArgGlobalOptions, Note, Pipeline, "Global options") \
   F(ArgRequired, Note, Pipeline, "[required]") \
   F(ArgTryHelp, Note, Pipeline, "For more information, try '{} --help'.") \
   F(ArgUnknownLongOption, Note, Pipeline, "Unexpected argument '--{}' found") \

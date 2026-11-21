@@ -115,55 +115,13 @@ void render_option_line(std::back_insert_iterator<std::string> out,
 
 UsageText::UsageText(Language language)
     : texts_(static_cast<usize>(i18n::KEY_COUNT)) {
-  set(Key::CliAbout, i18n::format<Key::CliAbout>(language));
-  set(Key::CliBackendHelp, i18n::format<Key::CliBackendHelp>(language));
-  set(Key::CliBuildAbout, i18n::format<Key::CliBuildAbout>(language));
-  set(Key::CliColorHelp, i18n::format<Key::CliColorHelp>(language));
-  set(Key::CliLangHelp, i18n::format<Key::CliLangHelp>(language));
-  set(Key::CliTimeTraceHelp, i18n::format<Key::CliTimeTraceHelp>(language));
-  set(Key::CliJsonHelp, i18n::format<Key::CliJsonHelp>(language));
-  set(Key::CliReleaseHelp, i18n::format<Key::CliReleaseHelp>(language));
-  set(Key::CliProfileHelp, i18n::format<Key::CliProfileHelp>(language));
-  set(Key::CliOnPanicHelp, i18n::format<Key::CliOnPanicHelp>(language));
-  set(Key::CliOptimizeHelp, i18n::format<Key::CliOptimizeHelp>(language));
-  set(Key::CliOverflowChecksHelp,
-      i18n::format<Key::CliOverflowChecksHelp>(language));
-  set(Key::CliTargetHelp, i18n::format<Key::CliTargetHelp>(language));
-  set(Key::CliBuildOutputHelp, i18n::format<Key::CliBuildOutputHelp>(language));
-  set(Key::CliEmitHelp, i18n::format<Key::CliEmitHelp>(language));
-  set(Key::CliLinkerOverrideHelp,
-      i18n::format<Key::CliLinkerOverrideHelp>(language));
-  set(Key::CliLinkArgsOverrideHelp,
-      i18n::format<Key::CliLinkArgsOverrideHelp>(language));
-  set(Key::CliCompileAbout, i18n::format<Key::CliCompileAbout>(language));
-  set(Key::CliCompileOutputHelp,
-      i18n::format<Key::CliCompileOutputHelp>(language));
-  set(Key::CliCompileLinkerHelp,
-      i18n::format<Key::CliCompileLinkerHelp>(language));
-  set(Key::CliCompileLinkArgsHelp,
-      i18n::format<Key::CliCompileLinkArgsHelp>(language));
-  set(Key::CliStdinHelp, i18n::format<Key::CliStdinHelp>(language));
-  set(Key::CliNoStdHelp, i18n::format<Key::CliNoStdHelp>(language));
-  set(Key::CliDepsHelp, i18n::format<Key::CliDepsHelp>(language));
-  set(Key::CliRunAbout, i18n::format<Key::CliRunAbout>(language));
-  set(Key::CliNewAbout, i18n::format<Key::CliNewAbout>(language));
-  set(Key::CliInitAbout, i18n::format<Key::CliInitAbout>(language));
-  set(Key::CliVcsHelp, i18n::format<Key::CliVcsHelp>(language));
-  set(Key::CliSuiteHelp, i18n::format<Key::CliSuiteHelp>(language));
-  set(Key::CliCheckAbout, i18n::format<Key::CliCheckAbout>(language));
-  set(Key::CliCheckFileHelp, i18n::format<Key::CliCheckFileHelp>(language));
-  set(Key::CliTestAbout, i18n::format<Key::CliTestAbout>(language));
-  set(Key::CliTestExecutionHelp,
-      i18n::format<Key::CliTestExecutionHelp>(language));
-  set(Key::CliTestFilterHelp, i18n::format<Key::CliTestFilterHelp>(language));
-  set(Key::CliTestListHelp, i18n::format<Key::CliTestListHelp>(language));
-  set(Key::CliTestNoRunHelp, i18n::format<Key::CliTestNoRunHelp>(language));
-  set(Key::CliFmtAbout, i18n::format<Key::CliFmtAbout>(language));
-  set(Key::CliFmtCheckHelp, i18n::format<Key::CliFmtCheckHelp>(language));
-  set(Key::CliLintAbout, i18n::format<Key::CliLintAbout>(language));
-  set(Key::CliLintFileHelp, i18n::format<Key::CliLintFileHelp>(language));
-  set(Key::CliLintFixHelp, i18n::format<Key::CliLintFixHelp>(language));
-  set(Key::CliLspAbout, i18n::format<Key::CliLspAbout>(language));
+  // Fill from the catalog's own key list. A key added to messages.def
+  // gets its text here without a second edit, so an argument can no
+  // longer reach the parser with an empty help string.
+#define ALCY_SET_USAGE_TEXT(Name, Severity, Stage, Text) \
+  set(Key::Name, std::string(i18n::raw_text<Key::Name>(language)));
+  ALCY_I18N_FOREACH_KEY_EN_US(ALCY_SET_USAGE_TEXT)
+#undef ALCY_SET_USAGE_TEXT
 }
 
 const UsageText& usage_text(Language language) {
@@ -173,8 +131,9 @@ const UsageText& usage_text(Language language) {
   return TABLES[static_cast<usize>(language)];
 }
 
-std::string HelpFormatter::operator()(const arg::Command& command,
+std::string HelpFormatter::operator()(const arg::HelpContext& context,
                                       term::ColorStyle color_style) const {
+  const arg::Command& command = context.command;
   std::string result;
 
   constexpr usize MARGIN = 512;
@@ -236,6 +195,22 @@ std::string HelpFormatter::operator()(const arg::Command& command,
   fmt::format_to(out, "\n{}{}{}{}:\n", bold, underline,
                  i18n::text<Key::ArgOptions>(language), reset);
 
+  // The flags of the commands a subcommand was reached through are as
+  // much a part of its command line as its own. Show them in a section
+  // of their own, so a reader can tell where each flag comes from.
+  std::vector<std::string_view> seen;
+  std::vector<const arg::Arg*> inherited;
+  for (const arg::Command* const ancestor : context.ancestors) {
+    for (const arg::Arg& argument : ancestor->args()) {
+      if (std::find(seen.begin(), seen.end(), argument.name()) == seen.end()) {
+        seen.push_back(argument.name());
+        inherited.push_back(&argument);
+      }
+    }
+  }
+
+  // One column width for both sections: a flag's description lines up
+  // whichever of the two it appears in.
   usize widest_option = MIN_DESCRIPTION_MARGIN;
   std::vector<std::string> specs;
   specs.reserve(command.args().size());
@@ -243,12 +218,29 @@ std::string HelpFormatter::operator()(const arg::Command& command,
     specs.push_back(format_option_spec(argument, language));
     widest_option = std::max(widest_option, specs.back().size());
   }
+  std::vector<std::string> inherited_specs;
+  inherited_specs.reserve(inherited.size());
+  for (const arg::Arg* const argument : inherited) {
+    inherited_specs.push_back(format_option_spec(*argument, language));
+    widest_option = std::max(widest_option, inherited_specs.back().size());
+  }
 
   for (usize i = 0; i < command.args().size(); ++i) {
     const arg::Arg& argument = command.args()[i];
     render_option_line(out, specs[i], widest_option, argument.help(),
                        argument.default_value(), argument.is_required(),
                        color_style, language);
+  }
+
+  if (!inherited.empty()) {
+    fmt::format_to(out, "\n{}{}{}{}:\n", bold, underline,
+                   i18n::text<Key::ArgGlobalOptions>(language), reset);
+    for (usize i = 0; i < inherited.size(); ++i) {
+      const arg::Arg& argument = *inherited[i];
+      render_option_line(out, inherited_specs[i], widest_option,
+                         argument.help(), argument.default_value(),
+                         argument.is_required(), color_style, language);
+    }
   }
 
   if (command.builtin_enabled()) {

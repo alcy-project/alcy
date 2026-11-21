@@ -11,6 +11,7 @@
 
 #include "cli/suggest.h"
 #include "fpag/arg/command.h"
+#include "fpag/arg/help_formatter.h"
 #include "fpag/arg/parse_error.h"
 #include "fpag/base/numeric.h"
 #include "fpag/term/color_style.h"
@@ -58,7 +59,7 @@ const UsageText& usage_text(i18n::Language language);
 struct HelpFormatter {
   i18n::Language language = i18n::Language::EnUs;
 
-  std::string operator()(const arg::Command& command,
+  std::string operator()(const arg::HelpContext& context,
                          term::ColorStyle color_style) const;
 };
 

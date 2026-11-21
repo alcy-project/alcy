@@ -111,6 +111,20 @@ std::string_view text(Language language) {
   }
 }
 
+// The catalog text itself, with no format-string check. For a table that
+// holds every message, diagnostics with placeholders included: the
+// placeholders stay as text until a caller composes the message.
+template <Key K>
+std::string_view raw_text(Language language) {
+  switch (language) {
+#define ALCY_I18N_RAW_IN(LanguageValue, Catalog, LIST) \
+  case LanguageValue: return detail::Catalog::text<K>();
+    ALCY_I18N_FOREACH_LANGUAGE(ALCY_I18N_RAW_IN)
+#undef ALCY_I18N_RAW_IN
+    default: UNREACHABLE();
+  }
+}
+
 // Composes a message in one language into out, which is anything fmt can
 // format into. Every catalog's format string for K is parsed against
 // Args... at compile time, so a translation that lost a placeholder or

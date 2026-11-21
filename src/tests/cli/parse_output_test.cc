@@ -95,10 +95,27 @@ TEST_CASE("Render help for explicit and bare invocations") {
 // is what this pins down.
 TEST_CASE("Coloured help closes every style it opens") {
   const HelpFormatter help{i18n::Language::EnUs};
-  const std::string text =
-      help(build_parser().root_command(), term::ColorStyle::Ansi16);
+  const arg::Parser parser = build_parser();
+  const arg::HelpContext context{parser.root_command(), {}};
+  const std::string text = help(context, term::ColorStyle::Ansi16);
   CHECK(text.find("\x1b[") != std::string::npos);
   CHECK(styles_balanced(text));
+}
+
+// A subcommand accepts the root's flags, so its help has to name them.
+// The inherited section is also where a key missing from UsageText
+// shows up: its help string would be empty.
+TEST_CASE("Subcommand help names the flags it inherits") {
+  const std::string_view args[] = {"alcy", "build", "--help"};
+  arg::Parser parser = build_parser();
+  const ParseOutcome outcome = parse_args(parser, args);
+  const Interruption asked =
+      render_outcome(parser, outcome, term::ColorMode::Never);
+  CHECK(asked.text.find("Global options") != std::string::npos);
+  CHECK(asked.text.find("--time-trace") != std::string::npos);
+  CHECK(asked.text.find("-j, --jobs") != std::string::npos);
+  CHECK(asked.text.find("Skip the build cache") != std::string::npos);
+  CHECK(asked.errors.empty());
 }
 
 TEST_CASE("Render version") {
