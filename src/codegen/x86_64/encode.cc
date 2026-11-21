@@ -513,7 +513,10 @@ Encoded encode(const Body& body) {
         const u8 mand = inst.width == 4 ? 0xf3 : 0xf2;
         const Reg dst = std::get<Reg>(inst.at(0));
         const Reg src = std::get<Reg>(inst.at(1));
-        sse_prefix(out, mand, dst, src, /*wide=*/inst.width == 8);
+        const bool wide = inst.count > 2 &&
+                          std::holds_alternative<Imm>(inst.at(2)) &&
+                          std::get<Imm>(inst.at(2)).value == 8;
+        sse_prefix(out, mand, dst, src, /*wide=*/wide);
         out.push_back(0x0f);
         out.push_back(0x2c);
         modrm_rr(out, dst, src);

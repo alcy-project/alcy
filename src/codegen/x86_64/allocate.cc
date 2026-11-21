@@ -341,10 +341,13 @@ void allocate(Body& body, const Frame& frame) {
       }
       if (inst.op == MOp::CvtF2I) {
         load_float(inst.ops[1], X);
-        push_labeled(make_inst(MOp::CvtF2I, w, Operand{Reg::Rax}, Operand{X}));
         const VReg dst = std::get<VReg>(inst.ops[0]);
         const u8 out_width = static_cast<u8>(
             frame.vreg_size[dst.index] > 8 ? 8 : frame.vreg_size[dst.index]);
+        // `w` names the source float width (ss/sd opcode); the third
+        // operand names the integer width, which decides REX.W.
+        push_labeled(make_inst(MOp::CvtF2I, w, Operand{Reg::Rax}, Operand{X},
+                               Operand{Imm{static_cast<i64>(out_width)}}));
         push_labeled(make_inst(MOp::Mov, out_width,
                                Operand{slot(disp_of(dst.index))},
                                Operand{Reg::Rax}));

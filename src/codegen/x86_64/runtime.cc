@@ -231,8 +231,19 @@ Body build_alloc_fs() {
   const auto mov = [&](MOp op, Operand dst, Operand src) {
     body.insts.push_back(make_inst(op, 8, dst, src));
   };
-  // length = (size + 16 + 4095) & ~4095
+  // length = (size + 16 + 4095) & ~4095, refusing a size whose header
+  // and alignment would wrap the word.
+  const u32 no_wrap = body.label_count++;
   mov(MOp::Mov, Operand{Reg::Rcx}, Operand{Reg::Rdi});
+  // The threshold is 2^64-1-4111, spelled as a negative i64 immediate.
+  mov(MOp::Cmp, Operand{Reg::Rcx}, Operand{Imm{static_cast<i64>(-4112)}});
+  body.insts.push_back(make_jcc(Cond::Be, Operand{Label{no_wrap}}));
+  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Imm{1}});
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{60}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  MInst wrapped = make_inst(MOp::Nop, 8);
+  wrapped.label = no_wrap;
+  body.insts.push_back(wrapped);
   mov(MOp::Add, Operand{Reg::Rcx}, Operand{Imm{4111}});
   mov(MOp::And, Operand{Reg::Rcx}, Operand{Imm{~4095LL}});
   // mmap(NULL, length, PROT_READ|PROT_WRITE,
@@ -370,7 +381,9 @@ void open_path(Body& body, i64 flags) {
   mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{257}});
   mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Imm{-100}});
   mov(MOp::Mov, Operand{Reg::Rdx}, Operand{Imm{flags}});
-  mov(MOp::Mov, Operand{Reg::R10}, Operand{Imm{0}});
+  // A file created by O_CREAT needs readable/writable bits; a zero mode
+  // would make a written file impossible to open again.
+  mov(MOp::Mov, Operand{Reg::R10}, Operand{Imm{0644}});
   body.insts.push_back(make_inst(MOp::Syscall, 8));
 }
 

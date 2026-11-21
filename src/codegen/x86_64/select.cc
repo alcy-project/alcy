@@ -1547,7 +1547,8 @@ bool Selector::emit(const ir::Instruction& instr,
         return true;
       }
       if (is_float(src) && is_integer(dst)) {
-        push(make_inst(MOp::CvtF2I, width_of(dst), dst_operand(), *lhs));
+        push(make_inst(MOp::CvtF2I, width_of(src), dst_operand(), *lhs,
+                       Operand{Imm{static_cast<i64>(width_of(dst))}}));
         return true;
       }
       if (is_integer(src) && is_integer(dst)) {
