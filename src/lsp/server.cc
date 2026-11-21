@@ -51,6 +51,7 @@ constexpr i32 INVALID_REQUEST = -32600;
 constexpr i32 METHOD_NOT_FOUND = -32601;
 constexpr i32 SERVER_NOT_INITIALIZED = -32002;
 constexpr i32 INVALID_PARAMS = -32602;
+constexpr i32 REQUEST_CANCELLED = -32800;
 
 const text::JsonValue* field(const text::JsonValue& object,
                              std::string_view key) {
@@ -153,6 +154,9 @@ i32 Server::run() {
 }
 
 void Server::handle(std::string_view payload) {
+  if (watched_files_pending_) {
+    flush_watched_files();
+  }
   base::Result<text::JsonValue, text::JsonError> parsed =
       text::parse_json(payload);
   if (parsed.is_err()) {
@@ -179,6 +183,14 @@ void Server::handle(std::string_view payload) {
 void Server::handle_request(const text::JsonValue& message) {
   const text::JsonValue* id = field(message, "id");
   const std::string_view method = string_field(message, "method");
+  if (id != nullptr) {
+    const auto cancelled = cancelled_.find(text::to_json(*id));
+    if (cancelled != cancelled_.end()) {
+      cancelled_.erase(cancelled);
+      send_error(*id, REQUEST_CANCELLED, "request cancelled");
+      return;
+    }
+  }
   if (method.empty()) {
     send_error(*id, INVALID_REQUEST, "request has no method");
     return;
@@ -500,6 +512,14 @@ void Server::handle_notification(const text::JsonValue& message) {
   } else if (method == "workspace/didChangeWatchedFiles") {
     watched_files_changed(*params);
   } else if (method == "$/cancelRequest") {
+    if (const text::JsonValue* id = field(*params, "id"); id != nullptr) {
+      // A cancel for a request already answered has nothing to match;
+      // bound the set so a long-lived session cannot grow it without end.
+      if (cancelled_.size() > 1024) {
+        cancelled_.clear();
+      }
+      cancelled_.insert(text::to_json(*id));
+    }
     log_message(4, "cancellation requested");
   }
 }
@@ -1346,6 +1366,11 @@ void Server::register_watchers() {
 
 void Server::watched_files_changed(const text::JsonValue& params) {
   (void)params;
+  watched_files_pending_ = true;
+}
+
+void Server::flush_watched_files() {
+  watched_files_pending_ = false;
   log_message(4, "watched files changed; refreshing package analyses");
   for (const auto& [uri, document] : documents_.documents()) {
     (void)uri;

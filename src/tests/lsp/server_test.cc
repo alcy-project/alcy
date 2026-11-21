@@ -81,6 +81,29 @@ TEST_CASE("The server answers initialize and exits cleanly on shutdown") {
   CHECK(response.find(R"("id":2)") != std::string::npos);
 }
 
+TEST_CASE("The server answers a cancelled request with RequestCancelled") {
+  std::string requests;
+  append_frame(requests,
+               R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})");
+  append_frame(requests,
+               R"({"jsonrpc":"2.0","method":"initialized","params":{}})");
+  append_frame(requests, R"({"jsonrpc":"2.0","method":"$/cancelRequest",)"
+                         R"("params":{"id":5}})");
+  append_frame(
+      requests,
+      R"({"jsonrpc":"2.0","id":5,"method":"textDocument/documentSymbol",)"
+      R"("params":{"textDocument":{"uri":"file:///main.al"}}})");
+  append_frame(requests,
+               R"({"jsonrpc":"2.0","id":2,"method":"shutdown","params":null})");
+  append_frame(requests, R"({"jsonrpc":"2.0","method":"exit"})");
+
+  i32 exit_code = -1;
+  const std::string response = serve(requests, &exit_code);
+
+  CHECK(response.find("-32800") != std::string::npos);
+  CHECK(response.find(R"("id":5)") != std::string::npos);
+}
+
 TEST_CASE("The server refuses a request before initialize") {
   std::string requests;
   append_frame(requests,

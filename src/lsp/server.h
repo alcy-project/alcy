@@ -5,6 +5,7 @@
 
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 #include "fpag/base/numeric.h"
 #include "lsp/analysis_cache.h"
@@ -98,6 +99,7 @@ class Server {
                   std::string_view message);
   void send_notification(std::string_view method, text::JsonValue params);
   void log_message(i32 type, std::string_view message);
+  void flush_watched_files();
   void send_request(std::string_view id,
                     std::string_view method,
                     text::JsonValue params);
@@ -109,6 +111,8 @@ class Server {
   DiagnosticsCache diagnostics_;
   PositionEncoding encoding_ = PositionEncoding::Utf16;
   bool watched_files_supported_ = false;
+  bool watched_files_pending_ = false;
+  std::unordered_set<std::string> cancelled_;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;
