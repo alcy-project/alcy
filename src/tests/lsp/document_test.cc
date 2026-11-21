@@ -7,10 +7,33 @@
 #include <vector>
 
 #include "doctest/doctest.h"
+#include "fpag/base/numeric.h"
 #include "lsp/protocol.h"
 #include "text/json.h"
 
 namespace lsp {
+
+namespace {
+
+// An incrementally edited index must agree with one built from scratch
+// at every byte offset, including the ones just past a line break.
+void check_matches_rebuild(const Document& edited) {
+  const Document rebuilt("file:///main.al", "alcy", edited.version(),
+                         std::string(edited.text()));
+  for (usize offset = 0; offset <= edited.text().size(); ++offset) {
+    CHECK(edited.index().position_at(edited.text(), offset) ==
+          rebuilt.index().position_at(rebuilt.text(), offset));
+  }
+}
+
+Document edit(Document document, Range range, std::string_view replacement) {
+  std::vector<ContentChange> changes;
+  changes.push_back(ContentChange{true, range, std::string(replacement)});
+  document.apply(changes, 2);
+  return document;
+}
+
+}  // namespace
 
 TEST_CASE("Positions count UTF-16 code units, not bytes") {
   // 'a', U+1F600 (four UTF-8 bytes, two UTF-16 units), 'b'.
@@ -87,6 +110,19 @@ TEST_CASE("A document applies an incremental change") {
 
   CHECK(document.text() == "fn run() {}");
   CHECK(document.version() == 2);
+}
+
+TEST_CASE("Incremental line starts match a full rebuild") {
+  const std::string source =
+      "fn main() {\r\n  x := 1\n  y := 2\r\n  ret x + y\n}\n";
+  const Document initial("file:///main.al", "alcy", 1, source);
+
+  check_matches_rebuild(edit(initial, {{1, 2}, {1, 6}}, "1 + 1"));
+  check_matches_rebuild(edit(initial, {{0, 0}, {0, 0}}, "// hi\n"));
+  check_matches_rebuild(edit(initial, {{2, 0}, {3, 0}}, ""));
+  check_matches_rebuild(edit(initial, {{1, 6}, {2, 6}}, "\r\n  z := 3\r"));
+  check_matches_rebuild(edit(initial, {{4, 0}, {4, 0}}, "\r"));
+  check_matches_rebuild(edit(initial, {{0, 9}, {4, 2}}, "x"));
 }
 
 TEST_CASE("A document applies a full replacement") {

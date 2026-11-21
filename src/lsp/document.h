@@ -48,6 +48,11 @@ class PositionIndex {
  public:
   void reset(std::string_view text);
 
+  // Updates line starts for an edit that replaced [start, end) with
+  // `new_len` bytes. `text` is the buffer after the edit. Only the
+  // affected neighbourhood is scanned; the rest of the index is reused.
+  void apply(std::string_view text, usize start, usize end, usize new_len);
+
   // Byte offset of `position`. A character past the line end clamps to
   // the line end, and a line past the text clamps to the text end.
   usize byte_offset(std::string_view text, Position position) const;

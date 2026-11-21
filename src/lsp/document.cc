@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "fpag/base/numeric.h"
 
@@ -66,6 +67,36 @@ void PositionIndex::reset(std::string_view text) {
       line_starts_.push_back(static_cast<u32>(i + 1));
     }
   }
+}
+
+void PositionIndex::apply(std::string_view text,
+                          usize start,
+                          usize end,
+                          usize new_len) {
+  const usize lo = start > 0 ? start - 1 : 0;
+  const i64 delta = static_cast<i64>(new_len) - static_cast<i64>(end - start);
+  const usize scan_end = start + new_len;
+
+  std::vector<u32> next;
+  next.reserve(line_starts_.size());
+  for (const u32 line_start : line_starts_) {
+    if (line_start > lo) {
+      break;
+    }
+    next.push_back(line_start);
+  }
+  for (usize i = lo; i < scan_end && i < text.size(); ++i) {
+    if (text[i] == '\n' ||
+        (text[i] == '\r' && (i + 1 == text.size() || text[i + 1] != '\n'))) {
+      next.push_back(static_cast<u32>(i + 1));
+    }
+  }
+  for (const u32 line_start : line_starts_) {
+    if (line_start > end) {
+      next.push_back(static_cast<u32>(static_cast<i64>(line_start) + delta));
+    }
+  }
+  line_starts_ = std::move(next);
 }
 
 usize PositionIndex::byte_offset(std::string_view text,
@@ -132,15 +163,16 @@ void Document::apply(std::span<const ContentChange> changes, i64 version) {
   for (const ContentChange& change : changes) {
     if (!change.has_range) {
       text_ = change.text;
+      index_.reset(text_);
     } else {
       const usize start = index_.byte_offset(text_, change.range.start);
       const usize end = index_.byte_offset(text_, change.range.end);
       if (start <= end && end <= text_.size()) {
         text_.replace(start, end - start, change.text);
+        index_.apply(text_, start, end, change.text.size());
       }
     }
     // Each change addresses the document the previous one produced.
-    rebuild();
   }
   version_ = version;
 }
