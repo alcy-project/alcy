@@ -158,8 +158,7 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
   }
 
   const debug::Profiler& profiler = *envelope.trace.profiler;
-  for (usize i = 0; i < events.size(); ++i) {
-    const debug::ProfileEvent& event = events[i];
+  for (const auto& event : events) {
     if (!first) {
       out += ',';
     }
