@@ -30,7 +30,7 @@ empty, and the file says why.
 These live in `src/scanner.c`.
 
 **The brace that opens a block.** The specification requires the `{` of
-`if`, `while`, `match`, `loop`, `for`, `fn`, `test`, `impl`, `struct`,
+`if`, `while`, `match`, `loop`, `for`, `fn`, `impl`, `struct`,
 `enum`, `spec`, `extern`, `comp`, `unsafe`, and `else` to stay on the
 line of the header it belongs to. That brace is `_block_lbrace`, and the
 scanner produces it only when no newline stands between the header and
@@ -96,11 +96,10 @@ Three places read narrower:
 - **A block opener on a following line.** The specification forbids it, so
   `if c` and a `{` on the next line is an `ERROR` node, as it is a
   diagnostic in the compiler.
-- **The body of a `test` block.** It reads the two item kinds the
-  specification gives it, a test entry and a helper `fn`, and nothing
-  `pub`. The compiler reuses the module's item list there, so it also
-  takes a `struct` or a `use` inside a block. Both readings that are
-  errors on either side are pinned by a corpus case.
+- **The body of a conditional group.** A `#[when(EXPR)] { ... }` group
+  reads the module's own item list: functions, types, `use`, another
+  group, and a `#[test]` marker on a function. The compiler splices the
+  group into the module without a scope, so the tree agrees with it.
 
 ## Reserved words
 

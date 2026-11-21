@@ -118,9 +118,9 @@ struct Pair {
 A test entry gated on the target
 ================================================================================
 
-test {
+#[when(testing)] {
   #[when(target.os == "linux")]
-  test adds() {
+  #[test] fn adds() {
     ret
   }
 }
@@ -128,13 +128,19 @@ test {
 --------------------------------------------------------------------------------
 
 (source_file
-  (test_block_item
+  (attribute
+    (identifier)
+    (identifier))
+  (conditional_group_item
     (attribute
       (identifier)
       (identifier)
       (identifier)
       (string))
-    (test_entry_item
+    (attribute
+      (identifier))
+    (function_item
       (identifier)
+      (parameters)
       (block
         (return_expression)))))

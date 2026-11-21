@@ -1681,6 +1681,65 @@
     }
   },
   {
+    "type": "conditional_group_item",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "attribute",
+          "named": true
+        },
+        {
+          "type": "conditional_group_item",
+          "named": true
+        },
+        {
+          "type": "const_item",
+          "named": true
+        },
+        {
+          "type": "enum_item",
+          "named": true
+        },
+        {
+          "type": "extern_item",
+          "named": true
+        },
+        {
+          "type": "function_item",
+          "named": true
+        },
+        {
+          "type": "impl_item",
+          "named": true
+        },
+        {
+          "type": "intrinsic_fn_item",
+          "named": true
+        },
+        {
+          "type": "spec_item",
+          "named": true
+        },
+        {
+          "type": "static_item",
+          "named": true
+        },
+        {
+          "type": "struct_item",
+          "named": true
+        },
+        {
+          "type": "use_item",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "const_item",
     "named": true,
     "fields": {
@@ -3783,6 +3842,10 @@
           "named": true
         },
         {
+          "type": "conditional_group_item",
+          "named": true
+        },
+        {
           "type": "const_item",
           "named": true
         },
@@ -3816,10 +3879,6 @@
         },
         {
           "type": "struct_item",
-          "named": true
-        },
-        {
-          "type": "test_block_item",
           "named": true
         },
         {
@@ -4093,65 +4152,6 @@
           "named": true
         }
       ]
-    }
-  },
-  {
-    "type": "test_block_item",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": false,
-      "types": [
-        {
-          "type": "attribute",
-          "named": true
-        },
-        {
-          "type": "function_item",
-          "named": true
-        },
-        {
-          "type": "test_entry_item",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "test_entry_item",
-    "named": true,
-    "fields": {
-      "body": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "block",
-            "named": true
-          }
-        ]
-      },
-      "name": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      },
-      "return_type": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "return_type",
-            "named": true
-          }
-        ]
-      }
     }
   },
   {
@@ -4993,10 +4993,6 @@
   },
   {
     "type": "struct",
-    "named": false
-  },
-  {
-    "type": "test",
     "named": false
   },
   {

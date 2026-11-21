@@ -134,12 +134,12 @@ module.exports = grammar({
     // Attributes ------------------------------------------------------------
 
     // Either attribute may lead an item and repeat; the closed set is
-    // `#[when(EXPR)]`, which gates an item on the target, and
+    // `#[when(EXPR)]`, which gates an item on the build context, and
     // `#[repr(C)]`, which fixes a struct's layout to the platform's C
     // one (grammar.ebnf, `attribute`). Word-like parts read as
     // identifiers so the rest of the language keeps its words, and the
     // checker validates the argument the way it validates an extern
-    // convention.
+    // convention. A `#[test]` role marker takes no argument.
     attribute: $ => seq(
       '#',
       '[',
@@ -169,6 +169,7 @@ module.exports = grammar({
       seq('(', $._when_expr, ')'),
       $.string,
       $.boolean,
+      prec(1, $.identifier),
       $._target_key,
     ),
 
@@ -195,7 +196,7 @@ module.exports = grammar({
       $.static_item,
       $.const_item,
       $.use_item,
-      $.test_block_item,
+      $.conditional_group_item,
       ),
     ),
 
@@ -365,53 +366,13 @@ module.exports = grammar({
       ';',
     ),
 
-    // A module's tests, one entry per line, beside the helpers they share.
-    // The block is module level only and does not nest: what it holds is an
-    // entry or a helper, so a second `test` block here reads as neither and
-    // is a parse error, as it is in the compiler (items.md, "Tests";
-    //).
-    test_block_item: $ => seq(
-      'test',
+    // A `#[when(...)]` gate followed by a brace groups items without
+    // making a scope: the compiler splices them into the module's own
+    // list. The group can hold any item, including another group.
+    conditional_group_item: $ => seq(
       $._block_lbrace,
-      itemList($, $._test_item),
+      itemList($, $._item),
       '}',
-    ),
-
-    // A gate leads a test entry or a helper the same way it leads any
-    // item.
-    _test_item: $ => seq(
-      repeat($.attribute),
-      choice($.test_entry_item, $._test_helper_item),
-    ),
-
-    // A test takes no arguments, so its parameter list is empty by syntax:
-    // the two parentheses are tokens rather than a `parameters` node. A
-    // declared return type parses, and it is the `alcy test` command that
-    // reports it, not the parse.
-    test_entry_item: $ => seq(
-      'test',
-      field('name', $.identifier),
-      '(',
-      ')',
-      optional(field('return_type', $.return_type)),
-      field('body', $.block),
-    ),
-
-    // A helper is an ordinary function whose name is scoped to the block, so
-    // it reads as `function_item` in the tree. It carries no visibility:
-    // nothing in a block is reachable from another module, so `pub` there
-    // would mean nothing (items.md, "Tests"). The alias wraps the whole
-    // rule, which is why the function itself is a rule of its own.
-    _test_helper_item: $ => alias($._test_helper_fn, $.function_item),
-
-    _test_helper_fn: $ => seq(
-      optional(choice('unsafe', 'comp')),
-      'fn',
-      field('name', $.identifier),
-      optional(field('type_parameters', $.type_parameters)),
-      field('parameters', $.parameters),
-      optional(field('return_type', $.return_type)),
-      field('body', $.block),
     ),
 
     return_type: $ => seq('->', field('type', $._type)),

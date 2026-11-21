@@ -11,9 +11,6 @@
 (extern_fn_item
   name: (identifier) @name) @definition.function
 
-(test_entry_item
-  name: (identifier) @name) @definition.function
-
 (spec_method
   name: (identifier) @name) @definition.method
 

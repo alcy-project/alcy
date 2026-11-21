@@ -693,8 +693,8 @@ fn log(comp fmt: str, args: ..) -> i32 {
 A test block with one entry
 ================================================================================
 
-test {
-  test adds() {
+#[when(testing)] {
+  #[test] fn adds() {
     assert(true)
   }
 }
@@ -702,9 +702,15 @@ test {
 --------------------------------------------------------------------------------
 
 (source_file
-  (test_block_item
-    (test_entry_item
+  (attribute
+    (identifier)
+    (identifier))
+  (conditional_group_item
+    (attribute
+      (identifier))
+    (function_item
       (identifier)
+      (parameters)
       (block
         (call_expression
           (path_expression
@@ -717,8 +723,8 @@ test {
 A test block holds the helpers its entries share
 ================================================================================
 
-test {
-  test adds() {
+#[when(testing)] {
+  #[test] fn adds() {
     assert_eq(twice(2), 4)
   }
 
@@ -732,9 +738,15 @@ test {
 --------------------------------------------------------------------------------
 
 (source_file
-  (test_block_item
-    (test_entry_item
+  (attribute
+    (identifier)
+    (identifier))
+  (conditional_group_item
+    (attribute
+      (identifier))
+    (function_item
       (identifier)
+      (parameters)
       (block
         (call_expression
           (path_expression
@@ -782,8 +794,8 @@ A test block sits among the module's other items
 
 const TWICE: i64 := 2
 
-test {
-  test adds() {
+#[when(testing)] {
+  #[test] fn adds() {
   }
 }
 
@@ -798,9 +810,15 @@ fn main() -> i32 {
     (identifier)
     (primitive_type)
     (integer))
-  (test_block_item
-    (test_entry_item
+  (attribute
+    (identifier)
+    (identifier))
+  (conditional_group_item
+    (attribute
+      (identifier))
+    (function_item
       (identifier)
+      (parameters)
       (block)))
   (function_item
     (identifier)
@@ -815,8 +833,8 @@ fn main() -> i32 {
 A test entry may declare a return type
 ================================================================================
 
-test {
-  test gives_a_value() -> i32 {
+#[when(testing)] {
+  #[test] fn gives_a_value() -> i32 {
     ret 1
   }
 }
@@ -824,9 +842,15 @@ test {
 --------------------------------------------------------------------------------
 
 (source_file
-  (test_block_item
-    (test_entry_item
+  (attribute
+    (identifier)
+    (identifier))
+  (conditional_group_item
+    (attribute
+      (identifier))
+    (function_item
       (identifier)
+      (parameters)
       (return_type
         (primitive_type))
       (block
@@ -837,40 +861,56 @@ test {
 A test block does not nest
 ================================================================================
 
-test {
-  test one() {
-  }
-
-  test {
+#[when(testing)] {
+  #[when(target.os == "linux")] {
+    #[test] fn linux_only() {
+    }
   }
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (test_block_item
-    (test_entry_item
+  (attribute
+    (identifier)
+    (identifier))
+  (conditional_group_item
+    (attribute
       (identifier)
-      (block))
-    (ERROR))
-  (ERROR))
+      (identifier)
+      (identifier)
+      (string))
+    (conditional_group_item
+      (attribute
+        (identifier))
+      (function_item
+        (identifier)
+        (parameters)
+        (block)))))
 
 ================================================================================
 A test entry takes no arguments
 ================================================================================
 
-test {
-  test one(n: i32) {
+#[when(testing)] {
+  #[test] fn one(n: i32) {
   }
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (test_block_item
-    (test_entry_item
+  (attribute
+    (identifier)
+    (identifier))
+  (conditional_group_item
+    (attribute
+      (identifier))
+    (function_item
       (identifier)
-      (ERROR
-        (identifier)
-        (primitive_type))
+      (parameters
+        (parameter
+          (identifier_pattern
+            (identifier))
+          (primitive_type)))
       (block))))
