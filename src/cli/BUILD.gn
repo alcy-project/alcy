@@ -9,6 +9,7 @@
 # timestamp alone and nothing rebuilds.
 action("version_cc") {
   script = "//tools/version.py"
+
   # Inputs, not sources: ninja watches them for changes, but gn check must
   # not think the compiler's headers belong to this action.
   inputs = compiler_version_sources

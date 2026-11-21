@@ -10,7 +10,10 @@ executable("docsite") {
   output_name = "alcy-docsite"
   sources = [ "docsite.cc" ]
 
-  configs += [ "//src:alcy_config" ]
+  configs += [
+    "//src:alcy_config",
+    "//src:win_sys_libs",
+  ]
 
   deps = [
     "//src:base_modules",
