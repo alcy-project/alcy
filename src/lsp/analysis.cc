@@ -99,6 +99,13 @@ void check_tree(PackageAnalysis& out,
   if (!features.has_value()) {
     return;
   }
+  if (types_unavailable) {
+    // Do not publish a document view whose checked types were moved out
+    // with no lowered storage to replace them. A feature that found no
+    // package answers nothing instead of indexing an empty type table.
+    out.context.bag.dedup();
+    return;
+  }
   const usize index = out.checked.size();
   for (const analyzer::ModuleNode* module : features->tree.modules) {
     if (module->file != source::UNKNOWN_FILE) {
@@ -107,7 +114,7 @@ void check_tree(PackageAnalysis& out,
   }
   out.checked.push_back(std::move(*features));
   out.lowered.push_back(std::move(lowered));
-  out.ok = !types_unavailable;
+  out.ok = true;
   out.context.bag.dedup();
 }
 

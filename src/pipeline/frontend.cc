@@ -57,16 +57,20 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
         std::move(package), ctx.target.width, ctx.ast, ctx.strings, ctx.bag,
         ctx.profiler, &ctx.sources, lowering::MAX_FUNCTIONS, checked_out);
   }();
-  if (lowered.is_err() || ctx.bag.error_count() > errors_before) {
+  if (lowered.is_err()) {
     return base::make_err(diag::Reported{});
   }
-  // The lowered storage is valid even when the borrow pass will refuse
-  // the program: hold it where the caller can reach it on either exit.
+  // The lowered storage is valid even when this pass reported a
+  // diagnostic or the borrow pass refuses the program: hold it where
+  // the caller can reach it on either exit.
   std::optional<lowering::LoweredPackage> local;
   std::optional<lowering::LoweredPackage>& destination =
       lowered_out == nullptr ? local : *lowered_out;
   destination.emplace(std::move(lowered).unwrap());
   lowering::LoweredPackage& package_ir = *destination;
+  if (ctx.bag.error_count() > errors_before) {
+    return base::make_err(diag::Reported{});
+  }
   // Reported counts exclude the parametric bodies, the specializations
   // of staged items, and the bodies the pass synthesized: no source
   // function stands for one. The storage's lists are the
