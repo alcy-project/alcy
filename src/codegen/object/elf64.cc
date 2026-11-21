@@ -166,9 +166,9 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
         const u16 shndx = symbol.section == Symbol::UNDEFINED
                               ? 0
                               : static_cast<u16>(symbol.section + 1);
-        symbol_index[at] = table.add(table.names.add(symbol.name),
-                                     symbol_info(symbol), shndx, symbol.offset,
-                                     symbol.size);
+        symbol_index[at] =
+            table.add(table.names.add(symbol.name), symbol_info(symbol), shndx,
+                      symbol.offset, symbol.size);
       }
     }
     if (pass == 0) {

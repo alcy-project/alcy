@@ -16,8 +16,8 @@
 #include "ir/function.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
-#include "overlay/overlay.h"
 #include "ir/type.h"
+#include "overlay/overlay.h"
 
 namespace codegen::x86_64 {
 

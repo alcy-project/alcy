@@ -36,6 +36,7 @@
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
+#include "overlay/overlay.h"
 
 namespace codegen::x86_64 {
 
@@ -76,10 +77,9 @@ constexpr bool is_signed(const ir::TypeTag tag) {
 constexpr bool is_integer(const ir::TypeTag tag) {
   // A bool rides as zero or one, which is what an integer immediate
   // spells; the compare reads it unsigned for the same reason.
-  return is_signed(tag) || tag == ir::TypeTag::I1 ||
-         tag == ir::TypeTag::U8 || tag == ir::TypeTag::U16 ||
-         tag == ir::TypeTag::U32 || tag == ir::TypeTag::U64 ||
-         tag == ir::TypeTag::Usize;
+  return is_signed(tag) || tag == ir::TypeTag::I1 || tag == ir::TypeTag::U8 ||
+         tag == ir::TypeTag::U16 || tag == ir::TypeTag::U32 ||
+         tag == ir::TypeTag::U64 || tag == ir::TypeTag::Usize;
 }
 
 constexpr bool is_float(const ir::TypeTag tag) {
@@ -1152,12 +1152,13 @@ bool Selector::emit(const ir::Instruction& instr,
       if (tag == ir::TypeTag::Struct || tag == ir::TypeTag::Tuple) {
         const ir::TypeIdxRange fields =
             tag == ir::TypeTag::Struct
-                ? storage_.struct_types()
-                      [storage_.types()[aggregate_type.idx].as_struct()]
+                ? storage_
+                      .struct_types()[storage_.types()[aggregate_type.idx]
+                                          .as_struct()]
                       .fields
                 : storage_
-                      .tuple_types()
-                      [storage_.types()[aggregate_type.idx].as_tuple()]
+                      .tuple_types()[storage_.types()[aggregate_type.idx]
+                                         .as_tuple()]
                       .elements;
         offset = static_cast<i64>(ir::field_offset(
             storage_.state(), fields, static_cast<u32>(which), width_));
@@ -1222,8 +1223,8 @@ bool Selector::emit(const ir::Instruction& instr,
         right = Operand{Reg::Rdx};
       }
       push(make_inst(alu_of(instr.op), compute, dst_operand(), right));
-      if ((instr.op == O::IntAdd || instr.op == O::IntSub) && check != nullptr &&
-          check->kind == overlay::Check::Overflow) {
+      if ((instr.op == O::IntAdd || instr.op == O::IntSub) &&
+          check != nullptr && check->kind == overlay::Check::Overflow) {
         check_overflow(is_signed(dst_tag()) ? Cond::O : Cond::B);
       }
       return true;
@@ -1608,10 +1609,9 @@ bool Selector::emit_call(const ir::Instruction& instr,
         return false;
       }
       if (!value.is<ir::RegisterIdx>()) {
-        const ir::Immutable& imm =
-            storage_.immutables()[value.as_immutable()];
-        const SymbolRef bytes = string_ref(
-            rodata_.intern(strings_.get(imm.data.str_id_value)));
+        const ir::Immutable& imm = storage_.immutables()[value.as_immutable()];
+        const SymbolRef bytes =
+            string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)));
         push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
                        Operand{bytes}));
         push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},

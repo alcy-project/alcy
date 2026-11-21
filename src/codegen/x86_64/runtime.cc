@@ -3,6 +3,7 @@
 
 #include "codegen/x86_64/runtime.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -43,7 +44,6 @@ SymbolRef text(Body& body, RoData& rodata, const std::string_view bytes) {
   body.symbols.push_back(symbol);
   return SymbolRef{static_cast<u32>(body.symbols.size() - 1)};
 }
-
 
 // The one writer a print family shares: `write` of the two words the
 // caller handed over, to the descriptor the family is for. The entry and
@@ -135,11 +135,11 @@ Body build_error_kind() {
     i32 number;
     i32 kind;
   };
-  constexpr Mapping mappings[] = {{4, 1}, {11, 2}, {2, 3},
+  constexpr Mapping mappings[] = {{4, 1},  {11, 2}, {2, 3},
                                   {13, 4}, {32, 5}, {22, 6}};
   for (const Mapping& mapping : mappings) {
-    body.insts.push_back(
-        make_inst(MOp::Cmp, 4, Operand{Reg::Rdi}, Operand{Imm{mapping.number}}));
+    body.insts.push_back(make_inst(MOp::Cmp, 4, Operand{Reg::Rdi},
+                                   Operand{Imm{mapping.number}}));
     const u32 next = body.label_count++;
     body.insts.push_back(make_jcc(Cond::E, Operand{Label{next}}));
     body.insts.push_back(
@@ -181,17 +181,16 @@ Body build_alloc(RoData& rodata) {
   // sequence made is what the exit restores.
   body.insts.push_back(
       make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{16}}));
-  body.insts.push_back(make_inst(MOp::Lea, 8, Operand{Reg::Rdi},
-                                 Operand{Mem{.base = Reg::Rsp,
-                                             .index = std::nullopt,
-                                             .scale = 1,
-                                             .disp = 0}}));
+  body.insts.push_back(make_inst(
+      MOp::Lea, 8, Operand{Reg::Rdi},
+      Operand{Mem{
+          .base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 0}}));
   const SymbolRef memalign = callee(body, "posix_memalign");
   body.insts.push_back(
       make_inst(MOp::Call, 8, Operand{SymbolRef{memalign.id}}));
   // A refusal is the end: there is nothing to answer with.
-  body.insts.push_back(make_inst(MOp::Cmp, 4, Operand{Reg::Rax},
-                                 Operand{Imm{0}}));
+  body.insts.push_back(
+      make_inst(MOp::Cmp, 4, Operand{Reg::Rax}, Operand{Imm{0}}));
   const u32 failed = body.label_count++;
   const u32 ok = body.label_count++;
   MInst to_ok = make_jcc(Cond::E, Operand{Label{ok}});
@@ -202,11 +201,10 @@ Body build_alloc(RoData& rodata) {
   const SymbolRef abort = callee(body, "abort");
   body.insts.push_back(make_inst(MOp::Call, 8, Operand{SymbolRef{abort.id}}));
   body.insts.push_back(make_inst(MOp::Ud2, 8));
-  MInst at_ok = make_inst(MOp::Mov, 8, Operand{Reg::Rax},
-                          Operand{Mem{.base = Reg::Rsp,
-                                      .index = std::nullopt,
-                                      .scale = 1,
-                                      .disp = 0}});
+  MInst at_ok = make_inst(
+      MOp::Mov, 8, Operand{Reg::Rax},
+      Operand{
+          Mem{.base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 0}});
   at_ok.label = ok;
   body.insts.push_back(at_ok);
   body.insts.push_back(make_inst(MOp::Ret, 8));

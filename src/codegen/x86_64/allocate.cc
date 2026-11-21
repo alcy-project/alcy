@@ -1,9 +1,9 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <bit>
 #include "codegen/x86_64/allocate.h"
 
+#include <bit>
 #include <optional>
 #include <span>
 #include <utility>
@@ -70,8 +70,8 @@ Shape shape_of(const MOp op) {
 // The registers allocation borrows, in the order reads take them. A
 // divide reads its dividend and its sign out of `rax` and `rdx`, which
 // the selector set up, so its one read takes `rcx` and only `rcx`.
-constexpr Reg READ_SCRATCHES[] = {Reg::Rax, Reg::Rcx, Reg::Rdx,
-                                  Reg::R10, Reg::R11};
+constexpr Reg READ_SCRATCHES[] = {Reg::Rax, Reg::Rcx, Reg::Rdx, Reg::R10,
+                                  Reg::R11};
 constexpr Reg DIVISOR_SCRATCHES[] = {Reg::Rcx};
 
 constexpr Mem slot(const i32 disp) {
@@ -283,8 +283,9 @@ void allocate(Body& body, const Frame& frame) {
         // The slot the selector named: its frame reference is the
         // source the copy reads.
         const Operand resolved = resolve(inst.ops[1]);
-        const Reg from = reg_of(std::get<Mem>(resolved).base.value());
-        (void)from;
+        const auto& base = std::get<Mem>(resolved).base;
+        DCHECK(base.has_value());
+        (void)reg_of(*base);
         push_labeled(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, resolved));
       } else {
         DCHECK_MSG(false, "a wide move reads an address");
@@ -355,8 +356,8 @@ void allocate(Body& body, const Frame& frame) {
         std::holds_alternative<Imm>(encoded.ops[1])) {
       const Reg into = pool[next_scratch++];
       DCHECK(next_scratch <= pool.size());
-      push_labeled(make_inst(MOp::Mov, inst.width, Operand{into},
-                             encoded.ops[1]));
+      push_labeled(
+          make_inst(MOp::Mov, inst.width, Operand{into}, encoded.ops[1]));
       encoded.ops[1] = Operand{into};
     }
     // An x86 scale field holds only 1, 2, 4 or 8. A wider element needs
@@ -376,11 +377,9 @@ void allocate(Body& body, const Frame& frame) {
         } else {
           const Reg factor = pool[next_scratch++];
           DCHECK(next_scratch <= pool.size());
-          push_labeled(make_inst(
-              MOp::Mov, 8, Operand{factor},
-              Operand{Imm{static_cast<i64>(mem->scale)}}));
-          push_labeled(
-              make_inst(MOp::Imul, 8, Operand{into}, Operand{factor}));
+          push_labeled(make_inst(MOp::Mov, 8, Operand{factor},
+                                 Operand{Imm{static_cast<i64>(mem->scale)}}));
+          push_labeled(make_inst(MOp::Imul, 8, Operand{into}, Operand{factor}));
         }
         mem->index = into;
         mem->scale = 1;
@@ -397,8 +396,8 @@ void allocate(Body& body, const Frame& frame) {
         std::holds_alternative<Imm>(encoded.ops[0])) {
       const Reg into = pool[next_scratch++];
       DCHECK(next_scratch <= pool.size());
-      push_labeled(make_inst(MOp::Mov, inst.width, Operand{into},
-                             encoded.ops[0]));
+      push_labeled(
+          make_inst(MOp::Mov, inst.width, Operand{into}, encoded.ops[0]));
       encoded.ops[0] = Operand{into};
     }
     std::optional<Reg> result;
