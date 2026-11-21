@@ -70,15 +70,27 @@ void check_tree(PackageAnalysis& out,
   std::optional<analyzer::CheckedPackage> features =
       std::move(checked).unwrap();
   std::optional<lowering::LoweredPackage> lowered;
+  bool types_unavailable = false;
   if (!out.context.bag.has_errors()) {
     (void)linter::run_lints(out.context, *features, config);
     if (config.borrow_checks) {
       std::optional<analyzer::CheckedPackage> consumed;
+      std::optional<lowering::LoweredPackage> lowered_out;
       base::Result<pipeline::FrontendOutput, diag::Reported> finished =
           pipeline::finish_frontend(out.context, std::move(*features),
-                                    &consumed);
+                                    &consumed, &lowered_out);
       if (finished.is_ok()) {
         lowered = std::move(std::move(finished).unwrap().package);
+      } else if (lowered_out.has_value()) {
+        // A borrow error does not invalidate the type tables lowering
+        // already built, so editor type answers can still use them.
+        lowered = std::move(lowered_out);
+      } else {
+        // Lowering itself failed: the consumed package's types were
+        // moved out and no lowered storage exists. No feature may read
+        // those tables, so answer nothing instead of indexing an empty
+        // table.
+        types_unavailable = true;
       }
       // The call hands the consumed package back on every exit.
       features.swap(consumed);
@@ -95,7 +107,7 @@ void check_tree(PackageAnalysis& out,
   }
   out.checked.push_back(std::move(*features));
   out.lowered.push_back(std::move(lowered));
-  out.ok = true;
+  out.ok = !types_unavailable;
   out.context.bag.dedup();
 }
 

@@ -46,11 +46,15 @@ base::Result<analyzer::CheckedPackage, diag::Reported> analyze_tree(
 // itself can finish the pipeline without checking twice.
 // `checked_out`, when given, receives the consumed package (its types
 // moved into lowering) on every exit, so a caller that analyzes once can
-// keep the checked metadata even when lowering fails.
+// keep the checked metadata even when lowering fails. `lowered_out`
+// receives the lowered package on every exit after lowering succeeds,
+// including a borrow-check failure: its type tables stay valid for a
+// reader that only asks types, not for borrow correctness.
 base::Result<FrontendOutput, diag::Reported> finish_frontend(
     PipelineContext& ctx,
     analyzer::CheckedPackage package,
-    std::optional<analyzer::CheckedPackage>* checked_out = nullptr);
+    std::optional<analyzer::CheckedPackage>* checked_out = nullptr,
+    std::optional<lowering::LoweredPackage>* lowered_out = nullptr);
 
 // Whether the root module declares the free `main` a binary links.
 // Check and build both reject a binary target without one.

@@ -39,7 +39,8 @@ base::Result<analyzer::CheckedPackage, diag::Reported> analyze_tree(
 base::Result<FrontendOutput, diag::Reported> finish_frontend(
     PipelineContext& ctx,
     analyzer::CheckedPackage package,
-    std::optional<analyzer::CheckedPackage>* checked_out) {
+    std::optional<analyzer::CheckedPackage>* checked_out,
+    std::optional<lowering::LoweredPackage>* lowered_out) {
   // Staged prelude modules check with the package but read as
   // toolchain sources, so reported counts exclude them.
   const usize staged = package.tree.staged_modules;
@@ -59,7 +60,13 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
   if (lowered.is_err() || ctx.bag.error_count() > errors_before) {
     return base::make_err(diag::Reported{});
   }
-  lowering::LoweredPackage package_ir = std::move(lowered).unwrap();
+  // The lowered storage is valid even when the borrow pass will refuse
+  // the program: hold it where the caller can reach it on either exit.
+  std::optional<lowering::LoweredPackage> local;
+  std::optional<lowering::LoweredPackage>& destination =
+      lowered_out == nullptr ? local : *lowered_out;
+  destination.emplace(std::move(lowered).unwrap());
+  lowering::LoweredPackage& package_ir = *destination;
   // Reported counts exclude the parametric bodies, the specializations
   // of staged items, and the bodies the pass synthesized: no source
   // function stands for one. The storage's lists are the

@@ -109,6 +109,17 @@ TEST_CASE("Hover on a binding name shows the inferred type") {
   }
 }
 
+TEST_CASE("Hover keeps the inferred type when borrow checking fails") {
+  const std::optional<std::string> markdown = hover(
+      "fn main() {\n  x := 1\n  m := &mut x\n  n := &mut x\n"
+      "  _ := m\n  _ := n\n}\n",
+      1, 2);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("i32") != std::string::npos);
+  }
+}
+
 TEST_CASE("Hover on a binding with an annotation shows the written type") {
   const std::optional<std::string> markdown =
       hover("fn f() -> i32 {\n  x: i64 := 1\n  ret 0\n}\n", 1, 2);
