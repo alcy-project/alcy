@@ -103,7 +103,7 @@ def main() -> int:
         if not binary.is_file():
             return log.die(
                 f"{name} binary not found in out/{args.build_subdir}/; "
-                "run tools/build.py --target=all --mode=debug "
+                "run tools/build.py --target=all --mode=release "
                 f"--build-subdir={args.build_subdir} first"
             )
         tools[name] = binary

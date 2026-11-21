@@ -146,13 +146,14 @@ jobs:
         run: uv run ./tools/check_cases.py --steps=program --mode=sanitized --build-subdir=build
 
   # The grammar is a second reading of the language, and the compiler is
-  # the oracle for it: every source this job's build accepts must parse
-  # there without an ERROR or a MISSING node. It needs a build, so it does
-  # not run in the matrix, and it asks one question rather than the ones the
-  # matrix would have asked it. The corpus half of the same check needs no
-  # build at all and runs in the Grammar job.
+  # the oracle for it: every source the compiler accepts must parse there
+  # without an ERROR or a MISSING node. Both this and the census below ask
+  # the release binary the matrix already built, so neither pays for a
+  # build of its own. The corpus half of the grammar check needs no
+  # compiler at all and runs in the Style workflow.
   grammar-vs-compiler:
     name: Grammar
+    needs: [release]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -168,6 +169,7 @@ jobs:
         with:
           nix: "false"
           os: Linux
+          toolchain: false
 
       - name: Install the tree-sitter CLI
         shell: bash
@@ -180,24 +182,74 @@ jobs:
           rm tree-sitter-cli.zip
           tree-sitter --version
 
-      - name: Build All
+      - name: Take the Release Compiler
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: alcy-compiler-release-linux-x86_64
+          path: out/ci-release
+
+      - name: Make the Compiler Executable
         shell: bash
-        run: uv run ./tools/build.py --target=all --mode=debug --build-subdir=build
+        run: chmod +x out/ci-release/alcy out/ci-release/comp_census
 
       - name: Check the Grammar Against the Compiler
         shell: bash
-        run: uv run ./tools/check_treesitter.py --differential --build-subdir=build
+        run: uv run ./tools/check_treesitter.py --differential --build-subdir=ci-release
+
+  # The second engine, over the whole acceptance corpus: every case the
+  # front end accepts is lowered to binary IR and interpreted function by
+  # function. A refusal the engine has not declared, or a compiler bug it
+  # reports instead of an answer, fails here. The corpus is checked once
+  # against the same release compiler the matrix built rather than once
+  # per platform, because the question the engine answers is about IR and
+  # not about a host.
+  comp-census:
+    name: Compiler Census
+    needs: [release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: Linux
+          toolchain: false
+
+      - name: Take the Release Compiler
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: alcy-compiler-release-linux-x86_64
+          path: out/ci-release
+
+      - name: Make the Compiler Executable
+        shell: bash
+        run: chmod +x out/ci-release/alcy out/ci-release/comp_census
+
+      - name: Check the Compiler Engine Against the Corpus
+        shell: bash
+        run: uv run ./tools/check_comp.py --build-subdir=ci-release
 
   # A subcommand of the driver is what a check is about, so a subcommand
   # is what a check is named after. Each entry below is one command, so the
-  # three share one definition and the matrix names them apart, and each
+  # four share one definition and the matrix names them apart, and each
   # runs the driver the matrix built rather than a tree of its own.
   #
   # What is left here is what the host does not answer for: the formatter
   # and the borrow rules read source and ask the driver about it, and a wasm
   # module comes out of the driver's own backend to be run by the same bun
-  # on every platform. A corpus whose cases link a program or run one is a
-  # question the platform answers, and those stay in the matrix.
+  # on every platform. Both wasm cases ask the same question of that
+  # backend: the wasm corpus exercises it, and the exe corpus answers
+  # whether the lowering agrees with the one that links a program. A
+  # corpus whose cases link or run natively is a platform question and
+  # stays in the matrix.
   harness:
     name: ${{ matrix.name }}
     needs: [debug]
@@ -213,6 +265,9 @@ jobs:
             bun: false
           - name: Wasm Acceptance
             command: uv run ./tools/check_cases.py --cases-root=e2e/wasm --steps=cli,program --mode=wasm --build-subdir=build
+            bun: true
+          - name: Wasm Programs
+            command: uv run ./tools/check_cases.py --steps=program --mode=wasm --build-subdir=build
             bun: true
     uses: ./.github/workflows/harness.yaml
     with:

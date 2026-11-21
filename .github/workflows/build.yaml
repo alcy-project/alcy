@@ -155,13 +155,27 @@ jobs:
           retention-days: 14
 
       # The checks that read the compiler without compiling anything take
-      # this instead of building the same tree in the same run.
+      # these instead of building the same tree in the same run. The
+      # census needs the release interpreter as well as the driver, and
+      # reads neither through a platform's linker, so one x64 entry
+      # carries both for the jobs that ask those questions.
       - name: Upload the Driver
         if: matrix.plat == 'linux' && !matrix.nix && inputs.build_type == 'debug'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: alcy-driver-${{ matrix.plat }}-${{ matrix.arch }}-${{ inputs.build_type }}
           path: out/build/alcy
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload the Release Compiler
+        if: matrix.plat == 'linux' && matrix.arch == 'x86_64' && !matrix.nix && inputs.build_type == 'release' && inputs.role == 'ci'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: alcy-compiler-release-linux-x86_64
+          path: |
+            out/build/alcy
+            out/build/comp_census
           if-no-files-found: error
           retention-days: 1
 
