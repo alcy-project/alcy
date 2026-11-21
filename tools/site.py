@@ -804,16 +804,28 @@ def command_build(args: argparse.Namespace) -> int:
 
 
 def command_test(_args: argparse.Namespace) -> int:
-    # The generator tests are part of the compiler test suite; run the
-    # same target CI does. The first build is full, subsequent ones
-    # are incremental.
+    # The generator tests are the ssg sources of the compiler test suite.
+    # Build and run them in the no-LLVM configuration the generator itself
+    # uses: the site job installs no C++ toolchain, and the normal build
+    # needs pinned libc++ headers that only setup-build provides.
+    code = build(
+        target="tests",
+        mode="release",
+        build_subdir=DOCSITE_BUILD_SUBDIR,
+        gn_args_extra=DEFAULT_GN_ARG,
+    )
+    if code != 0:
+        return fail(f"tests build failed ({code})")
     result = subprocess.run(
         [
             sys.executable,
             str(project_root_dir / "tools" / "run.py"),
             "--target=tests",
-            "--mode=debug",
-            "--build-subdir=build",
+            "--mode=release",
+            "--build-subdir=" + DOCSITE_BUILD_SUBDIR,
+            "--no-build",
+            "--",
+            "--source-file=*src/tests/ssg/*",
         ],
         check=False,
         cwd=project_root_dir,
