@@ -90,11 +90,10 @@ const analyzer::CheckedModule::CallTarget* find_target(
 }
 
 std::string signature_label(const pipeline::PipelineContext& context,
-                            const analyzer::CheckedPackage& package,
+                            const ir::StorageState& state,
                             std::string_view name,
                             std::span<const ir::TypeIdx> params,
                             ir::TypeIdx ret) {
-  const ir::StorageState& state = package.types->state();
   std::string out = "fn " + std::string(name) + "(";
   bool first = true;
   for (const ir::TypeIdx param : params) {
@@ -172,7 +171,7 @@ text::JsonValue signature_help(const Document& document,
     active = static_cast<u32>(params.size() - 1);
   }
 
-  const ir::StorageState& state = package.types->state();
+  const ir::StorageState& state = analysis.types();
   text::JsonValue parameters = text::JsonValue::make_array();
   for (const ir::TypeIdx param : params) {
     text::JsonValue entry = text::JsonValue::make_object();
@@ -183,7 +182,7 @@ text::JsonValue signature_help(const Document& document,
 
   text::JsonValue signature = text::JsonValue::make_object();
   signature.set("label", text::JsonValue::make_string(signature_label(
-                             context, package, name, params, ret)));
+                             context, state, name, params, ret)));
   signature.set("parameters", std::move(parameters));
 
   text::JsonValue signatures = text::JsonValue::make_array();

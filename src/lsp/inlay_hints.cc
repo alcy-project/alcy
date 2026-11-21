@@ -61,6 +61,7 @@ void collect_binding_hints(const DocumentAnalysis& analysis,
                            std::vector<Hint>* out) {
   const pipeline::PipelineContext& context = analysis.context();
   const analyzer::CheckedPackage& package = analysis.package();
+  const ir::StorageState& state = analysis.types();
   const source::FileId root = analysis.root();
   context.ast.stmts.for_each_node([&](const ast::StmtIdx index) {
     const ast::StmtNode& statement = context.ast.stmts[index];
@@ -86,10 +87,9 @@ void collect_binding_hints(const DocumentAnalysis& analysis,
     if (!type.has_value()) {
       return;
     }
-    out->push_back(Hint{
-        name.offset + name.length,
-        ": " + ir::type_display(package.types->state(), context.strings, *type),
-        true});
+    out->push_back(Hint{name.offset + name.length,
+                        ": " + ir::type_display(state, context.strings, *type),
+                        true});
   });
 }
 

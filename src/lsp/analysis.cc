@@ -19,9 +19,11 @@
 #include "fpag/base/result.h"
 #include "i18n/language.h"
 #include "ir/common.h"
+#include "ir/storage.h"
 #include "linter/config.h"
 #include "linter/engine.h"
 #include "linter/lint.h"
+#include "lowering/lowering.h"
 #include "lsp/document.h"
 #include "lsp/workspace.h"
 #include "path/path.h"
@@ -56,29 +58,43 @@ std::unique_ptr<PackageAnalysis> build_single(const Document& document) {
 void check_tree(PackageAnalysis& out,
                 const analyzer::ModuleTree& tree,
                 const linter::LintConfig& config) {
-  // One reading of the tree feeds both the diagnostics tail (lints and
-  // lowering) and the editor features. Lowering consumes the analyzed
-  // types, so clone them first for the features that outlive this call.
+  // One reading of the tree feeds both the diagnostics tail and the
+  // editor features. Lowering moves the analyzed type tables out, so
+  // keep the checked metadata it hands back and the lowered storage
+  // that now owns the types - neither is copied.
   base::Result<analyzer::CheckedPackage, diag::Reported> checked =
       pipeline::analyze_tree(out.context, tree);
   if (checked.is_err()) {
     return;
   }
-  analyzer::CheckedPackage tail = std::move(checked).unwrap();
-  analyzer::CheckedPackage features = tail;
+  std::optional<analyzer::CheckedPackage> features =
+      std::move(checked).unwrap();
+  std::optional<lowering::LoweredPackage> lowered;
   if (!out.context.bag.has_errors()) {
-    (void)linter::run_lints(out.context, tail, config);
+    (void)linter::run_lints(out.context, *features, config);
     if (config.borrow_checks) {
-      (void)pipeline::finish_frontend(out.context, std::move(tail));
+      std::optional<analyzer::CheckedPackage> consumed;
+      base::Result<pipeline::FrontendOutput, diag::Reported> finished =
+          pipeline::finish_frontend(out.context, std::move(*features),
+                                    &consumed);
+      if (finished.is_ok()) {
+        lowered = std::move(std::move(finished).unwrap().package);
+      }
+      // The call hands the consumed package back on every exit.
+      features.swap(consumed);
     }
   }
+  if (!features.has_value()) {
+    return;
+  }
   const usize index = out.checked.size();
-  for (const analyzer::ModuleNode* module : features.tree.modules) {
+  for (const analyzer::ModuleNode* module : features->tree.modules) {
     if (module->file != source::UNKNOWN_FILE) {
       out.package_of[module->file] = index;
     }
   }
-  out.checked.push_back(std::move(features));
+  out.checked.push_back(std::move(*features));
+  out.lowered.push_back(std::move(lowered));
   out.ok = true;
   out.context.bag.dedup();
 }
@@ -197,7 +213,8 @@ DocumentAnalysis::DocumentAnalysis(const Document& document)
   if (package == owner_->package_of.end()) {
     return;
   }
-  package_ = &owner_->checked[package->second];
+  package_index_ = package->second;
+  package_ = &owner_->checked[package_index_];
   ok_ = true;
 }
 
@@ -206,9 +223,20 @@ DocumentAnalysis::DocumentAnalysis(std::shared_ptr<PackageAnalysis> owner,
                                    usize package_index)
     : owner_(std::move(owner)), root_(root) {
   if (package_index < owner_->checked.size()) {
-    package_ = &owner_->checked[package_index];
+    package_index_ = package_index;
+    package_ = &owner_->checked[package_index_];
     ok_ = true;
   }
+}
+
+const ir::StorageState& DocumentAnalysis::types() const {
+  if (package_index_ < owner_->lowered.size()) {
+    const auto& lowered = owner_->lowered[package_index_];
+    if (lowered.has_value()) {
+      return lowered->storage->state();
+    }
+  }
+  return package_->types->state();
 }
 
 std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,

@@ -31,12 +31,11 @@ namespace lsp {
 namespace {
 
 std::string signature_markdown(const pipeline::PipelineContext& context,
-                               const analyzer::CheckedPackage& package,
+                               const ir::StorageState& state,
                                std::string_view keyword,
                                std::string_view name,
                                std::span<const ir::TypeIdx> params,
                                ir::TypeIdx ret) {
-  const ir::StorageState& state = package.types->state();
   std::string out =
       "~~~alcy\n" + std::string(keyword) + " " + std::string(name) + "(";
   bool first = true;
@@ -112,15 +111,15 @@ std::string doc_markdown(std::string_view source,
 // One line naming a type's size and alignment, or nothing for a type
 // that has no layout until an argument is known.
 std::string layout_line(const pipeline::PipelineContext& context,
-                        const analyzer::CheckedPackage& package,
+                        const ir::StorageState& state,
                         ir::TypeIdx type) {
-  const ir::TypeNode& node = package.types->state().types[type];
+  const ir::TypeNode& node = state.types[type];
   if (node.tag == ir::TypeTag::Param || node.tag == ir::TypeTag::Const ||
       node.tag == ir::TypeTag::Error) {
     return {};
   }
   const ir::TypeLayout layout =
-      ir::type_layout(package.types->state(), type, context.target.width);
+      ir::type_layout(state, type, context.target.width);
   if (layout.size == 0) {
     return {};
   }
@@ -132,6 +131,7 @@ std::string layout_line(const pipeline::PipelineContext& context,
 // and its layout, and every other spelling shows itself.
 std::string type_reference_markdown(const pipeline::PipelineContext& context,
                                     const analyzer::CheckedPackage& package,
+                                    const ir::StorageState& state,
                                     std::string_view source,
                                     ast::TypeIdx index) {
   const ast::TypeNode& node = context.ast.types[index];
@@ -148,9 +148,8 @@ std::string type_reference_markdown(const pipeline::PipelineContext& context,
               continue;
             }
             return "~~~alcy\n" +
-                   ir::type_display(package.types->state(), context.strings,
-                                    named.type) +
-                   "\n~~~\n" + layout_line(context, package, named.type);
+                   ir::type_display(state, context.strings, named.type) +
+                   "\n~~~\n" + layout_line(context, state, named.type);
           }
         }
       }
@@ -162,11 +161,10 @@ std::string type_reference_markdown(const pipeline::PipelineContext& context,
 // The type of an expression, as the hover markdown shared by a use site
 // and a declaration's initializer.
 std::string type_markdown(const pipeline::PipelineContext& context,
-                          const analyzer::CheckedPackage& package,
+                          const ir::StorageState& state,
                           ir::TypeIdx type) {
-  return "~~~alcy\n" +
-         ir::type_display(package.types->state(), context.strings, type) +
-         "\n~~~\n" + layout_line(context, package, type);
+  return "~~~alcy\n" + ir::type_display(state, context.strings, type) +
+         "\n~~~\n" + layout_line(context, state, type);
 }
 
 constexpr u32 NO_MEMBER = U32_MAX;
@@ -234,6 +232,7 @@ std::optional<std::string> render_target(const DocumentAnalysis& analysis,
                                          std::string_view source) {
   const pipeline::PipelineContext& context = analysis.context();
   const analyzer::CheckedPackage& package = analysis.package();
+  const ir::StorageState& state = analysis.types();
   const ast::ItemNode& item = context.ast.items[target.item];
   using K = ast::ItemKind;
   switch (item.kind) {
@@ -291,7 +290,7 @@ std::optional<std::string> render_target(const DocumentAnalysis& analysis,
         return std::nullopt;
       }
       return signature_markdown(
-                 context, package, item.kind == K::Fn ? "fn" : "intrinsic",
+                 context, state, item.kind == K::Fn ? "fn" : "intrinsic",
                  item.name(), signature->params, signature->ret) +
              doc_markdown(source, item.docs);
     }
@@ -302,7 +301,6 @@ std::optional<std::string> render_target(const DocumentAnalysis& analysis,
       if (info == nullptr) {
         return std::nullopt;
       }
-      const ir::StorageState& state = package.types->state();
       return "~~~alcy\n" +
              std::string(item.kind == K::Const ? "const " : "static ") +
              std::string(item.name()) + ": " +
@@ -324,6 +322,7 @@ std::optional<std::string> hover_markdown(const Document& document,
   const usize offset = document.index().byte_offset(document.text(), position);
   const pipeline::PipelineContext& context = analysis.context();
   const analyzer::CheckedPackage& package = analysis.package();
+  const ir::StorageState& state = analysis.types();
   const source::FileId root = analysis.root();
   const std::string_view source = document.text();
 
@@ -334,7 +333,7 @@ std::optional<std::string> hover_markdown(const Document& document,
       if (const std::optional<ir::TypeIdx> type =
               checked_expr_type(package, binding->init);
           type.has_value()) {
-        return type_markdown(context, package, *type);
+        return type_markdown(context, state, *type);
       }
     }
     if (binding->written.length != 0 &&
@@ -361,14 +360,14 @@ std::optional<std::string> hover_markdown(const Document& document,
   if (const std::optional<ast::TypeIdx> type =
           innermost_type(context, offset, root);
       type.has_value()) {
-    return type_reference_markdown(context, package, source, *type);
+    return type_reference_markdown(context, package, state, source, *type);
   }
   if (const std::optional<ast::ExprIdx> expr =
           innermost_expr(context, offset, root);
       expr.has_value()) {
     const std::optional<ir::TypeIdx> type = checked_expr_type(package, *expr);
     if (type.has_value()) {
-      return type_markdown(context, package, *type);
+      return type_markdown(context, state, *type);
     }
   }
   return std::nullopt;

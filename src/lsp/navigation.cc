@@ -68,9 +68,9 @@ std::optional<diag::Span> declaration_of_name(
 std::optional<diag::Span> declaration_of_type(
     const pipeline::PipelineContext& context,
     const analyzer::CheckedPackage& package,
+    const ir::StorageState& state,
     source::FileId root,
     ir::TypeIdx type) {
-  const ir::StorageState& state = package.types->state();
   ir::TypeNode node = state.types[type];
   if (node.tag == ir::TypeTag::Ref || node.tag == ir::TypeTag::MutRef) {
     type = state.ref_types[node.as_ref()].pointee;
@@ -211,7 +211,7 @@ std::optional<diag::Span> type_definition_at(const Document& document,
             checked_expr_type(package, *expr);
         type.has_value()) {
       const std::optional<diag::Span> declaration =
-          declaration_of_type(context, package, root, *type);
+          declaration_of_type(context, package, analysis.types(), root, *type);
       if (declaration.has_value()) {
         return declaration;
       }

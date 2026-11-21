@@ -57,8 +57,8 @@ std::string cell(u64 value, bool known) {
 // declaration has.
 const analyzer::CheckedModule::StructInfo* choose_struct(
     const analyzer::CheckedPackage& package,
+    const ir::StorageState& state,
     ast::ItemIdx item) {
-  const ir::StorageState& state = package.types->state();
   const analyzer::CheckedModule::StructInfo* fallback = nullptr;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::StructInfo& info : module.structs) {
@@ -82,8 +82,8 @@ const analyzer::CheckedModule::StructInfo* choose_struct(
 
 const analyzer::CheckedModule::EnumInfo* choose_enum(
     const analyzer::CheckedPackage& package,
+    const ir::StorageState& state,
     ast::ItemIdx item) {
-  const ir::StorageState& state = package.types->state();
   const analyzer::CheckedModule::EnumInfo* fallback = nullptr;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
@@ -117,14 +117,14 @@ std::optional<StructLayout> struct_layout_of(const DocumentAnalysis& analysis,
     return std::nullopt;
   }
   const ast::ItemStruct& declaration = item.payload.get<ast::ItemStruct>();
-  const ir::StorageState& state = package.types->state();
+  const ir::StorageState& state = analysis.types();
 
   StructLayout layout;
   layout.name = std::string(declaration.name.name);
 
   const bool generic = !declaration.params.empty();
   const analyzer::CheckedModule::StructInfo* info =
-      generic ? nullptr : choose_struct(package, item_index);
+      generic ? nullptr : choose_struct(package, state, item_index);
   if (generic || info == nullptr) {
     layout.generic = true;
     for (const ast::ItemStructField& field : declaration.fields) {
@@ -173,14 +173,14 @@ std::optional<EnumLayout> enum_layout_of(const DocumentAnalysis& analysis,
     return std::nullopt;
   }
   const ast::ItemEnum& declaration = item.payload.get<ast::ItemEnum>();
-  const ir::StorageState& state = package.types->state();
+  const ir::StorageState& state = analysis.types();
 
   EnumLayout layout;
   layout.name = std::string(declaration.name.name);
 
   const bool generic = !declaration.params.empty();
   const analyzer::CheckedModule::EnumInfo* info =
-      generic ? nullptr : choose_enum(package, item_index);
+      generic ? nullptr : choose_enum(package, state, item_index);
   if (generic || info == nullptr) {
     layout.generic = true;
     for (u32 i = 0; i < declaration.variants.size(); ++i) {

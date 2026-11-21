@@ -55,10 +55,9 @@ std::string_view prefix_at(std::string_view text, usize offset) {
 }
 
 std::string function_detail(const pipeline::PipelineContext& context,
-                            const analyzer::CheckedPackage& package,
+                            const ir::StorageState& state,
                             std::span<const ir::TypeIdx> params,
                             ir::TypeIdx ret) {
-  const ir::StorageState& state = package.types->state();
   std::string out = "(";
   bool first = true;
   for (const ir::TypeIdx param : params) {
@@ -138,7 +137,7 @@ void collect(const DocumentAnalysis& analysis,
              const VisibleNames& visible,
              std::vector<Item>* out) {
   const pipeline::PipelineContext& context = analysis.context();
-  const ir::StorageState& state = package.types->state();
+  const ir::StorageState& state = analysis.types();
   const auto doc_text = [&](ast::ItemIdx item) {
     if (!item.is_valid()) {
       return std::string{};
@@ -177,7 +176,7 @@ void collect(const DocumentAnalysis& analysis,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
       emit(module.module, fn.item, fn.name,
-           function_detail(context, package, fn.params, fn.ret),
+           function_detail(context, state, fn.params, fn.ret),
            fn.is_method ? CompletionItemKind::Method
                         : CompletionItemKind::Function);
     }
@@ -189,7 +188,7 @@ void collect(const DocumentAnalysis& analysis,
         continue;
       }
       emit(module.module, method.item, method.name,
-           function_detail(context, package, method.params, method.ret),
+           function_detail(context, state, method.params, method.ret),
            CompletionItemKind::Method);
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
