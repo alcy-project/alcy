@@ -71,16 +71,17 @@ const analyzer::CheckedModule::CallTarget* find_target(
     const analyzer::CheckedPackage& package,
     ast::ExprIdx callee) {
   const analyzer::CheckedModule::CallTarget* fallback = nullptr;
+  // A plain call is keyed by its callee in the checker's index; only an
+  // instantiated-only call still needs a list walk to find a fallback.
+  for (const analyzer::CheckedModule& module : package.modules) {
+    if (const auto* target = module.callee_of(callee, analyzer::NO_INST)) {
+      return target;
+    }
+  }
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::CallTarget& target :
          module.call_targets) {
-      if (target.callee != callee) {
-        continue;
-      }
-      if (target.inst == analyzer::NO_INST) {
-        return &target;
-      }
-      if (fallback == nullptr) {
+      if (target.callee == callee && fallback == nullptr) {
         fallback = &target;
       }
     }
