@@ -66,11 +66,6 @@ bool X8664::supports(const codegen::OutputKind kind,
 
 base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     codegen::EmitRequest request) {
-  if (request.options.freestanding) {
-    // The freestanding entry and the runtime it calls are the next thing
-    // this backend grows, not something it can half-answer.
-    return base::make_err(codegen::EmitError::Unsupported);
-  }
   ir::Storage storage = std::move(request.storage).unwrap();
   const ir::SymbolTable& strings = *request.strings;
   diag::DiagBag& bag = *request.bag;
@@ -181,7 +176,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // before the data section is written, because the text it prints is
   // data too.
   for (const std::string& name : runtime_names) {
-    Body body = runtime::build(name, rodata);
+    Body body = runtime::build(name, rodata, request.options.freestanding);
     emit_body(body, name, object::SymbolBind::Local);
   }
 
@@ -196,13 +191,23 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       wrapper.insts.push_back(
           make_inst(MOp::Xor, 4, Operand{Reg::Rax}, Operand{Reg::Rax}));
     }
-    wrapper.insts.push_back(make_inst(MOp::Ret, 8));
+    if (request.options.freestanding) {
+      // `_start` owns the process: the answer from `main` becomes the
+      // status of the exit syscall, with no startup object to return to.
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 8, Operand{Reg::Rdi}, Operand{Reg::Rax}));
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Imm{60}}));
+      wrapper.insts.push_back(make_inst(MOp::Syscall, 8));
+    } else {
+      wrapper.insts.push_back(make_inst(MOp::Ret, 8));
+    }
     Encoded encoded = encode(wrapper);
     const u64 at = text.bytes.size();
     text.bytes.insert(text.bytes.end(), encoded.bytes.begin(),
                       encoded.bytes.end());
     object.symbols.push_back(object::Symbol{
-        .name = "main",
+        .name = request.options.freestanding ? "_start" : "main",
         .section = 0,
         .offset = at,
         .size = encoded.bytes.size(),

@@ -223,6 +223,64 @@ Body build_dealloc(RoData& rodata) {
   return body;
 }
 
+// A freestanding heap asks the kernel for whole pages. The word before
+// the block remembers the mapping's length, so release needs only one
+// `munmap`. Both paths are plain syscalls: no C library is linked.
+Body build_alloc_fs() {
+  Body body;
+  const auto mov = [&](MOp op, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, 8, dst, src));
+  };
+  // length = (size + 16 + 4095) & ~4095
+  mov(MOp::Mov, Operand{Reg::Rcx}, Operand{Reg::Rdi});
+  mov(MOp::Add, Operand{Reg::Rcx}, Operand{Imm{4111}});
+  mov(MOp::And, Operand{Reg::Rcx}, Operand{Imm{~4095LL}});
+  // mmap(NULL, length, PROT_READ|PROT_WRITE,
+  //      MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{9}});
+  mov(MOp::Xor, Operand{Reg::Rdi}, Operand{Reg::Rdi});
+  mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Reg::Rcx});
+  mov(MOp::Mov, Operand{Reg::Rdx}, Operand{Imm{3}});
+  mov(MOp::Mov, Operand{Reg::R10}, Operand{Imm{0x22}});
+  mov(MOp::Mov, Operand{Reg::R8}, Operand{Imm{-1}});
+  mov(MOp::Xor, Operand{Reg::R9}, Operand{Reg::R9});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  mov(MOp::Cmp, Operand{Reg::Rax}, Operand{Imm{-4095}});
+  const u32 ok = body.label_count++;
+  // A valid pointer is below -4095 when read unsigned; kernel errors are
+  // the values at or above it.
+  body.insts.push_back(make_jcc(Cond::B, Operand{Label{ok}}));
+  // A refused mapping ends the process with status 1.
+  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Imm{1}});
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{60}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  MInst joined = make_inst(MOp::Nop, 8);
+  joined.label = ok;
+  body.insts.push_back(joined);
+  mov(MOp::Mov,
+      Operand{
+          Mem{.base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
+      Operand{Reg::Rcx});
+  mov(MOp::Add, Operand{Reg::Rax}, Operand{Imm{16}});
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
+Body build_dealloc_fs() {
+  Body body;
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{Reg::Rdi}, Operand{Imm{16}}));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8, Operand{Reg::Rsi},
+      Operand{Mem{
+          .base = Reg::Rdi, .index = std::nullopt, .scale = 1, .disp = 0}}));
+  body.insts.push_back(
+      make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Imm{11}}));
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
 }  // namespace
 
 bool defines(const std::string_view name) {
@@ -233,7 +291,7 @@ bool defines(const std::string_view name) {
          name == "alcy_alloc" || name == "alcy_dealloc";
 }
 
-Body build(const std::string_view name, RoData& rodata) {
+Body build(const std::string_view name, RoData& rodata, bool freestanding) {
   if (name == "alcy_print") {
     return build_writer(name, rodata, 1, /*newline=*/false);
   }
@@ -259,10 +317,10 @@ Body build(const std::string_view name, RoData& rodata) {
     return build_error_kind();
   }
   if (name == "alcy_alloc") {
-    return build_alloc(rodata);
+    return freestanding ? build_alloc_fs() : build_alloc(rodata);
   }
   if (name == "alcy_dealloc") {
-    return build_dealloc(rodata);
+    return freestanding ? build_dealloc_fs() : build_dealloc(rodata);
   }
   DCHECK_MSG(false, "the runtime was asked for a name it does not define");
   return Body{};
