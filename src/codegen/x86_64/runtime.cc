@@ -283,6 +283,63 @@ Body build_dealloc_fs() {
   return body;
 }
 
+// The process arguments were saved by the entry wrapper. `alcy_arg`
+// answers a borrowed slice into the process's own argument strings.
+Body build_arg_count() {
+  Body body;
+  const SymbolRef argc = callee(body, "alcy_argc");
+  body.insts.push_back(
+      make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{argc}));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8, Operand{Reg::Rax},
+      Operand{Mem{
+          .base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
+Body build_arg() {
+  Body body;
+  const auto mov = [&](MOp op, u8 width, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, width, dst, src));
+  };
+  const SymbolRef argv = callee(body, "alcy_argv");
+  mov(MOp::Mov, 8, Operand{Reg::Rax}, Operand{argv});
+  mov(MOp::Mov, 8, Operand{Reg::Rax},
+      Operand{
+          Mem{.base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}});
+  mov(MOp::Mov, 8, Operand{Reg::Rcx}, Operand{Reg::Rdi});
+  mov(MOp::Lea, 8, Operand{Reg::Rdx},
+      Operand{Mem{.base = Reg::Rax, .index = Reg::Rcx, .scale = 8, .disp = 0}});
+  mov(MOp::Mov, 8, Operand{Reg::Rdx},
+      Operand{
+          Mem{.base = Reg::Rdx, .index = std::nullopt, .scale = 1, .disp = 0}});
+  mov(MOp::Mov, 8, Operand{Reg::Rsi}, Operand{Reg::Rdx});
+  const u32 scan = body.label_count++;
+  const u32 done = body.label_count++;
+  MInst at_scan = make_inst(
+      MOp::Movzx, 1, Operand{Reg::Rcx},
+      Operand{
+          Mem{.base = Reg::Rsi, .index = std::nullopt, .scale = 1, .disp = 0}});
+  at_scan.label = scan;
+  body.insts.push_back(at_scan);
+  body.insts.push_back(
+      make_inst(MOp::Cmp, 1, Operand{Reg::Rcx}, Operand{Imm{0}}));
+  body.insts.push_back(make_jcc(Cond::E, Operand{Label{done}}));
+  body.insts.push_back(
+      make_inst(MOp::Add, 8, Operand{Reg::Rsi}, Operand{Imm{1}}));
+  body.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{scan}}));
+  MInst at_done = make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Reg::Rdx});
+  at_done.label = done;
+  body.insts.push_back(at_done);
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{Reg::Rsi}, Operand{Reg::Rax}));
+  body.insts.push_back(
+      make_inst(MOp::Mov, 8, Operand{Reg::Rdx}, Operand{Reg::Rsi}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
 }  // namespace
 
 bool defines(const std::string_view name) {
@@ -290,6 +347,7 @@ bool defines(const std::string_view name) {
          name == "alcy_eprint" || name == "alcy_eprintln" ||
          name == "alcy_panic" || name == "alcy_sys_write" ||
          name == "alcy_sys_read" || name == "alcy_error_kind" ||
+         name == "alcy_arg_count" || name == "alcy_arg" ||
          name == "alcy_alloc" || name == "alcy_dealloc";
 }
 
@@ -317,6 +375,12 @@ Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
   }
   if (name == "alcy_error_kind") {
     return build_error_kind();
+  }
+  if (name == "alcy_arg_count") {
+    return build_arg_count();
+  }
+  if (name == "alcy_arg") {
+    return build_arg();
   }
   if (name == "alcy_alloc") {
     return build_alloc_fs();

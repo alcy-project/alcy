@@ -185,6 +185,28 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   {
     Body wrapper;
     wrapper.symbols.push_back(entry_symbol);
+    if (!request.options.freestanding) {
+      // `main(argc, argv)` hands the process arguments to the runtime
+      // globals before the program body runs.
+      const u32 argc = wrapper.symbols.size();
+      wrapper.symbols.push_back("alcy_argc");
+      const u32 argv = wrapper.symbols.size();
+      wrapper.symbols.push_back("alcy_argv");
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{SymbolRef{argc}}));
+      wrapper.insts.push_back(make_inst(
+          MOp::Mov, 4,
+          Operand{Mem{
+              .base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
+          Operand{Reg::Rdi}));
+      wrapper.insts.push_back(
+          make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{SymbolRef{argv}}));
+      wrapper.insts.push_back(make_inst(
+          MOp::Mov, 8,
+          Operand{Mem{
+              .base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
+          Operand{Reg::Rsi}));
+    }
     wrapper.insts.push_back(make_inst(MOp::Call, 8, Operand{SymbolRef{0}}));
     if (storage.types()[storage.functions()[*entry].meta.return_type.idx].tag ==
         ir::TypeTag::Void) {
@@ -250,6 +272,32 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       });
     }
     object.sections.push_back(std::move(data));
+  }
+
+  // The process arguments the entry wrapper saved, in the third section.
+  // Only hosted builds have a `main` that received them.
+  if (!request.options.freestanding) {
+    object::Section globals{.name = ".data",
+                            .bytes = std::vector<u8>(16, 0),
+                            .align = 8,
+                            .alloc = true,
+                            .bits = true};
+    const u32 section = static_cast<u32>(object.sections.size());
+    object.symbols.push_back(
+        object::Symbol{.name = "alcy_argc",
+                       .section = section,
+                       .offset = 0,
+                       .size = 8,
+                       .bind = object::SymbolBind::Global,
+                       .type = object::SymbolType::Object});
+    object.symbols.push_back(
+        object::Symbol{.name = "alcy_argv",
+                       .section = section,
+                       .offset = 8,
+                       .size = 8,
+                       .bind = object::SymbolBind::Global,
+                       .type = object::SymbolType::Object});
+    object.sections.push_back(std::move(globals));
   }
 
   // The names the bodies reach but this object does not carry: the
