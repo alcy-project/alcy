@@ -61,18 +61,53 @@ std::string AnalysisCache::package_key_for(const Document& focus) const {
                           : "standalone:" + focus.uri();
 }
 
+const std::string& AnalysisCache::package_key(const Document& focus) {
+  const auto found = package_keys_.find(focus.uri());
+  if (found != package_keys_.end()) {
+    return found->second;
+  }
+  return package_keys_.emplace(focus.uri(), package_key_for(focus))
+      .first->second;
+}
+
+std::string AnalysisCache::stamp_for(const Document& focus) const {
+  std::string out = std::to_string(focus.version());
+  if (documents_ != nullptr) {
+    for (const auto& [uri, document] : documents_->documents()) {
+      out.push_back(';');
+      out.append(uri);
+      out.push_back(':');
+      out.append(std::to_string(document.version()));
+    }
+  }
+  return out;
+}
+
+void AnalysisCache::invalidate(const Document& document) {
+  const auto key = package_keys_.find(document.uri());
+  if (key != package_keys_.end()) {
+    signatures_.erase(key->second);
+  }
+}
+
 const DocumentAnalysis& AnalysisCache::get(const Document& document) {
   const std::string& uri = document.uri();
-  const std::string package_key = package_key_for(document);
-  const std::vector<workspace::BufferView> buffers = buffers_for(document);
-  const std::string signature =
-      package_key.starts_with("standalone:")
-          ? package_key + ":" + std::to_string(document.version())
-          : workspace::fingerprint(package_key, buffers);
-  const std::string cache_key = package_key + "\0" + signature;
+  const std::string& pkg_key = package_key(document);
+  const std::string stamp = stamp_for(document);
+  const auto cached = signatures_.find(pkg_key);
+  if (cached == signatures_.end() || cached->second.stamp != stamp) {
+    const std::vector<workspace::BufferView> buffers = buffers_for(document);
+    const std::string value =
+        pkg_key.starts_with("standalone:")
+            ? pkg_key + ":" + std::to_string(document.version())
+            : workspace::fingerprint(pkg_key, buffers);
+    signatures_[pkg_key] = SignatureEntry{stamp, value};
+  }
+  const std::string& signature = signatures_.at(pkg_key).value;
+  const std::string cache_key = pkg_key + "\0" + signature;
 
   for (auto it = entries_.begin(); it != entries_.end();) {
-    if (it->second.package_key == package_key &&
+    if (it->second.package_key == pkg_key &&
         it->second.cache_key != cache_key) {
       it = entries_.erase(it);
     } else {
@@ -88,6 +123,7 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
 
   auto inserted = packages_.find(cache_key);
   if (inserted == packages_.end()) {
+    const std::vector<workspace::BufferView> buffers = buffers_for(document);
     std::shared_ptr<PackageAnalysis> owner = build_analysis(
         buffers, document.uri(), i18n::Language::EnUs, encoding_);
     owner->fingerprint = signature;
@@ -109,7 +145,7 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
       std::make_unique<DocumentAnalysis>(inserted->second, root, package_index);
   const DocumentAnalysis& result = *analysis;
   entries_.insert_or_assign(uri,
-                            Entry{std::move(analysis), package_key, cache_key});
+                            Entry{std::move(analysis), pkg_key, cache_key});
   return result;
 }
 

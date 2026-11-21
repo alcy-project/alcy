@@ -1257,6 +1257,7 @@ void Server::did_open(const text::JsonValue& params) {
                       int_field(*text_document, "version", 0),
                       std::string(string_field(*text_document, "text")));
   document.set_encoding(encoding_);
+  cache_.invalidate_all();
   publish_diagnostics(document);
 }
 
@@ -1281,6 +1282,7 @@ void Server::did_change(const text::JsonValue& params) {
   }
   document->apply(changes,
                   int_field(*text_document, "version", document->version()));
+  cache_.invalidate(*document);
   for (const auto& [other_uri, other] : documents_.documents()) {
     (void)other_uri;
     if (cache_.same_package(*document, other)) {
@@ -1296,6 +1298,7 @@ void Server::did_close(const text::JsonValue& params) {
   }
   const std::string_view uri = string_field(*text_document, "uri");
   documents_.close(uri);
+  cache_.invalidate_all();
   cache_.erase(uri);
   tokens_.erase(uri);
   diagnostics_.erase(uri);

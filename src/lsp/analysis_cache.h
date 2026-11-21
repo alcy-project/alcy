@@ -45,8 +45,17 @@ class AnalysisCache {
 
   // Whether two buffers share a package key, for re-publishing diagnostics
   // to a sibling when one file of the package changes.
-  bool same_package(const Document& lhs, const Document& rhs) const {
-    return package_key_for(lhs) == package_key_for(rhs);
+  bool same_package(const Document& lhs, const Document& rhs) {
+    return package_key(lhs) == package_key(rhs);
+  }
+
+  // A package key and a content signature are stable between the
+  // notifications that can change them. Requests reuse both instead of
+  // walking the workspace and hashing every source on every hover.
+  void invalidate(const Document& document);
+  void invalidate_all() {
+    package_keys_.clear();
+    signatures_.clear();
   }
 
   void erase(std::string_view uri);
@@ -63,6 +72,7 @@ class AnalysisCache {
   void clear() {
     entries_.clear();
     packages_.clear();
+    invalidate_all();
   }
 
  private:
@@ -74,12 +84,20 @@ class AnalysisCache {
 
   std::vector<workspace::BufferView> buffers_for(const Document& focus) const;
   std::string package_key_for(const Document& focus) const;
+  const std::string& package_key(const Document& focus);
+  std::string stamp_for(const Document& focus) const;
 
   const DocumentStore* documents_ = nullptr;
   std::optional<path::Path> workspace_root_;
   PositionEncoding encoding_ = PositionEncoding::Utf16;
   std::unordered_map<std::string, Entry> entries_;
   std::unordered_map<std::string, std::shared_ptr<PackageAnalysis>> packages_;
+  struct SignatureEntry {
+    std::string stamp;
+    std::string value;
+  };
+  std::unordered_map<std::string, std::string> package_keys_;
+  std::unordered_map<std::string, SignatureEntry> signatures_;
 };
 
 }  // namespace lsp

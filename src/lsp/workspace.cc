@@ -12,7 +12,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash.h"
 #include "diag/bag.h"
+#include "fingerprint/fingerprint.h"
 #include "fpag/io/io_util.h"
 #include "i18n/language.h"
 #include "linter/config.h"
@@ -42,22 +44,6 @@ bool hex_digit(char c, u8& out) {
     return true;
   }
   return false;
-}
-
-u64 hash_bytes(std::string_view bytes) {
-  u64 hash = 1469598103934665603ULL;
-  for (char c : bytes) {
-    hash ^= static_cast<u8>(c);
-    hash *= 1099511628211ULL;
-  }
-  return hash;
-}
-
-void append_hash(std::string& out, std::string_view bytes) {
-  const u64 hash = hash_bytes(bytes);
-  for (u32 shift = 0; shift < 64; shift += 8) {
-    out.push_back(static_cast<char>((hash >> shift) & 0xff));
-  }
 }
 
 std::string read_or_empty(const path::Path& path) {
@@ -158,22 +144,19 @@ bool under_root(std::string_view file_path, std::string_view root) {
 std::string fingerprint(std::string_view root,
                         std::span<const BufferView> buffers) {
   pipeline::PipelineContext context(i18n::Language::EnUs);
-  std::string signature;
-  signature.append(root);
-  signature.push_back('\0');
+  fingerprint::Builder builder;
+  builder.bytes(root).u8(0);
 
   base::Result<path::Path, path::PathError> parsed =
       path::Path::from_native(root);
   if (parsed.is_err()) {
-    return signature;
+    return builder.finish().hex();
   }
   const path::Path root_path = std::move(parsed).unwrap();
-  append_hash(signature,
-              read_or_empty(root_path.join(pkg::MANIFEST_FILE_NAME)));
-  append_hash(
-      signature,
-      read_or_empty(
-          root_path.join(pkg::CONFIG_DIR_NAME).join(linter::LINT_FILE_NAME)));
+  builder.digest(
+      base::hash128(read_or_empty(root_path.join(pkg::MANIFEST_FILE_NAME))));
+  builder.digest(base::hash128(read_or_empty(
+      root_path.join(pkg::CONFIG_DIR_NAME).join(linter::LINT_FILE_NAME))));
 
   const auto buffer_for = [&](std::string_view file) -> const BufferView* {
     for (const BufferView& buffer : buffers) {
@@ -191,16 +174,15 @@ std::string fingerprint(std::string_view root,
   if (have_sources) {
     pipeline::DiscoveredSourcePaths listed = std::move(discovered).unwrap();
     for (const std::string& file : listed.files) {
-      signature.append(file);
-      signature.push_back(':');
+      builder.bytes(file).u8(':');
       if (const BufferView* buffer = buffer_for(file); buffer != nullptr) {
-        signature.append(std::to_string(buffer->version));
-        signature.push_back(':');
-        append_hash(signature, buffer->text);
+        builder.bytes(std::to_string(buffer->version))
+            .u8(':')
+            .digest(base::hash128(buffer->text));
       } else {
-        append_hash(signature, io::read_file(file));
+        builder.digest(base::hash128(io::read_file(file)));
       }
-      signature.push_back('\0');
+      builder.u8(0);
     }
   }
   for (const BufferView& buffer : buffers) {
@@ -208,12 +190,12 @@ std::string fingerprint(std::string_view root,
     if (!path.has_value() || !under_root(*path, root) || have_sources) {
       continue;
     }
-    signature.append(buffer.uri);
-    signature.push_back(':');
-    signature.append(std::to_string(buffer.version));
-    signature.push_back('\0');
+    builder.bytes(buffer.uri)
+        .u8(':')
+        .bytes(std::to_string(buffer.version))
+        .u8(0);
   }
-  return signature;
+  return builder.finish().hex();
 }
 
 }  // namespace lsp::workspace
