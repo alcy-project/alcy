@@ -111,7 +111,8 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
                                           &fixture->strings(), host_target(),
                                           /*emit_entry=*/true, {});
       std::move(emitter).emit();
-      static_cast<void>(codegen_llvm::emit_object(*warm, host_target()));
+      static_cast<void>(codegen_llvm::emit_object(
+          *warm, host_target(), /*profiler=*/nullptr, /*optimize=*/true));
     }
     emit(CaseId{"backend", "emit-object"}, EMIT_OBJECT,
          runner.measure(EMIT_OBJECT, rebuild, [&] {
@@ -121,7 +122,9 @@ void run_codegen_cases(Runner<SteadyClock>& runner,
                module.get(), fixture->take_storage(), &fixture->strings(),
                host_target(), /*emit_entry=*/true, {});
            std::move(emitter).emit();
-           static_cast<void>(codegen_llvm::emit_object(*module, host_target()));
+           static_cast<void>(codegen_llvm::emit_object(*module, host_target(),
+                                                       /*profiler=*/nullptr,
+                                                       /*optimize=*/true));
          }));
   }
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)

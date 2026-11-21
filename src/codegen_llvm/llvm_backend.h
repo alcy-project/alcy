@@ -43,7 +43,9 @@ base::Result<void, ObjectEmitError> configure_target(llvm::Module& module,
 // consumer of a module sees the same one.
 base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     llvm::Module& module,
-    const Target& target);
+    const Target& target,
+    debug::Profiler* profiler,
+    bool optimize);
 
 // A freestanding program has no libc for the pipeline to synthesize
 // calls to; passing true says so.

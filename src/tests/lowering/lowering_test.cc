@@ -381,7 +381,8 @@ TEST_CASE("Lower emits relocatable objects") {
   CHECK(!llvm::verifyModule(*module));
 
   base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError> emitted =
-      codegen_llvm::emit_object(*module, host_target());
+      codegen_llvm::emit_object(*module, host_target(),
+                                /*profiler=*/nullptr, /*optimize=*/true);
   CHECK(emitted.is_ok());
   if (emitted.is_err()) {
     return;
@@ -399,7 +400,8 @@ TEST_CASE("Lower emits relocatable objects") {
     base::Result<std::vector<u8>, codegen_llvm::ObjectEmitError>
         triple_emitted = codegen_llvm::emit_object(
             *module,
-            codegen_llvm::Target{std::string(triple), ir::PointerWidth::W64});
+            codegen_llvm::Target{std::string(triple), ir::PointerWidth::W64},
+            /*profiler=*/nullptr, /*optimize=*/true);
     CHECK(triple_emitted.is_ok());
     if (triple_emitted.is_err()) {
       continue;

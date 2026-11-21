@@ -147,7 +147,8 @@ base::Result<std::vector<u8>, codegen::EmitError> Llvm::emit(
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
                                                "emit-object", "backend");
       base::Result<std::vector<u8>, ObjectEmitError> object =
-          emit_object(*emitted.module, request.target);
+          emit_object(*emitted.module, request.target, request.options.profiler,
+                      request.options.optimize);
       if (object.is_err()) {
         return base::make_err(codegen::EmitError::CannotEmit);
       }
@@ -268,7 +269,8 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
           request.options.profiler,
           part_scope_name("emit-object-part", at, bitcode.size()), "backend");
       base::Result<std::vector<u8>, ObjectEmitError> object =
-          emit_object(*parsed_module, request.target);
+          emit_object(*parsed_module, request.target, request.options.profiler,
+                      request.options.optimize);
       if (object.is_err()) {
         failed.store(true);
         return;

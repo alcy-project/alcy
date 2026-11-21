@@ -18,6 +18,7 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/process_id.h"
 #include "fpag/debug/profiler/profile_event.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/thread_id.h"
 #include "fpag/debug/time_util.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
@@ -139,7 +140,7 @@ namespace {
 // The machine `target` names. Both entry points below need one, and both
 // fail the same way.
 base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError>
-target_machine(const Target& target) {
+target_machine(const Target& target, llvm::CodeGenOptLevel level) {
   init_linked_targets();
   const llvm::Triple triple(target.triple);
   std::string error;
@@ -150,7 +151,7 @@ target_machine(const Target& target) {
   }
   llvm::TargetOptions options;
   std::unique_ptr<llvm::TargetMachine> machine(backend->createTargetMachine(
-      triple, "generic", "", options, llvm::Reloc::PIC_, std::nullopt));
+      triple, "generic", "", options, llvm::Reloc::PIC_, std::nullopt, level));
   if (machine == nullptr) {
     return base::make_err(ObjectEmitError::NoTargetMachine);
   }
@@ -161,8 +162,9 @@ target_machine(const Target& target) {
 
 base::Result<void, ObjectEmitError> configure_target(llvm::Module& module,
                                                      const Target& target) {
+  // The layout is all this answer owes; the codegen level is inert here.
   base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
-      target_machine(target);
+      target_machine(target, llvm::CodeGenOptLevel::Default);
   if (machine.is_err()) {
     return base::make_err(std::move(machine).unwrap_err());
   }
@@ -185,7 +187,7 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
     return base::make_err(std::move(configured).unwrap_err());
   }
   base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
-      target_machine(target);
+      target_machine(target, llvm::CodeGenOptLevel::Default);
   if (machine.is_err()) {
     return base::make_err(std::move(machine).unwrap_err());
   }
@@ -289,14 +291,24 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
 
 base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     llvm::Module& module,
-    const Target& target) {
+    const Target& target,
+    debug::Profiler* profiler,
+    bool optimize) {
   base::Result<void, ObjectEmitError> configured =
       configure_target(module, target);
   if (configured.is_err()) {
     return base::make_err(std::move(configured).unwrap_err());
   }
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "target-machine",
+                                           "backend");
+  // A profile without the middle end gets codegen without the middle
+  // end's expensive level: unoptimized IR is the largest form, and
+  // aggressive selection and allocation on it is the emit phase's
+  // dominant cost.
+  const llvm::CodeGenOptLevel level =
+      optimize ? llvm::CodeGenOptLevel::Default : llvm::CodeGenOptLevel::None;
   base::Result<std::unique_ptr<llvm::TargetMachine>, ObjectEmitError> machine =
-      target_machine(target);
+      target_machine(target, level);
   if (machine.is_err()) {
     return base::make_err(std::move(machine).unwrap_err());
   }
@@ -305,11 +317,19 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
   llvm::SmallVector<char, 0> buffer_vec;
   llvm::raw_svector_ostream output(buffer_vec);
   llvm::legacy::PassManager passes;
-  if (owned->addPassesToEmitFile(passes, output, nullptr,
-                                 llvm::CodeGenFileType::ObjectFile)) {
-    return base::make_err(ObjectEmitError::CannotEmit);
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "add-emit-passes",
+                                             "backend");
+    if (owned->addPassesToEmitFile(passes, output, nullptr,
+                                   llvm::CodeGenFileType::ObjectFile)) {
+      return base::make_err(ObjectEmitError::CannotEmit);
+    }
   }
-  passes.run(module);
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "codegen-passes",
+                                             "backend");
+    passes.run(module);
+  }
 
   std::vector<u8> result(buffer_vec.begin(), buffer_vec.end());
   return base::make_ok(std::move(result));
