@@ -212,8 +212,22 @@ u8 cond_code(const Cond cond) {
     case Cond::Ge: return 0xd;
     case Cond::S: return 0x8;
     case Cond::Ns: return 0x9;
+    case Cond::P: return 0xa;
+    case Cond::Np: return 0xb;
   }
   return 0x4;
+}
+
+// The mandatory prefix of a scalar SSE form, followed by whatever REX
+// the registers need. XMM8-15 share their extension bit with the GPRs.
+void sse_prefix(std::vector<u8>& out,
+                const u8 mandatory,
+                const std::optional<Reg> reg,
+                const std::optional<Reg> rm) {
+  if (mandatory != 0) {
+    out.push_back(mandatory);
+  }
+  prefix(out, 4, false, reg, rm, std::nullopt);
 }
 
 void alu_rr(std::vector<u8>& out,
@@ -406,6 +420,110 @@ Encoded encode(const Body& body) {
                /*rm_register=*/false);
         out.push_back(0x8d);
         mem_disp(out, modrm_mem(out, to, from), from.disp);
+        break;
+      }
+      case MOp::Movss:
+      case MOp::Movsd: {
+        const u8 mand = inst.op == MOp::Movss ? 0xf3 : 0xf2;
+        const Operand& dst = inst.at(0);
+        const Operand& src = inst.at(1);
+        if (const Reg* to = std::get_if<Reg>(&dst); to != nullptr) {
+          DCHECK(is_xmm(*to));
+          if (const Reg* from = std::get_if<Reg>(&src); from != nullptr) {
+            sse_prefix(out, mand, *to, *from);
+            out.push_back(0x0f);
+            out.push_back(0x10);
+            modrm_rr(out, *to, *from);
+          } else if (const Mem* from = std::get_if<Mem>(&src);
+                     from != nullptr) {
+            sse_prefix(out, mand, *to, base_of(*from));
+            out.push_back(0x0f);
+            out.push_back(0x10);
+            mem_disp(out, modrm_mem(out, *to, *from), from->disp);
+          } else if (const SymbolRef* from = std::get_if<SymbolRef>(&src);
+                     from != nullptr) {
+            // The address is materialized by allocation; a symbol here
+            // holds the float's bytes, loaded through a GPR scratch.
+            DCHECK_MSG(false, "a float symbol reaches encoding unresolved");
+          }
+        } else if (const Mem* to = std::get_if<Mem>(&dst); to != nullptr) {
+          const Reg* from = std::get_if<Reg>(&src);
+          DCHECK(from != nullptr && is_xmm(*from));
+          sse_prefix(out, mand, *from, base_of(*to));
+          out.push_back(0x0f);
+          out.push_back(0x11);
+          mem_disp(out, modrm_mem(out, *from, *to), to->disp);
+        }
+        break;
+      }
+      case MOp::Fadd:
+      case MOp::Fsub:
+      case MOp::Fmul:
+      case MOp::Fdiv: {
+        const u8 mand = inst.width == 4 ? 0xf3 : 0xf2;
+        const u8 opcode = inst.op == MOp::Fadd   ? 0x58
+                          : inst.op == MOp::Fsub ? 0x5c
+                          : inst.op == MOp::Fmul ? 0x59
+                                                 : 0x5e;
+        const Reg dst = std::get<Reg>(inst.at(0));
+        const Reg src = std::get<Reg>(inst.at(1));
+        sse_prefix(out, mand, dst, src);
+        out.push_back(0x0f);
+        out.push_back(opcode);
+        modrm_rr(out, dst, src);
+        break;
+      }
+      case MOp::Fneg: {
+        const Reg dst = std::get<Reg>(inst.at(0));
+        // xorps with an all-zero register flips the sign bit. Allocation
+        // reserves the zero register as the second operand.
+        const Reg zero = std::get<Reg>(inst.at(1));
+        sse_prefix(out, 0x66, dst, zero);
+        out.push_back(0x0f);
+        out.push_back(0x57);
+        modrm_rr(out, dst, zero);
+        break;
+      }
+      case MOp::Fcom: {
+        // comiss has no mandatory prefix; comisd uses 66 (not F2).
+        const Reg lhs = std::get<Reg>(inst.at(0));
+        const Reg rhs = std::get<Reg>(inst.at(1));
+        sse_prefix(out, inst.width == 4 ? 0x00 : 0x66, lhs, rhs);
+        out.push_back(0x0f);
+        out.push_back(0x2f);
+        modrm_rr(out, lhs, rhs);
+        break;
+      }
+      case MOp::CvtI2F: {
+        const u8 mand = inst.width == 4 ? 0xf3 : 0xf2;
+        const Reg dst = std::get<Reg>(inst.at(0));
+        const Reg src = std::get<Reg>(inst.at(1));
+        sse_prefix(out, mand, dst, src);
+        out.push_back(0x0f);
+        out.push_back(0x2a);
+        modrm_rr(out, dst, src);
+        break;
+      }
+      case MOp::CvtF2I: {
+        const u8 mand = inst.width == 4 ? 0xf3 : 0xf2;
+        const Reg dst = std::get<Reg>(inst.at(0));
+        const Reg src = std::get<Reg>(inst.at(1));
+        sse_prefix(out, mand, dst, src);
+        out.push_back(0x0f);
+        out.push_back(0x2c);
+        modrm_rr(out, dst, src);
+        break;
+      }
+      case MOp::CvtF2F: {
+        // A widening conversion f32 -> f64 is F3 0F 5A; narrowing is
+        // F2 0F 5A. The width field names the source.
+        const u8 mand = inst.width == 4 ? 0xf3 : 0xf2;
+        const Reg dst = std::get<Reg>(inst.at(0));
+        const Reg src = std::get<Reg>(inst.at(1));
+        sse_prefix(out, mand, dst, src);
+        out.push_back(0x0f);
+        out.push_back(0x5a);
+        modrm_rr(out, dst, src);
         break;
       }
       case MOp::Add:

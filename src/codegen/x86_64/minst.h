@@ -68,7 +68,24 @@ using Operand = std::
     variant<std::monostate, VReg, Reg, Imm, Mem, Label, SymbolRef, SlotRef>;
 
 // The branch conditions, in the order the encoder's opcode offset uses.
-enum class Cond : u8 { O, No, E, Ne, L, Le, G, Ge, B, Be, A, Ae, S, Ns };
+enum class Cond : u8 {
+  O,
+  No,
+  E,
+  Ne,
+  L,
+  Le,
+  G,
+  Ge,
+  B,
+  Be,
+  A,
+  Ae,
+  S,
+  Ns,
+  P,
+  Np,
+};
 
 enum class MOp : u8 {
   Mov,
@@ -115,6 +132,23 @@ enum class MOp : u8 {
   RepMovsb,
   // Fills `rcx` bytes at `rdi` with the byte in `al`.
   RepStosb,
+  // Scalar floating-point moves: dst is an XMM register or memory, src
+  // is an XMM register, memory, or a symbol naming the bytes.
+  Movss,
+  Movsd,
+  // Ordered scalar arithmetic on two XMM registers.
+  Fadd,
+  Fsub,
+  Fmul,
+  Fdiv,
+  // Flips the sign bit of an XMM register (dst in place).
+  Fneg,
+  // Compares two XMM registers and sets the flags for a later `setcc`.
+  Fcom,
+  // Conversions between the integer and floating-point files.
+  CvtI2F,
+  CvtF2I,
+  CvtF2F,
   Ud2,
 };
 

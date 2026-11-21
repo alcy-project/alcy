@@ -374,6 +374,14 @@ std::optional<Operand> Selector::operand_of(const ir::Operand& op) {
       return Operand{
           string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)))};
     }
+    if (is_float(tag)) {
+      // The IEEE bits of a float literal are the bytes the read-only
+      // section holds; the allocator loads them through a GPR borrow.
+      const u64 bits = imm.as_u64_bits(tag);
+      const u32 bytes = tag == ir::TypeTag::F32 ? 4 : 8;
+      const std::string data(reinterpret_cast<const char*>(&bits), bytes);
+      return Operand{string_ref(rodata_.intern(data))};
+    }
   }
   if (op.is<ir::BlockIdx>()) {
     const ir::BlockIdx block = op.as_block();
@@ -509,6 +517,7 @@ bool Selector::receive_parameters(const ir::Block& entry) {
   // declaration names its parameters. A wide answer took the first one
   // for the caller's slot.
   u32 next_register = 0;
+  u32 next_xmm = 0;
   if (sret_vreg_ != NO_SRET) {
     push(make_inst(MOp::Mov, 8, Operand{SlotRef{sret_vreg_, 0}},
                    Operand{ARG_REGS[next_register++]}));
@@ -526,8 +535,19 @@ bool Selector::receive_parameters(const ir::Block& entry) {
           return false;
         }
         const ir::TypeTag tag = storage_.types()[param.type.idx].tag;
-        push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
-                       Operand{ARG_REGS[next_register++]}));
+        if (is_float(tag)) {
+          if (next_xmm >= ARG_XMM_COUNT) {
+            (void)unsupported(diag::Span{},
+                              "a float parameter past the vector registers");
+            return false;
+          }
+          push(make_inst(tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
+                         width_of(tag), Operand{VReg{vreg}},
+                         Operand{ARG_XMM_REGS[next_xmm++]}));
+        } else {
+          push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
+                         Operand{ARG_REGS[next_register++]}));
+        }
         break;
       }
       case Passage::TwoWord: {
@@ -662,7 +682,14 @@ bool Selector::emit(const ir::Instruction& instr,
         if (tag != ir::TypeTag::Void && tag != ir::TypeTag::Never) {
           const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
           const Passage passage = passage_of(value.type);
-          if (passage == Passage::ByAddress) {
+          if (is_float(tag)) {
+            const std::optional<Operand> src = scalar_of(value, span);
+            if (!src.has_value()) {
+              return false;
+            }
+            push(make_inst(tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
+                           width_of(tag), Operand{RETURN_XMM_REG}, *src));
+          } else if (passage == Passage::ByAddress) {
             // The caller named the slot; the bytes move there whole.
             if (!value.is<ir::RegisterIdx>()) {
               (void)unsupported(span,
@@ -867,7 +894,8 @@ bool Selector::emit(const ir::Instruction& instr,
       // spelling the halves as separate moves would ask the encoder for
       // a memory-to-memory move x86 does not have.
       const ir::TypeLayout layout = storage_.layout_of(dst_type_of(), width_);
-      if (is_two_word(loaded) || is_aggregate(loaded)) {
+      if (passage_of(dst_type_of()) != Passage::Register ||
+          is_aggregate(loaded)) {
         const u32 vreg = vreg_of(instr.dst, dst_type_of());
         push(make_inst(
             MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
@@ -897,7 +925,7 @@ bool Selector::emit(const ir::Instruction& instr,
       const ir::Operand& value = at(0);
       const ir::TypeTag tag = storage_.types()[value.type].tag;
       const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
-      if (is_aggregate(tag) || is_two_word(tag)) {
+      if (is_aggregate(tag) || passage_of(value.type) != Passage::Register) {
         const u32 dst = vreg_of(at(1).as_register(), at(1).type);
         if (!value.is<ir::RegisterIdx>()) {
           if (tag == ir::TypeTag::Str && value.is<ir::ImmutableIdx>()) {
@@ -938,13 +966,19 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!src.has_value()) {
         return false;
       }
-      push(make_inst(
-          MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
+      const Operand dst =
           Operand{Mem{.base = VReg{vreg_of(at(1).as_register(), at(1).type)},
                       .index = std::nullopt,
                       .scale = 1,
-                      .disp = 0}},
-          *src));
+                      .disp = 0}};
+      if (is_float(tag)) {
+        push(make_inst(tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
+                       width_of(tag), dst, *src));
+        return true;
+      }
+      push(make_inst(MOp::Mov,
+                     static_cast<u8>(layout.size > 8 ? 8 : layout.size), dst,
+                     *src));
       (void)tag;
       return true;
     }
@@ -1065,8 +1099,12 @@ bool Selector::emit(const ir::Instruction& instr,
         return false;
       }
       const ir::TypeTag pointee_tag = dst_tag();
-      if (pointee_tag != ir::TypeTag::Ref &&
-          pointee_tag != ir::TypeTag::MutRef) {
+      const bool pointer = pointee_tag == ir::TypeTag::Ref ||
+                           pointee_tag == ir::TypeTag::MutRef ||
+                           pointee_tag == ir::TypeTag::Ptr ||
+                           pointee_tag == ir::TypeTag::RawPtr ||
+                           pointee_tag == ir::TypeTag::RawMutPtr;
+      if (!pointer) {
         (void)unsupported(span, "an element projection of a non-reference");
         return false;
       }
@@ -1202,8 +1240,10 @@ bool Selector::emit(const ir::Instruction& instr,
                       .elements;
         offset = static_cast<i64>(ir::field_offset(
             storage_.state(), fields, static_cast<u32>(which), width_));
-      } else if (tag == ir::TypeTag::Str) {
-        // The pair the reference carries: the bytes, then the length.
+      } else if (tag == ir::TypeTag::Str ||
+                 ((tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) &&
+                  passage_of(aggregate_type) == Passage::TwoWord)) {
+        // The pair a slice reference carries: the bytes, then the length.
         offset = static_cast<i64>(which * 8);
       } else {
         (void)unsupported(span,
@@ -1315,6 +1355,37 @@ bool Selector::emit(const ir::Instruction& instr,
       }
       return true;
     }
+    case O::FAdd:
+    case O::FSub:
+    case O::FMul:
+    case O::FDiv: {
+      DCHECK(count == 2);
+      const u8 w = width_of(dst_tag());
+      const MOp op = instr.op == O::FAdd   ? MOp::Fadd
+                     : instr.op == O::FSub ? MOp::Fsub
+                     : instr.op == O::FMul ? MOp::Fmul
+                                           : MOp::Fdiv;
+      const std::optional<Operand> lhs = scalar_of(at(0), span);
+      const std::optional<Operand> rhs = scalar_of(at(1), span);
+      if (!lhs.has_value() || !rhs.has_value()) {
+        return false;
+      }
+      push(make_inst(op, w, dst_operand(), *lhs, *rhs));
+      return true;
+    }
+    case O::FNeg: {
+      DCHECK(count == 1);
+      const u8 w = width_of(dst_tag());
+      const u64 sign = w == 4 ? 0x80000000ULL : 0x8000000000000000ULL;
+      const std::string mask(reinterpret_cast<const char*>(&sign), w);
+      const SymbolRef mask_ref = string_ref(rodata_.intern(mask));
+      const std::optional<Operand> src = scalar_of(at(0), span);
+      if (!src.has_value()) {
+        return false;
+      }
+      push(make_inst(MOp::Fneg, w, dst_operand(), *src, Operand{mask_ref}));
+      return true;
+    }
     case O::IntDiv:
     case O::IntRem:
     case O::UintDiv:
@@ -1390,6 +1461,27 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!rhs.has_value()) {
         return false;
       }
+      // A floating compare sets ZF, PF (unordered) and CF. The primary
+      // condition is then combined with the unordered flag: equality and
+      // the ordered relations require an ordered pair, while `!=` holds
+      // for a NaN.
+      if (is_float(storage_.types()[at(0).type].tag)) {
+        const u8 w = width_of(storage_.types()[at(0).type].tag);
+        push(make_inst(MOp::Fcom, w, *lhs, *rhs));
+        const Cond primary = instr.op == O::Eq   ? Cond::E
+                             : instr.op == O::Ne ? Cond::Ne
+                             : instr.op == O::Lt ? Cond::B
+                             : instr.op == O::Le ? Cond::Be
+                             : instr.op == O::Gt ? Cond::A
+                                                 : Cond::Ae;
+        push(make_setcc(primary, Operand{Reg::Rcx}));
+        const Cond unordered = instr.op == O::Ne ? Cond::P : Cond::Np;
+        push(make_setcc(unordered, Operand{Reg::Rdx}));
+        push(make_inst(instr.op == O::Ne ? MOp::Or : MOp::And, 1,
+                       Operand{Reg::Rcx}, Operand{Reg::Rdx}));
+        push(make_inst(MOp::Mov, 1, dst_operand(), Operand{Reg::Rcx}));
+        return true;
+      }
       // The compare runs at its operands' width, which is the width the
       // value holds and not the bool it answers.
       const u8 compare = compute_width_of(storage_.types()[at(0).type].tag);
@@ -1422,11 +1514,20 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::TypeCast: {
       DCHECK(count == 1);
       const ir::TypeTag src = storage_.types()[at(0).type].tag;
-      if (is_float(src) || is_float(dst_tag())) {
-        (void)unsupported(span, "a floating point conversion");
-        return false;
+      const ir::TypeTag dst = dst_tag();
+      if (is_float(src) && is_float(dst)) {
+        push(make_inst(MOp::CvtF2F, width_of(src), dst_operand(), *lhs));
+        return true;
       }
-      if (is_integer(src) && is_integer(dst_tag())) {
+      if (is_integer(src) && is_float(dst)) {
+        push(make_inst(MOp::CvtI2F, width_of(dst), dst_operand(), *lhs));
+        return true;
+      }
+      if (is_float(src) && is_integer(dst)) {
+        push(make_inst(MOp::CvtF2I, width_of(src), dst_operand(), *lhs));
+        return true;
+      }
+      if (is_integer(src) && is_integer(dst)) {
         const u8 from = width_of(src);
         const u8 to = width_of(dst_tag());
         if (from < to) {
@@ -1629,6 +1730,7 @@ bool Selector::emit_call(const ir::Instruction& instr,
   // The argument registers, in the order the call fills them. A
   // wide answer took the first for the caller's slot.
   u32 next_register = 0;
+  u32 next_xmm = 0;
   if (defines_dst(instr) && passage_of(dst_type(instr)) == Passage::ByAddress) {
     // The answer lands in the slot the destination vreg holds, and
     // the callee writes it there; nothing reads `rax`.
@@ -1639,8 +1741,17 @@ bool Selector::emit_call(const ir::Instruction& instr,
     const ir::Operand& value = operand_at(instr, arg);
     const ir::TypeTag tag = storage_.types()[value.type].tag;
     if (is_float(tag)) {
-      (void)unsupported(span, "a floating point argument");
-      return false;
+      if (next_xmm >= ARG_XMM_COUNT) {
+        (void)unsupported(span, "a float argument past the vector registers");
+        return false;
+      }
+      const std::optional<Operand> side = scalar_of(value, span);
+      if (!side.has_value()) {
+        return false;
+      }
+      push(make_inst(tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
+                     width_of(tag), Operand{ARG_XMM_REGS[next_xmm++]}, *side));
+      continue;
     }
     const Passage passage = passage_of(value.type);
     if (passage != Passage::Register) {
@@ -1715,9 +1826,15 @@ bool Selector::emit_call(const ir::Instruction& instr,
   }
   if (defines_dst(instr)) {
     const Passage passage = passage_of(dst_type(instr));
-    if (passage == Passage::Register) {
-      push(make_inst(MOp::Mov, width_of(dst_value_tag(instr)),
-                     dst_reg_operand(instr), Operand{Reg::Rax}));
+    const ir::TypeTag returned = dst_value_tag(instr);
+    if (is_float(returned)) {
+      push(make_inst(returned == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
+                     width_of(returned),
+                     Operand{VReg{vreg_of(instr.dst, dst_type(instr))}},
+                     Operand{RETURN_XMM_REG}));
+    } else if (passage == Passage::Register) {
+      push(make_inst(MOp::Mov, width_of(returned), dst_reg_operand(instr),
+                     Operand{Reg::Rax}));
     } else if (passage == Passage::TwoWord) {
       const u32 vreg = vreg_of(instr.dst, dst_type(instr));
       push(

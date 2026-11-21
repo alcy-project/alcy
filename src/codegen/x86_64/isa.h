@@ -74,6 +74,7 @@ constexpr Reg ARG_REGS[] = {Reg::Rdi, Reg::Rsi, Reg::Rdx,
                             Reg::Rcx, Reg::R8,  Reg::R9};
 constexpr Reg ARG_XMM_REGS[] = {Reg::Xmm0, Reg::Xmm1, Reg::Xmm2, Reg::Xmm3,
                                 Reg::Xmm4, Reg::Xmm5, Reg::Xmm6, Reg::Xmm7};
+constexpr u8 ARG_XMM_COUNT = 8;
 constexpr Reg RETURN_REG = Reg::Rax;
 constexpr Reg RETURN_XMM_REG = Reg::Xmm0;
 

@@ -28,6 +28,23 @@ struct Shape {
   bool write0 = false;
 };
 
+bool is_float_op(const MOp op) {
+  switch (op) {
+    case MOp::Movss:
+    case MOp::Movsd:
+    case MOp::Fadd:
+    case MOp::Fsub:
+    case MOp::Fmul:
+    case MOp::Fdiv:
+    case MOp::Fneg:
+    case MOp::Fcom:
+    case MOp::CvtI2F:
+    case MOp::CvtF2I:
+    case MOp::CvtF2F: return true;
+    default: return false;
+  }
+}
+
 Shape shape_of(const MOp op) {
   switch (op) {
     case MOp::Mov:
@@ -61,6 +78,17 @@ Shape shape_of(const MOp op) {
     case MOp::Syscall:
     case MOp::Nop:
     case MOp::Cqo:
+    case MOp::Movss:
+    case MOp::Movsd:
+    case MOp::Fadd:
+    case MOp::Fsub:
+    case MOp::Fmul:
+    case MOp::Fdiv:
+    case MOp::Fneg:
+    case MOp::Fcom:
+    case MOp::CvtI2F:
+    case MOp::CvtF2I:
+    case MOp::CvtF2F:
     case MOp::RepMovsb:
     case MOp::RepStosb:
     case MOp::Ud2: return {};
@@ -251,6 +279,98 @@ void allocate(Body& body, const Frame& frame) {
     pool =
         inst.op == MOp::Idiv || inst.op == MOp::Udiv ? divisor_pool : read_pool;
     const Shape shape = shape_of(inst.op);
+
+    // Floating-point operations read their operands from the frame and
+    // write back to it, so the XMM file needs no allocation: two scratch
+    // registers carry every binary form. A float constant is named by a
+    // symbol whose bytes the read-only section holds; a GPR borrows its
+    // address.
+    if (is_float_op(inst.op)) {
+      const u8 w = inst.width;
+      const MOp load_op = w == 4 ? MOp::Movss : MOp::Movsd;
+      constexpr Reg X = Reg::Xmm0;
+      constexpr Reg Y = Reg::Xmm1;
+      const auto load_float = [&](const Operand& src, Reg into) {
+        if (const VReg* vreg = std::get_if<VReg>(&src); vreg != nullptr) {
+          push_labeled(make_inst(load_op, w, Operand{into},
+                                 Operand{slot(disp_of(vreg->index))}));
+        } else if (const SymbolRef* sym = std::get_if<SymbolRef>(&src);
+                   sym != nullptr) {
+          const Reg addr = pool[next_scratch++];
+          DCHECK(next_scratch <= pool.size());
+          push_labeled(make_inst(MOp::Mov, 8, Operand{addr}, Operand{*sym}));
+          push_labeled(make_inst(load_op, w, Operand{into},
+                                 Operand{Mem{.base = addr,
+                                             .index = std::nullopt,
+                                             .scale = 1,
+                                             .disp = 0}}));
+        } else if (const Mem* mem = std::get_if<Mem>(&src); mem != nullptr) {
+          push_labeled(make_inst(load_op, w, Operand{into}, resolve(*mem)));
+        }
+      };
+      const auto store_float = [&](const Operand& dst, Reg from) {
+        if (const VReg* vreg = std::get_if<VReg>(&dst); vreg != nullptr) {
+          const u8 dst_w = frame.vreg_size[vreg->index] == 4 ? 4 : 8;
+          const MOp store_op = dst_w == 4 ? MOp::Movss : MOp::Movsd;
+          push_labeled(make_inst(store_op, dst_w,
+                                 Operand{slot(disp_of(vreg->index))},
+                                 Operand{from}));
+        } else if (const Mem* mem = std::get_if<Mem>(&dst); mem != nullptr) {
+          push_labeled(make_inst(load_op, w, resolve(*mem), Operand{from}));
+        } else if (const Reg* to = std::get_if<Reg>(&dst); to != nullptr) {
+          if (*to != from) {
+            push_labeled(make_inst(load_op, w, Operand{*to}, Operand{from}));
+          }
+        }
+      };
+      if (inst.op == MOp::Fcom) {
+        load_float(inst.ops[0], X);
+        load_float(inst.ops[1], Y);
+        push_labeled(make_inst(MOp::Fcom, w, Operand{X}, Operand{Y}));
+        continue;
+      }
+      if (inst.op == MOp::CvtI2F) {
+        const Reg from = load_value(std::get<VReg>(inst.ops[1]));
+        push_labeled(make_inst(MOp::CvtI2F, w, Operand{X}, Operand{from}));
+        store_float(inst.ops[0], X);
+        continue;
+      }
+      if (inst.op == MOp::CvtF2I) {
+        load_float(inst.ops[1], X);
+        push_labeled(make_inst(MOp::CvtF2I, w, Operand{Reg::Rax}, Operand{X}));
+        const VReg dst = std::get<VReg>(inst.ops[0]);
+        const u8 out_width = static_cast<u8>(
+            frame.vreg_size[dst.index] > 8 ? 8 : frame.vreg_size[dst.index]);
+        push_labeled(make_inst(MOp::Mov, out_width,
+                               Operand{slot(disp_of(dst.index))},
+                               Operand{Reg::Rax}));
+        continue;
+      }
+      if (inst.op == MOp::Fneg) {
+        load_float(inst.ops[1], X);
+        load_float(inst.ops[2], Y);
+        push_labeled(make_inst(MOp::Fneg, w, Operand{X}, Operand{Y}));
+        store_float(inst.ops[0], X);
+        continue;
+      }
+      if (inst.op == MOp::CvtF2F) {
+        load_float(inst.ops[1], X);
+        push_labeled(make_inst(MOp::CvtF2F, w, Operand{Y}, Operand{X}));
+        store_float(inst.ops[0], Y);
+        continue;
+      }
+      // Operand order from the selector is dst, lhs, rhs.
+      if (inst.op == MOp::Movss || inst.op == MOp::Movsd) {
+        load_float(inst.ops[1], Y);
+        store_float(inst.ops[0], Y);
+      } else {
+        load_float(inst.ops[1], X);
+        load_float(inst.ops[2], Y);
+        push_labeled(make_inst(inst.op, w, Operand{X}, Operand{Y}));
+        store_float(inst.ops[0], X);
+      }
+      continue;
+    }
 
     // A move whose width no register holds runs as a byte copy between
     // the two addresses. Every other shape a slot wider than a register
