@@ -55,6 +55,7 @@ def build(
     llvm_dir: str = "",
     debug_info: str = "line",
     sanitizer: str = "address",
+    env: dict[str, str] | None = None,
 ) -> int:
     out_dir = project_root_dir / "out"
     build_dir = out_dir / build_subdir
@@ -94,6 +95,7 @@ def build(
                 ],
                 check=True,
                 cwd=project_root_dir,
+                env=env,
             )
 
             # gn check
@@ -101,6 +103,7 @@ def build(
                 ["gn", "check", str(build_dir), "//src/*"],
                 check=True,
                 cwd=project_root_dir,
+                env=env,
             )
 
             # update compdb
@@ -121,6 +124,7 @@ def build(
             ["ninja", "-C", str(build_dir), target],
             check=True,
             cwd=project_root_dir,
+            env=env,
         )
         return 0
     except subprocess.CalledProcessError as e:

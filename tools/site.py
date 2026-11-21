@@ -808,11 +808,23 @@ def command_test(_args: argparse.Namespace) -> int:
     # Build and run them in the no-LLVM configuration the generator itself
     # uses: the site job installs no C++ toolchain, and the normal build
     # needs pinned libc++ headers that only setup-build provides.
+    # emsdk puts its own clang++ first on PATH, which targets wasm and
+    # cannot find the host C++ headers the native generator needs. Drop
+    # those entries for this native build; the wasm build above keeps
+    # them.
+    env = dict(os.environ)
+    path = [
+        entry
+        for entry in env.get("PATH", "").split(os.pathsep)
+        if "emsdk" not in entry and "emscripten" not in entry
+    ]
+    env["PATH"] = os.pathsep.join(path)
     code = build(
         target="tests",
         mode="release",
         build_subdir=DOCSITE_BUILD_SUBDIR,
         gn_args_extra=DEFAULT_GN_ARG,
+        env=env,
     )
     if code != 0:
         return fail(f"tests build failed ({code})")
