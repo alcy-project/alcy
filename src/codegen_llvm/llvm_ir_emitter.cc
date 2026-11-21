@@ -342,13 +342,27 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
       }
     }
   }
+  // Which functions the image can still reach: the entry a binary
+  // names or the surface a library exports, and everything they call
+  // or reference as a value. A function nothing reaches is one the
+  // backend would translate for nothing - the middle end drops it in a
+  // profile that has one, and a profile without a middle end pays for
+  // every body here. A relocatable module keeps every symbol, so it
+  // keeps every function too.
+  std::vector<bool> reachable;
+  if (emit_entry_ || exported_functions_.has_value()) {
+    reachable = reachable_functions(parametric);
+  }
+  const auto kept = [&](const ir::FunctionIdx function_idx) {
+    return reachable.empty() || reachable[function_idx.idx];
+  };
 
   // Declare every function before defining any body so forward
   // calls resolve regardless of declaration order.
   llvm::Function* entry_function = nullptr;
   ir::TypeIdx entry_return = ir::TypeIdx::invalid();
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
-    if (parametric[function_idx.idx]) {
+    if (parametric[function_idx.idx] || !kept(function_idx)) {
       continue;
     }
     const ir::Function& function = storage_->functions()[function_idx];
@@ -395,7 +409,7 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
   }
   // PERF: consider running this process concurrently.
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
-    if (parametric[function_idx.idx]) {
+    if (parametric[function_idx.idx] || !kept(function_idx)) {
       continue;
     }
     const ir::Function& function = storage_->functions()[function_idx];
@@ -1370,6 +1384,62 @@ bool LlvmIrEmitter::is_entry_candidate(const ir::Function& function) const {
   const ir::TypeTag ret = storage_->types()[function.meta.return_type.idx].tag;
   return ret == ir::TypeTag::Void || ret == ir::TypeTag::I32 ||
          ret == ir::TypeTag::Enum;
+}
+
+std::vector<bool> LlvmIrEmitter::reachable_functions(
+    const std::vector<bool>& parametric) const {
+  std::vector<bool> reachable(storage_->functions().size(), false);
+  std::vector<u32> stack;
+  const auto reach = [&](const ir::FunctionIdx function_idx) {
+    if (function_idx.is_valid() && function_idx.idx < reachable.size() &&
+        !parametric[function_idx.idx] && !reachable[function_idx.idx]) {
+      reachable[function_idx.idx] = true;
+      stack.push_back(function_idx.idx);
+    }
+  };
+  // The roots: the entry a binary renames - the first candidate, the
+  // same one the declaration loop would pick - and the surface a
+  // library exports.
+  if (emit_entry_) {
+    for (const ir::FunctionIdx function_idx :
+         storage_->functions().idx_range()) {
+      if (!parametric[function_idx.idx] &&
+          is_entry_candidate(storage_->functions()[function_idx])) {
+        reach(function_idx);
+        break;
+      }
+    }
+  }
+  if (exported_functions_.has_value()) {
+    for (const ir::FunctionIdx function_idx : *exported_functions_) {
+      reach(function_idx);
+    }
+  }
+  if (stack.empty()) {
+    // No root the image is entered through: a module this emitter is
+    // not the right gate for keeps every function.
+    return {};
+  }
+  // Calls and function values are both operands naming a function, so
+  // one walk over the operands is the whole call graph.
+  while (!stack.empty()) {
+    const ir::Function& function =
+        storage_->functions()[ir::FunctionIdx(stack.back())];
+    stack.pop_back();
+    for (const ir::BlockIdx block_idx : function.blocks) {
+      const ir::Block& block = storage_->blocks()[block_idx];
+      for (const ir::InstructionIdx instr_idx : block.instrs) {
+        const ir::Instruction& instruction = storage_->instrs()[instr_idx];
+        for (const ir::OperandIdx operand_idx : instruction.operands) {
+          const ir::Operand& operand = storage_->operands()[operand_idx];
+          if (operand.is<ir::FunctionIdx>()) {
+            reach(operand.as_function());
+          }
+        }
+      }
+    }
+  }
+  return reachable;
 }
 
 void LlvmIrEmitter::emit_entry(llvm::Function* entry_function,

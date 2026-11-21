@@ -202,6 +202,12 @@ class LlvmIrEmitter {
   // exit code: `()`, `i32`, or a two-variant enum whose first variant
   // holds `` (see).
   bool is_entry_candidate(const ir::Function& function) const;
+  // The functions the image can still reach: the entry a binary names
+  // or the surface a library exports, and everything they call or
+  // reference as a value, walked over the lowered operands. An empty
+  // vector means no root was found and every function stays.
+  [[nodiscard]] std::vector<bool> reachable_functions(
+      const std::vector<bool>& parametric) const;
   // Emits the C-ABI `main` wrapper around a renamed user entry,
   // supplying a slot for a result past the direct limit.
   void emit_entry(llvm::Function* entry_function, ir::TypeIdx ret);
