@@ -99,12 +99,15 @@ assert(alcy_debug_info == "line" || alcy_debug_info == "full",
 # compiler reads memory it does not own; the thread sanitizer asks whether
 # two workers touch one object, which the job system can only answer under
 # it. Two runtimes that both own the heap cannot share a binary, so the
-# build carries one of them at a time.
+# build carries one of them at a time. "none" is for a host whose pinned
+# toolchain has no runtime that works there; the sanitizer checks run on
+# other hosts.
 declare_args() {
   alcy_sanitizer = "address"
 }
-assert(alcy_sanitizer == "address" || alcy_sanitizer == "thread",
-       "alcy_sanitizer must be \"address\" or \"thread\"")
+assert(alcy_sanitizer == "address" || alcy_sanitizer == "thread" ||
+           alcy_sanitizer == "none",
+       "alcy_sanitizer must be \"address\", \"thread\" or \"none\"")
 
 if (!is_win && !is_mac && !is_ios) {
   declare_args() {
@@ -197,7 +200,7 @@ if (is_wasm) {
 if (is_debug) {
   default_compiler_configs += [ "//build/config/compiler:debug" ]
 
-  if (!is_win && !is_wasm) {
+  if (!is_win && !is_wasm && alcy_sanitizer != "none") {
     if (alcy_sanitizer == "thread") {
       default_compiler_configs += [ "//build/config/compiler:tsan" ]
     } else {

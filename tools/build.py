@@ -184,10 +184,11 @@ def main():
     parser.add_argument(
         "--sanitizer",
         default="address",
-        choices=["address", "thread"],
-        help="Sanitizer in a debug build: the address sanitizer (default) "
-        "or the thread sanitizer, which is what a race in the job system "
-        "needs to be seen",
+        choices=["address", "thread", "none"],
+        help="Sanitizer in a debug build: the address sanitizer (default), "
+        "the thread sanitizer, which is what a race in the job system "
+        "needs to be seen, or none when the pinned toolchain has no "
+        "runtime that works on this host",
     )
     parser.add_argument(
         "--gn-arg",

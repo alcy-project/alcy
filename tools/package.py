@@ -139,6 +139,10 @@ def verify_archive(archive_path: Path, plat: str, required_targets: list[str]) -
         run = subprocess.run([str(binary), "--version"], capture_output=True, text=True)
         if run.returncode != 0 or not run.stdout.strip():
             log_error(f"The packaged binary failed to run: exit={run.returncode}")
+            if run.stdout:
+                log_error(f"stdout: {run.stdout.strip()}")
+            if run.stderr:
+                log_error(f"stderr: {run.stderr.strip()}")
             return False
         return True
 

@@ -34,48 +34,57 @@ jobs:
             label: Linux x86_64
             archive: tar.zst
             nix: false
+            sanitizer: address
           - os: ubuntu-24.04
             plat: linux
             arch: x86_64
             label: Linux x86_64
             archive: tar.zst
             nix: true
+            sanitizer: address
           - os: ubuntu-24.04-arm
             plat: linux
             arch: arm64
             label: Linux arm64
             archive: tar.zst
             nix: false
+            sanitizer: address
           - os: macos-26
             plat: macos
             arch: arm64
             label: macOS arm64
             archive: tar.zst
             nix: false
+            sanitizer: address
           - os: macos-26
             plat: macos
             arch: arm64
             label: macOS arm64
             archive: tar.zst
             nix: true
+            sanitizer: address
           - os: macos-26-intel
             plat: macos
             arch: x86_64
             label: macOS x86_64
             archive: tar.zst
             nix: false
+            sanitizer: none
+            # macOS Intel pins LLVM 20.1.7, whose ASan runtime dies with SIGILL on the current runner; the sanitizer acceptance job runs elsewhere.
           - os: windows-2025-vs2026
             plat: windows
             arch: x64
             label: Windows x64
             archive: zip
             nix: false
+            sanitizer: address
           - os: windows-11-arm
             plat: windows
             arch: arm64
             label: Windows arm64
             archive: zip
             nix: false
+            sanitizer: address
 
     env:
       COLORTERM: 256color
@@ -105,7 +114,7 @@ jobs:
 
       - name: Build All
         shell: bash
-        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/build.py --target=all --mode="$BUILD_TYPE" --build-subdir=build
+        run: ${{ matrix.nix && 'nix develop .#default --command ' || '' }}uv run ./tools/build.py --target=all --mode="$BUILD_TYPE" --build-subdir=build --sanitizer="${{ matrix.sanitizer }}"
 
       - name: Package & Generate Checksum
         shell: bash
