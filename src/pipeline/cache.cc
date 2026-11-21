@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/hash.h"
+#include "fingerprint/fingerprint.h"
 #include "fpag/base/numeric.h"
 #include "fpag/io/io_util.h"
 #include "ir/deserialize.h"
@@ -65,34 +66,21 @@ base::Digest128 cache_key(const CacheInputs& inputs) {
     summaries.push_back(digest.bytes());
   }
   std::sort(summaries.begin(), summaries.end());
-  std::vector<u8> canonical;
-  canonical.reserve(16 + 16 + inputs.triple.size() + inputs.target_name.size() +
-                    summaries.size() * 16 + 3);
-  for (const std::array<u8, 16> part :
-       {identity.bytes(), manifest_hash.bytes()}) {
-    canonical.insert(canonical.end(), part.begin(), part.end());
-  }
-  for (const char ch : inputs.triple) {
-    canonical.push_back(static_cast<u8>(ch));
-  }
-  canonical.push_back(0);
+  fingerprint::Builder canonical;
+  canonical.digest(identity).digest(manifest_hash);
+  canonical.bytes(inputs.triple).u8(0);
   // The name is length-delimited: a name that ran into the next field
   // would key two different targets the same.
-  const std::string target_length = std::to_string(inputs.target_name.size());
-  for (const char ch : target_length) {
-    canonical.push_back(static_cast<u8>(ch));
-  }
-  canonical.push_back(0);
-  for (const char ch : inputs.target_name) {
-    canonical.push_back(static_cast<u8>(ch));
-  }
-  canonical.push_back(inputs.is_lib ? 1 : 0);
-  canonical.push_back(inputs.emit_entry ? 1 : 0);
-  canonical.push_back(inputs.testing ? 1 : 0);
+  canonical.bytes(std::to_string(inputs.target_name.size())).u8(0);
+  canonical.bytes(inputs.target_name);
+  canonical.u8(inputs.is_lib ? 1 : 0)
+      .u8(inputs.emit_entry ? 1 : 0)
+      .u8(inputs.testing ? 1 : 0);
   for (const std::array<u8, 16>& digest : summaries) {
-    canonical.insert(canonical.end(), digest.begin(), digest.end());
+    canonical.bytes(std::string_view(
+        reinterpret_cast<const char*>(digest.data()), digest.size()));
   }
-  return base::hash128(std::span<const u8>(canonical.data(), canonical.size()));
+  return canonical.finish();
 }
 
 std::string cache_entry_path(std::string_view dir, base::Digest128 key) {
