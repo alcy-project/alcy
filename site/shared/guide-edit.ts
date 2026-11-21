@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Editing a guide page's `alcy` block: Edit and Done, the mirror under
-// the caret, Reset, and the hand-off to the playground. A page loads it
-// only when a block holds a complete program, and it stays separate from
-// `guide-run.js` so a reader who only presses Run never waits for the
-// editor, the colors, or the hand-off.
+// the caret, and Reset. A page loads it only when a block holds a
+// complete program, and it stays separate from `guide-run.js` so a
+// reader who only presses Run never waits for the editor or the colors.
+// Open is wired in `guide.js`, which loads with the page.
 
-import { handOffToPlayground } from "./handoff.js";
 import type { Highlighter } from "../playground/highlight.js";
 import { findBlocks, type CodeBlock } from "./guide-copy.js";
 import { t } from "./site.js";
@@ -87,19 +86,6 @@ export function wireEditor(block: CodeBlock, pressed = false): void {
 
   const edit = block.actions.querySelector<HTMLButtonElement>('[data-action="edit"]');
   const reset = block.actions.querySelector<HTMLButtonElement>('[data-action="reset"]');
-  const open = block.actions.querySelector<HTMLButtonElement>('[data-action="open"]');
-
-  // The 404's block ships without one: its own links already reach the
-  // playground, and its depth under the deployment root is whatever
-  // was mistyped, so there is no "../" that lands there.
-  if (open !== null) {
-    open.addEventListener("click", () => {
-      // The handoff rides sessionStorage, and the reader keeps their own
-      // tree's playground, one directory up from this page.
-      handOffToPlayground(block.source());
-      window.location.assign(new URL("../playground/", window.location.href).href);
-    });
-  }
 
   // A block may ship read-only, like the 404's: no working copy and no
   // editing state, only the published text and its buttons.

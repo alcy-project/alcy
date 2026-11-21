@@ -1,13 +1,13 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// The guide page's wiring, split along what the reader presses. Run, the
-// compiler's client, and the output are `guide-run.js`, which the page
-// fetches because it is the common case. The editor, the colors, and the
-// hand-off are `guide-edit.js`, fetched the first time a reader presses
-// Edit: until then the published text and its Copy, Run, and Open answer
-// for themselves.
+// The guide page's wiring, split along what the reader presses. Run and
+// Open are immediate: they need neither the compiler's client nor the
+// editor. Copy, Run, and Open work from the published text until an Edit
+// changes what `source()` returns. The editor and its colors live in
+// `guide-edit.js`, fetched the first time a reader presses Edit.
 
+import { handOffToPlayground } from "./handoff.js";
 import { findBlocks, wireCopy, type CodeBlock } from "./guide-copy.js";
 import { wireRun } from "./guide-run.js";
 
@@ -39,6 +39,21 @@ function onEditPress(block: CodeBlock): void {
   );
 }
 
+// Open hands the block's current source to the reader's own tree's
+// playground. The 404's block has no Open: its links already reach the
+// playground, and its depth under the deployment root has no fixed
+// "../" to land there.
+function wireOpen(block: CodeBlock): void {
+  const open = block.actions.querySelector<HTMLButtonElement>('[data-action="open"]');
+  if (open === null) {
+    return;
+  }
+  open.addEventListener("click", () => {
+    handOffToPlayground(block.source());
+    window.location.assign(new URL("../playground/", window.location.href).href);
+  });
+}
+
 // Copy is every block's, so the row is revealed before the `alcy`-only
 // wiring below narrows to the blocks that have Run and Edit.
 for (const block of findBlocks()) {
@@ -47,6 +62,7 @@ for (const block of findBlocks()) {
     continue;
   }
   wireRun(block);
+  wireOpen(block);
   const edit = block.actions.querySelector<HTMLButtonElement>('[data-action="edit"]');
   if (edit !== null) {
     edit.addEventListener("click", () => onEditPress(block));
