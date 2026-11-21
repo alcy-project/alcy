@@ -9,6 +9,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -170,10 +171,11 @@ std::string fingerprint(std::string_view root,
 
   base::Result<pipeline::DiscoveredSourcePaths, diag::Reported> discovered =
       pipeline::discover_source_paths(root, context.bag);
-  const bool have_sources = discovered.is_ok();
-  if (have_sources) {
+  std::unordered_set<std::string> discovered_files;
+  if (discovered.is_ok()) {
     pipeline::DiscoveredSourcePaths listed = std::move(discovered).unwrap();
     for (const std::string& file : listed.files) {
+      discovered_files.insert(file);
       builder.bytes(file).u8(':');
       if (const BufferView* buffer = buffer_for(file); buffer != nullptr) {
         builder.bytes(std::to_string(buffer->version))
@@ -185,14 +187,20 @@ std::string fingerprint(std::string_view root,
       builder.u8(0);
     }
   }
+  // A buffer under the root that discovery never saw - an unsaved new
+  // file - is still loaded as a virtual source by analyze_package. Its
+  // bytes and version must steer the signature or edits go unnoticed.
   for (const BufferView& buffer : buffers) {
     const std::optional<std::string> path = uri_to_path(buffer.uri);
-    if (!path.has_value() || !under_root(*path, root) || have_sources) {
+    if (!path.has_value() || !under_root(*path, root) ||
+        discovered_files.contains(*path)) {
       continue;
     }
     builder.bytes(buffer.uri)
         .u8(':')
         .bytes(std::to_string(buffer.version))
+        .u8(':')
+        .digest(base::hash128(buffer.text))
         .u8(0);
   }
   return builder.finish().hex();

@@ -211,6 +211,17 @@ TEST_CASE("A pull with a previous result id follows the package fingerprint") {
   CHECK(second.find("kind")->as_string() == "full");
 }
 
+TEST_CASE("An unsaved buffer changes the package fingerprint") {
+  const Fixture f;
+  const std::string new_uri = workspace::path_to_uri(f.root + "/new.al");
+  std::vector<workspace::BufferView> buffers = f.buffers();
+  buffers.push_back({new_uri, "fn fresh() -> i32 {\n  ret 0\n}\n", 1});
+  const std::string first = workspace::fingerprint(f.root, buffers);
+  buffers.back().text = "fn fresh() -> i32 {\n  ret 1\n}\n";
+  const std::string second = workspace::fingerprint(f.root, buffers);
+  CHECK(first != second);
+}
+
 TEST_CASE("Highlights do not paint a sibling definition into this buffer") {
   const Fixture f;
   const Document document(f.main_uri, "alcy", 1, std::string(MAIN));

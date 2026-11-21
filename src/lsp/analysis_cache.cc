@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash.h"
 #include "i18n/language.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
@@ -95,7 +96,8 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
     const std::vector<workspace::BufferView> buffers = buffers_for(document);
     const std::string value =
         pkg_key.starts_with("standalone:")
-            ? pkg_key + ":" + std::to_string(document.version())
+            ? pkg_key + ":" + std::to_string(document.version()) + ":" +
+                  base::hash128(document.text()).hex()
             : workspace::fingerprint(pkg_key, buffers);
     signatures_[pkg_key] = SignatureEntry{stamp, value};
   }
