@@ -79,6 +79,7 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
       ++it;
     }
   }
+  prune_packages();
 
   const auto found = entries_.find(uri);
   if (found != entries_.end() && found->second.cache_key == cache_key) {
@@ -114,11 +115,14 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
 
 void AnalysisCache::erase(std::string_view uri) {
   entries_.erase(std::string(uri));
+  prune_packages();
+}
+
+void AnalysisCache::prune_packages() {
   for (auto it = packages_.begin(); it != packages_.end();) {
     bool used = false;
-    for (const auto& [key, entry] : entries_) {
-      (void)key;
-      if (entry.cache_key == it->first) {
+    for (const auto& entry : entries_) {
+      if (entry.second.cache_key == it->first) {
         used = true;
         break;
       }
