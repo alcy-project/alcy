@@ -220,6 +220,7 @@ class Parser {
     // `#[test]` marks a function the run gathers; existence on a build
     // is a separate question answered by `#[when(testing)]`.
     bool is_test = false;
+    diag::Span is_test_span;
   };
 
   Attributes parse_attribute_list();

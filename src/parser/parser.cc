@@ -167,7 +167,10 @@ Parser::Attributes Parser::parse_attribute_list() {
   while (peek_kind() == lexer::TokenKind::Hash) {
     const Attributes one = parse_attribute();
     attributes.when_false = attributes.when_false || one.when_false;
-    attributes.is_test = attributes.is_test || one.is_test;
+    if (one.is_test) {
+      attributes.is_test = true;
+      attributes.is_test_span = one.is_test_span;
+    }
     if (one.repr_c) {
       attributes.repr_c = true;
       attributes.repr_span = one.repr_span;
@@ -254,6 +257,7 @@ Parser::Attributes Parser::parse_attribute() {
     }
     Attributes result;
     result.is_test = true;
+    result.is_test_span = name.span;
     return result;
   }
   if (attr_name == "repr") {
@@ -637,6 +641,21 @@ std::optional<ast::ItemIdx> Parser::parse_spelled_item(bool is_pub,
 void Parser::parse_group(Attributes attributes,
                          std::vector<ast::ItemIdx>& out) {
   using K = lexer::TokenKind;
+  // A group is a gate, not an item. A role or layout marker written on
+  // the brace would otherwise reach every function or struct inside it.
+  // Refuse it here and keep it from the children.
+  if (attributes.is_test) {
+    const u32 index = bag_.emit<i18n::Key::ParserTestOnlyOnFunctions>(
+        DiagCode::UnexpectedToken, attributes.is_test_span);
+    (void)index;
+    attributes.is_test = false;
+  }
+  if (attributes.repr_c) {
+    const u32 index = bag_.emit<i18n::Key::ParserReprNotOnStruct>(
+        DiagCode::ReprNotOnStruct, attributes.repr_span);
+    (void)index;
+    attributes.repr_c = false;
+  }
   if (!expect(K::LBrace, "`{`")) {
     return;
   }
@@ -648,7 +667,10 @@ void Parser::parse_group(Attributes attributes,
     if (peek_kind() == K::Hash) {
       const Attributes own = parse_attribute_list();
       child.when_false = child.when_false || own.when_false;
-      child.is_test = child.is_test || own.is_test;
+      if (own.is_test) {
+        child.is_test = true;
+        child.is_test_span = own.is_test_span;
+      }
       if (own.repr_c) {
         child.repr_c = true;
         child.repr_span = own.repr_span;
@@ -715,6 +737,12 @@ ast::ItemIdx Parser::parse_item(Attributes attributes) {
         }
         if (node.payload.get<ast::ItemFn>().params.size() != 0) {
           const u32 index = bag_.emit<i18n::Key::ParserTestTakesNoArguments>(
+              DiagCode::UnexpectedToken, node.span);
+          (void)index;
+          return ast::ItemIdx::invalid();
+        }
+        if (!node.payload.get<ast::ItemFn>().generic.empty()) {
+          const u32 index = bag_.emit<i18n::Key::ParserTestHasTypeParameters>(
               DiagCode::UnexpectedToken, node.span);
           (void)index;
           return ast::ItemIdx::invalid();

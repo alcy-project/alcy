@@ -2047,6 +2047,35 @@ TEST_CASE("The test marker is refused on a method") {
                     "test"));
 }
 
+TEST_CASE("A test marker is refused on a group") {
+  // A group has no functions of its own. Letting the marker through would
+  // silently turn every function it holds into a test.
+  const std::string_view source =
+      "fn main() -> i32 {\n  ret 0\n}\n\n#[test] {\n  fn a() {\n  }\n  fn b() "
+      "{\n  }\n}\n";
+  Fixture f;
+  const ParseResult result = parse(source, f);
+  CHECK(!result.ok);
+  CHECK(has_message(f.bag, "`#[test]` marks a function; put it on `fn`"));
+}
+
+TEST_CASE("A layout marker is refused on a group") {
+  const std::string_view source =
+      "#[repr(C)] {\n  struct A { x: i32 }\n  struct B { y: i32 }\n}\n";
+  Fixture f;
+  const ParseResult result = parse(source, f);
+  CHECK(!result.ok);
+  CHECK(has_message(f.bag, "`repr(C)` applies to structs"));
+}
+
+TEST_CASE("A test declares no type parameters") {
+  const std::string_view source = "#[test] fn generic<T>() {\n}\n";
+  Fixture f;
+  const ParseResult result = parse(source, f);
+  CHECK(!result.ok);
+  CHECK(has_message(f.bag, "a test declares no type parameters"));
+}
+
 TEST_CASE("A test marker refuses the shapes a test cannot take") {
   struct Case {
     std::string_view source;

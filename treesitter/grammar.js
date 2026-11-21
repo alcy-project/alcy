@@ -183,21 +183,26 @@ module.exports = grammar({
 
     // Items ----------------------------------------------------------------
 
-    _item: $ => seq(
-      repeat($.attribute),
-      choice(
-      $.function_item,
-      $.intrinsic_fn_item,
-      $.extern_item,
-      $.struct_item,
-      $.enum_item,
-      $.impl_item,
-      $.spec_item,
-      $.static_item,
-      $.const_item,
-      $.use_item,
-      $.conditional_group_item,
+    _item: $ => choice(
+      seq(
+        repeat($.attribute),
+        choice(
+          $.function_item,
+          $.intrinsic_fn_item,
+          $.extern_item,
+          $.struct_item,
+          $.enum_item,
+          $.impl_item,
+          $.spec_item,
+          $.static_item,
+          $.const_item,
+          $.use_item,
+        ),
       ),
+      // The compiler opens a group only after an attribute, so a bare
+      // brace is a parse error there. Require at least one attribute to
+      // keep the editor's tree in step with it.
+      seq(repeat1($.attribute), $.conditional_group_item),
     ),
 
     visibility: _ => 'pub',

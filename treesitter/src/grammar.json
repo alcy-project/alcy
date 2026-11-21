@@ -269,57 +269,74 @@
       ]
     },
     "_item": {
-      "type": "SEQ",
+      "type": "CHOICE",
       "members": [
         {
-          "type": "REPEAT",
-          "content": {
-            "type": "SYMBOL",
-            "name": "attribute"
-          }
-        },
-        {
-          "type": "CHOICE",
+          "type": "SEQ",
           "members": [
             {
-              "type": "SYMBOL",
-              "name": "function_item"
+              "type": "REPEAT",
+              "content": {
+                "type": "SYMBOL",
+                "name": "attribute"
+              }
             },
             {
-              "type": "SYMBOL",
-              "name": "intrinsic_fn_item"
-            },
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "function_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "intrinsic_fn_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "extern_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "struct_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "enum_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "impl_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "spec_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "static_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "const_item"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "use_item"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
             {
-              "type": "SYMBOL",
-              "name": "extern_item"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "struct_item"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "enum_item"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "impl_item"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "spec_item"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "static_item"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "const_item"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "use_item"
+              "type": "REPEAT1",
+              "content": {
+                "type": "SYMBOL",
+                "name": "attribute"
+              }
             },
             {
               "type": "SYMBOL",
