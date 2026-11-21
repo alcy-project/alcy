@@ -340,6 +340,135 @@ Body build_arg() {
   return body;
 }
 
+// Copy a borrowed path into a NUL-terminated stack buffer and return the
+// buffer's address in `Reg::Rdi`, ready for the `openat` syscall.
+void path_buffer(Body& body, u8 width) {
+  const auto mov = [&](MOp op, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, 8, dst, src));
+  };
+  // rdi = path bytes, rsi = byte count
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{4096}}));
+  mov(MOp::Mov, Operand{Reg::Rdx}, Operand{Reg::Rsi});
+  mov(MOp::Mov, Operand{Reg::Rcx}, Operand{Reg::Rsi});
+  mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Reg::Rdi});
+  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Reg::Rsp});
+  body.insts.push_back(make_inst(MOp::RepMovsb, 8));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 1,
+      Operand{Mem{.base = Reg::Rsp, .index = Reg::Rdx, .scale = 1, .disp = 0}},
+      Operand{Imm{0}}));
+  mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Reg::Rsp});
+  (void)width;
+}
+
+// openat(AT_FDCWD, path, flags, mode) -> fd in rax, or a negative errno.
+void open_path(Body& body, i64 flags) {
+  const auto mov = [&](MOp op, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, 8, dst, src));
+  };
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{257}});
+  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Imm{-100}});
+  mov(MOp::Mov, Operand{Reg::Rdx}, Operand{Imm{flags}});
+  mov(MOp::Mov, Operand{Reg::R10}, Operand{Imm{0}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+}
+
+// The shared tail: close the fd in r12 and keep rax as the answer.
+[[maybe_unused]] void close_file(Body& body) {
+  const auto mov = [&](MOp op, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, 8, dst, src));
+  };
+  mov(MOp::Mov, Operand{Reg::R12}, Operand{Reg::Rax});
+  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Reg::Rax});
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{3}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Reg::R12});
+}
+
+Body build_file_size() {
+  Body body;
+  const auto mov = [&](MOp op, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, 8, dst, src));
+  };
+  path_buffer(body, 8);
+  open_path(body, 0);  // O_RDONLY
+  body.insts.push_back(
+      make_inst(MOp::Cmp, 8, Operand{Reg::Rax}, Operand{Imm{-4095}}));
+  const u32 ok = body.label_count++;
+  // Linux returns negative errno values: read unsigned, a valid fd or
+  // pointer is below the -4095 threshold and an error is at or above it.
+  body.insts.push_back(make_jcc(Cond::B, Operand{Label{ok}}));
+  body.insts.push_back(
+      make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Imm{-1}}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  MInst joined = make_inst(MOp::Nop, 8);
+  joined.label = ok;
+  body.insts.push_back(joined);
+  mov(MOp::Mov, Operand{Reg::R12}, Operand{Reg::Rax});  // keep fd
+  // fstat: rax=5, rdi=fd, rsi=stat buffer. st_size is at offset 48.
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{256}}));
+  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Reg::R12});
+  mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Reg::Rsp});
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{5}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  mov(MOp::Mov, Operand{Reg::Rax},
+      Operand{Mem{
+          .base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 48}});
+  mov(MOp::Mov, Operand{Reg::R13}, Operand{Reg::Rax});  // keep size
+  // close(fd)
+  mov(MOp::Mov, Operand{Reg::Rdi}, Operand{Reg::R12});
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{3}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Reg::R13});
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
+// read(fd, buf, count) or write(fd, buf, count); the fd is in rdi and
+// the count in rdx when called. Kept in r12 across the close.
+Body build_file_io(bool write) {
+  Body body;
+  const auto mov = [&](MOp op, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, 8, dst, src));
+  };
+  const auto slot = [](i32 disp) {
+    return Operand{
+        Mem{.base = Reg::Rbp, .index = std::nullopt, .scale = 1, .disp = disp}};
+  };
+  // Source args: rdi=path, rsi=len, rdx=buffer, rcx=count. Keep the
+  // latter two in the frame: r10/r11 do not survive a syscall.
+  mov(MOp::Mov, slot(-8), Operand{Reg::Rdx});
+  mov(MOp::Mov, slot(-16), Operand{Reg::Rcx});
+  path_buffer(body, 8);
+  open_path(body, write ? 577 : 0);  // O_WRONLY|O_CREAT|O_TRUNC or O_RDONLY
+  body.insts.push_back(
+      make_inst(MOp::Cmp, 8, Operand{Reg::Rax}, Operand{Imm{-4095}}));
+  const u32 ok = body.label_count++;
+  // Linux returns negative errno values: read unsigned, a valid fd or
+  // pointer is below the -4095 threshold and an error is at or above it.
+  body.insts.push_back(make_jcc(Cond::B, Operand{Label{ok}}));
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{-1}});
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  MInst joined = make_inst(MOp::Nop, 8);
+  joined.label = ok;
+  body.insts.push_back(joined);
+  mov(MOp::Mov, slot(-24), Operand{Reg::Rax});  // fd
+  mov(MOp::Mov, Operand{Reg::Rdi}, slot(-24));
+  mov(MOp::Mov, Operand{Reg::Rsi}, slot(-8));
+  mov(MOp::Mov, Operand{Reg::Rdx}, slot(-16));
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{write ? 1 : 0}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  mov(MOp::Mov, slot(-32), Operand{Reg::Rax});  // bytes moved
+  mov(MOp::Mov, Operand{Reg::Rdi}, slot(-24));
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{3}});
+  body.insts.push_back(make_inst(MOp::Syscall, 8));
+  mov(MOp::Mov, Operand{Reg::Rax}, slot(-32));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
 }  // namespace
 
 bool defines(const std::string_view name) {
@@ -348,7 +477,9 @@ bool defines(const std::string_view name) {
          name == "alcy_panic" || name == "alcy_sys_write" ||
          name == "alcy_sys_read" || name == "alcy_error_kind" ||
          name == "alcy_arg_count" || name == "alcy_arg" ||
-         name == "alcy_alloc" || name == "alcy_dealloc";
+         name == "alcy_file_size" || name == "alcy_read_file_into" ||
+         name == "alcy_write_file" || name == "alcy_alloc" ||
+         name == "alcy_dealloc";
 }
 
 Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
@@ -381,6 +512,15 @@ Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
   }
   if (name == "alcy_arg") {
     return build_arg();
+  }
+  if (name == "alcy_file_size") {
+    return build_file_size();
+  }
+  if (name == "alcy_read_file_into") {
+    return build_file_io(false);
+  }
+  if (name == "alcy_write_file") {
+    return build_file_io(true);
   }
   if (name == "alcy_alloc") {
     return build_alloc_fs();
