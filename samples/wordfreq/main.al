@@ -1,9 +1,9 @@
-// Words counted in a `Map`, then read back a key at a time.
+// Words counted in a `HashMap`, then read back a key at a time.
 // `words.iter()` yields a reference to each element, so `*w` is the
-// `str` the map keys on; `keys()` yields the key itself.
+// `str` the map keys on; `keys()` yields a reference to the key.
 fn main() -> i32 {
   words := ["the", "cat", "and", "the", "hat", "the", "cat"]
-  mut counts := Map::<i32>::new()
+  mut counts := HashMap::<str, i32>::new()
   for w in words.iter() {
     mut next := 1
     if Option::Some(n) := counts.get(*w) {
@@ -15,8 +15,8 @@ fn main() -> i32 {
 
   mut total := 0i32
   for key in counts.keys() {
-    n := counts.get(key).or_panic_with_message("every key is present")
-    println("{} {}", key, *n)
+    n := counts.get_at(key).or_panic_with_message("every key is present")
+    println("{} {}", *key, *n)
     total = total + *n
   }
   println("total = {}", total)
