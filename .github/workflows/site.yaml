@@ -146,7 +146,7 @@ jobs:
         shell: bash
         run: |
           uv run ./tools/build.py \
-            --target=src/docsite:docsite \
+            --target=docsite \
             --mode=release \
             --build-subdir=docsite \
             --gn-arg="$ALCY_GN_ARGS"
