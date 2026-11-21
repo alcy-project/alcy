@@ -83,10 +83,6 @@ runs:
           echo "LIBCXX_LIB_DIR=$LIBCXX_DIR" >> "$GITHUB_ENV"
         else
           echo "LIBCXX_LIB_DIR=${{ env.LLVM_PATH }}/lib" >> "$GITHUB_ENV"
-          # The arm64 runner has no prebuilt wheel for the Rust tools the
-          # venv needs, so uv builds them with cargo. Git Bash puts its
-          # own link.exe where cargo finds it; name MSVC's explicitly.
-          printf 'LINK=%s\n' "${VCToolsInstallDir}bin/HostX64/x64/link.exe" >> "$GITHUB_ENV"
         fi
 
     - name: Install uv
@@ -99,6 +95,13 @@ runs:
       if: inputs.nix != 'true'
       shell: bash
       run: |
+        # Some Rust wheels have no build for the host, so uv builds them
+        # with cargo. Git Bash puts a link.exe of its own ahead of MSVC's;
+        # name MSVC's for this step only. Exporting LINK globally would
+        # make lld-link read it as arguments on every later link.
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          export LINK="${VCToolsInstallDir}bin/HostX64/x64/link.exe"
+        fi
         uv python install
         uv sync --frozen
         echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
