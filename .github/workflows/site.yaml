@@ -66,23 +66,21 @@ jobs:
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984
 
+      # The host generator and the ssg tests need the pinned clang and
+      # libc++ headers, not the runner's default compiler. Put this after
+      # emsdk so its clang wins for the native build.
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build
+        with:
+          nix: "false"
+          os: ${{ runner.os }}
+
       - name: Setup GN
         uses: pug523/actions/setup-gn@5beb5e05f1ac771b9c060eb38f18d935fffdc96d
 
       - name: Install Ninja
         shell: bash
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-        with:
-          enable-cache: false
-
-      - name: Setup Python Virtual Environment
-        run: |
-          uv python install
-          uv sync --frozen
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install the tree-sitter CLI
         shell: bash
