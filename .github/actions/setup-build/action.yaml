@@ -96,11 +96,13 @@ runs:
       shell: bash
       run: |
         # Some Rust wheels have no build for the host, so uv builds them
-        # with cargo. Git Bash puts a link.exe of its own ahead of MSVC's;
-        # name MSVC's for this step only. Exporting LINK globally would
-        # make lld-link read it as arguments on every later link.
+        # with cargo. cargo finds link.exe by name on PATH, where Git Bash
+        # puts a link.exe of its own ahead of MSVC's. Point PATH at the
+        # MSVC tools for this step only: LINK names arguments to a linker
+        # and cannot choose which executable cargo starts, and exporting
+        # either one globally would confuse the later C++ links.
         if [[ "$RUNNER_OS" == "Windows" ]]; then
-          export LINK="${VCToolsInstallDir}bin/HostX64/x64/link.exe"
+          export PATH="${VCToolsInstallDir}bin/HostX64/x64:$PATH"
         fi
         uv python install
         uv sync --frozen
