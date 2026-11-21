@@ -4600,7 +4600,7 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       PathValue resolved;
       if (!resolve_value_path(module, place, path,
                               node.payload.get<ast::ExprPath>().type_args, {},
-                              resolved)) {
+                              resolved, true)) {
         return error_type();
       }
       if (resolved.kind != PathValue::Kind::Local) {

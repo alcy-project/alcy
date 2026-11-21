@@ -19,12 +19,19 @@ std::optional<diag::Span> definition_at(const Document& document,
                                         const DocumentAnalysis& analysis,
                                         Position position);
 
+// A reference site and whether it writes to the binding rather than
+// reading it.
+struct ReferenceSite {
+  diag::Span span;
+  bool is_write = false;
+};
+
 // Every recorded use of the declaration the position names, the
 // declaration site excluded. The declaration is the one a use resolved
 // to, or the declaration the position sits on.
-std::vector<diag::Span> references_at(const Document& document,
-                                      const DocumentAnalysis& analysis,
-                                      Position position);
+std::vector<ReferenceSite> references_at(const Document& document,
+                                         const DocumentAnalysis& analysis,
+                                         Position position);
 
 // The methods that implement the spec at position: for a spec method or
 // a call that resolved to one, every method that implements it, in the

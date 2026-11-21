@@ -319,9 +319,9 @@ std::vector<diag::Span> implementation_at(const Document& document,
   return out;
 }
 
-std::vector<diag::Span> references_at(const Document& document,
-                                      const DocumentAnalysis& analysis,
-                                      Position position) {
+std::vector<ReferenceSite> references_at(const Document& document,
+                                         const DocumentAnalysis& analysis,
+                                         Position position) {
   if (!analysis.ok()) {
     return {};
   }
@@ -351,7 +351,7 @@ std::vector<diag::Span> references_at(const Document& document,
     return {};
   }
 
-  std::vector<diag::Span> out;
+  std::vector<ReferenceSite> out;
   std::unordered_set<FullSpanKey, FullSpanKeyHash> seen;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::Reference& reference :
@@ -361,7 +361,7 @@ std::vector<diag::Span> references_at(const Document& document,
       }
       const FullSpanKey key{reference.site.file, span_key(reference.site)};
       if (seen.insert(key).second) {
-        out.push_back(reference.site);
+        out.push_back({reference.site, reference.is_write});
       }
     }
   }

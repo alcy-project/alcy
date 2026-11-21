@@ -348,11 +348,11 @@ TEST_CASE("Cross-file references survive equal spans in two files") {
   }
   const usize offset = main_source.rfind("main_fn");
   const Position position = document.index().position_at(main_source, offset);
-  const std::vector<diag::Span> sites =
+  const std::vector<ReferenceSite> sites =
       references_at(document, analysis, position);
   CHECK(sites.size() == 2);
   if (sites.size() == 2) {
-    CHECK(sites[0].file != sites[1].file);
+    CHECK(sites[0].span.file != sites[1].span.file);
   }
 }
 

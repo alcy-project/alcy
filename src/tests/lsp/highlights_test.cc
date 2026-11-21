@@ -44,6 +44,18 @@ bool has(const std::vector<Start>& found, u32 line, u32 character) {
   return false;
 }
 
+// The highlight kind at a start position, or 0 when there is no highlight.
+f64 kind_at(const text::JsonValue& highlights, u32 line, u32 character) {
+  for (const text::JsonValue& highlight : highlights.as_array()) {
+    const text::JsonValue* start = highlight.find("range")->find("start");
+    if (static_cast<u32>(start->find("line")->as_number()) == line &&
+        static_cast<u32>(start->find("character")->as_number()) == character) {
+      return highlight.find("kind")->as_number();
+    }
+  }
+  return 0;
+}
+
 }  // namespace
 
 TEST_CASE("A function highlights its declaration and its call") {
@@ -84,6 +96,19 @@ TEST_CASE("Linked editing joins the declaration and its uses") {
     CHECK(ranges->as_array().size() == 2);
   }
   CHECK(linked.find("wordPattern") != nullptr);
+}
+
+TEST_CASE("An assignment highlights the write apart from reads") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "fn main() -> i32 {\n  mut n := 0\n  n = n + 1\n  ret n\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue highlights =
+      document_highlights(document, analysis, Position{2, 2});
+  CHECK(kind_at(highlights, 1, 6) == 2.0);  // declaration: Read
+  CHECK(kind_at(highlights, 2, 2) == 3.0);  // assignment target: Write
+  CHECK(kind_at(highlights, 2, 6) == 2.0);  // right-hand side: Read
+  CHECK(kind_at(highlights, 3, 6) == 2.0);  // return: Read
 }
 
 TEST_CASE("A comment highlights nothing") {

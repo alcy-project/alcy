@@ -1485,7 +1485,8 @@ class Checker {
                           ast::PathIdx path,
                           std::span<const ast::TypeIdx> type_args,
                           std::span<const ast::ExprIdx> call_args,
-                          PathValue& out);
+                          PathValue& out,
+                          bool is_write = false);
   // The declaration a resolved value path named, or an empty span.
   diag::Span declaration_of(const PathValue& value) const;
   // The name span of a named item, or an empty span.

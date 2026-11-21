@@ -988,8 +988,9 @@ void Server::references(const text::JsonValue& id,
       push(*location);
     }
   }
-  for (const diag::Span site : references_at(*document, analysis, position)) {
-    push(site);
+  for (const ReferenceSite site :
+       references_at(*document, analysis, position)) {
+    push(site.span);
   }
   send_result(id, std::move(result));
 }

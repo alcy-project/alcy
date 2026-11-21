@@ -56,11 +56,11 @@ TEST_CASE("A call resolves to the function declaration") {
 TEST_CASE("A function's references are its call sites") {
   const Document document("file:///main.al", "alcy", 1, SOURCE);
   const DocumentAnalysis analysis(document);
-  const std::vector<diag::Span> sites =
+  const std::vector<ReferenceSite> sites =
       references_at(document, analysis, Position{4, 4});
   CHECK(sites.size() == 1);
   if (sites.size() == 1) {
-    const Position start = position_of(document, sites[0]);
+    const Position start = position_of(document, sites[0].span);
     CHECK(start.line == 13);
     CHECK(start.character == 7);
   }
@@ -123,11 +123,11 @@ TEST_CASE("A field read resolves to the field declaration") {
 TEST_CASE("A field declaration's references include the read") {
   const Document document("file:///main.al", "alcy", 1, FIELD_SOURCE);
   const DocumentAnalysis analysis(document);
-  const std::vector<diag::Span> sites =
+  const std::vector<ReferenceSite> sites =
       references_at(document, analysis, Position{1, 2});
   CHECK(sites.size() == 1);
   if (sites.size() == 1) {
-    const Position start = position_of(document, sites[0]);
+    const Position start = position_of(document, sites[0].span);
     CHECK(start.line == 6);
     CHECK(start.character == 13);
   }
@@ -149,11 +149,11 @@ TEST_CASE("A method call resolves to the method declaration") {
 TEST_CASE("A method declaration's references include the call") {
   const Document document("file:///main.al", "alcy", 1, FIELD_SOURCE);
   const DocumentAnalysis analysis(document);
-  const std::vector<diag::Span> sites =
+  const std::vector<ReferenceSite> sites =
       references_at(document, analysis, Position{5, 6});
   CHECK(sites.size() == 1);
   if (sites.size() == 1) {
-    const Position start = position_of(document, sites[0]);
+    const Position start = position_of(document, sites[0].span);
     CHECK(start.line == 11);
     CHECK(start.character == 8);
   }

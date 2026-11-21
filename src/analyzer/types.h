@@ -418,6 +418,8 @@ struct CheckedModule {
   struct Reference {
     diag::Span site;
     diag::Span declaration;
+    // A write to the binding (an assignment target) rather than a read.
+    bool is_write = false;
   };
   std::vector<Reference> references;
 };

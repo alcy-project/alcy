@@ -19,11 +19,15 @@ namespace lsp {
 
 namespace {
 
-void add(text::JsonValue* list, const Document& document, diag::Span span) {
+void add(text::JsonValue* list,
+         const Document& document,
+         diag::Span span,
+         bool is_write) {
   text::JsonValue highlight = text::JsonValue::make_object();
   highlight.set("range", range_json(document, span.offset, span.length));
-  highlight.set("kind", text::JsonValue::make_number(
-                            static_cast<f64>(DocumentHighlightKind::Text)));
+  highlight.set("kind", text::JsonValue::make_number(static_cast<f64>(
+                            is_write ? DocumentHighlightKind::Write
+                                     : DocumentHighlightKind::Read)));
   list->push(std::move(highlight));
 }
 
@@ -40,11 +44,11 @@ text::JsonValue document_highlights(const Document& document,
   }
   const source::FileId root = analysis.root();
   if (declaration->file == root) {
-    add(&highlights, document, *declaration);
+    add(&highlights, document, *declaration, false);
   }
-  for (const diag::Span site : references_at(document, analysis, position)) {
-    if (site.file == root && !same_span(site, *declaration)) {
-      add(&highlights, document, site);
+  for (const ReferenceSite site : references_at(document, analysis, position)) {
+    if (site.span.file == root && !same_span(site.span, *declaration)) {
+      add(&highlights, document, site.span, site.is_write);
     }
   }
   return highlights;
@@ -63,9 +67,9 @@ text::JsonValue linked_editing_ranges(const Document& document,
   if (declaration->file == root) {
     ranges.push(range_json(document, declaration->offset, declaration->length));
   }
-  for (const diag::Span site : references_at(document, analysis, position)) {
-    if (site.file == root && !same_span(site, *declaration)) {
-      ranges.push(range_json(document, site.offset, site.length));
+  for (const ReferenceSite site : references_at(document, analysis, position)) {
+    if (site.span.file == root && !same_span(site.span, *declaration)) {
+      ranges.push(range_json(document, site.span.offset, site.span.length));
     }
   }
   text::JsonValue result = text::JsonValue::make_object();

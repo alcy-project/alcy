@@ -141,19 +141,19 @@ std::optional<text::JsonValue> workspace_rename(
 
   std::unordered_map<source::FileId, std::vector<diag::Span>> by_file;
   by_file[declaration->file].push_back(*declaration);
-  for (const diag::Span site : references_at(document, analysis, position)) {
+  for (const ReferenceSite site : references_at(document, analysis, position)) {
     const std::optional<std::string_view> text =
-        analysis.context().sources.bytes(site.file);
+        analysis.context().sources.bytes(site.span.file);
     if (!text.has_value()) {
       continue;
     }
     const std::vector<cst::Lexeme> lexemes = cst::lex(*text);
     const std::optional<diag::Span> segment =
-        named_segment_in(lexemes, site, name, *text);
+        named_segment_in(lexemes, site.span, name, *text);
     if (!segment.has_value()) {
       return std::nullopt;
     }
-    by_file[site.file].push_back(*segment);
+    by_file[site.span.file].push_back(*segment);
   }
 
   PositionCache positions;
