@@ -2952,6 +2952,15 @@ void Lowerer::run() {
     if (pkg.tree.modules[m]->is_summary) {
       continue;
     }
+    // The staged toolchain's functions register when lowered code
+    // names them: a call or a function value goes through fn_index,
+    // which reserves the row and enqueues the body. The toolchain's
+    // own bodies are the ones a small program would otherwise lower,
+    // borrow, and encode without ever running; the package's own
+    // modules lower whole so their diagnostics stay complete.
+    if (pkg.tree.modules[m]->is_staged) {
+      continue;
+    }
     const analyzer::CheckedModule& checked = pkg.modules[m];
     for (const auto& method : checked.methods) {
       if (!method.item.is_valid() || !comp_positions(method.item).empty() ||
