@@ -151,7 +151,7 @@
       "button.format": "整形",
       "button.lint": "Lint",
       "playground.copyLink": "リンクをコピー",
-      "playground.linkCopied": "リンクをコピーしました",
+      "playground.linkCopied": "コピーしました",
       "playground.openFile": "ファイルを開く",
       "playground.moreActions": "その他の操作",
       "compiler.idle": "コンパイラ未読込",
