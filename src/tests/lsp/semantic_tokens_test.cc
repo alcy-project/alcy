@@ -158,9 +158,9 @@ TEST_CASE("Declarations and mutable bindings carry modifiers") {
       "fn main() -> i32 {\n  mut n := 0\n  n = n + 1\n  ret n\n}\n");
   const DocumentAnalysis analysis(document);
   const text::JsonValue result = semantic_tokens(document, analysis);
-  // Bit 0 is declaration, bit 1 is mutable.
+  // Bit 0 is declaration, bit 1 is readonly.
   CHECK(modifier_at(result, 0, 3) == 1);  // main: declaration
-  CHECK(modifier_at(result, 1, 6) == 3);  // mut n: declaration + mutable
+  CHECK(modifier_at(result, 1, 6) == 1);  // mut n: declaration only
   CHECK(modifier_at(result, 2, 2) == 0);  // a use: no modifier
 }
 

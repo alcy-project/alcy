@@ -107,7 +107,11 @@ static_assert(
         static_cast<usize>(SemanticTokenType::Count),
     "the semantic token legend and SemanticTokenType are out of step");
 
-constexpr std::string_view TOKEN_MODIFIER_NAMES[] = {"declaration", "mutable"};
+constexpr std::string_view TOKEN_MODIFIER_NAMES[] = {"declaration", "readonly"};
+
+static_assert(sizeof(TOKEN_MODIFIER_NAMES) / sizeof(TOKEN_MODIFIER_NAMES[0]) ==
+                  2,
+              "keep the modifier legend in step with TokenModifier");
 
 }  // namespace
 

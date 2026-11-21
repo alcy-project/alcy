@@ -61,7 +61,7 @@ std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
 
 // The kinds the checker attached to names, addressable by the span a
 // name occupies, the end of a path, or the name itself.
-enum class TokenModifier : u8 { Declaration = 0, Mutable = 1 };
+enum class TokenModifier : u8 { Declaration = 0, ReadOnly = 1 };
 
 struct SymbolKinds {
   std::unordered_map<u64, SemanticTokenType> by_span;
@@ -80,22 +80,22 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
   const ast::AstArena& ast = analysis.context().ast;
   const analyzer::CheckedPackage& package = analysis.package();
   const source::FileId root = analysis.root();
-  const auto mark_declaration = [&](diag::Span span, bool is_mut = false) {
+  const auto mark_declaration = [&](diag::Span span, bool is_readonly = false) {
     if (span.file != root || span.length == 0) {
       return;
     }
     u8& bits = kinds.modifiers[span_key(span)];
     bits |= static_cast<u8>(1u << static_cast<u8>(TokenModifier::Declaration));
-    if (is_mut) {
-      bits |= static_cast<u8>(1u << static_cast<u8>(TokenModifier::Mutable));
+    if (is_readonly) {
+      bits |= static_cast<u8>(1u << static_cast<u8>(TokenModifier::ReadOnly));
     }
   };
   ast.patterns.for_each_node([&](const ast::PatternIdx index) {
     const ast::PatternNode& node = ast.patterns[index];
     if (node.kind == ast::PatternKind::Ident) {
-      mark_declaration(node.payload.ident.name.span);
+      mark_declaration(node.payload.ident.name.span, true);
     } else if (node.kind == ast::PatternKind::MutIdent) {
-      mark_declaration(node.payload.mut_ident.name.span, true);
+      mark_declaration(node.payload.mut_ident.name.span);
     }
   });
   for (const analyzer::CheckedModule& module : package.modules) {
