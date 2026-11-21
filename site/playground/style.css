@@ -606,11 +606,12 @@ body.resizing {
 }
 
 /* The tool row folds onto a second line on narrow screens: the picker
-   takes one row, the state and the actions the next. It needs less width
-   than it used to, now that the theme and language live in the header's
-   settings menu. */
+   takes one row, the state and the actions the next. The actions fold
+   into the menu at the same 760px as the panes: Japanese labels are
+   wider than English ones and wrap inside the buttons below that width.
+   The theme and language live in the header's settings menu. */
 
-@media (max-width: 620px) {
+@media (max-width: 760px) {
   .toolbar {
     flex-direction: column;
     align-items: stretch;
