@@ -38,6 +38,9 @@ struct Item {
   std::string detail;
   std::string documentation;
   CompletionItemKind kind = CompletionItemKind::Variable;
+  // A variant is shown by its short name but inserted qualified, as the
+  // language requires at a use site.
+  std::string insert_text;
 };
 
 std::string_view prefix_at(std::string_view text, usize offset) {
@@ -169,8 +172,8 @@ void collect(const DocumentAnalysis& analysis,
                         CompletionItemKind kind) {
     for (const std::string_view label :
          visible_labels(visible, module, declared)) {
-      out->push_back(
-          Item{std::string(label), std::string(detail), doc_text(item), kind});
+      out->push_back(Item{std::string(label), std::string(detail),
+                          doc_text(item), kind, ""});
     }
   };
   for (const analyzer::CheckedModule& module : package.modules) {
@@ -203,10 +206,11 @@ void collect(const DocumentAnalysis& analysis,
         continue;
       }
       for (const std::string_view variant : info.variants) {
-        out->push_back(
-            Item{std::string(variant),
-                 std::string(info.name) + "::" + std::string(variant), "",
-                 CompletionItemKind::EnumMember});
+        Item item{std::string(variant),
+                  std::string(info.name) + "::" + std::string(variant), "",
+                  CompletionItemKind::EnumMember, ""};
+        item.insert_text = item.detail;
+        out->push_back(std::move(item));
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
@@ -240,7 +244,7 @@ text::JsonValue completion_items(const Document& document,
       continue;
     }
     items.push_back(Item{std::string(keyword.spelling), "", "",
-                         CompletionItemKind::Keyword});
+                         CompletionItemKind::Keyword, ""});
   }
 
   std::sort(items.begin(), items.end(),
@@ -277,7 +281,9 @@ text::JsonValue completion_items(const Document& document,
                    static_cast<u32>(prefix.size()));
     text::JsonValue text_edit = text::JsonValue::make_object();
     text_edit.set("range", std::move(edit_range));
-    text_edit.set("newText", text::JsonValue::make_string(item.label));
+    text_edit.set("newText", text::JsonValue::make_string(
+                                 item.insert_text.empty() ? item.label
+                                                          : item.insert_text));
     entry.set("textEdit", std::move(text_edit));
     array.push(std::move(entry));
   }
