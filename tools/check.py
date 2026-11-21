@@ -233,9 +233,11 @@ def main() -> int:
     # The second engine, over the acceptance corpus: every case
     # that compiles is evaluated function by function, and a construct
     # the lowering emits that the engine refuses without declaring it
-    # fails here. The refusal declarations are checked in a debug build,
-    # so the census reads the debug binary.
-    tool("check_comp.py", f"--build-subdir={debug_subdir}")
+    # fails here. Both the IR writer and the census read the release
+    # binaries: the unoptimized IR they exchange is the same, and an
+    # instrumented census spent minutes under ASan doing the same walk a
+    # release binary finishes in seconds.
+    tool("check_comp.py", f"--build-subdir={release_subdir}")
 
     # The formatter's own check, over every source rather than a sample:
     # the tree is what it would write, formatting formatted output
@@ -255,7 +257,7 @@ def main() -> int:
         tool(
             "check_treesitter.py",
             "--differential",
-            f"--build-subdir={debug_subdir}",
+            f"--build-subdir={release_subdir}",
         )
 
     if not args.no_sanitize:

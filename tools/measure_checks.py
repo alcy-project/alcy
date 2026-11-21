@@ -112,7 +112,7 @@ CHECKS = [
             "run",
             "./tools/check_treesitter.py",
             "--differential",
-            "--build-subdir=build",
+            "--build-subdir=build_release",
         ],
     ),
     (
