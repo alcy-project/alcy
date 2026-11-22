@@ -8,6 +8,7 @@
 
 #include "benchmarks/case_frontend.h"
 #include "benchmarks/case_linter.h"
+#include "benchmarks/case_lsp.h"
 #include "benchmarks/case_pipeline.h"
 #include "benchmarks/clock.h"
 #include "benchmarks/generator.h"
@@ -133,6 +134,7 @@ i32 main(i32 argc, char** argv) {
   const bench::CaseFilter filter{case_filter};
   bench::run_frontend_cases(runner, spec, filter, emit);
   bench::run_linter_cases(runner, spec, filter, emit);
+  bench::run_lsp_cases(runner, spec, filter, emit);
   bench::run_pipeline_cases(runner, spec, filter, emit);
 #if ALCY_BACKEND_LLVM
   bench::run_codegen_cases(runner, spec, filter, emit);

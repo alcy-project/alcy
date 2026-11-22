@@ -36,6 +36,8 @@ source_set("bench_cases") {
     "case_frontend.h",
     "case_linter.cc",
     "case_linter.h",
+    "case_lsp.cc",
+    "case_lsp.h",
     "case_pipeline.cc",
     "case_pipeline.h",
     "fixture.cc",
@@ -57,6 +59,10 @@ source_set("bench_cases") {
 
     # The lint case drives the linter engine over a checked package.
     "//src/linter",
+
+    # The lsp cases drive the analysis cache and the request modules the
+    # server calls, over one generated source.
+    "//src/lsp",
   ]
 
   # The cases include the engine's headers, and the driver includes the
