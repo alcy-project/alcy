@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/nesting.h"
 #include "cst/lex.h"
 #include "fpag/base/numeric.h"
 #include "lexer/token.h"
@@ -13,11 +14,6 @@
 namespace cst {
 
 namespace {
-
-// The same budget the compiler applies to nested syntax. Beyond it the
-// builder stops descending and treats the opener as a leaf, so a
-// pathologically nested input cannot exhaust the stack.
-constexpr u32 MAX_DEPTH = 256;
 
 bool is_opener(lexer::TokenKind kind) {
   return kind == lexer::TokenKind::LParen ||
@@ -286,7 +282,7 @@ class Builder {
   }
 
   Node build_group(const Lexeme& opener, const Header& header) {
-    if (depth_ >= MAX_DEPTH) {
+    if (depth_ >= base::MAX_NESTING) {
       // Out of budget: keep the opener as a leaf and let the rest read as
       // siblings rather than descend further.
       ++pos_;
@@ -321,7 +317,7 @@ class Builder {
   // One frame per open sequence; the depth budget bounds the stack. The
   // array stays unset so a shallow parse does not zero the depth it never
   // opens.
-  Frame frames_[MAX_DEPTH + 1];
+  Frame frames_[base::MAX_NESTING + 1];
   usize pos_ = 0;
   u32 depth_ = 0;
 };
