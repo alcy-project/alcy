@@ -156,6 +156,13 @@ TEST_CASE("Parse the target and backend") {
   CHECK(config.backend == codegen::Backend::DirectWasm);
 }
 
+TEST_CASE("Parse the native direct backend") {
+  const std::string_view args[] = {"alcy", "compile", "main.al",
+                                   "--backend=direct-x86_64"};
+  const CliConfig config = parse_ok(args);
+  CHECK(config.backend == codegen::Backend::DirectX86_64);
+}
+
 TEST_CASE("Parse rejects an unknown target") {
   const std::string_view args[] = {"alcy", "build", "--target=bogus", "dir"};
   const ParseOutcome outcome = parse(args);

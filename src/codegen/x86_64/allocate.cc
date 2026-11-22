@@ -523,7 +523,9 @@ void allocate(Body& body, const Frame& frame) {
                       std::holds_alternative<VReg>(inst.ops[0]) &&
                       !register_sized(size_of(std::get<VReg>(inst.ops[0])));
     if (wide && size_of(std::get<VReg>(inst.ops[0])) == 0) {
-      // A value with no bytes has nothing to move.
+      // Nothing to copy, but a block label may ride on this instruction;
+      // keep it so branches still land on the right byte.
+      push_labeled(make_inst(MOp::Nop, 8));
       continue;
     }
     if (wide) {

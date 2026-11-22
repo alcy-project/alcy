@@ -46,7 +46,10 @@ Frame layout_frame(const Body& body,
   u64 cursor = 0;
   for (const Body::Alloca& alloca : body.allocas) {
     DCHECK(alloca.vreg < body.vreg_types.size());
-    cursor = align_up(cursor, alloca.align) + alloca.size;
+    // An empty allocation still needs a distinct address; otherwise
+    // two zero-length arrays collapse onto one stack location.
+    cursor =
+        align_up(cursor, alloca.align) + (alloca.size == 0 ? 1 : alloca.size);
     frame.vreg_pointee[alloca.vreg] = static_cast<i32>(-cursor);
   }
   for (u32 at = 0; at < body.vreg_types.size(); ++at) {

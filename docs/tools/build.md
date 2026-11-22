@@ -66,7 +66,7 @@ artifact it cannot verify.
 | --- | --- | --- | --- |
 | `-o`, `--output` | path | (per table above) | Literal output path |
 | `--emit` | `executable`, `object`, `llvm-ir`, `llvm-bc`, `ir`, `ir-bc` | `executable` | What to write. An unnamed file replaces the suffix: `foo.al` -> `foo.o`, `foo.ir`, `foo.bc`, `foo.ll`, `foo.irb`; the executable keeps its platform's suffix (none on POSIX, `.exe` on Windows; `.wasm` for a wasm target) |
-| `--backend` | `llvm`, `direct-wasm` | built-in | Which backend writes the code. `--emit=ir`/`--emit=ir-bc` need no backend at all and ignore the flag |
+| `--backend` | `llvm`, `direct-wasm`, `direct-x86_64` | native x86_64 Linux debug: `direct-x86_64`; otherwise `llvm` | Which backend writes the code. `--emit=ir`/`--emit=ir-bc` need no backend at all and ignore the flag |
 | `--target` | `<triple>` | `host` | The machine to build for (`wasm32-unknown-emscripten` is a real target). `--emit` chooses the artifact kind, not this |
 | `--no-cache` | flag | off | Neither read nor write the build cache for this invocation |
 

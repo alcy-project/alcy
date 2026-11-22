@@ -90,7 +90,7 @@ replaced. The foundations are in `roadmap.md`.
   constants, which currently bake the width into the immutables.
 
 - [ ] Devirtualization of function values. A call through a value is
-  an indirect call in both backends; LLVM sometimes folds it after
+  an indirect call in the backends; LLVM sometimes folds it after
   inlining, and the direct backend never does. The adapters store
   their function in a struct field the caller fills, so the pass
   needs cross-function facts and lands once the pass stage grows a

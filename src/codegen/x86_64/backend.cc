@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -159,9 +160,13 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
 
   // One body's bytes, its symbol, and the patches its references asked
   // for, moved by the offset it landed at.
+  struct EmittedBody {
+    u64 offset;
+    u64 size;
+  };
   const auto emit_body = [&](Body& body, const std::string& symbol,
                              const object::SymbolBind bind,
-                             Encoded* captured = nullptr) -> u64 {
+                             Encoded* captured = nullptr) -> EmittedBody {
     const Frame frame = layout_frame(body, storage, request.target.width);
     allocate(body, frame);
     Encoded encoded = encode(body);
@@ -188,7 +193,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           .addend = patch.addend,
       });
     }
-    return at;
+    return EmittedBody{at, encoded.bytes.size()};
   };
 
   // The names a backtrace shows, gathered while bodies are laid out.
@@ -252,19 +257,20 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
                                    ? linkable_name(function, storage, strings)
                                    : internal_symbol(index);
     Encoded encoded;
-    const u64 body_at = emit_body(
+    const EmittedBody emitted = emit_body(
         body, symbol,
         exported ? object::SymbolBind::Global : object::SymbolBind::Local,
         request.options.backtrace ? &encoded : nullptr);
-    if (index == entry) {
-      // A call or a function value naming main goes by its IR index,
-      // while the platform entry carries the wrapper's name. Give both
-      // spellings to the same bytes so a recursive call still links.
+    if (index == entry || exported) {
+      // A call or a function value names a function by its IR index,
+      // while an entry or an exported surface carries another spelling.
+      // Give both names to the same bytes so calls inside the object
+      // resolve without depending on the link.
       object.symbols.push_back(object::Symbol{
           .name = internal_symbol(index),
           .section = 0,
-          .offset = body_at,
-          .size = encoded.bytes.size(),
+          .offset = emitted.offset,
+          .size = emitted.size,
           .bind = object::SymbolBind::Local,
           .type = object::SymbolType::Func,
       });
@@ -597,15 +603,13 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // platform's own allocator, and whatever else a runtime body asked
   // for. They ride the symbol table as undefined, and the link resolves
   // them.
+  std::unordered_set<std::string_view> carried_names;
+  carried_names.reserve(object.symbols.size());
+  for (const object::Symbol& symbol : object.symbols) {
+    carried_names.insert(symbol.name);
+  }
   for (const object::Relocation& reloc : object.relocations) {
-    bool carried = false;
-    for (const object::Symbol& symbol : object.symbols) {
-      if (symbol.name == reloc.symbol) {
-        carried = true;
-        break;
-      }
-    }
-    if (!carried) {
+    if (carried_names.insert(reloc.symbol).second) {
       object.symbols.push_back(object::Symbol{
           .name = reloc.symbol,
           .section = object::Symbol::UNDEFINED,

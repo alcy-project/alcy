@@ -18,20 +18,85 @@ namespace codegen::x86_64::runtime {
 
 namespace {
 
-// One write(2) of the bytes `buf` and `len` name, to the descriptor `fd`
-// names. The count moves first, because the bytes often arrive in the
-// register the count is about to take.
+// write(2) every byte `buf` and `len` name, to `fd`. The cursor and
+// remainder live in stack slots: every general register is used by a
+// caller, and a syscall clobbers rcx/r11. A short write advances them
+// and retries; a failed write stops.
 void emit_write(Body& body,
                 const i64 fd,
                 const Operand& buf,
                 const Operand& len) {
-  body.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rdx}, len));
-  body.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, buf));
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{16}}));
+  body.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, buf));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8,
+      Operand{
+          Mem{.base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 0}},
+      Operand{Reg::Rax}));
+  body.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, len));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8,
+      Operand{
+          Mem{.base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 8}},
+      Operand{Reg::Rax}));
+  const u32 loop = body.label_count++;
+  const u32 done = body.label_count++;
+  MInst at_loop = make_inst(MOp::Nop, 8);
+  at_loop.label = loop;
+  body.insts.push_back(at_loop);
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8, Operand{Reg::Rsi},
+      Operand{Mem{
+          .base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 0}}));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8, Operand{Reg::Rdx},
+      Operand{Mem{
+          .base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 8}}));
   body.insts.push_back(
       make_inst(MOp::Mov, 4, Operand{Reg::Rdi}, Operand{Imm{fd}}));
   body.insts.push_back(
       make_inst(MOp::Mov, 4, Operand{Reg::Rax}, Operand{Imm{1}}));
   body.insts.push_back(make_inst(MOp::Syscall, 8));
+  body.insts.push_back(
+      make_inst(MOp::Test, 8, Operand{Reg::Rax}, Operand{Reg::Rax}));
+  body.insts.push_back(make_jcc(Cond::Le, Operand{Label{done}}));
+  // Rax holds the byte count returned by the syscall. Move the stack
+  // slots through r11: the ALU forms need register operands.
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8, Operand{Reg::R11},
+      Operand{Mem{
+          .base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 0}}));
+  body.insts.push_back(
+      make_inst(MOp::Add, 8, Operand{Reg::R11}, Operand{Reg::Rax}));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8,
+      Operand{
+          Mem{.base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 0}},
+      Operand{Reg::R11}));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8, Operand{Reg::R11},
+      Operand{Mem{
+          .base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 8}}));
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{Reg::R11}, Operand{Reg::Rax}));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8,
+      Operand{
+          Mem{.base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 8}},
+      Operand{Reg::R11}));
+  body.insts.push_back(make_inst(
+      MOp::Mov, 8, Operand{Reg::Rax},
+      Operand{Mem{
+          .base = Reg::Rsp, .index = std::nullopt, .scale = 1, .disp = 8}}));
+  body.insts.push_back(
+      make_inst(MOp::Test, 8, Operand{Reg::Rax}, Operand{Reg::Rax}));
+  body.insts.push_back(make_jcc(Cond::G, Operand{Label{loop}}));
+  MInst at_done = make_inst(MOp::Nop, 8);
+  at_done.label = done;
+  body.insts.push_back(at_done);
+  body.insts.push_back(
+      make_inst(MOp::Add, 8, Operand{Reg::Rsp}, Operand{Imm{16}}));
 }
 
 // The bytes one write needs, under a name the data section answers to.
@@ -510,14 +575,16 @@ void path_buffer(Body& body, u8 width) {
   // the copy overwrite the saved frame pointer and return address.
   const u32 fits = body.label_count++;
   body.insts.push_back(
-      make_inst(MOp::Cmp, 8, Operand{Reg::Rsi}, Operand{Imm{4095}}));
+      make_inst(MOp::Cmp, 8, Operand{Reg::Rsi}, Operand{Imm{4127}}));
   body.insts.push_back(make_jcc(Cond::Be, Operand{Label{fits}}));
-  mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Imm{4095}});
+  mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Imm{4127}});
   MInst at_fits = make_inst(MOp::Nop, 8);
   at_fits.label = fits;
   body.insts.push_back(at_fits);
+  // 4096 bytes of path plus 64 bytes so the copy never reaches the
+  // caller's saved arguments at [rbp-8] .. [rbp-32].
   body.insts.push_back(
-      make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{4096}}));
+      make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{4160}}));
   mov(MOp::Mov, Operand{Reg::Rdx}, Operand{Reg::Rsi});
   mov(MOp::Mov, Operand{Reg::Rcx}, Operand{Reg::Rsi});
   mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Reg::Rdi});
@@ -562,6 +629,9 @@ Body build_file_size() {
   const auto mov = [&](MOp op, Operand dst, Operand src) {
     body.insts.push_back(make_inst(op, 8, dst, src));
   };
+  // r12 and r13 survive the syscalls; keep the caller's values.
+  body.insts.push_back(make_inst(MOp::Push, 8, Operand{Reg::R12}));
+  body.insts.push_back(make_inst(MOp::Push, 8, Operand{Reg::R13}));
   path_buffer(body, 8);
   open_path(body, 0);  // O_RDONLY
   body.insts.push_back(
@@ -593,6 +663,8 @@ Body build_file_size() {
   mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{3}});
   body.insts.push_back(make_inst(MOp::Syscall, 8));
   mov(MOp::Mov, Operand{Reg::Rax}, Operand{Reg::R13});
+  body.insts.push_back(make_inst(MOp::Pop, 8, Operand{Reg::R13}));
+  body.insts.push_back(make_inst(MOp::Pop, 8, Operand{Reg::R12}));
   body.insts.push_back(make_inst(MOp::Ret, 8));
   return body;
 }

@@ -61,9 +61,9 @@ principles:
 ## Overview
 
 alcy is a statically-typed programming language with ownership-based memory
-management. The reference compiler is written in C++20 and lowers alcy
-source code to LLVM IR, relying on LLVM for optimization and object code
-generation.
+management. The reference compiler is written in C++20. It lowers alcy source
+code to LLVM IR for optimized builds, and to its own x86_64 objects for native
+debug builds on Linux, with no LLVM in the path.
 
 The scope is a single-threaded batch compiler: given source files, it
 produces an executable.
@@ -75,7 +75,8 @@ In scope:
 - IR construction.
 - Name resolution, type checking, and ownership checking.
 - A linear single-pass compilation pipeline.
-- LLVM IR emission and object-file generation.
+- LLVM IR emission and object-file generation, plus a direct x86_64
+  object emitter for native debug builds on Linux.
 
 Deliberately out of scope:
 
@@ -83,7 +84,6 @@ Deliberately out of scope:
 - Language-server functionality in the compiler pipeline; the language
   server is a toolchain module beside the compiler, not a stage in it.
 - Build-system dependency tracking.
-- A direct x86 backend; the direct wasm backend is.
 
 ## Architectural shape
 
@@ -239,6 +239,7 @@ flowchart TD
         borrow --> codegen[codegen: seam]
         codegen --> codegen_llvm
         codegen --> codegen_wasm[codegen/wasm]
+        codegen --> codegen_x86[codegen/x86_64]
         codegen_llvm --> llvm
     end
 
@@ -448,7 +449,8 @@ Source bytes
 [ codegen ]        -> the backend seam
    │
    ├─▶ [ codegen_llvm ]   -> LLVM IR / object code
-   └─▶ [ codegen/wasm ]   -> a final WASI module
+   ├─▶ [ codegen/wasm ]   -> a final WASI module
+   └─▶ [ codegen/x86_64 ] -> an ELF64 object, no LLVM
 ```
 
 A stage never calls the one that follows it: `pipeline` calls each in turn,
@@ -481,11 +483,13 @@ that happens to read them.
    across the control-flow graph to enforce single-ownership guarantees.
    It is the stage after lowering, not part of the analyzer.
 
-6. **LLVM code generation** - `codegen_llvm` walks verified basic blocks and
+6. **Code generation** - the backend walks verified basic blocks and
    lowers alcy IR operations to LLVM IR. The program runtime — `alcy_alloc`,
    `alcy_dealloc`, `alcy_print`, `alcy_println`, `alcy_panic`, and
    `alcy_sys_write`, over libc — is defined in that same module, so a build
-   spawns no compiler for it and it is optimized with the program.
+   spawns no compiler for it and it is optimized with the program. The
+   direct x86_64 backend writes the object itself for native debug builds,
+   with its own runtime and ELF writer.
 
 A test run walks the same stages over a different tree, and it is the only mode
 in which the items a stage reads are not the ones the package's files declare.
@@ -667,8 +671,8 @@ The following do not have a committed design:
 
 - Parallel and incremental compilation.
 - Custom memory management beyond the current arena model.
-- Completing `codegen/x86`, or replacing LLVM/the system linker with a direct
-  backend on both machines.
+- Replacing LLVM/the system linker with a direct backend on the remaining
+  targets.
 - Advanced optimizations and whole-program analysis.
 - Language features beyond the implemented subset (defined in `docs/spec/`,
   which is normative for language behavior).

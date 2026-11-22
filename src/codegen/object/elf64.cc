@@ -4,6 +4,7 @@
 #include "codegen/object/elf64.h"
 
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "debug/check.h"
@@ -148,6 +149,10 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
                   /*shndx=*/at + 1, 0, 0);
   }
   std::vector<u32> symbol_index(object.symbols.size(), 0);
+  // A name is resolved once per relocation; index it while the table
+  // is built instead of scanning every symbol for every relocation.
+  std::unordered_map<std::string_view, u32> symbol_by_name;
+  symbol_by_name.reserve(object.symbols.size());
   // The table's own order: the locals first, the globals after. A
   // symbol table whose globals are not last is not one the linker
   // reads, which is what `sh_info` tells it.
@@ -164,6 +169,7 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
         symbol_index[at] =
             table.add(table.names.add(symbol.name), symbol_info(symbol), shndx,
                       symbol.offset, symbol.size);
+        symbol_by_name.emplace(std::string_view(symbol.name), symbol_index[at]);
       }
     }
     if (pass == 0) {
@@ -173,10 +179,9 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
   }
 
   auto resolve = [&](const std::string_view name) {
-    for (u32 at = 0; at < object.symbols.size(); ++at) {
-      if (object.symbols[at].name == name) {
-        return symbol_index[at];
-      }
+    const auto found = symbol_by_name.find(name);
+    if (found != symbol_by_name.end()) {
+      return found->second;
     }
     CHECK_MSG(false, "relocation names a symbol the object does not carry");
     return u32{0};
@@ -336,8 +341,7 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
   for (u32 at = 0; at < section_count; ++at) {
     const Section& section = object.sections[at];
     header(shstrtab_name_of[at], section.bits ? SHT_PROGBITS : SHT_NOBITS,
-           flags_of(section), 0, section_offset[at],
-           section.bits ? section.bytes.size() : 0, 0, 0,
+           flags_of(section), 0, section_offset[at], section.bytes.size(), 0, 0,
            section.align == 0 ? 1 : section.align, 0);
   }
   if (!object.relocations.empty()) {

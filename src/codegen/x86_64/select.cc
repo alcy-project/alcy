@@ -589,11 +589,6 @@ bool Selector::receive_parameters(const ir::Block& entry) {
     switch (passage_of(param.type)) {
       case Passage::Register: {
         const ir::TypeTag tag = storage_.types()[param.type.idx].tag;
-        if (next_register >= ARG_REG_COUNT) {
-          push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
-                         from_stack()));
-          break;
-        }
         if (is_float(tag)) {
           if (next_xmm >= ARG_XMM_COUNT) {
             (void)unsupported(diag::Span{},
@@ -603,6 +598,9 @@ bool Selector::receive_parameters(const ir::Block& entry) {
           push(make_inst(tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
                          width_of(tag), Operand{VReg{vreg}},
                          Operand{ARG_XMM_REGS[next_xmm++]}));
+        } else if (next_register >= ARG_REG_COUNT) {
+          push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
+                         from_stack()));
         } else {
           push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
                          Operand{ARG_REGS[next_register++]}));
@@ -983,7 +981,16 @@ bool Selector::emit(const ir::Instruction& instr,
           (void)unsupported(span, "a case the backend cannot spell");
           return false;
         }
-        push(make_inst(MOp::Cmp, width, *value, *case_value));
+        Operand right = *case_value;
+        if (width == 8) {
+          if (const Imm* imm = std::get_if<Imm>(&right);
+              imm != nullptr &&
+              (imm->value > 0x7fffffffLL || imm->value < -0x80000000LL)) {
+            push(make_inst(MOp::Mov, 8, Operand{Reg::Rdx}, right));
+            right = Operand{Reg::Rdx};
+          }
+        }
+        push(make_inst(MOp::Cmp, width, *value, right));
         push(make_jcc(
             Cond::E,
             Operand{Label{body_.block_labels[at(idx + 1).as_block().idx]}}));
@@ -1037,11 +1044,8 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!has_dst) {
         return true;
       }
-      // The operand is the element count, which every lowering spells as
-      // a constant; a slot whose size is a value is not a thing this IR
-      // carries.
-      // The element count is a constant when it is there at all; a slot
-      // whose size is a value is not a thing this IR carries today.
+      // The element count is a constant when present: this IR never
+      // carries a slot whose size is a value.
       u64 elements = 1;
       if (!ops.empty()) {
         if (!at(0).is<ir::ImmutableIdx>()) {
@@ -1520,17 +1524,7 @@ bool Selector::emit(const ir::Instruction& instr,
         // both may be vregs and allocation borrows rax as its first
         // scratch. Reading rax first would let the second resolution
         // overwrite the left factor.
-        if (const Imm* immediate = std::get_if<Imm>(&*rhs);
-            immediate != nullptr) {
-          push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, *rhs));
-        } else {
-          const Operand right = *rhs;
-          if (std::holds_alternative<VReg>(right)) {
-            push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, right));
-          } else {
-            push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, right));
-          }
-        }
+        push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, *rhs));
         push(make_inst(MOp::Mov, compute, Operand{Reg::Rax}, *lhs));
         push(make_inst(MOp::Umul, compute, Operand{Reg::Rcx}));
         push(make_inst(MOp::Mov, compute, dst_operand(), Operand{Reg::Rax}));
@@ -1778,8 +1772,6 @@ bool Selector::emit(const ir::Instruction& instr,
 
 // The enum opcodes. Each reads a place, which is either the storage
 // a vreg names or the memory the pointer it holds addresses.
-// The enum opcodes. Each reads a place, which is either the storage a
-// vreg names or the memory the pointer it holds addresses.
 bool Selector::emit_enum(const ir::Instruction& instr,
                          const ir::OperandIdxRange ops,
                          const diag::Span span) {

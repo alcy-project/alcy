@@ -28,7 +28,8 @@
 namespace codegen {
 
 TEST_CASE("Backend names round-trip") {
-  for (const Backend backend : {Backend::Llvm, Backend::DirectWasm}) {
+  for (const Backend backend :
+       {Backend::Llvm, Backend::DirectWasm, Backend::DirectX86_64}) {
     const std::optional<Backend> found =
         backend_from_name(backend_name(backend));
     CHECK(found.has_value());

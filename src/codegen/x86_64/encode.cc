@@ -399,14 +399,18 @@ Encoded encode(const Body& body) {
           }
           break;
         }
-        prefix(out, 8, true, to, std::nullopt, std::nullopt);
-        out.push_back(0x0f);
-        out.push_back(width == 1 ? 0xb6 : 0xb7);
         if (const Reg* reg_from = std::get_if<Reg>(&inst.at(1));
             reg_from != nullptr) {
+          prefix(out, 8, true, to, *reg_from, std::nullopt);
+          out.push_back(0x0f);
+          out.push_back(width == 1 ? 0xb6 : 0xb7);
           modrm_rr(out, to, *reg_from);
         } else {
           const Mem& mem_from = std::get<Mem>(inst.at(1));
+          prefix(out, 8, true, to, base_of(mem_from), index_of(mem_from),
+                 /*rm_register=*/false);
+          out.push_back(0x0f);
+          out.push_back(width == 1 ? 0xb6 : 0xb7);
           mem_disp(out, modrm_mem(out, to, mem_from), mem_from.disp);
         }
         break;
@@ -416,21 +420,28 @@ Encoded encode(const Body& body) {
         // narrow forms have their own opcodes and the 32-bit one is
         // named for itself.
         const Reg to = std::get<Reg>(inst.at(0));
-        if (width == 4) {
-          // `movsxd r64, r/m32` has no 0f prefix; the wider form of the
-          // two-byte movsx would be an MMX instruction.
-          prefix(out, 8, true, to, std::nullopt, std::nullopt);
-          out.push_back(0x63);
-        } else {
-          prefix(out, 8, true, to, std::nullopt, std::nullopt);
-          out.push_back(0x0f);
-          out.push_back(width == 1 ? 0xbe : 0xbf);
-        }
         if (const Reg* reg_from = std::get_if<Reg>(&inst.at(1));
             reg_from != nullptr) {
+          prefix(out, 8, true, to, *reg_from, std::nullopt);
+          if (width == 4) {
+            // `movsxd r64, r/m32` has no 0f prefix; the wider form of
+            // the two-byte movsx would be an MMX instruction.
+            out.push_back(0x63);
+          } else {
+            out.push_back(0x0f);
+            out.push_back(width == 1 ? 0xbe : 0xbf);
+          }
           modrm_rr(out, to, *reg_from);
         } else {
           const Mem& mem_from = std::get<Mem>(inst.at(1));
+          prefix(out, 8, true, to, base_of(mem_from), index_of(mem_from),
+                 /*rm_register=*/false);
+          if (width == 4) {
+            out.push_back(0x63);
+          } else {
+            out.push_back(0x0f);
+            out.push_back(width == 1 ? 0xbe : 0xbf);
+          }
           mem_disp(out, modrm_mem(out, to, mem_from), mem_from.disp);
         }
         break;
@@ -651,7 +662,9 @@ Encoded encode(const Body& body) {
       }
       case MOp::Setcc: {
         const Reg dst = std::get<Reg>(inst.at(0));
-        prefix(out, 1, false, dst, std::nullopt, std::nullopt);
+        // setcc writes r/m8: the destination is the rm field, so an
+        // extended byte register needs REX.B rather than REX.R.
+        prefix(out, 1, false, std::nullopt, dst, std::nullopt);
         out.push_back(0x0f);
         out.push_back(static_cast<u8>(0x90 + cond_code(inst.cond)));
         out.push_back(static_cast<u8>(0xc0 | reg_code(dst)));

@@ -51,7 +51,7 @@ tools, so a build with no LLVM still answers either.
 | --- | --- | --- | --- |
 | `-o`, `--output` | path | (per table) | Literal output path. With `--stdin`, required |
 | `--emit` | `executable`, `object`, `llvm-ir`, `llvm-bc`, `ir`, `ir-bc` | `executable` | Artifact kind to write; replaces, never appends an extension |
-| `--backend` | `llvm`, `direct-wasm` | built-in | Which backend writes the code |
+| `--backend` | `llvm`, `direct-wasm`, `direct-x86_64` | native x86_64 Linux debug: `direct-x86_64`; otherwise `llvm` | Which backend writes the code |
 | `--target` | `<triple>` | `host` | The machine to build for |
 | `--linker` | driver | system default | System linker driver for executable builds |
 | `--link-args` | argument | (empty) | Argument for the linker. Repeatable |
