@@ -105,12 +105,7 @@ std::string join_posix(std::string_view first, std::string_view second) {
   std::string joined;
   joined.reserve(first.size() + second.size() + 1);
   joined = first;
-  if (first.back() == '/' && second.front() == '/') {
-    joined =
-        normalize_posix(std::string(first) + std::string(second.substr(1)));
-    return joined;
-  }
-  if (first.back() != '/' && second.front() != '/') {
+  if (first.back() != '/') {
     joined += '/';
   }
   joined += second;
