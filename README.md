@@ -19,6 +19,10 @@ language](docs/guide/03-language-tour.md) covers what the compiler
 accepts today, with every example on that page compiled when the site
 is built.
 
+The [alcy site](https://alcy-project.github.io/alcy/) carries that guide,
+the language reference, and a browser playground: edit and run alcy in a
+tab, with no install.
+
 ## Status
 
 Pre-1.0. The language, its standard library, and parts of the compiler
