@@ -145,6 +145,11 @@ i32 Server::run() {
   while (!exit_ && transport_.read_message(&payload)) {
     handle(payload);
   }
+  // A watched-file notification can be the last frame; flush it before
+  // the transport closes so its diagnostics still get published.
+  if (watched_files_pending_) {
+    flush_watched_files();
+  }
   if (transport_.failed()) {
     return 1;
   }
@@ -1261,8 +1266,8 @@ void Server::did_change(const text::JsonValue& params) {
       }
     }
   }
-  document->apply(changes,
-                  int_field(*text_document, "version", document->version()));
+  document->apply(
+      changes, int_field(*text_document, "version", document->version() + 1));
   cache_.invalidate(*document);
   for (const auto& [other_uri, other] : documents_.documents()) {
     (void)other_uri;
