@@ -19,4 +19,4 @@ only flow through build setup, never hot paths.
 - No filesystem existence check: a `Path` is a spelling, not a
   claim that anything exists there. Existence is established by the
   I/O that consumes the path (`SourceManager::load`,
-  `io::write_file`), which reports its own errors.
+  `io::write_file_str`), which reports its own errors.
