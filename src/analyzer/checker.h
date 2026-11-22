@@ -1480,13 +1480,14 @@ class Checker {
                                std::span<const ast::TypeIdx> type_args,
                                std::span<const ast::ExprIdx> call_args,
                                PathValue& out);
-  bool resolve_value_path(u32 module,
-                          ast::ExprIdx expr,
-                          ast::PathIdx path,
-                          std::span<const ast::TypeIdx> type_args,
-                          std::span<const ast::ExprIdx> call_args,
-                          PathValue& out,
-                          bool is_write = false);
+  bool resolve_value_path(
+      u32 module,
+      ast::ExprIdx expr,
+      ast::PathIdx path,
+      std::span<const ast::TypeIdx> type_args,
+      std::span<const ast::ExprIdx> call_args,
+      PathValue& out,
+      analyzer::ReferenceAccess access = analyzer::ReferenceAccess::Read);
   // The declaration a resolved value path named, or an empty span.
   diag::Span declaration_of(const PathValue& value) const;
   // The name span of a named item, or an empty span.

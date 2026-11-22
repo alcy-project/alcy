@@ -6,6 +6,7 @@
 #include <optional>
 #include <vector>
 
+#include "analyzer/types.h"
 #include "diag/span.h"
 #include "lsp/analysis.h"
 #include "lsp/document.h"
@@ -23,7 +24,7 @@ std::optional<diag::Span> definition_at(const Document& document,
 // reading it.
 struct ReferenceSite {
   diag::Span span;
-  bool is_write = false;
+  analyzer::ReferenceAccess access = analyzer::ReferenceAccess::Read;
 };
 
 // Every recorded use of the declaration the position names, the

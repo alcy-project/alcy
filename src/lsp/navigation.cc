@@ -358,7 +358,7 @@ std::vector<ReferenceSite> references_at(const Document& document,
       }
       const FullSpanKey key{reference.site.file, span_key(reference.site)};
       if (seen.insert(key).second) {
-        out.push_back({reference.site, reference.is_write});
+        out.push_back({reference.site, reference.access});
       }
     }
   }

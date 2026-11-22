@@ -6,6 +6,7 @@
 #include <optional>
 #include <utility>
 
+#include "analyzer/types.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "lsp/analysis.h"
@@ -22,12 +23,13 @@ namespace {
 void add(text::JsonValue* list,
          const Document& document,
          diag::Span span,
-         bool is_write) {
+         analyzer::ReferenceAccess access) {
   text::JsonValue highlight = text::JsonValue::make_object();
   highlight.set("range", range_json(document, span.offset, span.length));
   highlight.set("kind", text::JsonValue::make_number(static_cast<f64>(
-                            is_write ? DocumentHighlightKind::Write
-                                     : DocumentHighlightKind::Read)));
+                            access == analyzer::ReferenceAccess::Write
+                                ? DocumentHighlightKind::Write
+                                : DocumentHighlightKind::Read)));
   list->push(std::move(highlight));
 }
 
@@ -44,11 +46,11 @@ text::JsonValue document_highlights(const Document& document,
   }
   const source::FileId root = analysis.root();
   if (declaration->file == root) {
-    add(&highlights, document, *declaration, false);
+    add(&highlights, document, *declaration, analyzer::ReferenceAccess::Read);
   }
   for (const ReferenceSite site : references_at(document, analysis, position)) {
     if (site.span.file == root && !same_span(site.span, *declaration)) {
-      add(&highlights, document, site.span, site.is_write);
+      add(&highlights, document, site.span, site.access);
     }
   }
   return highlights;

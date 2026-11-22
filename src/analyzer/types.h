@@ -64,6 +64,10 @@ struct CompCallRecord {
 
 // Per-module type information for type checking and lowering. All TypeIdx
 // refer to the package Storage below; all views borrow source bytes.
+// How a reference uses the name it resolved to. The editor distinguishes
+// a write to a binding from a read when it highlights its sites.
+enum class ReferenceAccess : u8 { Read, Write };
+
 struct CheckedModule {
   u32 module;
 
@@ -418,8 +422,7 @@ struct CheckedModule {
   struct Reference {
     diag::Span site;
     diag::Span declaration;
-    // A write to the binding (an assignment target) rather than a read.
-    bool is_write = false;
+    ReferenceAccess access = ReferenceAccess::Read;
   };
   std::vector<Reference> references;
 };

@@ -4211,14 +4211,14 @@ bool Checker::resolve_value_path(u32 module,
                                  std::span<const ast::TypeIdx> type_args,
                                  std::span<const ast::ExprIdx> call_args,
                                  PathValue& out,
-                                 bool is_write) {
+                                 analyzer::ReferenceAccess access) {
   if (!resolve_value_path_impl(module, expr, path, type_args, call_args, out)) {
     return false;
   }
   const diag::Span declaration = declaration_of(out);
   if (declaration.length != 0) {
     modules[module].references.push_back(
-        {ast.paths[path].span, declaration, is_write});
+        {ast.paths[path].span, declaration, access});
   }
   return true;
 }
