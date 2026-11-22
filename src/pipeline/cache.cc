@@ -67,7 +67,7 @@ base::Digest128 cache_key(const CacheInputs& inputs) {
   std::sort(summaries.begin(), summaries.end());
   std::vector<u8> canonical;
   canonical.reserve(16 + 16 + inputs.triple.size() + inputs.target_name.size() +
-                    summaries.size() * 16 + 2);
+                    summaries.size() * 16 + 3);
   for (const std::array<u8, 16> part :
        {identity.bytes(), manifest_hash.bytes()}) {
     canonical.insert(canonical.end(), part.begin(), part.end());
@@ -88,6 +88,7 @@ base::Digest128 cache_key(const CacheInputs& inputs) {
   }
   canonical.push_back(inputs.is_lib ? 1 : 0);
   canonical.push_back(inputs.emit_entry ? 1 : 0);
+  canonical.push_back(inputs.testing ? 1 : 0);
   for (const std::array<u8, 16>& digest : summaries) {
     canonical.insert(canonical.end(), digest.begin(), digest.end());
   }

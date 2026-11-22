@@ -8,12 +8,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/hash.h"
 #include "diag/bag.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/write_input.h"
 #include "pipeline/artifact.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
@@ -118,6 +120,24 @@ Built build_configured(io::TempDir& dir, std::string_view rel) {
 bool write_package(io::TempDir& dir, std::string_view program) {
   return dir.write_file("proj/alcy.toml", MANIFEST) &&
          dir.write_file("proj/main.al", program);
+}
+
+TEST_CASE("A test run and a build take different cache entries") {
+  // The mode steers the tree the parser lowers, so it belongs in the key
+  // even where the file table happens to agree between the two commands.
+  CacheInputs inputs{
+      .files = ir::FileTable{},
+      .compiler_version = "v",
+      .manifest = "m",
+      .triple = "t",
+      .target_name = "app",
+      .summary_digests = {},
+  };
+  inputs.testing = false;
+  const base::Digest128 build = cache_key(inputs);
+  inputs.testing = true;
+  const base::Digest128 test = cache_key(inputs);
+  CHECK(build != test);
 }
 
 TEST_CASE("A run's lowering takes the entry a build stored") {

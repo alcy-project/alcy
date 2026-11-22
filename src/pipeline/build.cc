@@ -559,6 +559,7 @@ std::optional<FrontCache> front_cache_location(PipelineContext& ctx,
       .target_name = target.name,
       .is_lib = is_lib,
       .emit_entry = emit_entry,
+      .testing = ctx.testing,
       .summary_digests = ctx.summary_digests,
   });
   return FrontCache{std::string(out_dir.join(".cache").as_view()), key,

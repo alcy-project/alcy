@@ -59,6 +59,10 @@ struct CacheInputs {
   std::string_view target_name;
   bool is_lib = false;
   bool emit_entry = false;
+  // A test run parses a different tree from a build. The file table often
+  // shows the difference through the run's driver, but the mode itself is
+  // what steers lowering and belongs in the key on its own.
+  bool testing = false;
   // The dependency summaries the run resolved against, one digest per
   // sidecar read. A summary steers lowering the way a source does.
   std::span<const base::Digest128> summary_digests;
