@@ -40,8 +40,37 @@ function onInput(): void {
   session.scheduleCodeSave();
 }
 
+// The kebab is a <details> whose actions sit in a sibling row, so the
+// browser does not close it when one of those actions is used.
+function initActionsMenu(): void {
+  const menu = document.querySelector<HTMLDetailsElement>(".actions-menu");
+  if (menu === null) {
+    return;
+  }
+  const group = menu.closest(".run-group");
+  const close = (): void => {
+    menu.open = false;
+  };
+  document.addEventListener("pointerdown", (event) => {
+    if (menu.open && group !== null && event.target instanceof Node &&
+        !group.contains(event.target)) {
+      close();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && menu.open) {
+      close();
+      menu.querySelector("summary")?.focus();
+    }
+  });
+  for (const button of document.querySelectorAll(".toolbar-actions button")) {
+    button.addEventListener("click", close);
+  }
+}
+
 function init(): void {
   initThemeToggle(elements.theme);
+  initActionsMenu();
   registerAssetWorker();
   initSearch();
   enableLinkPrefetch();

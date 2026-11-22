@@ -47,7 +47,7 @@ export async function createHighlighter({
 
   return {
     highlight(text: string): string {
-      const tree = parser.parse(text);
+      const tree = parser.parse(text, previousTree ?? undefined);
       const captures = query.captures(tree.rootNode);
       previousTree?.delete();
       previousTree = tree;

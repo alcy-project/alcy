@@ -59,6 +59,9 @@ export async function openFile(file: File): Promise<void> {
 export async function loadSample(file: string): Promise<void> {
   try {
     const response = await fetch(new URL(`samples/${file}`, assetBase));
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
     applySource(await response.text());
     saveCodeNow();
   } catch (error) {
@@ -75,56 +78,67 @@ export async function loadSamples(): Promise<void> {
   } catch {
     manifest = null;
   }
-  if (manifest === null || !Array.isArray(manifest.samples) || manifest.samples.length === 0) {
-    elements.source.value = FALLBACK_SOURCE;
-    return;
-  }
-  elements.samples.replaceChildren();
-  for (const sample of manifest.samples) {
-    const option = document.createElement("option");
-    option.value = sample.file;
-    option.textContent = sample.title ?? sample.file;
-    option.title = sample.description ?? "";
-    elements.samples.append(option);
-  }
-  elements.samples.disabled = false;
-  // The picker answers a choice wherever the program came from: the
-  // arriving program (guide handoff, shared link, restored session)
-  // decides what starts in the editor, never whether the picker works.
-  elements.samples.addEventListener("change", () => {
-    // The origin option only names the arriving program; picking a
-    // real example retires it.
-    const origin = elements.samples.querySelector<HTMLOptionElement>('option[value=""]');
-    if (origin !== null) {
-      origin.remove();
+  const hasManifest =
+    manifest !== null && Array.isArray(manifest.samples) && manifest.samples.length > 0;
+  let initial = "";
+  if (hasManifest && manifest !== null) {
+    elements.samples.replaceChildren();
+    for (const sample of manifest.samples) {
+      const option = document.createElement("option");
+      option.value = sample.file;
+      option.textContent = sample.title ?? sample.file;
+      option.title = sample.description ?? "";
+      elements.samples.append(option);
     }
-    void loadSample(elements.samples.value);
-  });
-  const first = manifest.default ?? manifest.samples[0]?.file ?? "";
-  const initial = manifest.samples.some((sample) => sample.file === first)
-    ? first
-    : (manifest.samples[0]?.file ?? "");
+    elements.samples.disabled = false;
+    // The picker answers a choice wherever the program came from: the
+    // arriving program (guide handoff, shared link, restored session)
+    // decides what starts in the editor, never whether the picker works.
+    elements.samples.addEventListener("change", () => {
+      // The origin option only names the arriving program; picking a
+      // real example retires it.
+      const origin = elements.samples.querySelector<HTMLOptionElement>('option[value=""]');
+      if (origin !== null) {
+        origin.remove();
+      }
+      void loadSample(elements.samples.value);
+    });
+    const first = manifest.default ?? manifest.samples[0]?.file ?? "";
+    initial = manifest.samples.some((sample) => sample.file === first)
+      ? first
+      : (manifest.samples[0]?.file ?? "");
+  }
+
+  // A handoff or a shared link wins over both the default example and a
+  // missing manifest: the reader's program is never replaced by a sample.
   const incoming = takeIncomingSource();
   if (incoming !== null) {
     if (incoming.origin === "link") {
       clearLinkHash();
     }
-    markOrigin(
-      t(incoming.origin === "link" ? "samples.fromLink" : "samples.fromGuide"),
-    );
+    if (hasManifest) {
+      markOrigin(
+        t(incoming.origin === "link" ? "samples.fromLink" : "samples.fromGuide"),
+      );
+    }
     applySource(incoming.source);
     return;
   }
   const saved = readSavedCode();
-  const restored =
-    saved !== null &&
-    saved.sampleFile !== null &&
-    manifest.samples.some((sample) => sample.file === saved.sampleFile);
-  elements.samples.value = restored && saved !== null ? (saved.sampleFile ?? initial) : initial;
+  if (hasManifest && manifest !== null) {
+    const restored =
+      saved !== null &&
+      saved.sampleFile !== null &&
+      manifest.samples.some((sample) => sample.file === saved.sampleFile);
+    elements.samples.value =
+      restored && saved !== null ? (saved.sampleFile ?? initial) : initial;
+  }
   if (saved !== null) {
     applySource(saved.source);
     setStatus("status.restored");
-  } else {
+  } else if (hasManifest) {
     await loadSample(elements.samples.value);
+  } else {
+    applySource(FALLBACK_SOURCE);
   }
 }

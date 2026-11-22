@@ -40,6 +40,6 @@ export class Query {
 export class Parser {
   static init(options?: ParserOptions): Promise<void>;
   setLanguage(language: Language): void;
-  parse(text: string): Tree;
+  parse(text: string, previousTree?: Tree): Tree;
   delete(): void;
 }

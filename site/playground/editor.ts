@@ -105,9 +105,7 @@ export function syncMetrics(): void {
 function insertAtCursor(text: string): void {
   const start = elements.source.selectionStart;
   const end = elements.source.selectionEnd;
-  const value = elements.source.value;
-  elements.source.value = value.slice(0, start) + text + value.slice(end);
-  elements.source.selectionStart = elements.source.selectionEnd = start + text.length;
+  elements.source.setRangeText(text, start, end, "end");
 }
 
 // The mirror is plain text the moment the textarea changes, so the glyphs
