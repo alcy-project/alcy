@@ -90,7 +90,12 @@ std::string unescape_string(std::string_view spelling) {
           if (digit < 0) {
             break;
           }
-          code = code * 16 + static_cast<u64>(digit);
+          // Past the largest scalar there is no point accumulating: a
+          // long enough run would wrap the unsigned product back into
+          // the valid range. append_utf8 drops what is left.
+          if (code <= 0x10FFFF) {
+            code = code * 16 + static_cast<u64>(digit);
+          }
           any = true;
           ++i;
         }
