@@ -1,6 +1,6 @@
 # alcy programming language
 
-[![Build & Test](https://github.com/alcy-project/alcy/actions/workflows/build.yaml/badge.svg)](https://github.com/alcy-project/alcy/actions/workflows/build.yaml)
+[![CI](https://github.com/alcy-project/alcy/actions/workflows/ci.yaml/badge.svg)](https://github.com/alcy-project/alcy/actions/workflows/ci.yaml)
 
 alcy is an experimental systems language. It is statically typed and
 move-only, it is memory safe without lifetime annotations, and it spans
