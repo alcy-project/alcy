@@ -886,6 +886,8 @@ base::Result<std::string, diag::Reported> emit_output(
         parts.emplace_back(bytes.begin(), bytes.end());
       }
       if (readable) {
+        PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+            ctx.profiler, "object-cache-store", "backend");
         (void)cache_store(object_entry->dir, object_entry->path,
                           object_cache_serialize(object_entry->key, parts));
       }
@@ -1098,7 +1100,11 @@ base::Result<std::string, diag::Reported> emit_target(
         .path = object_entry_path(front_cache->dir, object_key),
         .key = object_key,
     };
-    cached_parts = object_cache_load(*object_entry);
+    {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler,
+                                               "object-cache-load", "backend");
+      cached_parts = object_cache_load(*object_entry);
+    }
     if (cached_parts.has_value()) {
       io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
       std::vector<std::string> paths;
