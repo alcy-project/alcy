@@ -109,7 +109,11 @@ TEST_CASE("DiagBag keeps a repair's kind") {
   CHECK(f.bag.attach_fix(index, Fix{Span{}, "x", FixKind::Refactor}).is_ok());
   const Diagnostic* stored = f.bag.at(index);
   CHECK(stored != nullptr);
-  if (stored == nullptr || stored->fix == nullptr) {
+  if (stored == nullptr) {
+    return;
+  }
+  CHECK(stored->fix != nullptr);
+  if (stored->fix == nullptr) {
     return;
   }
   CHECK(stored->fix->kind == FixKind::Refactor);

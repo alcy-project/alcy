@@ -45,7 +45,14 @@ TEST_CASE("Borrow errors reach diagnostics after the single analysis") {
   const text::JsonValue* items = report.find("items");
   CHECK(items != nullptr);
   if (items != nullptr) {
-    CHECK(!items->as_array().empty());
+    bool borrow_error = false;
+    for (const text::JsonValue& item : items->as_array()) {
+      const text::JsonValue* code = item.find("code");
+      if (code != nullptr && code->as_string().starts_with("EF")) {
+        borrow_error = true;
+      }
+    }
+    CHECK(borrow_error);
   }
 }
 

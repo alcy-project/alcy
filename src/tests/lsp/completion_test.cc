@@ -110,7 +110,7 @@ TEST_CASE("Variant completion inserts the qualified name") {
                           "fn f() -> i32 {\n  Som\n}\n");
   const DocumentAnalysis analysis(document);
   const text::JsonValue list =
-      completion_items(document, analysis, Position{4, 6});
+      completion_items(document, analysis, Position{5, 5});
   const text::JsonValue* item = find_item(list, "Some");
   CHECK(item != nullptr);
   if (item == nullptr) {
@@ -120,6 +120,12 @@ TEST_CASE("Variant completion inserts the qualified name") {
   CHECK(edit != nullptr);
   if (edit != nullptr) {
     CHECK(edit->find("newText")->as_string() == "Option::Some");
+    const text::JsonValue* range = edit->find("range");
+    CHECK(range != nullptr);
+    if (range != nullptr) {
+      CHECK(range->find("start")->find("character")->as_number() == 2.0);
+      CHECK(range->find("end")->find("character")->as_number() == 5.0);
+    }
   }
 }
 

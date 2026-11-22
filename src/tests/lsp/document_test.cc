@@ -125,6 +125,21 @@ TEST_CASE("Incremental line starts match a full rebuild") {
   check_matches_rebuild(edit(initial, {{0, 9}, {4, 2}}, "x"));
 }
 
+TEST_CASE("Sequential incremental changes compose") {
+  Document document("file:///main.al", "alcy", 1,
+                    "fn main() {\r\n  x := 1\n  ret x\n}\n");
+  std::vector<ContentChange> changes;
+  changes.push_back(ContentChange{true, Range{{1, 6}, {1, 7}}, "2"});
+  document.apply(changes, 2);
+  changes.clear();
+  changes.push_back(ContentChange{true, Range{{2, 0}, {2, 0}}, "// note\n"});
+  document.apply(changes, 3);
+  const Document rebuilt("file:///main.al", "alcy", 3,
+                         "fn main() {\r\n  x :=21\n// note\n  ret x\n}\n");
+  check_matches_rebuild(document);
+  CHECK(document.text() == rebuilt.text());
+}
+
 TEST_CASE("A document applies a full replacement") {
   Document document("file:///main.al", "alcy", 1, "fn main() {}");
   std::vector<ContentChange> changes;

@@ -36,6 +36,7 @@ executable("tests") {
     "diag/bag_test.cc",
     "diag/render_test.cc",
     "diag/worker_bags_test.cc",
+    "fingerprint/fingerprint_test.cc",
     "fmt/formatter_test.cc",
     "i18n/i18n_test.cc",
     "ir/deserialize_test.cc",
