@@ -108,6 +108,25 @@ TEST_CASE("the copy label is stamped in the page language") {
   CHECK(html.find("\xe3\x82\xb3\xe3\x83\x94\xe3\x83\xbc") != std::string::npos);
 }
 
+TEST_CASE("a non-Latin heading keeps its characters as the anchor") {
+  // The heading is the Japanese word for "introduction".
+  const std::string heading =
+      "\xe3\x81\xaf\xe3\x81\x98\xe3\x82\x81\xe3\x81\xab";
+  const std::string html =
+      render("ja", {ssg_test::heading_block(2, heading, 1)});
+  std::string expected = "<h2 id=\"";
+  expected += heading;
+  expected += "\">";
+  expected += heading;
+  expected += "</h2>";
+  CHECK(html.find(expected) != std::string::npos);
+}
+
+TEST_CASE("the article carries the page's language, not a fixed English") {
+  const std::string html = render("ja", {ssg_test::prose_block()});
+  CHECK(html.find("lang=\"ja\"") != std::string::npos);
+}
+
 TEST_CASE("the guide assets load only when a page has code") {
   const std::string with_code = render("en", {ssg_test::alcy_block()});
   CHECK(with_code.find("shared/guide.css") != std::string::npos);

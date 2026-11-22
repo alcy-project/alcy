@@ -207,7 +207,15 @@ std::string heading_slug(std::string_view text) {
   std::string out;
   out.reserve(text.size());
   bool dash = false;
-  for (const u8 c : text) {
+  for (const char raw : text) {
+    const u8 c = static_cast<u8>(raw);
+    // Non-ASCII bytes stay verbatim: a Japanese heading keeps its own
+    // characters as the anchor instead of collapsing to an empty id.
+    if (c >= 0x80) {
+      out += raw;
+      dash = false;
+      continue;
+    }
     const u8 lower = static_cast<u8>(std::tolower(c));
     if (std::isalnum(lower)) {
       out += static_cast<char>(lower);
@@ -399,12 +407,6 @@ std::string site_header(const Catalog& catalog,
   out += "      </nav>\n      " + settings + "\n    </header>";
   return out;
 }
-namespace {
-
-constexpr std::string_view PROSE_LANGUAGE = "en";
-
-}  // namespace
-
 std::string render_guide_page(const DocPage& page, const PageOptions& options) {
   const Catalog& catalog = *options.catalog;
   const auto t = [&catalog, &options](std::string_view key) {
@@ -503,7 +505,7 @@ std::string render_guide_page(const DocPage& page, const PageOptions& options) {
   out +=
       "      <main class=\"guide-article\" id=\"content\" tabindex=\"-1\" "
       "lang=\"" +
-      std::string(PROSE_LANGUAGE) + "\">\n";
+      std::string(options.language) + "\">\n";
   out += "        " + article + "\n";
   out += "        " + pager(page, options) + "\n";
   out += "      </main>\n";

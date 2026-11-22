@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -254,6 +255,22 @@ base::Result<std::vector<DocSource>, std::string> discover_guide(
     return base::make_err(
         join_posix({docs_dir, catalog.default_language}) +
         " has no guide pages; the default language defines the page set");
+  }
+  // A translation replaces the default source at the same path. One
+  // whose slug or directory differs would never be published, so name
+  // the mistake instead of dropping the page silently.
+  std::unordered_set<std::string> default_paths;
+  for (const DocSource& page : pages) {
+    if (page.language == catalog.default_language) {
+      default_paths.insert(page.path);
+    }
+  }
+  for (const DocSource& page : pages) {
+    if (page.language != catalog.default_language &&
+        !default_paths.contains(page.path)) {
+      return base::make_err(page.source_rel + ": no " +
+                            catalog.default_language + " page at " + page.path);
+    }
   }
   std::sort(pages.begin(), pages.end(),
             [](const DocSource& a, const DocSource& b) {
