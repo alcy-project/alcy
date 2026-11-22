@@ -22,6 +22,10 @@ namespace lsp {
 
 namespace {
 
+// The golden-ratio split constant for mixing version numbers into a
+// cache stamp; no domain meaning, just a stable decorrelation.
+constexpr u64 VERSION_STAMP_MIX = 0x9E3779B97F4A7C15ull;
+
 std::string resolve_uri(std::string_view uri) {
   // Only a file URI names a path the package walk can resolve. An
   // untitled buffer is standalone here just as build_analysis() makes
@@ -48,7 +52,7 @@ std::vector<workspace::BufferView> AnalysisCache::buffers_for(
   return buffers;
 }
 
-std::string AnalysisCache::package_key_for(const Document& focus) const {
+std::string AnalysisCache::compute_package_key(const Document& focus) const {
   const std::string path = resolve_uri(focus.uri());
   if (path.empty()) {
     return "standalone:" + focus.uri();
@@ -63,7 +67,7 @@ const std::string& AnalysisCache::package_key(const Document& focus) const {
   if (found != package_keys_.end()) {
     return found->second;
   }
-  return package_keys_.emplace(focus.uri(), package_key_for(focus))
+  return package_keys_.emplace(focus.uri(), compute_package_key(focus))
       .first->second;
 }
 
@@ -73,7 +77,7 @@ u64 AnalysisCache::stamp_for(const Document& focus,
   // signature. An edit in an unrelated package must not force a disk
   // re-fingerprint here, and a u64 avoids a string build per request.
   u64 stamp = base::hash64(focus.uri()) +
-              static_cast<u64>(focus.version()) * 0x9E3779B97F4A7C15ull;
+              static_cast<u64>(focus.version()) * VERSION_STAMP_MIX;
   if (documents_ != nullptr) {
     for (const auto& [uri, document] : documents_->documents()) {
       if (package_key(document) != pkg_key) {

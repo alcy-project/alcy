@@ -76,9 +76,10 @@ class AnalysisCache {
   };
 
   std::vector<workspace::BufferView> buffers_for(const Document& focus) const;
-  std::string package_key_for(const Document& focus) const;
+  std::string compute_package_key(const Document& focus) const;
   const std::string& package_key(const Document& focus) const;
   u64 stamp_for(const Document& focus, const std::string& pkg_key) const;
+  // Drops package readings no open document's entry still names.
   void prune_packages();
 
   const DocumentStore* documents_ = nullptr;
