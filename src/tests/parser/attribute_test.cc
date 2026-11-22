@@ -186,7 +186,7 @@ TEST_CASE("An unknown attribute is refused with guidance") {
   (void)r;
   CHECK(has_message(f.bag,
                     "Unknown attribute `blorch`; the known attributes are "
-                    "`when` and `repr`"));
+                    "`when`, `repr`, and `test`"));
 }
 
 TEST_CASE("An unknown value for a known key is refused with the known set") {

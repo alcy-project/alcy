@@ -138,7 +138,7 @@ module.exports = grammar({
     // `#[repr(C)]`, which fixes a struct's layout to the platform's C
     // one (grammar.ebnf, `attribute`). Word-like parts read as
     // identifiers so the rest of the language keeps its words, and the
-    // checker validates the argument the way it validates an extern
+    // parser validates the argument the way it validates an extern
     // convention. A `#[test]` role marker takes no argument.
     attribute: $ => seq(
       '#',

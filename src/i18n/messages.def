@@ -86,7 +86,7 @@
   F(ParserRangeEndNeedsBound, Error, Parser, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
   F(ParserRefSelfParameter, Error, Parser, "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)") \
   F(ParserReservedName, Error, Parser, "Name `{}` is reserved for future use") \
-  F(ParserUnknownAttribute, Error, Parser, "Unknown attribute `{}`; the known attributes are `when` and `repr`") \
+  F(ParserUnknownAttribute, Error, Parser, "Unknown attribute `{}`; the known attributes are `when`, `repr`, and `test`") \
   F(ParserWhenUnknownTarget, Error, Parser, "Unknown `target` argument `{}`; the known arguments are `os`, `arch`, and `freestanding`") \
   F(ParserWhenUnknownValue, Error, Parser, "Unknown value `{}` for `target.{}`; the known values are {}") \
   F(ParserWhenNotBoolean, Error, Parser, "`when` expects a boolean expression") \

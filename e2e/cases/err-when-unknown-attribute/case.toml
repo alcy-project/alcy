@@ -3,4 +3,6 @@ subcommand = "check"
 
 [cli.expect]
 exit = "non-zero"
-stderr_contains = ["Unknown attribute `somehow`; the known attributes are `when` and `repr`"]
+stderr_contains = [
+  "Unknown attribute `somehow`; the known attributes are `when`, `repr`, and `test`",
+]
