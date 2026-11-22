@@ -100,6 +100,7 @@ class Server {
   void send_notification(std::string_view method, text::JsonValue params);
   void log_message(i32 type, std::string_view message);
   void flush_watched_files();
+  void note_answered(const text::JsonValue& id);
   void send_request(std::string_view id,
                     std::string_view method,
                     text::JsonValue params);
@@ -113,6 +114,9 @@ class Server {
   bool watched_files_supported_ = false;
   bool watched_files_pending_ = false;
   std::unordered_set<std::string> cancelled_;
+  // Ids whose response has already gone out. A cancel for one of these
+  // is too late to matter and must not poison a later reuse of the id.
+  std::unordered_set<std::string> answered_;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;

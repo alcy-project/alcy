@@ -523,12 +523,15 @@ void Server::handle_notification(const text::JsonValue& message) {
     watched_files_changed(*params);
   } else if (method == "$/cancelRequest") {
     if (const text::JsonValue* id = field(*params, "id"); id != nullptr) {
-      // A cancel for a request already answered has nothing to match;
-      // bound the set so a long-lived session cannot grow it without end.
-      if (cancelled_.size() > MAX_PENDING_CANCELLATIONS) {
-        cancelled_.clear();
+      std::string key = text::to_json(*id);
+      // A cancel that arrives after its response cannot interrupt
+      // anything; recording it would reject a later reuse of the id.
+      if (!answered_.contains(key)) {
+        if (cancelled_.size() >= MAX_PENDING_CANCELLATIONS) {
+          cancelled_.clear();
+        }
+        cancelled_.insert(std::move(key));
       }
-      cancelled_.insert(text::to_json(*id));
     }
     log_message(4, "cancellation requested");
   }
@@ -1391,7 +1394,20 @@ void Server::publish_empty_diagnostics(std::string_view uri) {
   send_notification("textDocument/publishDiagnostics", std::move(params));
 }
 
+void Server::note_answered(const text::JsonValue& id) {
+  if (id.is_null()) {
+    return;
+  }
+  std::string key = text::to_json(id);
+  cancelled_.erase(key);
+  if (answered_.size() >= MAX_PENDING_CANCELLATIONS) {
+    answered_.clear();
+  }
+  answered_.insert(std::move(key));
+}
+
 void Server::send_result(const text::JsonValue& id, text::JsonValue result) {
+  note_answered(id);
   text::JsonValue message = text::JsonValue::make_object();
   message.set("jsonrpc", make_string("2.0"));
   message.set("id", id);
@@ -1402,6 +1418,7 @@ void Server::send_result(const text::JsonValue& id, text::JsonValue result) {
 void Server::send_error(const text::JsonValue& id,
                         i32 code,
                         std::string_view message_text) {
+  note_answered(id);
   text::JsonValue error = text::JsonValue::make_object();
   error.set("code", text::JsonValue::make_number(static_cast<f64>(code)));
   error.set("message", make_string(message_text));

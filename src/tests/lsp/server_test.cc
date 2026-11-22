@@ -104,6 +104,30 @@ TEST_CASE("The server answers a cancelled request with RequestCancelled") {
   CHECK(response.find(R"("id":5)") != std::string::npos);
 }
 
+TEST_CASE("A late cancel does not reject a reused request id") {
+  std::string requests;
+  append_frame(requests,
+               R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})");
+  append_frame(requests,
+               R"({"jsonrpc":"2.0","method":"initialized","params":{}})");
+  // The response to id 1 is long gone by the time this arrives.
+  append_frame(requests, R"({"jsonrpc":"2.0","method":"$/cancelRequest",)"
+                         R"("params":{"id":1}})");
+  append_frame(
+      requests,
+      R"({"jsonrpc":"2.0","id":1,"method":"textDocument/documentSymbol",)"
+      R"("params":{"textDocument":{"uri":"file:///main.al"}}})");
+  append_frame(requests,
+               R"({"jsonrpc":"2.0","id":2,"method":"shutdown","params":null})");
+  append_frame(requests, R"({"jsonrpc":"2.0","method":"exit"})");
+
+  i32 exit_code = -1;
+  const std::string response = serve(requests, &exit_code);
+
+  CHECK(response.find("-32800") == std::string::npos);
+  CHECK(response.find(R"("id":1,"result")") != std::string::npos);
+}
+
 TEST_CASE("The server refuses a request before initialize") {
   std::string requests;
   append_frame(requests,
