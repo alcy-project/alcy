@@ -24,8 +24,8 @@ of the compiler, so it owns no analysis of its own:
 - `ast_query.{h,cc}` names the span a declaration's name occupies,
   shared by hover and navigation.
 - `code_actions.{h,cc}` returns the lint repairs that intersect a
-  range as quick fixes, reading the repair the linter attached to its
-  finding.
+  range, mapping each repair's kind to the LSP quickfix, refactor, or
+  source action kind.
 - `highlights.{h,cc}` marks the declaration and every resolved use of
   the name under the cursor, and answers the ranges linked editing
   should change together.
@@ -61,8 +61,9 @@ of the compiler, so it owns no analysis of its own:
 - `inlay_hints.{h,cc}` names the parameter each call argument binds,
   beside the binding and layout hints it already shows.
 - `code_lens.{h,cc}` counts each declaration's references in one pass
-  over the reference table. The provider does not advertise a resolve,
-  so a lens is complete in the first answer.
+  over the reference table, tagged with a stable kind. The provider
+  advertises `resolveProvider: false`, so a lens is complete in the
+  first answer.
 - `workspace_symbols.{h,cc}` searches the outline of every source file in
   the packages the open documents belong to, so quick open spans modules
   the client has not opened.
@@ -109,11 +110,11 @@ error, and the server writes none today.
 
 Positions are zero-based and counted in UTF-16 code units, as the
 protocol requires, while the compiler reports byte offsets.
-`PositionIndex` is the single translation point, rebuilt per change
-rather than incrementally. The buffer is small next to the frontend run
-each change triggers, so a line-start table built with one scan is the
-simple side of that trade; a future incremental index belongs behind
-the same interface.
+`PositionIndex` is the single translation point. `Document::apply`
+patches its line starts for the edited range through `apply()` instead
+of rescanning the whole buffer; a full replacement still calls `reset`.
+The same index answers byte-offset and position queries for every
+feature.
 
 The frontend reads the whole package the manifest declares, with open
 buffers standing in for the files on disk. Diagnostics and the semantic

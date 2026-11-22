@@ -22,7 +22,8 @@ streams until the client asks for shutdown.
 - Semantic tokens from the lexer's own trivia
 - Folding ranges and document symbols
 - Call hierarchy, type hierarchy
-- Code actions: the linter's repairs for the diagnostics the server is showing
+- Code actions: the linter's repairs, carried as quickfix, refactor, or source
+  actions
 - Workspace symbols, workspace diagnostics
 - Semantic tokens delta answers (live editing sessions)
 - Code lenses (reference counts)
@@ -42,7 +43,7 @@ over the LSP channel.
 
 | Kind | Meaning |
 | --- | --- |
-| Request returns a JSON-RPC error | the request was ill-formed or named something the server does not support |
+| Request returns a JSON-RPC error | the request was ill-formed or named something the server does not support, or was cancelled before it started (`-32800`) |
 | `window/logMessage` | informational; the server logs to the log channel, never to stdout |
 | `window/showMessage` | information for the user, in the same language as diagnostics |
 
