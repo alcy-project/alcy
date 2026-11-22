@@ -696,9 +696,10 @@ class RuntimeBuilder {
   // middle end has run - stack probes and aggregate copies are the two
   // we know of. At optimize time the definition has no IR caller yet, so
   // GlobalDCE would collect it and the object would name a symbol nobody
-  // defined. Listing it in llvm.compiler.used keeps the discardable
-  // linkage and the comdat that lets objects share one copy.
-  void keep_through_lto(llvm::Function& function) {
+  // defined. Listing it in llvm.compiler.used keeps it through whatever
+  // optimization this build runs, with the discardable linkage and the
+  // comdat that let objects share one copy.
+  void keep_through_optimizer(llvm::Function& function) {
     llvm::appendToCompilerUsed(module_, {&function});
   }
 
@@ -745,7 +746,7 @@ class RuntimeBuilder {
         builder_.getPtrTy(), {builder_.getPtrTy(), builder_.getPtrTy(), usize_},
         false);
     llvm::Function* function = runtime("memcpy", type);
-    keep_through_lto(*function);
+    keep_through_optimizer(*function);
     llvm::LLVMContext& context = module_.getContext();
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", function);
@@ -792,7 +793,7 @@ class RuntimeBuilder {
         builder_.getPtrTy(),
         {builder_.getPtrTy(), builder_.getInt8Ty(), usize_}, false);
     llvm::Function* function = runtime("memset", type);
-    keep_through_lto(*function);
+    keep_through_optimizer(*function);
     llvm::LLVMContext& context = module_.getContext();
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", function);
@@ -1391,7 +1392,7 @@ class RuntimeBuilder {
     llvm::Function* function = llvm::Function::Create(
         type, llvm::GlobalValue::ExternalLinkage, "__chkstk", module_);
     link_once_odr(*function);
-    keep_through_lto(*function);
+    keep_through_optimizer(*function);
     function->addFnAttr(llvm::Attribute::Naked);
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "", function);
