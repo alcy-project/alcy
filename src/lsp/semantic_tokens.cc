@@ -270,7 +270,7 @@ std::vector<u32> semantic_tokens_in(const Document& document,
     const u8 modifier_bits = mod == kinds.modifiers.end() ? 0 : mod->second;
     const usize end =
         std::min(static_cast<usize>(span.offset) + span.length, range_end);
-    usize begin = span.offset;
+    usize begin = std::max(static_cast<usize>(span.offset), range_begin);
     while (begin < end) {
       usize line_end = begin;
       while (line_end < end && source[line_end] != '\n') {
@@ -291,7 +291,7 @@ std::vector<u32> semantic_tokens_in(const Document& document,
     if (lexeme.kind == cst::Lexeme::Kind::End) {
       break;
     }
-    if (lexeme.offset < range_begin || lexeme.offset >= range_end) {
+    if (lexeme.offset >= range_end) {
       continue;
     }
     diag::Span span;
@@ -418,24 +418,26 @@ std::vector<u32> filter_tokens(const std::vector<u32>& data,
       line += data[i];
       character = data[i + 1];
     }
-    const bool after_start =
-        line > start.line ||
-        (line == start.line && character >= start.character);
-    const bool before_end =
-        line < end.line || (line == end.line && character < end.character);
-    if (!after_start || !before_end) {
+    if (line < start.line || line > end.line) {
       continue;
     }
-    // The fresh path clips a token at the range end; a cached array
-    // holds the full token, so clip it here to keep both answers equal.
     u32 length = data[i + 2];
-    if (line == end.line && character + length > end.character) {
-      length = end.character - character;
+    u32 from = character;
+    // Clip both ends, matching the fresh path's range_begin/range_end.
+    if (line == start.line && from < start.character) {
+      if (from + length <= start.character) {
+        continue;
+      }
+      length -= start.character - from;
+      from = start.character;
+    }
+    if (line == end.line && from + length > end.character) {
+      length = end.character > from ? end.character - from : 0;
     }
     if (length == 0) {
       continue;
     }
-    encoder.add({line, character}, length, data[i + 3],
+    encoder.add({line, from}, length, data[i + 3],
                 static_cast<u8>(data[i + 4]));
   }
   return out;
