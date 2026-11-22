@@ -2958,11 +2958,12 @@ void Lowerer::run() {
     // own bodies are the ones a small program would otherwise lower,
     // borrow, and encode without ever running; the package's own
     // modules lower whole so their diagnostics stay complete.
-    if (pkg.tree.modules[m]->is_staged) {
-      continue;
-    }
+    const bool staged = pkg.tree.modules[m]->is_staged;
     const analyzer::CheckedModule& checked = pkg.modules[m];
     for (const auto& method : checked.methods) {
+      if (staged) {
+        continue;
+      }
       if (!method.item.is_valid() || !comp_positions(method.item).empty() ||
           ast.items[method.item].kind == ast::ItemKind::Intrinsic) {
         continue;
@@ -3022,6 +3023,13 @@ void Lowerer::run() {
       }
       const ast::ItemFn& decl = ast.items[sig.item].payload.get<ast::ItemFn>();
       if (!decl.params.empty() && decl.params.back().is_variadic) {
+        continue;
+      }
+      // A generated test driver joins a suite member's tree as a staged
+      // module, so its `main` is the one staged body nothing in lowered
+      // code names before the emitter looks for an entry. Seed that one
+      // entry candidate; the worklist reaches the rest from it.
+      if (staged && (sig.name != "main" || !decl.params.empty())) {
         continue;
       }
       fn_index(m, sig.item, sig.name, sig.params, sig.ret, analyzer::NO_INST,
