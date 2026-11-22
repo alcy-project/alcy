@@ -235,6 +235,17 @@ def main() -> int:
 
     tool("check_cases.py", "--steps=cli", f"--build-subdir={debug_subdir}")
 
+    # The native direct backend is a second lowering of the program
+    # cases: the same sources and expectations, but linked from the
+    # objects it emits itself rather than through LLVM. This is the
+    # path a native debug build takes by default.
+    tool(
+        "check_cases.py",
+        f"--build-subdir={debug_subdir}",
+        "--steps=program",
+        "--backend=direct-x86_64",
+    )
+
     # The second engine, over the acceptance corpus: every case
     # that compiles is evaluated function by function, and a construct
     # the lowering emits that the engine refuses without declaring it
