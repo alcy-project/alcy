@@ -19,6 +19,11 @@ using Digest = base::Digest128;
 // order given, so two readers of the same inputs reach the same digest.
 class Builder {
  public:
+  Builder& reserve(usize capacity) {
+    bytes_.reserve(capacity);
+    return *this;
+  }
+
   Builder& bytes(std::string_view data) {
     bytes_.append(data);
     return *this;

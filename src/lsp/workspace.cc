@@ -174,6 +174,7 @@ std::string fingerprint(std::string_view root,
   std::unordered_set<std::string> discovered_files;
   if (discovered.is_ok()) {
     pipeline::DiscoveredSourcePaths listed = std::move(discovered).unwrap();
+    builder.reserve(listed.files.size() * 64);
     for (const std::string& file : listed.files) {
       discovered_files.insert(file);
       builder.bytes(file).u8(':');
