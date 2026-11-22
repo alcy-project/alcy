@@ -50,7 +50,7 @@ jobs:
           bun-version: ${{ steps.versions.outputs.bun }}
 
       - name: Setup GN
-        uses: pug523/actions/setup-gn@c3b6728a2ba6a5cddc64f1faff98bc4ce2e339e2
+        uses: pug523/actions/setup-gn@3292474a690172a990b3c2fb4868640c95a473bf
 
       - name: Install Ninja
         shell: bash
