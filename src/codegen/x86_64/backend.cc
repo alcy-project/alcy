@@ -611,10 +611,17 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // The process arguments the entry wrapper saved, in the third section.
   // Only an object that actually uses the argument runtime carries them,
   // so a library that never asks for args leaves these to the binary.
-  const bool uses_args = std::find(runtime_names.begin(), runtime_names.end(),
-                                   "alcy_arg") != runtime_names.end() ||
-                         std::find(runtime_names.begin(), runtime_names.end(),
-                                   "alcy_arg_count") != runtime_names.end();
+  const bool uses_args =
+      std::find(runtime_names.begin(), runtime_names.end(), "alcy_arg") !=
+          runtime_names.end() ||
+      std::find(runtime_names.begin(), runtime_names.end(), "alcy_arg_count") !=
+          runtime_names.end() ||
+      std::find(runtime_names.begin(), runtime_names.end(), "alcy_env_find") !=
+          runtime_names.end() ||
+      std::find(runtime_names.begin(), runtime_names.end(),
+                "alcy_env_exists") != runtime_names.end() ||
+      std::find(runtime_names.begin(), runtime_names.end(), "alcy_env_get") !=
+          runtime_names.end();
   if (request.emit_entry || uses_args) {
     object::Section globals{.name = ".data",
                             .bytes = std::vector<u8>(24, 0),

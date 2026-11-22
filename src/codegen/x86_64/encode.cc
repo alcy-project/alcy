@@ -269,6 +269,9 @@ void alu_rm_imm(std::vector<u8>& out,
       static_cast<u8>(0xc0 | static_cast<u8>(alu) << 3 | reg_code(dst)));
   if (width == 1 || (value >= -128 && value <= 127)) {
     put(out, static_cast<u64>(value) & 0xff, 1);
+  } else if (width == 2) {
+    // A 16-bit immediate opcode takes exactly two immediate bytes.
+    put(out, static_cast<u64>(value) & 0xffff, 2);
   } else {
     put_i32(out, static_cast<i32>(value));
   }

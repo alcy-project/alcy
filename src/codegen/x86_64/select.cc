@@ -590,14 +590,14 @@ bool Selector::receive_parameters(const ir::Block& entry) {
       case Passage::Register: {
         const ir::TypeTag tag = storage_.types()[param.type.idx].tag;
         if (is_float(tag)) {
+          const MOp load = tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd;
           if (next_xmm >= ARG_XMM_COUNT) {
-            (void)unsupported(diag::Span{},
-                              "a float parameter past the vector registers");
-            return false;
+            push(make_inst(load, width_of(tag), Operand{VReg{vreg}},
+                           from_stack()));
+          } else {
+            push(make_inst(load, width_of(tag), Operand{VReg{vreg}},
+                           Operand{ARG_XMM_REGS[next_xmm++]}));
           }
-          push(make_inst(tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
-                         width_of(tag), Operand{VReg{vreg}},
-                         Operand{ARG_XMM_REGS[next_xmm++]}));
         } else if (next_register >= ARG_REG_COUNT) {
           push(make_inst(MOp::Mov, width_of(tag), Operand{VReg{vreg}},
                          from_stack()));
@@ -1975,16 +1975,27 @@ bool Selector::emit_call(const ir::Instruction& instr,
     const ir::Operand& value = operand_at(instr, arg);
     const ir::TypeTag tag = storage_.types()[value.type].tag;
     if (is_float(tag)) {
-      if (next_xmm >= ARG_XMM_COUNT) {
-        (void)unsupported(span, "a float argument past the vector registers");
-        return false;
-      }
+      const MOp load = tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd;
       const std::optional<Operand> side = scalar_of(value, span);
       if (!side.has_value()) {
         return false;
       }
-      push(make_inst(tag == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
-                     width_of(tag), Operand{ARG_XMM_REGS[next_xmm++]}, *side));
+      if (next_xmm >= ARG_XMM_COUNT) {
+        // SysV passes the ninth and later float arguments on the stack.
+        // Store the scalar through a GPR, then hand the slot to the
+        // callee; a float cannot be stored to memory directly here.
+        const Operand slot =
+            Operand{Mem{.base = Reg::Rsp,
+                        .index = std::nullopt,
+                        .scale = 1,
+                        .disp = static_cast<i32>(stack_offset)}};
+        push(make_inst(load, width_of(tag), slot, *side));
+        stack_offset += 8;
+        body_.outgoing = std::max(body_.outgoing, stack_offset);
+      } else {
+        push(make_inst(load, width_of(tag), Operand{ARG_XMM_REGS[next_xmm++]},
+                       *side));
+      }
       continue;
     }
     const Passage passage = passage_of(value.type);
@@ -1995,7 +2006,12 @@ bool Selector::emit_call(const ir::Instruction& instr,
             (void)unsupported(span, "a constant aggregate argument");
             return false;
           }
-          spill(Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}});
+          // The callee reads a pointer from this slot, so spill the
+          // address of the aggregate, not its first word's value.
+          push(make_inst(
+              MOp::Lea, 8, Operand{Reg::Rax},
+              Operand{SlotRef{vreg_of(value.as_register(), value.type), 0}}));
+          spill(Operand{Reg::Rax});
           continue;
         }
         // The bytes cross by address: the slot the value's vreg holds
