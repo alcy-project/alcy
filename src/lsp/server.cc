@@ -528,7 +528,7 @@ void Server::handle_notification(const text::JsonValue& message) {
       // anything; recording it would reject a later reuse of the id.
       if (!answered_.contains(key)) {
         if (cancelled_.size() >= MAX_PENDING_CANCELLATIONS) {
-          cancelled_.clear();
+          cancelled_.erase(cancelled_.begin());
         }
         cancelled_.insert(std::move(key));
       }
@@ -1403,9 +1403,11 @@ void Server::note_answered(const text::JsonValue& id) {
   }
   std::string key = text::to_json(id);
   cancelled_.erase(key);
-  if (answered_.size() >= MAX_PENDING_CANCELLATIONS) {
-    answered_.clear();
+  if (answered_order_.size() >= MAX_PENDING_CANCELLATIONS) {
+    answered_.erase(answered_order_.front());
+    answered_order_.pop_front();
   }
+  answered_order_.push_back(key);
   answered_.insert(std::move(key));
 }
 

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -117,6 +118,7 @@ class Server {
   // Ids whose response has already gone out. A cancel for one of these
   // is too late to matter and must not poison a later reuse of the id.
   std::unordered_set<std::string> answered_;
+  std::deque<std::string> answered_order_;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;
