@@ -12,6 +12,7 @@
 #include "tests/ssg/cases.h"
 using ssg::Block;
 using ssg::DocPage;
+using ssg::DocSource;
 
 namespace {
 
@@ -176,4 +177,31 @@ TEST_CASE("the reference does not send a reader back into the guide") {
   const std::string html = ssg_test::render_article(
       pages, ssg::REFERENCE_TREE, "en", {ssg_test::prose_block()});
   CHECK(html.find("pager-onward") == std::string::npos);
+}
+
+TEST_CASE(
+    "a translation replaces its page and missing ones fall back to the "
+    "default") {
+  const auto source = [](std::string_view slug, std::string_view language) {
+    DocSource doc;
+    doc.source_rel = std::string(language) + "/" + std::string(slug) + ".md";
+    doc.language = std::string(language);
+    doc.path = "guide/" + std::string(slug) + ".html";
+    doc.title = std::string(slug);
+    return doc;
+  };
+  const std::vector<DocSource> sources = {
+      source("intro", "en"), source("tour", "en"), source("tour", "ja")};
+
+  const std::vector<DocPage> pages =
+      ssg::pages_for_language(ssg_test::test_catalog(), sources, "ja");
+  CHECK(pages.size() == 2);
+  if (pages.size() != 2) {
+    return;
+  }
+  CHECK(pages[0].source_rel == "en/intro.md");
+  CHECK(pages[0].route == "ja/guide/intro.html");
+  CHECK(pages[1].source_rel == "ja/tour.md");
+  CHECK(pages[1].language == "ja");
+  CHECK(pages[1].route == "ja/guide/tour.html");
 }

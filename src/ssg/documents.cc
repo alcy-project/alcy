@@ -128,15 +128,29 @@ std::vector<DocPage> pages_for_language(const Catalog& catalog,
   std::vector<DocPage> pages;
   pages.reserve(sources.size());
   const std::string prefix(prefix_of(catalog, language));
-  for (const DocSource& source : sources) {
+  // The default language defines which pages exist. A translation
+  // replaces its counterpart; one that has not been written yet leaves
+  // the default text in place, so a new translation can land a page at
+  // a time.
+  for (const DocSource& fallback : sources) {
+    if (fallback.language != catalog.default_language) {
+      continue;
+    }
+    const DocSource* source = &fallback;
+    for (const DocSource& candidate : sources) {
+      if (candidate.language == language && candidate.path == fallback.path) {
+        source = &candidate;
+        break;
+      }
+    }
     DocPage page;
-    page.source_rel = source.source_rel;
-    page.path = source.path;
-    page.order = source.order;
-    page.title = source.title;
-    page.blocks = source.blocks;
+    page.source_rel = source->source_rel;
+    page.path = source->path;
+    page.order = source->order;
+    page.title = source->title;
+    page.blocks = source->blocks;
     page.language = std::string(language);
-    page.route = prefix + source.path;
+    page.route = prefix + source->path;
     pages.push_back(std::move(page));
   }
   return pages;

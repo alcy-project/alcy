@@ -453,7 +453,7 @@ i32 run(i32 argc, char** argv) {
   const std::string tools_dir =
       ssg::join_posix({context.options.repo_root, context.options.tools});
   base::Result<std::vector<ssg::DocSource>, std::string> guide =
-      ssg::discover_guide(docs_dir);
+      ssg::discover_guide(docs_dir, context.catalog);
   if (guide.is_err() || guide.value().empty()) {
     std::string message;
     if (guide.is_err()) {

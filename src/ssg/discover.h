@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "fpag/base/result.h"
+#include "ssg/catalog.h"
 #include "ssg/documents.h"
 #include "ssg/markdown.h"
 
@@ -19,8 +20,12 @@ namespace ssg {
 // the reference and the tools tree by an explicit list with the rest
 // appended in name order.
 
+// The guide's sources: the default language's files at the root and
+// each translation under a directory named for its language. Every
+// source keeps its language so pages_for_language can pick it.
 base::Result<std::vector<DocSource>, std::string> discover_guide(
-    std::string_view docs_dir);
+    std::string_view docs_dir,
+    const Catalog& catalog);
 
 base::Result<std::vector<DocSource>, std::string> discover_spec(
     std::string_view spec_dir);

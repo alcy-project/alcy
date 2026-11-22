@@ -343,13 +343,13 @@ Write `=0.5.0` in place of `0.5.x` to pin the version exactly.
 
 ## Where to go next
 
-- [The principles](../principles.md) describe where the language is
+- [The principles](../../principles.md) describe where the language is
   going and what decides design questions.
-- [The specification](../spec/overview.md) is the normative description.
-- [The architecture](../../src/docs/architecture.md) describes the
+- [The specification](../../spec/overview.md) is the normative description.
+- [The architecture](../../../src/docs/architecture.md) describes the
   compiler's design.
 
 The language is far from finished: generic functions take no bounds
 yet, a closure that captures borrows its frame, and several
 standard-library packages are declared but empty. The
-[backlog](../backlog.md) tracks what is being worked on.
+[backlog](../../backlog.md) tracks what is being worked on.

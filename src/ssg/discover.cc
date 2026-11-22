@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "fpag/io/io_util.h"
+#include "ssg/catalog.h"
 #include "ssg/documents.h"
 #include "ssg/markdown.h"
 #include "ssg/paths.h"
@@ -43,6 +44,7 @@ base::Result<DocSource, std::string> make_doc_source(
     std::string_view dir,
     std::string_view route_prefix,
     std::string_view segment,
+    std::string_view language,
     std::string_view name,
     usize order) {
   base::Result<Blocks, std::string> parsed =
@@ -59,6 +61,7 @@ base::Result<DocSource, std::string> make_doc_source(
   }
   DocSource source;
   source.source_rel = std::string(name);
+  source.language = std::string(language);
   source.path = join_posix({segment, strip_md(name) + ".html"});
   source.order = order;
   source.title = std::move(title).unwrap();
@@ -149,70 +152,96 @@ Blocks link_sibling_references(Blocks blocks,
 }
 
 base::Result<std::vector<DocSource>, std::string> discover_guide(
-    std::string_view docs_dir) {
-  std::vector<std::string> files;
-  base::Result<void, std::string> walked =
-      walk_markdown_files(docs_dir, "", &files);
-  if (walked.is_err()) {
-    return base::make_err(std::move(walked).unwrap_err());
-  }
-  std::sort(files.begin(), files.end());
+    std::string_view docs_dir,
+    const Catalog& catalog) {
   std::vector<DocSource> pages;
-  std::unordered_map<usize, std::string> orders;
-  for (const std::string& source_rel : files) {
-    const std::string file_name = basename_posix(source_rel);
-    const std::string stem =
-        file_name.substr(0, file_name.size() - std::string_view(".md").size());
-    const usize dash = stem.find('-');
-    usize number_len = dash == std::string::npos ? stem.size() : dash;
-    for (usize i = 0; i < number_len; i++) {
-      const char c = stem[i];
-      if (c < '0' || c > '9') {
-        number_len = 0;
-        break;
+  // Every language has its own directory. The default language is
+  // special only in that a page missing from another tree falls back
+  // to it; the layout and the route of every source are the same.
+  for (const std::string& language : catalog.languages) {
+    const std::string tree_dir = join_posix({docs_dir, language});
+    // A language nobody has written yet has no directory in git; its
+    // pages fall back to the default language instead of failing the build.
+    if (!io::is_dir(tree_dir)) {
+      continue;
+    }
+    std::vector<std::string> files;
+    base::Result<void, std::string> walked =
+        walk_markdown_files(tree_dir, "", &files);
+    if (walked.is_err()) {
+      return base::make_err(std::move(walked).unwrap_err());
+    }
+    for (std::string& file : files) {
+      file = join_posix({language, file});
+    }
+    std::sort(files.begin(), files.end());
+    std::unordered_map<usize, std::string> orders;
+    for (const std::string& source_rel : files) {
+      const std::string file_name = basename_posix(source_rel);
+      const std::string stem = file_name.substr(
+          0, file_name.size() - std::string_view(".md").size());
+      const usize dash = stem.find('-');
+      usize number_len = dash == std::string::npos ? stem.size() : dash;
+      for (usize i = 0; i < number_len; i++) {
+        const char c = stem[i];
+        if (c < '0' || c > '9') {
+          number_len = 0;
+          break;
+        }
       }
+      if (number_len == 0) {
+        return base::make_err(source_rel +
+                              ": guide files are named NN-slug.md");
+      }
+      // The digits are verified above, so the value is read by hand:
+      // stoul would throw, and the build runs with -fno-exceptions.
+      usize order = 0;
+      for (usize i = 0; i < number_len; i++) {
+        order = order * 10 + static_cast<usize>(stem[i] - '0');
+      }
+      const auto previous = orders.find(order);
+      if (previous != orders.end()) {
+        return base::make_err(source_rel + ": the number " +
+                              std::to_string(order) + " is already used by " +
+                              previous->second);
+      }
+      orders[order] = source_rel;
+      base::Result<Blocks, std::string> parsed =
+          parse_source(join_posix({docs_dir, source_rel}), source_rel);
+      if (parsed.is_err()) {
+        return base::make_err(std::move(parsed).unwrap_err());
+      }
+      Blocks blocks = std::move(parsed).unwrap();
+      base::Result<std::string, std::string> title =
+          title_of(blocks, source_rel);
+      if (title.is_err()) {
+        return base::make_err(std::move(title).unwrap_err());
+      }
+      const std::string dir = dirname_posix(source_rel);
+      const std::string file_name_html =
+          std::string(stem.substr(dash + 1)) + ".html";
+      DocSource page;
+      page.source_rel = source_rel;
+      page.language = language;
+      // The language directory is a source location, not part of the
+      // route: every tree publishes guide/NN-slug.html.
+      const std::string subdir =
+          dir == language ? "." : dir.substr(language.size() + 1);
+      page.path = subdir == "." ? join_posix({"guide", file_name_html})
+                                : join_posix({"guide", subdir, file_name_html});
+      page.order = order;
+      page.title = std::move(title).unwrap();
+      page.blocks = std::move(blocks);
+      pages.push_back(std::move(page));
     }
-    if (number_len == 0) {
-      return base::make_err(source_rel + ": guide files are named NN-slug.md");
-    }
-    // The digits are verified above, so the value is read by hand:
-    // stoul would throw, and the build runs with -fno-exceptions.
-    usize order = 0;
-    for (usize i = 0; i < number_len; i++) {
-      order = order * 10 + static_cast<usize>(stem[i] - '0');
-    }
-    const auto previous = orders.find(order);
-    if (previous != orders.end()) {
-      return base::make_err(source_rel + ": the number " +
-                            std::to_string(order) + " is already used by " +
-                            previous->second);
-    }
-    orders[order] = source_rel;
-    base::Result<Blocks, std::string> parsed =
-        parse_source(join_posix({docs_dir, source_rel}), source_rel);
-    if (parsed.is_err()) {
-      return base::make_err(std::move(parsed).unwrap_err());
-    }
-    Blocks blocks = std::move(parsed).unwrap();
-    base::Result<std::string, std::string> title = title_of(blocks, source_rel);
-    if (title.is_err()) {
-      return base::make_err(std::move(title).unwrap_err());
-    }
-    const std::string dir = dirname_posix(source_rel);
-    const std::string file = std::string(stem.substr(dash + 1)) + ".html";
-    DocSource page;
-    page.source_rel = source_rel;
-    page.path = dir == "." ? join_posix({"guide", file})
-                           : join_posix({"guide", dir, file});
-    page.order = order;
-    page.title = std::move(title).unwrap();
-    page.blocks = std::move(blocks);
-    pages.push_back(std::move(page));
   }
-  std::sort(
-      pages.begin(), pages.end(), [](const DocSource& a, const DocSource& b) {
-        return a.order < b.order || (a.order == b.order && a.path < b.path);
-      });
+  std::sort(pages.begin(), pages.end(),
+            [](const DocSource& a, const DocSource& b) {
+              return a.order < b.order ||
+                     (a.order == b.order &&
+                      (a.path < b.path ||
+                       (a.path == b.path && a.language < b.language)));
+            });
   return base::make_ok(std::move(pages));
 }
 
@@ -235,7 +264,7 @@ base::Result<std::vector<DocSource>, std::string> discover_ordered(
   for (const std::string& name : published) {
     const std::string full_name = std::string(route_prefix) + "/" + name;
     base::Result<DocSource, std::string> source = make_doc_source(
-        dir, route_prefix, segment, name,
+        dir, route_prefix, segment, "", name,
         static_cast<usize>(
             std::find(order.begin(), order.end(), name) == order.end()
                 ? order.size()

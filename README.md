@@ -18,9 +18,10 @@ A function that returns a status declares the type, as in
 `fn main() -> i32`. Ownership is not written at the call site: region
 inference over function summaries works out what a signature would
 otherwise have to spell out. [principles.md](docs/principles.md) argues
-for the design, and the [tour of the language](docs/guide/03-language-tour.md)
-covers what the compiler accepts today, with every example on that page
-compiled when the site is built.
+for the design, and the
+[tour of the language](docs/guide/en/03-language-tour.md) covers what the
+compiler accepts today, with every example on that page compiled when the
+site is built.
 
 The [alcy site](https://alcy-project.github.io/alcy/) carries that guide,
 the language reference, and a browser playground: edit and run alcy in a
