@@ -5,7 +5,7 @@
 
 """Check the toolchain standard library with its own tests.
 
-Every package under `lib/std/` holds `test` blocks beside the definitions
+Every package under `lib/std/` holds `#[test] fn`s beside the definitions
 they cover, and `alcy test` runs them. This check asks each
 package for the tests it names and then for its verdict:
 
@@ -129,7 +129,7 @@ def check_package(alcy, package):
                 package,
                 0,
                 None,
-                "names no test; the `test` blocks of a package's modules are what "
+                "names no test; the `#[test] fn`s of a package's modules are what "
                 "this check runs, and a package with nothing to run belongs in "
                 "UNTESTED with the reason it has nothing",
             )

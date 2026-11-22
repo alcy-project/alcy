@@ -304,6 +304,28 @@ TEST_CASE("repr(C) and a measuring gate conjunct on one item") {
   CHECK(item.repr_c);
   CHECK(!item.when_false);
 }
+TEST_CASE("The testing fact keeps and drops a gated test function") {
+  constexpr std::string_view SOURCE =
+      "#[when(testing)]\n#[test] fn kept() {\n}\n"
+      "#[when(!testing)]\n#[test] fn dropped() {\n}\n";
+  parser::BuildFacts testing = LINUX_X86_64;
+  testing.testing = true;
+  Fixture in_test;
+  const ParseResult kept = parse_with(SOURCE, testing, in_test);
+  CHECK(kept.ok);
+  CHECK(kept.items.size() == 1);
+  CHECK(in_test.ast.items[kept.items[0]].payload.get<ast::ItemFn>().name.name ==
+        "kept");
+
+  Fixture in_build;
+  const ParseResult dropped = parse_with(SOURCE, LINUX_X86_64, in_build);
+  CHECK(dropped.ok);
+  CHECK(dropped.items.size() == 1);
+  CHECK(in_build.ast.items[dropped.items[0]]
+            .payload.get<ast::ItemFn>()
+            .name.name == "dropped");
+}
+
 TEST_CASE("A boolean target compared to a string literal is named as boolean") {
   Fixture f;
   ParseResult r = parse_with(

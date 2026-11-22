@@ -4,6 +4,7 @@
 #include "parser/parser.h"
 
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -2032,6 +2033,35 @@ TEST_CASE("The test marker only leads a function") {
     CHECK(has_message(f.bag, "`#[test]` marks a function; put it on `fn`"));
     CHECK(f.bag.error_count() == 1);
   }
+}
+
+TEST_CASE("A group needs an attribute and bounds its nesting") {
+  Fixture bare;
+  CHECK(!parse("{ fn a() {} }\n", bare).ok);
+
+  std::string nested = "fn main() -> i32 {\n  ret 0\n}\n";
+  for (usize i = 0; i < 300; ++i) {
+    nested += "#[when(testing)] {\n";
+  }
+  nested += "  #[test] fn a() {}\n";
+  for (usize i = 0; i < 300; ++i) {
+    nested += "}\n";
+  }
+  Fixture deep;
+  const ParseResult result = parse(nested, deep);
+  CHECK(!result.ok);
+  CHECK(has_message(deep.bag, "Nesting is deeper than the limit of 256"));
+}
+
+TEST_CASE("A doc comment above a group does not reach its first item") {
+  const std::string_view source =
+      "/// docs for the group\n#[when(true)] {\n  fn a() {\n  }\n}\n";
+  Fixture f;
+  const ParseResult result = parse(source, f);
+  CHECK(result.ok);
+  CHECK(result.items.size() == 1);
+  const ast::ItemNode& item = f.ast.items[result.items[0]];
+  CHECK(item.docs.empty());
 }
 
 TEST_CASE("The test marker is refused on a method") {

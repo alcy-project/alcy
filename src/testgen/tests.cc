@@ -54,14 +54,17 @@ std::optional<std::string_view> declared_name(const ast::ItemNode& item) {
 
 }  // namespace
 
-SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
-                           std::string_view module,
-                           ast::AstArena& ast) {
-  SplicedModule spliced;
+GatheredModule gather_tests(std::span<const ast::ItemIdx> items,
+                            std::string_view module,
+                            ast::AstArena& ast) {
+  GatheredModule gathered;
+  // Keep the original list until a replacement is ready: an arena that
+  // runs out of room must not leave the module with no items at all.
+  gathered.items = items;
   std::vector<ast::ItemIdx> grown(items.begin(), items.end());
   // Names the module declares outside its tests: a test cannot take one
   // of those, because the run's driver calls it in that namespace.
-  std::vector<std::string_view> level;
+  std::vector<std::string_view> module_names;
   for (const ast::ItemIdx index : items) {
     if (!ast.items.bound(index)) {
       continue;
@@ -73,7 +76,7 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
     }
     if (const std::optional<std::string_view> name = declared_name(node);
         name.has_value()) {
-      level.push_back(*name);
+      module_names.push_back(*name);
     }
   }
   // Names the tests already gathered. Two tests with one name are a
@@ -93,22 +96,23 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
     }
     const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
     if (fn.name.name == ENTRY_POINT) {
-      spliced.refused.push_back(RefusedItem{Refusal::NamedMain, fn.name});
+      gathered.refused.push_back(RefusedTest{Refusal::NamedMain, fn.name});
       refused_at.push_back(at);
       continue;
     }
-    if (std::find(level.begin(), level.end(), fn.name.name) != level.end()) {
-      spliced.refused.push_back(RefusedItem{Refusal::Collides, fn.name});
+    if (std::find(module_names.begin(), module_names.end(), fn.name.name) !=
+        module_names.end()) {
+      gathered.refused.push_back(RefusedTest{Refusal::Collides, fn.name});
       refused_at.push_back(at);
       continue;
     }
     if (std::find(taken.begin(), taken.end(), fn.name.name) != taken.end()) {
-      spliced.refused.push_back(RefusedItem{Refusal::Duplicates, fn.name});
+      gathered.refused.push_back(RefusedTest{Refusal::Duplicates, fn.name});
       refused_at.push_back(at);
       continue;
     }
     if (fn.return_type.is_valid()) {
-      spliced.refused.push_back(RefusedItem{Refusal::Returns, fn.name});
+      gathered.refused.push_back(RefusedTest{Refusal::Returns, fn.name});
       refused_at.push_back(at);
       continue;
     }
@@ -122,11 +126,11 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
     const ast::ItemIdx replacement = ast.items.push_back(node);
     if (!replacement.is_valid()) {
       // The arena is spent; the caller reports the reservation rather
-      // than a half-spliced module.
-      return spliced;
+      // than a half-gathered module.
+      return gathered;
     }
     grown[at] = replacement;
-    spliced.tests.push_back(TestCase{
+    gathered.tests.push_back(TestCase{
         .module = std::string(module),
         .name = std::string(fn.name.name),
         .label = joined_label(module, fn.name.name),
@@ -140,8 +144,22 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
     grown.erase(grown.begin() + (at - removed));
     ++removed;
   }
-  spliced.items = ast::copy_to_arena(ast.spans, grown);
-  return spliced;
+  const bool changed = grown.size() != items.size() || [&] {
+    for (usize i = 0; i < items.size(); ++i) {
+      if (grown[i] != items[i]) {
+        return true;
+      }
+    }
+    return false;
+  }();
+  if (changed) {
+    const std::span<const ast::ItemIdx> copied =
+        ast::copy_to_arena(ast.spans, grown);
+    if (!copied.empty()) {
+      gathered.items = copied;
+    }
+  }
+  return gathered;
 }
 
 std::span<const ast::ItemIdx> entry_items(std::span<const ast::ItemIdx> module,

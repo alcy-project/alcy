@@ -211,16 +211,31 @@ class Parser {
   // An attribute list at the top of an item: `#[name(...)]` repeats on
   // its own lines. Each one is evaluated on this target as it is
   // parsed; `true` comes back when any `when` gate evaluated to false.
-  // What one `#[...]` contributed on top of the item: the target
-  // facts the `when` gate evaluated, and the `repr(C)` marker.
+  // What one `#[...]` contributed on top of the item: the `when` gate's
+  // verdict, and the `repr(C)` and `#[test]` markers.
   struct Attributes {
     bool when_false = false;
     bool repr_c = false;
     diag::Span repr_span;
     // `#[test]` marks a function the run gathers; existence on a build
-    // is a separate question answered by `#[when(testing)]`.
+    // is a separate question answered by a `#[when(EXPR)]` gate.
     bool is_test = false;
-    diag::Span is_test_span;
+    diag::Span test_span;
+
+    // Folds another attribute's contributions into these. Used both by
+    // a run of attributes on one item and by a group passing its gates
+    // to its children, so the set of fields lives in one place.
+    void merge_from(const Attributes& other) {
+      when_false = when_false || other.when_false;
+      if (other.is_test) {
+        is_test = true;
+        test_span = other.test_span;
+      }
+      if (other.repr_c) {
+        repr_c = true;
+        repr_span = other.repr_span;
+      }
+    }
   };
 
   Attributes parse_attribute_list();
@@ -287,7 +302,12 @@ class Parser {
   // A `#[when(...)] { ... }` group: parse its items into `out` with the
   // group's gate inherited. The group is only source-level grouping, so
   // it leaves no node of its own in the tree.
-  void parse_group(Attributes attributes, std::vector<ast::ItemIdx>& out);
+  void parse_conditional_group(Attributes attributes,
+                               std::vector<ast::ItemIdx>& out);
+  // Validates a `#[test]` marker on a parsed item and sets the marker on
+  // the function. Returns false, having reported, when the shape cannot
+  // be a test.
+  bool apply_test_marker(ast::ItemIdx item, diag::Span span);
   // An item spelled like a neighboring language's keyword (`func`,
   // `trait`, `import`) is parsed as the item it meant; `mod` has no alcy
   // form and is reported and skipped.

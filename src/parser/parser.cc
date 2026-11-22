@@ -166,15 +166,7 @@ Parser::Attributes Parser::parse_attribute_list() {
   Attributes attributes;
   while (peek_kind() == lexer::TokenKind::Hash) {
     const Attributes one = parse_attribute();
-    attributes.when_false = attributes.when_false || one.when_false;
-    if (one.is_test) {
-      attributes.is_test = true;
-      attributes.is_test_span = one.is_test_span;
-    }
-    if (one.repr_c) {
-      attributes.repr_c = true;
-      attributes.repr_span = one.repr_span;
-    }
+    attributes.merge_from(one);
     // A newline after `#[...]` lexes as `;`; it terminates the
     // attribute's line, not the item, so the item sits on its own.
     while (match(lexer::TokenKind::Semicolon)) {}
@@ -257,7 +249,7 @@ Parser::Attributes Parser::parse_attribute() {
     }
     Attributes result;
     result.is_test = true;
-    result.is_test_span = name.span;
+    result.test_span = name.span;
     return result;
   }
   if (attr_name == "repr") {
@@ -552,11 +544,15 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
       continue;
     }
     Attributes attributes;
+    bool has_attributes = false;
     if (peek_kind() == lexer::TokenKind::Hash) {
       attributes = parse_attribute_list();
+      has_attributes = true;
     }
-    if (peek_kind() == lexer::TokenKind::LBrace) {
-      parse_group(attributes, items);
+    // A brace opens a group only behind an attribute. A bare brace is
+    // not an item, and reads as a parse error the way tree-sitter does.
+    if (has_attributes && peek_kind() == lexer::TokenKind::LBrace) {
+      parse_conditional_group(attributes, items);
       continue;
     }
     ast::ItemIdx item = parse_documented_item(attributes);
@@ -638,15 +634,26 @@ std::optional<ast::ItemIdx> Parser::parse_spelled_item(bool is_pub,
   return std::nullopt;
 }
 
-void Parser::parse_group(Attributes attributes,
-                         std::vector<ast::ItemIdx>& out) {
+void Parser::parse_conditional_group(Attributes attributes,
+                                     std::vector<ast::ItemIdx>& out) {
   using K = lexer::TokenKind;
+  if (ast_.exhausted()) {
+    return;
+  }
+  if (nesting_exhausted(peek().span)) {
+    return;
+  }
+  const base::NestingScope scope(nesting_);
+  // A group has no AST node of its own. Doc comments written above it
+  // belong to no item, so drop them rather than let the first child
+  // claim them.
+  pending_docs_.clear();
   // A group is a gate, not an item. A role or layout marker written on
   // the brace would otherwise reach every function or struct inside it.
   // Refuse it here and keep it from the children.
   if (attributes.is_test) {
     const u32 index = bag_.emit<i18n::Key::ParserTestOnlyOnFunctions>(
-        DiagCode::UnexpectedToken, attributes.is_test_span);
+        DiagCode::UnexpectedToken, attributes.test_span);
     (void)index;
     attributes.is_test = false;
   }
@@ -664,20 +671,14 @@ void Parser::parse_group(Attributes attributes,
       continue;
     }
     Attributes child = attributes;
+    bool has_attributes = false;
     if (peek_kind() == K::Hash) {
       const Attributes own = parse_attribute_list();
-      child.when_false = child.when_false || own.when_false;
-      if (own.is_test) {
-        child.is_test = true;
-        child.is_test_span = own.is_test_span;
-      }
-      if (own.repr_c) {
-        child.repr_c = true;
-        child.repr_span = own.repr_span;
-      }
+      has_attributes = true;
+      child.merge_from(own);
     }
-    if (peek_kind() == K::LBrace) {
-      parse_group(child, out);
+    if (has_attributes && peek_kind() == K::LBrace) {
+      parse_conditional_group(child, out);
       continue;
     }
     ast::ItemIdx item = parse_documented_item(child);
@@ -718,6 +719,48 @@ ast::ItemIdx Parser::parse_documented_item(Attributes attributes) {
   return item;
 }
 
+bool Parser::apply_test_marker(ast::ItemIdx item, diag::Span span) {
+  ast::ItemNode& node = ast_.items[item];
+  if (node.kind != ast::ItemKind::Fn) {
+    const u32 index = bag_.emit<i18n::Key::ParserTestOnlyOnFunctions>(
+        DiagCode::UnexpectedToken, span);
+    (void)index;
+    return false;
+  }
+  const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+  if (fn.params.size() != 0) {
+    const u32 index = bag_.emit<i18n::Key::ParserTestTakesNoArguments>(
+        DiagCode::UnexpectedToken, span);
+    (void)index;
+    return false;
+  }
+  if (!fn.generic.empty()) {
+    const u32 index = bag_.emit<i18n::Key::ParserTestHasTypeParameters>(
+        DiagCode::UnexpectedToken, span);
+    (void)index;
+    return false;
+  }
+  // The driver calls a test with a plain call at runtime, so neither
+  // opt-in fits one. Refuse here rather than reporting against code the
+  // run generated for the caller.
+  if (fn.is_unsafe) {
+    const u32 index = bag_.emit<i18n::Key::ParserTestOnUnsafe>(
+        DiagCode::UnexpectedToken, span);
+    (void)index;
+    return false;
+  }
+  if (fn.is_comp) {
+    const u32 index =
+        bag_.emit<i18n::Key::ParserTestOnComp>(DiagCode::UnexpectedToken, span);
+    (void)index;
+    return false;
+  }
+  ast::ItemFn marked = fn;
+  marked.is_test = true;
+  node.payload.set(marked);
+  return true;
+}
+
 ast::ItemIdx Parser::parse_item(Attributes attributes) {
   // A spent arena builds nothing further: what it refused would leave a
   // node half made and a diagnostic about the wrong thing.
@@ -728,44 +771,8 @@ ast::ItemIdx Parser::parse_item(Attributes attributes) {
     if (item.is_valid()) {
       ast::ItemNode& node = ast_.items[item];
       node.when_false = attributes.when_false;
-      if (attributes.is_test) {
-        if (node.kind != ast::ItemKind::Fn) {
-          const u32 index = bag_.emit<i18n::Key::ParserTestOnlyOnFunctions>(
-              DiagCode::UnexpectedToken, node.span);
-          (void)index;
-          return ast::ItemIdx::invalid();
-        }
-        if (node.payload.get<ast::ItemFn>().params.size() != 0) {
-          const u32 index = bag_.emit<i18n::Key::ParserTestTakesNoArguments>(
-              DiagCode::UnexpectedToken, node.span);
-          (void)index;
-          return ast::ItemIdx::invalid();
-        }
-        if (!node.payload.get<ast::ItemFn>().generic.empty()) {
-          const u32 index = bag_.emit<i18n::Key::ParserTestHasTypeParameters>(
-              DiagCode::UnexpectedToken, node.span);
-          (void)index;
-          return ast::ItemIdx::invalid();
-        }
-        // The driver calls a test with a plain call at runtime, so neither
-        // opt-in fits one. Refuse here rather than reporting against code
-        // the run generated for the caller.
-        const ast::ItemFn& as_written = node.payload.get<ast::ItemFn>();
-        if (as_written.is_unsafe) {
-          const u32 index = bag_.emit<i18n::Key::ParserTestOnUnsafe>(
-              DiagCode::UnexpectedToken, node.span);
-          (void)index;
-          return ast::ItemIdx::invalid();
-        }
-        if (as_written.is_comp) {
-          const u32 index = bag_.emit<i18n::Key::ParserTestOnComp>(
-              DiagCode::UnexpectedToken, node.span);
-          (void)index;
-          return ast::ItemIdx::invalid();
-        }
-        ast::ItemFn fn = node.payload.get<ast::ItemFn>();
-        fn.is_test = true;
-        node.payload.set(fn);
+      if (attributes.is_test && !apply_test_marker(item, node.span)) {
+        return ast::ItemIdx::invalid();
       }
       if (attributes.repr_c) {
         if (node.kind != ast::ItemKind::Struct) {

@@ -121,16 +121,22 @@ bool Printer::chunk_is_attribute(const Chunk& chunk) {
       first.token != lexer::TokenKind::Hash) {
     return false;
   }
-  // The bracket pair is one Group node, not two tokens. Once it closes,
-  // anything else on the line is the item the attribute leads, so the
-  // chunk is not an attribute on its own.
+  // The bracket pair is one Group node, not two tokens. Attributes may
+  // repeat, so a `#` followed by a bracket may appear more than once.
+  // Anything else on the line is the item the attributes lead, which
+  // makes this chunk an item rather than an attribute on its own.
   bool closed = false;
   for (const cst::Node* node : chunk.nodes) {
     if (node->kind == cst::NodeKind::Token &&
-        node->token == lexer::TokenKind::Semicolon) {
+        (node->token == lexer::TokenKind::Semicolon ||
+         node->token == lexer::TokenKind::Hash)) {
       continue;
     }
-    if (closed && node->kind != cst::NodeKind::Comment) {
+    if (node->kind == cst::NodeKind::Comment) {
+      continue;
+    }
+    if (closed && !(node->kind == cst::NodeKind::Group &&
+                    node->group_role == cst::GroupRole::Bracket)) {
       return false;
     }
     if (node->kind == cst::NodeKind::Group &&

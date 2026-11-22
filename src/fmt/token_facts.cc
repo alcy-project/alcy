@@ -336,7 +336,8 @@ bool space_before(const cst::Node* prev,
           prev_generic) {
         return false;
       }
-      if (prev->token == lexer::TokenKind::ColonColon) {
+      if (prev->token == lexer::TokenKind::ColonColon ||
+          prev->token == lexer::TokenKind::Hash) {
         return false;
       }
     }

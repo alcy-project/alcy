@@ -1290,7 +1290,7 @@ struct AstArena {
 };
 
 // The span an item's name occupies. An impl is named by its target type;
-// items without a name (a use, a conditional group, an extern group) answer the
+// items without a name (a use, an extern group) answer the
 // whole item span.
 diag::Span item_name_span(const AstArena& ast, const ItemNode& item);
 diag::Span item_name_span(const AstArena& ast, ItemIdx item);

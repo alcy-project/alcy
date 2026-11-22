@@ -94,11 +94,19 @@ class Header {
       return;
     }
     has_any_ = true;
+    last_group_is_attribute_ = false;
     if (node.kind == NodeKind::Group) {
-      last_ = closer_of_group(node);
+      const lexer::TokenKind closer = closer_of_group(node);
+      // Only a bracket that closes an attribute (`#[...]`) opens a
+      // conditional group. Any other bracket before a brace is part of
+      // a type, an index, or a match subject.
+      last_group_is_attribute_ = closer == lexer::TokenKind::RBracket &&
+                                 last_ == lexer::TokenKind::Hash;
+      last_ = closer;
       has_read_ = true;
       return;
     }
+    last_group_is_attribute_ = false;
     last_ = node.token;
     has_read_ = node.token != lexer::TokenKind::Error;
     switch (node.token) {
@@ -122,9 +130,11 @@ class Header {
   }
 
   BraceRole brace_role() const {
-    // A brace right after an attribute closes a conditional group of
-    // items, laid out like an impl body.
-    if (last_ == lexer::TokenKind::RBracket) {
+    // A brace right after an attribute (`#[when(...)] { ... }`) closes
+    // a conditional group of items, laid out like an impl body. Any
+    // other bracket before a brace is a type, an index, or a match
+    // subject and does not make the brace a group.
+    if (last_group_is_attribute_) {
       return BraceRole::GroupBody;
     }
     if (has_match_) {
@@ -184,6 +194,7 @@ class Header {
   // front of it is exactly what the layout cannot promise to carry
   // into the next pass.
   bool has_read_;
+  bool last_group_is_attribute_ = false;
   lexer::TokenKind last_;
 };
 

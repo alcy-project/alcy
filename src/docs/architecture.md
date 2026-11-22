@@ -497,8 +497,8 @@ below that step changes, which is the point: a test resolves its module's
 siblings and dependencies exactly as that module does, so it is resolved,
 lowered, and emitted by the same code as the program it belongs to. The run then
 starts the resulting executable once per test and reads each status as that
-test's verdict. A build, a check, and a run of the package splice nothing - they
-read the block, keep it out of the program, and stop where they already stopped.
+test's verdict. A build, a check, and a run of the package drop gated items at
+parse time and stop where they already stopped.
 
 Each stage should expose the minimum data needed by the next stage. A stage
 must not reach backward into another stage's private state as a shortcut.

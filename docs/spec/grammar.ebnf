@@ -24,16 +24,21 @@ file        = { item } ;
 item        = { attribute } , [ vis ] , ( fn_item | intrinsic_fn_item | extern_item
                         | struct_item | enum_item | impl_item
                         | spec_item | static_item | const_item | use_item
-                        | test_item ) ;
+                        | conditional_group ) ;
+              (* An attribute is required in front of a conditional group;
+                 a bare brace is not an item. *)
 attribute   = "#" , "[" , ident , [ "(" , ( when_expr | repr_arg ) , ")" ] , "]" ;
               (* The closed set of attributes today: `when`, an item gate
-                 evaluated on the target — an item whose gate is false is
-                 not part of the module — and `repr(C)`, an FFI-layout
-                 marker on a struct. A gated item is still parsed: an
-                 error in its body is reported; analysis and emission
-                 never see it. See items.md, "The `when` gate", and
-                 ffi.md, "Layout and statics". Other names are rejected
-                 with guidance rather than read past. *)
+                 evaluated on the build descriptor — an item whose gate is
+                 false is not part of the module — `repr(C)`, an FFI-layout
+                 marker on a struct, and `test`, a marker on a free
+                 function. A gated item is still parsed: an error in its
+                 body is reported; analysis and emission never see it. A
+                 `#[when(EXPR)]` attribute followed by a brace groups items
+                 without making a namespace: they join the module's own
+                 list. See items.md, "The `when` gate", and ffi.md,
+                 "Layout and statics". Other names are rejected with
+                 guidance rather than read past. *)
 repr_arg    = "C" ;              (* Only `C` is accepted today. *)
 when_expr   = when_or ;
 when_or     = when_and , { "||" , when_and } ;
@@ -44,7 +49,9 @@ when_cmp    = when_unary , [ ( "==" | "!=" ) , when_unary ] ;
                  compared against `target.<key>` must name a value the
                  key knows. *)
 when_unary  = "!" , when_unary | when_primary ;
-when_primary = "(" , when_or , ")" | string | "true" | "false" | target_key ;
+when_primary = "(" , when_or , ")" | string | "true" | "false" | target_key | "testing" ;
+              (* `testing` is a bare boolean from the invocation mode:
+                 true only for `alcy test`, not a property of the target. *)
 target_key  = "target" , "." , ( "os" | "arch" | "freestanding" ) ;
 vis         = "pub" ;
 fn_item     = [ "unsafe" ] , [ "comp" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] , ")"
@@ -108,12 +115,15 @@ spec_method = [ "unsafe" ] , "fn" , IDENT , [ type_params ] , "(" , [ params ] ,
 static_item = "static" , IDENT , ":" , type , ":=" , expr ;
 const_item  = "const" , IDENT , ":" , type , ":=" , expr ;
 use_item    = "use" , path , [ "as" , IDENT ] , ";" ;
-test_item   = "test" , "{" , { test_entry | fn_item } , "}" ;
-test_entry  = "test" , IDENT , "(" , ")" , [ "->" , type ] , block ;
-              (* A module's tests, one per line, beside the helpers they
-                 need. A test takes no arguments and reports success by
-                 returning; the command that runs it rejects any other
-                 return type. See docs/spec/items.md, "Tests". *)
+conditional_group = "{" , { item } , "}" ;
+              (* A gate followed by a brace groups any items without
+                 making a namespace; the group's items inherit its gate
+                 and join the module's own list. Modules typically hold
+                 their tests in a `#[when(testing)]` group. *)
+              (* A `#[test] fn` is a free function the test command gathers.
+                 It takes no arguments, no type parameters, and is neither
+                 `unsafe` nor `comp`; a written return type is reported by
+                 the command that runs tests. See items.md, "Tests". *)
 
 (* Types *)
 
