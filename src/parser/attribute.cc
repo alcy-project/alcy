@@ -23,6 +23,7 @@ namespace {
 
 constexpr std::string_view TARGET = "target";
 constexpr std::string_view TESTING = "testing";
+constexpr std::string_view FREESTANDING_KEY = "target.freestanding";
 constexpr std::string_view KNOWN_OS_VALUES =
     "linux, darwin, windows, wasi, unknown";
 constexpr std::string_view KNOWN_ARCH_VALUES =
@@ -278,13 +279,11 @@ struct Evaluator {
       if ((left_key == "freestanding" || left_key == TESTING) &&
           right_key.empty()) {
         emit_target_is_boolean(
-            bag, right->span,
-            left_key == TESTING ? TESTING : "target.freestanding");
+            bag, right->span, left_key == TESTING ? TESTING : FREESTANDING_KEY);
       } else if ((right_key == "freestanding" || right_key == TESTING) &&
                  left_key.empty()) {
         emit_target_is_boolean(
-            bag, left->span,
-            right_key == TESTING ? TESTING : "target.freestanding");
+            bag, left->span, right_key == TESTING ? TESTING : FREESTANDING_KEY);
       } else if ((left_key == "os" || left_key == "arch") &&
                  right_key.empty()) {
         emit_target_is_string(bag, right->span, left_key);

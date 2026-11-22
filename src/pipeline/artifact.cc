@@ -936,11 +936,11 @@ base::Result<TestPackage, diag::Reported> resolve_test_package(
     if (file == nullptr) {
       continue;
     }
-    testgen::SplicedModule module =
-        testgen::splice_tests(file->items, input.name, ctx.ast);
+    testgen::GatheredModule module =
+        testgen::gather_tests(file->items, input.name, ctx.ast);
     sources.parsed.files[sources.parsed.by_id[input.id]].items = module.items;
     spliced.push_back(input.id);
-    for (const testgen::RefusedItem& refused : module.refused) {
+    for (const testgen::RefusedTest& refused : module.refused) {
       switch (refused.reason) {
         case testgen::Refusal::Returns:
           (void)ctx.bag.emit<i18n::Key::PipelineTestEntryReturns>(

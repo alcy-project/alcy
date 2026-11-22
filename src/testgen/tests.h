@@ -45,18 +45,18 @@ enum class Refusal : u8 {
 };
 
 // A test a gather left out, and why.
-struct RefusedItem {
+struct RefusedTest {
   Refusal reason = Refusal::Returns;
   ast::Ident name;
 };
 
 // The name an item declares in its module's namespace, when the item is
-// one that names itself: the kinds a splice's items compete with. The
+// one that names itself: the kinds a gathered test competes with. The
 // caller reports it, so it carries its span too.
 std::optional<ast::Ident> declared_ident(const ast::ItemNode& item);
 
 // What a module's tests contribute once they are callable.
-struct SplicedModule {
+struct GatheredModule {
   // The module's items, with every gathered test replaced by a public
   // copy of its function. A module that declares no test gets its own
   // list back.
@@ -64,7 +64,7 @@ struct SplicedModule {
   // The tests that got a call in the driver, in declaration order.
   std::vector<TestCase> tests;
   // The tests that got none, in declaration order.
-  std::vector<RefusedItem> refused;
+  std::vector<RefusedTest> refused;
 };
 
 // Gathers the `#[test] fn`s in `items` and makes them public, which is
@@ -78,9 +78,9 @@ struct SplicedModule {
 //
 // Every node and list is allocated in `ast`, whose lifetime outlives the
 // module's items.
-SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
-                           std::string_view module,
-                           ast::AstArena& ast);
+GatheredModule gather_tests(std::span<const ast::ItemIdx> items,
+                            std::string_view module,
+                            ast::AstArena& ast);
 
 // The items of the module a run enters through: the module's own, without
 // its entry point, followed by the driver's. A run has one entry point and
