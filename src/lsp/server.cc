@@ -188,6 +188,9 @@ void Server::handle_request(const text::JsonValue& message) {
   const std::string_view method = string_field(message, "method");
   if (id != nullptr) {
     const std::string key = text::to_json(*id);
+    // A client may reuse an id; this request is now the one that id
+    // names, so an earlier answer must not suppress its cancellation.
+    answered_.erase(key);
     if (cancelled_.contains(key)) {
       cancelled_.erase(key);
       // The server handles one message at a time, so this refuses a

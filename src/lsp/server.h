@@ -32,6 +32,9 @@ class BoundedIdSet {
   }
 
   void insert(std::string id) {
+    if (ids_.contains(id)) {
+      return;
+    }
     if (order_.size() >= limit_) {
       ids_.erase(order_.front());
       order_.pop_front();
