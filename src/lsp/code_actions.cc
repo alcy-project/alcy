@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -175,6 +176,7 @@ text::JsonValue code_actions(const Document& document,
   }
   std::optional<ManifestSnapshot> manifest;
   bool manifest_checked = false;
+  std::unordered_set<std::string> emitted_dependencies;
   for (u32 i = 0; i < bag.size(); ++i) {
     const diag::Diagnostic* diagnostic = bag.at(i);
     if (diagnostic == nullptr || !diagnostic->has_primary_span ||
@@ -195,6 +197,9 @@ text::JsonValue code_actions(const Document& document,
       continue;
     }
     if (!intersects(start_offset, end_offset, diagnostic->primary_span)) {
+      continue;
+    }
+    if (!emitted_dependencies.insert(fix->replacement).second) {
       continue;
     }
     PositionCache positions;

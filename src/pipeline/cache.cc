@@ -67,6 +67,8 @@ base::Digest128 cache_key(const CacheInputs& inputs) {
   }
   std::sort(summaries.begin(), summaries.end());
   fingerprint::Builder canonical;
+  canonical.reserve(64 + inputs.triple.size() + inputs.target_name.size() +
+                    summaries.size() * 16);
   canonical.digest(identity).digest(manifest_hash);
   canonical.bytes(inputs.triple).u8(0);
   // The name is length-delimited: a name that ran into the next field
