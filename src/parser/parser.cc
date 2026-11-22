@@ -539,37 +539,7 @@ base::Result<std::span<const ast::ItemIdx>, diag::Reported> Parser::parse() {
     return base::make_err(diag::Reported{});
   }
   std::vector<ast::ItemIdx> items;
-  while (!at_end()) {
-    if (match(lexer::TokenKind::Semicolon)) {
-      continue;
-    }
-    Attributes attributes;
-    bool has_attributes = false;
-    if (peek_kind() == lexer::TokenKind::Hash) {
-      attributes = parse_attribute_list();
-      has_attributes = true;
-    }
-    // A brace opens a group only behind an attribute. A bare brace is
-    // not an item, and reads as a parse error the way tree-sitter does.
-    if (has_attributes && peek_kind() == lexer::TokenKind::LBrace) {
-      parse_conditional_group(attributes, items);
-      continue;
-    }
-    ast::ItemIdx item = parse_documented_item(attributes);
-    if (!item.is_valid()) {
-      if (ast_.exhausted()) {
-        break;
-      }
-      synchronize();
-      continue;
-    }
-    if (ast_.items[item].when_false) {
-      // The gate evaluated to false on this target: the item is not
-      // present for anything downstream.
-      continue;
-    }
-    items.push_back(item);
-  }
+  parse_items_until(std::nullopt, Attributes{}, items);
   return base::make_ok(
       std::span<const ast::ItemIdx>(ast::copy_to_arena(ast_.spans, items)));
 }
@@ -634,6 +604,48 @@ std::optional<ast::ItemIdx> Parser::parse_spelled_item(bool is_pub,
   return std::nullopt;
 }
 
+void Parser::parse_items_until(std::optional<lexer::TokenKind> terminator,
+                               Attributes inherited,
+                               std::vector<ast::ItemIdx>& out) {
+  using K = lexer::TokenKind;
+  while (!at_end()) {
+    if (terminator.has_value() && check(*terminator)) {
+      break;
+    }
+    if (match(K::Semicolon)) {
+      continue;
+    }
+    Attributes attributes = inherited;
+    bool has_attributes = false;
+    if (peek_kind() == K::Hash) {
+      const Attributes own = parse_attribute_list();
+      has_attributes = true;
+      attributes.merge_from(own);
+    }
+    // A brace opens a group only behind an attribute. A bare brace is
+    // not an item, and reads as a parse error the way tree-sitter does.
+    if (has_attributes && peek_kind() == K::LBrace) {
+      parse_conditional_group(attributes, out);
+      continue;
+    }
+    ast::ItemIdx item = parse_documented_item(attributes);
+    if (!item.is_valid()) {
+      if (ast_.exhausted()) {
+        break;
+      }
+      synchronize();
+      continue;
+    }
+    // An item the gate dropped exists nowhere. The module loop sees
+    // gates in `attributes`; a group passes its own gate through
+    // `inherited`, so both paths land here.
+    if (ast_.items[item].when_false) {
+      continue;
+    }
+    out.push_back(item);
+  }
+}
+
 void Parser::parse_conditional_group(Attributes attributes,
                                      std::vector<ast::ItemIdx>& out) {
   using K = lexer::TokenKind;
@@ -666,37 +678,7 @@ void Parser::parse_conditional_group(Attributes attributes,
   if (!expect(K::LBrace, "`{`")) {
     return;
   }
-  while (!check(K::RBrace) && !at_end()) {
-    if (match(K::Semicolon)) {
-      continue;
-    }
-    Attributes child = attributes;
-    bool has_attributes = false;
-    if (peek_kind() == K::Hash) {
-      const Attributes own = parse_attribute_list();
-      has_attributes = true;
-      child.merge_from(own);
-    }
-    if (has_attributes && peek_kind() == K::LBrace) {
-      parse_conditional_group(child, out);
-      continue;
-    }
-    ast::ItemIdx item = parse_documented_item(child);
-    if (!item.is_valid()) {
-      if (ast_.exhausted()) {
-        break;
-      }
-      synchronize();
-      continue;
-    }
-    // The group writes straight into the module's list, so the gate
-    // check the module loop performs never sees these items. Apply it
-    // here: an item the group's gate dropped exists nowhere.
-    if (ast_.items[item].when_false) {
-      continue;
-    }
-    out.push_back(item);
-  }
+  parse_items_until(K::RBrace, attributes, out);
   if (!expect(K::RBrace, "`}`")) {
     return;
   }

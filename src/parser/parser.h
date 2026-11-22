@@ -299,6 +299,12 @@ class Parser {
   ast::ItemIdx parse_item(Attributes attributes);
   // One item with the doc comments written above it attached.
   ast::ItemIdx parse_documented_item(Attributes attributes);
+  // Parses items until `terminator`, appending the ones whose gates pass.
+  // The module loop and the conditional group share this shape; the group
+  // passes its own terminator and inherited attributes here.
+  void parse_items_until(std::optional<lexer::TokenKind> terminator,
+                         Attributes inherited,
+                         std::vector<ast::ItemIdx>& out);
   // A `#[when(...)] { ... }` group: parse its items into `out` with the
   // group's gate inherited. The group is only source-level grouping, so
   // it leaves no node of its own in the tree.
