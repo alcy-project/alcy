@@ -1477,7 +1477,12 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::Or:
     case O::Xor: {
       DCHECK(count == 2);
-      push(make_inst(MOp::Mov, compute, dst_operand(), *lhs));
+      const bool checked_narrow =
+          check != nullptr && check->kind == overlay::Check::Overflow &&
+          (instr.op == O::IntAdd || instr.op == O::IntSub) &&
+          width_of(dst_tag()) < 4;
+      const u8 alu_width = checked_narrow ? width_of(dst_tag()) : compute;
+      push(make_inst(MOp::Mov, alu_width, dst_operand(), *lhs));
       const std::optional<Operand> rhs = scalar_of(at(1), span);
       if (!rhs.has_value()) {
         return false;
@@ -1488,10 +1493,10 @@ bool Selector::emit(const ir::Instruction& instr,
       if (const Imm* value = std::get_if<Imm>(&right);
           value != nullptr &&
           (value->value > 0x7fffffffLL || value->value < -0x80000000LL)) {
-        push(make_inst(MOp::Mov, compute, Operand{Reg::Rdx}, right));
+        push(make_inst(MOp::Mov, alu_width, Operand{Reg::Rdx}, right));
         right = Operand{Reg::Rdx};
       }
-      push(make_inst(alu_of(instr.op), compute, dst_operand(), right));
+      push(make_inst(alu_of(instr.op), alu_width, dst_operand(), right));
       if ((instr.op == O::IntAdd || instr.op == O::IntSub) &&
           check != nullptr && check->kind == overlay::Check::Overflow) {
         check_overflow(is_signed(dst_tag()) ? Cond::O : Cond::B);
@@ -1720,8 +1725,10 @@ bool Selector::emit(const ir::Instruction& instr,
         // The float type picks ss/sd; the integer type picks REX.W.
         // They are different widths on a mixed conversion, so carry
         // them separately as the opcode width and a third operand.
+        const i64 tagged =
+            is_signed(src) ? width_of(src) : -static_cast<i64>(width_of(src));
         push(make_inst(MOp::CvtI2F, width_of(dst), dst_operand(), *lhs,
-                       Operand{Imm{static_cast<i64>(width_of(src))}}));
+                       Operand{Imm{tagged}}));
         return true;
       }
       if (is_float(src) && is_integer(dst)) {
@@ -1730,11 +1737,14 @@ bool Selector::emit(const ir::Instruction& instr,
             : dst == ir::TypeTag::I16 || dst == ir::TypeTag::U16 ? 2
             : dst == ir::TypeTag::I32 || dst == ir::TypeTag::U32 ? 4
                                                                  : 8;
-        const bool uns = dst == ir::TypeTag::U8 || dst == ir::TypeTag::U16 ||
-                         dst == ir::TypeTag::U32 || dst == ir::TypeTag::U64 ||
-                         dst == ir::TypeTag::I1;
+        const i64 tagged =
+            dst == ir::TypeTag::I1 ? -16
+            : (dst == ir::TypeTag::U8 || dst == ir::TypeTag::U16 ||
+               dst == ir::TypeTag::U32 || dst == ir::TypeTag::U64)
+                ? -bytes
+                : bytes;
         push(make_inst(MOp::CvtF2I, width_of(src), dst_operand(), *lhs,
-                       Operand{Imm{uns ? -bytes : bytes}}));
+                       Operand{Imm{tagged}}));
         return true;
       }
       if (is_integer(src) && is_integer(dst)) {

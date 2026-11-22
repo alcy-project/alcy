@@ -337,11 +337,21 @@ void allocate(Body& body, const Frame& frame) {
         continue;
       }
       if (inst.op == MOp::CvtI2F) {
-        const Reg from = load_value(std::get<VReg>(inst.ops[1]));
-        const Operand src_width =
-            inst.count > 2 ? inst.ops[2] : Operand{Imm{static_cast<i64>(w)}};
-        push_labeled(
-            make_inst(MOp::CvtI2F, w, Operand{X}, Operand{from}, src_width));
+        Reg from = load_value(std::get<VReg>(inst.ops[1]));
+        const i64 tagged =
+            inst.count > 2 && std::holds_alternative<Imm>(inst.ops[2])
+                ? std::get<Imm>(inst.ops[2]).value
+                : static_cast<i64>(w);
+        const bool uns = tagged < 0;
+        const u8 src_bytes = static_cast<u8>(uns ? -tagged : tagged);
+        i64 encode_width = src_bytes;
+        if (uns && src_bytes < 8) {
+          // load_value zero-extended the narrow value; reading it as a
+          // signed 64-bit word gives the right magnitude.
+          encode_width = 8;
+        }
+        push_labeled(make_inst(MOp::CvtI2F, w, Operand{X}, Operand{from},
+                               Operand{Imm{encode_width}}));
         store_float(inst.ops[0], X);
         continue;
       }
@@ -354,8 +364,9 @@ void allocate(Body& body, const Frame& frame) {
         // operand names the destination type as a signed byte count,
         // negative when the type is unsigned.
         const i64 tagged = std::get<Imm>(inst.ops[2]).value;
+        const bool is_bool = tagged == -16;
         const bool uns = tagged < 0;
-        const i64 type_bytes = uns ? -tagged : tagged;
+        const i64 type_bytes = is_bool ? 1 : (uns ? -tagged : tagged);
         const u8 cvt_width = out_width < 4 ? 4 : out_width;
         const i64 conv_min = cvt_width == 4 ? INT32_MIN : INT64_MIN;
         const i64 type_min = !uns ? (type_bytes == 1   ? -128
@@ -363,14 +374,15 @@ void allocate(Body& body, const Frame& frame) {
                                                        : conv_min)
                                   : 0;
         const i64 type_max =
-            uns ? (type_bytes == 8   ? -1
-                   : type_bytes == 4 ? 4294967295LL
-                   : type_bytes == 2 ? 65535
-                                     : 255)
-                : (type_bytes == 1 ? 127
-                   : type_bytes == 2
-                       ? 32767
-                       : (cvt_width == 4 ? INT32_MAX : INT64_MAX));
+            is_bool ? 1
+            : uns   ? (type_bytes == 8   ? -1
+                       : type_bytes == 4 ? 4294967295LL
+                       : type_bytes == 2 ? 65535
+                                         : 255)
+                    : (type_bytes == 1 ? 127
+                       : type_bytes == 2
+                           ? 32767
+                           : (cvt_width == 4 ? INT32_MAX : INT64_MAX));
 
         push_labeled(make_inst(MOp::CvtF2I, w, Operand{Reg::Rax}, Operand{X},
                                Operand{Imm{static_cast<i64>(out_width)}}));
@@ -445,6 +457,28 @@ void allocate(Body& body, const Frame& frame) {
           MInst at_within = make_inst(MOp::Nop, 8);
           at_within.label = within;
           push_labeled(at_within);
+        }
+
+        if (!uns && type_bytes < cvt_width) {
+          const u32 in_range = body.label_count++;
+          push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
+                                 Operand{Imm{type_max}}));
+          push_labeled(make_jcc(Cond::Le, Operand{Label{in_range}}));
+          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                                 Operand{Imm{type_max}}));
+          push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+          MInst at_in = make_inst(MOp::Nop, 8);
+          at_in.label = in_range;
+          push_labeled(at_in);
+          const u32 above_min = body.label_count++;
+          push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
+                                 Operand{Imm{type_min}}));
+          push_labeled(make_jcc(Cond::Ge, Operand{Label{above_min}}));
+          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                                 Operand{Imm{type_min}}));
+          MInst at_min = make_inst(MOp::Nop, 8);
+          at_min.label = above_min;
+          push_labeled(at_min);
         }
 
         MInst at_done = make_inst(MOp::Nop, 8);
@@ -529,7 +563,7 @@ void allocate(Body& body, const Frame& frame) {
         const auto& base = std::get<Mem>(resolved).base;
         DCHECK(base.has_value());
         (void)reg_of(*base);
-        push_labeled(make_inst(MOp::Mov, 8, Operand{Reg::Rsi}, resolved));
+        push_labeled(make_inst(MOp::Lea, 8, Operand{Reg::Rsi}, resolved));
       } else {
         DCHECK_MSG(false, "a wide move reads an address");
       }
