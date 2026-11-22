@@ -13,10 +13,10 @@ namespace fingerprint {
 
 using Digest = base::Digest128;
 
-// A canonical, length-delimited byte stream that both the compiler's
-// build cache and the editor's source signature hash with the project's
-// one hash. The bytes are accumulated in the order the caller adds them,
-// so two readers of the same inputs reach the same digest.
+// A caller-delimited byte stream that both the compiler's build cache
+// and the editor's source signature hash with the project's one hash.
+// The caller owns field separation; the builder only appends in the
+// order given, so two readers of the same inputs reach the same digest.
 class Builder {
  public:
   Builder& bytes(std::string_view data) {

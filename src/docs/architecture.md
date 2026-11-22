@@ -208,7 +208,7 @@ state between stages beyond the data explicitly passed along.
 | `i18n`                    | Stands for `internationalization`. The languages the compiler reports in, and the catalog that holds every message it can print.                      | Catalog strings are static; the cli owns the composed copies.                   |
 | `text`                    | Text primitives shared across stages: escape decoding for string literals, and JSON reading and writing.                                              | Owned strings; cold paths only.                                                 |
 | `symbol`                  | Mangling and demangling for linker-visible names, so a source name cannot collide with another package's symbol.                                      | Owned name strings; cold paths only.                                            |
-| `fingerprint`             | The canonical, length-delimited byte stream shared by the build cache and the editor's source signature; one digest over the bytes a reader feeds it. | One byte buffer per signature, built on the caller's side of a cache lookup.    |
+| `fingerprint`             | The caller-delimited byte stream shared by the build cache and the editor's source signature; one digest over the bytes a reader feeds it. | One byte buffer per signature, built on the caller's side of a cache lookup.    |
 | `base`, `debug`, `config` | Low-level shared facilities for numeric types, nesting limits, open-addressed tables, diagnostics/assertion helpers, and build-time flags.            | Zero heap allocations, apart from the table slots that grow on demand.          |
 
 Supporting targets include `tests` and `benchmarks`.
