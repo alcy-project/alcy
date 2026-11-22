@@ -1,10 +1,10 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Paths over bytes, the platform's own separator. The bytes are
-// validated UTF-8 whenever the path came from text and kept as they
-// are otherwise: a path is what the operating system was handed, not
-// a rule this package enforces on the kernel.
+// Paths over bytes, the platform's own separator. A path holds valid
+// UTF-8: text becomes its bytes directly, and `from_bytes` checks bytes
+// that come from elsewhere. A path is what the operating system was
+// handed, but only within the UTF-8 names this type can represent.
 
 use core::string::is_utf8;
 
