@@ -21,6 +21,14 @@ either way. What differs is the fixture lifecycle and what the number
 includes. `kind` tells them apart and a comparison selects records by
 `benchmark_id`, so they are never lined up against each other.
 
+An `lsp-session` case (`kind = "lsp-session"`, with `phase` one of
+`open`, `edit`, `hover`) drives the real server over a manifest
+package: one session per repetition, timed from inside - from the
+phase's request being written to its answer arriving. The spawn and
+the session setup before the phase are setup, not the number, and the
+figure carries the manifest, the siblings, and the transport that the
+in-process lsp cases leave out.
+
 ## Process cases
 
 A case is declared in `benchmarks/suites/cases.toml` and runs a

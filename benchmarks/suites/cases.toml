@@ -149,3 +149,44 @@ argv = ["lint", "."]
 expected_exit = 0
 repetitions = 15
 warmup = 3
+
+# The editor's session against the real server, one process per
+# repetition, timed from inside the session: the phase's request is
+# written and the phase's answer is awaited, and the spawn and the
+# session setup before it are not in the number. The fixture is a
+# manifest package, so the reading is the package one an editor session
+# on a project builds - summaries and siblings, not a lone file.
+[[case]]
+id = "lsp/session-open"
+kind = "lsp-session"
+phase = "open"
+fixture = "lsp-package"
+argv = []
+expected_exit = 0
+repetitions = 10
+warmup = 2
+
+# The edit's rebuild, as a session sees it: the same reading the open
+# case built, invalidated by one didChange. Compare against the micro
+# lsp/reanalyze floor - this carries the manifest, the sibling, and the
+# transport, and the two are never lined up against each other.
+[[case]]
+id = "lsp/session-edit"
+kind = "lsp-session"
+phase = "edit"
+fixture = "lsp-package"
+argv = []
+expected_exit = 0
+repetitions = 10
+warmup = 2
+
+# A hover on the warm reading, round trip.
+[[case]]
+id = "lsp/session-hover"
+kind = "lsp-session"
+phase = "hover"
+fixture = "lsp-package"
+argv = []
+expected_exit = 0
+repetitions = 10
+warmup = 2

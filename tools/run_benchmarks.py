@@ -63,6 +63,15 @@ def load_suite(path: Path) -> list[dict]:
             isinstance(a, str) for a in case["argv"]
         ):
             raise SuiteError(f"{path}: {case['id']}: argv must be a list of strings")
+        kind = case.get("kind", "process")
+        if kind not in ("process", "lsp-session"):
+            raise SuiteError(f"{path}: {case['id']}: unknown kind {kind!r}")
+        if kind == "lsp-session" and case.get("phase") not in (
+            "open",
+            "edit",
+            "hover",
+        ):
+            raise SuiteError(f"{path}: {case['id']}: an lsp-session case needs a phase")
     return cases
 
 
@@ -122,6 +131,66 @@ def summarize(samples_ns: list[int]) -> dict:
         "max": ordered[-1],
         "stddev": round(statistics.stdev(ordered), 1) if len(ordered) > 1 else 0.0,
     }
+
+
+def measure_lsp_session(
+    case: dict,
+    binary: Path,
+    fixtures_dir: Path,
+    build_subdir: str,
+    build_mode: str,
+) -> dict:
+    """One editor session per repetition, timed from inside the session.
+
+    The driver spawns the real server, speaks the protocol, and reports
+    the nanoseconds one phase took: the process spawn and the setup
+    before the phase are setup, not the number. The suite's repetitions
+    pool the per-session figures into the record the other kinds write.
+    """
+    repetitions = int(case.get("repetitions", 10))
+    warmup = int(case.get("warmup", 2))
+    driver = project_root_dir / "tools" / "lsp_session_driver.py"
+
+    with tempfile.TemporaryDirectory(prefix="alcy_bench_") as scratch:
+        work_dir = Path(scratch)
+        digest = fixture_digest(fixtures_dir / case["fixture"])
+        cwd = prepare_workspace(case, fixtures_dir, work_dir)
+        argv = [
+            sys.executable,
+            str(driver),
+            "--alcy",
+            str(binary),
+            "--root",
+            str(cwd),
+            "--phase",
+            case["phase"],
+        ]
+        samples_ns: list[int] = []
+        for _ in range(warmup + repetitions):
+            proc = subprocess.run(
+                argv, cwd=cwd, capture_output=True, text=True, timeout=300
+            )
+            if proc.returncode != case["expected_exit"]:
+                raise SuiteError(
+                    f"{case['id']}: exit {proc.returncode}, "
+                    f"want {case['expected_exit']}: {proc.stderr.strip()}"
+                )
+            if _ >= warmup:
+                samples_ns.append(json.loads(proc.stdout)["ns"])
+
+    record = {
+        "schema_version": SCHEMA_VERSION,
+        "benchmark_id": case["id"],
+        "kind": "lsp-session",
+        "command": ["alcy", "lsp", "--phase", case["phase"]],
+        "fixture_digest": digest,
+        "repetitions": repetitions,
+        "warmup": warmup,
+        "samples_ns": samples_ns,
+        "stats": summarize(samples_ns),
+    }
+    record.update(environment(binary, build_subdir, build_mode))
+    return record
 
 
 def measure(
@@ -661,13 +730,22 @@ def run_process(args) -> int:
     records = []
     for case in cases:
         try:
-            record = measure(
-                case,
-                binary,
-                fixtures_dir,
-                args.build_subdir,
-                args.build_mode or infer_build_mode(args.build_subdir),
-            )
+            if case.get("kind") == "lsp-session":
+                record = measure_lsp_session(
+                    case,
+                    binary,
+                    fixtures_dir,
+                    args.build_subdir,
+                    args.build_mode or infer_build_mode(args.build_subdir),
+                )
+            else:
+                record = measure(
+                    case,
+                    binary,
+                    fixtures_dir,
+                    args.build_subdir,
+                    args.build_mode or infer_build_mode(args.build_subdir),
+                )
         except SuiteError as e:
             print(f"error: {e}")
             return -1
