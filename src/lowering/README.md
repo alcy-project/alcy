@@ -10,17 +10,20 @@ translation units) carries the lowering state; it is not public API.
 
 ## Entry points
 
-- `lower_package(package, width, ast, strings, bag, profiler, sources)` ->
-  `base::Result<LoweredPackage, diag::Reported>`. The checked types
-  arrive as `ir::VerifiedStorage` proof, so no entry re-verification
-  runs; the finished IR is verified once by `StorageBuilder::build`
-  on the way out (`LOWER_INTERNAL`). With `sources`, a runtime panic
-  names the span it was lowered at.
+- `lower_package(package, width, ast, strings, bag, profiler, sources,
+  max_functions, checked_out)` -> `base::Result<LoweredPackage,
+  diag::Reported>`. The checked types arrive as `ir::VerifiedStorage`
+  proof, so no entry re-verification runs; the finished IR is verified
+  once by `StorageBuilder::build` on the way out (`LOWER_INTERNAL`).
+  With `sources`, a runtime panic names the span it was lowered at.
+  `checked_out`, when given, receives the consumed package on every exit
+  so a caller can keep its metadata without a second analysis.
 
 ## Input requirements
 
 - `CheckedPackage` is consumed by move: lowering reseeds its builder
-  from the checked types' proof and the package must not be used
-  after.
+  from the checked types' proof. The caller keeps the returned
+  `checked_out` for metadata; its `types` and, after lowering ran,
+  its drop tables have moved to the builder or the lowered result.
 - A `Lowerer` that set `failed` yields no package; diagnostics for
   the failure are already in the bag.

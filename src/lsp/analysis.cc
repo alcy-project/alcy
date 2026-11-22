@@ -92,7 +92,9 @@ void check_tree(PackageAnalysis& out,
         // Lowering itself failed: the consumed package's types were
         // moved out and no lowered storage exists. No feature may read
         // those tables, so answer nothing instead of indexing an empty
-        // table.
+        // table. This is a deliberate trade-off: keeping checked types
+        // for this rare case would need a clone on every analysis, and
+        // a borrow error already keeps its lowered storage above.
         types_unavailable = true;
       }
       // The call hands the consumed package back on every exit.
