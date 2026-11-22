@@ -142,11 +142,13 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
       return llvm::StructType::get(module_->getContext(), {});
     case T::I1: return builder_->getInt1Ty();
     case T::I8:
-    case T::U8: return builder_->getInt8Ty();
+    case T::U8:
+    case T::Char: return builder_->getInt8Ty();
     case T::I16:
     case T::U16: return builder_->getInt16Ty();
     case T::I32:
-    case T::U32: return builder_->getInt32Ty();
+    case T::U32:
+    case T::Rune: return builder_->getInt32Ty();
     case T::I64:
     case T::U64: return builder_->getInt64Ty();
     case T::Isize:

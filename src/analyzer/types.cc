@@ -518,6 +518,8 @@ ir::TypeIdx Checker::primitive_type(ast::PrimitiveKind kind, diag::Span span) {
     case PK::F64: return builder.primitive(TT::F64);
     case PK::Bool: return builder.primitive(TT::I1);
     case PK::Str: return builder.primitive(TT::Str);
+    case PK::Char: return builder.primitive(TT::Char);
+    case PK::Rune: return builder.primitive(TT::Rune);
     case PK::I128:
     case PK::U128: {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeNotSupported>(
@@ -1438,7 +1440,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "wrapping_mul" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
          name == "arg_count" || name == "arg" || name == "environ_exists" ||
-         name == "environ_value";
+         name == "environ_value" || name == "char_from_u8_unchecked" ||
+         name == "rune_from_u32_unchecked";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -1454,7 +1457,8 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "sys_read" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
          name == "arg_count" || name == "arg" || name == "environ_exists" ||
-         name == "environ_value";
+         name == "environ_value" || name == "char_from_u8_unchecked" ||
+         name == "rune_from_u32_unchecked";
 }
 
 // What may cross a C boundary in the first ABI slice :
@@ -1732,6 +1736,12 @@ bool Checker::check_intrinsic_signature(u32 module,
     expected.push_back(builder.reference_type(u8, false));
     expected.push_back(usize_ty);
     expected_ret = str;
+  } else if (name == "char_from_u8_unchecked") {
+    expected.push_back(builder.primitive(ir::TypeTag::U8));
+    expected_ret = builder.primitive(ir::TypeTag::Char);
+  } else if (name == "rune_from_u32_unchecked") {
+    expected.push_back(builder.primitive(ir::TypeTag::U32));
+    expected_ret = builder.primitive(ir::TypeTag::Rune);
   } else if (name == "file_size") {
     expected.push_back(slice_ref);
     expected_ret = builder.primitive(ir::TypeTag::I64);

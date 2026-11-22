@@ -32,6 +32,9 @@
 
 - `match` requires exhaustive arms over integer/bool literals, unit
   and tuple variant patterns, tuple and struct patterns, and `_`.
+  Character ranges (`'a'..='z'`, `'a'..<'z'`) test membership of a
+  `char` or `rune` without contributing to exhaustiveness, which
+  still needs a wildcard for those types.
   Bindings move by default; `&`/`&mut` patterns borrow. A binding
   behind a reference is a shared reference: `match *e` with `e: &E`
   binds `s: &T`, the referent stays its owner to end, and moving

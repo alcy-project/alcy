@@ -18,7 +18,7 @@ inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
 // flag it never read.
 // Major 7 adds the pointer-width type spellings to the pre-interned
 // prefix of the type table; a reader that predates it must refuse.
-inline constexpr u16 MAJOR = 7;
+inline constexpr u16 MAJOR = 8;
 // Minor 1 adds the specialization and synthetic function lists.
 // Minor 2 adds the per-type trait tables.
 inline constexpr u16 MINOR = 2;

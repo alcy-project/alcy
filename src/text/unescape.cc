@@ -112,4 +112,31 @@ std::string unescape_string(std::string_view spelling) {
   return out;
 }
 
+u32 char_literal_value(std::string_view spelling) {
+  const std::string bytes = unescape_string(spelling);
+  if (bytes.empty()) {
+    return 0xFFFD;
+  }
+  const auto at = [&](usize i) { return static_cast<u32>(bytes[i]); };
+  u32 scalar = at(0);
+  usize width = 1;
+  if (scalar >= 0xF0) {
+    width = 4;
+    scalar &= 0x07;
+  } else if (scalar >= 0xE0) {
+    width = 3;
+    scalar &= 0x0F;
+  } else if (scalar >= 0xC0) {
+    width = 2;
+    scalar &= 0x1F;
+  }
+  if (bytes.size() < width) {
+    return 0xFFFD;
+  }
+  for (usize i = 1; i < width; ++i) {
+    scalar = (scalar << 6) | (at(i) & 0x3F);
+  }
+  return scalar;
+}
+
 }  // namespace text

@@ -77,8 +77,9 @@ stands; reserved forms are rejected with guidance diagnostics.
   must name a Unicode scalar value: `\u{110000}` is past the last one,
   and a surrogate such as `\u{D800}` is not one. Raw bytes in the
   literal follow the same rule: a byte sequence that spells no scalar
-  is the same diagnostic as an escape that spells one. `'x'` character
-  syntax exists but resolves only with core (see `types.md`).
+  is the same diagnostic as an escape that spells one. A `'x'` literal
+  is a `char` for an ASCII scalar and a `rune` for any other scalar;
+  a `rune` context takes an ASCII literal too (see `types.md`).
 - Longest-match lexing applies throughout.
 
 ## Items
@@ -167,8 +168,12 @@ pattern and `x - 1` never parses as a pattern. The sign is not part of
 the literal's spelling; it is recorded separately, so the magnitude
 parses identically either way.
 
+A literal pattern may be followed by `..=` or `..<` and another
+literal, making a range pattern. Its endpoints must name the same
+type, and bare `..` is not a pattern.
+
 Declaration left-hand sides use this grammar with `:=`
-(`(c, _) := ...`, `_ := ...`). Range patterns are deferred.
+(`(c, _) := ...`, `_ := ...`).
 
 ## Expressions (lowest to highest precedence)
 

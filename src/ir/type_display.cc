@@ -63,6 +63,8 @@ std::string type_display_at(const StorageState& state,
     case TypeTag::F32: return "f32";
     case TypeTag::F64: return "f64";
     case TypeTag::Str: return "str";
+    case TypeTag::Char: return "char";
+    case TypeTag::Rune: return "rune";
     case TypeTag::Slice: {
       const SliceType& slice = state.slice_types[node.as_slice()];
       return "[" + type_display_at(state, strings, slice.element, depth + 1) +

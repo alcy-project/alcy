@@ -58,6 +58,8 @@ enum class TokenKind : u8 {
   F64,
   Bool,
   Str,
+  CharType,
+  RuneType,
 
   // Reserved words (parsed, rejected with guidance), plus the
   // contextual keywords the parser matches in position: `comp` in

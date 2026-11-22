@@ -226,6 +226,14 @@ TEST_CASE("Lexer reads strings and reports unterminated ones") {
   CHECK(f.bag.has_errors());
 }
 
+TEST_CASE("Lexer reads the scalar type keywords") {
+  Fixture f;
+  CHECK(
+      check_kinds("char rune", f.bag,
+                  {TokenKind::CharType, TokenKind::RuneType, TokenKind::Eof}));
+  CHECK(!f.bag.has_errors());
+}
+
 TEST_CASE("Lexer reads characters") {
   Fixture f;
   CHECK(check_kinds(

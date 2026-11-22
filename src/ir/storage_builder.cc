@@ -244,6 +244,8 @@ struct Reached {
       case T::F32:
       case T::F64:
       case T::Str:
+      case T::Char:
+      case T::Rune:
       case T::Ptr:
       case T::Function:
       case T::Never:

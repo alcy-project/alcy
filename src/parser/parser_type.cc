@@ -293,7 +293,9 @@ ast::TypeIdx Parser::parse_type() {
     case T::Usize:
     case T::F32:
     case T::F64:
-    case T::Bool: {
+    case T::Bool:
+    case T::CharType:
+    case T::RuneType: {
       const T kind = peek_kind();
       advance();
       ast::TypeNode node;
@@ -317,6 +319,8 @@ ast::TypeIdx Parser::parse_type() {
         case T::Usize: type_kind = P::Usize; break;
         case T::F32: type_kind = P::F32; break;
         case T::F64: type_kind = P::F64; break;
+        case T::CharType: type_kind = P::Char; break;
+        case T::RuneType: type_kind = P::Rune; break;
         default: type_kind = P::Bool; break;
       }
       node.payload.set(ast::TypePrimitive{
@@ -482,8 +486,28 @@ ast::PatternIdx Parser::parse_primary_pattern() {
           ast::Literal{kind, span, bytes_.substr(span.offset, span.length)});
       advance();
       ast::PatternNode node;
-      node.kind = ast::PatternKind::Literal;
       node.span = span_from(mark);
+      const bool inclusive = peek_kind() == lexer::TokenKind::DotDotEq;
+      if (inclusive || peek_kind() == lexer::TokenKind::DotDotLess) {
+        advance();
+        if (peek_kind() != lexer::TokenKind::Char &&
+            peek_kind() != lexer::TokenKind::Integer) {
+          expect(lexer::TokenKind::Char, "a range endpoint");
+          return ast::PatternIdx::invalid();
+        }
+        const lexer::TokenKind end_kind = peek_kind();
+        const diag::Span end_span = peek().span;
+        const ast::LiteralIdx end = ast_.literals.push_back(ast::Literal{
+            end_kind == lexer::TokenKind::Char ? ast::LiteralKind::Char
+                                               : ast::LiteralKind::Integer,
+            end_span, bytes_.substr(end_span.offset, end_span.length)});
+        advance();
+        node.kind = ast::PatternKind::Range;
+        node.payload.range = ast::PatternRange{
+            .start = value, .end = end, .inclusive = inclusive};
+        return ast_.patterns.push_back(node);
+      }
+      node.kind = ast::PatternKind::Literal;
       node.payload.literal.value = value;
       return ast_.patterns.push_back(node);
     }

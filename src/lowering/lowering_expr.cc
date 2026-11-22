@@ -184,6 +184,13 @@ ir::TypeTag Lowerer::literal_tag(ast::LiteralIdx value,
   if (lit.kind == ast::LiteralKind::String) {
     return ir::TypeTag::Str;
   }
+  if (lit.kind == ast::LiteralKind::Char) {
+    if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Rune) {
+      return ir::TypeTag::Rune;
+    }
+    return text::char_literal_value(lit.spelling) <= 0x7F ? ir::TypeTag::Char
+                                                          : ir::TypeTag::Rune;
+  }
   const bool is_float = lit.kind == ast::LiteralKind::Float;
   if (expected != nullptr) {
     const ir::TypeTag tag = tag_of(*expected);
@@ -294,6 +301,10 @@ Val Lowerer::lower_literal(ast::LiteralIdx lit_idx,
     const ir::ImmutableIdx imm =
         builder.immutable({.type = type, .data = {.str_id_value = id}});
     return Val{to_operand(imm, type), type, false, false};
+  }
+  if (tag == ir::TypeTag::Char || tag == ir::TypeTag::Rune) {
+    const u32 scalar = text::char_literal_value(lit.spelling);
+    return Val{imm_from_u64(tag, type, scalar), type, false, false};
   }
   if (tag == ir::TypeTag::F32 || tag == ir::TypeTag::F64) {
     // The digits round once, to the literal's own type: a
@@ -734,6 +745,7 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
   const base::NestingScope scope(nesting_);
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
+    case ast::PatternKind::Range: failed = true; return;
     case ast::PatternKind::Wildcard:
       // A wildcard binding of a droppable place discards it by ending
       // it, so a destructured field nothing binds still runs its
@@ -2109,6 +2121,9 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "str_from_parts") {
     return lower_str_from_parts_intrinsic(expr, sig, type_args);
   }
+  if (name == "char_from_u8_unchecked" || name == "rune_from_u32_unchecked") {
+    return lower_scalar_from_parts_intrinsic(expr, sig, type_args);
+  }
   internal(ast.exprs[expr].span, "unknown intrinsic");
   return Val{size_one, error_type(), false, false};
 }
@@ -2767,6 +2782,26 @@ Val Lowerer::lower_str_from_parts_intrinsic(
   return Val{to_operand(addr, str_ty), str_ty, true, false};
 }
 
+Val Lowerer::lower_scalar_from_parts_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& /*type_args*/) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  const ir::TypeIdx target = expr_type(expr);
+  Val value = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  const ir::RegisterIdx cast =
+      emit(ir::Opcode::TypeCast, target, {use_value(value)});
+  return Val{to_operand(cast, target), target, false, false};
+}
+
 ir::TypeIdx Lowerer::usize_type() {
   return builder.primitive(ir::TypeTag::Usize);
 }
@@ -3294,13 +3329,63 @@ Val Lowerer::lower_str_intrinsic(ast::ExprIdx expr, std::string_view name) {
     if (failed) {
       return Val{size_one, error_type(), false, false};
     }
+    // A scalar boundary is the start of a code point. Reading the byte
+    // there tells us a continuation cannot open one; the end of the
+    // view is a boundary by definition. An empty view has no byte to
+    // read, so it skips the check altogether.
+    const ir::TypeIdx byte_ref = builder.reference_type(u8_ty, false);
+    const ir::OperandIdx mask_c0 = imm_from_u64(ir::TypeTag::U8, u8_ty, 0xC0);
+    const ir::OperandIdx mask_80 = imm_from_u64(ir::TypeTag::U8, u8_ty, 0x80);
+    const auto continuation = [&](ir::OperandIdx pos) {
+      const ir::RegisterIdx at_end = emit(ir::Opcode::Eq, boolean, {pos, len});
+      const ir::RegisterIdx last =
+          emit(ir::Opcode::IntSub, usize_ty, {len, const_usize(1)});
+      const ir::RegisterIdx read_at =
+          emit(ir::Opcode::Select, usize_ty,
+               {to_operand(at_end, boolean), to_operand(last, usize_ty), pos});
+      const ir::RegisterIdx addr = emit(ir::Opcode::ElemOffset, byte_ref,
+                                        {bytes, to_operand(read_at, usize_ty)});
+      const ir::RegisterIdx byte =
+          emit(ir::Opcode::Load, u8_ty, {to_operand(addr, byte_ref)});
+      const ir::RegisterIdx high =
+          emit(ir::Opcode::And, u8_ty, {to_operand(byte, u8_ty), mask_c0});
+      const ir::RegisterIdx is_cont =
+          emit(ir::Opcode::Eq, boolean, {to_operand(high, u8_ty), mask_80});
+      return emit(ir::Opcode::And, boolean,
+                  {to_operand(emit(ir::Opcode::Not, boolean,
+                                   {to_operand(at_end, boolean)}),
+                              boolean),
+                   to_operand(is_cont, boolean)});
+    };
+    const ir::BlockIdx check_block = reserve_block();
+    const ir::BlockIdx join_block = reserve_block();
+    const ir::RegisterIdx len_is_zero =
+        emit(ir::Opcode::Eq, boolean,
+             {len, imm_from_u64(ir::TypeTag::Usize, usize_ty, 0)});
+    emit_cond_br(to_operand(len_is_zero, boolean), join_block, check_block);
+    switch_to(check_block);
+    const ir::RegisterIdx start_bad = continuation(start);
+    const ir::RegisterIdx end_bad = continuation(end);
+    const ir::RegisterIdx boundary_bad =
+        emit(ir::Opcode::Or, boolean,
+             {to_operand(start_bad, boolean), to_operand(end_bad, boolean)});
+    const ir::BlockIdx boundary_ok = reserve_block();
+    const ir::BlockIdx boundary_fail = reserve_block();
+    emit_cond_br(to_operand(boundary_bad, boolean), boundary_fail, boundary_ok);
+    switch_to(boundary_fail);
+    emit_panic(node.span, str_operand("slice not on a scalar boundary"));
+    switch_to(boundary_ok);
+    emit_br(join_block);
+    switch_to(join_block);
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
     // A byte reference at `start`: the element offset names a place
     // inside the source buffer, so the loan the view carries reaches
     // the result str the way it reaches the one `str_from_parts`
     // builds. Advancing by integer arithmetic would leave the register
     // loan-free, and a slice would then outlive the growth that frees
     // the buffer under it.
-    const ir::TypeIdx byte_ref = builder.reference_type(u8_ty, false);
     const ir::RegisterIdx sub_ref =
         emit(ir::Opcode::ElemOffset, byte_ref, {bytes, start});
     if (failed) {
@@ -4853,6 +4938,8 @@ bool Lowerer::pattern_bindable(ast::PatternIdx pattern) const {
     case ast::PatternKind::Wildcard:
     case ast::PatternKind::Ident:
     case ast::PatternKind::MutIdent: return true;
+    case ast::PatternKind::Range:
+    case ast::PatternKind::Literal: return false;
     case ast::PatternKind::Ref: return pattern_bindable(node.payload.ref.inner);
     case ast::PatternKind::Tuple: {
       if (node.payload.tuple.path.is_valid()) {
@@ -4873,7 +4960,6 @@ bool Lowerer::pattern_bindable(ast::PatternIdx pattern) const {
       }
       return true;
     }
-    case ast::PatternKind::Literal:
     case ast::PatternKind::Or: return false;
   }
   return false;
@@ -4977,6 +5063,33 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
         return;
       }
       emit_br(body_block);
+      switch_to(body_block);
+      return;
+    }
+    case ast::PatternKind::Range: {
+      const ast::PatternRange& range = node.payload.range;
+      Val lo = lower_literal(range.start, &scrut_type);
+      if (failed) {
+        return;
+      }
+      Val hi = lower_literal(range.end, &scrut_type);
+      if (failed) {
+        return;
+      }
+      Val actual = materialize(scrut_addr);
+      if (failed) {
+        return;
+      }
+      const ir::TypeIdx boolean = builder.primitive(ir::TypeTag::I1);
+      const ir::RegisterIdx above =
+          emit(ir::Opcode::Ge, boolean, {actual.op, lo.op});
+      const ir::RegisterIdx below =
+          range.inclusive ? emit(ir::Opcode::Le, boolean, {actual.op, hi.op})
+                          : emit(ir::Opcode::Lt, boolean, {actual.op, hi.op});
+      const ir::RegisterIdx test =
+          emit(ir::Opcode::And, boolean,
+               {to_operand(above, boolean), to_operand(below, boolean)});
+      emit_cond_br(to_operand(test, boolean), body_block, fail_block);
       switch_to(body_block);
       return;
     }
@@ -6048,10 +6161,6 @@ Val Lowerer::lower_expr(ast::ExprIdx expr, const ir::TypeIdx* expected) {
   switch (node.kind) {
     case ast::ExprKind::Literal: {
       const ast::ExprLiteral& literal = node.payload.get<ast::ExprLiteral>();
-      if (ast.literals[literal.value].kind == ast::LiteralKind::Char) {
-        internal(node.span, "character literal without type");
-        return Val{size_one, error_type(), false, false};
-      }
       // The checker already settled this literal's type; re-deriving it
       // would emit an `i32` in a `usize` function, which is invalid IR.
       const ir::TypeIdx checked = expr_type(expr);

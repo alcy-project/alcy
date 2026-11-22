@@ -22,6 +22,8 @@ inline constexpr bool is_integer_type(TypeTag tag) {
     case T::I64:
     // case T::I128:
     case T::U8:
+    case T::Char:
+    case T::Rune:
     case T::U16:
     case T::U32:
     case T::U64:

@@ -44,11 +44,13 @@ std::optional<Access> access_for(ir::TypeTag tag, ir::PointerWidth width) {
   switch (tag) {
     case T::I1: return Access{0x2D, 0, 0x3A, 0};  // load8_u / store8
     case T::I8: return Access{0x2C, 0, 0x3A, 0};
-    case T::U8: return Access{0x2D, 0, 0x3A, 0};
+    case T::U8:
+    case T::Char: return Access{0x2D, 0, 0x3A, 0};
     case T::I16: return Access{0x2E, 1, 0x3B, 1};
     case T::U16: return Access{0x2F, 1, 0x3B, 1};
     case T::I32:
-    case T::U32: return Access{0x28, 2, 0x36, 2};
+    case T::U32:
+    case T::Rune: return Access{0x28, 2, 0x36, 2};
     case T::I64:
     case T::U64: return Access{0x29, 3, 0x37, 3};
     case T::Isize:

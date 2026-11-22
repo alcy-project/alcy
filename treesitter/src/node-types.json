@@ -184,6 +184,10 @@
         "named": true
       },
       {
+        "type": "range_pattern",
+        "named": true
+      },
+      {
         "type": "reference_pattern",
         "named": true
       },
@@ -218,6 +222,10 @@
         "named": true
       },
       {
+        "type": "char_type",
+        "named": true
+      },
+      {
         "type": "function_type",
         "named": true
       },
@@ -247,6 +255,10 @@
       },
       {
         "type": "reference_type",
+        "named": true
+      },
+      {
+        "type": "rune_type",
         "named": true
       },
       {
@@ -1814,6 +1826,10 @@
             "named": true
           },
           {
+            "type": "range_pattern",
+            "named": true
+          },
+          {
             "type": "reference_pattern",
             "named": true
           },
@@ -3174,6 +3190,10 @@
             "named": true
           },
           {
+            "type": "range_pattern",
+            "named": true
+          },
+          {
             "type": "reference_pattern",
             "named": true
           },
@@ -3667,6 +3687,32 @@
     }
   },
   {
+    "type": "range_pattern",
+    "named": true,
+    "fields": {
+      "end": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "char",
+            "named": true
+          }
+        ]
+      },
+      "start": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "char",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "raw_ptr_type",
     "named": true,
     "fields": {
@@ -3704,6 +3750,10 @@
           },
           {
             "type": "negative_literal_pattern",
+            "named": true
+          },
+          {
+            "type": "range_pattern",
             "named": true
           },
           {
@@ -4870,6 +4920,10 @@
     "named": true
   },
   {
+    "type": "char_type",
+    "named": true
+  },
+  {
     "type": "comp",
     "named": false
   },
@@ -4966,6 +5020,10 @@
   {
     "type": "ret",
     "named": false
+  },
+  {
+    "type": "rune_type",
+    "named": true
   },
   {
     "type": "self",

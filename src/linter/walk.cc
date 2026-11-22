@@ -282,6 +282,7 @@ void walk_pattern(LintContext& ctx,
   using K = ast::PatternKind;
   switch (node.kind) {
     case K::Wildcard:
+    case K::Range:
     case K::Ident:
     case K::MutIdent:
     case K::Literal: break;

@@ -443,6 +443,8 @@ module.exports = grammar({
       $.unit_type,
       $.never_type,
       $.str_type,
+      $.char_type,
+      $.rune_type,
       $.tuple_type,
       $.paren_type,
       $.function_type,
@@ -465,6 +467,10 @@ module.exports = grammar({
     never_type: _ => '!',
 
     str_type: _ => 'str',
+
+    char_type: _ => 'char',
+
+    rune_type: _ => 'rune',
 
     tuple_type: $ => seq(
       '(',
@@ -569,6 +575,7 @@ module.exports = grammar({
       $.mut_identifier_pattern,
       $.identifier_pattern,
       $.literal_pattern,
+      $.range_pattern,
       $.negative_literal_pattern,
       $.tuple_pattern,
       $.tuple_variant_pattern,
@@ -591,6 +598,13 @@ module.exports = grammar({
     identifier_pattern: $ => prec(1, field('name', choice($.identifier, alias('self', $.self)))),
 
     literal_pattern: $ => $._literal,
+
+    // A character range in a match arm. Bare `..` is not a pattern.
+    range_pattern: $ => prec(1, seq(
+      field('start', $.char),
+      choice('..=', '..<'),
+      field('end', $.char),
+    )),
 
     // A `-` binds only to an integer or float literal, so `x - 1` never
     // parses as a pattern (grammar.md, "Patterns").
@@ -1075,6 +1089,7 @@ module.exports = grammar({
       $.mut_identifier_pattern,
       $.identifier_pattern,
       $.literal_pattern,
+      $.range_pattern,
       $.negative_literal_pattern,
       $.tuple_variant_pattern,
       $.struct_pattern,

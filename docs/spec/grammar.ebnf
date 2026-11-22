@@ -127,7 +127,7 @@ conditional_group = "{" , { item } , "}" ;
 
 (* Types *)
 
-type        = primitive | "()" | "!" | "str"
+type        = primitive | "()" | "!" | "str" | "char" | "rune"
             | tuple_type | paren_type | array_type | slice_type
             | ref_type | raw_ptr_type | path_type | func_type
             | owning_func_type ;
@@ -168,6 +168,7 @@ path_type   = path , [ "<" , type_arg , { "," , type_arg } , ">" ] ;
 (* Patterns *)
 
 pattern     = "_" | IDENT | "mut" , IDENT | literal
+            | literal , ( "..=" | "..<" ) , literal
             | "-" , literal
             | path , "(" , [ pattern , { "," , pattern } ] , ")"
             | path , "{" , field_pat , { "," , field_pat } , "}"

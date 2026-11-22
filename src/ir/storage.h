@@ -291,12 +291,14 @@ inline TypeLayout type_layout(const StorageState& state,
     case TypeTag::Error: return {};
     case TypeTag::I1: return {1, 1};
     case TypeTag::I8:
-    case TypeTag::U8: return {1, 1};
+    case TypeTag::U8:
+    case TypeTag::Char: return {1, 1};
     case TypeTag::I16:
     case TypeTag::U16: return {2, 2};
     case TypeTag::I32:
     case TypeTag::U32:
-    case TypeTag::F32: return {4, 4};
+    case TypeTag::F32:
+    case TypeTag::Rune: return {4, 4};
     case TypeTag::I64:
     case TypeTag::U64:
     case TypeTag::F64: return {8, 8};
@@ -544,6 +546,8 @@ inline bool is_copy_type(const StorageState& state,
     case TypeTag::F32:
     case TypeTag::F64:
     case TypeTag::Str:
+    case TypeTag::Char:
+    case TypeTag::Rune:
     case TypeTag::Ptr:
     case TypeTag::RawPtr:
     case TypeTag::RawMutPtr:

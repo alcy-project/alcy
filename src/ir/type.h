@@ -31,6 +31,8 @@ enum class TypeTag : u8 {
   F64,
   // F128,
   Str,
+  Char,    // ASCII scalar, one byte
+  Rune,    // Unicode scalar, four bytes
   Ptr,     // Opaque pointer
   Ref,     // Immutable reference (region tracked)
   MutRef,  // Mutable reference  (exclusive, region tracked)
@@ -264,6 +266,8 @@ constexpr const char* type_to_str(TypeTag tag) {
     case T::F64: return "f64";
     // case T::F128: return "f128";
     case T::Str: return "str";
+    case T::Char: return "char";
+    case T::Rune: return "rune";
     case T::Ptr: return "ptr";
     case T::Ref: return "ref";
     case T::MutRef: return "mut_ref";

@@ -119,6 +119,11 @@ bool verify_pattern_children(const PatternNode& node, const AstArena& arena) {
       const PatternLiteral literal = node.payload.literal;
       return bound(literal.value, arena.literals);
     }
+    case PatternKind::Range: {
+      const PatternRange range = node.payload.range;
+      return bound(range.start, arena.literals) &&
+             bound(range.end, arena.literals);
+    }
     case PatternKind::Tuple: {
       const PatternTuple tuple = node.payload.tuple;
       if (!bound(tuple.path, arena.paths)) {

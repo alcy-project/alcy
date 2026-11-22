@@ -115,7 +115,8 @@ class Analyzer {
     using K = ast::PatternKind;
     switch (node.kind) {
       case K::Wildcard:
-      case K::Literal: break;
+      case K::Literal:
+      case K::Range: break;
       case K::Ident:
         declare(node.payload.ident.name.name, node.payload.ident.name.span,
                 false, is_param);

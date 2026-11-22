@@ -335,6 +335,8 @@ std::optional<ValueShape> Emitter::shape_of(ir::TypeIdx type) const {
     case T::U8:
     case T::U16:
     case T::U32:
+    case T::Char:
+    case T::Rune:
     case T::Ptr:
     case T::RawPtr:
     case T::RawMutPtr:

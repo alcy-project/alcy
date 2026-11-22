@@ -74,6 +74,8 @@ ir::Immutable immutable_from_u64(ir::TypeTag tag, ir::TypeIdx type, u64 value) {
     case ir::TypeTag::I32: imm.data.i32_value = static_cast<i32>(value); break;
     case ir::TypeTag::I64: imm.data.i64_value = static_cast<i64>(value); break;
     case ir::TypeTag::U8: imm.data.u8_value = static_cast<u8>(value); break;
+    case ir::TypeTag::Char: imm.data.u8_value = static_cast<u8>(value); break;
+    case ir::TypeTag::Rune: imm.data.u32_value = static_cast<u32>(value); break;
     case ir::TypeTag::U16: imm.data.u16_value = static_cast<u16>(value); break;
     case ir::TypeTag::U32: imm.data.u32_value = static_cast<u32>(value); break;
     default: imm.data.u64_value = value; break;

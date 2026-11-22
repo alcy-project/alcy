@@ -179,7 +179,13 @@ interaction.
     through it.
   - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
     and `str_slice(s: str, start: usize, end: usize) -> str` are the
-    string primitives. Out-of-bounds `str_byte`/`str_slice` panic.
+    string primitives. Out-of-bounds `str_byte`/`str_slice` panic, as
+    does a `str_slice` whose start or end is not a scalar boundary.
+  - `char_from_u8_unchecked(value: u8) -> char` and
+    `rune_from_u32_unchecked(value: u32) -> rune` construct a scalar
+    without a check. Their preconditions (ASCII, and a Unicode scalar
+    respectively) are the caller's obligation; core wraps both in
+    checked functions.
   - `str_from_parts(ptr: &u8, len: usize) -> str` builds a view over
     caller-provided bytes. Only core uses it, to expose `String` as
     `str`; arbitrary pointers are the caller's responsibility.

@@ -397,7 +397,8 @@ class Desugarer {
             declare_named(target.payload.mut_ident.name);
         break;
       }
-      case ast::PatternKind::Literal: break;
+      case ast::PatternKind::Literal:
+      case ast::PatternKind::Range: break;
       case ast::PatternKind::Tuple: {
         for (ast::PatternIdx element : node.payload.tuple.elements) {
           visit_pattern(element);

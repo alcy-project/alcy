@@ -47,13 +47,14 @@ ordinary parse error, not a reserved-name diagnostic.
 ## Bootstrap
 
 `comp` (see `comp.md`), `intrinsic` (see `items.md`), `unsafe` and
-`extern` (see `ffi.md`)
+`extern` (see `ffi.md`), and the type keywords `char` and `rune`
+(see `types.md`)
 
 ## Literals, operators, delimiters, comments
 
 Literals: decimal, `0b`/`0o`/`0x` with type suffixes; `"..."`
-strings; `'...'` characters (unresolved; `Char` lives outside this
-document for now, see `types.md`); `true`, `false`
+strings; `'...'` characters (`char` for ASCII, `rune` otherwise,
+see `types.md`); `true`, `false`
 
 Operators and delimiters: `+ - * / % **` `& | ^ ~ << >>` and
 assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`

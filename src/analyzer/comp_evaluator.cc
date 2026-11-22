@@ -19,6 +19,7 @@
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "ir/type.h"
+#include "text/unescape.h"
 
 namespace analyzer {
 
@@ -419,7 +420,8 @@ bool CompEvaluator::comp_bind_pattern(u32 mod,
       // Transparent dereference and first-match alternatives bind
       // exactly like matching.
       return comp_match_pattern(mod, pattern, value, scope, span);
-    case ast::PatternKind::Literal: break;
+    case ast::PatternKind::Literal:
+    case ast::PatternKind::Range: break;
   }
   return fail(node.span, "pattern is not comp-evaluable");
 }
@@ -435,6 +437,27 @@ bool CompEvaluator::comp_match_pattern(u32 mod,
     case ast::PatternKind::Ident:
     case ast::PatternKind::MutIdent:
       return comp_bind_pattern(mod, pattern, value, scope, span);
+    case ast::PatternKind::Range: {
+      if (value.value.tag != CompValue::Tag::Int) {
+        return false;
+      }
+      const ast::PatternRange& range = node.payload.range;
+      const auto literal_value = [&](ast::LiteralIdx idx) {
+        const ast::Literal& lit = ast.literals[idx];
+        if (lit.kind == ast::LiteralKind::Char) {
+          return static_cast<u64>(text::char_literal_value(lit.spelling));
+        }
+        u64 magnitude = comp::parse_numeric_value(lit.spelling);
+        return lit.is_negative ? 0 - magnitude : magnitude;
+      };
+      const u64 v = value.value.int_value;
+      const u64 lo = literal_value(range.start);
+      const u64 hi = literal_value(range.end);
+      if (v < lo) {
+        return false;
+      }
+      return range.inclusive ? v <= hi : v < hi;
+    }
     case ast::PatternKind::Literal: {
       CompVal expected;
       expected.type = value.type;
@@ -1434,6 +1457,15 @@ bool CompEvaluator::comp_eval_intrinsic(
   const u64 end = second.value.int_value;
   if (index > end || end > bytes.size()) {
     return fail(span, "slice out of bounds");
+  }
+  const auto boundary = [&](u64 at) {
+    if (at == 0 || at == bytes.size()) {
+      return true;
+    }
+    return (static_cast<u8>(bytes[static_cast<usize>(at)]) & 0xC0u) != 0x80u;
+  };
+  if (!boundary(index) || !boundary(end)) {
+    return fail(span, "slice not on a scalar boundary");
   }
   out.type = receiver.type;
   out.value.tag = CompValue::Tag::Str;
