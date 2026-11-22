@@ -3,6 +3,7 @@
 
 #include "pipeline/run.h"
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@
 #include "pipeline/artifact.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
+#include "pipeline/cache.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
@@ -108,13 +110,14 @@ base::Result<RunOutcome, diag::Reported> run_package(
   const std::string exe_path =
       scratch.join(std::string("main") + std::string(exe_suffix()));
   const PlannedArtifact planned{&bin, EmitMode::Executable, exe_path};
+  std::optional<FrontCache> front_cache;
   base::Result<lowering::LoweredPackage, diag::Reported> lowered =
-      lower_target(ctx, planned, root, manifest_file);
+      lower_target(ctx, planned, root, manifest_file, nullptr, &front_cache);
   if (lowered.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage package = std::move(lowered).unwrap();
-  if (emit_target(ctx, planned, plan, package).is_err() ||
+  if (emit_target(ctx, planned, plan, package, front_cache).is_err() ||
       ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

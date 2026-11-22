@@ -517,6 +517,42 @@ SourceFiles source_file_table(PipelineContext& ctx) {
   return files;
 }
 
+// The location, or nothing when the cache is off for this run.
+std::optional<FrontCache> front_cache_location(PipelineContext& ctx,
+                                               const Artifact& target,
+                                               bool is_lib,
+                                               bool emit_entry,
+                                               const path::Path& root,
+                                               source::FileId manifest_file) {
+  if (ctx.no_cache) {
+    return std::nullopt;
+  }
+  const path::Path out_dir = target.output_dir.has_value()
+                                 ? *target.output_dir
+                                 : root.join(path::DEFAULT_OUT_DIR);
+  // The spans the digest reads live in `sources`, so the digests are
+  // taken before the return: a FileTable is a view, not an owner.
+  const SourceFiles sources = source_file_table(ctx);
+  const ir::FileTable files{.names = sources.names, .hashes = sources.hashes};
+  const base::Digest128 identity =
+      ir::identity_digest(files, ctx.target.width, ctx.version);
+  const std::string_view manifest_bytes =
+      ctx.sources.bytes(manifest_file).value_or(std::string_view{});
+  const base::Digest128 key = cache_key(CacheInputs{
+      .files = files,
+      .width = ctx.target.width,
+      .compiler_version = ctx.version,
+      .manifest = manifest_bytes,
+      .triple = ctx.target.triple,
+      .target_name = target.name,
+      .is_lib = is_lib,
+      .emit_entry = emit_entry,
+      .summary_digests = ctx.summary_digests,
+  });
+  return FrontCache{std::string(out_dir.join(".cache").as_view()), key,
+                    identity};
+}
+
 struct IrWriteInput {
   SourceFiles files;
   std::vector<ir::AddrName> addr_names;
@@ -753,7 +789,8 @@ base::Result<std::string, diag::Reported> emit_output(
     EmitMode mode,
     const std::string& output_path,
     bool is_lib,
-    std::span<const std::string> linked_objects) {
+    std::span<const std::string> linked_objects,
+    const std::optional<ObjectCacheEntry>& object_entry = std::nullopt) {
   // One path, so its parent is made once and every mode agrees about it.
   // The linker creates no directories of its own, which left
   // `alcy build -o out/app` failing where the same `-o` for an object
@@ -820,6 +857,26 @@ base::Result<std::string, diag::Reported> emit_output(
       return base::make_err(diag::Reported{});
     }
     std::vector<std::string> paths = std::move(objects).unwrap();
+    if (object_entry.has_value() && !ctx.no_cache) {
+      // The parts just written are the entry's bytes: read back, seal
+      // under the key, and rename into place. A store that fails leaves
+      // the build without a next-time hit, not without an artifact.
+      std::vector<std::vector<u8>> parts;
+      parts.reserve(paths.size());
+      bool readable = true;
+      for (const std::string& path : paths) {
+        const std::string bytes = io::read_file(path);
+        if (bytes.empty()) {
+          readable = false;
+          break;
+        }
+        parts.emplace_back(bytes.begin(), bytes.end());
+      }
+      if (readable) {
+        (void)cache_store(object_entry->dir, object_entry->path,
+                          object_cache_serialize(object_entry->key, parts));
+      }
+    }
     // The dependencies a summary answered for bring their own objects.
     paths.insert(paths.end(), linked_objects.begin(), linked_objects.end());
     return link_executable(ctx, plan.link, paths, output_path);
@@ -924,9 +981,13 @@ base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
     const PlannedArtifact& planned,
     const path::Path& root,
     source::FileId manifest_file,
-    bool* cached_out) {
+    bool* cached_out,
+    std::optional<FrontCache>* cache_out) {
   if (cached_out != nullptr) {
     *cached_out = false;
+  }
+  if (cache_out != nullptr) {
+    cache_out->reset();
   }
   Artifact& target = *planned.target;
   const bool is_lib = target.kind == ArtifactKind::Lib;
@@ -938,36 +999,21 @@ base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
   std::optional<lowering::LoweredPackage> cached;
   std::string cache_dir;
   std::string entry;
-  if (!ctx.no_cache) {
-    const path::Path out_dir = target.output_dir.has_value()
-                                   ? *target.output_dir
-                                   : root.join(path::DEFAULT_OUT_DIR);
-    const SourceFiles sources = source_file_table(ctx);
-    const std::string_view manifest_bytes =
-        ctx.sources.bytes(manifest_file).value_or(std::string_view{});
-    const ir::FileTable files{.names = sources.names, .hashes = sources.hashes};
-    const base::Digest128 identity =
-        ir::identity_digest(files, ctx.target.width, ctx.version);
-    const base::Digest128 key = cache_key(CacheInputs{
-        .files = files,
-        .width = ctx.target.width,
-        .compiler_version = ctx.version,
-        .manifest = manifest_bytes,
-        .triple = ctx.target.triple,
-        .target_name = target.name,
-        .is_lib = is_lib,
-        .emit_entry = emit_entry,
-        .summary_digests = ctx.summary_digests,
-    });
-    cache_dir = std::string(out_dir.join(".cache").as_view());
-    entry = cache_entry_path(cache_dir, key);
-    cached = cache_load(ctx, entry, identity);
+  const std::optional<FrontCache> location = front_cache_location(
+      ctx, target, is_lib, emit_entry, root, manifest_file);
+  if (location.has_value()) {
+    cache_dir = location->dir;
+    entry = cache_entry_path(cache_dir, location->key);
+    cached = cache_load(ctx, entry, location->identity);
     if (cached_out != nullptr) {
       *cached_out = cached.has_value();
     }
     ctx.cache_outcome = combine_cache_outcome(
         ctx.cache_outcome,
         cached.has_value() ? CacheOutcome::Hit : CacheOutcome::Miss);
+  }
+  if (cache_out != nullptr) {
+    *cache_out = location;
   }
   if (!cached.has_value()) {
     base::Result<lowering::LoweredPackage, diag::Reported> package =
@@ -1011,19 +1057,66 @@ base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
 
 // The back half of the same lifecycle: the middle end, the emission, and
 // the link. It runs on a lowered package from `lower_target`, which a run
-// may take from the cache as well as a build.
+// may take from the cache as well as a build. The object cache keys off
+// the same frontend entry the lowering stored, salted with everything
+// that acts between the cached IR and the machine code; a hit skips the
+// middle end and the emission both, because the bytes are the ones the
+// miss wrote.
 base::Result<std::string, diag::Reported> emit_target(
     PipelineContext& ctx,
     const PlannedArtifact& planned,
     BuildPlan plan,
-    lowering::LoweredPackage& lowered) {
+    lowering::LoweredPackage& lowered,
+    const std::optional<FrontCache>& front_cache) {
   Artifact& target = *planned.target;
+  std::optional<ObjectCacheEntry> object_entry;
+  std::optional<std::vector<std::vector<u8>>> cached_parts;
+  if (front_cache.has_value() && planned.mode == EmitMode::Executable &&
+      ctx.backend == codegen::Backend::Llvm) {
+    const base::Digest128 object_key = object_cache_key(ObjectCacheInputs{
+        .lowered = front_cache->key,
+        .optimize = plan.profile.optimize,
+        .overflow_checks = plan.profile.overflow_checks,
+        .backtrace = plan.profile.on_panic == pkg::OnPanic::Backtrace,
+        .backend = codegen::backend_name(ctx.backend),
+    });
+    object_entry = ObjectCacheEntry{
+        .dir = front_cache->dir,
+        .path = object_entry_path(front_cache->dir, object_key),
+        .key = object_key,
+    };
+    cached_parts = object_cache_load(*object_entry);
+    if (cached_parts.has_value()) {
+      io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
+      std::vector<std::string> paths;
+      for (usize at = 0; at < cached_parts->size(); ++at) {
+        const std::string path =
+            scratch.join("part" + std::to_string(at) + ".o");
+        if (!io::write_file(std::span<const u8>((*cached_parts)[at]), path)) {
+          paths.clear();
+          break;
+        }
+        paths.push_back(path);
+      }
+      if (!paths.empty()) {
+        paths.insert(paths.end(), target.linked_objects.begin(),
+                     target.linked_objects.end());
+        if (link_executable(ctx, plan.link, paths, planned.path).is_err()) {
+          return base::make_err(diag::Reported{});
+        }
+        return base::make_ok(planned.path);
+      }
+      // A part that would not write back is a miss: emit again, under
+      // the entry the miss stores into.
+    }
+  }
   if (optimize_package(ctx, lowered, plan.profile.optimize).is_err() ||
       ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   return emit_output(ctx, lowered, plan, planned.mode, planned.path,
-                     target.kind == ArtifactKind::Lib, target.linked_objects);
+                     target.kind == ArtifactKind::Lib, target.linked_objects,
+                     object_entry);
 }
 
 base::Result<BuildResult, diag::Reported> build_package(
@@ -1114,8 +1207,10 @@ base::Result<BuildResult, diag::Reported> build_package(
   std::string first_output;
   for (PlannedArtifact& planned_target : planned) {
     bool target_cached = false;
+    std::optional<FrontCache> front_cache;
     base::Result<lowering::LoweredPackage, diag::Reported> lowered =
-        lower_target(ctx, planned_target, root, manifest_file, &target_cached);
+        lower_target(ctx, planned_target, root, manifest_file, &target_cached,
+                     &front_cache);
     targets_cached = targets_cached && target_cached;
     if (lowered.is_err()) {
       failed = true;
@@ -1123,7 +1218,7 @@ base::Result<BuildResult, diag::Reported> build_package(
     }
     lowering::LoweredPackage package = std::move(lowered).unwrap();
     base::Result<std::string, diag::Reported> written =
-        emit_target(ctx, planned_target, plan, package);
+        emit_target(ctx, planned_target, plan, package, front_cache);
     if (written.is_err() || ctx.bag.has_errors()) {
       failed = true;
       break;

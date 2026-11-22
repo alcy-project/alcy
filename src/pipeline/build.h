@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -17,6 +18,7 @@
 #include "path/path.h"
 #include "pipeline/artifact.h"
 #include "pipeline/build_plan.h"
+#include "pipeline/cache.h"
 #include "pipeline/emit_mode.h"
 #include "pipeline/link_options.h"
 #include "pipeline/pipeline_context.h"
@@ -98,15 +100,19 @@ base::Result<lowering::LoweredPackage, diag::Reported> lower_target(
     const PlannedArtifact& planned,
     const path::Path& root,
     source::FileId manifest_file,
-    bool* cached_out = nullptr);
+    bool* cached_out = nullptr,
+    std::optional<FrontCache>* cache_out = nullptr);
 
 // The back half of the same lifecycle: the middle end, the emission, and
-// the link. Success names the path written.
+// the link. Success names the path written. The cache location the
+// lowering filled drives the object cache: a hit skips the middle end
+// and the emission, and a miss stores the objects under it.
 base::Result<std::string, diag::Reported> emit_target(
     PipelineContext& ctx,
     const PlannedArtifact& planned,
     BuildPlan plan,
-    lowering::LoweredPackage& lowered);
+    lowering::LoweredPackage& lowered,
+    const std::optional<FrontCache>& front_cache = std::nullopt);
 
 // What a build built, besides the path its first artifact landed at.
 // `name` is the manifest's package name for a package build, and the

@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <cstring>
 #include <optional>
 #include <span>
 #include <string>
@@ -98,6 +100,101 @@ std::string cache_entry_path(std::string_view dir, base::Digest128 key) {
   path += key.hex();
   path += ".irb";
   return path;
+}
+
+base::Digest128 object_cache_key(const ObjectCacheInputs& inputs) {
+  std::vector<u8> canonical;
+  canonical.reserve(16 + 4 + inputs.backend.size());
+  for (const std::array<u8, 16> part : {inputs.lowered.bytes()}) {
+    canonical.insert(canonical.end(), part.begin(), part.end());
+  }
+  canonical.push_back(inputs.optimize ? 1 : 0);
+  canonical.push_back(inputs.overflow_checks ? 1 : 0);
+  canonical.push_back(inputs.backtrace ? 1 : 0);
+  for (const char ch : inputs.backend) {
+    canonical.push_back(static_cast<u8>(ch));
+  }
+  canonical.push_back(0);
+  return base::hash128(std::span<const u8>(canonical.data(), canonical.size()));
+}
+
+std::string object_entry_path(std::string_view dir, base::Digest128 key) {
+  std::string path(dir);
+  path.push_back('/');
+  path += key.hex();
+  path += ".obj";
+  return path;
+}
+
+std::vector<u8> object_cache_serialize(const base::Digest128& key,
+                                       std::span<const std::vector<u8>> parts) {
+  std::vector<u8> blob;
+  constexpr char kMagic[8] = {'A', 'L', 'C', 'Y', 'O', 'B', 'J', '1'};
+  blob.insert(blob.end(), kMagic, kMagic + 8);
+  const auto put_u32 = [&blob](u32 value) {
+    for (usize shift = 0; shift < 32; shift += 8) {
+      blob.push_back(static_cast<u8>((value >> shift) & 0xFF));
+    }
+  };
+  const auto put_u64 = [&blob](u64 value) {
+    for (usize shift = 0; shift < 64; shift += 8) {
+      blob.push_back(static_cast<u8>((value >> shift) & 0xFF));
+    }
+  };
+  const std::array<u8, 16> key_bytes = key.bytes();
+  blob.insert(blob.end(), key_bytes.begin(), key_bytes.end());
+  put_u32(static_cast<u32>(parts.size()));
+  for (const std::vector<u8>& part : parts) {
+    put_u64(part.size());
+  }
+  for (const std::vector<u8>& part : parts) {
+    blob.insert(blob.end(), part.begin(), part.end());
+  }
+  return blob;
+}
+
+std::optional<std::vector<std::vector<u8>>> object_cache_load(
+    const ObjectCacheEntry& entry) {
+  const std::string raw = io::read_file(entry.path);
+  const base::Digest128& key = entry.key;
+  const std::span<const u8> bytes(reinterpret_cast<const u8*>(raw.data()),
+                                  raw.size());
+  constexpr usize kHeader = 8 + 16 + 4;
+  if (bytes.size() < kHeader) {
+    return std::nullopt;
+  }
+  constexpr char kMagic[8] = {'A', 'L', 'C', 'Y', 'O', 'B', 'J', '1'};
+  if (std::equal(kMagic, kMagic + 8, bytes.begin())) {
+  } else {
+    return std::nullopt;
+  }
+  if (std::memcmp(bytes.data() + 8, key.bytes().data(), 16) != 0) {
+    return std::nullopt;
+  }
+  const usize count = static_cast<usize>(bytes[24]) |
+                      (static_cast<usize>(bytes[25]) << 8) |
+                      (static_cast<usize>(bytes[26]) << 16) |
+                      (static_cast<usize>(bytes[27]) << 24);
+  if (count == 0 || count > 4096 || bytes.size() < kHeader + count * 8) {
+    return std::nullopt;
+  }
+  std::vector<std::vector<u8>> parts;
+  parts.reserve(count);
+  usize at = kHeader + count * 8;
+  for (usize part = 0; part < count; ++part) {
+    const usize base = kHeader + part * 8;
+    usize size = 0;
+    for (usize shift = 0, i = 0; shift < 64; shift += 8, ++i) {
+      size |= static_cast<u64>(bytes[base + i]) << shift;
+    }
+    if (size == 0 || at + size > bytes.size()) {
+      return std::nullopt;
+    }
+    parts.emplace_back(bytes.begin() + static_cast<isize>(at),
+                       bytes.begin() + static_cast<isize>(at + size));
+    at += size;
+  }
+  return parts;
 }
 
 std::optional<lowering::LoweredPackage> cache_load(

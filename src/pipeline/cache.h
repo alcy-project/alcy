@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/hash.h"
 #include "fpag/base/numeric.h"
@@ -68,8 +69,57 @@ struct CacheInputs {
 // and the summaries, sorted so resolution order cannot change it.
 base::Digest128 cache_key(const CacheInputs& inputs);
 
+// Where a target's cache entries live and what names them: the frontend
+// entry's key and the identity its load checks, both over one read of
+// the file table. Computed once per target and read by the lowering and
+// by the emit stage, which salts the same key for its own entries.
+struct FrontCache {
+  std::string dir;
+  base::Digest128 key;
+  base::Digest128 identity;
+};
+
 // `<dir>/<32 hex>.irb`.
 std::string cache_entry_path(std::string_view dir, base::Digest128 key);
+
+// Everything the object bytes are a function of, past the lowered form
+// the frontend entry holds: the profile bits and the backend that act
+// between the cached IR and the machine code. Two builds that share one
+// frontend entry keep separate object entries when these differ.
+struct ObjectCacheInputs {
+  // The frontend entry's key: the sources, the manifest, the target,
+  // and the compiler version ride inside it.
+  base::Digest128 lowered;
+  bool optimize = false;
+  bool overflow_checks = false;
+  bool backtrace = false;
+  std::string_view backend;
+};
+
+base::Digest128 object_cache_key(const ObjectCacheInputs& inputs);
+
+// Where one target's object entry lives: the digest names it, the
+// directory holds it, and the digest rides in the entry's header so a
+// load can refuse a file that answers for other inputs.
+struct ObjectCacheEntry {
+  std::string dir;
+  std::string path;
+  base::Digest128 key;
+};
+
+// `<dir>/<32 hex>.obj`.
+std::string object_entry_path(std::string_view dir, base::Digest128 key);
+
+// The parts, back to back behind a header that names their sizes and
+// the key they were written under.
+std::vector<u8> object_cache_serialize(const base::Digest128& key,
+                                       std::span<const std::vector<u8>> parts);
+
+// The stored parts, or empty when there is no entry, the header does
+// not parse, or the key inside is not the one asked for: a miss, never
+// an error.
+std::optional<std::vector<std::vector<u8>>> object_cache_load(
+    const ObjectCacheEntry& entry);
 
 // Loads the entry into a lowered package and installs its string table
 // in the context, which the backend reads. Empty when there is no entry,
