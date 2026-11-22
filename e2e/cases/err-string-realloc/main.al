@@ -4,9 +4,9 @@
 // leave it to run time.
 fn main() -> i32 {
   mut s := String::new()
-  s.push(104u8)
+  s.push_str("h")
   r := s.as_str()
-  s.push(105u8)
+  s.push_str("i")
   print("{}", r)
   ret 0
 }

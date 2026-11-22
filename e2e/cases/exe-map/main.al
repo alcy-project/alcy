@@ -3,8 +3,8 @@
 // and removal leaves a tombstone that a later insert reuses.
 fn key(i: i32) -> String {
   mut s := String::with_capacity(2 as usize)
-  s.push((48 + i / 10) as u8)
-  s.push((48 + i % 10) as u8)
+  _ := s.push_ascii((48 + i / 10) as u8)
+  _ := s.push_ascii((48 + i % 10) as u8)
   ret s
 }
 

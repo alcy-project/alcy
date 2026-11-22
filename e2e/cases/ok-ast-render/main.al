@@ -112,18 +112,18 @@ fn write_expr(nodes: &Vec<Expr>, idx: usize, out: &mut String) {
       out.push_str(text.as_str())
     }
     Expr::Add(l, r) => {
-      out.push(40u8)
+      out.push_str("(")
       write_expr(nodes, *l, out)
       out.push_str(" + ")
       write_expr(nodes, *r, out)
-      out.push(41u8)
+      out.push_str(")")
     }
     Expr::Mul(l, r) => {
-      out.push(40u8)
+      out.push_str("(")
       write_expr(nodes, *l, out)
       out.push_str(" * ")
       write_expr(nodes, *r, out)
-      out.push(41u8)
+      out.push_str(")")
     }
   }
 }

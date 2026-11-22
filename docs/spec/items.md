@@ -73,14 +73,24 @@
 
 ## The staged suite's `str` APIs
 
-- The standard library's `str` functions return byte offsets that
+- The standard library's text functions return byte offsets that
   always lie on scalar boundaries - `find`, `rfind`, `contains`,
   `split`, `split_whitespace`, `trim*`, `lines`, and the predicates
   built on them. A slice named by one of those offsets never crosses
-  a character, so `str_slice` at such an offset panics only on
-  out-of-bounds, not on a half code point.
+  a character. The byte-level operations `byte`, `bytes`,
+  `find_byte`, `rfind_byte`, and `count_byte` report raw positions
+  that are not necessarily boundaries; `byte_slice` and `split_at`
+  are the checked way to turn such a position back into `str`.
+- `str_slice` checks both bounds and scalar boundaries and panics on
+  a half code point as well as on out-of-bounds. `str_byte` is a
+  byte read and only bounds-checks.
 - `char` comes only from a checked decode, and the byte-level validity
   predicate lives on `[u8]`.
+- `String`'s checked surface answers `Option` when an operation could
+  break the UTF-8 invariant: `from_slice`, `byte_slice`, `split_at`,
+  `insert_str`, `truncate`, and `push_ascii`. `spare_capacity_mut`,
+  `set_len`, and `as_mut_slice` are `unsafe`; their precondition is
+  that the bytes below the recorded length spell scalars.
 
 ## Item attributes
 
@@ -179,8 +189,8 @@ interaction.
     through it.
   - `str_len(s: str) -> usize`, `str_byte(s: str, i: usize) -> u8`,
     and `str_slice(s: str, start: usize, end: usize) -> str` are the
-    string primitives. Out-of-bounds `str_byte`/`str_slice` panic, as
-    does a `str_slice` whose start or end is not a scalar boundary.
+    string primitives. `str_byte` panics out of bounds; `str_slice`
+    panics out of bounds or at a half code point.
   - `char_from_u8_unchecked(value: u8) -> char` and
     `rune_from_u32_unchecked(value: u32) -> rune` construct a scalar
     without a check. Their preconditions (ASCII, and a Unicode scalar

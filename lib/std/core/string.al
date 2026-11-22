@@ -1282,6 +1282,10 @@ impl Iterator < str > for SplitIter {
     assert("".count_chars() == 0, "a view of no bytes holds no character")
   }
 
+  #[test] fn byte_slice_refuses_a_cut_inside_a_scalar() {
+    assert("日".byte_slice(0, 1).is_none(), "a view never holds half a scalar")
+  }
+
   fn assert(ok: bool, what: str) {
     if !ok {
       panic(what)

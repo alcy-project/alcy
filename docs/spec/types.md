@@ -236,8 +236,28 @@
 - `len_bytes` is the byte count. `count_chars` counts scalar values.
   `count_graphemes` arrives with the segmentation tables.
 - Whether bytes are valid UTF-8 is a query over `[u8]`, the way a
-  comment parser asks: the predicate lives with the byte API. A `char`
-  comes only from a checked decode.
+  comment parser asks. `is_utf8(bytes: &[u8]) -> bool` is that
+  predicate, and `from_utf8(bytes: &[u8]) -> Result<str, Utf8Error>`
+  is the checked way in. `Utf8Error` carries `valid_up_to`, the
+  offset of the first byte that did not decode. `unicode::utf8::valid`
+  delegates to the byte predicate. A `char` comes only from a checked
+  decode.
+- All upward conversions go through that check. `str` to `&[u8]` and
+  to `Path` is free, and so is `String::as_str` / `as_bytes`; bytes to
+  `str` or `String`, and `Path` to `str`, are checked. The only raw
+  construction is `unsafe str_from_parts`, whose caller promises
+  well-formed bytes.
+- `str_slice` checks bounds and that both ends lie on scalar
+  boundaries, panicking when either fails. `byte_slice` offers the
+  same boundary check as `Option<str>` to callers that would rather
+  handle a refusal.
+- `String` in `text` owns valid UTF-8 bytes. Its checked mutators
+  `push_ascii`, `insert_str`, `truncate`, `byte_slice`, `split_at`,
+  and `from_slice` answer `Option` when a byte or boundary would
+  break the invariant; there is no public append of an arbitrary
+  byte. The raw writers `spare_capacity_mut`, `set_len`, and
+  `as_mut_slice` are `unsafe` and require the bytes below the
+  recorded length to spell scalars.
 - `char` is an ASCII scalar (0x00-0x7F) with a one-byte layout, and
   `rune` is a Unicode scalar value with a four-byte layout. Both are
   compiler-known types. A character literal names a `char` when its
