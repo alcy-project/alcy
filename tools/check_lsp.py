@@ -49,7 +49,7 @@ UNFORMATTED = "struct  Point{x:i32}"
 BROKEN = "fn main( -> i32 {\n}\n"
 # A comment run and two brace pairs on different lines, so one
 # foldingRange answer exercises both kinds of fold. The loop is the
-# document whose while-true finding carries the smoke's quick fix.
+# document whose while-true finding carries the smoke's refactor.
 FOLD = (
     "// one\n// two\nfn main() -> i32 {\n  while true {\n    ret 0\n  }\n  ret 1\n}\n"
 )
@@ -694,8 +694,8 @@ def main() -> int:
     actions = by_id.get(12, {}).get("result")
     if not isinstance(actions, list) or not actions:
         return fail(f"codeAction offered nothing: {actions!r}")
-    if actions[0].get("kind") != "quickfix":
-        return fail(f"codeAction was not a quick fix: {actions!r}")
+    if actions[0].get("kind") != "refactor":
+        return fail(f"codeAction was not a refactor: {actions!r}")
     if not isinstance(actions[0].get("edit"), dict):
         return fail(f"codeAction carried no edit: {actions!r}")
 
