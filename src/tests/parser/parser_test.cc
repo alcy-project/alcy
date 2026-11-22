@@ -2068,6 +2068,27 @@ TEST_CASE("A layout marker is refused on a group") {
   CHECK(has_message(f.bag, "`repr(C)` applies to structs"));
 }
 
+TEST_CASE("A test is neither unsafe nor comp") {
+  struct Case {
+    std::string_view source;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"#[test] unsafe fn f() {\n}\n",
+       "a test cannot be `unsafe`; the driver calls it without an `unsafe` "
+       "block"},
+      {"#[test] comp fn f() {\n}\n",
+       "a test cannot be `comp`; a test runs at runtime"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    const ParseResult result = parse(c.source, f);
+    CHECK(!result.ok);
+    CHECK(has_message(f.bag, c.message));
+    CHECK(f.bag.error_count() == 1);
+  }
+}
+
 TEST_CASE("A test declares no type parameters") {
   const std::string_view source = "#[test] fn generic<T>() {\n}\n";
   Fixture f;

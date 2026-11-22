@@ -489,16 +489,16 @@ that happens to read them.
 A test run walks the same stages over a different tree, and it is the only mode
 in which the items a stage reads are not the ones the package's files declare.
 Before name resolution, `pipeline` resolves the package's `#[test] fn`s: the
-`#[when(testing)]` groups are spliced into their modules, and each test becomes
-a free function of the module that wrote it. The module the run enters through
-keeps its items and not its entry point, and a generated module supplies the
-entry point that calls the selected tests in order. Nothing below that step
-changes, which is the point: a test resolves its module's siblings and
-dependencies exactly as that module does, so it is resolved, lowered, and
-emitted by the same code as the program it belongs to. The run then starts the
-resulting executable once per test and reads each status as that test's verdict.
-A build, a check, and a run of the package splice nothing - they read the block,
-keep it out of the program, and stop where they already stopped.
+`#[when(testing)]` groups were spliced into their modules at parse time, and
+each test is gathered into a public copy in the module that wrote it. The module
+the run enters through keeps its items and not its entry point, and a generated
+module supplies the entry point that calls the selected tests in order. Nothing
+below that step changes, which is the point: a test resolves its module's
+siblings and dependencies exactly as that module does, so it is resolved,
+lowered, and emitted by the same code as the program it belongs to. The run then
+starts the resulting executable once per test and reads each status as that
+test's verdict. A build, a check, and a run of the package splice nothing - they
+read the block, keep it out of the program, and stop where they already stopped.
 
 Each stage should expose the minimum data needed by the next stage. A stage
 must not reach backward into another stage's private state as a shortcut.

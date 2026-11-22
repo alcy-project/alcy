@@ -103,6 +103,8 @@
   F(ParserTestMalformed, Error, Parser, "`test` takes no arguments; write `#[test]` alone") \
   F(ParserTestTakesNoArguments, Error, Parser, "a test takes no arguments") \
   F(ParserTestHasTypeParameters, Error, Parser, "a test declares no type parameters") \
+  F(ParserTestOnUnsafe, Error, Parser, "a test cannot be `unsafe`; the driver calls it without an `unsafe` block") \
+  F(ParserTestOnComp, Error, Parser, "a test cannot be `comp`; a test runs at runtime") \
   F(ParserTestOnlyOnFunctions, Error, Parser, "`#[test]` marks a function; put it on `fn`") \
   F(ParserTestNotOnMethod, Error, Parser, "`#[test]` marks a module function; a method cannot be a test") \
   F(ParserTypeFirstDeclarationSpelling, Error, Parser, "a declaration puts the type after the name: `x: T := ...`") \

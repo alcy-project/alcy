@@ -747,6 +747,22 @@ ast::ItemIdx Parser::parse_item(Attributes attributes) {
           (void)index;
           return ast::ItemIdx::invalid();
         }
+        // The driver calls a test with a plain call at runtime, so neither
+        // opt-in fits one. Refuse here rather than reporting against code
+        // the run generated for the caller.
+        const ast::ItemFn& as_written = node.payload.get<ast::ItemFn>();
+        if (as_written.is_unsafe) {
+          const u32 index = bag_.emit<i18n::Key::ParserTestOnUnsafe>(
+              DiagCode::UnexpectedToken, node.span);
+          (void)index;
+          return ast::ItemIdx::invalid();
+        }
+        if (as_written.is_comp) {
+          const u32 index = bag_.emit<i18n::Key::ParserTestOnComp>(
+              DiagCode::UnexpectedToken, node.span);
+          (void)index;
+          return ast::ItemIdx::invalid();
+        }
         ast::ItemFn fn = node.payload.get<ast::ItemFn>();
         fn.is_test = true;
         node.payload.set(fn);
