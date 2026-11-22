@@ -2212,7 +2212,8 @@ ir::TypeIdx Checker::check_method_call(u32 module,
 
 ir::TypeIdx Checker::check_field(u32 module,
                                  ast::ExprIdx expr,
-                                 const ir::TypeIdx* expected) {
+                                 const ir::TypeIdx* expected,
+                                 analyzer::ReferenceAccess access) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ast::Ident field_name = node.payload.get<ast::ExprField>().name;
   ir::TypeIdx receiver =
@@ -2271,7 +2272,8 @@ ir::TypeIdx Checker::check_field(u32 module,
       (void)index;
       return error_type();
     }
-    modules[module].references.push_back({field_name.span, declaration});
+    modules[module].references.push_back(
+        {field_name.span, declaration, access});
     if (!check_field_access(module, owner->module, is_pub, field_name.span,
                             field_name.name, owner->name)) {
       return error_type();
@@ -4636,7 +4638,8 @@ ir::TypeIdx Checker::check_place(u32 module, ast::ExprIdx place) {
       // The field check diagnoses a receiver that is neither a struct
       // nor a tuple; returning early here let the assignment through
       // silently and reached an internal lowering error instead.
-      return check_field(module, place, nullptr);
+      return check_field(module, place, nullptr,
+                         analyzer::ReferenceAccess::Write);
     }
     case ast::ExprKind::Index: {
       const ast::ExprIndex& index = node.payload.get<ast::ExprIndex>();

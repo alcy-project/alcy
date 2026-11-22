@@ -111,6 +111,18 @@ TEST_CASE("An assignment highlights the write apart from reads") {
   CHECK(kind_at(highlights, 3, 6) == 2.0);  // return: Read
 }
 
+TEST_CASE("A field assignment target highlights as a write") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "struct Point {\n  x: i32,\n}\n"
+                          "fn main() -> i32 {\n  mut p := Point { x: 1 }\n"
+                          "  p.x = 2\n  ret p.x\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue highlights =
+      document_highlights(document, analysis, Position{5, 2});
+  CHECK(kind_at(highlights, 5, 2) == 3.0);  // field write
+  CHECK(kind_at(highlights, 6, 6) == 2.0);  // read
+}
+
 TEST_CASE("A comment highlights nothing") {
   const Document document("file:///main.al", "alcy", 1,
                           "// nothing\nfn main() -> i32 {\n  ret 0\n}\n");

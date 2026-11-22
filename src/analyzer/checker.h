@@ -1639,9 +1639,11 @@ class Checker {
   ir::TypeIdx check_method_call(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected);
-  ir::TypeIdx check_field(u32 module,
-                          ast::ExprIdx expr,
-                          const ir::TypeIdx* expected);
+  ir::TypeIdx check_field(
+      u32 module,
+      ast::ExprIdx expr,
+      const ir::TypeIdx* expected,
+      analyzer::ReferenceAccess access = analyzer::ReferenceAccess::Read);
   ir::TypeIdx check_struct_expr(u32 module,
                                 ast::ExprIdx expr,
                                 const ir::TypeIdx* expected);
