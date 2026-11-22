@@ -164,6 +164,10 @@ class RuntimeBuilder {
             llvm::ConstantInt::get(builder_.getInt32Ty(), 0));
       }
       link_once_odr(*fltused);
+      // The CRT marker is read by the linker, not by any IR instruction,
+      // so the middle end cannot see a use of it. Keep it with the
+      // codegen-synthesized helpers for the same reason.
+      llvm::appendToCompilerUsed(module_, {fltused});
       build_chkstk();
       build_args_init();
     }
