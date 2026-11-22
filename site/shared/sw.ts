@@ -66,12 +66,18 @@ let cacheName: Promise<string> | null = null;
 // An unreadable or missing version file disables caching rather than
 // serving assets whose freshness cannot be named.
 async function readCacheName(): Promise<string> {
-  const response = await fetch(VERSION_FILE, { cache: "no-cache" });
-  if (!response.ok) {
+  try {
+    const response = await fetch(VERSION_FILE, { cache: "no-cache" });
+    if (!response.ok) {
+      return "";
+    }
+    const version: { v?: unknown } = await response.json();
+    return typeof version.v === "string" && version.v !== "" ? version.v : "";
+  } catch {
+    // An offline check is not a bad version file. Keep the last name so
+    // shell() and asset() never await a rejected promise.
     return "";
   }
-  const version: { v?: unknown } = await response.json();
-  return typeof version.v === "string" && version.v !== "" ? version.v : "";
 }
 
 // What this worker names its assets by, without a request: the build's
@@ -91,8 +97,10 @@ function currentCacheName(): Promise<string> {
 
 // Re-reads the version and retires every cache it no longer names.
 async function refreshCacheName(): Promise<void> {
-  cacheName = readCacheName();
-  const keep = CACHE_PREFIX + (await cacheName);
+  const version = await readCacheName();
+  const keepVersion = version === "" ? await currentCacheName() : version;
+  cacheName = Promise.resolve(keepVersion);
+  const keep = CACHE_PREFIX + keepVersion;
   const names = await caches.keys();
   for (const name of names) {
     if (name.startsWith(CACHE_PREFIX) && name !== keep) {

@@ -909,10 +909,6 @@ body.site {
   font-size: 14px;
 }
 
-.site-search input:focus {
-  outline: none;
-}
-
 .site-search ol {
   margin: 0;
   padding: 6px 0;

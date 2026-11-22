@@ -71,10 +71,10 @@ export function initThemeToggle(button: HTMLButtonElement): void {
   const render = (): void => {
     const label = t(THEME_LABEL[mode]);
     button.dataset.themeMode = mode;
-    button.setAttribute("aria-label", label);
-    // The name beside the icon repeats the mode, so it carries the same
-    // string; with the stylesheet gone the button still says which mode
-    // it holds.
+    button.setAttribute("aria-label", t("button.themeNext"));
+    // The clipped name repeats the mode, so the button still says which
+    // mode it holds without the stylesheet; the accessible name describes
+    // the action instead.
     const name = button.querySelector(".theme-name");
     if (name !== null) {
       name.textContent = label;
@@ -85,7 +85,7 @@ export function initThemeToggle(button: HTMLButtonElement): void {
   render();
   button.addEventListener("click", () => {
     const next = THEME_MODES[(THEME_MODES.indexOf(mode) + 1) % THEME_MODES.length];
-    mode = next ?? "auto";
+    mode = next ?? mode;
     persistTheme(mode);
     applyTheme(mode);
     render();
