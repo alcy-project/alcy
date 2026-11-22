@@ -137,6 +137,32 @@ TEST_CASE("A message longer than the cap is clipped") {
   CHECK(stored->message.ends_with("..."));
 }
 
+TEST_CASE("DiagBag merge keeps a repair on its own entry") {
+  BagFixture into;
+  into.bag.emit_untranslated(Severity::Warning, Stage::Lint, 1, "existing");
+
+  mem::Arena source_arena;
+  source_arena.reserve(mem::page_size());
+  DiagBag from{source_arena, i18n::Language::EnUs};
+  const u32 index =
+      from.emit_untranslated(Severity::Warning, Stage::Lint, 2, "refactor me");
+  CHECK(from.attach_fix(index, Fix{Span{}, "new", diag::FixKind::Refactor})
+            .is_ok());
+
+  into.bag.merge(from);
+  CHECK(into.bag.size() == 2);
+  const Diagnostic* const existing = into.bag.at(0);
+  const Diagnostic* const merged = into.bag.at(1);
+  if (existing == nullptr || merged == nullptr) {
+    return;
+  }
+  CHECK(existing->fix == nullptr);
+  CHECK(merged->fix != nullptr);
+  if (merged->fix != nullptr) {
+    CHECK(merged->fix->kind == diag::FixKind::Refactor);
+  }
+}
+
 TEST_CASE("DiagBag merge carries dropped diagnostics") {
   mem::Arena small;
   small.reserve(mem::page_size());
