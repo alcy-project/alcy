@@ -557,10 +557,9 @@ change is worth its cost. The fuzzer's answer depends on where its corpus
 has got to, so a per-push run would mostly re-verify what it already
 knows.
 
-CI asks the checks as their own jobs (`ci.yaml`, `build.yaml`,
-`style.yaml`), every job running on every event, and `tools/check.py`
-runs the union as one local pass, so the check a contributor runs is the
-check the server runs. Which job
+CI asks the checks as their own jobs (`ci.yaml`, `build.yaml`), every job
+running on every event, and `tools/check.py` runs the union as one local
+pass, so the check a contributor runs is the check the server runs. Which job
 each check lives in is recorded beside the workflow definitions.
 `tools/measure_checks.py` times every check against lint, the largest, and is a
 report rather than a check.
