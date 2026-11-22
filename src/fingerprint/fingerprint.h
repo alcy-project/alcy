@@ -33,10 +33,6 @@ class Builder {
   // writer uses, so a digest crosses the same wire here as there.
   Builder& digest(Digest value);
 
-  // Length-prefixed bytes, for fields whose content can contain the
-  // delimiters a neighbour uses.
-  Builder& sized(std::string_view data);
-
   Digest finish() const { return base::hash128(bytes_); }
 
  private:

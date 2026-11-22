@@ -13,13 +13,4 @@ Builder& Builder::digest(Digest value) {
   return *this;
 }
 
-Builder& Builder::sized(std::string_view data) {
-  const u32 length = static_cast<u32>(data.size());
-  for (u32 shift = 0; shift < 32; shift += 8) {
-    bytes_.push_back(static_cast<char>((length >> shift) & 0xFFu));
-  }
-  bytes_.append(data);
-  return *this;
-}
-
 }  // namespace fingerprint
