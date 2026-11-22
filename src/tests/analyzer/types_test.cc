@@ -243,7 +243,7 @@ constexpr std::string_view CORE_PRELUDE_FILE = "core.al";
 // caller's use; an initializer_list of temporaries would dangle.
 const std::initializer_list<std::pair<std::string_view, std::string_view>>&
 core_prelude() {
-  static const std::initializer_list<
+  static constexpr std::initializer_list<
       std::pair<std::string_view, std::string_view>>
       PRELUDE = {{"core", CORE_PRELUDE_FILE}};
   return PRELUDE;
@@ -6420,7 +6420,7 @@ TEST_CASE("Check suppresses a std hint for a staged member") {
   if (!setup) {
     return;
   }
-  static const StdHint HINTS[] = {{"widgets", "Thing"}};
+  static constexpr StdHint HINTS[] = {{"widgets", "Thing"}};
   Fixture f;
   const CheckOutcome result =
       check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
@@ -6442,7 +6442,7 @@ TEST_CASE("Check hints at a std member that is not staged") {
   if (!setup) {
     return;
   }
-  static const StdHint HINTS[] = {{"widgets", "Thing"}};
+  static constexpr StdHint HINTS[] = {{"widgets", "Thing"}};
   Fixture f;
   const CheckOutcome result = check_case(dir, "main.al", {"main.al"}, f,
                                          ir::PointerWidth::W64, {}, HINTS);
@@ -6702,7 +6702,7 @@ TEST_CASE(
                    "fn main() {\n"
                    "  _ := probe(1u8)\n"
                    "}\n"}});
-  static const std::initializer_list<
+  static constexpr std::initializer_list<
       std::pair<std::string_view, std::string_view>>
       PRELUDE = {{"core", "mem.al"}};
   Fixture f;

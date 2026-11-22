@@ -163,7 +163,7 @@ struct Startup {
 // library is not a behavioral input the way an environment variable
 // would be: it is the platform the compiler already targets.
 const std::optional<Startup>& startup_inputs() {
-  static const std::optional<Startup> FOUND = []() -> std::optional<Startup> {
+  static const std::optional<Startup> found = []() -> std::optional<Startup> {
     const std::string arch = host_arch();
     std::vector<path::Path> dirs;
     dirs.push_back(as_path("/usr/lib64"));
@@ -203,7 +203,7 @@ const std::optional<Startup>& startup_inputs() {
     }
     return std::nullopt;
   }();
-  return FOUND;
+  return found;
 }
 #endif  // !BUILD_FLAG(IS_OS_WIN) && !BUILD_FLAG(IS_OS_MAC)
 
@@ -246,7 +246,7 @@ std::optional<WindowsStartup> kit_kernel32(const path::Path& lib_root,
 }
 
 const std::optional<WindowsStartup>& windows_startup_inputs() {
-  static const std::optional<WindowsStartup> FOUND =
+  static const std::optional<WindowsStartup> found =
       []() -> std::optional<WindowsStartup> {
     const std::string arch = windows_sdk_arch();
     auto from_env = [&arch](const char* dir_name, const char* version_name) {
@@ -291,7 +291,7 @@ const std::optional<WindowsStartup>& windows_startup_inputs() {
     }
     return std::nullopt;
   }();
-  return FOUND;
+  return found;
 }
 #endif  // BUILD_FLAG(IS_OS_WIN)
 
@@ -374,7 +374,7 @@ std::optional<Sdk> newest_macos_sdk(const path::Path& sdks_root) {
 }
 
 const std::optional<MacStartup>& macos_startup_inputs() {
-  static const std::optional<MacStartup> FOUND =
+  static const std::optional<MacStartup> found =
       []() -> std::optional<MacStartup> {
     std::vector<Sdk> sdks;
     if (const char* sdkroot = std::getenv("SDKROOT"); sdkroot != nullptr) {
@@ -421,7 +421,7 @@ const std::optional<MacStartup>& macos_startup_inputs() {
     }
     return std::nullopt;
   }();
-  return FOUND;
+  return found;
 }
 #endif  // BUILD_FLAG(IS_OS_MAC)
 

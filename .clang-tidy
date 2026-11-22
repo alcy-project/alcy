@@ -104,8 +104,13 @@ CheckOptions:
   # compile-time values, such as the generated staged-source tables.
   - key:          readability-identifier-naming.GlobalConstantCase
     value:        UPPER_CASE
+  # A function-local `static const` that cannot be constexpr keeps a
+  # plain snake_case name, like any other local. Compile-time statics
+  # are UPPER_CASE through StaticConstexprVariableCase above; namespace
+  # statics through GlobalConstantCase, and class statics through
+  # ClassConstantCase.
   - key:          readability-identifier-naming.StaticConstantCase
-    value:        UPPER_CASE
+    value:        lower_case
   - key:          readability-identifier-naming.ConstantMemberCase
     value:        UPPER_CASE
   - key:          readability-identifier-naming.ParameterCase

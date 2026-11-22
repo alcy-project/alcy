@@ -260,13 +260,13 @@ base::Result<std::vector<DocSource>, std::string> discover_ordered(
 
 base::Result<std::vector<DocSource>, std::string> discover_spec(
     std::string_view spec_dir) {
-  static const std::vector<std::string> SPEC_ORDER = {
+  static const std::vector<std::string> spec_order = {
       "overview.md",  "keywords.md",  "values.md",   "types.md",
       "grammar.md",   "items.md",     "modules.md",  "control.md",
       "ownership.md", "summaries.md", "ffi.md",      "fmt.md",
       "comp.md",      "errors.md",    "deferred.md",
   };
-  return discover_ordered(spec_dir, SPEC_ORDER, "reference", "spec");
+  return discover_ordered(spec_dir, spec_order, "reference", "spec");
 }
 
 base::Result<std::vector<SpecAsset>, std::string> discover_spec_assets(
@@ -294,10 +294,10 @@ base::Result<std::vector<SpecAsset>, std::string> discover_spec_assets(
 
 base::Result<std::vector<DocSource>, std::string> discover_tools(
     std::string_view tools_dir) {
-  static const std::vector<std::string> TOOLS_ORDER = {
+  static const std::vector<std::string> tools_order = {
       "index.md", "build.md", "compile.md", "check.md", "test.md", "run.md",
       "fmt.md",   "lint.md",  "lsp.md",     "new.md",   "init.md",
   };
-  return discover_ordered(tools_dir, TOOLS_ORDER, "tools", "tools");
+  return discover_ordered(tools_dir, tools_order, "tools", "tools");
 }
 }  // namespace ssg

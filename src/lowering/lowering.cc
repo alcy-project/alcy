@@ -434,11 +434,11 @@ ir::RegisterIdx Lowerer::emit_type_query(ir::Opcode op, ir::TypeIdx measure) {
 
 const std::vector<ir::TypeIdx>& Lowerer::fn_instance_args(u32 module,
                                                           u32 sig_index) const {
-  static const std::vector<ir::TypeIdx> NONE;
+  static const std::vector<ir::TypeIdx> none;
   const auto found =
       fn_args_by_slot_.find((static_cast<u64>(module) << 32) | sig_index);
   if (found == fn_args_by_slot_.end()) {
-    return NONE;
+    return none;
   }
   return pkg.fn_insts[found->second].args;
 }

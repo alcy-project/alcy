@@ -125,10 +125,10 @@ UsageText::UsageText(Language language)
 }
 
 const UsageText& usage_text(Language language) {
-  static const std::array<UsageText, i18n::LANGUAGE_COUNT> TABLES = {
+  static const std::array<UsageText, i18n::LANGUAGE_COUNT> tables = {
       UsageText{Language::EnUs},
   };
-  return TABLES[static_cast<usize>(language)];
+  return tables[static_cast<usize>(language)];
 }
 
 std::string HelpFormatter::operator()(const arg::HelpContext& context,
