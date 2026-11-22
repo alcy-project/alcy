@@ -25,15 +25,14 @@ namespace cli {
 // fpag's Arg holds its help text as a view, so the text has to outlive
 // every parser built from it. A table is filled on first use and lives
 // as long as the process, which is what lets a test build a second
-// parser over text the first one already used. Only the messages the
-// cli renders are in it: a key the compiler reports through has no
-// business here, and asking for one yields an empty view.
+// parser over text the first one already used. It holds every message
+// in the catalog, so any key a parser or a report asks for has a view.
 class UsageText {
  public:
   explicit UsageText(i18n::Language language);
 
-  // The text of one message, rendered for this language. Empty for a key
-  // no one filled, which is every message the compiler reports through.
+  // The text of one message, rendered for this language. Every key in
+  // the catalog is filled, so this is never empty.
   std::string_view text(i18n::Key key) const {
     return texts_[static_cast<usize>(key)];
   }
