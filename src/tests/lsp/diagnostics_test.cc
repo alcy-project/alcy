@@ -56,6 +56,25 @@ TEST_CASE("Borrow errors reach diagnostics after the single analysis") {
   }
 }
 
+TEST_CASE("A labeled finding reaches relatedInformation") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "fn main() -> i32 {\n  while true {\n    break\n  }\n  ret 0\n}\n");
+  const text::JsonValue report = document_diagnostic_report(document);
+  const text::JsonValue* items = report.find("items");
+  CHECK(items != nullptr);
+  if (items == nullptr) {
+    return;
+  }
+  bool related = false;
+  for (const text::JsonValue& item : items->as_array()) {
+    if (item.find("relatedInformation") != nullptr) {
+      related = true;
+    }
+  }
+  CHECK(related);
+}
+
 TEST_CASE("The workspace report carries one entry per open document") {
   DocumentStore documents;
   documents.open("file:///ok.al", "alcy", 1,

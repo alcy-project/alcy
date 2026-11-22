@@ -254,6 +254,19 @@ TEST_CASE("A cached range clips tokens at the requested end") {
   }
 }
 
+TEST_CASE("A cached range clips a multi-line comment like a fresh range") {
+  SemanticTokensCache cache;
+  const Document document("file:///main.al", "alcy", 1,
+                          "/* one\n two */\nfn main() -> i32 {\n  ret 0\n}\n");
+  const DocumentAnalysis analysis(document);
+  (void)cache.full(document, analysis);
+  const text::JsonValue ranged =
+      cache.range(document, analysis, Position{1, 0}, Position{2, 0});
+  const text::JsonValue fresh =
+      semantic_tokens_range(document, analysis, Position{1, 0}, Position{2, 0});
+  CHECK(flat_data(ranged) == flat_data(fresh));
+}
+
 TEST_CASE("Clearing the token cache forces a fresh result") {
   SemanticTokensCache cache;
   const Document document("file:///main.al", "alcy", 1,

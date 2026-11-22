@@ -179,6 +179,8 @@ TEST_CASE("Lowering hands back the checked package it consumed") {
   // Checked metadata survives even though the type storage moved out.
   CHECK(!handed_back->modules.empty());
   CHECK(!handed_back->tree.modules.empty());
+  // The proof moved into lowering, so the handed-back storage is empty.
+  CHECK(handed_back->types->state().types.empty());
 }
 
 TEST_CASE("Lower structs tuples fields and borrows") {
