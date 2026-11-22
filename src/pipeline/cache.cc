@@ -187,7 +187,9 @@ std::optional<std::vector<std::vector<u8>>> object_cache_load(
     for (usize shift = 0, i = 0; shift < 64; shift += 8, ++i) {
       size |= static_cast<u64>(bytes[base + i]) << shift;
     }
-    if (size == 0 || at + size > bytes.size()) {
+    // Subtract instead of adding, so a size near the end of the address
+    // space cannot wrap the comparison and pass as in bounds.
+    if (size == 0 || size > bytes.size() - at) {
       return std::nullopt;
     }
     parts.emplace_back(bytes.begin() + static_cast<isize>(at),
