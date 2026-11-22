@@ -145,6 +145,14 @@ TEST_CASE("a page stamp names the build and links to it") {
                   "rel=\"noopener\">TESTSTAMP</a>") != std::string::npos);
 }
 
+TEST_CASE("a page stamp escapes its URL before writing the link") {
+  const std::string html =
+      ssg::footer({.text = "TESTSTAMP", .url = "x\" onmouseover=\"alert(1)"});
+  CHECK(html.find("href=\"x\" onmouseover=\"alert(1)\"") == std::string::npos);
+  CHECK(html.find("href=\"x&quot; onmouseover=&quot;alert(1)\"") !=
+        std::string::npos);
+}
+
 TEST_CASE("the header names all five destinations") {
   const std::string html = ssg::site_header(
       ssg_test::test_catalog(), "index.html", "en", "index.html", "");
