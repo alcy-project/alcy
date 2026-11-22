@@ -4,8 +4,8 @@
 // insert into a temporary and leave the set empty.
 fn key(i: i32) -> String {
   mut s := String::with_capacity(2 as usize)
-  s.push((48 + i / 10) as u8)
-  s.push((48 + i % 10) as u8)
+  _ := s.push_ascii((48 + i / 10) as u8)
+  _ := s.push_ascii((48 + i % 10) as u8)
   ret s
 }
 

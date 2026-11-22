@@ -38,9 +38,9 @@ impl String {
     while i < str_len(s) {
       b := str_byte(s, i)
       if b >= 0x41u8 && b <= 0x5au8 {
-        out.push(b + 0x20u8)
+        out.push_byte_unchecked(b + 0x20u8)
       } else {
-        out.push(b)
+        out.push_byte_unchecked(b)
       }
       i = i + 1
     }
@@ -55,9 +55,9 @@ impl String {
     while i < str_len(s) {
       b := str_byte(s, i)
       if b >= 0x61u8 && b <= 0x7au8 {
-        out.push(b - 0x20u8)
+        out.push_byte_unchecked(b - 0x20u8)
       } else {
-        out.push(b)
+        out.push_byte_unchecked(b)
       }
       i = i + 1
     }
@@ -131,13 +131,25 @@ impl String {
     ret self.len == 0
   }
 
-  // Appends `b`, growing the buffer when it is full.
-  pub fn push(mut self: &mut Self, b: u8) {
+  // Internal byte append for callers that have already established
+  // that the byte keeps the buffer well-formed. A public append of an
+  // arbitrary byte would let a `String` hold an ill-formed sequence.
+  fn push_byte_unchecked(mut self: &mut Self, b: u8) {
     if self.len == self.cap {
       self.grow()
     }
     unsafe { uninit_write(elem_ptr(self.buf, self.len), b) }
     self.len = self.len + 1
+  }
+
+  // Appends one ASCII byte, or refuses it when the byte could not
+  // start or continue a scalar on its own.
+  pub fn push_ascii(mut self: &mut Self, b: u8) -> Option<()> {
+    if b >= 0x80u8 {
+      ret Option::None
+    }
+    self.push_byte_unchecked(b)
+    ret Option::Some(())
   }
 
   // Appends every byte of `s`, growing once for the whole run.
@@ -472,7 +484,7 @@ impl str {
       if b >= 0x41u8 && b <= 0x5au8 {
         b = b + 0x20u8
       }
-      out.push(b)
+      out.push_byte_unchecked(b)
       i = i + 1
     }
     ret out
@@ -487,7 +499,7 @@ impl str {
       if b >= 0x61u8 && b <= 0x7au8 {
         b = b - 0x20u8
       }
-      out.push(b)
+      out.push_byte_unchecked(b)
       i = i + 1
     }
     ret out

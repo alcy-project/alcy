@@ -10,7 +10,14 @@ fn main() -> i32 {
   while i < words.len() {
     w := words.at(i).or_panic_with_message("expected a value")
     mut key := String::with_capacity(1 as usize)
-    key.push(w.byte(0))
+    match w.as_str().byte_slice(0, 1) {
+      Option::Some(first) => {
+        key.push_str(first)
+      }
+      Option::None => {
+        ret 1
+      }
+    }
     list := groups.get_or_insert_with(key, () -> Vec::<String>::new())
     list.push(String::from(w.as_str()))
     i = i + 1

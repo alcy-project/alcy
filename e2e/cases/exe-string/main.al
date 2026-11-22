@@ -4,8 +4,8 @@ fn main() -> i32 {
   if s.len_bytes() != 0 {
     bad = 1
   }
-  s.push(104u8)
-  s.push(105u8)
+  s.push_str("h")
+  s.push_str("i")
   if s.len_bytes() != 2 {
     bad = 2
   }
@@ -37,7 +37,7 @@ fn main() -> i32 {
   mut big := String::new()
   mut i := 0
   while i < 300 {
-    big.push(97u8)
+    big.push_str("a")
     i = i + 1
   }
   if big.len_bytes() != 300 {

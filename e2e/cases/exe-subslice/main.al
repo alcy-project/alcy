@@ -80,10 +80,10 @@ fn main() -> i32 {
   }
   // A `str` narrows to a `str`.
   mut s := String::new()
-  s.push(104u8)
-  s.push(105u8)
-  s.push(106u8)
-  s.push(107u8)
+  s.push_str("h")
+  s.push_str("i")
+  s.push_str("j")
+  s.push_str("k")
   t2 := s.as_str()[1..<3]
   if str_len(t2) != 2 {
     bad = 12

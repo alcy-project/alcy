@@ -22,7 +22,7 @@ fn render(msgs: Vec<Diagnostic>) -> String {
   while i < ordered.len() {
     d := ordered.at(i).or_panic_with_message("expected a value")
     if i > 0 {
-      out.push(0x0au8)
+      out.push_str("\n")
     }
     out.push_str(d.message.as_str())
     i = i + 1

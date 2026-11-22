@@ -3,7 +3,7 @@
 // aborting inside the checked addition that computes the byte count.
 fn main() -> i32 {
   mut s := String::with_capacity(2 as usize)
-  s.push(97u8)
+  s.push_str("a")
   s.reserve(wrapping_sub(0 as usize, 1 as usize))
   ret 0
 }
