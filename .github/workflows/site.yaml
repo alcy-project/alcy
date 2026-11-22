@@ -76,7 +76,7 @@ jobs:
           os: ${{ runner.os }}
 
       - name: Setup GN
-        uses: pug523/actions/setup-gn@23d34841e8b140326ee369f881dbb1b643efe2d4
+        uses: pug523/actions/setup-gn@9afc52d92b075ad941b86041a12a25d2f7ec76b2
 
       - name: Install Ninja
         shell: bash
