@@ -129,6 +129,32 @@ TEST_CASE("Variant completion inserts the qualified name") {
   }
 }
 
+TEST_CASE("Qualified variant completion replaces the whole path") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "enum Option {\n  Some,\n  None,\n}\n"
+                          "fn f() -> i32 {\n  Option::Som\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{5, 13});
+  const text::JsonValue* item = find_item(list, "Some");
+  CHECK(item != nullptr);
+  if (item == nullptr) {
+    return;
+  }
+  const text::JsonValue* edit = item->find("textEdit");
+  CHECK(edit != nullptr);
+  if (edit == nullptr) {
+    return;
+  }
+  CHECK(edit->find("newText")->as_string() == "Option::Some");
+  const text::JsonValue* range = edit->find("range");
+  CHECK(range != nullptr);
+  if (range != nullptr) {
+    CHECK(range->find("start")->find("character")->as_number() == 2.0);
+    CHECK(range->find("end")->find("character")->as_number() == 13.0);
+  }
+}
+
 TEST_CASE("Completion carries a text edit and doc comments") {
   const Document document("file:///main.al", "alcy", 1,
                           "/// Adds two numbers.\n"

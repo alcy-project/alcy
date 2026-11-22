@@ -47,8 +47,10 @@ std::string_view prefix_at(std::string_view text, usize offset) {
   usize start = offset;
   while (start > 0) {
     const char c = text[start - 1];
+    // A qualified name is one prefix: replacing only its last segment
+    // would double the qualifier for a variant item's insert text.
     const bool word = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                      (c >= '0' && c <= '9') || c == '_';
+                      (c >= '0' && c <= '9') || c == '_' || c == ':';
     if (!word) {
       break;
     }
@@ -239,6 +241,10 @@ text::JsonValue completion_items(const Document& document,
                                  Position position) {
   const usize offset = document.index().byte_offset(document.text(), position);
   const std::string_view prefix = prefix_at(document.text(), offset);
+  const usize qualifier_end = prefix.rfind("::");
+  const std::string_view name_prefix = qualifier_end == std::string_view::npos
+                                           ? prefix
+                                           : prefix.substr(qualifier_end + 2);
 
   std::vector<Item> items;
   if (analysis.ok()) {
@@ -265,7 +271,7 @@ text::JsonValue completion_items(const Document& document,
 
   text::JsonValue array = text::JsonValue::make_array();
   for (const Item& item : items) {
-    if (!starts_with(item.label, prefix)) {
+    if (!starts_with(item.label, name_prefix)) {
       continue;
     }
     text::JsonValue entry = text::JsonValue::make_object();
