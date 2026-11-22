@@ -59,9 +59,9 @@ base::Result<void, diag::Reported> link_executable(
                                 u32 workers);
 
 // Emits the package's code generation as objects under `scratch`, one per
-// part, and answers their paths in order. The part count is the caller's,
-// and it must be a function of the program: two runs of one package write
-// the same objects whatever `-j` said.
+// part, and answers their paths in order. The part count follows the
+// program; without a middle end it is also bounded by the workers, since
+// extra parts would only add bitcode round trips.
 base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
     PipelineContext& ctx,
     lowering::LoweredPackage& package,

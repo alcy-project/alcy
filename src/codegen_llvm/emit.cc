@@ -189,15 +189,13 @@ Llvm::emit_artifacts(codegen::EmitRequest request) {
   if (!supports(request.kind, request.target)) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
-  // Built and optimized whole, then partitioned: the middle end sees one
-  // module, so a release build keeps the cross-function inlining it has
-  // today, and only code generation - which is per function either way - is
-  // spread. `SplitModule` writes partitions a linker accepts, which is what
-  // lets the caller link them back into one image.
-  // A split request carries its optimization to the parts: the ThinLTO
-  // backend runs the middle end per part, on the thread that writes it, and
-  // imports what the other parts define. A request that asked for no
-  // optimization has nothing to link and only the code generation is spread.
+  // The module is built whole, then partitioned. With a middle end the
+  // whole module is optimized before the split, keeping cross-function
+  // inlining; `optimize_in_parts` then runs a ThinLTO backend on each
+  // partition, importing what the others define. Without one there is no
+  // link step and only code generation is spread over the parts.
+  // `SplitModule` writes partitions a linker accepts, which is what lets
+  // the caller link them back into one image.
   const bool optimize_parts = request.options.optimize;
   request.options.optimize = false;
   EmittedModule emitted;

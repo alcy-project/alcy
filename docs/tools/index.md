@@ -62,7 +62,7 @@ Every verb takes these before its own arguments:
 | `--lang` | `en-us` | `en-us` | Language for every message this run prints. The locale the shell exports is never consulted |
 | `-t`, `--time-trace` | flag | off | Time the pipeline's phases; with `--json` the events embed in the document, on their own the phases print as a pruned tree |
 | `--json` | flag | off | One JSON document on standard output, for a tool reading it. Applies to `build`, `compile`, `check`, `lint`, and `test` |
-| `-j`, `--jobs` | `N` | `1` | Threads reading source files. `--jobs 0` is refused; everything after the read is single-threaded |
+| `-j`, `--jobs` | `N` | half the machine | Threads reading source files. `--jobs 0` asks for that default; `-j 1` reads in order. Everything after the read is single-threaded |
 
 `--release` selects the built-in `release` profile; `--profile <name>` selects
 one by name (see [the profile file](build.md#the-profile-file) in

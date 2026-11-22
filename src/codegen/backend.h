@@ -64,9 +64,8 @@ struct EmitOptions {
   // command.
   bool optimize = false;
   // How many objects code generation may be split into, for a backend
-  // that can write more than one. The count is a function of the
-  // program, never of the machine running the build: what a run writes
-  // must not depend on how many threads read it.
+  // that can write more than one. The count follows the program; a
+  // profile with no middle end also bounds it by the reader threads.
   u32 parts = 1;
   // How many threads the split may use. A backend that ignores `parts`
   // ignores this too.
