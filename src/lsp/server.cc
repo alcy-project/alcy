@@ -1055,18 +1055,28 @@ void Server::code_action(const text::JsonValue& id,
   const text::JsonValue* context = field(params, "context");
   const text::JsonValue* only =
       context == nullptr ? nullptr : field(*context, "only");
-  if (only != nullptr && only->is_array() && !only->as_array().empty()) {
+  if (only != nullptr && only->is_array()) {
     text::JsonValue filtered = text::JsonValue::make_array();
-    for (const text::JsonValue& action : actions.as_array()) {
-      const text::JsonValue* kind = action.find("kind");
-      if (kind == nullptr || !kind->is_string()) {
-        continue;
-      }
-      for (const text::JsonValue& wanted : only->as_array()) {
-        if (wanted.is_string() &&
-            kind->as_string().starts_with(wanted.as_string())) {
-          filtered.push(action);
-          break;
+    if (!only->as_array().empty()) {
+      for (const text::JsonValue& action : actions.as_array()) {
+        const text::JsonValue* kind = action.find("kind");
+        if (kind == nullptr || !kind->is_string()) {
+          continue;
+        }
+        for (const text::JsonValue& wanted : only->as_array()) {
+          if (!wanted.is_string()) {
+            continue;
+          }
+          const std::string_view requested = wanted.as_string();
+          const std::string_view offered = kind->as_string();
+          // CodeActionKind matches on a dot boundary: "quickfix" is
+          // not a prefix of another kind in the same family.
+          if (offered == requested || (offered.starts_with(requested) &&
+                                       offered.size() > requested.size() &&
+                                       offered[requested.size()] == '.')) {
+            filtered.push(action);
+            break;
+          }
         }
       }
     }
