@@ -76,16 +76,24 @@ u64 AnalysisCache::stamp_for(const Document& focus,
   // Only the documents that feed this package can invalidate its
   // signature. An edit in an unrelated package must not force a disk
   // re-fingerprint here, and a u64 avoids a string build per request.
-  u64 stamp = base::hash64(focus.uri()) +
-              static_cast<u64>(focus.version()) * VERSION_STAMP_MIX;
+  u64 stamp = base::hash64(focus.uri());
+  bool focus_in_store = false;
   if (documents_ != nullptr) {
     for (const auto& [uri, document] : documents_->documents()) {
       if (package_key(document) != pkg_key) {
         continue;
       }
       stamp ^= base::hash64(uri) +
-               static_cast<u64>(document.version()) * 0x9E3779B97F4A7C15ull;
+               static_cast<u64>(document.version()) * VERSION_STAMP_MIX;
+      if (uri == focus.uri()) {
+        focus_in_store = true;
+      }
     }
+  }
+  // A direct get() on a document the store does not hold still has to
+  // notice its version; otherwise the terms above would cancel it out.
+  if (!focus_in_store) {
+    stamp ^= static_cast<u64>(focus.version()) * VERSION_STAMP_MIX;
   }
   return stamp;
 }
@@ -102,7 +110,8 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
   const std::string& pkg_key = package_key(document);
   const u64 stamp = stamp_for(document, pkg_key);
   const auto cached = signatures_.find(pkg_key);
-  if (cached == signatures_.end() || cached->second.stamp != stamp) {
+  if (!watched_files_ || cached == signatures_.end() ||
+      cached->second.stamp != stamp) {
     const std::vector<workspace::BufferView> buffers = buffers_for(document);
     const std::string value =
         pkg_key.starts_with("standalone:")

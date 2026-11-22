@@ -37,6 +37,10 @@ class AnalysisCache {
 
   void set_encoding(PositionEncoding encoding) { encoding_ = encoding; }
 
+  // Without dynamic watcher registration the server gets no notice of an
+  // external edit, so a request must re-read the workspace signature.
+  void set_watched_files(bool watched) { watched_files_ = watched; }
+
   // Whether two buffers share a package key, for re-publishing diagnostics
   // to a sibling when one file of the package changes.
   bool same_package(const Document& lhs, const Document& rhs) const {
@@ -84,6 +88,7 @@ class AnalysisCache {
 
   const DocumentStore* documents_ = nullptr;
   PositionEncoding encoding_ = PositionEncoding::Utf16;
+  bool watched_files_ = false;
   std::unordered_map<std::string, Entry> entries_;
   std::unordered_map<std::string, std::shared_ptr<PackageAnalysis>> packages_;
   struct SignatureEntry {

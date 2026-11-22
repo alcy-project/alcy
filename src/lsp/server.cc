@@ -541,6 +541,7 @@ void Server::initialize(const text::JsonValue& id,
     encoding_ = negotiate_encoding(*params);
     cache_.set_encoding(encoding_);
     watched_files_supported_ = false;
+    cache_.set_watched_files(false);
     if (const text::JsonValue* capabilities = params->find("capabilities");
         capabilities != nullptr && capabilities->is_object()) {
       if (const text::JsonValue* workspace = capabilities->find("workspace");
@@ -552,6 +553,7 @@ void Server::initialize(const text::JsonValue& id,
                   watched->find("dynamicRegistration");
               dynamic != nullptr && dynamic->is_bool()) {
             watched_files_supported_ = dynamic->as_bool();
+            cache_.set_watched_files(watched_files_supported_);
           }
         }
       }
