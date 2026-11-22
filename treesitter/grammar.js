@@ -133,13 +133,14 @@ module.exports = grammar({
 
     // Attributes ------------------------------------------------------------
 
-    // Either attribute may lead an item and repeat; the closed set is
-    // `#[when(EXPR)]`, which gates an item on the build context, and
+    // The three attributes may lead an item and repeat; the closed set is
+    // `#[when(EXPR)]`, which gates an item on the build context,
     // `#[repr(C)]`, which fixes a struct's layout to the platform's C
-    // one (grammar.ebnf, `attribute`). Word-like parts read as
-    // identifiers so the rest of the language keeps its words, and the
-    // parser validates the argument the way it validates an extern
-    // convention. A `#[test]` role marker takes no argument.
+    // one, and `#[test]`, which marks a function a test (grammar.ebnf,
+    // `attribute`). Word-like parts read as identifiers so the rest of
+    // the language keeps its words, and the parser validates the
+    // argument the way it validates an extern convention. `#[test]` takes
+    // no argument.
     attribute: $ => seq(
       '#',
       '[',

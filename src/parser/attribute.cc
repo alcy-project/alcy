@@ -23,6 +23,7 @@ namespace {
 
 constexpr std::string_view TARGET = "target";
 constexpr std::string_view TESTING = "testing";
+constexpr std::string_view FREESTANDING = "freestanding";
 constexpr std::string_view FREESTANDING_KEY = "target.freestanding";
 constexpr std::string_view KNOWN_OS_VALUES =
     "linux, darwin, windows, wasi, unknown";
@@ -276,11 +277,11 @@ struct Evaluator {
       // side and which shape.
       const std::string_view left_key = left->target_key;
       const std::string_view right_key = right->target_key;
-      if ((left_key == "freestanding" || left_key == TESTING) &&
+      if ((left_key == FREESTANDING || left_key == TESTING) &&
           right_key.empty()) {
         emit_target_is_boolean(
             bag, right->span, left_key == TESTING ? TESTING : FREESTANDING_KEY);
-      } else if ((right_key == "freestanding" || right_key == TESTING) &&
+      } else if ((right_key == FREESTANDING || right_key == TESTING) &&
                  left_key.empty()) {
         emit_target_is_boolean(
             bag, left->span, right_key == TESTING ? TESTING : FREESTANDING_KEY);
@@ -395,8 +396,8 @@ struct Evaluator {
         if (name == "arch") {
           return Value::make_string(std::string(facts.arch), "arch", key.span);
         }
-        if (name == "freestanding") {
-          return Value::make_boolean(facts.freestanding, "freestanding",
+        if (name == FREESTANDING) {
+          return Value::make_boolean(facts.freestanding, FREESTANDING,
                                      key.span);
         }
         emit_unknown_target(bag, key, bytes);

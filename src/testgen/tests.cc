@@ -95,25 +95,25 @@ GatheredModule gather_tests(std::span<const ast::ItemIdx> items,
       continue;
     }
     const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
-    if (fn.name.name == ENTRY_POINT) {
-      gathered.refused.push_back(RefusedTest{Refusal::NamedMain, fn.name});
+    const auto refuse = [&](Refusal reason) {
+      gathered.refused.push_back(RefusedTest{reason, fn.name});
       refused_at.push_back(at);
+    };
+    if (fn.name.name == ENTRY_POINT) {
+      refuse(Refusal::NamedMain);
       continue;
     }
     if (std::find(module_names.begin(), module_names.end(), fn.name.name) !=
         module_names.end()) {
-      gathered.refused.push_back(RefusedTest{Refusal::Collides, fn.name});
-      refused_at.push_back(at);
+      refuse(Refusal::Collides);
       continue;
     }
     if (std::find(taken.begin(), taken.end(), fn.name.name) != taken.end()) {
-      gathered.refused.push_back(RefusedTest{Refusal::Duplicates, fn.name});
-      refused_at.push_back(at);
+      refuse(Refusal::Duplicates);
       continue;
     }
     if (fn.return_type.is_valid()) {
-      gathered.refused.push_back(RefusedTest{Refusal::Returns, fn.name});
-      refused_at.push_back(at);
+      refuse(Refusal::Returns);
       continue;
     }
     taken.push_back(fn.name.name);
