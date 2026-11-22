@@ -55,7 +55,6 @@ class AnalysisCache {
   void erase(std::string_view uri);
 
   // Drops package readings no open document's entry still names.
-  void prune_packages();
 
   [[nodiscard]] const Document* open_document(std::string_view uri) const {
     return documents_ == nullptr ? nullptr : documents_->find(uri);
@@ -79,14 +78,15 @@ class AnalysisCache {
   std::vector<workspace::BufferView> buffers_for(const Document& focus) const;
   std::string package_key_for(const Document& focus) const;
   const std::string& package_key(const Document& focus) const;
-  std::string stamp_for(const Document& focus) const;
+  u64 stamp_for(const Document& focus, const std::string& pkg_key) const;
+  void prune_packages();
 
   const DocumentStore* documents_ = nullptr;
   PositionEncoding encoding_ = PositionEncoding::Utf16;
   std::unordered_map<std::string, Entry> entries_;
   std::unordered_map<std::string, std::shared_ptr<PackageAnalysis>> packages_;
   struct SignatureEntry {
-    std::string stamp;
+    u64 stamp = 0;
     std::string value;
   };
   mutable std::unordered_map<std::string, std::string> package_keys_;

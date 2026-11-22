@@ -67,17 +67,23 @@ const std::string& AnalysisCache::package_key(const Document& focus) const {
       .first->second;
 }
 
-std::string AnalysisCache::stamp_for(const Document& focus) const {
-  std::string out = std::to_string(focus.version());
+u64 AnalysisCache::stamp_for(const Document& focus,
+                             const std::string& pkg_key) const {
+  // Only the documents that feed this package can invalidate its
+  // signature. An edit in an unrelated package must not force a disk
+  // re-fingerprint here, and a u64 avoids a string build per request.
+  u64 stamp = base::hash64(focus.uri()) +
+              static_cast<u64>(focus.version()) * 0x9E3779B97F4A7C15ull;
   if (documents_ != nullptr) {
     for (const auto& [uri, document] : documents_->documents()) {
-      out.push_back(';');
-      out.append(uri);
-      out.push_back(':');
-      out.append(std::to_string(document.version()));
+      if (package_key(document) != pkg_key) {
+        continue;
+      }
+      stamp ^= base::hash64(uri) +
+               static_cast<u64>(document.version()) * 0x9E3779B97F4A7C15ull;
     }
   }
-  return out;
+  return stamp;
 }
 
 void AnalysisCache::invalidate(const Document& document) {
@@ -90,7 +96,7 @@ void AnalysisCache::invalidate(const Document& document) {
 const DocumentAnalysis& AnalysisCache::get(const Document& document) {
   const std::string& uri = document.uri();
   const std::string& pkg_key = package_key(document);
-  const std::string stamp = stamp_for(document);
+  const u64 stamp = stamp_for(document, pkg_key);
   const auto cached = signatures_.find(pkg_key);
   if (cached == signatures_.end() || cached->second.stamp != stamp) {
     const std::vector<workspace::BufferView> buffers = buffers_for(document);
@@ -104,15 +110,19 @@ const DocumentAnalysis& AnalysisCache::get(const Document& document) {
   const std::string& signature = signatures_.at(pkg_key).value;
   const std::string cache_key = pkg_key + "\0" + signature;
 
+  bool removed = false;
   for (auto it = entries_.begin(); it != entries_.end();) {
     if (it->second.package_key == pkg_key &&
         it->second.cache_key != cache_key) {
       it = entries_.erase(it);
+      removed = true;
     } else {
       ++it;
     }
   }
-  prune_packages();
+  if (removed) {
+    prune_packages();
+  }
 
   const auto found = entries_.find(uri);
   if (found != entries_.end() && found->second.cache_key == cache_key) {
