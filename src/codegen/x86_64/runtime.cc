@@ -570,9 +570,9 @@ void path_buffer(Body& body, u8 width) {
   const auto mov = [&](MOp op, Operand dst, Operand src) {
     body.insts.push_back(make_inst(op, 8, dst, src));
   };
-  // rdi = path bytes, rsi = byte count. The fixed buffer holds 4095
-  // bytes plus its terminator; clamp a longer path rather than letting
-  // the copy overwrite the saved frame pointer and return address.
+  // rdi = path bytes, rsi = byte count. Clamp a longer path to the
+  // 4127 bytes the reserved 4160-byte frame can hold without reaching
+  // the caller's saved arguments at [rbp-8] .. [rbp-32].
   const u32 fits = body.label_count++;
   body.insts.push_back(
       make_inst(MOp::Cmp, 8, Operand{Reg::Rsi}, Operand{Imm{4127}}));
@@ -663,8 +663,15 @@ Body build_file_size() {
   mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{3}});
   body.insts.push_back(make_inst(MOp::Syscall, 8));
   mov(MOp::Mov, Operand{Reg::Rax}, Operand{Reg::R13});
-  body.insts.push_back(make_inst(MOp::Pop, 8, Operand{Reg::R13}));
-  body.insts.push_back(make_inst(MOp::Pop, 8, Operand{Reg::R12}));
+  // The saves above live at [rbp-16] (r13) and [rbp-8] (r12). The stack
+  // pointer has moved twice since then, so a pop would read the stat
+  // buffer instead; load the saved words by their fixed addresses.
+  mov(MOp::Mov, Operand{Reg::R13},
+      Operand{Mem{
+          .base = Reg::Rbp, .index = std::nullopt, .scale = 1, .disp = -16}});
+  mov(MOp::Mov, Operand{Reg::R12},
+      Operand{Mem{
+          .base = Reg::Rbp, .index = std::nullopt, .scale = 1, .disp = -8}});
   body.insts.push_back(make_inst(MOp::Ret, 8));
   return body;
 }
