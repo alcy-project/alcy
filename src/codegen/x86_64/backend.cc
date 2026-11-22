@@ -295,6 +295,17 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     }
   }
 
+  // The env wrappers call alcy_env_find; make sure it is emitted too.
+  // Iterate while growing the list, since a body can pull in another.
+  const bool uses_env = std::find(runtime_names.begin(), runtime_names.end(),
+                                  "alcy_env_exists") != runtime_names.end() ||
+                        std::find(runtime_names.begin(), runtime_names.end(),
+                                  "alcy_env_get") != runtime_names.end();
+  if (uses_env && std::find(runtime_names.begin(), runtime_names.end(),
+                            "alcy_env_find") == runtime_names.end()) {
+    runtime_names.push_back("alcy_env_find");
+  }
+
   // The runtime, for the names the program reaches. A body is built
   // before the data section is written, because the text it prints is
   // data too.
@@ -328,6 +339,8 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     wrapper.symbols.push_back("alcy_argc");
     const u32 argv = wrapper.symbols.size();
     wrapper.symbols.push_back("alcy_argv");
+    const u32 environ = wrapper.symbols.size();
+    wrapper.symbols.push_back("alcy_environ");
     if (request.options.freestanding) {
       wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
                                         Operand{Mem{.base = Reg::Rsp,
@@ -353,6 +366,26 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           Operand{Mem{
               .base = Reg::Rcx, .index = std::nullopt, .scale = 1, .disp = 0}},
           Operand{Reg::Rax}));
+      // envp follows argv and its terminating null: rsp + 8 + (argc+1)*8.
+      // argc was loaded into rax at the top of this branch and rsp still
+      // points at the initial stack.
+      wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
+                                        Operand{Mem{.base = Reg::Rsp,
+                                                    .index = std::nullopt,
+                                                    .scale = 1,
+                                                    .disp = 0}}));
+      wrapper.insts.push_back(make_inst(MOp::Lea, 8, Operand{Reg::Rax},
+                                        Operand{Mem{.base = Reg::Rsp,
+                                                    .index = RegRef{Reg::Rax},
+                                                    .scale = 8,
+                                                    .disp = 16}}));
+      wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
+                                        Operand{SymbolRef{environ}}));
+      wrapper.insts.push_back(make_inst(
+          MOp::Mov, 8,
+          Operand{Mem{
+              .base = Reg::Rcx, .index = std::nullopt, .scale = 1, .disp = 0}},
+          Operand{Reg::Rax}));
     } else {
       wrapper.insts.push_back(
           make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{SymbolRef{argc}}));
@@ -368,6 +401,14 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           Operand{Mem{
               .base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
           Operand{Reg::Rsi}));
+      // A hosted main receives envp as its third argument.
+      wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
+                                        Operand{SymbolRef{environ}}));
+      wrapper.insts.push_back(make_inst(
+          MOp::Mov, 8,
+          Operand{Mem{
+              .base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}},
+          Operand{Reg::Rdx}));
     }
 
     // An enum answer arrives in a slot the caller owns. The wrapper
@@ -576,7 +617,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
                                    "alcy_arg_count") != runtime_names.end();
   if (request.emit_entry || uses_args) {
     object::Section globals{.name = ".data",
-                            .bytes = std::vector<u8>(16, 0),
+                            .bytes = std::vector<u8>(24, 0),
                             .align = 8,
                             .write = true,
                             .alloc = true,
@@ -596,6 +637,13 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
                        .size = 8,
                        .bind = object::SymbolBind::Global,
                        .type = object::SymbolType::Object});
+    object.symbols.push_back(
+        object::Symbol{.name = "alcy_environ",
+                       .section = section,
+                       .offset = 16,
+                       .size = 8,
+                       .bind = object::SymbolBind::Global,
+                       .type = object::SymbolType::Object});
     object.sections.push_back(std::move(globals));
   }
 
@@ -603,8 +651,10 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // platform's own allocator, and whatever else a runtime body asked
   // for. They ride the symbol table as undefined, and the link resolves
   // them.
-  std::unordered_set<std::string_view> carried_names;
-  carried_names.reserve(object.symbols.size());
+  // Own the names: inserting into object.symbols below can reallocate it,
+  // invalidating any string_view that points into an existing symbol.
+  std::unordered_set<std::string> carried_names;
+  carried_names.reserve(object.symbols.size() + object.relocations.size());
   for (const object::Symbol& symbol : object.symbols) {
     carried_names.insert(symbol.name);
   }

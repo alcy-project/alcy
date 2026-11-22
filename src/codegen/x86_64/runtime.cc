@@ -712,6 +712,143 @@ Body build_file_io(bool write) {
   return body;
 }
 
+// alcy_env_find(name: str) -> str: scan the process environment for
+// NAME=VALUE and answer VALUE as a borrowed view. A null pointer means
+// not found. The table pointer was saved by the entry wrapper; hosted
+// builds leave it null. On a freestanding ELF entry the kernel hands us
+// envp as an array of NUL-terminated pointers ending in null.
+Body build_env_find() {
+  Body body;
+  const auto mov = [&](MOp op, u8 width, Operand dst, Operand src) {
+    body.insts.push_back(make_inst(op, width, dst, src));
+  };
+  const auto label = [&]() { return body.label_count++; };
+  const auto jcc = [&](Cond cond, u32 target) {
+    body.insts.push_back(make_jcc(cond, Operand{Label{target}}));
+  };
+  const auto at_label = [&](u32 id) {
+    MInst nop = make_inst(MOp::Nop, 8);
+    nop.label = id;
+    body.insts.push_back(nop);
+  };
+
+  const SymbolRef environ = callee(body, "alcy_environ");
+  // rdi = name pointer, rsi = name length. Keep the name in r10/r11 so
+  // the byte comparison can use rax/rcx/rdx freely.
+  mov(MOp::Mov, 8, Operand{Reg::R10}, Operand{Reg::Rdi});
+  mov(MOp::Mov, 8, Operand{Reg::R11}, Operand{Reg::Rsi});
+  mov(MOp::Mov, 8, Operand{Reg::Rax}, Operand{environ});
+  mov(MOp::Mov, 8, Operand{Reg::Rax},
+      Operand{
+          Mem{.base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}});
+  const u32 walk = label();
+  const u32 compare = label();
+  const u32 next_entry = label();
+  const u32 at_equals = label();
+  const u32 value_scan = label();
+  const u32 entry_mismatch = label();
+  const u32 missing = label();
+  const u32 done = label();
+
+  at_label(walk);
+  // rcx = *envp; null terminates the table.
+  mov(MOp::Mov, 8, Operand{Reg::Rcx},
+      Operand{
+          Mem{.base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}});
+  mov(MOp::Test, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx});
+  jcc(Cond::E, missing);
+  // Compare name bytes. rdx indexes within this entry.
+  mov(MOp::Mov, 8, Operand{Reg::Rdx}, Operand{Imm{0}});
+  at_label(compare);
+  mov(MOp::Mov, 8, Operand{Reg::R8}, Operand{Reg::Rdx});
+  mov(MOp::Cmp, 8, Operand{Reg::R8}, Operand{Reg::R11});
+  jcc(Cond::Ae, at_equals);
+  mov(MOp::Movzx, 1, Operand{Reg::R8},
+      Operand{Mem{.base = Reg::Rcx, .index = Reg::R8, .scale = 1, .disp = 0}});
+  mov(MOp::Movzx, 1, Operand{Reg::R9},
+      Operand{Mem{.base = Reg::R10, .index = Reg::Rdx, .scale = 1, .disp = 0}});
+  mov(MOp::Cmp, 1, Operand{Reg::R8}, Operand{Reg::R9});
+  jcc(Cond::Ne, entry_mismatch);
+  mov(MOp::Add, 8, Operand{Reg::Rdx}, Operand{Imm{1}});
+  body.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{compare}}));
+
+  at_label(at_equals);
+  // entry[name_len] must be '='.
+  mov(MOp::Movzx, 1, Operand{Reg::R8},
+      Operand{Mem{.base = Reg::Rcx, .index = Reg::R11, .scale = 1, .disp = 0}});
+  mov(MOp::Cmp, 1, Operand{Reg::R8}, Operand{Imm{'='}});
+  jcc(Cond::Ne, entry_mismatch);
+  // VALUE starts at name_len + 1; find its NUL for the length.
+  mov(MOp::Lea, 8, Operand{Reg::R9},
+      Operand{Mem{.base = Reg::Rcx, .index = Reg::R11, .scale = 1, .disp = 1}});
+  mov(MOp::Mov, 8, Operand{Reg::Rdx}, Operand{Imm{0}});
+  const u32 found_value = label();
+  at_label(value_scan);
+  mov(MOp::Movzx, 1, Operand{Reg::R8},
+      Operand{Mem{.base = Reg::R9, .index = Reg::Rdx, .scale = 1, .disp = 0}});
+  body.insts.push_back(
+      make_inst(MOp::Test, 1, Operand{Reg::R8}, Operand{Reg::R8}));
+  jcc(Cond::E, found_value);
+  mov(MOp::Add, 8, Operand{Reg::Rdx}, Operand{Imm{1}});
+  body.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{value_scan}}));
+
+  at_label(entry_mismatch);
+  at_label(next_entry);
+  mov(MOp::Add, 8, Operand{Reg::Rax}, Operand{Imm{8}});
+  body.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{walk}}));
+
+  at_label(found_value);
+  mov(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Reg::R9});
+  const u32 after_found = label();
+  body.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{after_found}}));
+  at_label(missing);
+  mov(MOp::Xor, 8, Operand{Reg::Rax}, Operand{Reg::Rax});
+  mov(MOp::Xor, 8, Operand{Reg::Rdx}, Operand{Reg::Rdx});
+  at_label(after_found);
+  at_label(done);
+  // Setcc-style return: the view is {rax, rdx}.
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
+// alcy_env_exists(name) -> i32: 1 when the find answers a non-null
+// pointer. alcy_env_get(name) -> str returns the found view or an empty
+// one; both share the find body's convention through an internal call.
+Body build_env_exists() {
+  Body body;
+  // Inline the find by calling it as a local subroutine would need an
+  // extra symbol; instead duplicate its result test by checking the
+  // environment directly through the shared find body name.
+  const SymbolRef find = callee(body, "alcy_env_find");
+  body.insts.push_back(make_inst(MOp::Call, 8, Operand{find}));
+  body.insts.push_back(
+      make_inst(MOp::Test, 8, Operand{Reg::Rax}, Operand{Reg::Rax}));
+  const u32 present = body.label_count++;
+  const u32 join = body.label_count++;
+  body.insts.push_back(make_jcc(Cond::Ne, Operand{Label{present}}));
+  body.insts.push_back(
+      make_inst(MOp::Xor, 4, Operand{Reg::Rax}, Operand{Reg::Rax}));
+  body.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{join}}));
+  MInst at_present = make_inst(MOp::Nop, 8);
+  at_present.label = present;
+  body.insts.push_back(at_present);
+  body.insts.push_back(
+      make_inst(MOp::Mov, 4, Operand{Reg::Rax}, Operand{Imm{1}}));
+  MInst at_join = make_inst(MOp::Nop, 8);
+  at_join.label = join;
+  body.insts.push_back(at_join);
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
+Body build_env_get() {
+  Body body;
+  const SymbolRef find = callee(body, "alcy_env_find");
+  body.insts.push_back(make_inst(MOp::Call, 8, Operand{find}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  return body;
+}
+
 }  // namespace
 
 bool defines(const std::string_view name) {
@@ -722,7 +859,8 @@ bool defines(const std::string_view name) {
          name == "alcy_arg_count" || name == "alcy_arg" ||
          name == "alcy_file_size" || name == "alcy_read_file_into" ||
          name == "alcy_write_file" || name == "alcy_alloc" ||
-         name == "alcy_dealloc";
+         name == "alcy_dealloc" || name == "alcy_env_find" ||
+         name == "alcy_env_exists" || name == "alcy_env_get";
 }
 
 Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
@@ -770,6 +908,15 @@ Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
   }
   if (name == "alcy_dealloc") {
     return build_dealloc_fs();
+  }
+  if (name == "alcy_env_find") {
+    return build_env_find();
+  }
+  if (name == "alcy_env_exists") {
+    return build_env_exists();
+  }
+  if (name == "alcy_env_get") {
+    return build_env_get();
   }
   DCHECK_MSG(false, "the runtime was asked for a name it does not define");
   return Body{};

@@ -15,7 +15,6 @@
 #include "cli/output.h"
 #include "cli/result_code.h"
 #include "cli/trace.h"
-#include "codegen/backend.h"
 #include "codegen/target.h"
 #include "diag/bag.h"
 #include "diag/render.h"
@@ -163,12 +162,6 @@ i32 run_test(const CliConfig& config,
   }
   const pipeline::BuildProfile selected = std::move(profile).unwrap();
   resolve_backend_options(config, ctx, selected);
-  if (config.backend == codegen::Backend::None) {
-    // A test driver is a freestanding image whose runtime leans on the
-    // whole platform surface (environment, error tables). LLVM carries
-    // that today; a direct backend still answers an explicit request.
-    ctx.backend = codegen::Backend::Llvm;
-  }
   FdSink err_sink{io::STDERR_FD};
   const Logger err{&FdSink::write, &err_sink};
   const term::ColorStyle style =
