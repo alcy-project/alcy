@@ -323,7 +323,9 @@ class Serializer {
       case TypeTag::I16: return static_cast<u16>(immutable.data.i16_value);
       case TypeTag::I32: return static_cast<u32>(immutable.data.i32_value);
       case TypeTag::I64: return static_cast<u64>(immutable.data.i64_value);
-      case TypeTag::U8: return immutable.data.u8_value;
+      case TypeTag::U8:
+      case TypeTag::Char: return immutable.data.u8_value;
+      case TypeTag::Rune: return immutable.data.u32_value;
       case TypeTag::U16: return immutable.data.u16_value;
       case TypeTag::U32: return immutable.data.u32_value;
       case TypeTag::U64: return immutable.data.u64_value;

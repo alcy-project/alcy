@@ -742,7 +742,13 @@ bool read_immutables(Parsed& parsed, std::span<const u8> payload) {
       case TypeTag::I64:
         immutable.data.i64_value = static_cast<i64>(value);
         break;
-      case TypeTag::U8: immutable.data.u8_value = static_cast<u8>(value); break;
+      case TypeTag::U8:
+      case TypeTag::Char:
+        immutable.data.u8_value = static_cast<u8>(value);
+        break;
+      case TypeTag::Rune:
+        immutable.data.u32_value = static_cast<u32>(value);
+        break;
       case TypeTag::U16:
         immutable.data.u16_value = static_cast<u16>(value);
         break;

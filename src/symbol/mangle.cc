@@ -74,6 +74,8 @@ constexpr char TAG_F64 = 'F';
 constexpr char TAG_ISIZE = 'V';
 constexpr char TAG_USIZE = 'W';
 constexpr char TAG_STR = 'z';
+constexpr char TAG_CHAR = 'j';
+constexpr char TAG_RUNE = 'J';
 constexpr char TAG_PTR = 'p';
 constexpr char TAG_REF = 'r';
 constexpr char TAG_MUT_REF = 'w';
@@ -135,6 +137,8 @@ char primitive_tag(ir::TypeTag tag) {
     case ir::TypeTag::F64: return TAG_F64;
     case ir::TypeTag::Isize: return TAG_ISIZE;
     case ir::TypeTag::Usize: return TAG_USIZE;
+    case ir::TypeTag::Char: return TAG_CHAR;
+    case ir::TypeTag::Rune: return TAG_RUNE;
     default: return '\0';
   }
 }
@@ -220,7 +224,9 @@ class Encoder {
       case ir::TypeTag::Isize:
       case ir::TypeTag::Usize:
       case ir::TypeTag::F32:
-      case ir::TypeTag::F64: break;
+      case ir::TypeTag::F64:
+      case ir::TypeTag::Char:
+      case ir::TypeTag::Rune: break;
       case ir::TypeTag::Str: out_.push_back(TAG_STR); return;
       case ir::TypeTag::Ref:
         out_.push_back(TAG_REF);

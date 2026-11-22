@@ -417,3 +417,53 @@ fn f(_x: i32, _: i32) -> i32 {
         (path_expression
           (path
             (identifier)))))))
+
+================================================================================
+Character range patterns
+================================================================================
+
+fn f(c: char, r: rune) -> i32 {
+  match c {
+    'a'..='z' => ret 1,
+    'A'..<'Z' => ret 2,
+    _ => ret 0,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    name: (identifier)
+    parameters: (parameters
+      (parameter
+        pattern: (identifier_pattern
+          name: (identifier))
+        type: (char_type))
+      (parameter
+        pattern: (identifier_pattern
+          name: (identifier))
+        type: (rune_type)))
+    return_type: (return_type
+      type: (primitive_type))
+    body: (block
+      value: (match_expression
+        scrutinee: (path_expression
+          path: (path
+            segment: (identifier)))
+        (match_arm
+          pattern: (range_pattern
+            start: (char)
+            end: (char))
+          value: (return_expression
+            value: (integer)))
+        (match_arm
+          pattern: (range_pattern
+            start: (char)
+            end: (char))
+          value: (return_expression
+            value: (integer)))
+        (match_arm
+          pattern: (wildcard_pattern)
+          value: (return_expression
+            value: (integer)))))))

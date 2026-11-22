@@ -77,7 +77,8 @@ foreclose the baremetal story.
   the call names `unsafe { ... }` and an extern function is refused
   in value position until unsafe function types land. There is no
   `unsafe extern` spelling.
-- The initial ABI is scalars, raw pointers, and `()` as a return.
+- The initial ABI is scalars, raw pointers, and `()` as a return. A
+  `char` maps to an unsigned byte and a `rune` to a 32-bit word.
   Everything else is refused with a diagnostic: by-value aggregates,
   `str`/slices/references, closures, generics, and variadics. The
   callee's own contract is the caller's `unsafe` block to keep.

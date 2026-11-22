@@ -154,7 +154,6 @@
   F(AnalyzerCannotInferTypeArguments, Error, Analyzer, "Cannot infer the type arguments of '{}'; add them with '{}::<T>(...)'") \
   F(AnalyzerCannotInferMethodTypeArguments, Error, Analyzer, "Cannot infer the type arguments of method '{}'; spell them as 'x.{}::<T>(...)'") \
   F(AnalyzerCannotInferValueArgument, Error, Analyzer, "Cannot infer the value argument for parameter '{}' of '{}'; add it with '{}::<...>(...)'") \
-  F(AnalyzerCharacterLiteralDeferred, Error, Analyzer, "Character literals need the core Char type (deferred)") \
   F(AnalyzerCheckedTypesFailedVerification, Error, Analyzer, "Internal error: checked types failed verification ({} at index {})") \
   F(AnalyzerClosureArityMismatch, Error, Analyzer, "Closure expects {} parameter{}, found {}") \
   F(AnalyzerClosureParamNeedsAnnotation, Error, Analyzer, "Cannot infer the type of parameter '{}'; add an annotation") \

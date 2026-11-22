@@ -47,7 +47,9 @@ struct Immutable {
       case TypeTag::I16: return static_cast<u64>(data.i16_value);
       case TypeTag::I32: return static_cast<u64>(data.i32_value);
       case TypeTag::I64: return static_cast<u64>(data.i64_value);
-      case TypeTag::U8: return static_cast<u64>(data.u8_value);
+      case TypeTag::U8:
+      case TypeTag::Char: return static_cast<u64>(data.u8_value);
+      case TypeTag::Rune: return static_cast<u64>(data.u32_value);
       case TypeTag::U16: return static_cast<u64>(data.u16_value);
       case TypeTag::U32: return static_cast<u64>(data.u32_value);
       case TypeTag::U64: return static_cast<u64>(data.u64_value);

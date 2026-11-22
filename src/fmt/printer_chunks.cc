@@ -191,7 +191,9 @@ bool Printer::ends_like_statement(const std::vector<const cst::Node*>& nodes) {
       case lexer::TokenKind::F32:
       case lexer::TokenKind::F64:
       case lexer::TokenKind::Bool:
-      case lexer::TokenKind::Str: return true;
+      case lexer::TokenKind::Str:
+      case lexer::TokenKind::CharType:
+      case lexer::TokenKind::RuneType: return true;
       default: return false;
     }
   }

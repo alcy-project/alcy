@@ -45,7 +45,8 @@ void Checker::collect_pattern_idents(ast::PatternIdx pattern,
                                      std::vector<std::string_view>& out) const {
   switch (ast.patterns[pattern].kind) {
     case ast::PatternKind::Wildcard:
-    case ast::PatternKind::Literal: return;
+    case ast::PatternKind::Literal:
+    case ast::PatternKind::Range: return;
     case ast::PatternKind::Ident: {
       out.push_back(ast.patterns[pattern].payload.ident.name.name);
       return;
@@ -139,6 +140,12 @@ bool Checker::bind_pattern(u32 module,
       local.span = node.payload.mut_ident.name.span;
       scopes.back().push_back(local);
       return false;
+    }
+    case ast::PatternKind::Range: {
+      const ast::PatternRange& range = node.payload.range;
+      const ir::TypeIdx start = check_literal(range.start, &type);
+      check_literal(range.end, &start);
+      return true;
     }
     case ast::PatternKind::Literal: {
       // A string literal pattern is deferred (docs/spec/deferred.md):
@@ -765,6 +772,37 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
   // a width the position holds.
   ir::TypeIdx left = ir::TypeIdx::invalid();
   ir::TypeIdx right = ir::TypeIdx::invalid();
+  const auto is_char_lit = [&](ast::ExprIdx expr) {
+    const ast::ExprNode& node = ast.exprs[expr];
+    return node.kind == ast::ExprKind::Literal &&
+           ast.literals[node.payload.get<ast::ExprLiteral>().value].kind ==
+               ast::LiteralKind::Char;
+  };
+  if (is_char_lit(lhs) != is_char_lit(rhs)) {
+    const ast::ExprIdx literal = is_char_lit(lhs) ? lhs : rhs;
+    const ast::ExprIdx sibling = is_char_lit(lhs) ? rhs : lhs;
+    const ir::TypeIdx sibling_type =
+        check_expr(module, sibling, operand_expected);
+    const ir::TypeIdx* adopt =
+        tag_of(sibling_type) == ir::TypeTag::Rune ? &sibling_type : nullptr;
+    const ir::TypeIdx literal_type = check_expr(module, literal, adopt);
+    left = is_char_lit(lhs) ? literal_type : sibling_type;
+    right = is_char_lit(lhs) ? sibling_type : literal_type;
+    if (is_error(left)) {
+      return right;
+    }
+    if (is_error(right)) {
+      return left;
+    }
+    if (types_equal(left, right)) {
+      return left;
+    }
+    const u32 index = bag.emit<i18n::Key::AnalyzerTypeMismatch>(
+        DiagCode::TypeMismatch, span, what, pretty_tag(tag_of(left)),
+        pretty_tag(tag_of(right)));
+    (void)index;
+    return error_type();
+  }
   const bool lhs_literal =
       is_unsuffixed_int_literal(lhs) || is_unsuffixed_float_literal(lhs);
   const bool rhs_literal =
@@ -2488,7 +2526,10 @@ ir::TypeIdx Checker::check_cast(u32 module,
       is_integer_tag(from) || is_float_tag(from) || from == ir::TypeTag::I1;
   const bool numeric_to =
       is_integer_tag(to) || is_float_tag(to) || to == ir::TypeTag::I1;
-  if (from == ir::TypeTag::Never || (numeric_from && numeric_to)) {
+  const bool text_cast = (from == ir::TypeTag::Char &&
+                          (to == ir::TypeTag::U8 || to == ir::TypeTag::Rune)) ||
+                         (from == ir::TypeTag::Rune && to == ir::TypeTag::U32);
+  if (from == ir::TypeTag::Never || (numeric_from && numeric_to) || text_cast) {
     if (expected != nullptr) {
       return unify(*expected, target, node.span, "cast");
     }

@@ -238,9 +238,14 @@
 - Whether bytes are valid UTF-8 is a query over `[u8]`, the way a
   comment parser asks: the predicate lives with the byte API. A `char`
   comes only from a checked decode.
-- `char` (a Unicode scalar value), grapheme segmentation, and width
-  live outside this document for now; the names are reserved. Baremetal
-  targets without core use `u8`/`u32` directly.
+- `char` is an ASCII scalar (0x00-0x7F) with a one-byte layout, and
+  `rune` is a Unicode scalar value with a four-byte layout. Both are
+  compiler-known types. A character literal names a `char` when its
+  scalar is ASCII and a `rune` otherwise; in a context that expects a
+  `rune`, an ASCII literal is that rune. Neither can be built from a
+  wider integer with a cast: construction goes through core's checked
+  functions, or its two `unsafe` unchecked intrinsics with a proven
+  precondition. Grapheme segmentation and width remain deferred.
 
 ## Ranges (staged)
 

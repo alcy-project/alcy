@@ -47,7 +47,9 @@ std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
     case lexer::TokenKind::F32:
     case lexer::TokenKind::F64:
     case lexer::TokenKind::Bool:
-    case lexer::TokenKind::Str: return SemanticTokenType::Type;
+    case lexer::TokenKind::Str:
+    case lexer::TokenKind::CharType:
+    case lexer::TokenKind::RuneType: return SemanticTokenType::Type;
     case lexer::TokenKind::Integer:
     case lexer::TokenKind::Float: return SemanticTokenType::Number;
     case lexer::TokenKind::String:

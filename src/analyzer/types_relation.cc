@@ -69,6 +69,9 @@ bool Checker::is_float_tag(ir::TypeTag tag) const {
 
 bool Checker::is_builtin_comparable(ir::TypeIdx type) const {
   const ir::TypeTag tag = tag_of(type);
+  if (tag == ir::TypeTag::Char || tag == ir::TypeTag::Rune) {
+    return true;
+  }
   if (is_integer_tag(tag) || is_float_tag(tag) || tag == ir::TypeTag::I1 ||
       tag == ir::TypeTag::Ptr || ir::is_raw_ptr_type(tag)) {
     return true;

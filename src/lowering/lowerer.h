@@ -1095,6 +1095,10 @@ class Lowerer {
   Val lower_str_from_parts_intrinsic(ast::ExprIdx expr,
                                      const analyzer::CheckedModule::FnSig& sig,
                                      const std::vector<ir::TypeIdx>& type_args);
+  Val lower_scalar_from_parts_intrinsic(
+      ast::ExprIdx expr,
+      const analyzer::CheckedModule::FnSig& sig,
+      const std::vector<ir::TypeIdx>& type_args);
   // The summary module that declares the item, or nothing when none: a
   // generic instantiation records its signature in the calling module,
   // so the item's own module is what says a summary carries its body

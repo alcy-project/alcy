@@ -127,6 +127,8 @@ enum class PrimitiveKind : u8 {
   F64,
   Bool,
   Str,
+  Char,
+  Rune,
 };
 
 enum class TypeKind : u8 {
@@ -276,6 +278,7 @@ enum class PatternKind : u8 {
   Ident,
   MutIdent,
   Literal,
+  Range,
   Tuple,
   Struct,
   Ref,
@@ -293,6 +296,12 @@ struct PatternIdent {
 
 struct PatternLiteral {
   LiteralIdx value = LiteralIdx::invalid();
+};
+
+struct PatternRange {
+  LiteralIdx start = LiteralIdx::invalid();
+  LiteralIdx end = LiteralIdx::invalid();
+  bool inclusive = true;
 };
 
 struct PatternTuple {
@@ -326,6 +335,7 @@ union PatternPayload {
   PatternIdent ident;
   PatternIdent mut_ident;
   PatternLiteral literal;
+  PatternRange range;
   PatternTuple tuple;
   PatternStruct strukt;
   PatternRef ref;

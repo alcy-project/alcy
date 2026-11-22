@@ -26,6 +26,7 @@
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
+#include "text/unescape.h"
 
 namespace analyzer {
 
@@ -194,10 +195,20 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       return type;
     }
     case LK::Char: {
-      const u32 index = bag.emit<i18n::Key::AnalyzerCharacterLiteralDeferred>(
-          DiagCode::UnsupportedType, lit.span);
-      (void)index;
-      return error_type();
+      const u32 scalar = text::char_literal_value(lit.spelling);
+      const ir::TypeTag tag =
+          scalar <= 0x7F ? ir::TypeTag::Char : ir::TypeTag::Rune;
+      // A rune context takes an ASCII literal too: widening a scalar
+      // never changes its value, and it lets a rune stream be matched
+      // against an ASCII range without a cast.
+      if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Rune) {
+        return *expected;
+      }
+      const ir::TypeIdx type = builder.primitive(tag);
+      if (expected != nullptr) {
+        return unify(*expected, type, lit.span, "character literal");
+      }
+      return type;
     }
     case LK::Integer: {
       ir::TypeTag tag = ir::TypeTag::I32;

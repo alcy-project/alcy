@@ -182,6 +182,8 @@ class TextWriter {
       case TypeTag::F32: out_ += "f32"; break;
       case TypeTag::F64: out_ += "f64"; break;
       case TypeTag::Str: out_ += "str"; break;
+      case TypeTag::Char: out_ += "char"; break;
+      case TypeTag::Rune: out_ += "rune"; break;
       case TypeTag::Ptr: out_ += "ptr"; break;
       case TypeTag::Never: out_ += '!'; break;
       case TypeTag::Error: out_ += "<error>"; break;

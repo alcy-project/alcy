@@ -2223,4 +2223,47 @@ TEST_CASE("Parser collects the doc comments above an item") {
   CHECK(f.ast.items[result.items[1]].docs.empty());
 }
 
+TEST_CASE("A character range pattern parses") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f(c: char) {\n"
+      "  match c {\n"
+      "    'a'..='z' => ret 1,\n"
+      "    'A'..<'Z' => ret 2,\n"
+      "    _ => ret 0,\n"
+      "  }\n"
+      "}\n",
+      f);
+  CHECK(result.ok);
+  usize ranges = 0;
+  bool inclusive = false;
+  bool exclusive = false;
+  for (const ast::PatternNode& pattern : f.ast.patterns) {
+    if (pattern.kind != ast::PatternKind::Range) {
+      continue;
+    }
+    ++ranges;
+    inclusive = inclusive || pattern.payload.range.inclusive;
+    exclusive = exclusive || !pattern.payload.range.inclusive;
+  }
+  CHECK(ranges == 2);
+  CHECK(inclusive);
+  CHECK(exclusive);
+  CHECK(!f.bag.has_errors());
+}
+
+TEST_CASE("Bare dots are refused in a pattern") {
+  Fixture f;
+  const ParseResult result = parse(
+      "fn f(c: char) {\n"
+      "  match c {\n"
+      "    'a'.. => ret 1,\n"
+      "    _ => ret 0,\n"
+      "  }\n"
+      "}\n",
+      f);
+  CHECK(!result.ok);
+  CHECK(f.bag.has_errors());
+}
+
 }  // namespace parser

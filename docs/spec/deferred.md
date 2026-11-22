@@ -64,8 +64,8 @@ it is implemented.
   back and aborts the process instead.
 - `break` with a value; `main` returning richer types.
 - `pub(...)` restricted visibility; glob imports.
-- `f16`, 128-bit integers, posit, and decimal types; `char`/`Ascii`/
-  grapheme semantics in core (see `types.md`).
+- `f16`, 128-bit integers, posit, and decimal types; `Ascii` and grapheme
+  semantics (see `types.md`).
 - Interior mutability; mutable statics; `const`-position extensions.
 - The across-thread markers (`Send`/`Sync`), structural and derived
   like `Movable`, land with the first concurrency package that needs

@@ -1,0 +1,10 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 0
+not_contains = ["error"]
+
+[program.expect]
+exit = "non-zero"
+stderr_contains = ["slice not on a scalar boundary"]

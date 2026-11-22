@@ -107,7 +107,9 @@ u8 float_compare_opcode(ir::Opcode op, bool wide) {
 u32 integer_bits(ir::TypeTag tag, ir::PointerWidth width) {
   switch (tag) {
     case ir::TypeTag::I8:
-    case ir::TypeTag::U8: return 8;
+    case ir::TypeTag::U8:
+    case ir::TypeTag::Char: return 8;
+    case ir::TypeTag::Rune: return 32;
     case ir::TypeTag::I16:
     case ir::TypeTag::U16: return 16;
     case ir::TypeTag::I32:
@@ -139,6 +141,8 @@ void canonicalize(BinaryWriter& out, ir::TypeTag tag) {
       break;
     case ir::TypeTag::I8: out.byte(0xC0); break;  // i32.extend8_s
     case ir::TypeTag::U8:
+    case ir::TypeTag::Char:
+    case ir::TypeTag::Rune:
       out.byte(0x41);
       out.i32_leb(0xFF);
       out.byte(0x71);

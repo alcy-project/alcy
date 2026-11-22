@@ -14,7 +14,7 @@ pub unsafe intrinsic fn str_from_parts(ptr: &u8, len: usize) -> str;
 // The byte length of the scalar at `at`, or zero where the bytes do
 // not form one: a stray continuation, a lead the alphabet does not
 // grant, an overlong form, a surrogate, or one past the last scalar.
-fn utf8_scalar_length(bytes: &[u8], at: usize) -> usize {
+pub fn utf8_scalar_length(bytes: &[u8], at: usize) -> usize {
   mut want := 0 as usize
   mut lo := 0x80u8
   mut hi := 0xBFu8
@@ -483,10 +483,8 @@ impl str {
     }
   }
 
-  // The number of scalar values the bytes hold. Every byte sequence
-  // has one: an ill-formed subsequence counts as a single replacement
-  // unit, the way Unicode's decoding algorithms consume the maximal
-  // subpart of one.
+  // The number of scalar values the view holds. A `str` is valid
+  // UTF-8, so every byte sequence starts a scalar exactly once.
   pub fn count_chars(self: &Self) -> usize {
     mut n := 0 as usize
     mut i := 0 as usize
@@ -619,9 +617,43 @@ impl str {
     ret StrIter { s: self, pos: 0 }
   }
 
+  // A cursor over the scalars, the same order as the bytes but one
+  // whole scalar per step. The view is Copy, so keeping only the
+  // unconsumed tail has no borrowed owner to outlive.
+  pub fn runes(self: str) -> RuneIter {
+    ret RuneIter { rest: self }
+  }
+
   // Byte iteration: `for b in s` reads each byte in order.
   pub fn into_iter(self: str) -> StrIter {
     ret StrIter { s: self, pos: 0 }
+  }
+}
+
+// A consuming cursor over a string's Unicode scalars.
+pub struct RuneIter {
+  rest: str,
+}
+
+impl RuneIter {
+  pub fn into_iter(self: RuneIter) -> RuneIter {
+    ret self
+  }
+}
+
+impl Iterator < rune > for RuneIter {
+  fn next(mut self: &mut Self) -> Option<rune> {
+    match rune_from_str(self.rest) {
+      Result::Err(e) => {
+        ret Option::None
+      }
+      Result::Ok(decoded) => {
+        scalar := decoded.0
+        width := decoded.1
+        self.rest = str_slice(self.rest, width, str_len(self.rest))
+        ret Option::Some(scalar)
+      }
+    }
   }
 }
 
@@ -1248,13 +1280,6 @@ impl Iterator < str > for SplitIter {
     assert("日本語".count_chars() == 3, "three three-byte scalars are three characters")
     assert("hello".count_chars() == 5, "an ASCII letter is a character of its own")
     assert("".count_chars() == 0, "a view of no bytes holds no character")
-  }
-
-  #[test] fn count_chars_counts_a_truncated_sequence_once() {
-    assert(
-      str_slice("日", 0, 1).count_chars() == 1,
-      "an ill-formed subsequence is one replacement unit",
-    )
   }
 
   fn assert(ok: bool, what: str) {
