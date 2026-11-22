@@ -1,9 +1,9 @@
-// `write_file` writes a file that `read_file` reads back.
+// `write_file_str` writes a file that `read_file_str` reads back.
 fn main() -> i32 {
-  if !write_file(&Path::from_str("out.txt"), "hello file") {
+  if !write_file_str(&Path::from_str("out.txt"), "hello file") {
     ret 1
   }
-  match read_file(&Path::from_str("out.txt")) {
+  match read_file_str(&Path::from_str("out.txt")) {
     Option::Some(text) => {
       if text.as_str() != "hello file" {
         ret 2
@@ -13,7 +13,7 @@ fn main() -> i32 {
       ret 3
     }
   }
-  if write_file(&Path::from_str("/nonexistent/dir/x"), "y") {
+  if write_file_str(&Path::from_str("/nonexistent/dir/x"), "y") {
     ret 4
   }
   ret 0

@@ -2091,7 +2091,7 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
     return lower_arg_count_intrinsic(expr, sig, type_args);
   }
   if (name == "file_size" || name == "read_file_into" ||
-      name == "write_file_all") {
+      name == "write_file_all" || name == "write_file_all_bytes") {
     return lower_file_intrinsic(expr, sig, type_args);
   }
   if (name == "elem_ptr" || name == "elem_ref" || name == "ptr_offset" ||
@@ -2495,7 +2495,7 @@ Val Lowerer::lower_file_intrinsic(
         ext, builder.primitive(ir::TypeTag::Function))));
     ops.push_back(to_operand(bytes, ptr_ty));
     ops.push_back(to_operand(len, usize_ty));
-  } else if (name == "write_file_all") {
+  } else if (name == "write_file_all" || name == "write_file_all_bytes") {
     Val data = lower_expr(call.args[1], &sig.params[1]);
     if (failed || terminated_cur()) {
       return stopped_value();

@@ -20,9 +20,13 @@ pub unsafe intrinsic fn read_file_into(path: &[u8], out: &mut u8, out_len: usize
 // temporary slot and an existing file is truncated.
 pub unsafe intrinsic fn write_file_all(path: &[u8], data: str) -> i64;
 
+// The byte form of `write_file_all`: `data` is a byte view instead of
+// a string, so a file need not hold well-formed text.
+pub unsafe intrinsic fn write_file_all_bytes(path: &[u8], data: &[u8]) -> i64;
+
 // The whole file at `path` as bytes, or `None` when it cannot be
 // read.
-pub fn read_bytes(path: &Path) -> Option<Vec<u8>> {
+pub fn read_file_bytes(path: &Path) -> Option<Vec<u8>> {
   bytes := path.encoded_bytes()
   n := unsafe { file_size(bytes.as_slice()) }
   if n < 0 {
@@ -43,8 +47,8 @@ pub fn read_bytes(path: &Path) -> Option<Vec<u8>> {
 
 // The whole file at `path` as a string, or `None` when it cannot be
 // read or its bytes are not well-formed UTF-8.
-pub fn read_file(path: &Path) -> Option<String> {
-  match read_bytes(path) {
+pub fn read_file_str(path: &Path) -> Option<String> {
+  match read_file_bytes(path) {
     Option::Some(bytes) => {
       ret String::from_slice(bytes.as_slice())
     }
@@ -56,7 +60,15 @@ pub fn read_file(path: &Path) -> Option<String> {
 
 // Writes `contents` to the file at `path`, answering whether it could.
 // An existing file is truncated.
-pub fn write_file(path: &Path, contents: str) -> bool {
+pub fn write_file_str(path: &Path, contents: str) -> bool {
   bytes := path.encoded_bytes()
   ret unsafe { write_file_all(bytes.as_slice(), contents) } >= 0
+}
+
+// Writes `data` to the file at `path`, answering whether it could. An
+// existing file is truncated, and the bytes need not be well-formed
+// text.
+pub fn write_file_bytes(path: &Path, data: &[u8]) -> bool {
+  bytes := path.encoded_bytes()
+  ret unsafe { write_file_all_bytes(bytes.as_slice(), data) } >= 0
 }

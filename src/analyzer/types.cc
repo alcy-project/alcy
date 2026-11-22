@@ -1439,7 +1439,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "wrapping_add" || name == "wrapping_sub" ||
          name == "wrapping_mul" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
-         name == "arg_count" || name == "arg" || name == "environ_exists" ||
+         name == "write_file_all_bytes" || name == "arg_count" ||
+         name == "arg" || name == "environ_exists" ||
          name == "environ_value" || name == "char_from_u8_unchecked" ||
          name == "rune_from_u32_unchecked";
 }
@@ -1456,7 +1457,8 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "slice_at" || name == "slice_at_mut" || name == "read" ||
          name == "sys_read" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
-         name == "arg_count" || name == "arg" || name == "environ_exists" ||
+         name == "write_file_all_bytes" || name == "arg_count" ||
+         name == "arg" || name == "environ_exists" ||
          name == "environ_value" || name == "char_from_u8_unchecked" ||
          name == "rune_from_u32_unchecked";
 }
@@ -1753,6 +1755,10 @@ bool Checker::check_intrinsic_signature(u32 module,
   } else if (name == "write_file_all") {
     expected.push_back(slice_ref);
     expected.push_back(str);
+    expected_ret = builder.primitive(ir::TypeTag::I64);
+  } else if (name == "write_file_all_bytes") {
+    expected.push_back(slice_ref);
+    expected.push_back(slice_ref);
     expected_ret = builder.primitive(ir::TypeTag::I64);
   } else if (name == "arg_count") {
     expected_ret = builder.primitive(ir::TypeTag::I64);

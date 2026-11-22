@@ -246,8 +246,9 @@ interaction.
 - `memcopy`, `str_from_parts`, `slice_from_parts`,
   `slice_from_parts_mut`, `alloc`, `dealloc`, `elem_ptr`, `elem_ref`,
   `uninit_assume`, `ptr_offset`, `ptr_offset_mut`, `sys_read`,
-  `file_size`, `read_file_into`, `write_file_all`, `arg_count`, and
-  `arg` carry a precondition the compiler cannot check, so their
+  `file_size`, `read_file_into`, `write_file_all`,
+  `write_file_all_bytes`, `arg_count`, and `arg` carry a precondition
+  the compiler cannot check, so their
   declarations say `unsafe` and a call needs an `unsafe` block
   (`ffi.md`). The checker verifies the marker against the set the way
   it verifies the shape, so leaving it out, or adding it to a safe
