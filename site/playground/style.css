@@ -613,6 +613,24 @@ body.resizing {
    wider than English ones and wrap inside the buttons below that width.
    The theme and language live in the header's settings menu. */
 
+/* Between the phone layout and the width where the whole row fits,
+   the picker keeps the first line with the compiler state at its right
+   edge, and the actions get a line of their own. */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .toolbar-end {
+    display: contents;
+  }
+
+  .compiler-state {
+    margin-left: auto;
+  }
+
+  .run-group {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+
 @media (max-width: 760px) {
   .toolbar {
     flex-direction: column;
