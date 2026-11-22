@@ -86,17 +86,17 @@ enum class DiagCode : u8 {
   // linker, whose failure names the tool rather than the entry point.
   NoEntryPoint = 24,
   // A `#[test] fn` writes a return type. A run reports a test by whether it
-  // returned, so a value has no reader; a helper beside the entries is
-  // what a test that needs one calls.
+  // returned, so a value has no reader; a helper beside the test is what
+  // one that needs a value calls.
   TestEntryReturns = 25,
   // A `#[test] fn` named `main`. The run writes the entry point its
-  // module needs, so a block cannot declare one.
+  // module needs, so a test cannot declare one.
   TestEntryNamedMain = 26,
-  // A block item takes a name its module declares at its own level:
+  // A `#[test] fn` takes a name its module declares at its own level:
   // both are items of one namespace, so the module would hold two of
   // that name.
   TestCollidesWithItem = 27,
-  // Two block items take one name, which the module would likewise hold
+  // Two `#[test] fn`s take one name, which the module would likewise hold
   // twice.
   TestDuplicateName = 28,
   // `alcy test` was given a suite manifest, which names the packages

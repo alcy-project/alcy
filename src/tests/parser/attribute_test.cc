@@ -315,6 +315,16 @@ TEST_CASE("A boolean target compared to a string literal is named as boolean") {
       "`target.freestanding` is a boolean; compare it to `true` or `false`"));
 }
 
+TEST_CASE("The testing fact compared to a string literal is named as testing") {
+  Fixture f;
+  ParseResult r =
+      parse_with("#[when(testing == \"yes\")]\nfn x() -> i32 { ret 1 }\n",
+                 LINUX_X86_64, f);
+  (void)r;
+  CHECK(has_message(f.bag,
+                    "`testing` is a boolean; compare it to `true` or `false`"));
+}
+
 TEST_CASE("A string target compared to a boolean literal is named as string") {
   Fixture f;
   ParseResult r = parse_with(

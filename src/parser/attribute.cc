@@ -160,9 +160,11 @@ void emit_unknown_value(diag::DiagBag& bag,
   (void)index;
 }
 
-void emit_target_is_boolean(diag::DiagBag& bag, diag::Span span) {
+void emit_target_is_boolean(diag::DiagBag& bag,
+                            diag::Span span,
+                            std::string_view key) {
   const u32 index = bag.emit<i18n::Key::ParserWhenTargetIsBoolean>(
-      DiagCode::WhenTargetIsBoolean, span);
+      DiagCode::WhenTargetIsBoolean, span, key);
   (void)index;
 }
 
@@ -275,10 +277,14 @@ struct Evaluator {
       const std::string_view right_key = right->target_key;
       if ((left_key == "freestanding" || left_key == TESTING) &&
           right_key.empty()) {
-        emit_target_is_boolean(bag, right->span);
+        emit_target_is_boolean(
+            bag, right->span,
+            left_key == TESTING ? TESTING : "target.freestanding");
       } else if ((right_key == "freestanding" || right_key == TESTING) &&
                  left_key.empty()) {
-        emit_target_is_boolean(bag, left->span);
+        emit_target_is_boolean(
+            bag, left->span,
+            right_key == TESTING ? TESTING : "target.freestanding");
       } else if ((left_key == "os" || left_key == "arch") &&
                  right_key.empty()) {
         emit_target_is_string(bag, right->span, left_key);

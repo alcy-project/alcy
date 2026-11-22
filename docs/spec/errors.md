@@ -59,10 +59,15 @@
 
 ## Tests
 
-- `#[test]` marks a function, not any other item; anything else that
-  carries it is an error where it is written. A test takes no
-  arguments. Existence on a build is a separate `#[when(testing)]`
-  gate, so a test left out of a build is not an error there.
+- `#[test]` marks a free function, not a method, a group, or any other
+  item; anything else that carries it is an error where it is written.
+  A test takes no arguments and no type parameters, and it is neither
+  `unsafe` nor `comp`: the run calls it with a plain call at runtime, so
+  a signature the caller cannot write directly is refused at parse time.
+  A marker on a group is refused there too, rather than reaching every
+  function the group holds. Existence on a build is a separate
+  `#[when(testing)]` gate, so a test left out of a build is not an error
+  there.
 - Success is returning, so a test's return type is `()`. A written
   return type is reported by the command that runs tests rather than
   by the parse, which is what keeps a build from failing over a body

@@ -96,7 +96,7 @@
   F(ParserReprUnknown, Error, Parser, "Unknown repr `{}`; the known repr is `C`") \
   F(ParserReprMalformed, Error, Parser, "`repr` takes one argument: `C`") \
   F(ParserReprEmpty, Error, Parser, "`repr(C)` does not apply to a struct with no fields") \
-  F(ParserWhenTargetIsBoolean, Error, Parser, "`target.freestanding` is a boolean; compare it to `true` or `false`") \
+  F(ParserWhenTargetIsBoolean, Error, Parser, "`{}` is a boolean; compare it to `true` or `false`") \
   F(ParserWhenTargetIsString, Error, Parser, "`target.{}` is a string; compare it to one of the known values") \
   F(ParserReturnSpelling, Error, Parser, "`ret` returns; write `ret ...`") \
   F(ParserSpecItemSpelling, Error, Parser, "`spec` declares a capability; `impl Spec for Type` opts a type in") \

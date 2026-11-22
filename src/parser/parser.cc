@@ -243,14 +243,14 @@ Parser::Attributes Parser::parse_attribute() {
     // existence question belongs to `#[when(testing)]`.
     if (check(lexer::TokenKind::LParen)) {
       const u32 index = bag_.emit<i18n::Key::ParserTestMalformed>(
-          DiagCode::WhenMalformed, name.span);
+          DiagCode::TestMalformed, name.span);
       (void)index;
       synchronize_attribute();
       return nothing;
     }
     if (!match(lexer::TokenKind::RBracket)) {
       const u32 index = bag_.emit<i18n::Key::ParserTestMalformed>(
-          DiagCode::WhenMalformed, name.span);
+          DiagCode::TestMalformed, name.span);
       (void)index;
       synchronize_attribute();
       return nothing;
