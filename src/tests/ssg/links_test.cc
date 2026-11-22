@@ -34,12 +34,15 @@ DocPage make_page(std::string_view source_rel,
 }
 
 const std::vector<DocPage> PAGES = {
-    make_page("01-introduction.md", "guide/introduction.html"),
-    make_page("02-getting-started.md", "guide/getting-started.html"),
-    make_page("sub/03-more.md", "guide/sub/more.html"),
-    make_page("01-introduction.md", "guide/introduction.html", "ja"),
-    make_page("02-getting-started.md", "guide/getting-started.html", "ja"),
-    make_page("sub/03-more.md", "guide/sub/more.html", "ja"),
+    make_page("en/01-introduction.md", "guide/introduction.html"),
+    make_page("en/02-getting-started.md", "guide/getting-started.html"),
+    make_page("en/sub/03-more.md", "guide/sub/more.html"),
+    make_page("ja/01-introduction.md", "guide/introduction.html", "ja"),
+    make_page("ja/02-getting-started.md", "guide/getting-started.html", "ja"),
+    make_page("ja/sub/03-more.md", "guide/sub/more.html", "ja"),
+    // A page whose source fell back to the default language keeps the
+    // default source_rel but its own language and route.
+    make_page("en/02-getting-started.md", "guide/getting-started.html", "ja"),
 };
 
 LinkAudit make_checker(const std::unordered_set<std::string>& site = {},
@@ -69,12 +72,19 @@ TEST_CASE("a page link becomes the built html in the same tree") {
   CHECK(links.errors().empty());
 }
 
+TEST_CASE("a fallback page resolves sibling links in its own tree") {
+  LinkAudit links = make_checker();
+  CHECK(links.resolve("02-getting-started.md", PAGES[6]) ==
+        "getting-started.html");
+  CHECK(links.errors().empty());
+}
+
 TEST_CASE("a repository markdown link becomes a GitHub URL") {
   LinkAudit links = make_checker({}, {"docs/spec/01-lexical.md"});
   CHECK(
-      links.resolve("../spec/01-lexical.md", PAGES[0]) ==
+      links.resolve("../../spec/01-lexical.md", PAGES[0]) ==
       "https://github.com/alcy-project/alcy/blob/main/docs/spec/01-lexical.md");
-  CHECK(links.resolve("../spec/01-lexical.md#decision", PAGES[1]) ==
+  CHECK(links.resolve("../../spec/01-lexical.md#decision", PAGES[1]) ==
         "https://github.com/alcy-project/alcy/blob/main/docs/spec/"
         "01-lexical.md#decision");
   CHECK(links.errors().empty());
@@ -82,7 +92,8 @@ TEST_CASE("a repository markdown link becomes a GitHub URL") {
 
 TEST_CASE("a missing repository file is an error") {
   LinkAudit links = make_checker();
-  CHECK(links.resolve("../spec/99-nope.md", PAGES[0]) == "../spec/99-nope.md");
+  CHECK(links.resolve("../../spec/99-nope.md", PAGES[0]) ==
+        "../../spec/99-nope.md");
   CHECK(links.errors().size() == 1);
 }
 

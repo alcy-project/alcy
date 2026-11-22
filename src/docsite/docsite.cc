@@ -106,7 +106,9 @@ base::Result<std::optional<Options>, std::string> parse_args(i32 argc,
     return base::make_err(parser.error_message());
   }
   const auto get = [&matches](const char* name) {
-    return std::string(matches.get<std::string_view>(name).unwrap_or(""));
+    return matches.has(name)
+               ? std::string(matches.get<std::string_view>(name).unwrap_or(""))
+               : std::string();
   };
   Options options;
   options.docs = get("docs");
@@ -168,9 +170,8 @@ base::Result<void, std::string> write_string_to_file(std::string_view root,
   if (!create_directories(ssg::dirname_posix(target))) {
     return base::make_err("cannot create the directory for " + target);
   }
-  const std::string bytes(content);
-  const std::span<const u8> view(reinterpret_cast<const u8*>(bytes.data()),
-                                 bytes.size());
+  const std::span<const u8> view(reinterpret_cast<const u8*>(content.data()),
+                                 content.size());
   if (!io::write_file(view, target)) {
     return base::make_err("cannot write " + target);
   }
@@ -189,31 +190,26 @@ bool site_exists_relative(std::string_view root, std::string_view candidate) {
 }
 
 std::string json_escape(std::string_view text) {
+  constexpr std::string_view HEX = "0123456789abcdef";
   std::string out;
   out.reserve(text.size() + 16);
   for (const char c : text) {
     switch (c) {
-      case '"':
-        out += '\\';
-        out += '"';
-        break;
-      case '\\':
-        out += '\\';
-        out += '\\';
-        break;
-      case '\n':
-        out += '\\';
-        out += 'n';
-        break;
-      case '\r':
-        out += '\\';
-        out += 'r';
-        break;
-      case '\t':
-        out += '\\';
-        out += 't';
-        break;
-      default: out += c;
+      case '"': out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default: {
+        const u8 byte = static_cast<u8>(c);
+        if (byte < 0x20) {
+          out += "\\u00";
+          out += HEX[byte >> 4];
+          out += HEX[byte & 0x0f];
+        } else {
+          out += c;
+        }
+      }
     }
   }
   return out;
@@ -369,7 +365,6 @@ std::unordered_map<std::string, std::string> template_values_for(
                         : "<a href=\"" +
                               ssg::escape_attribute(context.stamp.url) +
                               "\" rel=\"noopener\">" + stamp_text + "</a>";
-  values["settings"] = "";
   return values;
 }
 namespace {
@@ -380,7 +375,7 @@ base::Result<void, std::string> write_spec_assets(Context& context,
       ssg::discover_spec_assets(
           ssg::join_posix({site_root, context.options.spec}));
   if (assets.is_err()) {
-    return base::make_ok();  // An empty spec tree was caught at discover.
+    return base::make_err(std::move(assets).unwrap_err());
   }
   const std::vector<ssg::SpecAsset> asset_list = std::move(assets).unwrap();
   for (const std::string& language : context.catalog.languages) {
@@ -686,7 +681,15 @@ i32 run(i32 argc, char** argv) {
   std::vector<ssg::DocSource> indexed;
   for (const std::vector<ssg::DocSource>* sources :
        {&guide_pages, &spec_pages, &tools_pages}) {
-    indexed.insert(indexed.end(), sources->begin(), sources->end());
+    for (const ssg::DocSource& source : *sources) {
+      // The guide has one source per language per route; indexing them
+      // all would publish duplicate hits under the same route. Spec and
+      // tools sources carry no language and are indexed once as before.
+      if (source.language.empty() ||
+          source.language == context.catalog.default_language) {
+        indexed.push_back(source);
+      }
+    }
   }
   for (usize index = 0; index < indexed.size(); index++) {
     const ssg::DocSource& source = indexed[index];
@@ -744,7 +747,13 @@ i32 run(i32 argc, char** argv) {
     }
     return 1;
   }
-  std::cout << "alcy-docsite: " << guide_pages.size() << " guide, "
+  usize guide_count = 0;
+  for (const ssg::DocSource& source : guide_pages) {
+    if (source.language == context.catalog.default_language) {
+      guide_count++;
+    }
+  }
+  std::cout << "alcy-docsite: " << guide_count << " guide, "
             << spec_pages.size() << " reference, " << tools_pages.size()
             << " tools pages x " << context.catalog.languages.size()
             << " languages, " << fenced.count << " alcy fences compiled\n";

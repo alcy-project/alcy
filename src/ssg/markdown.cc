@@ -237,7 +237,7 @@ std::vector<std::string_view> split_lines(std::string_view text) {
       end++;
     }
     std::string_view line = text.substr(begin, end - begin);
-    // Keep the \r: a CRLF file is refused at the write step instead.
+    // Drop CR so a CRLF source parses the same as an LF source.
     if (!line.empty() && line.back() == '\r') {
       line.remove_suffix(1);
     }
@@ -338,9 +338,8 @@ base::Result<Blocks, std::string> parse_markdown(std::string_view source) {
         index++;
       }
       if (!closed) {
-        return base::make_err(
-            std::string("") /* replaced by caller with path */ +
-            std::to_string(start) + ": the code fence is never closed");
+        return base::make_err(std::to_string(start) +
+                              ": the code fence is never closed");
       }
       blocks.push_back(make_code(start, info, std::move(body)));
       continue;

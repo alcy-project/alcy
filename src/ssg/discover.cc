@@ -146,6 +146,14 @@ Blocks link_sibling_references(Blocks blocks,
       }
       continue;
     }
+    if (block.type == BlockType::Table) {
+      for (std::vector<std::string>& row : block.rows) {
+        for (std::string& cell : row) {
+          rewrite(cell);
+        }
+      }
+      continue;
+    }
     rewrite(block.text);
   }
   return blocks;
@@ -234,6 +242,18 @@ base::Result<std::vector<DocSource>, std::string> discover_guide(
       page.blocks = std::move(blocks);
       pages.push_back(std::move(page));
     }
+  }
+  bool has_default = false;
+  for (const DocSource& page : pages) {
+    if (page.language == catalog.default_language) {
+      has_default = true;
+      break;
+    }
+  }
+  if (!has_default) {
+    return base::make_err(
+        join_posix({docs_dir, catalog.default_language}) +
+        " has no guide pages; the default language defines the page set");
   }
   std::sort(pages.begin(), pages.end(),
             [](const DocSource& a, const DocSource& b) {

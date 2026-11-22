@@ -49,9 +49,12 @@ library's tests are in `../src/tests/ssg/`. `tsconfig.json` and
 `tsconfig.workers.json` are the two remaining TypeScript builds: the
 pages (DOM) and the playground's two workers (WebWorker).
 
-The guide's sources live outside the site, under `docs/guide/`, named
-`NN-slug.md`: the number is the reading order, the `# heading` is the
-title, and the slug (number dropped) is the URL.
+The guide's sources live outside the site, one directory per language
+under `docs/guide/<lang>/`, named `NN-slug.md`: the number is the reading
+order, the `# heading` is the title, and the slug (number dropped) is the
+URL. The default language (`en`) defines which pages exist; a page missing
+from another language falls back to it, so translations can land one page
+at a time.
 
 The generator also writes the site's root files: `404.html`, whose links
 are written from the deployment root because GitHub Pages serves it

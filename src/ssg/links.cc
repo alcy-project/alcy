@@ -68,8 +68,8 @@ std::string tree_source_root(std::string_view tree) {
 
 // Guide sources are filed under docs/guide/<lang>/; spec and tools
 // sources are not. Drop that first segment for guide sources so a link
-// resolves to one tree-relative key regardless of which language's file
-// a page uses - including a translation that fell back to the default.
+// resolves to one tree-relative key regardless of which language's
+// source a page uses - including a page that fell back to the default.
 std::string tree_source_rel(std::string_view tree,
                             std::string_view source_rel) {
   if (tree != "guide") {
@@ -79,6 +79,22 @@ std::string tree_source_rel(std::string_view tree,
   return slash == std::string_view::npos
              ? std::string(source_rel)
              : std::string(source_rel.substr(slash + 1));
+}
+
+// A string literal "\0" appends nothing: its length is zero. Write the
+// separators explicitly so distinct (language, tree, source) triples
+// cannot collapse into the same key.
+std::string source_key(std::string_view language,
+                       std::string_view tree,
+                       std::string_view source_rel) {
+  std::string key;
+  key.reserve(language.size() + tree.size() + source_rel.size() + 2);
+  key += language;
+  key.push_back('\0');
+  key += tree;
+  key.push_back('\0');
+  key += source_rel;
+  return key;
 }
 
 struct SplitUrl {
@@ -102,9 +118,9 @@ LinkAudit::LinkAudit(LinkContext context) : context_(std::move(context)) {
   }
   for (const DocPage& page : *context_.pages) {
     const std::string tree = tree_of(page);
-    pages_by_source_.emplace(page.language + "\0" + tree + "\0" +
-                                 tree_source_rel(tree, page.source_rel),
-                             &page);
+    pages_by_source_.emplace(
+        source_key(page.language, tree, tree_source_rel(tree, page.source_rel)),
+        &page);
   }
 }
 
@@ -138,9 +154,8 @@ std::string LinkAudit::resolve(std::string_view url, const DocPage& page) {
         const std::string stripped = normalized == root
                                          ? std::string()
                                          : normalized.substr(root.size() + 1);
-        const auto target =
-            pages_by_source_.find(page.language + "\0" + tree + "\0" +
-                                  tree_source_rel(tree, stripped));
+        const auto target = pages_by_source_.find(
+            source_key(page.language, tree, tree_source_rel(tree, stripped)));
         if (target == pages_by_source_.end()) {
           return fail("does not name a " + tree + " page (" + stripped + ")");
         }

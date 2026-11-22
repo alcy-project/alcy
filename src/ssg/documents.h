@@ -22,9 +22,9 @@ namespace ssg {
 struct DocSource {
   // The path under the documentation directory, e.g. `types.md`.
   std::string source_rel;
-  // The language this source is written in. The default language's
-  // files live at the tree's root; translations live under a directory
-  // named for their language.
+  // The language this source is written in. Every guide language lives
+  // under its own docs/guide/<lang>/ directory; spec and tools sources
+  // carry no language.
   std::string language;
   // The path inside one language tree, e.g. `reference/types.html`.
   std::string path;

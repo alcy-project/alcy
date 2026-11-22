@@ -146,7 +146,9 @@ std::vector<DocPage> pages_for_language(const Catalog& catalog,
     DocPage page;
     page.source_rel = source->source_rel;
     page.path = source->path;
-    page.order = source->order;
+    // The default source fixes the page's position; a translation must
+    // not reorder the tree by giving its file a different number.
+    page.order = fallback.order;
     page.title = source->title;
     page.blocks = source->blocks;
     page.language = std::string(language);
