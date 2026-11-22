@@ -346,10 +346,10 @@ std::string pager(const DocPage& page, const PageOptions& options) {
 
 std::string footer(const Stamp& stamp) {
   const std::string text = escape_html(stamp.text);
-  const std::string mark =
-      stamp.url.empty()
-          ? text
-          : "<a href=\"" + stamp.url + "\" rel=\"noopener\">" + text + "</a>";
+  const std::string mark = stamp.url.empty()
+                               ? text
+                               : "<a href=\"" + escape_attribute(stamp.url) +
+                                     "\" rel=\"noopener\">" + text + "</a>";
   return "<footer class=\"site-footer\">\n      <span>alcy build " + mark +
          "</span>\n      <a href=\"https://github.com/alcy-project/alcy\" "
          "rel=\"noopener\">GitHub</a>\n    </footer>";
