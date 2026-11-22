@@ -61,6 +61,7 @@ class SemanticTokensCache {
                         Position end);
 
   void erase(std::string_view uri);
+  void clear() { entries_.clear(); }
 
  private:
   struct Entry {

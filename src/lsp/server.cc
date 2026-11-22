@@ -51,6 +51,10 @@ constexpr i32 SERVER_NOT_INITIALIZED = -32002;
 constexpr i32 INVALID_PARAMS = -32602;
 constexpr i32 REQUEST_CANCELLED = -32800;
 
+// A cancel that arrives after its request has been answered has nothing
+// left to match. Bound the set before clearing stale ids wholesale.
+constexpr usize MAX_PENDING_CANCELLATIONS = 1024;
+
 const text::JsonValue* field(const text::JsonValue& object,
                              std::string_view key) {
   return object.find(key);
@@ -521,7 +525,7 @@ void Server::handle_notification(const text::JsonValue& message) {
     if (const text::JsonValue* id = field(*params, "id"); id != nullptr) {
       // A cancel for a request already answered has nothing to match;
       // bound the set so a long-lived session cannot grow it without end.
-      if (cancelled_.size() > 1024) {
+      if (cancelled_.size() > MAX_PENDING_CANCELLATIONS) {
         cancelled_.clear();
       }
       cancelled_.insert(text::to_json(*id));
@@ -1364,6 +1368,9 @@ void Server::flush_watched_files() {
   watched_files_pending_ = false;
   log_message(4, "watched files changed; refreshing package analyses");
   cache_.clear();
+  // The token array holds kinds resolved by the old analysis. Reuse of
+  // a version that did not change must not hide a disk edit.
+  tokens_.clear();
   for (const auto& [uri, document] : documents_.documents()) {
     (void)uri;
     publish_diagnostics(document);

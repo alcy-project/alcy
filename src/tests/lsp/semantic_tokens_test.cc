@@ -227,6 +227,18 @@ TEST_CASE("An unchanged version reuses the remembered token array") {
   CHECK(flat_data(ranged) == flat_data(fresh));
 }
 
+TEST_CASE("Clearing the token cache forces a fresh result") {
+  SemanticTokensCache cache;
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() -> i32 {\n  ret 0\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue first = cache.full(document, analysis);
+  cache.clear();
+  const text::JsonValue again = cache.full(document, analysis);
+  CHECK(first.find("resultId")->as_string() !=
+        again.find("resultId")->as_string());
+}
+
 TEST_CASE("A multi-line comment becomes one token per line") {
   const Document document(
       "file:///main.al", "alcy", 1,
