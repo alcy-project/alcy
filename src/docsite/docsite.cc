@@ -663,6 +663,8 @@ i32 run(i32 argc, char** argv) {
       }
     }
     sitemap_routes.push_back(prefix + "guide/index.html");
+    sitemap_routes.push_back(prefix + "reference/index.html");
+    sitemap_routes.push_back(prefix + "tools/index.html");
     sitemap_routes.push_back(prefix + "playground/index.html");
   }
   for (const std::string& route : sitemap_routes) {
