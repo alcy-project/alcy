@@ -943,13 +943,13 @@ base::Result<TestPackage, diag::Reported> resolve_test_package(
     for (const testgen::RefusedTest& refused : module.refused) {
       switch (refused.reason) {
         case testgen::Refusal::Returns:
-          (void)ctx.bag.emit<i18n::Key::PipelineTestEntryReturns>(
-              DiagCode::TestEntryReturns, refused.name.span, input.name,
+          (void)ctx.bag.emit<i18n::Key::PipelineTestReturns>(
+              DiagCode::TestReturns, refused.name.span, input.name,
               refused.name.name);
           break;
         case testgen::Refusal::NamedMain:
-          (void)ctx.bag.emit<i18n::Key::PipelineTestEntryNamedMain>(
-              DiagCode::TestEntryNamedMain, refused.name.span, input.name);
+          (void)ctx.bag.emit<i18n::Key::PipelineTestNamedMain>(
+              DiagCode::TestNamedMain, refused.name.span, input.name);
           break;
         case testgen::Refusal::Collides:
           (void)ctx.bag.emit<i18n::Key::PipelineTestCollidesWithItem>(

@@ -88,10 +88,10 @@ enum class DiagCode : u8 {
   // A `#[test] fn` writes a return type. A run reports a test by whether it
   // returned, so a value has no reader; a helper beside the test is what
   // one that needs a value calls.
-  TestEntryReturns = 25,
+  TestReturns = 25,
   // A `#[test] fn` named `main`. The run writes the entry point its
   // module needs, so a test cannot declare one.
-  TestEntryNamedMain = 26,
+  TestNamedMain = 26,
   // A `#[test] fn` takes a name its module declares at its own level:
   // both are items of one namespace, so the module would hold two of
   // that name.

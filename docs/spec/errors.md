@@ -65,9 +65,11 @@
   `unsafe` nor `comp`: the run calls it with a plain call at runtime, so
   a signature the caller cannot write directly is refused at parse time.
   A marker on a group is refused there too, rather than reaching every
-  function the group holds. Existence on a build is a separate
-  `#[when(testing)]` gate, so a test left out of a build is not an error
-  there.
+  function the group holds. A written `pub` on a test is accepted but
+  has no effect: the run publishes each gathered test itself, so the
+  spelling does not change what callers can reach. Existence on a build
+  is a separate `#[when(EXPR)]` gate, so a test left out of a build is
+  not an error there.
 - Success is returning, so a test's return type is `()`. A written
   return type is reported by the command that runs tests rather than
   by the parse, which is what keeps a build from failing over a body

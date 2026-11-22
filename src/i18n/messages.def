@@ -492,8 +492,8 @@
   F(PipelineTestCollidesWithItem, Error, Pipeline, "`#[test] fn {}` is already declared in module `{}`; rename the test") \
   F(PipelineTestDriverReserved, Error, Pipeline, "`{}` in module `{}` is a name the test driver declares; rename the item") \
   F(PipelineTestDuplicateName, Error, Pipeline, "`#[test] fn {}` is declared twice in module `{}`") \
-  F(PipelineTestEntryNamedMain, Error, Pipeline, "`#[test] fn main` in module `{}` names the entry point the run writes; rename the test") \
-  F(PipelineTestEntryReturns, Error, Pipeline, "Test '{}::{}' writes a return type; a run reports whether a test returned, so write a helper `fn` beside it") \
+  F(PipelineTestNamedMain, Error, Pipeline, "`#[test] fn main` in module `{}` names the entry point the run writes; rename the test") \
+  F(PipelineTestReturns, Error, Pipeline, "Test '{}::{}' writes a return type; a run reports whether a test returned, so write a helper `fn` beside it") \
   F(PipelineNoBackend, Error, Pipeline, "This build of the compiler has no code generation backend") \
   F(PipelineUnknownProfile, Error, Pipeline, "Unknown profile '{}'; the built-in profiles are debug and release, and .alcy/profile.toml defines the rest") \
   F(PipelineUnknownTarget, Error, Pipeline, "Cannot build for target '{}'; the compiler was not built with that backend") \
