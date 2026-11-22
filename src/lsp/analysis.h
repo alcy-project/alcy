@@ -13,16 +13,19 @@
 
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "i18n/language.h"
 #include "ir/common.h"
 #include "ir/storage.h"
 #include "lowering/lowering.h"
 #include "lsp/document.h"
+#include "lsp/protocol.h"
 #include "lsp/workspace.h"
 #include "path/path.h"
 #include "pipeline/pipeline_context.h"
 #include "source/source.h"
+#include "text/json.h"
 
 namespace lsp {
 
@@ -118,6 +121,14 @@ struct SourceText {
 };
 std::optional<SourceText> source_text_of(const DocumentAnalysis& analysis,
                                          source::FileId file);
+
+// A location resolved from the analysis's own source text, or nothing
+// when the file has no editor URI or the bytes were not loaded.
+std::optional<text::JsonValue> location_json(const DocumentAnalysis& analysis,
+                                             source::FileId file,
+                                             diag::Span span,
+                                             PositionEncoding encoding,
+                                             PositionCache* cache);
 
 // The type the checker recorded for an expression, if it recorded one.
 // An entry exists once per instantiation; the declaration's own entry is

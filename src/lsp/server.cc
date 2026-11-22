@@ -935,13 +935,11 @@ void Server::implementation(const text::JsonValue& id,
   text::JsonValue result = text::JsonValue::make_array();
   PositionCache positions;
   for (const diag::Span span : locations) {
-    const std::optional<std::string> uri = uri_of_file(analysis, span.file);
-    const std::optional<std::string_view> text =
-        analysis.context().sources.bytes(span.file);
-    if (!uri.has_value() || !text.has_value()) {
-      continue;
+    const auto location =
+        location_json(analysis, span.file, span, encoding_, &positions);
+    if (location.has_value()) {
+      result.push(std::move(*location));
     }
-    result.push(location_json(*uri, *text, span, encoding_, &positions));
   }
   send_result(id, std::move(result));
 }

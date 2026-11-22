@@ -15,6 +15,7 @@
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "diag/bag.h"
+#include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "i18n/language.h"
@@ -25,6 +26,7 @@
 #include "linter/lint.h"
 #include "lowering/lowering.h"
 #include "lsp/document.h"
+#include "lsp/protocol.h"
 #include "lsp/workspace.h"
 #include "path/path.h"
 #include "pipeline/artifact.h"
@@ -33,6 +35,7 @@
 #include "pipeline/std_select.h"
 #include "pipeline/std_stage.h"
 #include "source/source.h"
+#include "text/json.h"
 
 namespace lsp {
 
@@ -312,6 +315,20 @@ std::optional<SourceText> source_text_of(const DocumentAnalysis& analysis,
     return std::nullopt;
   }
   return SourceText{*uri, *text};
+}
+
+std::optional<text::JsonValue> location_json(const DocumentAnalysis& analysis,
+                                             source::FileId file,
+                                             diag::Span span,
+                                             PositionEncoding encoding,
+                                             PositionCache* cache) {
+  const std::optional<std::string> uri = uri_of_file(analysis, file);
+  const std::optional<std::string_view> text =
+      analysis.context().sources.bytes(file);
+  if (!uri.has_value() || !text.has_value()) {
+    return std::nullopt;
+  }
+  return lsp::location_json(*uri, *text, span, encoding, cache);
 }
 
 std::optional<ir::TypeIdx> checked_expr_type(
