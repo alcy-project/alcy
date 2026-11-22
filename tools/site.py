@@ -875,6 +875,7 @@ def command_serve(args: argparse.Namespace) -> int:
         ".svg",
         ".txt",
         ".wasm",
+        ".xml",
     }
 
     class Handler(http.server.SimpleHTTPRequestHandler):

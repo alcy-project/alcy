@@ -399,8 +399,6 @@ def main():
     fix_errors = args.fix_errors
 
     if args.verbose:
-        import os
-
         if fix_errors:
             print(f"{os.path.basename(__file__)}: fix errors enabled")
         elif fix:
