@@ -1273,7 +1273,8 @@ void Server::did_open(const text::JsonValue& params) {
                       std::string(string_field(*text_document, "text")));
   document.set_encoding(encoding_);
   cache_.invalidate_all();
-  tokens_.erase(document.uri());
+  // Opening a file can change what a sibling's names resolve to.
+  tokens_.clear();
   publish_diagnostics(document);
 }
 
@@ -1318,7 +1319,8 @@ void Server::did_close(const text::JsonValue& params) {
   documents_.close(uri);
   cache_.invalidate_all();
   cache_.erase(uri);
-  tokens_.erase(uri);
+  // Closing a file can undo a sibling's resolved declarations.
+  tokens_.clear();
   diagnostics_.erase(uri);
   publish_empty_diagnostics(uri);
 }
