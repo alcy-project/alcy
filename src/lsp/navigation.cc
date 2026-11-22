@@ -243,7 +243,6 @@ std::vector<diag::Span> implementation_at(const Document& document,
   const usize offset = document.index().byte_offset(document.text(), position);
   const pipeline::PipelineContext& context = analysis.context();
   const analyzer::CheckedPackage& package = analysis.package();
-  const source::FileId root = analysis.root();
 
   // A call or an impl method resolves to the method the checker bound;
   // its spec field names the spec the implementation belongs to.
@@ -297,7 +296,7 @@ std::vector<diag::Span> implementation_at(const Document& document,
   }
 
   std::vector<diag::Span> out;
-  std::unordered_set<u64> seen;
+  std::unordered_set<FullSpanKey, FullSpanKeyHash> seen;
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::MethodInfo& info : module.methods) {
       if (info.spec != spec || !info.item.is_valid()) {
@@ -308,10 +307,8 @@ std::vector<diag::Span> implementation_at(const Document& document,
       }
       const diag::Span span =
           ::ast::item_name_span(context.ast, context.ast.items[info.item]);
-      if (span.file != root) {
-        continue;
-      }
-      if (seen.insert(span_key(span)).second) {
+      const FullSpanKey key{span.file, span_key(span)};
+      if (seen.insert(key).second) {
         out.push_back(span);
       }
     }
