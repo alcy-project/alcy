@@ -25,6 +25,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
+#include "llvm/Transforms/Utils/ModuleUtils.h"
 
 namespace codegen_llvm {
 namespace {
@@ -687,6 +688,16 @@ class RuntimeBuilder {
   // A Windows image carries no C runtime to answer it, so the runtime
   // defines the routine itself. Loop idiom recognition leaves a loop in
   // a function of this name alone, so the definition stays a loop.
+  // The code generator can emit a reference to one of these after the
+  // middle end has run - stack probes and aggregate copies are the two
+  // we know of. At optimize time the definition has no IR caller yet, so
+  // GlobalDCE would collect it and the object would name a symbol nobody
+  // defined. Listing it in llvm.compiler.used keeps the discardable
+  // linkage and the comdat that lets objects share one copy.
+  void keep_through_lto(llvm::Function& function) {
+    llvm::appendToCompilerUsed(module_, {&function});
+  }
+
   void build_wcslen() {
     llvm::Type* i16 = builder_.getInt16Ty();
     llvm::Type* i64 = builder_.getInt64Ty();
@@ -730,6 +741,7 @@ class RuntimeBuilder {
         builder_.getPtrTy(), {builder_.getPtrTy(), builder_.getPtrTy(), usize_},
         false);
     llvm::Function* function = runtime("memcpy", type);
+    keep_through_lto(*function);
     llvm::LLVMContext& context = module_.getContext();
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", function);
@@ -776,6 +788,7 @@ class RuntimeBuilder {
         builder_.getPtrTy(),
         {builder_.getPtrTy(), builder_.getInt8Ty(), usize_}, false);
     llvm::Function* function = runtime("memset", type);
+    keep_through_lto(*function);
     llvm::LLVMContext& context = module_.getContext();
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(context, "entry", function);
@@ -1374,6 +1387,7 @@ class RuntimeBuilder {
     llvm::Function* function = llvm::Function::Create(
         type, llvm::GlobalValue::ExternalLinkage, "__chkstk", module_);
     link_once_odr(*function);
+    keep_through_lto(*function);
     function->addFnAttr(llvm::Attribute::Naked);
     llvm::BasicBlock* entry =
         llvm::BasicBlock::Create(module_.getContext(), "", function);
