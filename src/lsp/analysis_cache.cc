@@ -58,7 +58,7 @@ std::string AnalysisCache::package_key_for(const Document& focus) const {
                           : "standalone:" + focus.uri();
 }
 
-const std::string& AnalysisCache::package_key(const Document& focus) {
+const std::string& AnalysisCache::package_key(const Document& focus) const {
   const auto found = package_keys_.find(focus.uri());
   if (found != package_keys_.end()) {
     return found->second;

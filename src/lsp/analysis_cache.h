@@ -39,7 +39,7 @@ class AnalysisCache {
 
   // Whether two buffers share a package key, for re-publishing diagnostics
   // to a sibling when one file of the package changes.
-  bool same_package(const Document& lhs, const Document& rhs) {
+  bool same_package(const Document& lhs, const Document& rhs) const {
     return package_key(lhs) == package_key(rhs);
   }
 
@@ -78,7 +78,7 @@ class AnalysisCache {
 
   std::vector<workspace::BufferView> buffers_for(const Document& focus) const;
   std::string package_key_for(const Document& focus) const;
-  const std::string& package_key(const Document& focus);
+  const std::string& package_key(const Document& focus) const;
   std::string stamp_for(const Document& focus) const;
 
   const DocumentStore* documents_ = nullptr;
@@ -89,7 +89,7 @@ class AnalysisCache {
     std::string stamp;
     std::string value;
   };
-  std::unordered_map<std::string, std::string> package_keys_;
+  mutable std::unordered_map<std::string, std::string> package_keys_;
   std::unordered_map<std::string, SignatureEntry> signatures_;
 };
 

@@ -149,7 +149,7 @@ void collect(const DocumentAnalysis& analysis,
     std::string text;
     for (const diag::Span span : node.docs) {
       const std::optional<std::string_view> bytes =
-          analysis.context().sources.bytes(span.file);
+          context.sources.bytes(span.file);
       if (!bytes.has_value() || span.offset + span.length > bytes->size()) {
         continue;
       }
