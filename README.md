@@ -43,9 +43,12 @@ compiles today may need an edit tomorrow.
 
 ## What alcy is
 
-alcy compiles to stand-alone binaries (LLVM backend) or to WebAssembly
-(`--backend=direct-wasm`; alcy's own WASI emitter, with no LLVM and no
-linker behind it). There is no interpreter and no runtime to ship: a
+alcy compiles to stand-alone binaries or to WebAssembly. On native
+x86_64 Linux a debug build uses alcy's own x86_64 emitter
+(`--backend=direct-x86_64`), which writes the object without LLVM;
+an optimized build uses the LLVM backend. WebAssembly uses
+`--backend=direct-wasm`, alcy's own WASI emitter, with no LLVM and no
+linker behind it. There is no interpreter and no runtime to ship: a
 compiled program runs on its own.
 
 It builds and tests on Linux (x86_64 and arm64), macOS (aarch64 and

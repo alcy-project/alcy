@@ -612,8 +612,12 @@ bool Selector::receive_parameters(const ir::Block& entry) {
       case Passage::TwoWord: {
         if (next_register + 1 >= ARG_REG_COUNT) {
           // The whole pair arrives on the stack: one wide move fills the
-          // destination slot from the two words there.
-          push(make_inst(MOp::Mov, 8, Operand{VReg{vreg}}, from_stack()));
+          // destination slot from the two words there. Advance the cursor
+          // for both words, or a later stack argument reads the first
+          // word of this pair again.
+          const Operand low = from_stack();
+          (void)from_stack();
+          push(make_inst(MOp::Mov, 8, Operand{VReg{vreg}}, low));
           break;
         }
         push(make_inst(MOp::Mov, 8, Operand{SlotRef{vreg, 0}},
@@ -1446,6 +1450,11 @@ bool Selector::emit(const ir::Instruction& instr,
       return false;
     }
     case O::Call: return emit_call(instr, ops, span);
+    case O::AtomicLoad:
+    case O::AtomicStore:
+    case O::AtomicRmw:
+    case O::AtomicCompareExchange:
+    case O::Fence: (void)unsupported(span, "an atomic operation"); return false;
     default: break;
   }
 
@@ -2071,7 +2080,8 @@ bool Selector::emit_call(const ir::Instruction& instr,
   if (sited) {
     body_.call_sites.push_back(Body::CallSite{
         call_label,
-        std::string(strings_.get(site_names_[current_instr_idx_.idx]))});
+        std::string(strings_.get(site_names_[current_instr_idx_.idx])),
+        static_cast<u8>(indirect ? 2 : 5)});
   }
   if (defines_dst(instr)) {
     const Passage passage = passage_of(dst_type(instr));

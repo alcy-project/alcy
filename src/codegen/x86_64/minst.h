@@ -262,6 +262,9 @@ struct Body {
   struct CallSite {
     u32 label = 0;
     std::string site;
+    // A direct call is a 5-byte e8 rel32; an indirect one is a 2-byte
+    // ff /2. The return address the trace names follows the bytes.
+    u8 call_len = 5;
   };
   std::vector<CallSite> call_sites;
 };

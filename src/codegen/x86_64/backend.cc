@@ -252,9 +252,23 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
                                    ? linkable_name(function, storage, strings)
                                    : internal_symbol(index);
     Encoded encoded;
-    emit_body(body, symbol,
-              exported ? object::SymbolBind::Global : object::SymbolBind::Local,
-              request.options.backtrace ? &encoded : nullptr);
+    const u64 body_at = emit_body(
+        body, symbol,
+        exported ? object::SymbolBind::Global : object::SymbolBind::Local,
+        request.options.backtrace ? &encoded : nullptr);
+    if (index == entry) {
+      // A call or a function value naming main goes by its IR index,
+      // while the platform entry carries the wrapper's name. Give both
+      // spellings to the same bytes so a recursive call still links.
+      object.symbols.push_back(object::Symbol{
+          .name = internal_symbol(index),
+          .section = 0,
+          .offset = body_at,
+          .size = encoded.bytes.size(),
+          .bind = object::SymbolBind::Local,
+          .type = object::SymbolType::Func,
+      });
+    }
     if (request.options.backtrace) {
       std::string shown = std::string(strings.get(function.meta.path));
       if (!shown.empty()) {
@@ -266,7 +280,9 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       for (const Body::CallSite& call : body.call_sites) {
         if (call.label < encoded.label_offsets.size()) {
           backtrace_sites.push_back(BacktraceSite{
-              symbol, static_cast<i64>(encoded.label_offsets[call.label]) + 5,
+              symbol,
+              static_cast<i64>(encoded.label_offsets[call.label]) +
+                  call.call_len,
               call.site});
         }
       }
@@ -286,6 +302,12 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   if (request.emit_entry) {
     Body wrapper;
     wrapper.symbols.push_back(entry_symbol);
+    // The C runtime enters `main` with rsp%16==8. A pushed frame pointer
+    // restores the SysV alignment the call to alcy_main below needs;
+    // the freestanding _start already enters aligned and never returns.
+    if (!request.options.freestanding) {
+      wrapper.insts.push_back(make_inst(MOp::Push, 8, Operand{Reg::Rbp}));
+    }
     const ir::TypeIdx return_type =
         storage.functions()[*entry].meta.return_type;
     const ir::TypeTag return_tag = storage.types()[return_type.idx].tag;
@@ -411,6 +433,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Imm{60}}));
       wrapper.insts.push_back(make_inst(MOp::Syscall, 8));
     } else {
+      wrapper.insts.push_back(make_inst(MOp::Pop, 8, Operand{Reg::Rbp}));
       wrapper.insts.push_back(make_inst(MOp::Ret, 8));
     }
     Encoded encoded = encode(wrapper);
