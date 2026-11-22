@@ -516,7 +516,7 @@
   F(CliCompileLinkerHelp, Note, Pipeline, "System linker driver for executable builds.") \
   F(CliCompileNeedsInput, Note, Pipeline, "The `compile` command needs a file input or `--stdin`") \
   F(CliCompileOutputHelp, Note, Pipeline, "Where the output goes. Empty picks a path beside the input; required with --stdin.") \
-  F(CliDepsHelp, Note, Pipeline, "A dependency on top of the default suite (`alcy/std/*`), as a package specifier or `specifier = {{ ... }}`. The default already globs every member; repeatable.") \
+  F(CliDepsHelp, Note, Pipeline, "A dependency on top of the default suite (`alcy/std/*`), as a package specifier or `specifier = { ... }`. The default already globs every member; repeatable.") \
   F(CliDepsOnlyForCompile, Note, Pipeline, "The `--no-std` and `--deps` flags only mean anything for `compile`") \
   F(CliDidYouMean, Note, Pipeline, "{} (did you mean '{}'?)") \
   F(CliEmitHelp, Note, Pipeline, "What to write: executable (default), object, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
