@@ -258,11 +258,11 @@ ast::ExprIdx Parser::parse_unary() {
   // twice, which parses and means something else.
   if ((check(lexer::TokenKind::Plus) || check(lexer::TokenKind::Minus)) &&
       peek_kind() == peek_kind(1) && doubled_text(pos_)) {
-    const diag::Span span = span_from(pos_);
+    advance();
+    advance();
+    const diag::Span span = span_from(mark);
     (void)bag_.emit<i18n::Key::ParserIncrementSpelling>(DiagCode::Spelling,
                                                         span);
-    advance();
-    advance();
     ast::ExprIdx operand = parse_unary();
     if (!operand.is_valid()) {
       return ast::ExprIdx::invalid();
@@ -496,11 +496,12 @@ ast::ExprIdx Parser::parse_postfix() {
       // doubled pair, so a chain (`i++ ++`) reports at each pair the
       // reader wrote.
       if (peek_kind() == peek_kind(1) && doubled_text(pos_)) {
-        const diag::Span span = span_from(mark);
+        const usize op_mark = pos_;
+        advance();
+        advance();
+        const diag::Span span = span_from(op_mark);
         (void)bag_.emit<i18n::Key::ParserIncrementSpelling>(DiagCode::Spelling,
                                                             span);
-        advance();
-        advance();
         continue;
       }
       return base;
