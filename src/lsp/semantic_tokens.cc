@@ -30,6 +30,36 @@ namespace lsp {
 
 namespace {
 
+// Writes absolute token positions as the LSP delta stream. Both the
+// first computation and a cached-array filter must encode the same
+// rule, so it lives here rather than in two lambdas.
+class DeltaEncoder {
+ public:
+  explicit DeltaEncoder(std::vector<u32>& out) : out_(out) {}
+
+  void add(Position start, u32 length, u32 type, u8 modifier) {
+    if (length == 0) {
+      return;
+    }
+    const bool new_line = first_ || start.line != previous_line_;
+    out_.push_back(new_line ? start.line - (first_ ? 0 : previous_line_) : 0);
+    out_.push_back(new_line ? start.character
+                            : start.character - previous_character_);
+    out_.push_back(length);
+    out_.push_back(type);
+    out_.push_back(modifier);
+    previous_line_ = start.line;
+    previous_character_ = start.character;
+    first_ = false;
+  }
+
+ private:
+  std::vector<u32>& out_;
+  u32 previous_line_ = 0;
+  u32 previous_character_ = 0;
+  bool first_ = true;
+};
+
 std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
   switch (kind) {
     case lexer::TokenKind::I8:
@@ -231,28 +261,10 @@ std::vector<u32> semantic_tokens_in(const Document& document,
   }
 
   std::vector<u32> data;
-  u32 previous_line = 0;
-  u32 previous_character = 0;
-  bool first = true;
+  DeltaEncoder encoder(data);
   const auto emit = [&](Position start, u32 length, SemanticTokenType type,
                         u8 modifier_bits = 0) {
-    if (length == 0) {
-      return;
-    }
-    const u32 delta_line = first || start.line != previous_line
-                               ? start.line - (first ? 0 : previous_line)
-                               : 0;
-    const u32 delta_character = first || start.line != previous_line
-                                    ? start.character
-                                    : start.character - previous_character;
-    data.push_back(delta_line);
-    data.push_back(delta_character);
-    data.push_back(length);
-    data.push_back(static_cast<u32>(type));
-    data.push_back(modifier_bits);
-    previous_line = start.line;
-    previous_character = start.character;
-    first = false;
+    encoder.add(start, length, static_cast<u32>(type), modifier_bits);
   };
   // A token cannot cross a line on the wire, so a block comment or a
   // multi-line string is emitted one line at a time.
@@ -399,11 +411,9 @@ std::vector<u32> filter_tokens(const std::vector<u32>& data,
                                Position start,
                                Position end) {
   std::vector<u32> out;
+  DeltaEncoder encoder(out);
   u32 line = 0;
   u32 character = 0;
-  u32 previous_line = 0;
-  u32 previous_character = 0;
-  bool first = true;
   for (usize i = 0; i + 4 < data.size(); i += 5) {
     if (data[i] == 0) {
       character += data[i + 1];
@@ -419,18 +429,8 @@ std::vector<u32> filter_tokens(const std::vector<u32>& data,
     if (!after_start || !before_end) {
       continue;
     }
-    out.push_back(first || line != previous_line
-                      ? line - (first ? 0 : previous_line)
-                      : 0);
-    out.push_back(first || line != previous_line
-                      ? character
-                      : character - previous_character);
-    out.push_back(data[i + 2]);
-    out.push_back(data[i + 3]);
-    out.push_back(data[i + 4]);
-    previous_line = line;
-    previous_character = character;
-    first = false;
+    encoder.add({line, character}, data[i + 2], data[i + 3],
+                static_cast<u8>(data[i + 4]));
   }
   return out;
 }
