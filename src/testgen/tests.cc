@@ -80,6 +80,7 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
   // duplicate, which has its own diagnostic rather than a collision
   // with the module.
   std::vector<std::string_view> taken;
+  std::vector<usize> refused_at;
   for (usize at = 0; at < items.size(); ++at) {
     const ast::ItemIdx index = items[at];
     if (!ast.items.bound(index)) {
@@ -93,18 +94,22 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
     const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
     if (fn.name.name == ENTRY_POINT) {
       spliced.refused.push_back(RefusedItem{Refusal::NamedMain, fn.name});
+      refused_at.push_back(at);
       continue;
     }
     if (std::find(level.begin(), level.end(), fn.name.name) != level.end()) {
       spliced.refused.push_back(RefusedItem{Refusal::Collides, fn.name});
+      refused_at.push_back(at);
       continue;
     }
     if (std::find(taken.begin(), taken.end(), fn.name.name) != taken.end()) {
       spliced.refused.push_back(RefusedItem{Refusal::Duplicates, fn.name});
+      refused_at.push_back(at);
       continue;
     }
     if (fn.return_type.is_valid()) {
       spliced.refused.push_back(RefusedItem{Refusal::Returns, fn.name});
+      refused_at.push_back(at);
       continue;
     }
     taken.push_back(fn.name.name);
@@ -126,6 +131,14 @@ SplicedModule splice_tests(std::span<const ast::ItemIdx> items,
         .name = std::string(fn.name.name),
         .label = joined_label(module, fn.name.name),
     });
+  }
+  // A refused test is gone from the module, not left behind as an ordinary
+  // function with the marker still set: that would add a second, unrelated
+  // diagnostic to the one the refusal already reported.
+  usize removed = 0;
+  for (const usize at : refused_at) {
+    grown.erase(grown.begin() + (at - removed));
+    ++removed;
   }
   spliced.items = ast::copy_to_arena(ast.spans, grown);
   return spliced;

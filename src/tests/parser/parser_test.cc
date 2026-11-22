@@ -2034,6 +2034,19 @@ TEST_CASE("The test marker only leads a function") {
   }
 }
 
+TEST_CASE("The test marker is refused on a method") {
+  // A run gathers tests from module items, so a marked method would be
+  // read and then dropped in silence without this diagnostic.
+  const std::string_view source =
+      "struct S {}\nimpl S {\n  #[test] fn check() {\n  }\n}\n";
+  Fixture f;
+  const ParseResult result = parse(source, f);
+  CHECK(!result.ok);
+  CHECK(has_message(f.bag,
+                    "`#[test]` marks a module function; a method cannot be a "
+                    "test"));
+}
+
 TEST_CASE("A test marker refuses the shapes a test cannot take") {
   struct Case {
     std::string_view source;

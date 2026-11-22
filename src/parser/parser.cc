@@ -1464,10 +1464,18 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     // from the block before anything downstream sees it.
     Attributes attributes;
     if (peek_kind() == lexer::TokenKind::Hash) {
+      const diag::Span attribute_span = peek().span;
       attributes = parse_attribute_list();
       if (attributes.repr_c) {
         const u32 index = bag_.emit<i18n::Key::ParserReprNotOnStruct>(
             DiagCode::ReprNotOnStruct, attributes.repr_span);
+        (void)index;
+      }
+      // A run gathers tests from module items, so a method cannot be one.
+      // Without this the marker would be read and then dropped in silence.
+      if (attributes.is_test) {
+        const u32 index = bag_.emit<i18n::Key::ParserTestNotOnMethod>(
+            DiagCode::UnexpectedToken, attribute_span);
         (void)index;
       }
     }
