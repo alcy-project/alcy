@@ -160,7 +160,7 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       }
       const diag::Span name = ::ast::item_name_span(ast, ast.items[info.item]);
       add_span(kinds, name, SemanticTokenType::Variable);
-      mark_declaration(name);
+      mark_declaration(name, true);
       kinds.by_name.emplace(info.name, SemanticTokenType::Variable);
     }
   }
