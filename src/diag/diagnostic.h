@@ -26,8 +26,8 @@ struct Label {
 };
 
 // What a repair is for, so an editor can group quick fixes apart from
-// refactors and source actions.
-enum class FixKind : u8 { QuickFix, Refactor, Source };
+// refactors from a plain fix.
+enum class FixKind : u8 { QuickFix, Refactor };
 
 // A machine-applicable repair to the source: replace the bytes the span
 // covers with the replacement, which is empty to delete them. A producer

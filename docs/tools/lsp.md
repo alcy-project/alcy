@@ -22,8 +22,8 @@ streams until the client asks for shutdown.
 - Semantic tokens from the lexer's own trivia
 - Folding ranges and document symbols
 - Call hierarchy, type hierarchy
-- Code actions: the linter's repairs, carried as quickfix, refactor, or source
-  actions
+- Code actions: the linter's repairs as quickfix or refactor, plus manifest
+  dependency fixes as source actions actions
 - Workspace symbols, workspace diagnostics
 - Semantic tokens delta answers (live editing sessions)
 - Code lenses (reference counts)

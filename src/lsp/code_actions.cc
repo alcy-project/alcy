@@ -30,7 +30,6 @@ namespace lsp {
 std::string_view code_action_kind_name(diag::FixKind kind) {
   switch (kind) {
     case diag::FixKind::Refactor: return "refactor";
-    case diag::FixKind::Source: return "source";
     case diag::FixKind::QuickFix: return "quickfix";
   }
   return "quickfix";
@@ -213,7 +212,7 @@ text::JsonValue code_actions(const Document& document,
     action.set("title",
                text::JsonValue::make_string(
                    "Add the standard library member to [dependencies]"));
-    action.set("kind", text::JsonValue::make_string("quickfix"));
+    action.set("kind", text::JsonValue::make_string("source"));
     action.set("edit", std::move(workspace_edit));
     actions.push(std::move(action));
   }

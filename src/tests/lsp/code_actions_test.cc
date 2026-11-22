@@ -70,7 +70,6 @@ TEST_CASE("A while-true finding offers one refactor") {
 TEST_CASE("Repair kinds map to distinct LSP CodeAction kinds") {
   CHECK(code_action_kind_name(diag::FixKind::QuickFix) == "quickfix");
   CHECK(code_action_kind_name(diag::FixKind::Refactor) == "refactor");
-  CHECK(code_action_kind_name(diag::FixKind::Source) == "source");
 }
 
 TEST_CASE("A clean buffer offers no quick fix") {
