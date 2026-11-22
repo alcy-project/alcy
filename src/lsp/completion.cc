@@ -204,12 +204,15 @@ void collect(const DocumentAnalysis& analysis,
                                          : CompletionItemKind::Struct);
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
-      if (visible_labels(visible, module.module, info.name).empty()) {
+      const auto labels = visible_labels(visible, module.module, info.name);
+      if (labels.empty()) {
         continue;
       }
+      // A use alias is what the buffer can spell; inserting the
+      // declaration name would be unresolved at the use site.
+      const std::string qualifier(labels.front());
       for (const std::string_view variant : info.variants) {
-        Item item{std::string(variant),
-                  std::string(info.name) + "::" + std::string(variant),
+        Item item{std::string(variant), qualifier + "::" + std::string(variant),
                   ast::ItemIdx::invalid(), CompletionItemKind::EnumMember, ""};
         item.insert_text = item.detail;
         out->push_back(std::move(item));
