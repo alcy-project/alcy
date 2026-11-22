@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 
 #include "fpag/base/numeric.h"
 #include "lsp/analysis_cache.h"
@@ -17,6 +18,47 @@
 #include "text/json.h"
 
 namespace lsp {
+
+constexpr usize MAX_PENDING_CANCELLATIONS = 1024;
+
+// A bounded set of request ids with FIFO eviction. The LSP reuses ids,
+// so a late cancel or an old answer must not poison a later request.
+class BoundedIdSet {
+ public:
+  explicit BoundedIdSet(usize limit) : limit_(limit) {}
+
+  bool contains(std::string_view id) const {
+    return ids_.contains(std::string(id));
+  }
+
+  void insert(std::string id) {
+    if (order_.size() >= limit_) {
+      ids_.erase(order_.front());
+      order_.pop_front();
+    }
+    order_.push_back(id);
+    ids_.insert(std::move(id));
+  }
+
+  void erase(std::string_view id) {
+    const auto found = ids_.find(std::string(id));
+    if (found == ids_.end()) {
+      return;
+    }
+    ids_.erase(found);
+    for (auto it = order_.begin(); it != order_.end(); ++it) {
+      if (*it == id) {
+        order_.erase(it);
+        return;
+      }
+    }
+  }
+
+ private:
+  usize limit_;
+  std::unordered_set<std::string> ids_;
+  std::deque<std::string> order_;
+};
 
 // The LSP message loop: reads frames, routes each JSON-RPC request or
 // notification, and writes the responses and diagnostics. One instance
@@ -114,11 +156,10 @@ class Server {
   PositionEncoding encoding_ = PositionEncoding::Utf16;
   bool watched_files_supported_ = false;
   bool watched_files_pending_ = false;
-  std::unordered_set<std::string> cancelled_;
+  BoundedIdSet cancelled_{MAX_PENDING_CANCELLATIONS};
   // Ids whose response has already gone out. A cancel for one of these
   // is too late to matter and must not poison a later reuse of the id.
-  std::unordered_set<std::string> answered_;
-  std::deque<std::string> answered_order_;
+  BoundedIdSet answered_{MAX_PENDING_CANCELLATIONS};
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;

@@ -51,10 +51,6 @@ constexpr i32 SERVER_NOT_INITIALIZED = -32002;
 constexpr i32 INVALID_PARAMS = -32602;
 constexpr i32 REQUEST_CANCELLED = -32800;
 
-// A cancel that arrives after its request has been answered has nothing
-// left to match. Bound the set before clearing stale ids wholesale.
-constexpr usize MAX_PENDING_CANCELLATIONS = 1024;
-
 const text::JsonValue* field(const text::JsonValue& object,
                              std::string_view key) {
   return object.find(key);
@@ -191,9 +187,9 @@ void Server::handle_request(const text::JsonValue& message) {
   const text::JsonValue* id = field(message, "id");
   const std::string_view method = string_field(message, "method");
   if (id != nullptr) {
-    const auto cancelled = cancelled_.find(text::to_json(*id));
-    if (cancelled != cancelled_.end()) {
-      cancelled_.erase(cancelled);
+    const std::string key = text::to_json(*id);
+    if (cancelled_.contains(key)) {
+      cancelled_.erase(key);
       // The server handles one message at a time, so this refuses a
       // request that has not started yet; it cannot interrupt one that
       // is already being answered.
@@ -527,9 +523,6 @@ void Server::handle_notification(const text::JsonValue& message) {
       // A cancel that arrives after its response cannot interrupt
       // anything; recording it would reject a later reuse of the id.
       if (!answered_.contains(key)) {
-        if (cancelled_.size() >= MAX_PENDING_CANCELLATIONS) {
-          cancelled_.erase(cancelled_.begin());
-        }
         cancelled_.insert(std::move(key));
       }
     }
@@ -935,7 +928,7 @@ void Server::implementation(const text::JsonValue& id,
   text::JsonValue result = text::JsonValue::make_array();
   PositionCache positions;
   for (const diag::Span span : locations) {
-    const auto location =
+    auto location =
         location_json(analysis, span.file, span, encoding_, &positions);
     if (location.has_value()) {
       result.push(std::move(*location));
@@ -1399,14 +1392,8 @@ void Server::note_answered(const text::JsonValue& id) {
   if (id.is_null()) {
     return;
   }
-  std::string key = text::to_json(id);
-  cancelled_.erase(key);
-  if (answered_order_.size() >= MAX_PENDING_CANCELLATIONS) {
-    answered_.erase(answered_order_.front());
-    answered_order_.pop_front();
-  }
-  answered_order_.push_back(key);
-  answered_.insert(std::move(key));
+  answered_.insert(text::to_json(id));
+  cancelled_.erase(text::to_json(id));
 }
 
 void Server::send_result(const text::JsonValue& id, text::JsonValue result) {
