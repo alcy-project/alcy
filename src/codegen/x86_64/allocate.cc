@@ -171,8 +171,8 @@ void allocate(Body& body, const Frame& frame) {
   // width the value holds: a narrower read zero-extends, so the high
   // bytes a wider one would carry are never there to mistake for data.
   const auto load_value = [&](const VReg vreg) -> Reg {
+    DCHECK(next_scratch < pool.size());
     const Reg into = pool[next_scratch++];
-    DCHECK(next_scratch <= pool.size());
     if (const std::optional<i32> pointee = pointee_of(vreg);
         pointee.has_value()) {
       push_labeled(
@@ -203,8 +203,8 @@ void allocate(Body& body, const Frame& frame) {
   // Brings one vreg's *address* into a scratch, which is the only thing
   // a slot wider than a register offers.
   const auto load_address = [&](const VReg vreg) -> Reg {
+    DCHECK(next_scratch < pool.size());
     const Reg into = pool[next_scratch++];
-    DCHECK(next_scratch <= pool.size());
     if (const std::optional<i32> pointee = pointee_of(vreg);
         pointee.has_value()) {
       push_labeled(
@@ -299,8 +299,8 @@ void allocate(Body& body, const Frame& frame) {
                                  Operand{slot(disp_of(vreg->index))}));
         } else if (const SymbolRef* sym = std::get_if<SymbolRef>(&src);
                    sym != nullptr) {
+          DCHECK(next_scratch < pool.size());
           const Reg addr = pool[next_scratch++];
-          DCHECK(next_scratch <= pool.size());
           push_labeled(make_inst(MOp::Mov, 8, Operand{addr}, Operand{*sym}));
           push_labeled(make_inst(load_op, w, Operand{into},
                                  Operand{Mem{.base = addr,
@@ -624,8 +624,8 @@ void allocate(Body& body, const Frame& frame) {
     // the one the dividend and its sign are not in.
     if ((encoded.op == MOp::Idiv || encoded.op == MOp::Udiv) &&
         std::holds_alternative<Imm>(encoded.ops[0])) {
+      DCHECK(next_scratch < pool.size());
       const Reg into = pool[next_scratch++];
-      DCHECK(next_scratch <= pool.size());
       push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[0]));
       encoded.ops[0] = Operand{into};
     }
@@ -633,8 +633,8 @@ void allocate(Body& body, const Frame& frame) {
     // x86 has no memory-to-immediate form that carries a relocation.
     if (encoded.op == MOp::Mov && std::holds_alternative<Mem>(encoded.ops[0]) &&
         std::holds_alternative<SymbolRef>(encoded.ops[1])) {
+      DCHECK(next_scratch < pool.size());
       const Reg into = pool[next_scratch++];
-      DCHECK(next_scratch <= pool.size());
       push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[1]));
       encoded.ops[1] = Operand{into};
     }
@@ -642,8 +642,8 @@ void allocate(Body& body, const Frame& frame) {
     // constant needs a scratch the instruction may clobber.
     if ((encoded.op == MOp::Movsx || encoded.op == MOp::Movzx) &&
         std::holds_alternative<Imm>(encoded.ops[1])) {
+      DCHECK(next_scratch < pool.size());
       const Reg into = pool[next_scratch++];
-      DCHECK(next_scratch <= pool.size());
       push_labeled(
           make_inst(MOp::Mov, inst.width, Operand{into}, encoded.ops[1]));
       encoded.ops[1] = Operand{into};
@@ -654,8 +654,8 @@ void allocate(Body& body, const Frame& frame) {
     if (encoded.op == MOp::Lea) {
       if (Mem* mem = std::get_if<Mem>(&encoded.ops[1]);
           mem != nullptr && mem->index.has_value() && mem->scale > 8) {
+        DCHECK(next_scratch < pool.size());
         const Reg into = pool[next_scratch++];
-        DCHECK(next_scratch <= pool.size());
         const Reg idx = std::get<Reg>(*mem->index);
         push_labeled(make_inst(MOp::Mov, 8, Operand{into}, Operand{idx}));
         if (std::has_single_bit(mem->scale)) {
@@ -663,8 +663,8 @@ void allocate(Body& body, const Frame& frame) {
           push_labeled(
               make_inst(MOp::Shl, 8, Operand{into}, Operand{Imm{shift}}));
         } else {
+          DCHECK(next_scratch < pool.size());
           const Reg factor = pool[next_scratch++];
-          DCHECK(next_scratch <= pool.size());
           push_labeled(make_inst(MOp::Mov, 8, Operand{factor},
                                  Operand{Imm{static_cast<i64>(mem->scale)}}));
           push_labeled(make_inst(MOp::Imul, 8, Operand{into}, Operand{factor}));
@@ -682,8 +682,8 @@ void allocate(Body& body, const Frame& frame) {
          encoded.op == MOp::Shr || encoded.op == MOp::Sar ||
          encoded.op == MOp::Not || encoded.op == MOp::Neg) &&
         std::holds_alternative<Imm>(encoded.ops[0])) {
+      DCHECK(next_scratch < pool.size());
       const Reg into = pool[next_scratch++];
-      DCHECK(next_scratch <= pool.size());
       push_labeled(
           make_inst(MOp::Mov, inst.width, Operand{into}, encoded.ops[0]));
       encoded.ops[0] = Operand{into};
@@ -696,8 +696,8 @@ void allocate(Body& body, const Frame& frame) {
         // the destination into: the opcode writes it as it stands.
         result = *named;
       } else {
+        DCHECK(next_scratch < pool.size());
         result = pool[next_scratch++];
-        DCHECK(next_scratch <= pool.size());
         encoded.ops[0] = Operand{*result};
       }
     }
@@ -707,8 +707,8 @@ void allocate(Body& body, const Frame& frame) {
         std::holds_alternative<Imm>(encoded.ops[1])) {
       const Imm& value = std::get<Imm>(encoded.ops[1]);
       if (value.value > 0x7fffffffLL || value.value < -0x80000000LL) {
+        DCHECK(next_scratch < pool.size());
         const Reg into = pool[next_scratch++];
-        DCHECK(next_scratch <= pool.size());
         push_labeled(make_inst(MOp::Mov, 8, Operand{into}, encoded.ops[1]));
         encoded.ops[1] = Operand{into};
       }

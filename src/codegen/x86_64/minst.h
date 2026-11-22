@@ -32,9 +32,9 @@ struct Imm {
 // register before the encoder reads it.
 using RegRef = std::variant<VReg, Reg>;
 
-// A memory reference. `base` absent is rip-relative, which is how a
-// symbol's address rides in an instruction; `index` absent is a plain
-// base plus displacement.
+// A memory reference: a base register and an optional scaled index plus
+// displacement. Every base the encoder accepts names a register; an
+// absent index means a plain base plus displacement.
 struct Mem {
   std::optional<RegRef> base;
   std::optional<RegRef> index;
@@ -67,7 +67,7 @@ struct SlotRef {
 using Operand = std::
     variant<std::monostate, VReg, Reg, Imm, Mem, Label, SymbolRef, SlotRef>;
 
-// The branch conditions, in the order the encoder's opcode offset uses.
+// The branch conditions. The encoder maps each one to its opcode offset.
 enum class Cond : u8 {
   O,
   No,
@@ -272,6 +272,5 @@ struct Body {
 // Renders a body as text, one instruction per line, in the spelling the
 // disassembler's reader would write. This is what a lowering bug is read
 // from, so it is part of the type rather than a test's private helper.
-[[nodiscard]] std::string dump(const Body& body);
 
 }  // namespace codegen::x86_64

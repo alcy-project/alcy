@@ -296,7 +296,6 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   }
 
   // The env wrappers call alcy_env_find; make sure it is emitted too.
-  // Iterate while growing the list, since a body can pull in another.
   const bool uses_env = std::find(runtime_names.begin(), runtime_names.end(),
                                   "alcy_env_exists") != runtime_names.end() ||
                         std::find(runtime_names.begin(), runtime_names.end(),

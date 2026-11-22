@@ -96,10 +96,9 @@ codegen::Backend select_backend(const codegen::Target& target,
   // the final object without LLVM, which is the point of the backend.
   // An optimized build keeps LLVM, which still carries the release
   // pipeline.
-  const bool native_debug = !optimize &&
-                            target.triple.rfind("x86_64", 0) == 0 &&
-                            target.triple.find("linux") != std::string::npos &&
-                            backend_available(codegen::Backend::DirectX86_64);
+  const bool native_debug =
+      !optimize && backend_supports(codegen::Backend::DirectX86_64,
+                                    codegen::OutputKind::Object, target);
   const codegen::Backend preferred = native_debug
                                          ? codegen::Backend::DirectX86_64
                                          : codegen::default_backend(target);
