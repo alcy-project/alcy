@@ -113,8 +113,9 @@ it is implemented.
 ## Platform surface shelved with the runtime
 
 - `strerror` (mapping an errno to text), directory iteration (readdir),
-  and WTF-16 path encoding on Windows. The errno an operation reports
-  stays a number; nothing interprets it.
+  and WTF-16 path encoding on Windows: `Path` holds well-formed UTF-16
+  there, so an unpaired surrogate from the OS is not representable. The
+  errno an operation reports stays a number; nothing interprets it.
 
 ## Keywords reserved for the above
 

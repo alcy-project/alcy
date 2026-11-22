@@ -267,6 +267,36 @@
   functions, or its two `unsafe` unchecked intrinsics with a proven
   precondition. Grapheme segmentation and width remain deferred.
 
+## Paths and C strings (staged)
+
+- `path::Path` owns a path in the platform's own spelling, and `&Path`
+  is its view. On non-Windows targets the spelling is UTF-8 bytes; on
+  Windows it is well-formed UTF-16 units. `#[when]` gives both targets
+  the same public names. Unpaired surrogates (WTF-16) are not
+  representable.
+- `Path::from_str` takes a `str` without a check. `from_bytes` checks
+  UTF-8, then encodes UTF-16 on Windows, so a path always round-trips
+  through `to_str` or the byte accessors. A non-UTF-8 path the OS can
+  name is not representable today. `as_bytes` borrows the UTF-8 bytes
+  on non-Windows targets; `encoded_bytes` copies the platform's bytes
+  and yields UTF-8 on Windows. `join`, `file_name`, `parent`, and
+  `extension` work on components and answer owned values or `None`.
+  The file I/O package takes `&Path` and passes the encoded bytes to
+  its intrinsics.
+- `ffi::CStr` is a borrowed view over bytes ending in a terminator.
+  `CStr::from_ptr` is `unsafe`: the pointer must reach a NUL and the
+  memory must stay initialized for the view's life. `as_bytes` stops
+  at the first NUL, and `as_str` decodes those bytes through
+  `from_utf8`, answering `Result<str, Utf8Error>`.
+- `ffi::CString` owns the bytes and one trailing terminator. `new`
+  and `from_str` answer `None` when the bytes contain an interior
+  NUL. `as_bytes` excludes the terminator, `as_bytes_with_nul`
+  includes it, and `as_ptr` is the pointer an extern declaration
+  takes.
+- `env` answers the platform's own bytes for a name, and `env_str`
+  checks them as UTF-8. A variable that is set to no bytes is `Some`
+  of an empty vector, not `None`.
+
 ## Ranges (staged)
 
 - A range is interval data, not an iterator: a single

@@ -82,6 +82,9 @@ foreclose the baremetal story.
   Everything else is refused with a diagnostic: by-value aggregates,
   `str`/slices/references, closures, generics, and variadics. The
   callee's own contract is the caller's `unsafe` block to keep.
+- The staged `ffi` package supplies `CStr` and `CString` for the bytes
+  an extern declaration reads through a pointer. Their termination,
+  borrowing, and UTF-8 decoding contracts are in `types.md`.
 
 ## Freestanding (Bootstrap)
 

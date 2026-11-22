@@ -1,9 +1,11 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Paths over wide units, the platform's own spelling. The units are
-// UTF-16 whenever the path came from text and kept as they are
-// otherwise: a path is what the operating system was handed.
+// Paths over wide units, the platform's own spelling. A path holds
+// well-formed UTF-16: text is encoded into it, and `from_bytes` checks
+// UTF-8 before encoding. Unpaired surrogates (WTF-16) are not
+// representable here; a path is what the operating system was handed
+// only within those units.
 
 use core::string::is_utf8;
 use core::string::from_utf8;
