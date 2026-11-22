@@ -70,14 +70,16 @@ text::JsonValue diagnostics_for(const Document& document,
     if (diagnostic == nullptr) {
       continue;
     }
-    if (file != source::UNKNOWN_FILE && diagnostic->has_primary_span &&
-        diagnostic->primary_span.file != file) {
+    // A finding without a primary span has no position in any document;
+    // reporting it at offset zero would put it on every open file's
+    // first line.
+    if (!diagnostic->has_primary_span ||
+        (file != source::UNKNOWN_FILE &&
+         diagnostic->primary_span.file != file)) {
       continue;
     }
-    const u32 offset =
-        diagnostic->has_primary_span ? diagnostic->primary_span.offset : 0;
-    const u32 length =
-        diagnostic->has_primary_span ? diagnostic->primary_span.length : 0;
+    const u32 offset = diagnostic->primary_span.offset;
+    const u32 length = diagnostic->primary_span.length;
     text::JsonValue entry = text::JsonValue::make_object();
     entry.set("range", range_json(document, offset, length));
     entry.set("severity", text::JsonValue::make_number(
