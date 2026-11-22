@@ -43,7 +43,7 @@ bool intersects(usize start, usize end, diag::Span span) {
   return span.offset < end && start < span.offset + span.length;
 }
 
-struct ManifestSource {
+struct ManifestSnapshot {
   std::string uri;
   std::string text;
 };
@@ -53,8 +53,8 @@ struct ManifestFix {
   std::string replacement;
 };
 
-std::optional<ManifestSource> manifest_source(const Document& document,
-                                              AnalysisCache& cache) {
+std::optional<ManifestSnapshot> manifest_source(const Document& document,
+                                                AnalysisCache& cache) {
   const std::optional<std::string> path =
       workspace::uri_to_path(document.uri());
   if (!path.has_value()) {
@@ -73,7 +73,7 @@ std::optional<ManifestSource> manifest_source(const Document& document,
   if (text.empty()) {
     return std::nullopt;
   }
-  return ManifestSource{manifest_uri, std::move(text)};
+  return ManifestSnapshot{manifest_uri, std::move(text)};
 }
 
 std::optional<ManifestFix> std_dependency_fix(
@@ -173,7 +173,7 @@ text::JsonValue code_actions(const Document& document,
     action.set("edit", std::move(workspace_edit));
     actions.push(std::move(action));
   }
-  std::optional<ManifestSource> manifest;
+  std::optional<ManifestSnapshot> manifest;
   bool manifest_checked = false;
   for (u32 i = 0; i < bag.size(); ++i) {
     const diag::Diagnostic* diagnostic = bag.at(i);

@@ -45,6 +45,15 @@ bool is_line_break(char c) {
   return c == '\n' || c == '\r';
 }
 
+// True when a line starts immediately after `i`: a newline always does,
+// a carriage return only without the newline that would pair with it.
+bool line_starts_after(std::string_view text, usize i) {
+  if (text[i] == '\n') {
+    return true;
+  }
+  return text[i] == '\r' && (i + 1 == text.size() || text[i + 1] != '\n');
+}
+
 }  // namespace
 
 u32 PositionIndex::units(char byte) const {
@@ -60,10 +69,7 @@ void PositionIndex::reset(std::string_view text) {
   for (usize i = 0; i < text.size(); ++i) {
     // A lone carriage return starts a line; the one before a newline does
     // not, so "\r\n" counts as a single break.
-    if (text[i] == '\n') {
-      line_starts_.push_back(static_cast<u32>(i + 1));
-    } else if (text[i] == '\r' &&
-               (i + 1 == text.size() || text[i + 1] != '\n')) {
+    if (line_starts_after(text, i)) {
       line_starts_.push_back(static_cast<u32>(i + 1));
     }
   }
@@ -86,8 +92,7 @@ void PositionIndex::apply(std::string_view text,
     next.push_back(line_start);
   }
   for (usize i = lo; i < scan_end && i < text.size(); ++i) {
-    if (text[i] == '\n' ||
-        (text[i] == '\r' && (i + 1 == text.size() || text[i + 1] != '\n'))) {
+    if (line_starts_after(text, i)) {
       next.push_back(static_cast<u32>(i + 1));
     }
   }

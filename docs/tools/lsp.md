@@ -23,7 +23,7 @@ streams until the client asks for shutdown.
 - Folding ranges and document symbols
 - Call hierarchy, type hierarchy
 - Code actions: the linter's repairs as quickfix or refactor, plus manifest
-  dependency fixes as source actions actions
+  dependency fixes as source actions
 - Workspace symbols, workspace diagnostics
 - Semantic tokens delta answers (live editing sessions)
 - Code lenses (reference counts)
