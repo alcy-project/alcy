@@ -210,13 +210,28 @@ Body build_panic(RoData& rodata) {
   body.insts.push_back(make_inst(MOp::Push, 8, Operand{Reg::R14}));
 
   const SymbolRef prefix = text(body, rodata, "panic at ");
+  const SymbolRef bare = text(body, rodata, "panic: ");
   const SymbolRef colon = text(body, rodata, ": ");
   const SymbolRef newline = text(body, rodata, "\n");
 
-  // The place first, the way the trace reads: `panic at <site>: <msg>`.
+  // With a site the trace reads `panic at <site>: <msg>`; without one
+  // it reads `panic: <msg>`.
+  const u32 with_site = body.label_count++;
+  const u32 after_head = body.label_count++;
+  body.insts.push_back(
+      make_inst(MOp::Test, 8, Operand{Reg::R14}, Operand{Reg::R14}));
+  body.insts.push_back(make_jcc(Cond::E, Operand{Label{with_site}}));
   emit_write(body, 2, Operand{prefix}, Operand{Imm{9}});
   emit_write(body, 2, Operand{Reg::R13}, Operand{Reg::R14});
   emit_write(body, 2, Operand{colon}, Operand{Imm{2}});
+  body.insts.push_back(make_inst(MOp::Jmp, 8, Operand{Label{after_head}}));
+  MInst at_with = make_inst(MOp::Nop, 8);
+  at_with.label = with_site;
+  body.insts.push_back(at_with);
+  emit_write(body, 2, Operand{bare}, Operand{Imm{7}});
+  MInst at_after = make_inst(MOp::Nop, 8);
+  at_after.label = after_head;
+  body.insts.push_back(at_after);
   emit_write(body, 2, Operand{Reg::Rbx}, Operand{Reg::R12});
   emit_write(body, 2, Operand{newline}, Operand{Imm{1}});
   emit_backtrace_walk(body, rodata);
@@ -490,7 +505,17 @@ void path_buffer(Body& body, u8 width) {
   const auto mov = [&](MOp op, Operand dst, Operand src) {
     body.insts.push_back(make_inst(op, 8, dst, src));
   };
-  // rdi = path bytes, rsi = byte count
+  // rdi = path bytes, rsi = byte count. The fixed buffer holds 4095
+  // bytes plus its terminator; clamp a longer path rather than letting
+  // the copy overwrite the saved frame pointer and return address.
+  const u32 fits = body.label_count++;
+  body.insts.push_back(
+      make_inst(MOp::Cmp, 8, Operand{Reg::Rsi}, Operand{Imm{4095}}));
+  body.insts.push_back(make_jcc(Cond::Be, Operand{Label{fits}}));
+  mov(MOp::Mov, Operand{Reg::Rsi}, Operand{Imm{4095}});
+  MInst at_fits = make_inst(MOp::Nop, 8);
+  at_fits.label = fits;
+  body.insts.push_back(at_fits);
   body.insts.push_back(
       make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{4096}}));
   mov(MOp::Mov, Operand{Reg::Rdx}, Operand{Reg::Rsi});
