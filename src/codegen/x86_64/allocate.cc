@@ -81,6 +81,7 @@ Shape shape_of(const MOp op) {
     case MOp::Cqo:
     case MOp::Movss:
     case MOp::Movsd:
+    case MOp::Movdqu:
     case MOp::Fadd:
     case MOp::Fsub:
     case MOp::Fmul:
@@ -135,6 +136,21 @@ void allocate(Body& body, const Frame& frame) {
     out.push_back(
         make_inst(MOp::Sub, 8, Operand{Reg::Rsp}, Operand{Imm{frame.size}}));
   }
+  // Spill the callee-saved XMM scratch into the two slots reserved at
+  // the bottom of the frame (the last 32 bytes below rbp).
+  out.push_back(make_inst(MOp::Movdqu, 16,
+                          Operand{Mem{.base = Reg::Rbp,
+                                      .index = std::nullopt,
+                                      .scale = 1,
+                                      .disp = -static_cast<i32>(frame.size)}},
+                          Operand{Reg::Xmm14}));
+  out.push_back(
+      make_inst(MOp::Movdqu, 16,
+                Operand{Mem{.base = Reg::Rbp,
+                            .index = std::nullopt,
+                            .scale = 1,
+                            .disp = -static_cast<i32>(frame.size - 16)}},
+                Operand{Reg::Xmm15}));
 
   u32 next_scratch = 0;
   const std::span<const Reg> read_pool = std::span<const Reg>(READ_SCRATCHES);
@@ -269,8 +285,20 @@ void allocate(Body& body, const Frame& frame) {
     pending_label = inst.label;
     inst.label = MInst::NO_LABEL;
     if (inst.op == MOp::Ret) {
-      // The exit, where the IR ended: the frame is given back and the
-      // caller resumed.
+      // The exit, where the IR ended: restore the borrowed XMM scratch
+      // and give the frame back to the caller.
+      push_labeled(
+          make_inst(MOp::Movdqu, 16, Operand{Reg::Xmm14},
+                    Operand{Mem{.base = Reg::Rbp,
+                                .index = std::nullopt,
+                                .scale = 1,
+                                .disp = -static_cast<i32>(frame.size)}}));
+      push_labeled(
+          make_inst(MOp::Movdqu, 16, Operand{Reg::Xmm15},
+                    Operand{Mem{.base = Reg::Rbp,
+                                .index = std::nullopt,
+                                .scale = 1,
+                                .disp = -static_cast<i32>(frame.size - 16)}}));
       push_labeled(
           make_inst(MOp::Mov, 8, Operand{Reg::Rsp}, Operand{Reg::Rbp}));
       push_labeled(make_inst(MOp::Pop, 8, Operand{Reg::Rbp}));

@@ -136,6 +136,9 @@ enum class MOp : u8 {
   // is an XMM register, memory, or a symbol naming the bytes.
   Movss,
   Movsd,
+  // Moves all 16 bytes of an XMM register to or from memory, for saving
+  // the callee-saved vector registers across a body.
+  Movdqu,
   // Ordered scalar arithmetic on two XMM registers.
   Fadd,
   Fsub,

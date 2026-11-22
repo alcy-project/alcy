@@ -51,8 +51,8 @@ constexpr bool is_xmm(Reg reg) {
   return static_cast<u8>(reg) >= GPR_COUNT;
 }
 
-// The registers a call may clobber. Every vector register is
-// caller-saved on this ABI; the frame's own two are never operands.
+// The registers a call may clobber. XMM6-15 are callee-saved on SysV;
+// allocation saves the two it borrows as float scratch in the prologue.
 constexpr bool is_caller_saved(Reg reg) {
   switch (reg) {
     case Reg::Rax:
@@ -64,7 +64,13 @@ constexpr bool is_caller_saved(Reg reg) {
     case Reg::R9:
     case Reg::R10:
     case Reg::R11: return true;
-    default: return is_xmm(reg);
+    case Reg::Xmm0:
+    case Reg::Xmm1:
+    case Reg::Xmm2:
+    case Reg::Xmm3:
+    case Reg::Xmm4:
+    case Reg::Xmm5: return true;
+    default: return false;
   }
 }
 

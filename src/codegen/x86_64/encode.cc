@@ -492,6 +492,25 @@ Encoded encode(const Body& body) {
         }
         break;
       }
+      case MOp::Movdqu: {
+        const Operand& dst = inst.at(0);
+        const Operand& src = inst.at(1);
+        if (const Reg* to = std::get_if<Reg>(&dst); to != nullptr) {
+          const Mem& from = std::get<Mem>(src);
+          sse_prefix(out, 0xf3, *to, base_of(from));
+          out.push_back(0x0f);
+          out.push_back(0x6f);
+          mem_disp(out, modrm_mem(out, *to, from), from.disp);
+        } else {
+          const Mem& target = std::get<Mem>(dst);
+          const Reg from = std::get<Reg>(src);
+          sse_prefix(out, 0xf3, from, base_of(target));
+          out.push_back(0x0f);
+          out.push_back(0x7f);
+          mem_disp(out, modrm_mem(out, from, target), target.disp);
+        }
+        break;
+      }
       case MOp::Fadd:
       case MOp::Fsub:
       case MOp::Fmul:

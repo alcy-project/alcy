@@ -69,6 +69,9 @@ Frame layout_frame(const Body& body,
   // Outgoing arguments past the registers live in the bytes below the
   // locals, so a call never writes over a live slot.
   cursor += body.outgoing;
+  // Two callee-saved XMM registers are borrowed as float scratch; their
+  // 16-byte save slots sit at the bottom of the frame.
+  cursor += 32;
   frame.size = static_cast<u32>(align_up(cursor, 16));
   return frame;
 }
