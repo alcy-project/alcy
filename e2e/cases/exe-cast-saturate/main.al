@@ -70,5 +70,21 @@ fn main() -> i32 {
   if 7.0f64 as u8 != 7u8 {
     ret 15
   }
+  // A value inside the unsigned range must not saturate: a 32-bit
+  // signed convert cannot hold 3e9, and a 64-bit signed convert
+  // cannot hold 1e19.
+  if (3000000000.0f64) as u32 != 3000000000u32 {
+    ret 20
+  }
+  if (10000000000.0e9) as u64 != 10000000000000000000u64 {
+    ret 21
+  }
+  if (4294967295.0f64) as u32 != 4294967295u32 {
+    ret 22
+  }
+  // A u64 source is unsigned: its sign bit adds 2^64 to the answer.
+  if (18446744073709551615u64 as f64) != 18446744073709551615.0f64 {
+    ret 23
+  }
   ret 0
 }

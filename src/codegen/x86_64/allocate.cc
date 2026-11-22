@@ -365,21 +365,65 @@ void allocate(Body& body, const Frame& frame) {
         continue;
       }
       if (inst.op == MOp::CvtI2F) {
-        Reg from = load_value(std::get<VReg>(inst.ops[1]));
         const i64 tagged =
             inst.count > 2 && std::holds_alternative<Imm>(inst.ops[2])
                 ? std::get<Imm>(inst.ops[2]).value
                 : static_cast<i64>(w);
         const bool uns = tagged < 0;
         const u8 src_bytes = static_cast<u8>(uns ? -tagged : tagged);
-        i64 encode_width = src_bytes;
-        if (uns && src_bytes < 8) {
-          // load_value zero-extended the narrow value; reading it as a
-          // signed 64-bit word gives the right magnitude.
-          encode_width = 8;
+        // A constant source has no slot to read; bring it into a scratch
+        // register the same way a value loaded from the frame would be.
+        Reg from = Reg::Rax;
+        if (const Imm* imm = std::get_if<Imm>(&inst.ops[1]); imm != nullptr) {
+          DCHECK(next_scratch < pool.size());
+          from = pool[next_scratch++];
+          push_labeled(make_inst(MOp::Mov, 8, Operand{from}, Operand{*imm}));
+        } else {
+          from = load_value(std::get<VReg>(inst.ops[1]));
         }
-        push_labeled(make_inst(MOp::CvtI2F, w, Operand{X}, Operand{from},
-                               Operand{Imm{encode_width}}));
+        if (!(uns && src_bytes == 8)) {
+          i64 encode_width = src_bytes;
+          if (uns && src_bytes < 8) {
+            // load_value zero-extended the narrow value; reading it as a
+            // signed 64-bit word gives the right magnitude.
+            encode_width = 8;
+          }
+          push_labeled(make_inst(MOp::CvtI2F, w, Operand{X}, Operand{from},
+                                 Operand{Imm{encode_width}}));
+        } else {
+          // A u64 with its sign bit set is a value in [2^63, 2^64). The
+          // signed conversion gives a negative float, so add 2^64 to it.
+          const u32 small_u64 = body.label_count++;
+          push_labeled(make_inst(MOp::Test, 8, Operand{from}, Operand{from}));
+          push_labeled(make_jcc(Cond::Ns, Operand{Label{small_u64}}));
+          push_labeled(
+              make_inst(MOp::Xor, 8, Operand{Reg::R8}, Operand{Reg::R8}));
+          push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm2},
+                                 Operand{Reg::R8}, Operand{Imm{8}}));
+          push_labeled(make_inst(MOp::Mov, 8, Operand{Reg::R11},
+                                 Operand{Imm{INT64_MIN}}));
+          push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm3},
+                                 Operand{Reg::R11}, Operand{Imm{8}}));
+          push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm4},
+                                 Operand{Reg::R8}, Operand{Imm{8}}));
+          push_labeled(
+              make_inst(MOp::Fsub, 8, Operand{Reg::Xmm4}, Operand{Reg::Xmm3}));
+          push_labeled(
+              make_inst(MOp::Fadd, 8, Operand{Reg::Xmm4}, Operand{Reg::Xmm4}));
+          push_labeled(make_inst(MOp::CvtI2F, 8, Operand{X}, Operand{from},
+                                 Operand{Imm{8}}));
+          push_labeled(make_inst(MOp::Fadd, 8, Operand{X}, Operand{Reg::Xmm4}));
+          const u32 done = body.label_count++;
+          push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+          MInst at_small = make_inst(MOp::Nop, 8);
+          at_small.label = small_u64;
+          push_labeled(at_small);
+          push_labeled(make_inst(MOp::CvtI2F, 8, Operand{X}, Operand{from},
+                                 Operand{Imm{8}}));
+          MInst at_done = make_inst(MOp::Nop, 8);
+          at_done.label = done;
+          push_labeled(at_done);
+        }
         store_float(inst.ops[0], X);
         continue;
       }
@@ -395,7 +439,16 @@ void allocate(Body& body, const Frame& frame) {
         const bool is_bool = tagged == -16;
         const bool uns = tagged < 0;
         const i64 type_bytes = is_bool ? 1 : (uns ? -tagged : tagged);
-        const u8 cvt_width = out_width < 4 ? 4 : out_width;
+        // Do the range work in double precision even for an f32 source:
+        // a widening conversion makes the same bound constants usable for
+        // both opcode widths.
+        u8 cw = w;
+        if (w == 4) {
+          push_labeled(make_inst(MOp::CvtF2F, 4, Operand{Y}, Operand{X}));
+          push_labeled(make_inst(MOp::Movsd, 8, Operand{X}, Operand{Y}));
+          cw = 8;
+        }
+        const u8 cvt_width = uns ? 8 : (out_width < 4 ? 4 : out_width);
         const i64 conv_min = cvt_width == 4 ? INT32_MIN : INT64_MIN;
         const i64 type_min = !uns ? (type_bytes == 1   ? -128
                                      : type_bytes == 2 ? -32768
@@ -412,12 +465,10 @@ void allocate(Body& body, const Frame& frame) {
                            ? 32767
                            : (cvt_width == 4 ? INT32_MAX : INT64_MAX));
 
-        push_labeled(make_inst(MOp::CvtF2I, w, Operand{Reg::Rax}, Operand{X},
-                               Operand{Imm{static_cast<i64>(out_width)}}));
         const u32 done = body.label_count++;
 
         // NaN: cvtt returns conv_min, but comisd x,x sets PF for a NaN.
-        push_labeled(make_inst(MOp::Fcom, w, Operand{X}, Operand{X}));
+        push_labeled(make_inst(MOp::Fcom, cw, Operand{X}, Operand{X}));
         const u32 not_nan = body.label_count++;
         push_labeled(make_jcc(Cond::Np, Operand{Label{not_nan}}));
         push_labeled(make_inst(MOp::Xor, out_width, Operand{Reg::Rax},
@@ -427,86 +478,137 @@ void allocate(Body& body, const Frame& frame) {
         at_not_nan.label = not_nan;
         push_labeled(at_not_nan);
 
-        // conv_min is the sentinel for a positive overflow (source >= 0)
-        // or, for signed types, a negative overflow (source < 0).
-        const u32 not_sentinel = body.label_count++;
-        push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R9},
-                               Operand{Imm{conv_min}}));
-        push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
-                               Operand{Reg::R9}));
-        push_labeled(make_jcc(Cond::Ne, Operand{Label{not_sentinel}}));
-        // Compare the source with +0.0 to tell the two apart.
-        push_labeled(
-            make_inst(MOp::Xor, 8, Operand{Reg::R8}, Operand{Reg::R8}));
-        push_labeled(make_inst(MOp::CvtI2F, w, Operand{Reg::Xmm2},
-                               Operand{Reg::R8},
-                               Operand{Imm{static_cast<i64>(w == 4 ? 4 : 8)}}));
-        push_labeled(make_inst(MOp::Fcom, w, Operand{X}, Operand{Reg::Xmm2}));
-        const u32 positive = body.label_count++;
-        push_labeled(make_jcc(Cond::Ae, Operand{Label{positive}}));
-        // negative overflow: answer the type minimum.
-        push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
-                               Operand{Imm{type_min}}));
-        push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
-        MInst at_positive = make_inst(MOp::Nop, 8);
-        at_positive.label = positive;
-        push_labeled(at_positive);
-        // positive overflow: answer the type maximum.
-        push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R11},
-                               Operand{Imm{type_max}}));
-        push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
-                               Operand{Reg::R11}));
-        push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
-        MInst at_not_sentinel = make_inst(MOp::Nop, 8);
-        at_not_sentinel.label = not_sentinel;
-        push_labeled(at_not_sentinel);
-
-        // Unsigned narrow types: a negative result or one past the type
-        // maximum saturates to 0 or the maximum respectively.
-        if (uns && type_bytes < 8) {
+        if (!uns) {
+          // Signed: the truncating convert's sentinel marks an overflow.
+          push_labeled(make_inst(MOp::CvtF2I, cw, Operand{Reg::Rax}, Operand{X},
+                                 Operand{Imm{static_cast<i64>(cvt_width)}}));
+          const u32 not_sentinel = body.label_count++;
+          push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R9},
+                                 Operand{Imm{conv_min}}));
+          push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
+                                 Operand{Reg::R9}));
+          push_labeled(make_jcc(Cond::Ne, Operand{Label{not_sentinel}}));
+          // Compare the source with +0.0 to tell the two apart.
+          push_labeled(
+              make_inst(MOp::Xor, 8, Operand{Reg::R8}, Operand{Reg::R8}));
+          push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm2},
+                                 Operand{Reg::R8}, Operand{Imm{8}}));
+          push_labeled(
+              make_inst(MOp::Fcom, cw, Operand{X}, Operand{Reg::Xmm2}));
+          const u32 positive = body.label_count++;
+          push_labeled(make_jcc(Cond::Ae, Operand{Label{positive}}));
+          // negative overflow: answer the type minimum.
+          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                                 Operand{Imm{type_min}}));
+          push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+          MInst at_positive = make_inst(MOp::Nop, 8);
+          at_positive.label = positive;
+          push_labeled(at_positive);
+          // positive overflow: answer the type maximum.
+          push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R11},
+                                 Operand{Imm{type_max}}));
+          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                                 Operand{Reg::R11}));
+          push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+          MInst at_not_sentinel = make_inst(MOp::Nop, 8);
+          at_not_sentinel.label = not_sentinel;
+          push_labeled(at_not_sentinel);
+          if (type_bytes < cvt_width) {
+            const u32 in_range = body.label_count++;
+            push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
+                                   Operand{Imm{type_max}}));
+            push_labeled(make_jcc(Cond::Le, Operand{Label{in_range}}));
+            push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                                   Operand{Imm{type_max}}));
+            push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+            MInst at_in = make_inst(MOp::Nop, 8);
+            at_in.label = in_range;
+            push_labeled(at_in);
+            const u32 above_min = body.label_count++;
+            push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
+                                   Operand{Imm{type_min}}));
+            push_labeled(make_jcc(Cond::Ge, Operand{Label{above_min}}));
+            push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+                                   Operand{Imm{type_min}}));
+            MInst at_min = make_inst(MOp::Nop, 8);
+            at_min.label = above_min;
+            push_labeled(at_min);
+          }
+        } else {
+          // Unsigned: values below zero saturate to zero, and values at
+          // or above the type's limit saturate to its maximum. In between
+          // a 64-bit signed convert holds the whole range of every
+          // unsigned type but u64.
+          push_labeled(
+              make_inst(MOp::Xor, 8, Operand{Reg::R8}, Operand{Reg::R8}));
+          push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm2},
+                                 Operand{Reg::R8}, Operand{Imm{8}}));
+          push_labeled(
+              make_inst(MOp::Fcom, cw, Operand{X}, Operand{Reg::Xmm2}));
           const u32 nonnegative = body.label_count++;
-          push_labeled(make_inst(MOp::Test, cvt_width, Operand{Reg::Rax},
-                                 Operand{Reg::Rax}));
-          push_labeled(make_jcc(Cond::Ns, Operand{Label{nonnegative}}));
+          push_labeled(make_jcc(Cond::Ae, Operand{Label{nonnegative}}));
           push_labeled(make_inst(MOp::Xor, out_width, Operand{Reg::Rax},
                                  Operand{Reg::Rax}));
           push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
           MInst at_nonnegative = make_inst(MOp::Nop, 8);
           at_nonnegative.label = nonnegative;
           push_labeled(at_nonnegative);
-          push_labeled(make_inst(MOp::Mov, cvt_width, Operand{Reg::R11},
-                                 Operand{Imm{type_max}}));
-          push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
-                                 Operand{Reg::R11}));
-          const u32 within = body.label_count++;
-          push_labeled(make_jcc(Cond::Be, Operand{Label{within}}));
-          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
-                                 Operand{Reg::R11}));
-          MInst at_within = make_inst(MOp::Nop, 8);
-          at_within.label = within;
-          push_labeled(at_within);
-        }
 
-        if (!uns && type_bytes < cvt_width) {
-          const u32 in_range = body.label_count++;
-          push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
-                                 Operand{Imm{type_max}}));
-          push_labeled(make_jcc(Cond::Le, Operand{Label{in_range}}));
-          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
+          // The exclusive upper bound 2^limit in Xmm3. A bool's limit is
+          // 2, so 1 is its only nonzero answer.
+          const i64 limit = is_bool ? 1 : 8 * type_bytes;
+          if (type_bytes < 8) {
+            push_labeled(make_inst(MOp::Mov, 8, Operand{Reg::R11},
+                                   Operand{Imm{static_cast<i64>(1) << limit}}));
+            push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm3},
+                                   Operand{Reg::R11}, Operand{Imm{8}}));
+          } else {
+            // 2^64 has no signed 64-bit spelling: build -2^63, negate it
+            // by subtracting from zero, then double it.
+            push_labeled(make_inst(MOp::Mov, 8, Operand{Reg::R11},
+                                   Operand{Imm{INT64_MIN}}));
+            push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm3},
+                                   Operand{Reg::R11}, Operand{Imm{8}}));
+            push_labeled(make_inst(MOp::CvtI2F, 8, Operand{Reg::Xmm4},
+                                   Operand{Reg::R8}, Operand{Imm{8}}));
+            push_labeled(make_inst(MOp::Fsub, 8, Operand{Reg::Xmm4},
+                                   Operand{Reg::Xmm3}));
+            push_labeled(make_inst(MOp::Movsd, 8, Operand{Reg::Xmm3},
+                                   Operand{Reg::Xmm4}));
+            push_labeled(make_inst(MOp::Fadd, 8, Operand{Reg::Xmm3},
+                                   Operand{Reg::Xmm3}));
+          }
+          push_labeled(
+              make_inst(MOp::Fcom, cw, Operand{X}, Operand{Reg::Xmm3}));
+          const u32 below_upper = body.label_count++;
+          push_labeled(make_jcc(Cond::B, Operand{Label{below_upper}}));
+          push_labeled(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
                                  Operand{Imm{type_max}}));
           push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
-          MInst at_in = make_inst(MOp::Nop, 8);
-          at_in.label = in_range;
-          push_labeled(at_in);
-          const u32 above_min = body.label_count++;
-          push_labeled(make_inst(MOp::Cmp, cvt_width, Operand{Reg::Rax},
-                                 Operand{Imm{type_min}}));
-          push_labeled(make_jcc(Cond::Ge, Operand{Label{above_min}}));
-          push_labeled(make_inst(MOp::Mov, out_width, Operand{Reg::Rax},
-                                 Operand{Imm{type_min}}));
-          MInst at_min = make_inst(MOp::Nop, 8);
-          at_min.label = above_min;
-          push_labeled(at_min);
+          MInst at_below = make_inst(MOp::Nop, 8);
+          at_below.label = below_upper;
+          push_labeled(at_below);
+
+          if (type_bytes == 8) {
+            // Xmm4 still holds 2^63. Convert the high half with a bias:
+            // cvtt(X - 2^63) plus 2^63 as an unsigned bit pattern.
+            push_labeled(
+                make_inst(MOp::Fcom, cw, Operand{X}, Operand{Reg::Xmm4}));
+            const u32 small_u64 = body.label_count++;
+            push_labeled(make_jcc(Cond::B, Operand{Label{small_u64}}));
+            push_labeled(
+                make_inst(MOp::Fsub, 8, Operand{X}, Operand{Reg::Xmm4}));
+            push_labeled(make_inst(MOp::CvtF2I, 8, Operand{Reg::Rax},
+                                   Operand{X}, Operand{Imm{8}}));
+            push_labeled(
+                make_inst(MOp::Add, 8, Operand{Reg::Rax}, Operand{Reg::R11}));
+            push_labeled(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
+            MInst at_small = make_inst(MOp::Nop, 8);
+            at_small.label = small_u64;
+            push_labeled(at_small);
+          }
+          push_labeled(make_inst(MOp::CvtF2I, 8, Operand{Reg::Rax}, Operand{X},
+                                 Operand{Imm{8}}));
         }
 
         MInst at_done = make_inst(MOp::Nop, 8);
