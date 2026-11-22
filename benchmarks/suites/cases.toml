@@ -106,3 +106,46 @@ expected_exit = 0
 repetitions = 10
 warmup = 2
 output_kind = "scratch"
+
+# The formatter, on the pilot's two fixtures: the same layout question
+# over format-heavy content and over primitives, so the gap between the
+# two rows is what the conversion lanes cost. Both are read-only, and
+# both fixtures are format-clean, so every repetition measures the same
+# work.
+[[case]]
+id = "fmt/file-check-heavy"
+fixture = "fmt-heavy"
+argv = ["fmt", "--check", "--file", "main.al"]
+expected_exit = 0
+repetitions = 15
+warmup = 3
+
+[[case]]
+id = "fmt/file-check-primitives"
+fixture = "fmt-primitives"
+argv = ["fmt", "--check", "--file", "main.al"]
+expected_exit = 0
+repetitions = 15
+warmup = 3
+
+# The formatter over a package: discovery, the manifest, and per-file
+# layout in one pass - the shape the instruction gate's `fmt --check`
+# rows measure, timed here as a process.
+[[case]]
+id = "fmt/package"
+fixture = "check-package"
+argv = ["fmt", "--check", "."]
+expected_exit = 0
+repetitions = 15
+warmup = 3
+
+# The linter over a package: the finding pass the micro benchmark
+# measures in process, timed as a process here. The fixture is
+# lint-clean, so the run is the scan, not the reporting.
+[[case]]
+id = "lint/package"
+fixture = "check-package"
+argv = ["lint", "."]
+expected_exit = 0
+repetitions = 15
+warmup = 3
