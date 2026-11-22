@@ -1,5 +1,7 @@
 # alcy programming language
 
+[![Build & Test](https://github.com/alcy-project/alcy/actions/workflows/build.yaml/badge.svg)](https://github.com/alcy-project/alcy/actions/workflows/build.yaml)
+
 alcy is an experimental systems language. It is statically typed and
 move-only, it is memory safe without lifetime annotations, and it spans
 bare metal to high-level software with one compiler.
@@ -10,14 +12,15 @@ fn main() {
 }
 ```
 
+[Run this program in the browser](https://alcy-project.github.io/alcy/playground/).
+
 A function that returns a status declares the type, as in
 `fn main() -> i32`. Ownership is not written at the call site: region
 inference over function summaries works out what a signature would
 otherwise have to spell out. [principles.md](docs/principles.md) argues
-for the design, and the [tour of the
-language](docs/guide/03-language-tour.md) covers what the compiler
-accepts today, with every example on that page compiled when the site
-is built.
+for the design, and the [tour of the language](docs/guide/03-language-tour.md)
+covers what the compiler accepts today, with every example on that page
+compiled when the site is built.
 
 The [alcy site](https://alcy-project.github.io/alcy/) carries that guide,
 the language reference, and a browser playground: edit and run alcy in a
