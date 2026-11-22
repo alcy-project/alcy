@@ -965,10 +965,21 @@ void Lexer::lex_char(std::vector<Token>& out) {
         if (i < bytes_.size() && bytes_[i] == '{') {
           ++i;
           const usize hex = i;
+          u64 code = 0;
           while (i < bytes_.size() && is_hex_digit(bytes_[i])) {
+            // Stop tracking once the value cannot be a scalar: the
+            // answer cannot change, and the multiply would wrap.
+            if (code <= 0x10FFFF) {
+              code = code * 16 + hex_digit_value(bytes_[i]);
+            }
             ++i;
           }
           if (i != hex && i < bytes_.size() && bytes_[i] == '}') {
+            if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {
+              const diag::Span span = span_at(pos_, i + 1 - pos_);
+              (void)bag_.emit<i18n::Key::LexerUnicodeEscapeNotScalar>(
+                  DiagCode::InvalidEscape, span);
+            }
             pos_ = i + 1;
             empty = false;
             continue;
