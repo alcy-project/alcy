@@ -78,7 +78,6 @@ LlvmIrEmitter::LlvmIrEmitter(
       site_names_(site_names) {}
 
 void LlvmIrEmitter::check_state() {
-  // DCHECK_MSG(storage_, "IR Storage is null");
   DCHECK_MSG(module_, "LLVM Module is null");
   DCHECK_MSG(builder_, "LLVM IR Builder is null");
   DCHECK_MSG(interner_, "String Interner is null");
@@ -407,14 +406,13 @@ EmittedBacktrace LlvmIrEmitter::emit() && noexcept {
           BacktraceName{llvm_function, display_name(function.meta)});
     }
   }
-  // PERF: consider running this process concurrently.
   for (const ir::FunctionIdx function_idx : storage_->functions().idx_range()) {
     if (parametric[function_idx.idx] || !kept(function_idx)) {
       continue;
     }
     const ir::Function& function = storage_->functions()[function_idx];
     // Bodies emit independently: no cross-function state moves between
-    // iterations, which is also what the comment above is waiting on.
+    // iterations.
     // The name is the source spelling: two instantiations of one generic
     // read as repeat reports of the same name rather than as distinct
     // work, so an instantiation-specific cost stays attributable rather
@@ -1131,9 +1129,6 @@ llvm::Function* LlvmIrEmitter::create_function(
     const ir::FunctionMeta& function_meta) const {
   llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> parameter_types;
   parameter_types.reserve(function_meta.param_types.size());
-  // DLOG("Function Name: {}, Param Count in Slice: {}",
-  //      interner_->get(function_meta.name), function_meta.param_types.size());
-
   // A result past the direct limit crosses in a slot the caller names
   // first, and the signature returns void there.
   const bool indirect_ret = in_memory_aggregate(function_meta.return_type);

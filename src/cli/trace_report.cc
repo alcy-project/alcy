@@ -43,8 +43,7 @@ u64 end_ns(const debug::ProfileEvent& event) {
 }
 
 // A node's own name, which is what the rows say. An event the profiler
-// never interned reports nothing, which is also what the flat totals
-// below used to print for one.
+// never interned reports nothing.
 std::string_view node_name(const debug::Profiler& profiler,
                            const TraceReport::Node& node) {
   return node.event.name == str::INVALID_STRING_POOL_ID

@@ -203,7 +203,6 @@ TEST_CASE("Parser builds functions with params and return types") {
   const ast::ItemFn& fn = as_fn(result.items[0], f);
   CHECK(fn.params.size() == 2);
   CHECK(fn.return_type.is_valid());
-  // Note: resolve_type requires analyzer context, skipping type check here
   CHECK(fn.body.is_valid());
   const ast::Block& block = f.ast.blocks[fn.body];
   CHECK(block.value.is_valid());
