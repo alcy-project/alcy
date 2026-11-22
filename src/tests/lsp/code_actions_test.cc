@@ -12,7 +12,7 @@
 
 namespace lsp {
 
-TEST_CASE("A while-true finding offers one quick fix") {
+TEST_CASE("A while-true finding offers one refactor") {
   const Document document(
       "file:///main.al", "alcy", 1,
       "fn main() -> i32 {\n  mut n := 0\n  while true {\n"
@@ -29,7 +29,7 @@ TEST_CASE("A while-true finding offers one quick fix") {
   const text::JsonValue* kind = action.find("kind");
   CHECK(kind != nullptr);
   if (kind != nullptr) {
-    CHECK(kind->as_string() == "quickfix");
+    CHECK(kind->as_string() == "refactor");
   }
   const text::JsonValue* edit = action.find("edit");
   CHECK(edit != nullptr);

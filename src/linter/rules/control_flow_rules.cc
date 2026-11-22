@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ast/ast.h"
+#include "diag/diagnostic.h"
 #include "fpag/base/numeric.h"
 #include "i18n/messages.h"
 #include "linter/context.h"
@@ -133,10 +134,12 @@ void check_while(LintContext& ctx, ast::ExprIdx expr) {
       text.substr(begin, end - begin) != "while true") {
     return;
   }
+  // Swapping the keyword is a behavior-preserving rewrite, not a
+  // correction of a mistake, so offer it as a refactor.
   ctx.fix(finding,
           diag::Span{node.span.file, static_cast<u32>(begin),
                      static_cast<u32>(end - begin)},
-          "loop");
+          "loop", diag::FixKind::Refactor);
 }
 
 void check_loop(LintContext& ctx, ast::ExprIdx expr) {
