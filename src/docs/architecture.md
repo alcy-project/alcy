@@ -156,8 +156,9 @@ what implements it lives in `src/`.
   `build.py` and `run.py` drive GN; the `check_*.py` scripts are the
   acceptance suites. They sit beside the sources they drive rather than
   inside `build/`, which holds only what GN itself reads.
-- `third_party/` - vendored dependencies as submodules (`llvm`, `fpag`,
-  `fmt`, `doctest`, `xxhash`), each wrapped with a `BUILD.gn`.
+- `third_party/` - vendored dependencies as submodules (`fpag`, `fmt`,
+  `doctest`, `xxhash`), each wrapped with a `BUILD.gn`. LLVM is a prebuilt
+  toolchain downloaded into `out/` by the setup target, not a submodule.
 - `treesitter/` - the language's tree-sitter grammar, a second reading of
   `docs/spec/` for editors. A GN `source_set` compiles it, and the site
   generator links the same parse table the editors use;
@@ -392,8 +393,7 @@ consideration of their effect on these contracts.
 ## Validation & error model
 
 Validation happens at trust boundaries - the public API of each module -
-and nowhere else by default. The contract (decided in
-) is:
+and nowhere else by default. The contract is:
 
 - **Public API is checked-only.** Every public entry point that accepts
   externally supplied or independently constructible data returns
@@ -515,12 +515,10 @@ them from a table. The stages that hold such a table say so where they
 declare it, and the trace is what says whether it is still being walked.
 
 The frontend's stages are the unit of work for parallelism, one function per
-thread, in the order that makes each one independent of the one before it:
-
-records the measurements that put the stages in that order and the one whose
-blocker is a data structure rather than scratch. A target without threads
-runs each of those units inline, which is why none of them needs a second
-path.
+thread, in the order that makes each one independent of the one before it.
+That order comes from measurements; one stage is blocked by a data structure
+rather than scratch. A target without threads runs each of those units inline,
+which is why none of them needs a second path.
 
 ## LLVM integration
 
@@ -531,8 +529,8 @@ backend; compiler IR must remain independent of LLVM-specific types and
 policies.
 
 Only the libraries required for IR construction and emission are used. The
-fork is consumed as prebuilt static libraries keyed by the submodule tag,
-with a from-source fallback. Build and platform details are documented in
+fork is consumed as prebuilt static libraries keyed by `llvm_fork_tag` in
+`config.toml`. Build and platform details are documented in
 [build.md](build.md).
 
 ## Verification
