@@ -548,8 +548,13 @@ def main() -> int:
         return fail("initialize did not advertise signatureHelpProvider")
     if capabilities.get("inlayHintProvider") is not True:
         return fail("initialize did not advertise inlayHintProvider")
-    if capabilities.get("codeActionProvider") is not True:
+    actions = capabilities.get("codeActionProvider")
+    if actions is not True and not isinstance(actions, dict):
         return fail("initialize did not advertise codeActionProvider")
+    if isinstance(actions, dict) and not set(
+        actions.get("codeActionKinds", ["quickfix"])
+    ).issuperset({"quickfix", "refactor", "source"}):
+        return fail("codeActionProvider did not list the action kinds")
     if not isinstance(capabilities.get("semanticTokensProvider"), dict):
         return fail("initialize did not advertise semanticTokensProvider")
     if capabilities.get("semanticTokensProvider", {}).get("range") is not True:
