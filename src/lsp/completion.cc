@@ -36,7 +36,7 @@ namespace {
 struct Item {
   std::string label;
   std::string detail;
-  std::string documentation;
+  ast::ItemIdx declaration = ast::ItemIdx::invalid();
   CompletionItemKind kind = CompletionItemKind::Variable;
   // A variant is shown by its short name but inserted qualified, as the
   // language requires at a use site.
@@ -135,45 +135,47 @@ std::vector<std::string_view> visible_labels(const VisibleNames& visible,
                                        : labels->second;
 }
 
+std::string doc_text(const DocumentAnalysis& analysis, ast::ItemIdx item) {
+  if (!item.is_valid()) {
+    return {};
+  }
+  const auto& context = analysis.context();
+  const ast::ItemNode& node = context.ast.items[item];
+  std::string text;
+  for (const diag::Span span : node.docs) {
+    const std::optional<std::string_view> bytes =
+        context.sources.bytes(span.file);
+    if (!bytes.has_value() || span.offset + span.length > bytes->size()) {
+      continue;
+    }
+    std::string_view line = bytes->substr(span.offset, span.length);
+    if (line.starts_with("///")) {
+      line.remove_prefix(3);
+    }
+    if (line.starts_with(' ')) {
+      line.remove_prefix(1);
+    }
+    if (!text.empty()) {
+      text.push_back('\n');
+    }
+    text.append(line);
+  }
+  return text;
+}
+
 void collect(const DocumentAnalysis& analysis,
              const analyzer::CheckedPackage& package,
              const VisibleNames& visible,
              std::vector<Item>* out) {
   const pipeline::PipelineContext& context = analysis.context();
   const ir::StorageState& state = analysis.types();
-  const auto doc_text = [&](ast::ItemIdx item) {
-    if (!item.is_valid()) {
-      return std::string{};
-    }
-    const ast::ItemNode& node = context.ast.items[item];
-    std::string text;
-    for (const diag::Span span : node.docs) {
-      const std::optional<std::string_view> bytes =
-          context.sources.bytes(span.file);
-      if (!bytes.has_value() || span.offset + span.length > bytes->size()) {
-        continue;
-      }
-      std::string_view line = bytes->substr(span.offset, span.length);
-      if (line.starts_with("///")) {
-        line.remove_prefix(3);
-      }
-      if (line.starts_with(' ')) {
-        line.remove_prefix(1);
-      }
-      if (!text.empty()) {
-        text.push_back('\n');
-      }
-      text.append(line);
-    }
-    return text;
-  };
   const auto emit = [&](u32 module, ast::ItemIdx item,
                         std::string_view declared, std::string_view detail,
                         CompletionItemKind kind) {
     for (const std::string_view label :
          visible_labels(visible, module, declared)) {
-      out->push_back(Item{std::string(label), std::string(detail),
-                          doc_text(item), kind, ""});
+      out->push_back(
+          Item{std::string(label), std::string(detail), item, kind, ""});
     }
   };
   for (const analyzer::CheckedModule& module : package.modules) {
@@ -207,8 +209,8 @@ void collect(const DocumentAnalysis& analysis,
       }
       for (const std::string_view variant : info.variants) {
         Item item{std::string(variant),
-                  std::string(info.name) + "::" + std::string(variant), "",
-                  CompletionItemKind::EnumMember, ""};
+                  std::string(info.name) + "::" + std::string(variant),
+                  ast::ItemIdx::invalid(), CompletionItemKind::EnumMember, ""};
         item.insert_text = item.detail;
         out->push_back(std::move(item));
       }
@@ -243,8 +245,9 @@ text::JsonValue completion_items(const Document& document,
     if (keyword.category != lexer::KeywordCategory::Keyword) {
       continue;
     }
-    items.push_back(Item{std::string(keyword.spelling), "", "",
-                         CompletionItemKind::Keyword, ""});
+    items.push_back(Item{std::string(keyword.spelling), "",
+                         ast::ItemIdx::invalid(), CompletionItemKind::Keyword,
+                         ""});
   }
 
   std::sort(items.begin(), items.end(),
@@ -269,12 +272,12 @@ text::JsonValue completion_items(const Document& document,
     if (!item.detail.empty()) {
       entry.set("detail", text::JsonValue::make_string(item.detail));
     }
-    if (!item.documentation.empty()) {
-      text::JsonValue documentation = text::JsonValue::make_object();
-      documentation.set("kind", text::JsonValue::make_string("markdown"));
-      documentation.set("value",
-                        text::JsonValue::make_string(item.documentation));
-      entry.set("documentation", std::move(documentation));
+    std::string documentation = doc_text(analysis, item.declaration);
+    if (!documentation.empty()) {
+      text::JsonValue doc = text::JsonValue::make_object();
+      doc.set("kind", text::JsonValue::make_string("markdown"));
+      doc.set("value", text::JsonValue::make_string(documentation));
+      entry.set("documentation", std::move(doc));
     }
     text::JsonValue edit_range =
         range_json(document, static_cast<u32>(offset - prefix.size()),
