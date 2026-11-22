@@ -12,13 +12,20 @@
 namespace cli {
 
 void init_runtime() {
-  term::register_console();
-  // A logger with no sink traps on its first record, which would take
-  // down an internal-error path that had already diagnosed the problem.
-  debug::init_debug_logger();
-  debug::register_exit_handler();
-  debug::register_terminate_handler();
-  debug::register_signal_handlers();
+  // These registrations are process-wide. A test process calls cli_main
+  // many times; registering an exit handler for each one left a stack of
+  // ANSI resets to be written at shutdown.
+  static const bool initialized = [] {
+    term::register_console();
+    // A logger with no sink traps on its first record, which would take
+    // down an internal-error path that had already diagnosed the problem.
+    debug::init_debug_logger();
+    debug::register_exit_handler();
+    debug::register_terminate_handler();
+    debug::register_signal_handlers();
+    return true;
+  }();
+  (void)initialized;
 }
 
 }  // namespace cli

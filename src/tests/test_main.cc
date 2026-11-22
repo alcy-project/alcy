@@ -3,6 +3,7 @@
 
 #include <cstdio>
 
+#include "config/build_config.h"
 #include "fpag/base/numeric.h"
 #include "fpag/debug/profiler/profile_scope.h"
 #include "fpag/debug/signal_handler.h"
@@ -35,6 +36,12 @@ i32 main(i32 argc, char** argv) {
   doctest::Context context;
 
   context.applyCommandLine(argc, argv);
+#if BUILD_FLAG(IS_OS_ASMJS)
+  // The wasm suite runs under bun with its output captured into a CI
+  // log. doctest still thinks it owns a terminal there and its reporter
+  // writes bare ANSI resets, which read as empty lines in the log.
+  context.setOption("no-colors", true);
+#endif
 
   i32 result = 0;
   {
