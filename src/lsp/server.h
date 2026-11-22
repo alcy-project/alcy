@@ -21,8 +21,7 @@ namespace lsp {
 
 constexpr usize MAX_PENDING_CANCELLATIONS = 1024;
 
-// A bounded set of request ids with FIFO eviction. The LSP reuses ids,
-// so a late cancel or an old answer must not poison a later request.
+// A bounded set of pending cancellation ids with FIFO eviction.
 class BoundedIdSet {
  public:
   explicit BoundedIdSet(usize limit) : limit_(limit) {}
@@ -160,9 +159,12 @@ class Server {
   bool watched_files_supported_ = false;
   bool watched_files_pending_ = false;
   BoundedIdSet cancelled_{MAX_PENDING_CANCELLATIONS};
-  // Ids whose response has already gone out. A cancel for one of these
-  // is too late to matter and must not poison a later reuse of the id.
-  BoundedIdSet answered_{MAX_PENDING_CANCELLATIONS};
+  // Ids whose response has already gone out. This set is intentionally
+  // unbounded: evicting an id would make a late cancel for it look like
+  // a pending one and reject a later reuse. Ids are short and a session
+  // answers a bounded number of requests, so keeping them is cheaper
+  // than answering a live request with a cancellation error.
+  std::unordered_set<std::string> answered_;
   bool initialized_ = false;
   bool shutdown_ = false;
   bool exit_ = false;
