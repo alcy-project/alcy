@@ -24,8 +24,7 @@ of the compiler, so it owns no analysis of its own:
 - `ast_query.{h,cc}` names the span a declaration's name occupies,
   shared by hover and navigation.
 - `code_actions.{h,cc}` returns the lint repairs that intersect a
-  range, mapping each repair's kind to the LSP quickfix, refactor, or
-  source action kind.
+  range, mapping each repair to the LSP quickfix or refactor kind.
 - `highlights.{h,cc}` marks the declaration and every resolved use of
   the name under the cursor, and answers the ranges linked editing
   should change together.
@@ -128,21 +127,4 @@ another module would answer for it.
 
 ## Plan
 
-The features land one at a time, each reusing the parse or the analysis
-an earlier one already built. A syntax feature reads the
-compiler's AST, a trivia feature reads `cst/`, and a semantic feature
-reads the checked package through an analyzer query.
-
-1. Outline (`documentSymbol`) and folding ranges.
-2. Hover for declarations, types, and expressions, and enum layouts.
-3. Definition and references over a resolver seam.
-4. Completion and signature help.
-5. alcy-specific inlay hints: inferred types and layouts.
-6. A per-document analysis cache, so a request does not re-run the
-   frontend.
-7. Quick fixes for the linter's machine-applicable findings.
-8. Package-aware analysis, so an import resolves against the manifest's
-   sibling modules and dependencies.
-9. Cross-package navigation: references, rename, call hierarchy, and
-   workspace symbols follow recorded resolutions beyond the open buffer.
-10. Watched files, log notifications, and position-encoding negotiation.
+The features below are shipped. New work is tracked in `docs/roadmap.md`.

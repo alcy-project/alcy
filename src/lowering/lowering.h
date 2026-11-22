@@ -122,10 +122,11 @@ inline constexpr usize MAX_FUNCTIONS = 65536;
 // The budget is a parameter so a caller - a case that has to spend it -
 // can say how much it wants rather than generating a package of that
 // size.
-// `checked_out`, when given, receives the package this call consumed:
-// every table but `types`, which moved into the builder that seeded
-// lowering. A reader that needs the checked metadata after lowering can
-// keep it without a second analysis or a clone. Set on every exit.
+// `checked_out`, when given, receives the package this call consumed.
+// `types` moved into the builder that seeded lowering; on exits after
+// lowering ran, `not_movable` and `needs_drop` moved into the result.
+// The remaining checked metadata needs no second analysis or clone.
+// Set on every exit.
 base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
