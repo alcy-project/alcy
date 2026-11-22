@@ -598,7 +598,13 @@ void Server::initialize(const text::JsonValue& id,
   signature_options.set("triggerCharacters", std::move(signature_triggers));
   capabilities.set("signatureHelpProvider", std::move(signature_options));
   capabilities.set("inlayHintProvider", text::JsonValue::make_bool(true));
-  capabilities.set("codeActionProvider", text::JsonValue::make_bool(true));
+  text::JsonValue action_kinds = text::JsonValue::make_array();
+  for (const std::string_view kind : {"quickfix", "refactor", "source"}) {
+    action_kinds.push(text::JsonValue::make_string(std::string(kind)));
+  }
+  text::JsonValue action_provider = text::JsonValue::make_object();
+  action_provider.set("codeActionKinds", std::move(action_kinds));
+  capabilities.set("codeActionProvider", std::move(action_provider));
   text::JsonValue semantic = text::JsonValue::make_object();
   text::JsonValue legend = text::JsonValue::make_object();
   legend.set("tokenTypes", semantic_token_types());
@@ -1044,8 +1050,29 @@ void Server::code_action(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, code_actions(*document, cache_, read_position(*start),
-                               read_position(*end)));
+  text::JsonValue actions = code_actions(
+      *document, cache_, read_position(*start), read_position(*end));
+  const text::JsonValue* context = field(params, "context");
+  const text::JsonValue* only =
+      context == nullptr ? nullptr : field(*context, "only");
+  if (only != nullptr && only->is_array() && !only->as_array().empty()) {
+    text::JsonValue filtered = text::JsonValue::make_array();
+    for (const text::JsonValue& action : actions.as_array()) {
+      const text::JsonValue* kind = action.find("kind");
+      if (kind == nullptr || !kind->is_string()) {
+        continue;
+      }
+      for (const text::JsonValue& wanted : only->as_array()) {
+        if (wanted.is_string() &&
+            kind->as_string().starts_with(wanted.as_string())) {
+          filtered.push(action);
+          break;
+        }
+      }
+    }
+    actions = std::move(filtered);
+  }
+  send_result(id, std::move(actions));
 }
 
 void Server::linked_editing_range(const text::JsonValue& id,
