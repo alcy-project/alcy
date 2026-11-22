@@ -48,7 +48,15 @@ base::Result<void, diag::Reported> link_executable(
 // How many objects a package's code generation is split into. A function of
 // the program and not of the machine: a small package stays whole, and a
 // large one gains nothing from parts finer than the work a core can take.
-[[nodiscard]] u32 codegen_parts(const lowering::LoweredPackage& package);
+// How many parts a package's emission splits into. A profile with a
+// middle end spreads that middle end over parts sized by the function
+// count; a profile without one spreads only code generation, which is
+// cheap enough that the split's round trip is the cost to beat - there
+// the parts follow the workers once the module has the bodies to feed
+// them, and stay at one while it has not.
+[[nodiscard]] u32 codegen_parts(const lowering::LoweredPackage& package,
+                                bool optimize,
+                                u32 workers);
 
 // Emits the package's code generation as objects under `scratch`, one per
 // part, and answers their paths in order. The part count is the caller's,

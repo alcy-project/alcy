@@ -440,11 +440,23 @@ base::Result<void, diag::Reported> emit_package_output(
   return write_output(ctx, what, output_path, std::move(bytes).unwrap());
 }
 
-u32 codegen_parts(const lowering::LoweredPackage& package) {
+u32 codegen_parts(const lowering::LoweredPackage& package,
+                  bool optimize,
+                  u32 workers) {
   constexpr u32 FUNCTIONS_PER_PART = 128;
   constexpr u32 MAX_PARTS = 16;
   const u32 functions = static_cast<u32>(package.storage->functions().size());
-  return std::clamp(functions / FUNCTIONS_PER_PART, 1u, MAX_PARTS);
+  const u32 by_size = std::clamp(functions / FUNCTIONS_PER_PART, 1u, MAX_PARTS);
+  if (optimize) {
+    return by_size;
+  }
+  // Without a middle end the parts only spread code generation. Four
+  // bodies per part keeps the split's bitcode round trip behind the
+  // parallelism it buys, and the workers bound what extra parts could
+  // serve: beyond them the round trips multiply and nothing runs on
+  // the parts they add.
+  const u32 by_workers = std::min(workers, functions / 4);
+  return std::clamp(std::max(by_size, by_workers), 1u, MAX_PARTS);
 }
 
 base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
@@ -852,7 +864,8 @@ base::Result<std::string, diag::Reported> emit_output(
     io::TempDir scratch = io::TempDir::create_unique("alcy_build_");
     base::Result<std::vector<std::string>, diag::Reported> objects =
         emit_package_objects(ctx, lowered, plan, scratch, is_lib,
-                             codegen_parts(lowered));
+                             codegen_parts(lowered, plan.profile.optimize,
+                                           ctx.requested_jobs()));
     if (objects.is_err()) {
       return base::make_err(diag::Reported{});
     }
