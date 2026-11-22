@@ -31,8 +31,7 @@ namespace lsp {
 namespace {
 
 // Writes absolute token positions as the LSP delta stream. Both the
-// first computation and a cached-array filter must encode the same
-// rule, so it lives here rather than in two lambdas.
+// first computation and a cached-array filter use this one rule.
 class DeltaEncoder {
  public:
   explicit DeltaEncoder(std::vector<u32>& out) : out_(out) {}
@@ -91,8 +90,6 @@ std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
 
 // The kinds the checker attached to names, addressable by the span a
 // name occupies, the end of a path, or the name itself.
-enum class TokenModifier : u8 { Declaration = 0, ReadOnly = 1 };
-
 struct SymbolKinds {
   std::unordered_map<u64, SemanticTokenType> by_span;
   std::unordered_map<u64, u8> modifiers;
@@ -429,7 +426,16 @@ std::vector<u32> filter_tokens(const std::vector<u32>& data,
     if (!after_start || !before_end) {
       continue;
     }
-    encoder.add({line, character}, data[i + 2], data[i + 3],
+    // The fresh path clips a token at the range end; a cached array
+    // holds the full token, so clip it here to keep both answers equal.
+    u32 length = data[i + 2];
+    if (line == end.line && character + length > end.character) {
+      length = end.character - character;
+    }
+    if (length == 0) {
+      continue;
+    }
+    encoder.add({line, character}, length, data[i + 3],
                 static_cast<u8>(data[i + 4]));
   }
   return out;

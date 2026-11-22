@@ -162,6 +162,13 @@ TEST_CASE("Declarations and mutable bindings carry modifiers") {
   CHECK(modifier_at(result, 0, 3) == 1);  // main: declaration
   CHECK(modifier_at(result, 1, 6) == 1);  // mut n: declaration only
   CHECK(modifier_at(result, 2, 2) == 0);  // a use: no modifier
+
+  const Document immutable("file:///main.al", "alcy", 1,
+                           "fn main() -> i32 {\n  x := 1\n  ret x\n}\n");
+  const DocumentAnalysis immutable_analysis(immutable);
+  const text::JsonValue immutable_tokens =
+      semantic_tokens(immutable, immutable_analysis);
+  CHECK(modifier_at(immutable_tokens, 1, 2) == 3);  // x: declaration + readonly
 }
 
 TEST_CASE("A comment is classified even when analysis fails") {
@@ -225,6 +232,26 @@ TEST_CASE("An unchanged version reuses the remembered token array") {
   const text::JsonValue fresh =
       semantic_tokens_range(document, analysis, Position{0, 0}, Position{1, 0});
   CHECK(flat_data(ranged) == flat_data(fresh));
+}
+
+TEST_CASE("A cached range clips tokens at the requested end") {
+  SemanticTokensCache cache;
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() -> i32 {\n  ret 0\n}\n");
+  const DocumentAnalysis analysis(document);
+  (void)cache.full(document, analysis);
+  // The `fn` keyword spans characters 0..2; a range ending at 1 must
+  // return a token of length 1, not the full keyword.
+  const text::JsonValue ranged =
+      cache.range(document, analysis, Position{0, 0}, Position{0, 1});
+  const text::JsonValue fresh =
+      semantic_tokens_range(document, analysis, Position{0, 0}, Position{0, 1});
+  CHECK(flat_data(ranged) == flat_data(fresh));
+  const std::vector<Decoded> tokens = decode(ranged);
+  CHECK(tokens.size() == 1);
+  if (!tokens.empty()) {
+    CHECK(tokens[0].length == 1);
+  }
 }
 
 TEST_CASE("Clearing the token cache forces a fresh result") {

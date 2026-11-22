@@ -1250,6 +1250,7 @@ void Server::did_open(const text::JsonValue& params) {
                       std::string(string_field(*text_document, "text")));
   document.set_encoding(encoding_);
   cache_.invalidate_all();
+  tokens_.erase(document.uri());
   publish_diagnostics(document);
 }
 
@@ -1276,8 +1277,10 @@ void Server::did_change(const text::JsonValue& params) {
       changes, int_field(*text_document, "version", document->version() + 1));
   cache_.invalidate(*document);
   for (const auto& [other_uri, other] : documents_.documents()) {
-    (void)other_uri;
     if (cache_.same_package(*document, other)) {
+      // A sibling edit can change this buffer's resolved token kinds
+      // even though its own version did not move.
+      tokens_.erase(other_uri);
       publish_diagnostics(other);
     }
   }

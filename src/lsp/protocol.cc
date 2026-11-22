@@ -110,8 +110,8 @@ static_assert(
 constexpr std::string_view TOKEN_MODIFIER_NAMES[] = {"declaration", "readonly"};
 
 static_assert(sizeof(TOKEN_MODIFIER_NAMES) / sizeof(TOKEN_MODIFIER_NAMES[0]) ==
-                  2,
-              "keep the modifier legend in step with TokenModifier");
+                  static_cast<usize>(TokenModifier::Count),
+              "the semantic token legend and TokenModifier are out of step");
 
 }  // namespace
 
