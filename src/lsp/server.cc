@@ -187,6 +187,9 @@ void Server::handle_request(const text::JsonValue& message) {
     const auto cancelled = cancelled_.find(text::to_json(*id));
     if (cancelled != cancelled_.end()) {
       cancelled_.erase(cancelled);
+      // The server handles one message at a time, so this refuses a
+      // request that has not started yet; it cannot interrupt one that
+      // is already being answered.
       send_error(*id, REQUEST_CANCELLED, "request cancelled");
       return;
     }
