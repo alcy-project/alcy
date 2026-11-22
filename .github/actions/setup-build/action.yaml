@@ -49,7 +49,7 @@ runs:
 
     - name: Setup Build Environment (Standard)
       if: inputs.nix != 'true' && inputs.toolchain == 'true'
-      uses: pug523/actions/cxx-gn-setup@5beb5e05f1ac771b9c060eb38f18d935fffdc96d
+      uses: pug523/actions/cxx-gn-setup@c3b6728a2ba6a5cddc64f1faff98bc4ce2e339e2
       with:
         os: ${{ inputs.os }}
         llvm_version: ${{ steps.versions.outputs.llvm_version }}
