@@ -29,7 +29,7 @@ executable("tests") {
     "cli/validate_test.cc",
     "codegen/backend_test.cc",
     "codegen/wasm_module_test.cc",
-    "codegen/wasm_reach_test.cc",
+    "codegen/wasm_reachability_test.cc",
     "codegen/wasm_writer_test.cc",
     "codegen/x86_64_encoder_test.cc",
     "codegen/x86_64_printer_test.cc",

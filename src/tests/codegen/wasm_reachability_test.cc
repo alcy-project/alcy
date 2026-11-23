@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include "codegen/reach.h"
+#include "codegen/reachability.h"
 #include "doctest/doctest.h"
 #include "fpag/base/numeric.h"
 #include "ir/block.h"
