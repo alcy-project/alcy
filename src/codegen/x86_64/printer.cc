@@ -490,7 +490,8 @@ void emit_data_section(std::string& out,
   usize at = 0;
   for (const object::Symbol* symbol : symbols) {
     while (at < symbol->offset && at < section.bytes.size()) {
-      const usize end = std::min(symbol->offset, section.bytes.size());
+      const usize end =
+          std::min(static_cast<usize>(symbol->offset), section.bytes.size());
       std::vector<u8> gap(section.bytes.begin() + at,
                           section.bytes.begin() + end);
       emit_bytes(out, gap);

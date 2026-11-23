@@ -613,6 +613,10 @@ base::Result<void, diag::Reported> link_with_embedded_lld(
 
 #else  // !defined(ALCY_EMBEDDED_LLD)
 
+std::string embedded_lld_startup_path() {
+  return std::string();
+}
+
 bool embedded_lld_ready(bool) {
   return false;
 }

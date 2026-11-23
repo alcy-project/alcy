@@ -356,7 +356,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     wrapper.symbols.push_back("alcy_argc");
     const u32 argv = wrapper.symbols.size();
     wrapper.symbols.push_back("alcy_argv");
-    const u32 environ = wrapper.symbols.size();
+    const u32 environ_symbol = wrapper.symbols.size();
     wrapper.symbols.push_back("alcy_environ");
     if (request.options.freestanding) {
       wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
@@ -397,7 +397,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
                                                     .scale = 8,
                                                     .disp = 16}}));
       wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
-                                        Operand{SymbolRef{environ}}));
+                                        Operand{SymbolRef{environ_symbol}}));
       wrapper.insts.push_back(make_inst(
           MOp::Mov, 8,
           Operand{Mem{
@@ -420,7 +420,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           Operand{Reg::Rsi}));
       // A hosted main receives envp as its third argument.
       wrapper.insts.push_back(make_inst(MOp::Mov, 8, Operand{Reg::Rax},
-                                        Operand{SymbolRef{environ}}));
+                                        Operand{SymbolRef{environ_symbol}}));
       wrapper.insts.push_back(make_inst(
           MOp::Mov, 8,
           Operand{Mem{
