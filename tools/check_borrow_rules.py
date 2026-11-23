@@ -913,9 +913,9 @@ case(
     "reject",
     """fn main() -> i32 {
   mut s := String::new()
-  s.push(104u8)
+  s.push_char('h')
   r := s.as_str()
-  s.push(105u8)
+  s.push_char('i')
   print(r)
   ret 0
 }""",
@@ -927,10 +927,10 @@ case(
     "reject",
     """fn main() -> i32 {
   mut s := String::new()
-  s.push(104u8)
+  s.push_char('h')
   r := s.as_str()
   t := r
-  s.push(105u8)
+  s.push_char('i')
   print(t)
   ret 0
 }""",
@@ -942,9 +942,9 @@ case(
     "accept",
     """fn main() -> i32 {
   mut s := String::new()
-  s.push(104u8)
+  s.push_char('h')
   r := s.as_str()
-  s.push(105u8)
+  s.push_char('i')
   ret s.len_bytes() as i32
 }""",
 )
@@ -955,8 +955,8 @@ case(
     "accept",
     """fn main() -> i32 {
   mut s := String::new()
-  s.push(104u8)
-  s.push(105u8)
+  s.push_char('h')
+  s.push_char('i')
   print("{}", s.as_str())
   ret 0
 }""",
@@ -1170,10 +1170,10 @@ case(
     "reject",
     """fn main() -> i32 {
   mut s := String::new()
-  s.push(104u8)
-  s.push(105u8)
+  s.push_char('h')
+  s.push_char('i')
   t := s.as_str()[0..<1]
-  s.push(106u8)
+  s.push_char('j')
   ret str_len(t) as i32
 }""",
 )
@@ -1187,8 +1187,8 @@ case(
     "reject",
     """fn main() -> i32 {
   mut s := String::new()
-  s.push(104u8)
-  s.push(105u8)
+  s.push_char('h')
+  s.push_char('i')
   t := s.slice(0, 1)
   s.reserve(64)
   ret str_len(t) as i32
