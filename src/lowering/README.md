@@ -18,6 +18,8 @@ translation units) carries the lowering state; it is not public API.
   With `sources`, a runtime panic names the span it was lowered at.
   `checked_out`, when given, receives the consumed package on every exit
   so a caller can keep its metadata without a second analysis.
+  `recovered_types_out` receives the unverified type tables on a failed
+  exit, so a type-only reader need not clone the analysis.
 
 ## Input requirements
 
