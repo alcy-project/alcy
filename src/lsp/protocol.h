@@ -51,8 +51,6 @@ text::JsonValue range_json(std::string_view text,
                            PositionCache* cache = nullptr);
 
 // A location in this document for a span the checker recorded.
-text::JsonValue location_json(const Document& document, diag::Span span);
-
 // A location in another file, named by URI and source bytes.
 text::JsonValue location_json(
     std::string_view uri,

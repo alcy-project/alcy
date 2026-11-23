@@ -58,8 +58,6 @@ class AnalysisCache {
 
   void erase(std::string_view uri);
 
-  // Drops package readings no open document's entry still names.
-
   [[nodiscard]] const Document* open_document(std::string_view uri) const {
     return documents_ == nullptr ? nullptr : documents_->find(uri);
   }

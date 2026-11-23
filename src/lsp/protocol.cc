@@ -64,11 +64,6 @@ text::JsonValue range_json(std::string_view text,
   return out;
 }
 
-text::JsonValue location_json(const Document& document, diag::Span span) {
-  return location_json(document.uri(), document.text(), span,
-                       document.encoding());
-}
-
 text::JsonValue location_json(std::string_view uri,
                               std::string_view text,
                               diag::Span span,
