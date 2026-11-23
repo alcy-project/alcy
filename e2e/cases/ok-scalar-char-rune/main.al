@@ -40,5 +40,14 @@ fn main() -> i32 {
     Option::None => {}
     Option::Some(r) => ret 9,
   }
+  if format("{}", 'a').as_str() != "a" {
+    ret 10
+  }
+  if format("{}", '日').as_str() != "日" {
+    ret 11
+  }
+  if format("{}", '\n').as_str() != "\n" {
+    ret 12
+  }
   ret 0
 }

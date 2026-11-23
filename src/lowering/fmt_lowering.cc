@@ -253,6 +253,23 @@ bool Lowerer::Fmt::emit_pieces(diag::Span span,
         ir::Opcode::GetElementPtr, elem_ty,
         {state.tup_op, owner_.zero_i32, owner_.index_operand(piece.arg)});
     const ir::TypeTag tag = owner_.tag_of(elem_ty);
+    if (tag == ir::TypeTag::Char || tag == ir::TypeTag::Rune) {
+      const ir::RegisterIdx loaded = owner_.emit(
+          ir::Opcode::Load, elem_ty, {owner_.to_operand(elem_addr, elem_ty)});
+      const bool ok =
+          tag == ir::TypeTag::Char
+              ? emit_primitive_helper(span, "display_char",
+                                      owner_.to_operand(loaded, elem_ty),
+                                      ir::TypeTag::Char, state)
+              : emit_primitive_helper(span, "display_rune",
+                                      owner_.to_operand(loaded, elem_ty),
+                                      ir::TypeTag::Rune, state);
+      if (!ok) {
+        owner_.internal(span, "fmt scalar helper unavailable");
+        return false;
+      }
+      continue;
+    }
     if (tag == ir::TypeTag::Str) {
       const ir::RegisterIdx loaded = owner_.emit(
           ir::Opcode::Load, elem_ty, {owner_.to_operand(elem_addr, elem_ty)});
