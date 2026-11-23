@@ -1,6 +1,7 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -59,6 +60,36 @@ Doc Printer::build_flow(std::vector<Piece> pieces, bool allow_wrap) {
   out.push_back(doc_nest(config_.indent_width, doc_concat(std::move(tail))));
   return doc_group(doc_concat(std::move(out)));
 }
+
+namespace {
+
+// Pins a run of source bytes as docs, writing each break the source
+// carried as its own hardline. The tail of a group is one of the runs
+// print_flow cannot see, and a break dropped there makes the next pass
+// read a different tree.
+std::vector<Doc> gap_docs(std::string_view gap) {
+  std::vector<Doc> out;
+  usize run_start = 0;
+  for (usize i = 0; i < gap.size(); ++i) {
+    if (gap[i] != '\n') {
+      continue;
+    }
+    if (i > run_start) {
+      out.push_back(doc_text(gap.substr(run_start, i - run_start)));
+    }
+    out.push_back(doc_hardline());
+    while (i + 1 < gap.size() && (gap[i + 1] == ' ' || gap[i + 1] == '\t')) {
+      ++i;
+    }
+    run_start = i + 1;
+  }
+  if (run_start < gap.size()) {
+    out.push_back(doc_text(gap.substr(run_start, gap.size() - run_start)));
+  }
+  return out;
+}
+
+}  // namespace
 
 Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
                         bool allow_wrap) {
@@ -422,6 +453,16 @@ Doc Printer::print_list(const cst::Node& group,
     parts.reserve(2);
     parts.push_back(doc_text(open));
     parts.push_back(print_flow(nodes, true));
+    if (!inner.kids.empty()) {
+      const cst::Node& last = inner.kids.back();
+      const usize from = last.offset + last.length;
+      const usize to = group.offset + group.length;
+      if (to > from) {
+        std::vector<Doc> tail = gap_docs(source_.substr(from, to - from));
+        parts.insert(parts.end(), std::make_move_iterator(tail.begin()),
+                     std::make_move_iterator(tail.end()));
+      }
+    }
     return doc_concat(std::move(parts));
   }
   if (items.empty() || (items.size() == 1 && items[0].nodes.empty())) {
@@ -461,12 +502,36 @@ Doc Printer::print_list(const cst::Node& group,
   inner_parts.reserve(2);
   inner_parts.push_back(doc_softline());
   inner_parts.push_back(doc_concat(std::move(body)));
+  // The bytes between the last item and a closer are a real part of
+  // the source. A break there has to be written as a break: dropping
+  // it lets the next pass read a shorter, differently split tree and
+  // move the layout. Where there is no gap, the softline still lets
+  // a long list wrap before its closer.
+  std::vector<Doc> before_close;
+  if (!inner.kids.empty()) {
+    const cst::Node& last = inner.kids.back();
+    const usize from = last.offset + last.length;
+    const usize to = group.offset + group.length - (group.has_closer ? 1 : 0);
+    if (to > from) {
+      const std::string_view gap = source_.substr(from, to - from);
+      // A plain blank is layout the formatter owns: it normalizes the
+      // space before a closer away. Only a break the source wrote has
+      // to survive, or the next pass reads a different tree.
+      if (gap.find('\n') != std::string_view::npos) {
+        before_close = gap_docs(gap);
+      }
+    }
+  }
+  if (before_close.empty()) {
+    before_close.push_back(doc_softline());
+  }
   std::vector<Doc> out;
   out.reserve(4);
   out.push_back(doc_text(open));
   out.push_back(
       doc_nest(config_.indent_width, doc_concat(std::move(inner_parts))));
-  out.push_back(doc_softline());
+  out.insert(out.end(), std::make_move_iterator(before_close.begin()),
+             std::make_move_iterator(before_close.end()));
   out.push_back(doc_text(close));
   return doc_group(doc_concat(std::move(out)));
 }
