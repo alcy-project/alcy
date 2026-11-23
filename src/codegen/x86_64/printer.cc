@@ -7,9 +7,11 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
+#include "codegen/backend.h"
 #include "codegen/object/elf64.h"
 #include "codegen/x86_64/isa.h"
 #include "codegen/x86_64/minst.h"
@@ -17,6 +19,8 @@
 
 namespace codegen::x86_64 {
 namespace {
+
+bool is_symbol(const Operand& operand);
 
 constexpr const char* GPR64[] = {"rax", "rcx", "rdx", "rbx", "rsp", "rbp",
                                  "rsi", "rdi", "r8",  "r9",  "r10", "r11",
@@ -132,13 +136,207 @@ std::string operand_text(const Operand& operand,
   return "<unresolved>";
 }
 
+std::string reg_name_intel(const Reg reg, const u8 width) {
+  const u32 index = static_cast<u32>(reg);
+  if (is_xmm(reg)) {
+    return "xmm" + std::to_string(index - GPR_COUNT);
+  }
+  const char* const* names = GPR64;
+  if (width == 1) {
+    names = GPR8;
+  } else if (width == 2) {
+    names = GPR16;
+  } else if (width == 4) {
+    names = GPR32;
+  }
+  return names[index];
+}
+
+const char* size_qualifier(const u8 width) {
+  switch (width) {
+    case 1: return "BYTE PTR ";
+    case 2: return "WORD PTR ";
+    case 4: return "DWORD PTR ";
+    case 8: return "QWORD PTR ";
+    case 16: return "XMMWORD PTR ";
+    default: return "";
+  }
+}
+
+std::string memory_text_intel(const Mem& mem,
+                              const u8 width,
+                              const bool qualify) {
+  std::string inner;
+  const auto base = [&]() -> std::optional<Reg> {
+    if (!mem.base.has_value()) {
+      return std::nullopt;
+    }
+    if (const Reg* reg = std::get_if<Reg>(&*mem.base); reg != nullptr) {
+      return *reg;
+    }
+    return std::nullopt;
+  }();
+  if (base.has_value()) {
+    inner = reg_name_intel(*base, 8);
+  }
+  if (mem.index.has_value()) {
+    if (const Reg* index = std::get_if<Reg>(&*mem.index); index != nullptr) {
+      if (!inner.empty()) {
+        inner += " + ";
+      }
+      inner += reg_name_intel(*index, 8) + "*" + std::to_string(mem.scale);
+    }
+  }
+  if (mem.disp != 0) {
+    if (!inner.empty()) {
+      inner += mem.disp > 0 ? " + " : " - ";
+    }
+    const i64 magnitude =
+        mem.disp < 0 ? -static_cast<i64>(mem.disp) : static_cast<i64>(mem.disp);
+    inner += std::to_string(magnitude);
+  }
+  if (inner.empty()) {
+    inner = "0";
+  }
+  return std::string(qualify ? size_qualifier(width) : "") + "[" + inner + "]";
+}
+
+std::string operand_text_intel(const Operand& operand,
+                               const Body& body,
+                               const u8 width,
+                               const bool symbol_address,
+                               const bool qualify,
+                               const std::string& label_prefix) {
+  if (const Reg* reg = std::get_if<Reg>(&operand); reg != nullptr) {
+    return reg_name_intel(*reg, width);
+  }
+  if (const Imm* imm = std::get_if<Imm>(&operand); imm != nullptr) {
+    return std::to_string(imm->value);
+  }
+  if (const Label* label = std::get_if<Label>(&operand); label != nullptr) {
+    return label_prefix + ".L" + std::to_string(label->id);
+  }
+  if (const SymbolRef* symbol = std::get_if<SymbolRef>(&operand);
+      symbol != nullptr) {
+    const std::string& name = body.symbols[symbol->id];
+    return symbol_address ? "OFFSET " + name : name;
+  }
+  if (const Mem* mem = std::get_if<Mem>(&operand); mem != nullptr) {
+    return memory_text_intel(*mem, width, qualify);
+  }
+  return "<unresolved>";
+}
+
+std::string instruction_text_intel(const MInst& inst,
+                                   const Body& body,
+                                   const std::string& label_prefix) {
+  const u8 w = inst.width;
+  const bool symbol_src = inst.count > 1 && is_symbol(inst.at(1));
+  const auto op = [&](const u32 index, const u8 width,
+                      const bool qualify = true) {
+    return operand_text_intel(inst.at(index), body, width, false, qualify,
+                              label_prefix);
+  };
+  const auto op_addr = [&](const u32 index, const u8 width) {
+    return operand_text_intel(inst.at(index), body, width, true, true,
+                              label_prefix);
+  };
+
+  switch (inst.op) {
+    case MOp::Mov:
+      return std::string(symbol_src && w == 8 ? "movabs " : "mov ") + op(0, w) +
+             ", " + (symbol_src ? op_addr(1, w) : op(1, w));
+    case MOp::Movzx:
+    case MOp::Movsx:
+      if (w == 4) {
+        return std::string(inst.op == MOp::Movzx ? "mov " : "movsxd ") +
+               op(0, inst.op == MOp::Movzx ? 4 : 8) + ", " + op(1, 4);
+      }
+      return std::string(inst.op == MOp::Movzx ? "movzx " : "movsx ") +
+             op(0, 8) + ", " + op(1, w);
+    case MOp::Lea: return "lea " + op(0, 8) + ", " + op(1, 8, false);
+    case MOp::Add: return "add " + op(0, w) + ", " + op(1, w);
+    case MOp::Sub: return "sub " + op(0, w) + ", " + op(1, w);
+    case MOp::And: return "and " + op(0, w) + ", " + op(1, w);
+    case MOp::Or: return "or " + op(0, w) + ", " + op(1, w);
+    case MOp::Xor: return "xor " + op(0, w) + ", " + op(1, w);
+    case MOp::Imul: return "imul " + op(0, w) + ", " + op(1, w);
+    case MOp::Umul: return "mul " + op(0, w);
+    case MOp::Idiv: return "idiv " + op(0, w);
+    case MOp::Udiv: return "div " + op(0, w);
+    case MOp::Shl:
+    case MOp::Sar:
+    case MOp::Shr: {
+      const std::string count = std::holds_alternative<Reg>(inst.at(1))
+                                    ? reg_name_intel(Reg::Rcx, 1)
+                                    : op(1, w);
+      const char* mnemonic = inst.op == MOp::Shl   ? "shl"
+                             : inst.op == MOp::Sar ? "sar"
+                                                   : "shr";
+      return std::string(mnemonic) + " " + op(0, w) + ", " + count;
+    }
+    case MOp::Not: return "not " + op(0, w);
+    case MOp::Neg: return "neg " + op(0, w);
+    case MOp::Cmp: return "cmp " + op(0, w) + ", " + op(1, w);
+    case MOp::Test: return "test " + op(0, w) + ", " + op(1, w);
+    case MOp::Setcc:
+      return std::string("set") + cond_suffix(inst.cond) + " " + op(0, 1);
+    case MOp::Jmp: return "jmp " + op(0, 8);
+    case MOp::Jcc:
+      return std::string("j") + cond_suffix(inst.cond) + " " + op(0, 8);
+    case MOp::Call: return "call " + op(0, 8);
+    case MOp::CallReg: return "call " + op(0, 8);
+    case MOp::Ret: return "ret";
+    case MOp::Syscall: return "syscall";
+    case MOp::Nop: return "nop";
+    case MOp::Push: return "push " + op(0, 8);
+    case MOp::Pop: return "pop " + op(0, 8);
+    case MOp::Cqo: return "cqo";
+    case MOp::RepMovsb: return "rep movsb";
+    case MOp::RepStosb: return "rep stosb";
+    case MOp::Movss: return "movss " + op(0, w) + ", " + op(1, w);
+    case MOp::Movsd: return "movsd " + op(0, w) + ", " + op(1, w);
+    case MOp::Movdqu: return "movdqu " + op(0, 16) + ", " + op(1, 16);
+    case MOp::Fadd:
+    case MOp::Fsub:
+    case MOp::Fmul:
+    case MOp::Fdiv: {
+      const char* mnemonic = inst.op == MOp::Fadd   ? "add"
+                             : inst.op == MOp::Fsub ? "sub"
+                             : inst.op == MOp::Fmul ? "mul"
+                                                    : "div";
+      return std::string(mnemonic) + (w == 4 ? "ss " : "sd ") + op(0, w) +
+             ", " + op(1, w);
+    }
+    case MOp::Fneg: return "xorpd " + op(0, 16) + ", " + op(1, 16);
+    case MOp::Fcom:
+      return std::string(w == 4 ? "comiss " : "comisd ") + op(0, w) + ", " +
+             op(1, w);
+    case MOp::CvtI2F: {
+      const i64 width = inst.count > 2 ? std::get<Imm>(inst.at(2)).value : 8;
+      return std::string(width == 8 ? "cvtsi2sd " : "cvtsi2ss ") + op(0, w) +
+             ", " + op(1, 8);
+    }
+    case MOp::CvtF2I: {
+      const i64 dest = inst.count > 2 ? std::get<Imm>(inst.at(2)).value : 4;
+      return std::string(w == 4 ? "cvttss2si " : "cvttsd2si ") +
+             op(0, static_cast<u8>(dest)) + ", " + op(1, w);
+    }
+    case MOp::CvtF2F:
+      return std::string(w == 4 ? "cvtss2sd " : "cvtsd2ss ") + op(0, w) + ", " +
+             op(1, w);
+    case MOp::Ud2: return "ud2";
+  }
+  return "<unknown>";
+}
+
 bool is_symbol(const Operand& operand) {
   return std::holds_alternative<SymbolRef>(operand);
 }
 
-std::string instruction_text(const MInst& inst,
-                             const Body& body,
-                             const std::string& label_prefix) {
+std::string instruction_text_att(const MInst& inst,
+                                 const Body& body,
+                                 const std::string& label_prefix) {
   const u8 w = inst.width;
   const std::string suf = width_suffix(w);
   const bool symbol_src = inst.count > 1 && is_symbol(inst.at(1));
@@ -245,6 +443,15 @@ std::string instruction_text(const MInst& inst,
   return "<unknown>";
 }
 
+std::string instruction_text(const MInst& inst,
+                             const Body& body,
+                             const std::string& label_prefix,
+                             const codegen::AsmSyntax syntax) {
+  return syntax == codegen::AsmSyntax::Intel
+             ? instruction_text_intel(inst, body, label_prefix)
+             : instruction_text_att(inst, body, label_prefix);
+}
+
 void emit_bytes(std::string& out, const std::vector<u8>& bytes) {
   constexpr usize PER_LINE = 16;
   for (usize at = 0; at < bytes.size(); at += PER_LINE) {
@@ -303,11 +510,11 @@ void emit_data_section(std::string& out,
 
 std::string print_assembly(const object::Object& object,
                            std::span<const PrintedBody> bodies,
-                           const Syntax syntax) {
-  if (syntax != Syntax::Att) {
-    return std::string("; Intel syntax is not available yet\n");
-  }
+                           const codegen::AsmSyntax syntax) {
   std::string out;
+  if (syntax == codegen::AsmSyntax::Intel) {
+    out += "\t.intel_syntax noprefix\n";
+  }
   out += "\t.text\n";
   out += "\t.section .text,\"ax\",@progbits\n";
   out += "\t.balign 16\n";
@@ -337,6 +544,12 @@ std::string print_assembly(const object::Object& object,
             [](const PrintedBody* a, const PrintedBody* b) {
               return a->offset < b->offset;
             });
+  std::unordered_set<std::string> emitted_labels;
+  const auto label = [&](const std::string& name) {
+    if (emitted_labels.insert(name).second) {
+      out += name + ":\n";
+    }
+  };
   usize body_at = 0;
   usize at = 0;
   while (at < text_bytes.size()) {
@@ -363,20 +576,22 @@ std::string print_assembly(const object::Object& object,
       if (symbol.type == object::SymbolType::Func && is_body) {
         continue;
       }
-      out += symbol.name + ":\n";
+      label(symbol.name);
     }
     if (is_body) {
       const PrintedBody& printed = *ordered[body_at];
       const std::string label_prefix = printed.symbol + ".";
-      out += printed.symbol + ":\n";
+      label(printed.symbol);
       for (const std::string& alias : printed.aliases) {
-        out += alias + ":\n";
+        label(alias);
       }
       for (const MInst& inst : printed.body.insts) {
         if (inst.label != MInst::NO_LABEL) {
           out += label_prefix + ".L" + std::to_string(inst.label) + ":\n";
         }
-        out += "\t" + instruction_text(inst, printed.body, label_prefix) + "\n";
+        out += "\t" +
+               instruction_text(inst, printed.body, label_prefix, syntax) +
+               "\n";
       }
       out += "\t.size " + printed.symbol + ", .-" + printed.symbol + "\n";
       at = next;

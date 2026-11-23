@@ -40,6 +40,7 @@ ResultCode run_build(const CliConfig& config,
                      Envelope& envelope) {
   TraceSession trace(ctx, config.time_trace);
   envelope.bag = &ctx.bag;
+  ctx.asm_syntax = config.asm_syntax;
   envelope.sources = &ctx.sources;
   const ResultCode failed = ResultCode::BuildFailed;
   // Validation keeps single files out: `build` takes a package

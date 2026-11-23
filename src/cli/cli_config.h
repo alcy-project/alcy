@@ -87,6 +87,8 @@ struct CliConfig {
   // none, and the pipeline picks the first backend that can write for the
   // chosen target.
   codegen::Backend backend = codegen::Backend::None;
+  // The spelling of an assembly output. Only --emit=asm reads it.
+  codegen::AsmSyntax asm_syntax = codegen::AsmSyntax::Att;
   // The machine to build for, from --target; the host when unnamed.
   codegen::Target target = codegen::host_target();
   // Compile the program on standard input rather than a file. The name it

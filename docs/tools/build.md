@@ -9,7 +9,7 @@ it beside the manifest, and tells you where it went.
 
 ```console
 $ alcy build [--release | --profile <NAME>] [--emit MODE]
-             [--backend NAME] [--target TRIPLE]
+             [--asm-syntax att|intel] [--backend NAME] [--target TRIPLE]
              [--output PATH] [--linker DRIVER] [--link-args ARG]...
              [--file FILE] [--no-cache] [--freestanding] [PACKAGE-DIR]
 ```
@@ -66,6 +66,7 @@ artifact it cannot verify.
 | --- | --- | --- | --- |
 | `-o`, `--output` | path | (per table above) | Literal output path |
 | `--emit` | `executable`, `object`, `asm`, `llvm-ir`, `llvm-bc`, `ir`, `ir-bc` | `executable` | What to write. An unnamed file replaces the suffix: `foo.al` -> `foo.o`, `foo.s`, `foo.ir`, `foo.bc`, `foo.ll`, `foo.irb`; the executable keeps its platform's suffix (none on POSIX, `.exe` on Windows; `.wasm` for a wasm target) |
+| `--asm-syntax` | `att`, `intel` | `att` | The spelling `--emit=asm` writes. LLVM prints its own assembly and ignores it |
 | `--backend` | `llvm`, `direct-wasm`, `direct-x86_64` | native x86_64 Linux debug: `direct-x86_64`; otherwise `llvm` | Which backend writes the code. `--emit=ir`/`--emit=ir-bc` need no backend at all and ignore the flag. See [Backends and output formats](backends.md) |
 | `--target` | `<triple>` | `host` | The machine to build for (`wasm32-unknown-emscripten` is a real target). `--emit` chooses the artifact kind, not this |
 

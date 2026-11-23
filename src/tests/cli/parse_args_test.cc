@@ -217,6 +217,17 @@ TEST_CASE("Parse the freestanding override in build and compile") {
   CHECK(!parse_ok(plain).freestanding);
 }
 
+TEST_CASE("Parse the assembly syntax in build and compile") {
+  const std::string_view intel_build[] = {"alcy", "build", "--emit=asm",
+                                          "--asm-syntax=intel"};
+  CHECK(parse_ok(intel_build).asm_syntax == codegen::AsmSyntax::Intel);
+  const std::string_view intel_compile[] = {"alcy", "compile", "--emit=asm",
+                                            "--asm-syntax=intel"};
+  CHECK(parse_ok(intel_compile).asm_syntax == codegen::AsmSyntax::Intel);
+  const std::string_view plain[] = {"alcy", "compile", "--emit=asm"};
+  CHECK(parse_ok(plain).asm_syntax == codegen::AsmSyntax::Att);
+}
+
 TEST_CASE("Parse rejects an unknown emit spelling") {
   const std::string_view exe[] = {"alcy", "build", "--emit=exe"};
   CHECK(parse(exe).is<ParseFailure>());

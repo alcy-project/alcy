@@ -34,6 +34,11 @@ enum class Backend : u8 { None, Llvm, DirectWasm, DirectX86_64 };
 // textual assembly, which a backend prints from the code it would emit.
 enum class OutputKind : u8 { Object, Module, Text, Bitcode, Assembly };
 
+// Which spelling an assembly output uses. The direct x86_64 backend
+// prints either form; the LLVM backend prints its own assembly and
+// ignores this choice.
+enum class AsmSyntax : u8 { Att, Intel };
+
 // Why an emission failed. Anything finer lives in the bag the request
 // carries; this is what a caller switches on to choose its own message.
 enum class EmitError : u8 {
@@ -55,6 +60,9 @@ struct EmitOptions {
   // runtime carries the sequence, so this is what that emitter is asked
   // for.
   bool freestanding = false;
+  // The spelling of an `Assembly` output. Defaults to AT&T, the form
+  // every assembler reads; Intel is opt-in from the CLI.
+  AsmSyntax asm_syntax = AsmSyntax::Att;
   // Whether a panic walks the frame chain and names the frames it can
   //. Only the LLVM backend keeps frame pointers and emits the
   // table the walk reads; the direct wasm backend writes the message and

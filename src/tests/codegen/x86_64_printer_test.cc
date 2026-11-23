@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "codegen/backend.h"
 #include "codegen/object/elf64.h"
 #include "codegen/x86_64/isa.h"
 #include "codegen/x86_64/minst.h"
@@ -111,4 +112,61 @@ TEST_CASE("The printer labels data sections with their symbols") {
   CHECK(contains(text, "\t.byte 0xde, 0xad\n"));
 }
 
+TEST_CASE("The Intel printer writes destination-first operands") {
+  Body body;
+  body.symbols.push_back("callee");
+  MInst first = make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Imm{7}});
+  first.label = 0;
+  body.insts.push_back(first);
+  body.insts.push_back(
+      make_inst(MOp::Add, 8, Operand{Reg::Rbx}, Operand{Reg::Rax}));
+  body.insts.push_back(make_inst(MOp::Call, 8, Operand{SymbolRef{0}}));
+  body.insts.push_back(make_jcc(Cond::Ne, Operand{Label{0}}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+
+  object::Object object = text_object(5);
+  std::vector<PrintedBody> bodies{
+      PrintedBody{"fn", body, object::SymbolBind::Local, {}, 0, 5}};
+  const std::string text =
+      print_assembly(object, bodies, codegen::AsmSyntax::Intel);
+  CHECK(contains(text, "\t.intel_syntax noprefix\n"));
+  CHECK(contains(text, "fn:\n"));
+  CHECK(contains(text, "\tmov rax, 7\n"));
+  CHECK(contains(text, "\tadd rbx, rax\n"));
+  CHECK(contains(text, "\tcall callee\n"));
+  CHECK(contains(text, "fn..L0:\n"));
+  CHECK(contains(text, "\tjne fn..L0\n"));
+  CHECK(contains(text, "\tret\n"));
+}
+
+TEST_CASE("The Intel printer qualifies memory operands") {
+  Body body;
+  const Mem source{
+      .base = Reg::Rbp, .index = std::nullopt, .scale = 1, .disp = -8};
+  body.insts.push_back(
+      make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{source}));
+  object::Object object = text_object(1);
+  std::vector<PrintedBody> bodies{
+      PrintedBody{"fn", body, object::SymbolBind::Local, {}, 0, 1}};
+  const std::string text =
+      print_assembly(object, bodies, codegen::AsmSyntax::Intel);
+  CHECK(contains(text, "\tmov rax, QWORD PTR [rbp - 8]\n"));
+}
+
+TEST_CASE("The Intel printer spells a shift count as cl") {
+  Body body;
+  body.insts.push_back(
+      make_inst(MOp::Mov, 1, Operand{Reg::Rcx}, Operand{Reg::Rax}));
+  body.insts.push_back(
+      make_inst(MOp::Shl, 4, Operand{Reg::Rax}, Operand{Reg::Rcx}));
+  object::Object object = text_object(2);
+  std::vector<PrintedBody> bodies{
+      PrintedBody{"fn", body, object::SymbolBind::Local, {}, 0, 2}};
+  const std::string text =
+      print_assembly(object, bodies, codegen::AsmSyntax::Intel);
+  CHECK(contains(text, "\tmov cl, al\n"));
+  CHECK(contains(text, "\tshl eax, cl\n"));
+}
+
 }  // namespace codegen::x86_64
+

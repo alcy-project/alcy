@@ -702,7 +702,8 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   }
 
   if (want_assembly) {
-    const std::string text = print_assembly(object, printed);
+    const std::string text =
+        print_assembly(object, printed, request.options.asm_syntax);
     return base::make_ok(std::vector<u8>(text.begin(), text.end()));
   }
   return base::make_ok(object::write_elf64_x86_64(object));
