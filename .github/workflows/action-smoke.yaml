@@ -1,0 +1,79 @@
+# The repository is also a consumer action: `uses: alcy-project/alcy@vX`
+# installs the CLI from release vX's assets. That path is the one thing
+# the release workflows do not walk -- they produce the archives, while
+# the action has to name, verify and unpack them on a runner. Smoke it
+# on every published release, on every platform the action claims, using
+# the action code and the archive from the same tag.
+#
+# A draft release cannot be used here: its assets are not downloadable
+# without credentials, which is what the action's plain curl has. Run
+# this after publishing. workflow_dispatch repeats the same check for a
+# tag already out.
+name: Action Smoke
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Published release tag to install (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: action-smoke-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            label: Linux x86_64
+          - os: ubuntu-24.04-arm
+            label: Linux arm64
+          - os: macos-26
+            label: macOS arm64
+          - os: macos-26-intel
+            label: macOS x86_64
+          - os: windows-2025-vs2026
+            label: Windows x64
+          - os: windows-11-arm
+            label: Windows arm64
+
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          submodules: false
+          fetch-depth: 1
+          ref: ${{ env.TAG }}
+
+      # The local action is the tag's action.yaml. Its default version
+      # comes from github.action_ref, which is empty for a local use, so
+      # name the tag explicitly: the archive and the installer must be
+      # the pair the release workflow walked.
+      - name: Install alcy from the Release
+        uses: ./
+        with:
+          version: ${{ env.TAG }}
+
+      - name: Check the Installed CLI
+        shell: bash
+        run: |
+          alcy --version
+          printf 'fn main() -> i32 {\n  ret 0\n}\n' > smoke.al
+          alcy check --file smoke.al
