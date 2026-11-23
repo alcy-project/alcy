@@ -156,27 +156,18 @@ namespace {
 
 class Selector {
  public:
-  Selector(const ir::Storage& storage,
-           const ir::SymbolTable& strings,
-           std::span<const diag::Span> spans,
-           const ir::Function& function,
-           diag::DiagBag& bag,
-           const ir::PointerWidth width,
-           RoData& rodata,
-           const overlay::Overlay* checks,
-           std::span<const str::StringPoolId> site_names,
-           bool backtrace)
-      : storage_(storage),
-        strings_(strings),
-        spans_(spans),
-        function_(function),
-        bag_(bag),
-        width_(width),
-        rodata_(rodata),
-        checks_(checks),
+  explicit Selector(const SelectContext& context)
+      : storage_(context.storage),
+        strings_(context.strings),
+        spans_(context.spans),
+        function_(context.function),
+        bag_(context.bag),
+        width_(context.width),
+        rodata_(context.rodata),
+        checks_(context.overlay),
         current_instr_idx_(ir::InstructionIdx::invalid()),
-        site_names_(site_names),
-        backtrace_(backtrace) {}
+        site_names_(context.site_names),
+        backtrace_(context.backtrace) {}
 
   base::Result<Body, codegen::EmitError> run();
 
@@ -770,17 +761,10 @@ bool Selector::emit(const ir::Instruction& instr,
   const auto at = [&](const u32 index) { return operand_at(instr, index); };
 
   const bool has_dst = instr.dst.is_valid();
-  const auto dst_type_of = [&]() {
-    return storage_.registers()[instr.dst].type;
-  };
-  const auto dst_tag = [&]() {
-    return storage_.types()[dst_type_of().idx].tag;
-  };
-  const auto dst_operand = [&]() {
-    return Operand{VReg{vreg_of(instr.dst, dst_type_of())}};
-  };
-  // A fresh label, for the shapes one instruction grows into.
-  const auto fresh_label = [&]() { return body_.label_count++; };
+  const auto dst_type_of = [&]() { return dst_type(instr); };
+  const auto dst_tag = [&]() { return dst_value_tag(instr); };
+  const auto dst_operand = [&]() { return dst_reg_operand(instr); };
+  // `fresh_label()` is the class helper; no local shadow is needed.
   // A checked operation that overflows ends the process through the
   // runtime panic; the carry flag serves unsigned arithmetic and the
   // overflow flag signed arithmetic.
@@ -2125,18 +2109,8 @@ bool Selector::emit_call(const ir::Instruction& instr,
 }
 
 base::Result<Body, codegen::EmitError> select_function(
-    const ir::Storage& storage,
-    const ir::SymbolTable& strings,
-    std::span<const diag::Span> spans,
-    const ir::Function& function,
-    diag::DiagBag& bag,
-    const ir::PointerWidth width,
-    RoData& rodata,
-    const overlay::Overlay* checks,
-    std::span<const str::StringPoolId> site_names,
-    bool backtrace) {
-  Selector selector(storage, strings, spans, function, bag, width, rodata,
-                    checks, site_names, backtrace);
+    const SelectContext& context) {
+  Selector selector(context);
   return selector.run();
 }
 

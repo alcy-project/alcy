@@ -35,16 +35,23 @@ namespace codegen::x86_64 {
 //
 // A construct the selector has no lowering for is reported at the place
 // it was written, and the failure names it rather than guessing.
+// What selecting one function reads. The bundle travels unchanged into
+// the selector, so a caller adds a setting in one place rather than at
+// both ends of a ten-argument hand-off.
+struct SelectContext {
+  const ir::Storage& storage;
+  const ir::SymbolTable& strings;
+  std::span<const diag::Span> spans;
+  const ir::Function& function;
+  diag::DiagBag& bag;
+  ir::PointerWidth width;
+  RoData& rodata;
+  const overlay::Overlay* overlay = nullptr;
+  std::span<const str::StringPoolId> site_names;
+  bool backtrace = false;
+};
+
 [[nodiscard]] base::Result<Body, codegen::EmitError> select_function(
-    const ir::Storage& storage,
-    const ir::SymbolTable& strings,
-    std::span<const diag::Span> spans,
-    const ir::Function& function,
-    diag::DiagBag& bag,
-    ir::PointerWidth width,
-    RoData& rodata,
-    const overlay::Overlay* overlay,
-    std::span<const str::StringPoolId> site_names = {},
-    bool backtrace = false);
+    const SelectContext& context);
 
 }  // namespace codegen::x86_64

@@ -9,7 +9,7 @@ exit status stand.
 ```console
 $ alcy run [--release | --profile <NAME>] [--linker DRIVER] [--link-args ARG]...
          [--on-panic abort|backtrace] [--optimize on|off] [--overflow-checks on|off]
-         [--no-cache] [PACKAGE-DIR] [-- ARGS...]
+         [--no-cache] [--freestanding] [PACKAGE-DIR] [-- ARGS...]
 ```
 
 `PACKAGE-DIR` defaults to the current directory. A positional ending

@@ -858,75 +858,73 @@ Body build_env_get() {
 
 }  // namespace
 
-bool defines(const std::string_view name) {
-  return name == "alcy_print" || name == "alcy_println" ||
-         name == "alcy_eprint" || name == "alcy_eprintln" ||
-         name == "alcy_panic" || name == "alcy_sys_write" ||
-         name == "alcy_sys_read" || name == "alcy_error_kind" ||
-         name == "alcy_arg_count" || name == "alcy_arg" ||
-         name == "alcy_file_size" || name == "alcy_read_file_into" ||
-         name == "alcy_write_file" || name == "alcy_alloc" ||
-         name == "alcy_dealloc" || name == "alcy_env_find" ||
-         name == "alcy_env_exists" || name == "alcy_env_get";
+namespace {
+
+// One table holds both the names this runtime answers and the bodies
+// behind them. A new entry is one line, so `defines` and `build` cannot
+// disagree about what the backend carries.
+using Builder = Body (*)(RoData&);
+struct RuntimeEntry {
+  std::string_view name;
+  Builder build;
+};
+
+constexpr RuntimeEntry RUNTIME[] = {
+    {"alcy_print",
+     [](RoData& rodata) {
+       return build_writer("alcy_print", rodata, 1, /*newline=*/false);
+     }},
+    {"alcy_println",
+     [](RoData& rodata) {
+       return build_writer("alcy_println", rodata, 1, /*newline=*/true);
+     }},
+    {"alcy_eprint",
+     [](RoData& rodata) {
+       return build_writer("alcy_eprint", rodata, 2, /*newline=*/false);
+     }},
+    {"alcy_eprintln",
+     [](RoData& rodata) {
+       return build_writer("alcy_eprintln", rodata, 2, /*newline=*/true);
+     }},
+    {"alcy_panic", [](RoData& rodata) { return build_panic(rodata); }},
+    {"alcy_sys_write", [](RoData&) { return build_syscall_body(1); }},
+    {"alcy_sys_read", [](RoData&) { return build_syscall_body(0); }},
+    {"alcy_error_kind", [](RoData&) { return build_error_kind(); }},
+    {"alcy_arg_count", [](RoData&) { return build_arg_count(); }},
+    {"alcy_arg", [](RoData&) { return build_arg(); }},
+    {"alcy_file_size", [](RoData&) { return build_file_size(); }},
+    {"alcy_read_file_into", [](RoData&) { return build_file_io(false); }},
+    {"alcy_write_file", [](RoData&) { return build_file_io(true); }},
+    {"alcy_alloc", [](RoData& rodata) { return build_alloc_fs(rodata); }},
+    {"alcy_dealloc", [](RoData&) { return build_dealloc_fs(); }},
+    {"alcy_env_find", [](RoData&) { return build_env_find(); }},
+    {"alcy_env_exists", [](RoData&) { return build_env_exists(); }},
+    {"alcy_env_get", [](RoData&) { return build_env_get(); }},
+};
+
+const RuntimeEntry* find(const std::string_view name) {
+  for (const RuntimeEntry& entry : RUNTIME) {
+    if (entry.name == name) {
+      return &entry;
+    }
+  }
+  return nullptr;
 }
 
-Body build(const std::string_view name, RoData& rodata, bool /*freestanding*/) {
-  if (name == "alcy_print") {
-    return build_writer(name, rodata, 1, /*newline=*/false);
+}  // namespace
+
+bool defines(const std::string_view name) {
+  return find(name) != nullptr;
+}
+
+Body build(const std::string_view name, RoData& rodata, bool) {
+  const RuntimeEntry* entry = find(name);
+  DCHECK_MSG(entry != nullptr,
+             "the runtime was asked for a name it does not define");
+  if (entry == nullptr) {
+    return Body{};
   }
-  if (name == "alcy_println") {
-    return build_writer(name, rodata, 1, /*newline=*/true);
-  }
-  if (name == "alcy_eprint") {
-    return build_writer(name, rodata, 2, /*newline=*/false);
-  }
-  if (name == "alcy_eprintln") {
-    return build_writer(name, rodata, 2, /*newline=*/true);
-  }
-  if (name == "alcy_panic") {
-    return build_panic(rodata);
-  }
-  if (name == "alcy_sys_write") {
-    return build_syscall_body(1);
-  }
-  if (name == "alcy_sys_read") {
-    return build_syscall_body(0);
-  }
-  if (name == "alcy_error_kind") {
-    return build_error_kind();
-  }
-  if (name == "alcy_arg_count") {
-    return build_arg_count();
-  }
-  if (name == "alcy_arg") {
-    return build_arg();
-  }
-  if (name == "alcy_file_size") {
-    return build_file_size();
-  }
-  if (name == "alcy_read_file_into") {
-    return build_file_io(false);
-  }
-  if (name == "alcy_write_file") {
-    return build_file_io(true);
-  }
-  if (name == "alcy_alloc") {
-    return build_alloc_fs(rodata);
-  }
-  if (name == "alcy_dealloc") {
-    return build_dealloc_fs();
-  }
-  if (name == "alcy_env_find") {
-    return build_env_find();
-  }
-  if (name == "alcy_env_exists") {
-    return build_env_exists();
-  }
-  if (name == "alcy_env_get") {
-    return build_env_get();
-  }
-  DCHECK_MSG(false, "the runtime was asked for a name it does not define");
-  return Body{};
+  return entry->build(rodata);
 }
 
 }  // namespace codegen::x86_64::runtime
