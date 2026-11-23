@@ -16,6 +16,14 @@
 
 namespace lsp {
 
+namespace {
+
+bool is_utf8_continuation(char c) {
+  return (static_cast<u8>(c) & 0xC0u) == 0x80u;
+}
+
+}  // namespace
+
 text::JsonValue document_formatting(const Document& document) {
   text::JsonValue edits = text::JsonValue::make_array();
   std::string formatted =
@@ -82,12 +90,21 @@ void append_edit(const Document& document,
          hunk[prefix] == replacement[prefix]) {
     ++prefix;
   }
+  // A byte-wise match can end inside a multi-byte character. Move both
+  // boundaries back to a character start so the inserted text stays
+  // valid UTF-8.
+  while (prefix > 0 && is_utf8_continuation(hunk[prefix])) {
+    --prefix;
+  }
   usize suffix = 0;
   while (suffix < hunk.size() - prefix &&
          suffix < replacement.size() - prefix &&
          hunk[hunk.size() - 1 - suffix] ==
              replacement[replacement.size() - 1 - suffix]) {
     ++suffix;
+  }
+  while (suffix > 0 && is_utf8_continuation(hunk[hunk.size() - 1 - suffix])) {
+    --suffix;
   }
   const usize from = start + prefix;
   const usize to = end - suffix;
