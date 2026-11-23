@@ -57,7 +57,6 @@ of the compiler, so it owns no analysis of its own:
   so incoming and outgoing calls are its own reading.
 - `type_hierarchy.{h,cc}` reads specs as supertypes and their impls as
   subtypes.
-- `inlay_hints.{h,cc}` names the parameter each call argument binds,
   beside the binding and layout hints it already shows.
 - `code_lens.{h,cc}` counts each declaration's references in one pass
   over the reference table, tagged with a stable kind. The provider
@@ -68,7 +67,6 @@ of the compiler, so it owns no analysis of its own:
   the client has not opened.
 - `rename.{h,cc}` renames the name under the cursor, editing the
   segments the checker named.
-- `navigation.{h,cc}` also answers the declaration of a value's type,
   so a variable of struct type jumps to the struct, and the methods that
   implement a spec.
 - `selection.{h,cc}` grows a selection from the word under the cursor
@@ -86,7 +84,6 @@ of the compiler, so it owns no analysis of its own:
   members as children.
 - Decided types are rendered by `ir/type_display.cc`; hover, completion,
   inlay hints, and layout ask it for the source spelling.
-- `diagnostics.{h,cc}` answers one document's pull report and the
   workspace report over every open document, and skips an unchanged
   buffer the client already holds.
 - `server.{h,cc}` routes the methods and owns the session lifecycle;
@@ -108,8 +105,9 @@ is the check CI asks.
 Standard output is protocol only. A debug message belongs on standard
 error, and the server writes none today.
 
-Positions are zero-based and counted in UTF-16 code units, as the
-protocol requires, while the compiler reports byte offsets.
+Positions are zero-based; characters use the encoding the client
+negotiated at initialize (UTF-16 or UTF-8), while the compiler reports
+byte offsets.
 `PositionIndex` is the single translation point. `Document::apply`
 patches its line starts for the edited range through `apply()` instead
 of rescanning the whole buffer; a full replacement still calls `reset`.
