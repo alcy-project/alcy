@@ -22,7 +22,9 @@ export interface PageState {
   highlighter: Highlighter | null;
   compilerStatus: CompilerStatusName;
   compilerDetail: string;
-  checkSeq: number;
+  // Bumped on every source change and compiler request; an answer from
+  // an older generation must not overwrite newer state.
+  requestSeq: number;
   highlightFrame: number | null;
   highlightedText: string | null;
   gutterLines: number;
@@ -43,7 +45,7 @@ export const state: PageState = {
   highlighter: null,
   compilerStatus: "idle",
   compilerDetail: "",
-  checkSeq: 0,
+  requestSeq: 0,
   highlightFrame: null,
   highlightedText: null,
   gutterLines: 0,

@@ -96,6 +96,9 @@ function applyCompilerState(status: CompilerStatusName, detail: string): void {
 }
 
 export function scheduleCheck(): void {
+  // Every edit makes answers to earlier requests stale, even while the
+  // debounce is still waiting to send the check for this source.
+  state.requestSeq++;
   if (state.compilerStatus !== "ready") {
     return;
   }
@@ -111,14 +114,14 @@ export async function runCheck({
   if (state.running) {
     return;
   }
-  const sequence = ++state.checkSeq;
+  const sequence = ++state.requestSeq;
   if (!automatic) {
     setStatus("status.checking");
   }
   try {
     const started = performance.now();
     const response = await callCompiler("check", normalizedSource());
-    if (sequence !== state.checkSeq) {
+    if (sequence !== state.requestSeq) {
       return;
     }
     if (response.error !== undefined) {
@@ -145,7 +148,7 @@ export async function runCheck({
       }
     }
   } catch (error) {
-    if (sequence === state.checkSeq) {
+    if (sequence === state.requestSeq) {
       applyCompilerState("error", error instanceof Error ? error.message : String(error));
     }
   }
@@ -243,8 +246,12 @@ export async function runDownload(): Promise<void> {
   if (state.running) {
     return;
   }
+  const sequence = ++state.requestSeq;
   try {
     const response = await callCompiler("compile", normalizedSource());
+    if (sequence !== state.requestSeq) {
+      return;
+    }
     if (response.error !== undefined) {
       setStatus("status.compilerUnavailable");
       return;
@@ -265,7 +272,9 @@ export async function runDownload(): Promise<void> {
     URL.revokeObjectURL(url);
     setStatus("status.downloaded");
   } catch (error) {
-    applyCompilerState("error", error instanceof Error ? error.message : String(error));
+    if (sequence === state.requestSeq) {
+      applyCompilerState("error", error instanceof Error ? error.message : String(error));
+    }
   }
 }
 
@@ -277,8 +286,13 @@ export async function runFormat(): Promise<void> {
   if (state.running) {
     return;
   }
+  const sequence = ++state.requestSeq;
   try {
+    const started = performance.now();
     const response = await callCompiler("format", normalizedSource());
+    if (sequence !== state.requestSeq) {
+      return;
+    }
     if (response.error !== undefined) {
       setStatus("status.compilerUnavailable");
       return;
@@ -287,12 +301,15 @@ export async function runFormat(): Promise<void> {
       setStatus("status.compilerError");
       return;
     }
+    const ms = (response.ms ?? performance.now() - started).toFixed(1);
     if (response.text !== normalizedSource()) {
       replaceBuffer(response.text);
     }
-    setStatus("status.formatted");
+    setStatus("status.formatted", { ms });
   } catch (error) {
-    applyCompilerState("error", error instanceof Error ? error.message : String(error));
+    if (sequence === state.requestSeq) {
+      applyCompilerState("error", error instanceof Error ? error.message : String(error));
+    }
   }
 }
 
@@ -303,20 +320,28 @@ export async function runLint(): Promise<void> {
   if (state.running) {
     return;
   }
+  const sequence = ++state.requestSeq;
   try {
+    const started = performance.now();
     const response = await callCompiler("lint", normalizedSource());
+    if (sequence !== state.requestSeq) {
+      return;
+    }
     if (response.error !== undefined) {
       setStatus("status.compilerUnavailable");
       return;
     }
+    const ms = (response.ms ?? performance.now() - started).toFixed(1);
     renderDiagnostics(response.diagnostics);
     if (response.diagnostics.length === 0) {
-      setStatus("status.lintClean");
+      setStatus("status.lintClean", { ms });
       return;
     }
     showTab("problems");
-    setStatus("status.lintFound", { count: response.diagnostics.length });
+    setStatus("status.lintFound", { count: response.diagnostics.length, ms });
   } catch (error) {
-    applyCompilerState("error", error instanceof Error ? error.message : String(error));
+    if (sequence === state.requestSeq) {
+      applyCompilerState("error", error instanceof Error ? error.message : String(error));
+    }
   }
 }
