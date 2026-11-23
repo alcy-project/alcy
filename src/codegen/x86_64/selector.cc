@@ -52,11 +52,13 @@ u8 width_of(const ir::TypeTag tag) {
   switch (tag) {
     case ir::TypeTag::I1:
     case ir::TypeTag::I8:
-    case ir::TypeTag::U8: return 1;
+    case ir::TypeTag::U8:
+    case ir::TypeTag::Char: return 1;
     case ir::TypeTag::I16:
     case ir::TypeTag::U16: return 2;
     case ir::TypeTag::I32:
     case ir::TypeTag::U32:
+    case ir::TypeTag::Rune:
     case ir::TypeTag::F32: return 4;
     default: return 8;
   }
@@ -80,7 +82,8 @@ constexpr bool is_integer(const ir::TypeTag tag) {
   // spells; the compare reads it unsigned for the same reason.
   return is_signed(tag) || tag == ir::TypeTag::I1 || tag == ir::TypeTag::U8 ||
          tag == ir::TypeTag::U16 || tag == ir::TypeTag::U32 ||
-         tag == ir::TypeTag::U64 || tag == ir::TypeTag::Usize;
+         tag == ir::TypeTag::U64 || tag == ir::TypeTag::Usize ||
+         tag == ir::TypeTag::Char || tag == ir::TypeTag::Rune;
 }
 
 constexpr bool is_float(const ir::TypeTag tag) {
@@ -718,10 +721,16 @@ bool Selector::emit_check_prelude(const ir::Instruction& instr,
     const ir::TypeTag tag =
         storage_.types()[storage_.operands()[instr.operands.head()].type].tag;
     const u8 width = compute_width_of(tag);
-    const u64 bits = tag == ir::TypeTag::I8 || tag == ir::TypeTag::U8     ? 8
-                     : tag == ir::TypeTag::I16 || tag == ir::TypeTag::U16 ? 16
-                     : tag == ir::TypeTag::I32 || tag == ir::TypeTag::U32 ? 32
-                                                                          : 64;
+    const u64 bits =
+        tag == ir::TypeTag::I8 || tag == ir::TypeTag::U8 ||
+                tag == ir::TypeTag::Char
+            ? 8
+            : tag == ir::TypeTag::I16 || tag == ir::TypeTag::U16
+                  ? 16
+                  : tag == ir::TypeTag::I32 || tag == ir::TypeTag::U32 ||
+                          tag == ir::TypeTag::Rune
+                      ? 32
+                      : 64;
     const u32 ok = fresh_label();
     push(make_inst(MOp::Mov, width, Operand{Reg::R9}, *raw));
     if (bits <= 0x7fffffffULL) {
@@ -1823,14 +1832,20 @@ bool Selector::emit_cast(const ir::Instruction& instr, const diag::Span span) {
       }
       if (is_float(src) && is_integer(dst)) {
         const i64 bytes =
-            dst == ir::TypeTag::I8 || dst == ir::TypeTag::U8     ? 1
-            : dst == ir::TypeTag::I16 || dst == ir::TypeTag::U16 ? 2
-            : dst == ir::TypeTag::I32 || dst == ir::TypeTag::U32 ? 4
-                                                                 : 8;
+            dst == ir::TypeTag::I8 || dst == ir::TypeTag::U8 ||
+                    dst == ir::TypeTag::Char
+                ? 1
+                : dst == ir::TypeTag::I16 || dst == ir::TypeTag::U16
+                      ? 2
+                      : dst == ir::TypeTag::I32 || dst == ir::TypeTag::U32 ||
+                              dst == ir::TypeTag::Rune
+                          ? 4
+                          : 8;
         const i64 tagged =
             dst == ir::TypeTag::I1 ? -16
             : (dst == ir::TypeTag::U8 || dst == ir::TypeTag::U16 ||
-               dst == ir::TypeTag::U32 || dst == ir::TypeTag::U64)
+               dst == ir::TypeTag::U32 || dst == ir::TypeTag::U64 ||
+               dst == ir::TypeTag::Char || dst == ir::TypeTag::Rune)
                 ? -bytes
                 : bytes;
         push(make_inst(MOp::CvtF2I, width_of(src), dst_reg_operand(instr), *lhs,
