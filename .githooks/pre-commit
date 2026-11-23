@@ -1,0 +1,13 @@
+#!/bin/sh
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# The same tree checks check.py asks CI, in the order that makes a failed
+# commit say which one it was. A clone without uv has no way to run them;
+# say so rather than blocking the commit.
+if ! command -v uv >/dev/null 2>&1; then
+  echo "pre-commit: uv not found; skipping tree checks" >&2
+  exit 0
+fi
+
+exec uv run ./tools/format.py --dry-run

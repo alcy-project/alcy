@@ -1,0 +1,14 @@
+#!/bin/sh
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Git runs hooks from the repository root, but the message file is given
+# as a path. The validator only uses the standard library, so any Python
+# on PATH will do; a machine without one cannot check the message.
+py=$(command -v python3 || command -v python)
+if [ -z "$py" ]; then
+  echo "commit-msg: python not found; skipping message check" >&2
+  exit 0
+fi
+
+exec "$py" tools/check_commit_msg.py "$1"
