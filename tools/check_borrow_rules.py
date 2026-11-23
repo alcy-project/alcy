@@ -1178,18 +1178,18 @@ case(
 }""",
 )
 
-# `String::slice` reaches `str_slice`, whose pointer advance names a
-# place inside the source buffer, so the view carries the buffer's loan
-# the way `as_str` does and the growth that may reallocate conflicts.
+# `str_slice` advances a pointer into the source buffer, so the view
+# carries the buffer's loan the way `as_str` does and the growth that
+# may reallocate conflicts.
 case(
     "subslice",
-    "string-slice-method-then-buffer-write",
+    "str-slice-intrinsic-then-reserve",
     "reject",
     """fn main() -> i32 {
   mut s := String::new()
   s.push_char('h')
   s.push_char('i')
-  t := s.slice(0, 1)
+  t := str_slice(s.as_str(), 0, 1)
   s.reserve(64)
   ret str_len(t) as i32
 }""",
