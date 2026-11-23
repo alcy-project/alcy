@@ -689,9 +689,11 @@ A figure a commit message carries is one an outside reader can reproduce:
 the corpus is one generator command away, and the measurement names the
 subcommand it ran.
 
-    perf.py corpus --shape print --modules 1200
-    perf.py instructions out/perf/print1200 out/opt/alcy \\
-        --subcommand "build --no-cache --backend direct-x86_64"
+```text
+perf.py corpus --shape print --modules 1200
+perf.py instructions out/perf/print1200 out/opt/alcy \\
+    --subcommand "build --no-cache --backend direct-x86_64"
+```
 
 `tools/check_perf.py` is the gate over these numbers: it builds the
 compiler at a base revision and at the working tree, measures both on
