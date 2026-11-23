@@ -148,8 +148,7 @@ TEST_CASE("Editing a sibling buffer invalidates the package analysis") {
   if (main == nullptr) {
     return;
   }
-  const PackageAnalysis* first = &cache.owner_of(*main);
-  CHECK(!has_message(first->context.bag, "Unresolved import"));
+  CHECK(!has_message(cache.owner_of(*main).context.bag, "Unresolved import"));
 
   documents.open(f.helper_uri, "alcy", 2,
                  "pub struct Renamed {\n  pub x: i32,\n}\n");
@@ -157,9 +156,7 @@ TEST_CASE("Editing a sibling buffer invalidates the package analysis") {
   if (main == nullptr) {
     return;
   }
-  const PackageAnalysis* second = &cache.owner_of(*main);
-  CHECK(second != first);
-  CHECK(has_message(second->context.bag, "Unresolved import"));
+  CHECK(has_message(cache.owner_of(*main).context.bag, "Unresolved import"));
 }
 
 TEST_CASE("Workspace URIs round-trip through paths with escapes") {

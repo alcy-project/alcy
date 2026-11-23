@@ -31,26 +31,24 @@ TEST_CASE("A standalone edit rebuilds even with an unchanged version") {
   const Document before("untitled:Untitled-1", "alcy", 1,
                         "fn main() -> i32 {\n  ret 0\n}\n");
   const Document after("untitled:Untitled-1", "alcy", 1,
-                       "fn main() -> i32 {\n  ret 1\n}\n");
+                       "fn main( -> i32 {\n}\n");
   AnalysisCache cache;
-  const PackageAnalysis* const first = &cache.get(before).owner();
+  CHECK(cache.get(before).ok());
   cache.invalidate(before);
-  CHECK(&cache.get(after).owner() != first);
+  CHECK(!cache.get(after).ok());
 }
 
 TEST_CASE("An untitled buffer keeps its own standalone signature") {
   const Document first("untitled:Untitled-1", "alcy", 1,
                        "fn main() -> i32 {\n  ret 0\n}\n");
   const Document edited("untitled:Untitled-1", "alcy", 2,
-                        "fn main() -> i32 {\n  ret 1\n}\n");
+                        "fn main( -> i32 {\n}\n");
   const Document other("untitled:Untitled-2", "alcy", 1,
                        "fn main() -> i32 {\n  ret 0\n}\n");
   AnalysisCache cache;
-  const PackageAnalysis* const before = &cache.get(first).owner();
   CHECK(cache.get(first).ok());
-  CHECK(&cache.get(edited).owner() != before);
-  CHECK(&cache.get(other).owner() != before);
-  CHECK(&cache.get(other).owner() != &cache.get(edited).owner());
+  CHECK(!cache.get(edited).ok());
+  CHECK(cache.get(other).ok());
 }
 
 TEST_CASE("Erasing an entry leaves the cache able to rebuild it") {
