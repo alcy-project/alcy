@@ -60,7 +60,7 @@ std::string code_string(diag::Severity severity, diag::Code code) {
 
 text::JsonValue diagnostics_for(const Document& document,
                                 AnalysisCache& cache) {
-  const DocumentAnalysis& analysis = cache.get(document);
+  const DocumentAnalysis& analysis = cache.analysis_for(document);
   const PackageAnalysis& owner = analysis.owner();
   const source::FileId file = analysis.root();
   const diag::DiagBag& bag = owner.context.bag;
@@ -167,7 +167,8 @@ text::JsonValue DiagnosticsCache::pull(const Document& document,
                                        AnalysisCache& cache,
                                        std::string_view previous_result_id) {
   const std::string& uri = document.uri();
-  const std::string fingerprint = cache.get(document).owner().fingerprint;
+  const std::string fingerprint =
+      cache.analysis_for(document).owner().fingerprint;
   const auto found = entries_.find(uri);
   if (found != entries_.end() && found->second.version == document.version() &&
       found->second.fingerprint == fingerprint && !previous_result_id.empty() &&

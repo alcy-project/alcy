@@ -701,7 +701,7 @@ void Server::document_symbol(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, document_symbols(*document, cache_.get(*document)));
+  send_result(id, document_symbols(*document, cache_.analysis_for(*document)));
 }
 
 void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
@@ -711,7 +711,7 @@ void Server::hover(const text::JsonValue& id, const text::JsonValue& params) {
     send_result(id, text::JsonValue{});
     return;
   }
-  const DocumentAnalysis& analysis = cache_.get(*document);
+  const DocumentAnalysis& analysis = cache_.analysis_for(*document);
   const std::optional<std::string> markdown =
       hover_markdown(*document, analysis, position);
   if (!markdown.has_value()) {
@@ -734,7 +734,7 @@ void Server::definition(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  const DocumentAnalysis& analysis = cache_.get(*document);
+  const DocumentAnalysis& analysis = cache_.analysis_for(*document);
   const std::optional<diag::Span> location =
       definition_at(*document, analysis, position);
   if (!location.has_value()) {
@@ -759,7 +759,7 @@ void Server::type_definition(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  const DocumentAnalysis& analysis = cache_.get(*document);
+  const DocumentAnalysis& analysis = cache_.analysis_for(*document);
   const std::optional<diag::Span> location =
       type_definition_at(*document, analysis, position);
   if (!location.has_value()) {
@@ -789,7 +789,7 @@ void Server::code_lens(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, code_lenses(*document, cache_.get(*document)));
+  send_result(id, code_lenses(*document, cache_.analysis_for(*document)));
 }
 
 void Server::type_hierarchy_prepare(const text::JsonValue& id,
@@ -800,8 +800,8 @@ void Server::type_hierarchy_prepare(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(
-      id, prepare_type_hierarchy(*document, cache_.get(*document), position));
+  send_result(id, prepare_type_hierarchy(
+                      *document, cache_.analysis_for(*document), position));
 }
 
 void Server::type_hierarchy_supertypes(const text::JsonValue& id,
@@ -818,7 +818,7 @@ void Server::type_hierarchy_supertypes(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, supertypes(*document, cache_.get(*document), *item));
+  send_result(id, supertypes(*document, cache_.analysis_for(*document), *item));
 }
 
 void Server::type_hierarchy_subtypes(const text::JsonValue& id,
@@ -835,7 +835,7 @@ void Server::type_hierarchy_subtypes(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, subtypes(*document, cache_.get(*document), *item));
+  send_result(id, subtypes(*document, cache_.analysis_for(*document), *item));
 }
 
 void Server::call_hierarchy_prepare(const text::JsonValue& id,
@@ -846,8 +846,8 @@ void Server::call_hierarchy_prepare(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(
-      id, prepare_call_hierarchy(*document, cache_.get(*document), position));
+  send_result(id, prepare_call_hierarchy(
+                      *document, cache_.analysis_for(*document), position));
 }
 
 void Server::call_hierarchy_incoming(const text::JsonValue& id,
@@ -864,7 +864,7 @@ void Server::call_hierarchy_incoming(const text::JsonValue& id,
   source::FileId item_file = source::UNKNOWN_FILE;
   for (const auto& [candidate_uri, candidate] : documents_.documents()) {
     (void)candidate_uri;
-    const DocumentAnalysis& found = cache_.get(candidate);
+    const DocumentAnalysis& found = cache_.analysis_for(candidate);
     if (!found.ok()) {
       continue;
     }
@@ -899,7 +899,7 @@ void Server::call_hierarchy_outgoing(const text::JsonValue& id,
   source::FileId item_file = source::UNKNOWN_FILE;
   for (const auto& [candidate_uri, candidate] : documents_.documents()) {
     (void)candidate_uri;
-    const DocumentAnalysis& found = cache_.get(candidate);
+    const DocumentAnalysis& found = cache_.analysis_for(candidate);
     if (!found.ok()) {
       continue;
     }
@@ -934,7 +934,7 @@ void Server::implementation(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  const DocumentAnalysis& analysis = cache_.get(*document);
+  const DocumentAnalysis& analysis = cache_.analysis_for(*document);
   const std::vector<diag::Span> locations =
       implementation_at(*document, analysis, position);
   text::JsonValue result = text::JsonValue::make_array();
@@ -965,7 +965,7 @@ void Server::references(const text::JsonValue& id,
       include_declaration = include->as_bool();
     }
   }
-  const DocumentAnalysis& analysis = cache_.get(*document);
+  const DocumentAnalysis& analysis = cache_.analysis_for(*document);
   text::JsonValue result = text::JsonValue::make_array();
   PositionCache positions;
   const auto push = [&](diag::Span span) {
@@ -1001,7 +1001,8 @@ void Server::completion(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, completion_items(*document, cache_.get(*document), position));
+  send_result(id, completion_items(*document, cache_.analysis_for(*document),
+                                   position));
 }
 
 void Server::signature(const text::JsonValue& id,
@@ -1012,7 +1013,8 @@ void Server::signature(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  send_result(id, signature_help(*document, cache_.get(*document), position));
+  send_result(
+      id, signature_help(*document, cache_.analysis_for(*document), position));
 }
 
 void Server::inlay_hint(const text::JsonValue& id,
@@ -1028,7 +1030,7 @@ void Server::inlay_hint(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id, inlay_hints(*document, cache_.get(*document)));
+  send_result(id, inlay_hints(*document, cache_.analysis_for(*document)));
 }
 
 void Server::code_action(const text::JsonValue& id,
@@ -1094,8 +1096,8 @@ void Server::linked_editing_range(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  send_result(
-      id, linked_editing_ranges(*document, cache_.get(*document), position));
+  send_result(id, linked_editing_ranges(
+                      *document, cache_.analysis_for(*document), position));
 }
 
 void Server::document_highlight(const text::JsonValue& id,
@@ -1106,8 +1108,8 @@ void Server::document_highlight(const text::JsonValue& id,
     send_result(id, text::JsonValue::make_array());
     return;
   }
-  send_result(id,
-              document_highlights(*document, cache_.get(*document), position));
+  send_result(id, document_highlights(*document, cache_.analysis_for(*document),
+                                      position));
 }
 
 void Server::diagnostic(const text::JsonValue& id,
@@ -1123,7 +1125,7 @@ void Server::diagnostic(const text::JsonValue& id,
     send_result(id, text::JsonValue{});
     return;
   }
-  if (!cache_.get(*document).ok()) {
+  if (!cache_.analysis_for(*document).ok()) {
     log_message(2, "the package could not be analyzed");
   }
   send_result(id, diagnostics_.pull(*document, cache_,
@@ -1143,7 +1145,7 @@ void Server::prepare_rename(const text::JsonValue& id,
     return;
   }
   const std::optional<RenameTarget> target =
-      rename_target(*document, cache_.get(*document), position);
+      rename_target(*document, cache_.analysis_for(*document), position);
   if (!target.has_value()) {
     send_result(id, text::JsonValue{});
     return;
@@ -1168,8 +1170,9 @@ void Server::rename(const text::JsonValue& id, const text::JsonValue& params) {
     send_result(id, text::JsonValue{});
     return;
   }
-  const std::optional<text::JsonValue> edit = workspace_rename(
-      *document, cache_.get(*document), position, new_name->as_string());
+  const std::optional<text::JsonValue> edit =
+      workspace_rename(*document, cache_.analysis_for(*document), position,
+                       new_name->as_string());
   if (!edit.has_value()) {
     send_result(id, text::JsonValue{});
     return;
@@ -1197,8 +1200,8 @@ void Server::selection_range(const text::JsonValue& id,
       positions.push_back(read_position(item));
     }
   }
-  send_result(id,
-              selection_ranges(*document, cache_.get(*document), positions));
+  send_result(id, selection_ranges(*document, cache_.analysis_for(*document),
+                                   positions));
 }
 
 void Server::semantic_tokens_full(const text::JsonValue& id,
@@ -1214,7 +1217,7 @@ void Server::semantic_tokens_full(const text::JsonValue& id,
     send_result(id, semantic_tokens_empty());
     return;
   }
-  send_result(id, tokens_.full(*document, cache_.get(*document)));
+  send_result(id, tokens_.full(*document, cache_.analysis_for(*document)));
 }
 
 void Server::semantic_tokens_delta(const text::JsonValue& id,
@@ -1231,7 +1234,8 @@ void Server::semantic_tokens_delta(const text::JsonValue& id,
     return;
   }
   const std::string_view previous = string_field(params, "previousResultId");
-  send_result(id, tokens_.delta(*document, cache_.get(*document), previous));
+  send_result(
+      id, tokens_.delta(*document, cache_.analysis_for(*document), previous));
 }
 
 void Server::semantic_tokens_in_range(const text::JsonValue& id,
@@ -1251,7 +1255,7 @@ void Server::semantic_tokens_in_range(const text::JsonValue& id,
     send_result(id, semantic_tokens_empty());
     return;
   }
-  send_result(id, tokens_.range(*document, cache_.get(*document),
+  send_result(id, tokens_.range(*document, cache_.analysis_for(*document),
                                 read_position(*start), read_position(*end)));
 }
 
@@ -1264,7 +1268,7 @@ void Server::struct_layout(const text::JsonValue& id,
     return;
   }
   const std::optional<StructLayout> layout =
-      struct_layout_at(*document, cache_.get(*document), position);
+      struct_layout_at(*document, cache_.analysis_for(*document), position);
   if (!layout.has_value()) {
     send_result(id, text::JsonValue{});
     return;

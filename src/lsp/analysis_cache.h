@@ -27,12 +27,12 @@ class AnalysisCache {
   explicit AnalysisCache(const DocumentStore& documents)
       : documents_(&documents) {}
 
-  const DocumentAnalysis& get(const Document& document);
+  const DocumentAnalysis& analysis_for(const Document& document);
 
   // The reading that owns this document's diagnostics. The bag on its
   // context holds the whole package's findings.
   const PackageAnalysis& owner_of(const Document& document) {
-    return get(document).owner();
+    return analysis_for(document).owner();
   }
 
   void set_encoding(PositionEncoding encoding) { encoding_ = encoding; }

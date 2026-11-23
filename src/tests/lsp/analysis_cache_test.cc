@@ -13,9 +13,9 @@ TEST_CASE("A cache reuses the analysis for one version") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn main() -> i32 {\n  ret 0\n}\n");
   AnalysisCache cache;
-  const DocumentAnalysis& first = cache.get(document);
+  const DocumentAnalysis& first = cache.analysis_for(document);
   CHECK(first.ok());
-  CHECK(&cache.get(document) == &first);
+  CHECK(&cache.analysis_for(document) == &first);
 }
 
 TEST_CASE("A cache answers every version of a document") {
@@ -23,8 +23,8 @@ TEST_CASE("A cache answers every version of a document") {
                        "fn main() -> i32 {\n  ret 0\n}\n");
   const Document broken("file:///main.al", "alcy", 2, "fn main( -> i32 {\n}\n");
   AnalysisCache cache;
-  CHECK(cache.get(valid).ok());
-  CHECK(!cache.get(broken).ok());
+  CHECK(cache.analysis_for(valid).ok());
+  CHECK(!cache.analysis_for(broken).ok());
 }
 
 TEST_CASE("A standalone edit rebuilds even with an unchanged version") {
@@ -33,9 +33,9 @@ TEST_CASE("A standalone edit rebuilds even with an unchanged version") {
   const Document after("untitled:Untitled-1", "alcy", 1,
                        "fn main( -> i32 {\n}\n");
   AnalysisCache cache;
-  CHECK(cache.get(before).ok());
+  CHECK(cache.analysis_for(before).ok());
   cache.invalidate(before);
-  CHECK(!cache.get(after).ok());
+  CHECK(!cache.analysis_for(after).ok());
 }
 
 TEST_CASE("An untitled buffer keeps its own standalone signature") {
@@ -46,18 +46,18 @@ TEST_CASE("An untitled buffer keeps its own standalone signature") {
   const Document other("untitled:Untitled-2", "alcy", 1,
                        "fn main() -> i32 {\n  ret 0\n}\n");
   AnalysisCache cache;
-  CHECK(cache.get(first).ok());
-  CHECK(!cache.get(edited).ok());
-  CHECK(cache.get(other).ok());
+  CHECK(cache.analysis_for(first).ok());
+  CHECK(!cache.analysis_for(edited).ok());
+  CHECK(cache.analysis_for(other).ok());
 }
 
 TEST_CASE("Erasing an entry leaves the cache able to rebuild it") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn main() -> i32 {\n  ret 0\n}\n");
   AnalysisCache cache;
-  CHECK(cache.get(document).ok());
+  CHECK(cache.analysis_for(document).ok());
   cache.erase(document.uri());
-  CHECK(cache.get(document).ok());
+  CHECK(cache.analysis_for(document).ok());
 }
 
 }  // namespace lsp

@@ -125,7 +125,7 @@ text::JsonValue code_actions(const Document& document,
       document.index().byte_offset(document.text(), start);
   const usize end_offset = document.index().byte_offset(document.text(), end);
 
-  const DocumentAnalysis& analysis = cache.get(document);
+  const DocumentAnalysis& analysis = cache.analysis_for(document);
   const diag::DiagBag& bag = analysis.owner().context.bag;
   text::JsonValue actions = text::JsonValue::make_array();
   std::vector<std::pair<usize, usize>> seen;

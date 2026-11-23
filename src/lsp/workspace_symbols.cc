@@ -98,7 +98,7 @@ text::JsonValue workspace_symbols(const DocumentStore& documents,
   PositionEncoding encoding = PositionEncoding::Utf16;
   for (const auto& [uri, document] : documents.documents()) {
     (void)uri;
-    const DocumentAnalysis& analysis = cache.get(document);
+    const DocumentAnalysis& analysis = cache.analysis_for(document);
     encoding = analysis.owner().encoding;
     if (!analysis.ok()) {
       continue;

@@ -85,9 +85,9 @@ void run_lsp_cases(Runner<SteadyClock>& runner,
                // the edit invalidates is gone, and the arena the last
                // reading filled is not reused.
                cache = std::make_unique<lsp::AnalysisCache>();
-               static_cast<void>(cache->get(document));
+               static_cast<void>(cache->analysis_for(document));
              },
-             [&] { static_cast<void>(cache->get(edited_document)); }));
+             [&] { static_cast<void>(cache->analysis_for(edited_document)); }));
   }
 
   if (filter.wants(CaseId{"lsp", "did-change"})) {
@@ -114,7 +114,7 @@ void run_lsp_cases(Runner<SteadyClock>& runner,
              REQUEST,
              [&] {
                cache = std::make_unique<lsp::AnalysisCache>();
-               analysis = &cache->get(document);
+               analysis = &cache->analysis_for(document);
              },
              [&] {
                static_cast<void>(
@@ -128,7 +128,7 @@ void run_lsp_cases(Runner<SteadyClock>& runner,
              REQUEST,
              [&] {
                cache = std::make_unique<lsp::AnalysisCache>();
-               static_cast<void>(cache->get(document));
+               static_cast<void>(cache->analysis_for(document));
              },
              [&] {
                static_cast<void>(
@@ -142,7 +142,7 @@ void run_lsp_cases(Runner<SteadyClock>& runner,
              REQUEST,
              [&] {
                cache = std::make_unique<lsp::AnalysisCache>();
-               analysis = &cache->get(document);
+               analysis = &cache->analysis_for(document);
              },
              [&] {
                static_cast<void>(lsp::semantic_tokens(document, *analysis));

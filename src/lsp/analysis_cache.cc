@@ -105,7 +105,7 @@ void AnalysisCache::invalidate(const Document& document) {
   }
 }
 
-const DocumentAnalysis& AnalysisCache::get(const Document& document) {
+const DocumentAnalysis& AnalysisCache::analysis_for(const Document& document) {
   const std::string& uri = document.uri();
   const std::string& pkg_key = package_key(document);
   const u64 stamp = stamp_for(document, pkg_key);
