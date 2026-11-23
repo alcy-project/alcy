@@ -70,4 +70,25 @@ TEST_CASE("Signature help outside a call answers nothing") {
   CHECK(!signature_help(document, analysis, Position{1, 5}).is_object());
 }
 
+TEST_CASE("Signature help shows a variadic parameter") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "comp fn count(args: ..) -> usize {\n  ret args.len()\n}\n"
+      "fn main() -> i32 {\n  ret count(1)\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue result =
+      signature_help(document, analysis, Position{4, 9});
+  const text::JsonValue* signatures = result.find("signatures");
+  CHECK(signatures != nullptr);
+  if (signatures == nullptr || signatures->as_array().empty()) {
+    return;
+  }
+  const text::JsonValue& signature = signatures->as_array().front();
+  CHECK(signature.find("label")->as_string() == "fn count(args: ..) -> usize");
+  const text::JsonValue* parameters = signature.find("parameters");
+  CHECK(parameters != nullptr);
+  if (parameters != nullptr) {
+    CHECK(parameters->as_array().size() == 1);
+  }
+}
 }  // namespace lsp

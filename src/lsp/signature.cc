@@ -93,7 +93,8 @@ std::string signature_label(const pipeline::PipelineContext& context,
                             const ir::StorageState& state,
                             std::string_view name,
                             std::span<const ir::TypeIdx> params,
-                            ir::TypeIdx ret) {
+                            ir::TypeIdx ret,
+                            std::string_view variadic_name) {
   std::string out = "fn " + std::string(name) + "(";
   bool first = true;
   for (const ir::TypeIdx param : params) {
@@ -102,6 +103,13 @@ std::string signature_label(const pipeline::PipelineContext& context,
     }
     first = false;
     out += ir::type_display(state, context.strings, param);
+  }
+  if (!variadic_name.empty()) {
+    if (!first) {
+      out += ", ";
+    }
+    out += variadic_name;
+    out += ": ..";
   }
   out += ')';
   if (ret != ir::primitive_idx(ir::TypeTag::Void)) {
@@ -135,6 +143,7 @@ text::JsonValue signature_help(const Document& document,
   const analyzer::CheckedModule& module = package.modules[target->module];
 
   std::string_view name;
+  std::string_view variadic_name;
   std::span<const ir::TypeIdx> params;
   ir::TypeIdx ret = ir::primitive_idx(ir::TypeTag::Void);
   if (target->is_method) {
@@ -144,6 +153,7 @@ text::JsonValue signature_help(const Document& document,
     const analyzer::CheckedModule::MethodInfo& method =
         module.methods[target->index];
     name = method.name;
+    variadic_name = variadic_param_name(context, method.item);
     params = method.params;
     ret = method.ret;
   } else {
@@ -152,6 +162,7 @@ text::JsonValue signature_help(const Document& document,
     }
     const analyzer::CheckedModule::FnSig& fn = module.functions[target->index];
     name = fn.name;
+    variadic_name = variadic_param_name(context, fn.item);
     params = fn.params;
     ret = fn.ret;
   }
@@ -181,8 +192,15 @@ text::JsonValue signature_help(const Document& document,
   }
 
   text::JsonValue signature = text::JsonValue::make_object();
-  signature.set("label", text::JsonValue::make_string(signature_label(
-                             context, state, name, params, ret)));
+  if (!variadic_name.empty()) {
+    text::JsonValue entry = text::JsonValue::make_object();
+    entry.set("label", text::JsonValue::make_string(std::string(variadic_name) +
+                                                    ": .."));
+    parameters.push(std::move(entry));
+  }
+  signature.set("label",
+                text::JsonValue::make_string(signature_label(
+                    context, state, name, params, ret, variadic_name)));
   signature.set("parameters", std::move(parameters));
 
   text::JsonValue signatures = text::JsonValue::make_array();

@@ -158,6 +158,15 @@ TEST_CASE("Hover on a primitive type shows its spelling") {
   }
 }
 
+TEST_CASE("Hover on a variadic function shows its variadic slot") {
+  const std::optional<std::string> markdown =
+      hover("comp fn count(args: ..) -> usize {\n  ret args.len()\n}\n", 0, 10);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("fn count(args: ..) -> usize") != std::string::npos);
+  }
+}
+
 TEST_CASE("Hover off every node answers nothing") {
   const std::optional<std::string> markdown =
       hover("struct Mix {\n  // just a note\n  a: u8,\n}\n", 1, 6);

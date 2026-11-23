@@ -265,6 +265,38 @@ const ir::StorageState& DocumentAnalysis::types() const {
   return package_->types->state();
 }
 
+std::string_view variadic_param_name(const pipeline::PipelineContext& context,
+                                     ast::ItemIdx item) {
+  if (!item.is_valid()) {
+    return {};
+  }
+  const ast::ItemNode& node = context.ast.items[item];
+  if (node.kind != ast::ItemKind::Fn && node.kind != ast::ItemKind::Intrinsic) {
+    return {};
+  }
+  for (const ast::ItemFnParam& param : node.payload.get<ast::ItemFn>().params) {
+    if (!param.is_variadic) {
+      continue;
+    }
+    const ast::PatternNode& pattern = context.ast.patterns[param.pattern];
+    diag::Span name;
+    if (pattern.kind == ast::PatternKind::Ident) {
+      name = pattern.payload.ident.name.span;
+    } else if (pattern.kind == ast::PatternKind::MutIdent) {
+      name = pattern.payload.mut_ident.name.span;
+    } else {
+      return {};
+    }
+    const std::optional<std::string_view> bytes =
+        context.sources.bytes(name.file);
+    if (!bytes.has_value() || name.offset + name.length > bytes->size()) {
+      return {};
+    }
+    return bytes->substr(name.offset, name.length);
+  }
+  return {};
+}
+
 std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
                                        source::FileId file) {
   for (const auto& [uri, id] : analysis.owner().files_by_uri) {

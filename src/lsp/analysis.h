@@ -134,6 +134,11 @@ std::optional<text::JsonValue> location_json(const DocumentAnalysis& analysis,
                                              PositionEncoding encoding,
                                              PositionCache* cache);
 
+// The name written at a function's `args: ..` slot, or empty when the
+// declaration has no variadic parameter or is a synthesized signature.
+std::string_view variadic_param_name(const pipeline::PipelineContext& context,
+                                     ast::ItemIdx item);
+
 // The type the checker recorded for an expression, if it recorded one.
 // An entry exists once per instantiation; the declaration's own entry is
 // the one a query without a call site wants.

@@ -62,7 +62,8 @@ std::string_view prefix_at(std::string_view text, usize offset) {
 std::string function_detail(const pipeline::PipelineContext& context,
                             const ir::StorageState& state,
                             std::span<const ir::TypeIdx> params,
-                            ir::TypeIdx ret) {
+                            ir::TypeIdx ret,
+                            std::string_view variadic_name) {
   std::string out = "(";
   bool first = true;
   for (const ir::TypeIdx param : params) {
@@ -71,6 +72,13 @@ std::string function_detail(const pipeline::PipelineContext& context,
     }
     first = false;
     out += ir::type_display(state, context.strings, param);
+  }
+  if (!variadic_name.empty()) {
+    if (!first) {
+      out += ", ";
+    }
+    out += variadic_name;
+    out += ": ..";
   }
   out += ')';
   if (ret != ir::primitive_idx(ir::TypeTag::Void)) {
@@ -183,7 +191,8 @@ void collect(const DocumentAnalysis& analysis,
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
       emit(module.module, fn.item, fn.name,
-           function_detail(context, state, fn.params, fn.ret),
+           function_detail(context, state, fn.params, fn.ret,
+                           variadic_param_name(context, fn.item)),
            fn.is_method ? CompletionItemKind::Method
                         : CompletionItemKind::Function);
     }
@@ -195,7 +204,8 @@ void collect(const DocumentAnalysis& analysis,
         continue;
       }
       emit(module.module, method.item, method.name,
-           function_detail(context, state, method.params, method.ret),
+           function_detail(context, state, method.params, method.ret,
+                           variadic_param_name(context, method.item)),
            CompletionItemKind::Method);
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
