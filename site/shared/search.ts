@@ -17,6 +17,8 @@ interface Section {
 
 interface Entry {
   route: string;
+  // Empty for sources shared by every tree, e.g. the reference.
+  language?: string;
   title: string;
   sections: Section[];
 }
@@ -36,12 +38,30 @@ let input: HTMLInputElement | null = null;
 let list: HTMLOListElement | null = null;
 let count: HTMLElement | null = null;
 
+// One index serves every tree. Keep one entry per route: the reader's
+// own language where a translation exists, the default text otherwise.
+function forLanguage(all: readonly Entry[], language: string): Entry[] {
+  const chosen = new Map<string, Entry>();
+  for (const entry of all) {
+    if (entry.language === language) {
+      chosen.set(entry.route, entry);
+    }
+  }
+  for (const entry of all) {
+    if (!chosen.has(entry.route)) {
+      chosen.set(entry.route, entry);
+    }
+  }
+  return [...chosen.values()];
+}
+
 async function loadEntries(): Promise<Entry[]> {
   if (entries === null) {
     try {
       const response = await fetch(INDEX_URL);
       const parsed: unknown = await response.json();
-      entries = Array.isArray(parsed) ? (parsed as Entry[]) : [];
+      const all = Array.isArray(parsed) ? (parsed as Entry[]) : [];
+      entries = forLanguage(all, document.documentElement.lang);
     } catch {
       entries = [];
     }

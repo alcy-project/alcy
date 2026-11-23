@@ -673,28 +673,23 @@ i32 run(i32 argc, char** argv) {
     return 1;
   }
 
-  // The search index covers the English trees once; the module that
-  // reads it resolves a route into the reader's own tree.
+  // The index carries one entry per source language per route. The
+  // reader keeps the entry for its own tree, falling back to the
+  // default text where no translation exists.
   std::string search_json;
   search_json.reserve(static_cast<usize>(64) * 1024);
   search_json += "[\n";
   std::vector<ssg::DocSource> indexed;
   for (const std::vector<ssg::DocSource>* sources :
        {&guide_pages, &spec_pages, &tools_pages}) {
-    for (const ssg::DocSource& source : *sources) {
-      // The guide has one source per language per route; indexing them
-      // all would publish duplicate hits under the same route. Spec and
-      // tools sources carry no language and are indexed once as before.
-      if (source.language.empty() ||
-          source.language == context.catalog.default_language) {
-        indexed.push_back(source);
-      }
-    }
+    indexed.insert(indexed.end(), sources->begin(), sources->end());
   }
   for (usize index = 0; index < indexed.size(); index++) {
     const ssg::DocSource& source = indexed[index];
     search_json +=
         "  {\n    \"route\": \"" + json_escape(source.path) + "\",\n";
+    search_json +=
+        "    \"language\": \"" + json_escape(source.language) + "\",\n";
     search_json += "    \"title\": \"" + json_escape(source.title) + "\",\n";
     const std::vector<ssg::GuideSection> sections =
         ssg::sections_of(source.blocks);
