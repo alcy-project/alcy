@@ -38,7 +38,12 @@ constexpr MeasurementPolicy REQUEST = {
     .warmup = 3,
     .samples = 0,
     .min_duration_ns = 1000ull * 1000 * 1000,
-    .min_batch_ns = 50000,
+    // A request itself is tens of microseconds to a millisecond, while
+    // the analysis it needs is rebuilt before every sample. A 50us
+    // target keeps the batch at one, so collecting a second of measured
+    // time asks for hundreds of full analyses and the smoke never ends.
+    // Batch until one sample is long enough to time instead.
+    .min_batch_ns = 50ull * 1000 * 1000,
 };
 
 // The edited text: the generated source with one more function at the
