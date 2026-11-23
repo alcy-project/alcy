@@ -91,15 +91,15 @@ std::optional<SemanticTokenType> literal_type(lexer::TokenKind kind) {
 // The kinds the checker attached to names, addressable by the span a
 // name occupies, the end of a path, or the name itself.
 struct SymbolKinds {
-  std::unordered_map<u64, SemanticTokenType> by_span;
-  std::unordered_map<u64, u8> modifiers;
-  std::unordered_map<u32, SemanticTokenType> by_path_end;
+  std::unordered_map<FullSpanKey, SemanticTokenType, FullSpanKeyHash> by_span;
+  std::unordered_map<FullSpanKey, u8, FullSpanKeyHash> modifiers;
+  std::unordered_map<u64, SemanticTokenType> by_path_end;
   std::unordered_map<std::string_view, SemanticTokenType> by_name;
 };
 
 void add_span(SymbolKinds& kinds, diag::Span span, SemanticTokenType type) {
   if (span.length != 0) {
-    kinds.by_span.emplace(span_key(span), type);
+    kinds.by_span.emplace(FullSpanKey{span.file, span_key(span)}, type);
   }
 }
 
@@ -111,7 +111,7 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
     if (span.file != root || span.length == 0) {
       return;
     }
-    u8& bits = kinds.modifiers[span_key(span)];
+    u8& bits = kinds.modifiers[FullSpanKey{span.file, span_key(span)}];
     bits |= static_cast<u8>(1u << static_cast<u8>(TokenModifier::Declaration));
     if (is_readonly) {
       bits |= static_cast<u8>(1u << static_cast<u8>(TokenModifier::ReadOnly));
@@ -197,27 +197,32 @@ void collect(const DocumentAnalysis& analysis, SymbolKinds& kinds) {
       if (reference.site.file != root) {
         continue;
       }
-      const auto declared = kinds.by_span.find(span_key(reference.declaration));
+      const auto declared = kinds.by_span.find(FullSpanKey{
+          reference.declaration.file, span_key(reference.declaration)});
       const SemanticTokenType type = declared == kinds.by_span.end()
                                          ? SemanticTokenType::Variable
                                          : declared->second;
       add_span(kinds, reference.declaration, SemanticTokenType::Variable);
       add_span(kinds, reference.site, type);
-      kinds.by_path_end.emplace(reference.site.offset + reference.site.length,
-                                type);
+      const u64 path_end =
+          (static_cast<u64>(reference.site.file) << 32) |
+          static_cast<u64>(reference.site.offset + reference.site.length);
+      kinds.by_path_end.emplace(path_end, type);
     }
   }
 }
 
 std::optional<SemanticTokenType> classify_identifier(const SymbolKinds& kinds,
                                                      std::string_view source,
+                                                     source::FileId file,
                                                      diag::Span span) {
-  const u64 key = span_key(span);
-  const auto exact = kinds.by_span.find(key);
+  const auto exact = kinds.by_span.find(FullSpanKey{file, span_key(span)});
   if (exact != kinds.by_span.end()) {
     return exact->second;
   }
-  const auto path = kinds.by_path_end.find(span.offset + span.length);
+  const u64 path_end = (static_cast<u64>(file) << 32) |
+                       static_cast<u64>(span.offset + span.length);
+  const auto path = kinds.by_path_end.find(path_end);
   if (path != kinds.by_path_end.end()) {
     return path->second;
   }
@@ -266,7 +271,8 @@ std::vector<u32> semantic_tokens_in(const Document& document,
   // A token cannot cross a line on the wire, so a block comment or a
   // multi-line string is emitted one line at a time.
   const auto emit_span = [&](diag::Span span, SemanticTokenType type) {
-    const auto mod = kinds.modifiers.find(span_key(span));
+    const auto mod =
+        kinds.modifiers.find(FullSpanKey{span.file, span_key(span)});
     const u8 modifier_bits = mod == kinds.modifiers.end() ? 0 : mod->second;
     const usize end =
         std::min(static_cast<usize>(span.offset) + span.length, range_end);
@@ -295,6 +301,7 @@ std::vector<u32> semantic_tokens_in(const Document& document,
       continue;
     }
     diag::Span span;
+    span.file = analysis.root();
     span.offset = lexeme.offset;
     span.length = lexeme.length;
     if (lexeme.kind == cst::Lexeme::Kind::Comment) {
@@ -306,7 +313,7 @@ std::vector<u32> semantic_tokens_in(const Document& document,
     }
     if (lexeme.token == lexer::TokenKind::Ident) {
       const std::optional<SemanticTokenType> type =
-          classify_identifier(kinds, source, span);
+          classify_identifier(kinds, source, span.file, span);
       if (type.has_value()) {
         emit_span(span, *type);
       }
