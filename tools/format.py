@@ -3,6 +3,8 @@
 # Copyright 2026 The Alcy Project Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import concurrent.futures
+import os
 import shutil
 import subprocess
 import sys
@@ -40,7 +42,12 @@ def gn_files_outside_sources() -> list[str]:
     return files
 
 
-def create_commands(target_dirs: list[Path], dry_run: bool) -> list[list[str]]:
+MAX_JOBS = 8
+
+
+def create_commands(
+    target_dirs: list[Path], dry_run: bool, jobs: int = 1
+) -> list[list[str]]:
     commands: list[list[str]] = []
     files: list[str] = []
     gn_files: list[str] = []
@@ -71,7 +78,13 @@ def create_commands(target_dirs: list[Path], dry_run: bool) -> list[list[str]]:
             # `--dry-run` alone reports style drift but exits 0; only
             # `--Werror` makes the report a failure.
             base_command += ["--dry-run", "--Werror"]
-        commands.append(base_command + files)
+        # clang-format walks files one at a time and is the whole cost of
+        # this check. Its arguments are disjoint, so split them across
+        # processes; format_files runs the chunks together and prints
+        # their reports in file order.
+        chunk_size = max(1, (len(files) + jobs - 1) // jobs)
+        for at in range(0, len(files), chunk_size):
+            commands.append(base_command + files[at : at + chunk_size])
     if len(gn_files) > 0:
         # print("target gn files:", *gn_files, sep="\n  ")
         base_command = ["gn", "format"]
@@ -151,17 +164,20 @@ def format_files(dry_run: bool, timings: bool = False) -> int:
 
     # The rule fixes come before clang-format, so the final pass
     # normalizes whatever they rewrote.
-    commands = tool_commands(dry_run) + create_commands(target_dirs, dry_run)
+    jobs = min(MAX_JOBS, os.cpu_count() or 1)
+    commands = tool_commands(dry_run) + create_commands(target_dirs, dry_run, jobs)
+
     # Every command's exit code is the check; a discarded one lets both
     # clang-format drift and a license that would be applied pass. The
     # output is captured so the check's answer is its own summary, and a
-    # failure's diagnostics print where they can be read.
-    for cmd in commands:
-        proc = subprocess.run(cmd, cwd=project_root_dir, capture_output=True, text=True)
-        mark(command_label(cmd))
+    # failure's diagnostics print where they can be read. The rule fixes
+    # have to finish before clang-format sees what they wrote, so only
+    # the chunks of one command run together.
+    def report(cmd: list[str], proc: subprocess.CompletedProcess) -> None:
+        nonlocal ok
         if proc.returncode != 0:
             ok = False
-            print(f"format: failed: {' '.join(cmd)}")
+            print(f"format: failed: {command_label(cmd)}")
             if proc.stdout:
                 print(proc.stdout, end="")
             if proc.stderr:
@@ -169,8 +185,43 @@ def format_files(dry_run: bool, timings: bool = False) -> int:
         elif not dry_run and proc.stdout:
             # A fix that changed something names it; a fix that changed
             # nothing is the silence the summary carries.
-            print(f"--- {' '.join(cmd)}")
+            print(f"--- {command_label(cmd)}")
             print(proc.stdout, end="")
+
+    def run_all(group: list[list[str]]) -> list[subprocess.CompletedProcess]:
+        if len(group) == 1:
+            return [
+                subprocess.run(
+                    group[0], cwd=project_root_dir, capture_output=True, text=True
+                )
+            ]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(group)) as pool:
+            return list(
+                pool.map(
+                    lambda cmd: subprocess.run(
+                        cmd, cwd=project_root_dir, capture_output=True, text=True
+                    ),
+                    group,
+                )
+            )
+
+    at = 0
+    while at < len(commands):
+        if commands[at][0] == "clang-format":
+            group = []
+            while at < len(commands) and commands[at][0] == "clang-format":
+                group.append(commands[at])
+                at += 1
+            results = run_all(group)
+            mark("clang-format")
+            for cmd, proc in zip(group, results, strict=True):
+                report(cmd, proc)
+        else:
+            cmd = commands[at]
+            at += 1
+            proc = run_all([cmd])[0]
+            mark(command_label(cmd))
+            report(cmd, proc)
 
     if len(commands) == 0:
         print("None of the files were formatted")
