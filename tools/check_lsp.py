@@ -30,6 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from utils import timing
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -1052,8 +1053,11 @@ if __name__ == "__main__":
 
     def run() -> int:
         code = main()
+        timing.mark("smoke")
         if code != 0:
             return code
-        return package_session(alcy_binary(BUILD_SUBDIR))
+        code = package_session(alcy_binary(BUILD_SUBDIR))
+        timing.mark("package")
+        return code
 
     sys.exit(run_with_timings(run))

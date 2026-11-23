@@ -37,6 +37,7 @@ import time
 import tomllib
 from pathlib import Path
 
+from utils import timing
 from utils.paths import project_root_dir
 
 SCHEMA_VERSION = 1
@@ -839,17 +840,21 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+    timing.mark("setup")
     if args.command == "compare":
-        return compare(Path(args.before), Path(args.after))
-    if args.command == "smoke":
-        return run_smoke(args.build_subdir)
-    if args.command == "reconcile":
+        code = compare(Path(args.before), Path(args.after))
+    elif args.command == "smoke":
+        code = run_smoke(args.build_subdir)
+    elif args.command == "reconcile":
         mode = args.build_mode or infer_build_mode(args.build_subdir)
-        return run_reconcile(args.build_subdir, mode, args.tolerance)
-    if args.command == "micro":
+        code = run_reconcile(args.build_subdir, mode, args.tolerance)
+    elif args.command == "micro":
         mode = args.build_mode or infer_build_mode(args.build_subdir)
-        return run_micro(args.build_subdir, mode, args.output, args.cases)
-    return run_process(args)
+        code = run_micro(args.build_subdir, mode, args.output, args.cases)
+    else:
+        code = run_process(args)
+    timing.mark(args.command)
+    return code
 
 
 if __name__ == "__main__":

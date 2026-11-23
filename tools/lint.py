@@ -13,6 +13,7 @@ from pathlib import Path
 import format
 import gn_check
 import header_license
+from utils import timing
 from utils.command import run_commands_in_parallel
 from utils.paths import (
     excluded_source_dirs,
@@ -253,12 +254,14 @@ def lint_files(
     )
     if ret != 0:
         return -1
+    timing.mark("gn gen")
 
     failed = False
     build_dir = out_dir / build_subdir
     ret = subprocess.run(["ninja", "-C", build_dir, "setup_llvm"]).returncode
     if ret != 0:
         return -2
+    timing.mark("setup_llvm")
 
     target_dirs = []
     for d in project_source_dirs:
@@ -288,6 +291,7 @@ def lint_files(
             if ret != 0:
                 failed = True
 
+    timing.mark("whole tree")
     files, comp_files, header_files = target_files(target_dirs)
     if changed_set is not None:
         files = [f for f in files if f in changed_set]
@@ -310,6 +314,7 @@ def lint_files(
         if share > 0 and not comp_files and not header_files:
             print("lint: this shard has no files")
             return 0
+    timing.mark("collect files")
     enumerated = len(files) + len(comp_files) + len(header_files)
     # The tidy is the run's long stretch; its size is worth naming before
     # the silence starts.
@@ -340,9 +345,11 @@ def lint_files(
     )
     if not run_commands_in_parallel(commands, verbose=verbose):
         failed = True
+    timing.mark("clang-tidy")
 
     if fix or fix_errors:
         format.format_files(dry_run=False)
+        timing.mark("fix format")
 
     # A lint that lints nothing is not a pass: a source directory that no
     # longer exists leaves every check silently unapplied, which is exactly

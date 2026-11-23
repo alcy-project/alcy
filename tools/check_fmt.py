@@ -32,6 +32,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from utils import timing
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -125,8 +126,11 @@ def main() -> int:
         print("no sources found under " + ", ".join(SOURCE_ROOTS))
         return 1
 
+    timing.mark("setup")
+
     # The layout check: the tree as it stands is what fmt would write.
     needs_formatting = unformatted(alcy, corpus)
+    timing.mark("layout")
 
     # The property sweep: format every file once, then ask --check of
     # the copies (idempotence) and the compiler of both sides (the
@@ -160,6 +164,7 @@ def main() -> int:
         mirror = Path(tmp)
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             formatted = list(pool.map(swept, corpus))
+        timing.mark("sweep")
         for path, text in zip(corpus, formatted, strict=True):
             copy = mirror / path.relative_to(project_root_dir)
             copy.parent.mkdir(parents=True, exist_ok=True)
@@ -168,8 +173,10 @@ def main() -> int:
                 print(f"formatted {path.relative_to(project_root_dir)}")
         copies = [mirror / path.relative_to(project_root_dir) for path in corpus]
         moved = unformatted(alcy, copies)
+        timing.mark("idempotence")
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             verdicts = list(pool.map(checked, corpus, copies, formatted))
+        timing.mark("verdict")
         for path, pair in zip(corpus, verdicts, strict=True):
             if pair is None:
                 continue

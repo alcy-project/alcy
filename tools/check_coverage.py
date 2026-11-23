@@ -44,6 +44,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from utils import timing
 from utils.paths import project_root_dir
 
 REPO_ROOT = project_root_dir
@@ -341,6 +342,7 @@ def main() -> int:
     if args.build_only:
         if build() != 0:
             sys.exit("build failed")
+        timing.mark("build")
         return 0
 
     if shutil.which("llvm-profdata") is None or shutil.which("llvm-cov") is None:
@@ -348,8 +350,10 @@ def main() -> int:
 
     if not args.no_build and build() != 0:
         sys.exit("build failed")
+    timing.mark("build")
 
     current = measure(args.verbose)
+    timing.mark("measure")
     if args.update:
         write_baseline(current)
         return 0

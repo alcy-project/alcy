@@ -14,6 +14,8 @@ import re
 import sys
 from pathlib import Path
 
+from utils import timing
+
 TYPES = (
     "feat",
     "fix",
@@ -115,12 +117,16 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.self_test:
-        return self_test()
+        code = self_test()
+        timing.mark("self-test")
+        return code
     if not args.message:
         parser.error("give the commit message file, or --self-test")
 
     text = Path(args.message).read_text(encoding="utf-8", errors="replace")
+    timing.mark("read")
     problems = check(text)
+    timing.mark("check")
     if not problems:
         return 0
     for problem in problems:

@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 
+from utils import timing
 from utils.paths import project_root_dir
 
 
@@ -46,6 +47,7 @@ def main():
     if bun is None:
         print("bun is not on PATH; needed to run the playground smoke")
         return 1
+    timing.mark("setup")
 
     smoke = project_root_dir / "src" / "playground" / "js" / "smoke.mjs"
     proc = subprocess.run(
@@ -56,6 +58,7 @@ def main():
         cwd=project_root_dir,
         timeout=300,
     )
+    timing.mark("smoke")
     if proc.returncode != 0:
         print(f"playground smoke failed (exit {proc.returncode}):")
         print(proc.stdout + proc.stderr)

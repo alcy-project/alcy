@@ -20,6 +20,7 @@ specification behind a rule, and the deferred list points at the plan for the re
 import re
 import sys
 
+from utils import timing
 from utils.paths import project_root_dir
 
 SPEC_DIR = project_root_dir / "docs" / "spec"
@@ -57,6 +58,7 @@ def main() -> int:
                     continue
                 print(f"{relative}:{number}: {description}: {match.group(0)}")
                 findings += 1
+    timing.mark("scan")
     if findings:
         print(
             f"the specification names the implementation in {findings} place(s); "

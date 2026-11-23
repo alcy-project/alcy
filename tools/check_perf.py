@@ -42,6 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import perf  # noqa: E402
+from utils import timing  # noqa: E402
 
 REPO_ROOT = perf.REPO_ROOT
 GATE_DIR = REPO_ROOT / "out" / "check-perf"
@@ -249,8 +250,11 @@ def main() -> int:
 
     allows = load_allows()
     corpora = generate_corpora(GATE_DIR / "corpora")
+    timing.mark("corpora")
     head_binary = build_tree(REPO_ROOT)
+    timing.mark("build head")
     base_binary = prepare_base(base_ref, args.keep_base)
+    timing.mark("build base")
 
     # (row label, corpus, command), in the order the report reads.
     rows = []
@@ -264,6 +268,7 @@ def main() -> int:
         before = measure(base_binary, corpus, command, args.reps)
         after = measure(head_binary, corpus, command, args.reps)
         measured[(label, command)] = (before, after)
+    timing.mark("measure")
 
     # A suspect is measured again before it fails: a count that does
     # not reproduce was a glitched counter, not a regression.
@@ -281,6 +286,7 @@ def main() -> int:
         after = measure(head_binary, corpus, command, args.reps)
         held = measured[(label, command)]
         measured[(label, command)] = (min(before, held[0]), min(after, held[1]))
+    timing.mark("recheck")
 
     print()
     header = f"{'row':32} {'base':>15} {'head':>15} {'delta':>9}  status"

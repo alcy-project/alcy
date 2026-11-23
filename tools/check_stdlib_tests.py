@@ -33,7 +33,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from utils import log
+from utils import log, timing
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -194,7 +194,9 @@ def main():
             sys.exit("no such package: " + ", ".join(sorted(missing)))
 
     jobs = args.jobs or min(8, os.cpu_count() or 1)
+    timing.mark("setup")
     results = run_packages(alcy, selected, jobs)
+    timing.mark("run")
 
     logger = log.Logger(args.verbose)
     total = 0

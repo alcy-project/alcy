@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from cases.runner import build_result, discover
-from utils import log
+from utils import log, timing
 from utils.paths import project_root_dir
 
 
@@ -105,7 +105,9 @@ def main() -> int:
         )
     jobs = args.jobs or min(os.cpu_count() or 2, 8)
     label = ",".join(root.name for root in roots)
+    timing.mark("setup")
     result = build_result(alcy, selected, steps, args.mode, jobs, label, args.backend)
+    timing.mark("run")
     if result.notes:
         print("\n".join(result.notes))
     logger = log.Logger(args.verbose)

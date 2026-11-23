@@ -39,6 +39,7 @@ import tempfile
 from functools import partial
 from pathlib import Path
 
+from utils import timing
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -1319,10 +1320,12 @@ def main():
     fixed = []
     total = 0
     jobs = min(os.cpu_count() or 2, 8)
+    timing.mark("setup")
     with tempfile.TemporaryDirectory(prefix="alcy_borrow_sweep_") as tmp:
         workdir = Path(tmp)
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             ran = list(pool.map(partial(run_case, alcy, workdir), CASES))
+        timing.mark("sweep")
         for case, (got, reason) in zip(CASES, ran, strict=True):
             total += 1
             group, name, expect, known, _ = case

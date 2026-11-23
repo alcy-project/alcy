@@ -24,7 +24,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from utils import log
+from utils import log, timing
 from utils.env import run_environment
 from utils.paths import project_root_dir
 
@@ -110,6 +110,7 @@ def main() -> int:
 
     case_dirs = collect_cases()
     jobs = args.jobs or min(os.cpu_count() or 2, 8)
+    timing.mark("setup")
 
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
@@ -130,6 +131,7 @@ def main() -> int:
                     rejected += 1
                 else:
                     packages.append(path)
+        timing.mark("emit")
 
         # One driver process reads every package, so the census is one
         # verdict rather than one per case. The driver's census lines run
@@ -145,6 +147,7 @@ def main() -> int:
             errors="replace",
             env=run_environment(),
         )
+        timing.mark("census")
         if proc.returncode != 0:
             if proc.stderr:
                 print(proc.stderr, end="")

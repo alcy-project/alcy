@@ -34,6 +34,7 @@ import sys
 import tomllib
 from pathlib import Path
 
+from utils import timing
 from utils.paths import project_root_dir
 
 GRAMMAR_DIR = project_root_dir / "treesitter"
@@ -293,12 +294,17 @@ def main() -> int:
     if not args.differential:
         args.grammar = True
 
+    timing.mark("setup")
     sample = project_root_dir / "samples" / "primes" / "main.al"
     checks = [check_version(cli)]
+    timing.mark("version")
     if args.grammar:
         checks.append(check_generated())
+        timing.mark("generated")
         checks.append(check_corpus())
+        timing.mark("corpus")
         checks.append(check_queries(sample))
+        timing.mark("queries")
 
     if args.differential:
         alcy = project_root_dir / "out" / args.build_subdir / "alcy"
@@ -312,6 +318,7 @@ def main() -> int:
             )
             return 1
         checks.append(check_differential(alcy))
+        timing.mark("differential")
 
     return 0 if all(checks) else 1
 
