@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -80,6 +81,10 @@ struct PipelineContext {
   // `_start` instead of `main`, and the link skips the C runtime
   //. Set from the goal package's toolchain file.
   bool freestanding = false;
+  // The host SDK or import library the embedded linker chose, when the
+  // link used it. Reported by --json as the one host input a native
+  // executable build depends on; empty for every other artifact.
+  std::string link_sdk_path;
   // Whether this run builds tests: `alcy test` sets it before parsing, so
   // a `#[when(testing)]` gate keeps its items and every other command
   // drops them. Invocation mode, not a property of the target.

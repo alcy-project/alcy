@@ -81,6 +81,7 @@ interleaved with it:
   "outcome": "built",
   "args": ["--release"],
   "output_path": "out/app",
+  "link_sdk": null,
   "subject": "package app (1 target)",
   "cache": "miss",
   "diagnostics": [],
@@ -152,12 +153,16 @@ reads it: [`build`](build.md), [`lint`](lint.md).
 
 Where a build setting comes from is part of the command's contract:
 
-- Environment variables do not decide what a command accepts or
-  selects. Flags, profiles, targets, backends, and output kinds come
-  from the command line or the project's files. The locale is never
-  consulted: `--lang` chooses the message language. `NO_COLOR` is the
-  one environment input and it only turns color off; no exit code
-  depends on it.
+- Build settings come from the command line or the project's files.
+  `--lang` chooses the message language and `NO_COLOR` only turns color
+  off; neither changes an artifact. One known exception remains: a
+  native executable's link resolves the host's C runtime and SDK,
+  which are discovered from the host installation and its platform
+  SDK environment variables. Only that artifact is not reproducible
+  across machines. Objects, assembly, IR, and wasm modules do not link
+  and are; the host path a native link resolved is reported as
+  `link_sdk` in `--json` - an SDK or kit directory on macOS and
+  Windows, the startup-file directory on Linux.
 - `compile` reads no configuration file. It never consults `alcy.toml`
   or `.alcy/`, so one command line is the whole story. Its profile and
   toolchain choices are built in or given as flags.

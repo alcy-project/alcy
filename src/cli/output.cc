@@ -680,6 +680,12 @@ std::string render_json(const Envelope& envelope, i18n::Language language) {
   } else {
     append_json_string(out, envelope.output_path);
   }
+  out += R"(,"link_sdk":)";
+  if (envelope.link_sdk_path.empty()) {
+    out += "null";
+  } else {
+    append_json_string(out, envelope.link_sdk_path);
+  }
   out += R"(,"subject":)";
   const std::string subject = result_subject(envelope, language);
   if (subject.empty()) {

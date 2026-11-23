@@ -141,6 +141,7 @@ ResultCode run_compile(const CliConfig& config,
     if (res.is_err() || ctx.bag.has_errors()) {
       return failed;
     }
+    envelope.link_sdk_path = ctx.link_sdk_path;
     envelope.status = Status::Ok;
     envelope.outcome = Outcome::Compiled;
     record_output(std::move(res).unwrap(), envelope);
@@ -153,6 +154,7 @@ ResultCode run_compile(const CliConfig& config,
   if (res.is_err() || ctx.bag.has_errors()) {
     return failed;
   }
+  envelope.link_sdk_path = ctx.link_sdk_path;
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Compiled;
   record_output(std::move(res).unwrap(), envelope);

@@ -427,6 +427,26 @@ const std::optional<MacStartup>& macos_startup_inputs() {
 
 }  // namespace
 
+std::string embedded_lld_startup_path() {
+#if BUILD_FLAG(IS_OS_WIN)
+  if (const std::optional<WindowsStartup>& found = windows_startup_inputs();
+      found.has_value()) {
+    return as_string(found->kernel32);
+  }
+#elif BUILD_FLAG(IS_OS_MAC)
+  if (const std::optional<MacStartup>& found = macos_startup_inputs();
+      found.has_value()) {
+    return as_string(found->sysroot);
+  }
+#else
+  if (const std::optional<Startup>& found = startup_inputs();
+      found.has_value()) {
+    return as_string(found->crt1.parent());
+  }
+#endif
+  return std::string();
+}
+
 bool embedded_lld_ready(bool freestanding) {
 #if BUILD_FLAG(IS_OS_WIN)
   // A Windows program references nothing but the kernel, freestanding or

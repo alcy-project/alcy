@@ -87,6 +87,10 @@ struct Envelope {
   // What the command wrote, as the caller would name it. Empty when it
   // wrote nothing, which is what a check does.
   std::string output_path;
+  // The host SDK or import library a native executable link resolved.
+  // Empty for an artifact that never linked and for a link another
+  // driver performed. This is the one host input the JSON reports.
+  std::string link_sdk_path;
   // What a scaffold created, and where. Only set by `new` and `init`.
   std::string package_name;
   std::string package_dir;

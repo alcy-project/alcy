@@ -206,6 +206,7 @@ i32 run_test(const CliConfig& config,
         out.block(label + '\n');
       }
     }
+    envelope.link_sdk_path = ctx.link_sdk_path;
     envelope.status = Status::Ok;
     envelope.outcome = Outcome::Listed;
     return result_code(ResultCode::Success);
@@ -241,6 +242,7 @@ i32 run_test(const CliConfig& config,
   envelope.test_ended_early = done.ended_early;
   envelope.output_bytes = done.output_bytes;
   if (!runs) {
+    envelope.link_sdk_path = ctx.link_sdk_path;
     envelope.status = Status::Ok;
     envelope.outcome = Outcome::Built;
     envelope.output_path = done.exe_path;
@@ -263,6 +265,7 @@ i32 run_test(const CliConfig& config,
   if (!done.ok()) {
     return result_code(ResultCode::TestFailed);
   }
+  envelope.link_sdk_path = ctx.link_sdk_path;
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Tested;
   return result_code(ResultCode::Success);

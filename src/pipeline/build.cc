@@ -726,6 +726,7 @@ base::Result<void, diag::Reported> link_executable(
       ready = embedded_lld_ready(link.freestanding);
     }
     if (ready) {
+      ctx.link_sdk_path = embedded_lld_startup_path();
       return link_with_embedded_lld(ctx, link, object_paths, exe_path);
     }
   }

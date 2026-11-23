@@ -23,6 +23,12 @@ struct PipelineContext;
 // what every build did before the linker was embedded.
 bool embedded_lld_ready(bool freestanding);
 
+// The host library or SDK directory the embedded linker resolved for a
+// native hosted link. Empty on a target with no such discovery, on a
+// freestanding link, and when the configured driver did the link. This
+// is the value --json reports so a build's host inputs are visible.
+[[nodiscard]] std::string embedded_lld_startup_path();
+
 // Links the objects into `exe_path` with the embedded lld, passing the
 // configured driver arguments through. Only called when
 // `embedded_lld_ready()` is true.

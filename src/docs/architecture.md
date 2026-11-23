@@ -612,6 +612,11 @@ filesystem or writing an output artifact.
   environment variables, ambient locale, wall-clock time, or user identity.
   Every such input must be explicit (CLI flags, manifest, or source) so
   that identical inputs reproduce identical results on any machine.
+  Known exception: a native executable's link resolves the host's C
+  runtime and SDK from the host installation and its SDK environment
+  variables, so that artifact alone is not yet reproducible across
+  machines; every output kind that does not link is. The resolved path
+  is reported by `--json` as `link_sdk`.
   Diagnostic messages render in English by default; other languages are
   selected only through an explicit `--lang` flag (never ambient
   locale), and each message is identified by its own catalog key rather

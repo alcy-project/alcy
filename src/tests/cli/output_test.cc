@@ -101,6 +101,16 @@ TEST_CASE("Result lines start their subject in one column") {
   CHECK(checked_line.starts_with("Checked"));
 }
 
+TEST_CASE("The JSON reports the SDK a native link resolved") {
+  Envelope envelope = built("out/app", 1, 1);
+  const std::string plain = render_json(envelope, i18n::Language::EnUs);
+  CHECK(plain.find("\"link_sdk\":null") != std::string::npos);
+
+  envelope.link_sdk_path = "/SDKs/MacOSX.sdk";
+  const std::string linked = render_json(envelope, i18n::Language::EnUs);
+  CHECK(linked.find("\"link_sdk\":\"/SDKs/MacOSX.sdk\"") != std::string::npos);
+}
+
 TEST_CASE("A build that read a manifest reports what it built") {
   Envelope package = built("out/proj/app", 1, 1);
   package.built_name = "proj";

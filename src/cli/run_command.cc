@@ -139,6 +139,7 @@ i32 run_run(const CliConfig& config,
   }
   // A run that reaches the program still carries the warnings the bag
   // collected along the way, so the report is not a success-only line.
+  envelope.link_sdk_path = ctx.link_sdk_path;
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Ran;
   return std::move(result).unwrap().exit_code;

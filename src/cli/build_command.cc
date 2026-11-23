@@ -77,6 +77,7 @@ ResultCode run_build(const CliConfig& config,
     if (res.is_err() || ctx.bag.has_errors()) {
       return failed;
     }
+    envelope.link_sdk_path = ctx.link_sdk_path;
     envelope.status = Status::Ok;
     envelope.outcome = Outcome::Built;
     record_output(std::move(res).unwrap(), envelope);
@@ -155,6 +156,7 @@ ResultCode run_build(const CliConfig& config,
   envelope.built_name = std::move(built.name);
   envelope.built_suite = built.suite;
   envelope.built_count = built.count;
+  envelope.link_sdk_path = ctx.link_sdk_path;
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Built;
   envelope.cache = ctx.cache_outcome;
