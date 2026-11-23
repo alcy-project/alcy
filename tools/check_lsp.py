@@ -680,7 +680,7 @@ def main() -> int:
     if not isinstance(signature, dict):
         return fail(f"signatureHelp answered nothing: {signature!r}")
     signature_label = (signature.get("signatures") or [{}])[0].get("label")
-    if signature_label != "fn id(i32) -> i32":
+    if signature_label != "fn id(x: i32) -> i32":
         return fail(f"signatureHelp gave the wrong label: {signature_label!r}")
 
     completion = by_id.get(10, {}).get("result")
