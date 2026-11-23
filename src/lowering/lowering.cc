@@ -3322,8 +3322,9 @@ void Lowerer::compact_instrs() {
   builder = ir::StorageBuilder(std::move(state));
 }
 
-base::Result<ir::VerifiedStorage, ir::VerificationError> Lowerer::finish() && {
-  return std::move(builder).build();
+base::Result<ir::VerifiedStorage, ir::VerificationError> Lowerer::finish(
+    ir::StorageState* failed_out) && {
+  return std::move(builder).build(failed_out);
 }
 namespace {
 
@@ -3775,13 +3776,19 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     debug::Profiler* profiler,
     const source::SourceManager* sources,
     usize max_functions,
-    std::optional<analyzer::CheckedPackage>* checked_out) {
+    std::optional<analyzer::CheckedPackage>* checked_out,
+    ir::StorageState* recovered_types_out) {
   Lowerer lowerer(std::move(package), width, ast, strings, bag, max_functions,
                   profiler);
   lowerer.sources = sources;
   const auto give_back = [&] {
     if (checked_out != nullptr) {
       checked_out->emplace(std::move(lowerer.pkg));
+    }
+  };
+  const auto keep_types = [&](ir::StorageState state) {
+    if (recovered_types_out != nullptr) {
+      *recovered_types_out = std::move(state);
     }
   };
   // A dependency with no sources carries its generic bodies in the
@@ -3795,11 +3802,13 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     }
   }
   if (lowerer.failed) {
+    keep_types(std::move(lowerer.builder).take_state());
     give_back();
     return base::make_err(diag::Reported{});
   }
   lowerer.run();
   if (lowerer.failed) {
+    keep_types(std::move(lowerer.builder).take_state());
     give_back();
     return base::make_err(diag::Reported{});
   }
@@ -3848,7 +3857,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
         CompRun{entry.idx, entry.name, record.args, record.result});
   }
   base::Result<ir::VerifiedStorage, ir::VerificationError> built =
-      std::move(lowerer).finish();
+      std::move(lowerer).finish(recovered_types_out);
   if (built.is_err()) {
     const ir::VerificationError error = std::move(built).unwrap_err();
     const u32 index = bag.emit<i18n::Key::LowerIrVerificationFailed>(
@@ -3903,6 +3912,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     const u32 index = bag.emit<i18n::Key::LowerCompEngineMismatch>(
         DiagCode::Internal, diag::Span{}, run.name);
     (void)index;
+    keep_types(std::move(lowered.storage).unwrap().take_state());
     give_back();
     return base::make_err(diag::Reported{});
   }

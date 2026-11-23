@@ -1754,7 +1754,8 @@ class Lowerer {
   void run();
 
   ir::BlockParamIdxRange pending_block_params_;
-  base::Result<ir::VerifiedStorage, ir::VerificationError> finish() &&;
+  base::Result<ir::VerifiedStorage, ir::VerificationError> finish(
+      ir::StorageState* failed_out = nullptr) &&;
 };
 
 }  // namespace lowering

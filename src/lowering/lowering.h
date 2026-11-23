@@ -126,7 +126,9 @@ inline constexpr usize MAX_FUNCTIONS = 65536;
 // `types` moved into the builder that seeded lowering; on exits after
 // lowering ran, `not_movable` and `needs_drop` moved into the result.
 // The remaining checked metadata needs no second analysis or clone.
-// Set on every exit.
+// Set on every exit. `recovered_types_out`, when given, receives the
+// unverified type tables on a failed exit so a type-only reader can
+// still answer; it is untouched on success.
 base::Result<LoweredPackage, diag::Reported> lower_package(
     analyzer::CheckedPackage package,
     ir::PointerWidth width,
@@ -136,6 +138,7 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     debug::Profiler* profiler = nullptr,
     const source::SourceManager* sources = nullptr,
     usize max_functions = MAX_FUNCTIONS,
-    std::optional<analyzer::CheckedPackage>* checked_out = nullptr);
+    std::optional<analyzer::CheckedPackage>* checked_out = nullptr,
+    ir::StorageState* recovered_types_out = nullptr);
 
 }  // namespace lowering
