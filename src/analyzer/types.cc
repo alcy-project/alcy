@@ -1440,9 +1440,8 @@ bool Checker::is_known_intrinsic(std::string_view name) {
          name == "wrapping_mul" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
          name == "write_file_all_bytes" || name == "arg_count" ||
-         name == "arg" || name == "environ_exists" ||
-         name == "environ_value" || name == "char_from_u8_unchecked" ||
-         name == "rune_from_u32_unchecked";
+         name == "arg" || name == "environ_exists" || name == "environ_value" ||
+         name == "char_from_u8_unchecked" || name == "rune_from_u32_unchecked";
 }
 
 // The intrinsics whose preconditions the compiler cannot check
@@ -1458,9 +1457,8 @@ static bool intrinsic_is_unsafe(std::string_view name) {
          name == "sys_read" || name == "file_size" ||
          name == "read_file_into" || name == "write_file_all" ||
          name == "write_file_all_bytes" || name == "arg_count" ||
-         name == "arg" || name == "environ_exists" ||
-         name == "environ_value" || name == "char_from_u8_unchecked" ||
-         name == "rune_from_u32_unchecked";
+         name == "arg" || name == "environ_exists" || name == "environ_value" ||
+         name == "char_from_u8_unchecked" || name == "rune_from_u32_unchecked";
 }
 
 // What may cross a C boundary in the first ABI slice :
