@@ -17,6 +17,7 @@
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profile_scope.h"
+#include "ir/storage.h"
 #include "lowering/lowering.h"
 #include "pipeline/embedded_std.h"
 #include "pipeline/parse.h"
@@ -40,7 +41,8 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
     PipelineContext& ctx,
     analyzer::CheckedPackage package,
     std::optional<analyzer::CheckedPackage>* checked_out,
-    std::optional<lowering::LoweredPackage>* lowered_out) {
+    std::optional<lowering::LoweredPackage>* lowered_out,
+    ir::StorageState* recovered_types_out) {
   // Staged prelude modules check with the package but read as
   // toolchain sources, so reported counts exclude them.
   const usize staged = package.tree.staged_modules;
@@ -53,9 +55,10 @@ base::Result<FrontendOutput, diag::Reported> finish_frontend(
   const u32 errors_before = ctx.bag.error_count();
   base::Result<lowering::LoweredPackage, diag::Reported> lowered = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "lower", "frontend");
-    return lowering::lower_package(
-        std::move(package), ctx.target.width, ctx.ast, ctx.strings, ctx.bag,
-        ctx.profiler, &ctx.sources, lowering::MAX_FUNCTIONS, checked_out);
+    return lowering::lower_package(std::move(package), ctx.target.width,
+                                   ctx.ast, ctx.strings, ctx.bag, ctx.profiler,
+                                   &ctx.sources, lowering::MAX_FUNCTIONS,
+                                   checked_out, recovered_types_out);
   }();
   if (lowered.is_err()) {
     return base::make_err(diag::Reported{});

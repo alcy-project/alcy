@@ -10,6 +10,7 @@
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "ir/storage.h"
 #include "lowering/lowering.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -50,11 +51,15 @@ base::Result<analyzer::CheckedPackage, diag::Reported> analyze_tree(
 // receives the lowered package on every exit after lowering succeeds,
 // including a borrow-check failure: its type tables stay valid for a
 // reader that only asks types, not for borrow correctness.
+// `recovered_types_out` receives unverified type tables when lowering
+// fails before a lowered package exists; a type-only reader can use
+// them instead of declining the document.
 base::Result<FrontendOutput, diag::Reported> finish_frontend(
     PipelineContext& ctx,
     analyzer::CheckedPackage package,
     std::optional<analyzer::CheckedPackage>* checked_out = nullptr,
-    std::optional<lowering::LoweredPackage>* lowered_out = nullptr);
+    std::optional<lowering::LoweredPackage>* lowered_out = nullptr,
+    ir::StorageState* recovered_types_out = nullptr);
 
 // Whether the root module declares the free `main` a binary links.
 // Check and build both reject a binary target without one.
