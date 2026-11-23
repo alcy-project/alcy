@@ -148,6 +148,26 @@ TEST_CASE("A documented struct offers its doc comment in completion") {
   }
 }
 
+TEST_CASE("Completion offers a method after a receiver dot") {
+  const Document document(
+      "file:///main.al", "alcy", 1,
+      "fn main() -> i32 {\n  mut n := 10\n"
+      "  for i in (2..=n).step_by(2) {\n    n = n + i\n  }\n"
+      "  ret n\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{2, 26});
+  const text::JsonValue* item = find_item(list, "step_by");
+  CHECK(item != nullptr);
+  if (item != nullptr) {
+    const text::JsonValue* edit = item->find("textEdit");
+    CHECK(edit != nullptr);
+    if (edit != nullptr) {
+      CHECK(edit->find("newText")->as_string() == "step_by");
+    }
+  }
+}
+
 TEST_CASE("Qualified variant completion replaces the whole path") {
   const Document document("file:///main.al", "alcy", 1,
                           "enum Option {\n  Some,\n  None,\n}\n"

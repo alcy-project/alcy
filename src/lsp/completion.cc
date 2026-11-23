@@ -136,6 +136,16 @@ VisibleNames visible_names(const DocumentAnalysis& analysis) {
       names[root_module][info.name].push_back(info.name);
     }
   }
+  // Methods are named at a receiver, not through a module scope. Offer
+  // their declared names from every module so a call like `r.step_by(2)`
+  // can complete even when the defining module is not imported by name.
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
+      if (method.item.is_valid()) {
+        names[module.module][method.name].push_back(method.name);
+      }
+    }
+  }
   return names;
 }
 
@@ -278,6 +288,9 @@ text::JsonValue completion_items(const Document& document,
   const std::string_view name_prefix = qualifier_end == std::string_view::npos
                                            ? prefix
                                            : prefix.substr(qualifier_end + 2);
+  const usize prefix_start = offset - prefix.size();
+  const bool after_dot =
+      prefix_start > 0 && document.text()[prefix_start - 1] == '.';
 
   std::vector<Item> items;
   if (analysis.ok()) {
@@ -305,6 +318,11 @@ text::JsonValue completion_items(const Document& document,
   text::JsonValue array = text::JsonValue::make_array();
   for (const Item& item : items) {
     if (!starts_with(item.label, name_prefix)) {
+      continue;
+    }
+    // After a receiver's dot only methods can apply; everywhere else a
+    // method name is not in scope. Keep both lists tight.
+    if (after_dot != (item.kind == CompletionItemKind::Method)) {
       continue;
     }
     text::JsonValue entry = text::JsonValue::make_object();
