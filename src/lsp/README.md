@@ -84,7 +84,8 @@ of the compiler, so it owns no analysis of its own:
 - `symbols.{h,cc}` builds the outline from the compiler's parse: the
   AST's items, with struct fields, enum variants, and impl or spec
   members as children.
-- `typing.{h,cc}` renders a decided type the way source spells it.
+- Decided types are rendered by `ir/type_display.cc`; hover, completion,
+  inlay hints, and layout ask it for the source spelling.
 - `diagnostics.{h,cc}` answers one document's pull report and the
   workspace report over every open document, and skips an unchanged
   buffer the client already holds.
