@@ -3,6 +3,7 @@
 
 #include "pipeline/call_sites.h"
 
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -21,23 +22,37 @@ namespace pipeline {
 std::vector<str::StringPoolId> render_instr_sites(
     PipelineContext& ctx,
     std::span<const diag::Span> spans) {
-  std::vector<str::StringPoolId> out;
-  out.reserve(spans.size());
-  for (const diag::Span span : spans) {
-    if (span.file == source::UNKNOWN_FILE) {
-      out.push_back(str::EMPTY_STRING_ID);
-      continue;
+  std::vector<str::StringPoolId> out(spans.size(), str::EMPTY_STRING_ID);
+  // The spans in source order, so one LineCursor answers them in a pass:
+  // a position lookup walks from where the last one stopped, and a
+  // per-span walk from the top of the text was the bulk of a checked
+  // build's site rendering - tens of thousands of spans, each re-counted
+  // every line of the file from byte zero.
+  std::vector<u32> order;
+  order.reserve(spans.size());
+  for (u32 at = 0; at < spans.size(); ++at) {
+    if (spans[at].file != source::UNKNOWN_FILE) {
+      order.push_back(at);
     }
+  }
+  std::sort(order.begin(), order.end(), [&](u32 left, u32 right) {
+    if (spans[left].file != spans[right].file) {
+      return spans[left].file < spans[right].file;
+    }
+    return spans[left].offset < spans[right].offset;
+  });
+  diag::LineCursor cursor;
+  for (const u32 at : order) {
+    const diag::Span& span = spans[at];
     const std::optional<std::string_view> name = ctx.sources.name(span.file);
     const std::optional<std::string_view> bytes = ctx.sources.bytes(span.file);
     if (!name.has_value() || !bytes.has_value()) {
-      out.push_back(str::EMPTY_STRING_ID);
       continue;
     }
-    const diag::LineColumn at = diag::line_column(*bytes, span.offset);
+    const diag::LineColumn position = cursor.locate(*bytes, span.offset);
     const std::optional<str::StringPoolId> id = ctx.strings.intern_copied(
-        fmt::format("{}:{}:{}", *name, at.line, at.column));
-    out.push_back(id.value_or(str::EMPTY_STRING_ID));
+        fmt::format("{}:{}:{}", *name, position.line, position.column));
+    out[at] = id.value_or(str::EMPTY_STRING_ID);
   }
   return out;
 }
