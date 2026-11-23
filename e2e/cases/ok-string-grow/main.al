@@ -4,7 +4,7 @@ fn main() -> i32 {
   mut s := String::new()
   mut i := 0
   while i < 300 {
-    s.push_str("a")
+    s.push_char('a')
     i = i + 1
   }
   if s.len_bytes() != 300 {

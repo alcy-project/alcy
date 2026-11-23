@@ -28,7 +28,7 @@ fn main() -> i32 {
   if !(s == t) {
     ret 5
   }
-  t.push_str("!")
+  t.push_char('!')
   if s == t {
     ret 6
   }
@@ -40,11 +40,11 @@ fn main() -> i32 {
   // turn: `Vec<String>` needs `String`'s implementation.
   mut sa := Vec::<String>::new()
   mut e := String::new()
-  e.push_str("x")
+  e.push_char('x')
   sa.push(e)
   mut sb := Vec::<String>::new()
   mut f := String::new()
-  f.push_str("x")
+  f.push_char('x')
   sb.push(f)
   if !(sa == sb) {
     ret 8
