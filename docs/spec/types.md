@@ -251,13 +251,13 @@
   boundaries, panicking when either fails. `byte_slice` offers the
   same boundary check as `Option<str>` to callers that would rather
   handle a refusal.
-- `String` in `text` owns valid UTF-8 bytes. Its checked mutators
-  `push_ascii`, `insert_str`, `truncate`, `byte_slice`, `split_at`,
-  and `from_slice` answer `Option` when a byte or boundary would
-  break the invariant; there is no public append of an arbitrary
-  byte. The raw writers `spare_capacity_mut`, `set_len`, and
-  `as_mut_slice` are `unsafe` and require the bytes below the
-  recorded length to spell scalars.
+- `String` in `text` owns valid UTF-8 bytes. Its position-taking and
+  byte-taking mutators `insert_str`, `truncate`, `byte_slice`,
+  `split_at`, and `from_slice` answer `Option` when a byte or boundary
+  would break the invariant. Appending a `char` needs no check, and
+  there is no public append of an arbitrary byte. The raw writers
+  `spare_capacity_mut`, `set_len`, and `as_mut_slice` are `unsafe` and
+  require the bytes below the recorded length to spell scalars.
 - `char` is an ASCII scalar (0x00-0x7F) with a one-byte layout, and
   `rune` is a Unicode scalar value with a four-byte layout. Both are
   compiler-known types. A character literal names a `char` when its

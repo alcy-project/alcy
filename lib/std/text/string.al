@@ -142,14 +142,10 @@ impl String {
     self.len = self.len + 1
   }
 
-  // Appends one ASCII byte, or refuses it when the byte could not
-  // start or continue a scalar on its own.
-  pub fn push_ascii(mut self: &mut Self, b: u8) -> Option<()> {
-    if b >= 0x80u8 {
-      ret Option::None
-    }
-    self.push_byte_unchecked(b)
-    ret Option::Some(())
+  // Appends one ASCII scalar. A `char` is already known to be ASCII,
+  // so the byte it holds can be written without another check.
+  pub fn push_char(mut self: &mut Self, c: char) {
+    self.push_byte_unchecked(c as u8)
   }
 
   // Appends every byte of `s`, growing once for the whole run.

@@ -86,11 +86,13 @@
   byte read and only bounds-checks.
 - `char` comes only from a checked decode, and the byte-level validity
   predicate lives on `[u8]`.
-- `String`'s checked surface answers `Option` when an operation could
-  break the UTF-8 invariant: `from_slice`, `byte_slice`, `split_at`,
-  `insert_str`, `truncate`, and `push_ascii`. `spare_capacity_mut`,
-  `set_len`, and `as_mut_slice` are `unsafe`; their precondition is
-  that the bytes below the recorded length spell scalars.
+- `String`'s position-taking and byte-taking operations answer `Option`
+  when an operation could break the UTF-8 invariant: `from_slice`,
+  `byte_slice`, `split_at`, `insert_str`, and `truncate`. Appending a
+  `char` needs no check, because the scalar is already known to be
+  ASCII. `spare_capacity_mut`, `set_len`, and `as_mut_slice` are
+  `unsafe`; their precondition is that the bytes below the recorded
+  length spell scalars.
 
 ## Item attributes
 

@@ -13,7 +13,7 @@ fn main() -> i32 {
         if c < 0x61u8 || c > 0x7au8 {
           break
         }
-        _ := text.push_ascii(c)
+        text.push_char(char_from_u8(c).or_panic_with_message("an ASCII letter"))
         i = i + 1
       }
       idents.push(text)
