@@ -14,6 +14,13 @@ fn main() -> i32 {
   if size_of::<[Empty; 8]>() != 0 {
     ret 3
   }
+  // A zero-sized element has no stride, so a runtime index still names
+  // the same address as a constant one.
+  zsta := [(); 4]
+  at := 3 as usize
+  if &zsta[0] != &zsta[at] {
+    ret 7
+  }
   mut v := Vec::<()>::new()
   v.push(())
   v.push(())

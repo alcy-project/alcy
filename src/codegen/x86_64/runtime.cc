@@ -449,6 +449,16 @@ Body build_alloc_fs(RoData& rodata) {
     mov(MOp::Mov, Operand{Reg::Rax}, Operand{Imm{60}});
     body.insts.push_back(make_inst(MOp::Syscall, 8));
   };
+  // A zero-byte request needs no mapping. Its answer is the alignment
+  // itself: non-null, aligned, and never dereferenced.
+  const u32 maps = body.label_count++;
+  mov(MOp::Cmp, Operand{Reg::Rdi}, Operand{Imm{0}});
+  body.insts.push_back(make_jcc(Cond::Ne, Operand{Label{maps}}));
+  mov(MOp::Mov, Operand{Reg::Rax}, Operand{Reg::Rsi});
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  MInst has_bytes = make_inst(MOp::Nop, 8);
+  has_bytes.label = maps;
+  body.insts.push_back(has_bytes);
   // length = (size + 16 + 4095) & ~4095, refusing a size whose header
   // and alignment would wrap the word.
   const u32 no_wrap = body.label_count++;
@@ -494,6 +504,16 @@ Body build_alloc_fs(RoData& rodata) {
 
 Body build_dealloc_fs() {
   Body body;
+  // A zero-byte request answered with a dangling address owns no
+  // mapping; its `dealloc` is a no-op.
+  const u32 frees = body.label_count++;
+  body.insts.push_back(
+      make_inst(MOp::Cmp, 8, Operand{Reg::Rsi}, Operand{Imm{0}}));
+  body.insts.push_back(make_jcc(Cond::Ne, Operand{Label{frees}}));
+  body.insts.push_back(make_inst(MOp::Ret, 8));
+  MInst has_bytes = make_inst(MOp::Nop, 8);
+  has_bytes.label = frees;
+  body.insts.push_back(has_bytes);
   body.insts.push_back(
       make_inst(MOp::Sub, 8, Operand{Reg::Rdi}, Operand{Imm{16}}));
   body.insts.push_back(make_inst(

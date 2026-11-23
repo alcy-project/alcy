@@ -1269,10 +1269,12 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
               storage_.layout_of(shape.element, width_);
           if (const Imm* imm = std::get_if<Imm>(&*step); imm != nullptr) {
             offset += static_cast<i64>(element.size) * imm->value;
-          } else {
+          } else if (element.size != 0) {
             index = *step;
             scale = element.size;
           }
+          // A zero-sized element has no stride: every index names the
+          // same address, so no scaled index is encoded at all.
           ty = shape.element;
           continue;
         }
@@ -1309,7 +1311,7 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
         const ir::TypeLayout scalar = storage_.layout_of(*ty, width_);
         if (const Imm* imm = std::get_if<Imm>(&*step); imm != nullptr) {
           offset += static_cast<i64>(scalar.size) * imm->value;
-        } else {
+        } else if (scalar.size != 0) {
           index = *step;
           scale = scalar.size;
         }
@@ -1364,13 +1366,14 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
       std::optional<RegRef> scaled;
       if (const Imm* imm = std::get_if<Imm>(&*index); imm != nullptr) {
         disp = imm->value * static_cast<i64>(layout.size);
-      } else {
+      } else if (layout.size != 0) {
         scaled = regref_of(index);
         if (!scaled.has_value()) {
           (void)unsupported(span, "an element offset the backend cannot spell");
           return false;
         }
       }
+      // A zero-sized element strides by zero; the address is the base.
       push(make_inst(
           MOp::Lea, 8, dst_reg_operand(instr),
           Operand{Mem{.base = VReg{vreg_of(operand_at(instr, 0).as_register(),
