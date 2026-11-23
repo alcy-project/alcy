@@ -47,7 +47,7 @@ fn main() -> i32 {
   }
   mut j := 0
   while j < 5 {
-    s.push_str("a")
+    s.push_char('a')
     j = j + 1
   }
   if s.capacity() != 5 as usize {

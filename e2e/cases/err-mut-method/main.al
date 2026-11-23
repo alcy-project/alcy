@@ -2,6 +2,6 @@
 // the value.
 fn main() -> i32 {
   s := String::new()
-  s.push_str("A")
+  s.push_char('A')
   ret 0
 }
