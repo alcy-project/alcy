@@ -154,6 +154,18 @@ std::string internal_symbol(const ir::FunctionIdx index) {
 
 namespace {
 
+// A register index rides on a memory operand when there is one; a
+// constant index is folded into the displacement by the caller.
+std::optional<RegRef> regref_of(const std::optional<Operand>& operand) {
+  if (!operand.has_value()) {
+    return std::nullopt;
+  }
+  if (const VReg* vreg = std::get_if<VReg>(&*operand); vreg != nullptr) {
+    return RegRef{*vreg};
+  }
+  return std::nullopt;
+}
+
 class Selector {
  public:
   explicit Selector(const SelectContext& context)
@@ -190,6 +202,20 @@ class Selector {
   [[nodiscard]] bool emit(const ir::Instruction& instr,
                           const diag::Span span,
                           const overlay::Entry* check);
+
+  // The opcode groups `emit` dispatches to. An optional answer says
+  // whether the group handled the opcode; no group means a scalar
+  // instruction, whose lowering reads and writes one value.
+  [[nodiscard]] std::optional<bool> emit_values(const ir::Instruction& instr,
+                                                diag::Span span);
+  [[nodiscard]] std::optional<bool> emit_control(const ir::Instruction& instr,
+                                                 diag::Span span);
+  [[nodiscard]] std::optional<bool> emit_memory(const ir::Instruction& instr,
+                                                diag::Span span);
+  [[nodiscard]] bool emit_arithmetic(const ir::Instruction& instr,
+                                     diag::Span span,
+                                     const overlay::Entry* check);
+  [[nodiscard]] bool emit_cast(const ir::Instruction& instr, diag::Span span);
 
   // The runtime panic call a failed check ends the process through.
   void emit_panic_call(std::string_view message, str::StringPoolId site);
@@ -757,47 +783,43 @@ bool Selector::emit(const ir::Instruction& instr,
   current_op_ = instr.op;
   using O = ir::Opcode;
   const ir::OperandIdxRange ops = instr.operands;
-  const usize count = ops.size();
-  const auto at = [&](const u32 index) { return operand_at(instr, index); };
 
-  const bool has_dst = instr.dst.is_valid();
-  const auto dst_type_of = [&]() { return dst_type(instr); };
-  const auto dst_tag = [&]() { return dst_value_tag(instr); };
-  const auto dst_operand = [&]() { return dst_reg_operand(instr); };
-  // `fresh_label()` is the class helper; no local shadow is needed.
-  // A checked operation that overflows ends the process through the
-  // runtime panic; the carry flag serves unsigned arithmetic and the
-  // overflow flag signed arithmetic.
-  const auto check_overflow = [&](const Cond condition) {
-    const u32 ok = fresh_label();
-    const Cond no_overflow = condition == Cond::O   ? Cond::No
-                             : condition == Cond::B ? Cond::Ae
-                                                    : condition;
-    push(make_jcc(no_overflow, Operand{Label{ok}}));
-    emit_panic_call("integer overflow",
-                    check != nullptr ? check->site : str::EMPTY_STRING_ID);
-    MInst join = make_inst(MOp::Nop, 8);
-    join.label = ok;
-    push(join);
-  };
   if (check != nullptr && check->kind != overlay::Check::None &&
       check->kind != overlay::Check::Overflow &&
       !emit_check_prelude(instr, span, *check)) {
     return false;
   }
 
-  // The register an index rides on, when it is one. A constant index is
-  // the caller's to fold into a displacement.
-  const auto regref_of =
-      [](const std::optional<Operand>& operand) -> std::optional<RegRef> {
-    if (!operand.has_value()) {
-      return std::nullopt;
-    }
-    if (const VReg* vreg = std::get_if<VReg>(&*operand); vreg != nullptr) {
-      return RegRef{*vreg};
-    }
-    return std::nullopt;
-  };
+  if (std::optional<bool> done = emit_values(instr, span); done.has_value()) {
+    return *done;
+  }
+  if (std::optional<bool> done = emit_control(instr, span); done.has_value()) {
+    return *done;
+  }
+  if (std::optional<bool> done = emit_memory(instr, span); done.has_value()) {
+    return *done;
+  }
+  switch (instr.op) {
+    case O::EnumTagLoad:
+    case O::EnumTagSet:
+    case O::EnumFieldAddr: return emit_enum(instr, ops, span);
+    case O::Call: return emit_call(instr, ops, span);
+    case O::AtomicLoad:
+    case O::AtomicStore:
+    case O::AtomicRmw:
+    case O::AtomicCompareExchange:
+    case O::Fence: (void)unsupported(span, "an atomic operation"); return false;
+    default: break;
+  }
+  return emit_arithmetic(instr, span, check);
+}
+
+std::optional<bool> Selector::emit_values(const ir::Instruction& instr,
+                                          const diag::Span span) {
+  using O = ir::Opcode;
+  const ir::OperandIdxRange ops = instr.operands;
+  const usize count = ops.size();
+  const bool has_dst = instr.dst.is_valid();
 
   switch (instr.op) {
     case O::Noop:
@@ -814,19 +836,31 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!has_dst) {
         return true;
       }
-      const std::optional<Operand> src = operand_of(at(0));
+      const std::optional<Operand> src = operand_of(operand_at(instr, 0));
       if (!src.has_value()) {
         (void)unsupported(span, "a move of a value the backend cannot spell");
         return false;
       }
-      push(make_inst(MOp::Mov, 8, dst_operand(), *src));
+      push(make_inst(MOp::Mov, 8, dst_reg_operand(instr), *src));
       return true;
     }
+    default: return std::nullopt;
+  }
+}
+
+std::optional<bool> Selector::emit_control(const ir::Instruction& instr,
+                                           const diag::Span span) {
+  using O = ir::Opcode;
+  const ir::OperandIdxRange ops = instr.operands;
+  const usize count = ops.size();
+  const bool has_dst = instr.dst.is_valid();
+
+  switch (instr.op) {
     case O::Ret: {
       // An explicit `()` comes back as an operand of a type that holds
       // no bytes, and the function still returns void.
       if (!ops.empty()) {
-        const ir::Operand& value = at(0);
+        const ir::Operand& value = operand_at(instr, 0);
         const ir::TypeTag tag = storage_.types()[value.type].tag;
         if (tag != ir::TypeTag::Void && tag != ir::TypeTag::Never) {
           const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
@@ -906,13 +940,14 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::Br: {
       // operands[0] = target block, operands[1..] = its parameters.
       DCHECK(!ops.empty());
-      const ir::BlockIdx target = at(0).as_block();
+      const ir::BlockIdx target = operand_at(instr, 0).as_block();
       const ir::Block& target_block = storage_.blocks()[target];
       DCHECK(count == 1 + target_block.block_params.size());
       for (u32 param = 0; param + 1 < count; ++param) {
         const ir::BlockParam& block_param =
             storage_.block_params()[target_block.block_params[param]];
-        const std::optional<Operand> value = scalar_of(at(param + 1), span);
+        const std::optional<Operand> value =
+            scalar_of(operand_at(instr, param + 1), span);
         if (!value.has_value()) {
           return false;
         }
@@ -927,11 +962,12 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::CondBr: {
       // operands = [cond, true_block, false_block].
       DCHECK(count == 3);
-      const ir::BlockIdx taken = at(1).as_block();
-      const ir::BlockIdx other = at(2).as_block();
-      if (at(0).is<ir::ImmutableIdx>()) {
+      const ir::BlockIdx taken = operand_at(instr, 1).as_block();
+      const ir::BlockIdx other = operand_at(instr, 2).as_block();
+      if (operand_at(instr, 0).is<ir::ImmutableIdx>()) {
         // A constant condition is the branch it names.
-        const ir::Immutable& imm = storage_.immutables()[at(0).as_immutable()];
+        const ir::Immutable& imm =
+            storage_.immutables()[operand_at(instr, 0).as_immutable()];
         const ir::TypeTag tag = storage_.types()[imm.type.idx].tag;
         const bool truth = is_integer(tag) && imm.as_u64_integer(tag) != 0;
         push(make_inst(
@@ -939,13 +975,14 @@ bool Selector::emit(const ir::Instruction& instr,
             Operand{Label{body_.block_labels[(truth ? taken : other).idx]}}));
         return true;
       }
-      const std::optional<Operand> cond = scalar_of(at(0), span);
+      const std::optional<Operand> cond = scalar_of(operand_at(instr, 0), span);
       if (!cond.has_value()) {
         return false;
       }
-      push(make_inst(MOp::Cmp,
-                     compute_width_of(storage_.types()[at(0).type].tag), *cond,
-                     Operand{Imm{0}}));
+      push(make_inst(
+          MOp::Cmp,
+          compute_width_of(storage_.types()[operand_at(instr, 0).type].tag),
+          *cond, Operand{Imm{0}}));
       push(make_jcc(Cond::Ne, Operand{Label{body_.block_labels[taken.idx]}}));
       push(make_inst(MOp::Jmp, 8,
                      Operand{Label{body_.block_labels[other.idx]}}));
@@ -954,13 +991,16 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::Switch: {
       // operands = [value, default, (case_imm, case_block)...].
       DCHECK(count >= 2);
-      const std::optional<Operand> value = scalar_of(at(0), span);
+      const std::optional<Operand> value =
+          scalar_of(operand_at(instr, 0), span);
       if (!value.has_value()) {
         return false;
       }
-      const u8 width = compute_width_of(storage_.types()[at(0).type].tag);
+      const u8 width =
+          compute_width_of(storage_.types()[operand_at(instr, 0).type].tag);
       for (u32 idx = 2; idx + 1 < count; idx += 2) {
-        const std::optional<Operand> case_value = operand_of(at(idx));
+        const std::optional<Operand> case_value =
+            operand_of(operand_at(instr, idx));
         if (!case_value.has_value()) {
           (void)unsupported(span, "a case the backend cannot spell");
           return false;
@@ -977,10 +1017,13 @@ bool Selector::emit(const ir::Instruction& instr,
         push(make_inst(MOp::Cmp, width, *value, right));
         push(make_jcc(
             Cond::E,
-            Operand{Label{body_.block_labels[at(idx + 1).as_block().idx]}}));
+            Operand{Label{body_.block_labels
+                              [operand_at(instr, idx + 1).as_block().idx]}}));
       }
-      push(make_inst(MOp::Jmp, 8,
-                     Operand{Label{body_.block_labels[at(1).as_block().idx]}}));
+      push(make_inst(
+          MOp::Jmp, 8,
+          Operand{
+              Label{body_.block_labels[operand_at(instr, 1).as_block().idx]}}));
       return true;
     }
     case O::Select: {
@@ -989,21 +1032,22 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!has_dst) {
         return true;
       }
-      const std::optional<Operand> cond = scalar_of(at(0), span);
-      const std::optional<Operand> yes = scalar_of(at(1), span);
-      const std::optional<Operand> no = scalar_of(at(2), span);
+      const std::optional<Operand> cond = scalar_of(operand_at(instr, 0), span);
+      const std::optional<Operand> yes = scalar_of(operand_at(instr, 1), span);
+      const std::optional<Operand> no = scalar_of(operand_at(instr, 2), span);
       if (!cond.has_value() || !yes.has_value() || !no.has_value()) {
         return false;
       }
       const u32 taken = fresh_label();
       const u32 done = fresh_label();
-      push(make_inst(MOp::Cmp,
-                     compute_width_of(storage_.types()[at(0).type].tag), *cond,
-                     Operand{Imm{0}}));
+      push(make_inst(
+          MOp::Cmp,
+          compute_width_of(storage_.types()[operand_at(instr, 0).type].tag),
+          *cond, Operand{Imm{0}}));
       push(make_jcc(Cond::Ne, Operand{Label{taken}}));
-      push(make_inst(MOp::Mov, 8, dst_operand(), *no));
+      push(make_inst(MOp::Mov, 8, dst_reg_operand(instr), *no));
       push(make_inst(MOp::Jmp, 8, Operand{Label{done}}));
-      MInst yes_move = make_inst(MOp::Mov, 8, dst_operand(), *yes);
+      MInst yes_move = make_inst(MOp::Mov, 8, dst_reg_operand(instr), *yes);
       yes_move.label = taken;
       push(yes_move);
       // The join, which carries no code of its own.
@@ -1012,6 +1056,18 @@ bool Selector::emit(const ir::Instruction& instr,
       push(join);
       return true;
     }
+    default: return std::nullopt;
+  }
+}
+
+std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
+                                          const diag::Span span) {
+  using O = ir::Opcode;
+  const ir::OperandIdxRange ops = instr.operands;
+  const usize count = ops.size();
+  const bool has_dst = instr.dst.is_valid();
+
+  switch (instr.op) {
     case O::TypeSizeOf:
     case O::TypeAlignOf: {
       if (!has_dst) {
@@ -1019,7 +1075,7 @@ bool Selector::emit(const ir::Instruction& instr,
       }
       const ir::TypeLayout layout = storage_.layout_of(instr.measure, width_);
       push(make_inst(
-          MOp::Mov, 8, dst_operand(),
+          MOp::Mov, 8, dst_reg_operand(instr),
           Operand{Imm{static_cast<i64>(
               instr.op == O::TypeSizeOf ? layout.size : layout.align)}}));
       return true;
@@ -1032,23 +1088,23 @@ bool Selector::emit(const ir::Instruction& instr,
       // carries a slot whose size is a value.
       u64 elements = 1;
       if (!ops.empty()) {
-        if (!at(0).is<ir::ImmutableIdx>()) {
+        if (!operand_at(instr, 0).is<ir::ImmutableIdx>()) {
           (void)unsupported(span, "a slot whose size is a value");
           return false;
         }
         const ir::Immutable& count_imm =
-            storage_.immutables()[at(0).as_immutable()];
+            storage_.immutables()[operand_at(instr, 0).as_immutable()];
         elements =
             count_imm.as_u64_integer(storage_.types()[count_imm.type.idx].tag);
       }
-      const ir::TypeLayout layout = storage_.layout_of(dst_type_of(), width_);
+      const ir::TypeLayout layout = storage_.layout_of(dst_type(instr), width_);
       body_.allocas.push_back(Body::Alloca{
-          .vreg = vreg_of(instr.dst, dst_type_of()),
+          .vreg = vreg_of(instr.dst, dst_type(instr)),
           .size = layout.size * elements,
           .align = layout.align,
       });
       note_alloca(instr.dst);
-      note_pointee(instr.dst, dst_type_of());
+      note_pointee(instr.dst, dst_type(instr));
       return true;
     }
     case O::Load: {
@@ -1056,23 +1112,24 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!has_dst) {
         return true;
       }
-      if (!at(0).is<ir::RegisterIdx>()) {
+      if (!operand_at(instr, 0).is<ir::RegisterIdx>()) {
         (void)unsupported(span, "a memory operand the backend cannot spell");
         return false;
       }
-      const ir::TypeTag loaded = dst_tag();
+      const ir::TypeTag loaded = dst_value_tag(instr);
       // A value wider than one register crosses as its whole slot. The
       // allocator turns this into the byte copy the destination needs;
       // spelling the halves as separate moves would ask the encoder for
       // a memory-to-memory move x86 does not have.
-      const ir::TypeLayout layout = storage_.layout_of(dst_type_of(), width_);
-      if (passage_of(dst_type_of()) != Passage::Register ||
+      const ir::TypeLayout layout = storage_.layout_of(dst_type(instr), width_);
+      if (passage_of(dst_type(instr)) != Passage::Register ||
           is_aggregate(loaded)) {
-        const u32 vreg = vreg_of(instr.dst, dst_type_of());
+        const u32 vreg = vreg_of(instr.dst, dst_type(instr));
         push(make_inst(
             MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
             Operand{VReg{vreg}},
-            Operand{Mem{.base = VReg{vreg_of(at(0).as_register(), at(0).type)},
+            Operand{Mem{.base = VReg{vreg_of(operand_at(instr, 0).as_register(),
+                                             operand_at(instr, 0).type)},
                         .index = std::nullopt,
                         .scale = 1,
                         .disp = 0}}));
@@ -1080,8 +1137,9 @@ bool Selector::emit(const ir::Instruction& instr,
       }
       push(make_inst(
           MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
-          dst_operand(),
-          Operand{Mem{.base = VReg{vreg_of(at(0).as_register(), at(0).type)},
+          dst_reg_operand(instr),
+          Operand{Mem{.base = VReg{vreg_of(operand_at(instr, 0).as_register(),
+                                           operand_at(instr, 0).type)},
                       .index = std::nullopt,
                       .scale = 1,
                       .disp = 0}}));
@@ -1090,15 +1148,16 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::Store: {
       // operands = [value, ptr].
       DCHECK(count == 2);
-      if (!at(1).is<ir::RegisterIdx>()) {
+      if (!operand_at(instr, 1).is<ir::RegisterIdx>()) {
         (void)unsupported(span, "a memory operand the backend cannot spell");
         return false;
       }
-      const ir::Operand& value = at(0);
+      const ir::Operand& value = operand_at(instr, 0);
       const ir::TypeTag tag = storage_.types()[value.type].tag;
       const ir::TypeLayout layout = storage_.layout_of(value.type, width_);
       if (is_aggregate(tag) || passage_of(value.type) != Passage::Register) {
-        const u32 dst = vreg_of(at(1).as_register(), at(1).type);
+        const u32 dst = vreg_of(operand_at(instr, 1).as_register(),
+                                operand_at(instr, 1).type);
         if (!value.is<ir::RegisterIdx>()) {
           if (tag == ir::TypeTag::Str && value.is<ir::ImmutableIdx>()) {
             const ir::Immutable& imm =
@@ -1139,7 +1198,8 @@ bool Selector::emit(const ir::Instruction& instr,
         return false;
       }
       const Operand dst =
-          Operand{Mem{.base = VReg{vreg_of(at(1).as_register(), at(1).type)},
+          Operand{Mem{.base = VReg{vreg_of(operand_at(instr, 1).as_register(),
+                                           operand_at(instr, 1).type)},
                       .index = std::nullopt,
                       .scale = 1,
                       .disp = 0}};
@@ -1161,11 +1221,11 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!has_dst) {
         return true;
       }
-      if (!at(0).is<ir::RegisterIdx>()) {
+      if (!operand_at(instr, 0).is<ir::RegisterIdx>()) {
         (void)unsupported(span, "a memory operand the backend cannot spell");
         return false;
       }
-      const ir::RegisterIdx base = at(0).as_register();
+      const ir::RegisterIdx base = operand_at(instr, 0).as_register();
       std::optional<ir::TypeIdx> ty = pointee_hint(base);
       if (!ty.has_value()) {
         (void)unsupported(span, "a projection of an untracked pointer");
@@ -1175,7 +1235,7 @@ bool Selector::emit(const ir::Instruction& instr,
       std::optional<Operand> index;
       u64 scale = 1;
       for (u32 idx = 1; idx < count; ++idx) {
-        const std::optional<Operand> step = operand_of(at(idx));
+        const std::optional<Operand> step = operand_of(operand_at(instr, idx));
         if (!step.has_value()) {
           (void)unsupported(span, "a projection the backend cannot spell");
           return false;
@@ -1248,17 +1308,15 @@ bool Selector::emit(const ir::Instruction& instr,
       // width whatever the element is.
       const u32 address =
           vreg_of(instr.dst, ir::primitive_idx(ir::TypeTag::Ptr));
-      push(make_inst(MOp::Lea, 8, Operand{VReg{address}},
-                     Operand{Mem{.base = VReg{vreg_of(base, at(0).type)},
-                                 .index = regref_of(index),
-                                 .scale = static_cast<u8>(scale),
-                                 .disp = static_cast<i32>(offset)}}));
+      push(make_inst(
+          MOp::Lea, 8, Operand{VReg{address}},
+          Operand{Mem{.base = VReg{vreg_of(base, operand_at(instr, 0).type)},
+                      .index = regref_of(index),
+                      .scale = static_cast<u8>(scale),
+                      .disp = static_cast<i32>(offset)}}));
       note_pointee(instr.dst, *ty);
       return true;
     }
-    case O::EnumTagLoad:
-    case O::EnumTagSet:
-    case O::EnumFieldAddr: return emit_enum(instr, ops, span);
     case O::ElemOffset: {
       // operands = [base_ptr, index]; the destination's own type names
       // the element.
@@ -1266,11 +1324,11 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!has_dst) {
         return true;
       }
-      if (!at(0).is<ir::RegisterIdx>()) {
+      if (!operand_at(instr, 0).is<ir::RegisterIdx>()) {
         (void)unsupported(span, "a memory operand the backend cannot spell");
         return false;
       }
-      const ir::TypeTag pointee_tag = dst_tag();
+      const ir::TypeTag pointee_tag = dst_value_tag(instr);
       const bool pointer = pointee_tag == ir::TypeTag::Ref ||
                            pointee_tag == ir::TypeTag::MutRef ||
                            pointee_tag == ir::TypeTag::Ptr ||
@@ -1281,10 +1339,11 @@ bool Selector::emit(const ir::Instruction& instr,
         return false;
       }
       const ir::TypeIdx element =
-          storage_.ref_types()[storage_.types()[dst_type_of().idx].as_ref()]
+          storage_.ref_types()[storage_.types()[dst_type(instr).idx].as_ref()]
               .pointee;
       const ir::TypeLayout layout = storage_.layout_of(element, width_);
-      const std::optional<Operand> index = scalar_of(at(1), span);
+      const std::optional<Operand> index =
+          scalar_of(operand_at(instr, 1), span);
       if (!index.has_value()) {
         return false;
       }
@@ -1302,8 +1361,9 @@ bool Selector::emit(const ir::Instruction& instr,
         }
       }
       push(make_inst(
-          MOp::Lea, 8, dst_operand(),
-          Operand{Mem{.base = VReg{vreg_of(at(0).as_register(), at(0).type)},
+          MOp::Lea, 8, dst_reg_operand(instr),
+          Operand{Mem{.base = VReg{vreg_of(operand_at(instr, 0).as_register(),
+                                           operand_at(instr, 0).type)},
                       .index = scaled,
                       .scale = static_cast<u8>(layout.size),
                       .disp = static_cast<i32>(disp)}}));
@@ -1315,7 +1375,8 @@ bool Selector::emit(const ir::Instruction& instr,
       // the instruction form names.
       DCHECK(count == 3);
       for (const u32 which : {0u, 1u, 2u}) {
-        const std::optional<Operand> side = scalar_of(at(which), span);
+        const std::optional<Operand> side =
+            scalar_of(operand_at(instr, which), span);
         if (!side.has_value()) {
           return false;
         }
@@ -1332,7 +1393,8 @@ bool Selector::emit(const ir::Instruction& instr,
       // operands = [dst, value, len].
       DCHECK(count == 3);
       for (const u32 which : {0u, 1u, 2u}) {
-        const std::optional<Operand> side = scalar_of(at(which), span);
+        const std::optional<Operand> side =
+            scalar_of(operand_at(instr, which), span);
         if (!side.has_value()) {
           return false;
         }
@@ -1351,10 +1413,11 @@ bool Selector::emit(const ir::Instruction& instr,
       if (!has_dst) {
         return true;
       }
-      if (at(0).is<ir::ImmutableIdx>()) {
+      if (operand_at(instr, 0).is<ir::ImmutableIdx>()) {
         // A literal's fields are constants: the bytes live in the data
         // section and the length is the count of them.
-        const ir::Immutable& imm = storage_.immutables()[at(0).as_immutable()];
+        const ir::Immutable& imm =
+            storage_.immutables()[operand_at(instr, 0).as_immutable()];
         const ir::TypeTag tag = storage_.types()[imm.type.idx].tag;
         if (tag != ir::TypeTag::Str) {
           (void)unsupported(span,
@@ -1362,20 +1425,20 @@ bool Selector::emit(const ir::Instruction& instr,
                             "spell");
           return false;
         }
-        if (!at(1).is<ir::ImmutableIdx>()) {
+        if (!operand_at(instr, 1).is<ir::ImmutableIdx>()) {
           (void)unsupported(span, "a dynamic field projection");
           return false;
         }
         const ir::Immutable& index_imm =
-            storage_.immutables()[at(1).as_immutable()];
+            storage_.immutables()[operand_at(instr, 1).as_immutable()];
         const u64 which =
             index_imm.as_u64_integer(storage_.types()[index_imm.type.idx].tag);
         const SymbolRef symbol =
             string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)));
         if (which == 0) {
-          push(make_inst(MOp::Mov, 8, dst_operand(), Operand{symbol}));
+          push(make_inst(MOp::Mov, 8, dst_reg_operand(instr), Operand{symbol}));
         } else {
-          push(make_inst(MOp::Mov, 8, dst_operand(),
+          push(make_inst(MOp::Mov, 8, dst_reg_operand(instr),
                          Operand{Imm{static_cast<i64>(
                              strings_.get(imm.data.str_id_value).size())}}));
         }
@@ -1383,18 +1446,18 @@ bool Selector::emit(const ir::Instruction& instr,
       }
       // A value's field rides in its slot at the offset the layout
       // gives it, which the aggregate's own field walk publishes.
-      if (!at(0).is<ir::RegisterIdx>()) {
+      if (!operand_at(instr, 0).is<ir::RegisterIdx>()) {
         (void)unsupported(span, "a memory operand the backend cannot spell");
         return false;
       }
-      if (!at(1).is<ir::ImmutableIdx>()) {
+      if (!operand_at(instr, 1).is<ir::ImmutableIdx>()) {
         (void)unsupported(span, "a dynamic field projection");
         return false;
       }
-      const ir::RegisterIdx aggregate = at(0).as_register();
-      const ir::TypeIdx aggregate_type = at(0).type;
+      const ir::RegisterIdx aggregate = operand_at(instr, 0).as_register();
+      const ir::TypeIdx aggregate_type = operand_at(instr, 0).type;
       const ir::Immutable& index_imm =
-          storage_.immutables()[at(1).as_immutable()];
+          storage_.immutables()[operand_at(instr, 1).as_immutable()];
       const u64 which =
           index_imm.as_u64_integer(storage_.types()[index_imm.type.idx].tag);
       i64 offset = 0;
@@ -1423,34 +1486,52 @@ bool Selector::emit(const ir::Instruction& instr,
                           "no layout for yet");
         return false;
       }
-      const ir::TypeLayout layout = storage_.layout_of(dst_type_of(), width_);
+      const ir::TypeLayout layout = storage_.layout_of(dst_type(instr), width_);
       // The pair rides in the register's own slot: reading a field is
       // the slot reference, not a dereference of the word it holds.
-      push(make_inst(MOp::Mov,
-                     static_cast<u8>(layout.size > 8 ? 8 : layout.size),
-                     dst_operand(),
-                     Operand{SlotRef{vreg_of(aggregate, at(0).type),
-                                     static_cast<i32>(offset)}}));
+      push(make_inst(
+          MOp::Mov, static_cast<u8>(layout.size > 8 ? 8 : layout.size),
+          dst_reg_operand(instr),
+          Operand{SlotRef{vreg_of(aggregate, operand_at(instr, 0).type),
+                          static_cast<i32>(offset)}}));
       return true;
     }
     case O::InsertValue: {
       (void)unsupported(span, "an aggregate field write");
       return false;
     }
-    case O::Call: return emit_call(instr, ops, span);
-    case O::AtomicLoad:
-    case O::AtomicStore:
-    case O::AtomicRmw:
-    case O::AtomicCompareExchange:
-    case O::Fence: (void)unsupported(span, "an atomic operation"); return false;
-    default: break;
+    default: return std::nullopt;
   }
+}
+
+bool Selector::emit_arithmetic(const ir::Instruction& instr,
+                               const diag::Span span,
+                               const overlay::Entry* check) {
+  using O = ir::Opcode;
+  const ir::OperandIdxRange ops = instr.operands;
+  const usize count = ops.size();
+  const auto at = [&](const u32 index) { return operand_at(instr, index); };
+  // A checked operation that overflows ends the process through the
+  // runtime panic; the carry flag serves unsigned arithmetic and the
+  // overflow flag signed arithmetic.
+  const auto check_overflow = [&](const Cond condition) {
+    const u32 ok = fresh_label();
+    const Cond no_overflow = condition == Cond::O   ? Cond::No
+                             : condition == Cond::B ? Cond::Ae
+                                                    : condition;
+    push(make_jcc(no_overflow, Operand{Label{ok}}));
+    emit_panic_call("integer overflow",
+                    check != nullptr ? check->site : str::EMPTY_STRING_ID);
+    MInst join = make_inst(MOp::Nop, 8);
+    join.label = ok;
+    push(join);
+  };
 
   // Everything left reads one or two scalars and writes one.
   if (!defines_dst(instr)) {
     return true;
   }
-  const u8 compute = compute_width_of(dst_tag());
+  const u8 compute = compute_width_of(dst_value_tag(instr));
   const std::optional<Operand> lhs = scalar_of(at(0), span);
   if (!lhs.has_value()) {
     return false;
@@ -1468,10 +1549,11 @@ bool Selector::emit(const ir::Instruction& instr,
       const bool checked_narrow =
           check != nullptr && check->kind == overlay::Check::Overflow &&
           (instr.op == O::IntAdd || instr.op == O::IntSub) &&
-          width_of(dst_tag()) < 4;
-      const u8 alu_width = checked_narrow ? width_of(dst_tag()) : compute;
-      push(make_inst(MOp::Mov, alu_width, dst_operand(), *lhs));
-      const std::optional<Operand> rhs = scalar_of(at(1), span);
+          width_of(dst_value_tag(instr)) < 4;
+      const u8 alu_width =
+          checked_narrow ? width_of(dst_value_tag(instr)) : compute;
+      push(make_inst(MOp::Mov, alu_width, dst_reg_operand(instr), *lhs));
+      const std::optional<Operand> rhs = scalar_of(operand_at(instr, 1), span);
       if (!rhs.has_value()) {
         return false;
       }
@@ -1484,23 +1566,24 @@ bool Selector::emit(const ir::Instruction& instr,
         push(make_inst(MOp::Mov, alu_width, Operand{Reg::Rdx}, right));
         right = Operand{Reg::Rdx};
       }
-      push(make_inst(alu_of(instr.op), alu_width, dst_operand(), right));
+      push(make_inst(alu_of(instr.op), alu_width, dst_reg_operand(instr),
+                     right));
       if ((instr.op == O::IntAdd || instr.op == O::IntSub) &&
           check != nullptr && check->kind == overlay::Check::Overflow) {
-        check_overflow(is_signed(dst_tag()) ? Cond::O : Cond::B);
+        check_overflow(is_signed(dst_value_tag(instr)) ? Cond::O : Cond::B);
       }
       return true;
     }
     case O::IntMul:
     case O::IntMulWrap: {
       DCHECK(count == 2);
-      const std::optional<Operand> rhs = scalar_of(at(1), span);
+      const std::optional<Operand> rhs = scalar_of(operand_at(instr, 1), span);
       if (!rhs.has_value()) {
         return false;
       }
       const bool checked = instr.op == O::IntMul && check != nullptr &&
                            check->kind == overlay::Check::Overflow;
-      if (checked && !is_signed(dst_tag())) {
+      if (checked && !is_signed(dst_value_tag(instr))) {
         // `imul` reports *signed* overflow through its carry flag, which
         // a product that fits unsigned can still trip. The one-operand
         // `mul` sets carry from the high half of an unsigned product.
@@ -1511,19 +1594,21 @@ bool Selector::emit(const ir::Instruction& instr,
         push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, *rhs));
         push(make_inst(MOp::Mov, compute, Operand{Reg::Rax}, *lhs));
         push(make_inst(MOp::Umul, compute, Operand{Reg::Rcx}));
-        push(make_inst(MOp::Mov, compute, dst_operand(), Operand{Reg::Rax}));
+        push(make_inst(MOp::Mov, compute, dst_reg_operand(instr),
+                       Operand{Reg::Rax}));
         check_overflow(Cond::B);
         return true;
       }
-      push(make_inst(MOp::Mov, compute, dst_operand(), *lhs));
+      push(make_inst(MOp::Mov, compute, dst_reg_operand(instr), *lhs));
       if (const Imm* immediate = std::get_if<Imm>(&*rhs);
           immediate != nullptr) {
         // The two-operand form reads a register, so a constant takes one
         // the instruction is free to clobber.
         push(make_inst(MOp::Mov, compute, Operand{Reg::Rcx}, *rhs));
-        push(make_inst(MOp::Imul, compute, dst_operand(), Operand{Reg::Rcx}));
+        push(make_inst(MOp::Imul, compute, dst_reg_operand(instr),
+                       Operand{Reg::Rcx}));
       } else {
-        push(make_inst(MOp::Imul, compute, dst_operand(), *rhs));
+        push(make_inst(MOp::Imul, compute, dst_reg_operand(instr), *rhs));
       }
       if (checked) {
         check_overflow(Cond::O);
@@ -1535,30 +1620,31 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::FMul:
     case O::FDiv: {
       DCHECK(count == 2);
-      const u8 w = width_of(dst_tag());
+      const u8 w = width_of(dst_value_tag(instr));
       const MOp op = instr.op == O::FAdd   ? MOp::Fadd
                      : instr.op == O::FSub ? MOp::Fsub
                      : instr.op == O::FMul ? MOp::Fmul
                                            : MOp::Fdiv;
-      const std::optional<Operand> lhs = scalar_of(at(0), span);
-      const std::optional<Operand> rhs = scalar_of(at(1), span);
+      const std::optional<Operand> lhs = scalar_of(operand_at(instr, 0), span);
+      const std::optional<Operand> rhs = scalar_of(operand_at(instr, 1), span);
       if (!lhs.has_value() || !rhs.has_value()) {
         return false;
       }
-      push(make_inst(op, w, dst_operand(), *lhs, *rhs));
+      push(make_inst(op, w, dst_reg_operand(instr), *lhs, *rhs));
       return true;
     }
     case O::FNeg: {
       DCHECK(count == 1);
-      const u8 w = width_of(dst_tag());
+      const u8 w = width_of(dst_value_tag(instr));
       const u64 sign = w == 4 ? 0x80000000ULL : 0x8000000000000000ULL;
       const std::string mask(reinterpret_cast<const char*>(&sign), w);
       const SymbolRef mask_ref = string_ref(rodata_.intern(mask));
-      const std::optional<Operand> src = scalar_of(at(0), span);
+      const std::optional<Operand> src = scalar_of(operand_at(instr, 0), span);
       if (!src.has_value()) {
         return false;
       }
-      push(make_inst(MOp::Fneg, w, dst_operand(), *src, Operand{mask_ref}));
+      push(make_inst(MOp::Fneg, w, dst_reg_operand(instr), *src,
+                     Operand{mask_ref}));
       return true;
     }
     case O::IntDiv:
@@ -1569,20 +1655,20 @@ bool Selector::emit(const ir::Instruction& instr,
       // The dividend rides in `rax` and its sign in `rdx`, which is what
       // the one-operand form reads them from.
       push(make_inst(MOp::Mov, compute, Operand{Reg::Rax}, *lhs));
-      if (is_signed(dst_tag())) {
+      if (is_signed(dst_value_tag(instr))) {
         push(make_inst(MOp::Cqo, compute));
       } else {
         push(
             make_inst(MOp::Xor, compute, Operand{Reg::Rdx}, Operand{Reg::Rdx}));
       }
-      const std::optional<Operand> rhs = scalar_of(at(1), span);
+      const std::optional<Operand> rhs = scalar_of(operand_at(instr, 1), span);
       if (!rhs.has_value()) {
         return false;
       }
       push(make_inst(instr.op == O::IntDiv || instr.op == O::IntRem ? MOp::Idiv
                                                                     : MOp::Udiv,
                      compute, *rhs));
-      push(make_inst(MOp::Mov, compute, dst_operand(),
+      push(make_inst(MOp::Mov, compute, dst_reg_operand(instr),
                      instr.op == O::IntDiv || instr.op == O::UintDiv
                          ? Operand{Reg::Rax}
                          : Operand{Reg::Rdx}));
@@ -1592,8 +1678,8 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::ArithmeticShiftRight:
     case O::LogicalShiftRight: {
       DCHECK(count == 2);
-      push(make_inst(MOp::Mov, compute, dst_operand(), *lhs));
-      const std::optional<Operand> rhs = scalar_of(at(1), span);
+      push(make_inst(MOp::Mov, compute, dst_reg_operand(instr), *lhs));
+      const std::optional<Operand> rhs = scalar_of(operand_at(instr, 1), span);
       if (!rhs.has_value()) {
         return false;
       }
@@ -1602,22 +1688,23 @@ bool Selector::emit(const ir::Instruction& instr,
       // register a shift reads it from; a constant rides in the
       // instruction.
       if (const Imm* imm = std::get_if<Imm>(&*rhs); imm != nullptr) {
-        push(make_inst(op, compute, dst_operand(), *rhs));
+        push(make_inst(op, compute, dst_reg_operand(instr), *rhs));
       } else {
         push(make_inst(MOp::Mov, 1, Operand{Reg::Rcx}, *rhs));
-        push(make_inst(op, compute, dst_operand(), Operand{Reg::Rcx}));
+        push(make_inst(op, compute, dst_reg_operand(instr), Operand{Reg::Rcx}));
       }
       return true;
     }
     case O::Not: {
       DCHECK(count == 1);
-      push(make_inst(MOp::Mov, compute, dst_operand(), *lhs));
-      if (dst_tag() == ir::TypeTag::I1) {
+      push(make_inst(MOp::Mov, compute, dst_reg_operand(instr), *lhs));
+      if (dst_value_tag(instr) == ir::TypeTag::I1) {
         // A bool's negation is logical, and a bool rides as zero or
         // one, so flipping the one bit is the whole answer.
-        push(make_inst(MOp::Xor, compute, dst_operand(), Operand{Imm{1}}));
+        push(make_inst(MOp::Xor, compute, dst_reg_operand(instr),
+                       Operand{Imm{1}}));
       } else {
-        push(make_inst(MOp::Not, compute, dst_operand()));
+        push(make_inst(MOp::Not, compute, dst_reg_operand(instr)));
       }
       return true;
     }
@@ -1632,7 +1719,7 @@ bool Selector::emit(const ir::Instruction& instr,
     case O::Ge:
     case O::Gt: {
       DCHECK(count == 2);
-      const std::optional<Operand> rhs = scalar_of(at(1), span);
+      const std::optional<Operand> rhs = scalar_of(operand_at(instr, 1), span);
       if (!rhs.has_value()) {
         return false;
       }
@@ -1640,8 +1727,8 @@ bool Selector::emit(const ir::Instruction& instr,
       // condition is then combined with the unordered flag: equality and
       // the ordered relations require an ordered pair, while `!=` holds
       // for a NaN.
-      if (is_float(storage_.types()[at(0).type].tag)) {
-        const u8 w = width_of(storage_.types()[at(0).type].tag);
+      if (is_float(storage_.types()[operand_at(instr, 0).type].tag)) {
+        const u8 w = width_of(storage_.types()[operand_at(instr, 0).type].tag);
         push(make_inst(MOp::Fcom, w, *lhs, *rhs));
         const Cond primary = instr.op == O::Eq   ? Cond::E
                              : instr.op == O::Ne ? Cond::Ne
@@ -1654,12 +1741,13 @@ bool Selector::emit(const ir::Instruction& instr,
         push(make_setcc(unordered, Operand{Reg::Rdx}));
         push(make_inst(instr.op == O::Ne ? MOp::Or : MOp::And, 1,
                        Operand{Reg::Rcx}, Operand{Reg::Rdx}));
-        push(make_inst(MOp::Mov, 1, dst_operand(), Operand{Reg::Rcx}));
+        push(make_inst(MOp::Mov, 1, dst_reg_operand(instr), Operand{Reg::Rcx}));
         return true;
       }
       // The compare runs at its operands' width, which is the width the
       // value holds and not the bool it answers.
-      const u8 compare = compute_width_of(storage_.types()[at(0).type].tag);
+      const u8 compare =
+          compute_width_of(storage_.types()[operand_at(instr, 0).type].tag);
       // The compare reads its left side from a register, and its right
       // side from one when the constant is wider than the opcode's
       // immediate carries. Both take registers the instruction is free
@@ -1682,20 +1770,44 @@ bool Selector::emit(const ir::Instruction& instr,
       }
       push(make_inst(MOp::Cmp, compare, left, right));
       push(make_setcc(
-          compare_of(instr.op, is_signed(storage_.types()[at(0).type].tag)),
-          dst_operand()));
+          compare_of(
+              instr.op,
+              is_signed(storage_.types()[operand_at(instr, 0).type].tag)),
+          dst_reg_operand(instr)));
       return true;
     }
+    case O::TypeCast: return emit_cast(instr, span);
+    default: {
+      (void)unsupported(span,
+                        "an instruction the backend has no lowering "
+                        "for");
+      return false;
+    }
+  }
+}
+
+bool Selector::emit_cast(const ir::Instruction& instr, const diag::Span span) {
+  using O = ir::Opcode;
+  const ir::OperandIdxRange ops = instr.operands;
+  const usize count = ops.size();
+  const auto at = [&](const u32 index) { return operand_at(instr, index); };
+  const std::optional<Operand> lhs = scalar_of(at(0), span);
+  if (!lhs.has_value()) {
+    return false;
+  }
+
+  switch (instr.op) {
     case O::TypeCast: {
       DCHECK(count == 1);
-      const ir::TypeTag src = storage_.types()[at(0).type].tag;
-      const ir::TypeTag dst = dst_tag();
+      const ir::TypeTag src = storage_.types()[operand_at(instr, 0).type].tag;
+      const ir::TypeTag dst = dst_value_tag(instr);
       if (is_float(src) && is_float(dst)) {
         if (src == dst) {
           push(make_inst(src == ir::TypeTag::F32 ? MOp::Movss : MOp::Movsd,
-                         width_of(src), dst_operand(), *lhs));
+                         width_of(src), dst_reg_operand(instr), *lhs));
         } else {
-          push(make_inst(MOp::CvtF2F, width_of(src), dst_operand(), *lhs));
+          push(make_inst(MOp::CvtF2F, width_of(src), dst_reg_operand(instr),
+                         *lhs));
         }
         return true;
       }
@@ -1705,7 +1817,7 @@ bool Selector::emit(const ir::Instruction& instr,
         // them separately as the opcode width and a third operand.
         const i64 tagged =
             is_signed(src) ? width_of(src) : -static_cast<i64>(width_of(src));
-        push(make_inst(MOp::CvtI2F, width_of(dst), dst_operand(), *lhs,
+        push(make_inst(MOp::CvtI2F, width_of(dst), dst_reg_operand(instr), *lhs,
                        Operand{Imm{tagged}}));
         return true;
       }
@@ -1721,26 +1833,26 @@ bool Selector::emit(const ir::Instruction& instr,
                dst == ir::TypeTag::U32 || dst == ir::TypeTag::U64)
                 ? -bytes
                 : bytes;
-        push(make_inst(MOp::CvtF2I, width_of(src), dst_operand(), *lhs,
+        push(make_inst(MOp::CvtF2I, width_of(src), dst_reg_operand(instr), *lhs,
                        Operand{Imm{tagged}}));
         return true;
       }
       if (is_integer(src) && is_integer(dst)) {
         const u8 from = width_of(src);
-        const u8 to = width_of(dst_tag());
+        const u8 to = width_of(dst_value_tag(instr));
         if (from < to) {
           // A wider value reads the narrow one's own bytes and
           // re-derives the rest.
           push(make_inst(is_signed(src) ? MOp::Movsx : MOp::Movzx, from,
-                         dst_operand(), *lhs));
+                         dst_reg_operand(instr), *lhs));
         } else {
-          push(make_inst(MOp::Mov, 8, dst_operand(), *lhs));
+          push(make_inst(MOp::Mov, 8, dst_reg_operand(instr), *lhs));
         }
         return true;
       }
       // A pointer and an integer of the machine's width are the same
       // bytes; two pointers are too.
-      push(make_inst(MOp::Mov, 8, dst_operand(), *lhs));
+      push(make_inst(MOp::Mov, 8, dst_reg_operand(instr), *lhs));
       return true;
     }
     default: {
