@@ -266,6 +266,9 @@
   wider integer with a cast: construction goes through core's checked
   functions, or its two `unsafe` unchecked intrinsics with a proven
   precondition. Grapheme segmentation and width remain deferred.
+- Widening a `char` to a `rune` is spelled `rune_from_char(c)`, the
+  named form diagnostics recommend. `(c as rune)` names the same cast
+  at the primitive level and stays available for low-level code.
 
 ## Paths and C strings (staged)
 

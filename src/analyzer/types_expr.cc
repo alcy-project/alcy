@@ -797,9 +797,18 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
     if (types_equal(left, right)) {
       return left;
     }
+    const ir::TypeTag lt = tag_of(left);
+    const ir::TypeTag rt = tag_of(right);
+    if ((lt == ir::TypeTag::Char && rt == ir::TypeTag::Rune) ||
+        (lt == ir::TypeTag::Rune && rt == ir::TypeTag::Char)) {
+      const u32 index =
+          bag.emit<i18n::Key::AnalyzerCharRuneBinaryMismatch>(
+              DiagCode::TypeMismatch, span);
+      (void)index;
+      return error_type();
+    }
     const u32 index = bag.emit<i18n::Key::AnalyzerTypeMismatch>(
-        DiagCode::TypeMismatch, span, what, pretty_tag(tag_of(left)),
-        pretty_tag(tag_of(right)));
+        DiagCode::TypeMismatch, span, what, pretty_tag(lt), pretty_tag(rt));
     (void)index;
     return error_type();
   }
@@ -834,9 +843,18 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
   if (types_equal(left, right)) {
     return left;
   }
+  const ir::TypeTag lt = tag_of(left);
+  const ir::TypeTag rt = tag_of(right);
+  if ((lt == ir::TypeTag::Char && rt == ir::TypeTag::Rune) ||
+      (lt == ir::TypeTag::Rune && rt == ir::TypeTag::Char)) {
+    const u32 index =
+        bag.emit<i18n::Key::AnalyzerCharRuneBinaryMismatch>(
+            DiagCode::TypeMismatch, span);
+    (void)index;
+    return error_type();
+  }
   const u32 index = bag.emit<i18n::Key::AnalyzerTypeMismatch>(
-      DiagCode::TypeMismatch, span, what, pretty_tag(tag_of(left)),
-      pretty_tag(tag_of(right)));
+      DiagCode::TypeMismatch, span, what, pretty_tag(lt), pretty_tag(rt));
   (void)index;
   return error_type();
 }

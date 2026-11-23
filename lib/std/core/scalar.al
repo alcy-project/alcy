@@ -29,6 +29,13 @@ pub fn char_from_rune(value: rune) -> Option<char> {
   ret Option::Some(unsafe { char_from_u8_unchecked(code as u8) })
 }
 
+// The rune an ASCII byte widens to. This is the named, discoverable
+// spelling of `(value as rune)`; a `char` is already a scalar, so the
+// cast cannot fail and needs no check.
+pub fn rune_from_char(value: char) -> rune {
+  ret (value as rune)
+}
+
 // The rune a 32-bit word names, or None for a surrogate or a value
 // past the last scalar.
 pub fn rune_from_u32(value: u32) -> Option<rune> {

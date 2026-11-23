@@ -1,0 +1,6 @@
+[cli]
+subcommand = "check"
+
+[cli.expect]
+exit = 4
+contains = ["is a Unicode scalar, so its type is `rune`, not `char`"]

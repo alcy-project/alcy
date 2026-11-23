@@ -204,6 +204,14 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Rune) {
         return *expected;
       }
+      if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Char &&
+          tag == ir::TypeTag::Rune) {
+        const u32 index =
+            bag.emit<i18n::Key::AnalyzerCharacterLiteralNotAscii>(
+                DiagCode::TypeMismatch, lit.span, lit.spelling);
+        (void)index;
+        return error_type();
+      }
       const ir::TypeIdx type = builder.primitive(tag);
       if (expected != nullptr) {
         return unify(*expected, type, lit.span, "character literal");

@@ -49,5 +49,8 @@ fn main() -> i32 {
   if format("{}", '\n').as_str() != "\n" {
     ret 12
   }
+  if !(rune_from_char('a') == 'a') {
+    ret 13
+  }
   ret 0
 }
