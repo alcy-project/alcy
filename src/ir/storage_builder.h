@@ -527,11 +527,17 @@ class StorageBuilder {
 
   // Verifies the built storage and returns it as proof-carrying
   // VerifiedStorage. Invalid builder output becomes a structured
-  // error instead of corrupt IR downstream.
-  base::Result<VerifiedStorage, VerificationError> build() && {
+  // error instead of corrupt IR downstream. When verification fails and
+  // `failed_out` is given, the unverified tables move there so a reader
+  // that only needs type display can still use them.
+  base::Result<VerifiedStorage, VerificationError> build(
+      StorageState* failed_out = nullptr) && {
     Storage storage(std::move(state_));
     if (VerificationResult verified = verify_storage(storage);
         verified.is_err()) {
+      if (failed_out != nullptr) {
+        *failed_out = std::move(storage).take_state();
+      }
       return base::make_err(std::move(verified).unwrap_err());
     }
     return base::make_ok(VerifiedStorage(std::move(storage)));

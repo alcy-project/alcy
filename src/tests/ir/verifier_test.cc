@@ -146,6 +146,35 @@ TEST_CASE("Verify unterminated block") {
                 VerificationErrorKind::UnterminatedBlock);
 }
 
+TEST_CASE("A failed build hands back the unverified tables") {
+  StorageBuilder builder;
+  const ImmutableIdx imm = builder.immutable(
+      {.type = primitive_idx(TypeTag::I32), .data = {.i32_value = 1}});
+  const OperandIdx arg = builder.operand(
+      Operand::from_immutable(imm, primitive_idx(TypeTag::I32)));
+  const InstructionIdx inst = builder.instr({
+      .op = Opcode::Alloca,
+      .flags = {},
+      .dst = RegisterIdx(0),
+      .measure = ir::TypeIdx::invalid(),
+      .operands = {arg, 1},
+  });
+  builder.reg({.type = primitive_idx(TypeTag::I32), .def_idx = inst});
+  const BlockIdx block = builder.block({
+      .instrs = {inst, 1},
+      .block_params = {},
+  });
+  builder.function({
+      .meta = void_meta(),
+      .blocks = {block, 1},
+  });
+  StorageState recovered;
+  check_invalid(std::move(builder).build(&recovered),
+                VerificationErrorKind::UnterminatedBlock);
+  CHECK(!recovered.types.empty());
+  CHECK(!recovered.functions.empty());
+}
+
 TEST_CASE("Verify misplaced terminator") {
   StorageBuilder builder;
   InstrSeq instrs;
