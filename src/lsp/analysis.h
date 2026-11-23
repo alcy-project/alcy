@@ -47,6 +47,9 @@ struct PackageAnalysis {
   // type tables, so a feature that asks for a type reads them through
   // this storage rather than a cloned checked package.
   std::vector<std::optional<lowering::LoweredPackage>> lowered;
+  // Type tables recovered from a failed lowering, aligned with `checked`.
+  // Presence means lowering ran and failed; absence means it did not run.
+  std::vector<std::optional<ir::StorageState>> recovered;
   // Source file to the checked package that holds it.
   std::unordered_map<source::FileId, usize> package_of;
   // Open buffer URI to the source file registered for its text.
@@ -92,8 +95,9 @@ class DocumentAnalysis {
   }
   [[nodiscard]] const PackageAnalysis& owner() const { return *owner_; }
 
-  // The type tables this document's names resolve against. Lowering
-  // owns them; when it did not run, the checked package still does.
+  // The type tables this document's names resolve against: the lowered
+  // result first, then tables recovered from a failed lowering, then the
+  // checked package when lowering never ran.
   [[nodiscard]] const ir::StorageState& types() const;
 
  private:

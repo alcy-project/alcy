@@ -3,6 +3,7 @@
 
 #include "lsp/analysis.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,6 +17,7 @@
 #include "doctest/doctest.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/storage.h"
 #include "lsp/analysis_cache.h"
 #include "lsp/call_hierarchy.h"
 #include "lsp/code_actions.h"
@@ -220,6 +222,31 @@ TEST_CASE("An unsaved buffer changes the package fingerprint") {
   buffers.back().text = "fn fresh() -> i32 {\n  ret 1\n}\n";
   const std::string second = workspace::fingerprint(f.root, buffers);
   CHECK(first != second);
+}
+
+TEST_CASE("A lowered package failure leaves editor types readable") {
+  const std::string uri = "file:///main.al";
+  const std::string text = "fn main() -> i32 {\n  ret 0\n}\n";
+  const std::vector<workspace::BufferView> buffers = {{uri, text, 1}};
+  std::shared_ptr<PackageAnalysis> owner(
+      build_analysis(buffers, uri, i18n::Language::EnUs).release());
+  CHECK(owner->checked.size() == 1);
+  if (owner->checked.size() != 1) {
+    return;
+  }
+  const source::FileId root = owner->files_by_uri.at(uri);
+  // Simulate a lowering failure: no lowered package, but recovered tables.
+  owner->lowered[0].reset();
+  auto& recovered = owner->recovered[0];
+  recovered.emplace();
+  CHECK(recovered.has_value());
+  if (!recovered.has_value()) {
+    return;
+  }
+  const ir::StorageState* const expected = &recovered.value();
+  const DocumentAnalysis view(owner, root, 0);
+  CHECK(view.ok());
+  CHECK(&view.types() == expected);
 }
 
 TEST_CASE("Highlights do not paint a sibling definition into this buffer") {

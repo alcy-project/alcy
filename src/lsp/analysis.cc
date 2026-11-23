@@ -14,6 +14,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "debug/dcheck.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -73,7 +74,8 @@ void check_tree(PackageAnalysis& out,
   std::optional<analyzer::CheckedPackage> features =
       std::move(checked).unwrap();
   std::optional<lowering::LoweredPackage> lowered;
-  bool types_unavailable = false;
+  std::optional<ir::StorageState> recovered;
+  ir::StorageState recovered_state;
   if (!out.context.bag.has_errors()) {
     (void)linter::run_lints(out.context, *features, config);
     if (config.borrow_checks) {
@@ -81,31 +83,22 @@ void check_tree(PackageAnalysis& out,
       std::optional<lowering::LoweredPackage> lowered_out;
       base::Result<pipeline::FrontendOutput, diag::Reported> finished =
           pipeline::finish_frontend(out.context, std::move(*features),
-                                    &consumed, &lowered_out);
+                                    &consumed, &lowered_out, &recovered_state);
       if (finished.is_ok()) {
         lowered = std::move(std::move(finished).unwrap().package);
       } else if (lowered_out.has_value()) {
         // A borrow error does not invalidate the type tables lowering
         // already built, so editor type answers can still use them.
         lowered = std::move(lowered_out);
-      } else {
-        // No lowered storage exists: the checked types were moved into
-        // lowering. Decline features rather than index empty tables;
-        // keeping a copy for this rare exit would clone every analysis.
-        types_unavailable = true;
+      }
+      if (!lowered.has_value() && !recovered_state.types.empty()) {
+        recovered.emplace(std::move(recovered_state));
       }
       // The call hands the consumed package back on every exit.
       features.swap(consumed);
     }
   }
   if (!features.has_value()) {
-    return;
-  }
-  if (types_unavailable) {
-    // Do not publish a document view whose checked types were moved out
-    // with no lowered storage to replace them. A feature that found no
-    // package answers nothing instead of indexing an empty type table.
-    out.context.bag.dedup();
     return;
   }
   const usize index = out.checked.size();
@@ -116,6 +109,9 @@ void check_tree(PackageAnalysis& out,
   }
   out.checked.push_back(std::move(*features));
   out.lowered.push_back(std::move(lowered));
+  out.recovered.push_back(std::move(recovered));
+  DCHECK_EQ(out.checked.size(), out.lowered.size());
+  DCHECK_EQ(out.checked.size(), out.recovered.size());
   out.ok = true;
   out.context.bag.dedup();
 }
@@ -257,6 +253,15 @@ const ir::StorageState& DocumentAnalysis::types() const {
       return lowered->storage->state();
     }
   }
+  if (package_index_ < owner_->recovered.size()) {
+    const auto& recovered = owner_->recovered[package_index_];
+    if (recovered.has_value()) {
+      return *recovered;
+    }
+  }
+  // Reached only when lowering never ran: the checked storage still owns
+  // its tables. After lowering ran, they moved out and one of the two
+  // entries above is present.
   return package_->types->state();
 }
 
