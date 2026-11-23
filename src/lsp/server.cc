@@ -599,7 +599,8 @@ void Server::initialize(const text::JsonValue& id,
   capabilities.set("signatureHelpProvider", std::move(signature_options));
   capabilities.set("inlayHintProvider", text::JsonValue::make_bool(true));
   text::JsonValue action_kinds = text::JsonValue::make_array();
-  for (const std::string_view kind : {"quickfix", "refactor", "source"}) {
+  for (const std::string_view kind :
+       {CODE_ACTION_QUICKFIX, CODE_ACTION_REFACTOR, CODE_ACTION_SOURCE}) {
     action_kinds.push(text::JsonValue::make_string(std::string(kind)));
   }
   text::JsonValue action_provider = text::JsonValue::make_object();

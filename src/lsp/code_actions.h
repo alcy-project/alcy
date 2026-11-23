@@ -12,6 +12,11 @@
 
 namespace lsp {
 
+// The LSP CodeAction kinds this server can return.
+constexpr std::string_view CODE_ACTION_QUICKFIX = "quickfix";
+constexpr std::string_view CODE_ACTION_REFACTOR = "refactor";
+constexpr std::string_view CODE_ACTION_SOURCE = "source";
+
 // The LSP CodeAction kind for a repair: quickfix or refactor.
 std::string_view code_action_kind_name(diag::FixKind kind);
 
