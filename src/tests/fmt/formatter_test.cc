@@ -503,6 +503,23 @@ TEST_CASE("A break in a pinned gap lays the flow out broken") {
   CHECK(idempotent(source, narrow));
 }
 
+TEST_CASE("A line comment's own break is not pinned again before a closer") {
+  // The flow writes the break that ends a line comment itself. The
+  // source's first newline after the comment is that same break, so
+  // pinning it into the group's trailing gap writes two; every pass
+  // then turns the layout's break into another pinned one.
+  std::string source = "=2######(\x00\x00";
+  source.append(24, static_cast<char>(0xd0));
+  source += "+///";
+  source.append(4, static_cast<char>(0xd0));
+  source += "\x00\n)EP";
+  CHECK(idempotent_default(source));
+  FormatConfig narrow;
+  narrow.line_length = 24;
+  narrow.indent_width = 1;
+  CHECK(idempotent(source, narrow));
+}
+
 TEST_CASE("Deeply nested input does not exhaust the stack") {
   std::string source;
   for (usize i = 0; i < 600; ++i) {

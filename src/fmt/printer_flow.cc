@@ -89,6 +89,26 @@ std::vector<Doc> gap_docs(std::string_view gap) {
   return out;
 }
 
+// The break that ends a line comment is already written by the flow:
+// the comment doc carries a hardline. The source's first newline after
+// such a comment is that same break, so pinning it into the gap writes
+// it twice, and the layout's own break becomes the next pass's pinned
+// one. Later breaks in the gap are the source's to keep.
+usize gap_start_after(const cst::Node& last, std::string_view source) {
+  usize from = last.offset + last.length;
+  if (last.kind != cst::NodeKind::Comment ||
+      last.comment == cst::CommentKind::Block || from >= source.size() ||
+      source[from] != '\n') {
+    return from;
+  }
+  ++from;
+  while (from < source.size() &&
+         (source[from] == ' ' || source[from] == '\t')) {
+    ++from;
+  }
+  return from;
+}
+
 }  // namespace
 
 Doc Printer::print_flow(const std::vector<const cst::Node*>& nodes,
@@ -455,7 +475,7 @@ Doc Printer::print_list(const cst::Node& group,
     parts.push_back(print_flow(nodes, true));
     if (!inner.kids.empty()) {
       const cst::Node& last = inner.kids.back();
-      const usize from = last.offset + last.length;
+      const usize from = gap_start_after(last, source_);
       const usize to = group.offset + group.length;
       if (to > from) {
         std::vector<Doc> tail = gap_docs(source_.substr(from, to - from));
@@ -510,7 +530,7 @@ Doc Printer::print_list(const cst::Node& group,
   std::vector<Doc> before_close;
   if (!inner.kids.empty()) {
     const cst::Node& last = inner.kids.back();
-    const usize from = last.offset + last.length;
+    const usize from = gap_start_after(last, source_);
     const usize to = group.offset + group.length - (group.has_closer ? 1 : 0);
     if (to > from) {
       const std::string_view gap = source_.substr(from, to - from);
