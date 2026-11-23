@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -24,6 +25,7 @@
 #include "analyzer/resolve.h"
 #include "analyzer/summary.h"
 #include "ast/ast.h"
+#include "base/hash.h"
 #include "config/build_config.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
@@ -35,10 +37,13 @@
 #include "fpag/io/io_util.h"
 #include "i18n/messages.h"
 #include "ir/deserialize.h"
+#include "ir/write_input.h"
 #include "path/path.h"
+#include "pipeline/cache.h"
 #include "pipeline/dependencies.h"
 #include "pipeline/diag_code.h"
 #include "pipeline/embedded_std.h"
+#include "pipeline/emit_mode.h"
 #include "pipeline/frontend.h"
 #include "pipeline/modules.h"
 #include "pipeline/parse.h"
@@ -55,6 +60,23 @@
 #include "testgen/tests.h"
 
 namespace pipeline {
+
+SourceFiles source_file_table(PipelineContext& ctx) {
+  SourceFiles files;
+  files.names.resize(ctx.sources.file_count());
+  files.hashes.resize(files.names.size());
+  for (u32 id = 0; id < files.names.size(); ++id) {
+    if (std::find(ctx.plan_files.begin(), ctx.plan_files.end(), id) !=
+        ctx.plan_files.end()) {
+      continue;
+    }
+    files.names[id] = ctx.sources.name(id).value_or(std::string_view{});
+    const std::string_view bytes =
+        ctx.sources.bytes(id).value_or(std::string_view{});
+    files.hashes[id] = base::hash128(bytes);
+  }
+  return files;
+}
 
 namespace {
 
@@ -289,11 +311,19 @@ struct PackageSources {
 // copy of, when it is one: the package is then staged as that member
 // rather than beside it, so its own modules are the ones the tree holds
 // under the member's name and the embedded copy is not staged at all.
+//
+// A caller that passes `cached_out` lets the run cache answer before the
+// parse: the file table this point computes is the one the entry keys
+// on, and a hit hands back the lowered package with the parse and the
+// name resolution below undone. `mode` decides the entry the key names.
 base::Result<PackageSources, diag::Reported> collect_package_sources(
     PipelineContext& ctx,
     const path::Path& root,
     const pkg::PackageManifest& manifest,
-    std::string_view member) {
+    std::string_view member,
+    EmitMode mode,
+    source::FileId manifest_file,
+    std::optional<CachedFrontBuild>* cached_out) {
   // Path dependencies load first: a dependency's own manifest names
   // standard-library members, and the selection below covers the
   // whole closure rather than this manifest alone.
@@ -395,6 +425,54 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
                                              "frontend");
     return std_prelude(ctx, selection);
   }();
+  // The run cache can answer here for a package with the one binary
+  // target: the file table this point computes is the one the entry
+  // keys on - discovery has loaded the package's files, the staged
+  // prelude is in, and nothing after this point loads another - so a
+  // hit hands back the lowered package and the parse and the name
+  // resolution below are work a cache hit discards.
+  if (cached_out != nullptr && !ctx.no_cache && manifest.bin_count == 1 &&
+      manifest.lib == nullptr) {
+    const SourceFiles discovered = source_file_table(ctx);
+    const ir::FileTable files{.names = discovered.names,
+                              .hashes = discovered.hashes};
+    const base::Digest128 identity =
+        ir::identity_digest(files, ctx.target.width, ctx.version);
+    const std::string_view manifest_bytes =
+        ctx.sources.bytes(manifest_file).value_or(std::string_view{});
+    const std::string_view target_name =
+        manifest.bins[0].name.empty() ? manifest.name : manifest.bins[0].name;
+    const base::Digest128 key = cache_key(CacheInputs{
+        .files = files,
+        .width = ctx.target.width,
+        .compiler_version = ctx.version,
+        .manifest = manifest_bytes,
+        .triple = ctx.target.triple,
+        .target_name = target_name,
+        .is_lib = false,
+        .emit_entry = mode == EmitMode::Executable,
+        .testing = ctx.testing,
+        .summary_digests = ctx.summary_digests,
+    });
+    const path::Path cache_dir =
+        root.join(path::DEFAULT_OUT_DIR).join(".cache");
+    std::optional<lowering::LoweredPackage> cached =
+        cache_load(ctx, cache_entry_path(cache_dir.as_view(), key), identity);
+    if (cached.has_value()) {
+      ctx.cache_outcome =
+          combine_cache_outcome(ctx.cache_outcome, CacheOutcome::Hit);
+      CachedFrontBuild front;
+      front.package =
+          std::make_unique<lowering::LoweredPackage>(std::move(*cached));
+      front.front = FrontCache{std::string(cache_dir.as_view()), key, identity};
+      *cached_out = std::move(front);
+      PackageSources cached_sources;
+      cached_sources.file_count = ctx.sources.file_count();
+      return base::make_ok(std::move(cached_sources));
+    }
+    ctx.cache_outcome =
+        combine_cache_outcome(ctx.cache_outcome, CacheOutcome::Miss);
+  }
   // Every file the closure checks is counted once: the package's
   // own and each dependency's, and the source manager hands one id
   // to a file two of them share.
@@ -780,7 +858,9 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     source::FileId manifest_file,
     std::string_view manifest_name,
     ArtifactScope scope,
-    std::string* package_name_out) {
+    std::string* package_name_out,
+    EmitMode mode,
+    std::optional<CachedFrontBuild>* cached_out) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "targets", "frontend");
   base::Result<LoadedPackage, diag::Reported> loaded =
       load_package(ctx, root, manifest_file, manifest_name);
@@ -805,11 +885,39 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     return base::make_err(diag::Reported{});
   }
   base::Result<PackageSources, diag::Reported> sources =
-      collect_package_sources(ctx, root, package.manifest, {});
+      collect_package_sources(ctx, root, package.manifest, {}, mode,
+                              manifest_file, cached_out);
   if (sources.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
   const PackageSources collected = std::move(sources).unwrap();
+
+  // The cache answered before the frontend ran: the single binary
+  // target stands on the loaded reading, with a tree nothing reads -
+  // the frontend the tree feeds is what the entry replaced.
+  if (cached_out != nullptr && cached_out->has_value()) {
+    std::vector<Artifact> targets;
+    Artifact target;
+    target.file_count = collected.file_count;
+    for (const analyzer::DependencyPackage& dependency :
+         collected.dependencies) {
+      if (!dependency.object.empty()) {
+        target.linked_objects.emplace_back(dependency.object);
+      }
+    }
+    target.name = package.manifest.bins[0].name.empty()
+                      ? package.manifest.name
+                      : package.manifest.bins[0].name;
+    target.kind = ArtifactKind::Bin;
+    targets.push_back(std::move(target));
+    for (Artifact& artifact : targets) {
+      artifact.output_dir = root.join(path::DEFAULT_OUT_DIR);
+    }
+    if (package_name_out != nullptr) {
+      *package_name_out = std::string(package.manifest.name);
+    }
+    return base::make_ok(std::move(targets));
+  }
 
   std::vector<Artifact> targets;
   // The binary comes first: `alcy run` takes the front artifact, and a
@@ -893,7 +1001,9 @@ base::Result<TestPackage, diag::Reported> resolve_test_package(
   // artifact of its own - every member of a suite is one - still has
   // tests, so this resolves the selection rather than a target's tree.
   base::Result<PackageSources, diag::Reported> collected =
-      collect_package_sources(ctx, root, package.manifest, member);
+      collect_package_sources(ctx, root, package.manifest, member,
+                              EmitMode::Executable, source::UNKNOWN_FILE,
+                              /*cached_out=*/nullptr);
   if (collected.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }

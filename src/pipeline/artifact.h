@@ -3,16 +3,20 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "analyzer/resolve.h"
+#include "base/hash.h"
 #include "diag/bag.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
 #include "path/path.h"
+#include "pipeline/cache.h"
+#include "pipeline/emit_mode.h"
 #include "pipeline/pipeline_context.h"
 #include "pkg/manifest.h"
 #include "pkg/toolchain.h"
@@ -49,6 +53,17 @@ struct Artifact {
   // dependencies a summary answered for.
   std::vector<std::string> linked_objects;
 };
+
+// The loaded sources with their content digests, in file-id order: what
+// the run cache's key and the IR writer's identity both hash. A file the
+// run read to plan the build holds an empty slot - no lowered form
+// reads it - but keeps its place, because spans name files by index.
+struct SourceFiles {
+  std::vector<std::string_view> names;
+  std::vector<base::Digest128> hashes;
+};
+
+SourceFiles source_file_table(PipelineContext& ctx);
 
 // Emits the missing-entry-point diagnostic when a binary artifact
 // declares no free `main`, and answers whether the artifact can go on.
@@ -109,18 +124,34 @@ enum class ArtifactScope : u8 {
   BinOnly,
 };
 
+// A package reading the run cache served before the frontend ran: the
+// lowered package the entry held, and the cache location its key names
+// (the object cache sits beside it). A caller that receives one skips
+// the frontend for the target it serves.
+struct CachedFrontBuild {
+  std::unique_ptr<lowering::LoweredPackage> package;
+  FrontCache front;
+};
+
 // Parses the manifest and resolves the artifacts `scope` names: the
 // binary first when one exists, then the library. Shared by build,
 // check, and run; the manifest views borrow the context arena. When
 // `package_name_out` is not null the manifest's package name is written
-// to it (a copy, so it outlives the arena's other uses).
+// to it (a copy, so it outlives the arena's other uses). A caller that
+// also passes `cached_out` lets the resolution stop after discovery for
+// a package whose run-cache entry answers: the parsed and resolved
+// frontend the cache makes redundant is not run, and the lowered
+// package arrives in `cached_out` with `mode` deciding the entry the
+// key names.
 base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     PipelineContext& ctx,
     const path::Path& root,
     source::FileId manifest_file,
     std::string_view manifest_name,
     ArtifactScope scope,
-    std::string* package_name_out = nullptr);
+    std::string* package_name_out = nullptr,
+    EmitMode mode = EmitMode::Executable,
+    std::optional<CachedFrontBuild>* cached_out = nullptr);
 
 // A package resolved for testing: the module tree a test run enters
 // through, and the tests the tree's driver calls, in the order the driver

@@ -505,76 +505,6 @@ base::Result<std::vector<std::string>, diag::Reported> emit_package_objects(
   return base::make_ok(std::move(paths));
 }
 
-// What a write input borrows: the file names and address names it points
-// at, kept alive for as long as the input is. Constructed in place so the
-// spans never outlive their owners.
-struct SourceFiles {
-  std::vector<std::string_view> names;
-  std::vector<base::Digest128> hashes;
-};
-
-// The file table over the loaded sources: names in FileId order with
-// the content hash of each, so a cache tells two programs under one
-// name apart. A file whose bytes are gone hashes the empty input
-// rather than claiming no hash was computed. A file the run read to
-// plan the build leaves its slot empty instead: no lowered form holds
-// a profile's opt level or a toolchain's driver, and a slot that keyed
-// one would miss on an edit that changes only the plan. The slot
-// itself stays, because an instruction span names its file by index.
-SourceFiles source_file_table(PipelineContext& ctx) {
-  SourceFiles files;
-  files.names.resize(ctx.sources.file_count());
-  files.hashes.resize(files.names.size());
-  for (u32 id = 0; id < files.names.size(); ++id) {
-    if (std::find(ctx.plan_files.begin(), ctx.plan_files.end(), id) !=
-        ctx.plan_files.end()) {
-      continue;
-    }
-    files.names[id] = ctx.sources.name(id).value_or(std::string_view{});
-    const std::string_view bytes =
-        ctx.sources.bytes(id).value_or(std::string_view{});
-    files.hashes[id] = base::hash128(bytes);
-  }
-  return files;
-}
-
-// The location, or nothing when the cache is off for this run.
-std::optional<FrontCache> front_cache_location(PipelineContext& ctx,
-                                               const Artifact& target,
-                                               bool is_lib,
-                                               bool emit_entry,
-                                               const path::Path& root,
-                                               source::FileId manifest_file) {
-  if (ctx.no_cache) {
-    return std::nullopt;
-  }
-  const path::Path out_dir = target.output_dir.has_value()
-                                 ? *target.output_dir
-                                 : root.join(path::DEFAULT_OUT_DIR);
-  // The spans the digest reads live in `sources`, so the digests are
-  // taken before the return: a FileTable is a view, not an owner.
-  const SourceFiles sources = source_file_table(ctx);
-  const ir::FileTable files{.names = sources.names, .hashes = sources.hashes};
-  const base::Digest128 identity =
-      ir::identity_digest(files, ctx.target.width, ctx.version);
-  const std::string_view manifest_bytes =
-      ctx.sources.bytes(manifest_file).value_or(std::string_view{});
-  const base::Digest128 key = cache_key(CacheInputs{
-      .files = files,
-      .width = ctx.target.width,
-      .compiler_version = ctx.version,
-      .manifest = manifest_bytes,
-      .triple = ctx.target.triple,
-      .target_name = target.name,
-      .is_lib = is_lib,
-      .emit_entry = emit_entry,
-      .testing = ctx.testing,
-      .summary_digests = ctx.summary_digests,
-  });
-  return FrontCache{std::string(out_dir.join(".cache").as_view()), key,
-                    identity};
-}
-
 struct IrWriteInput {
   SourceFiles files;
   std::vector<ir::AddrName> addr_names;
@@ -1001,6 +931,43 @@ base::Result<std::string, diag::Reported> build_single_root(
   return result;
 }
 
+// Where a target's cache entries live and what names them: the run
+// cache's key and the identity its load checks, over one read of the
+// loaded sources. The emit stage salts the same key for its own entry.
+std::optional<FrontCache> front_cache_location(PipelineContext& ctx,
+                                               const Artifact& target,
+                                               bool is_lib,
+                                               bool emit_entry,
+                                               const path::Path& root,
+                                               source::FileId manifest_file) {
+  if (ctx.no_cache) {
+    return std::nullopt;
+  }
+  const path::Path out_dir = target.output_dir.has_value()
+                                 ? *target.output_dir
+                                 : root.join(path::DEFAULT_OUT_DIR);
+  const SourceFiles sources = source_file_table(ctx);
+  const ir::FileTable files{.names = sources.names, .hashes = sources.hashes};
+  const base::Digest128 identity =
+      ir::identity_digest(files, ctx.target.width, ctx.version);
+  const std::string_view manifest_bytes =
+      ctx.sources.bytes(manifest_file).value_or(std::string_view{});
+  const base::Digest128 key = cache_key(CacheInputs{
+      .files = files,
+      .width = ctx.target.width,
+      .compiler_version = ctx.version,
+      .manifest = manifest_bytes,
+      .triple = ctx.target.triple,
+      .target_name = target.name,
+      .is_lib = is_lib,
+      .emit_entry = emit_entry,
+      .testing = ctx.testing,
+      .summary_digests = ctx.summary_digests,
+  });
+  return FrontCache{std::string(out_dir.join(".cache").as_view()), key,
+                    identity};
+}
+
 // The front half of a target's lifecycle - the cache lookup, the compile
 // that stores the unoptimized package when the lowering was quiet, and
 // the summary a library leaves beside its artifact before optimization
@@ -1165,9 +1132,10 @@ base::Result<BuildResult, diag::Reported> build_package(
     EmitMode mode,
     const BuildProgressObserver* progress) {
   std::string package_name;
+  std::optional<CachedFrontBuild> cached_front;
   base::Result<std::vector<Artifact>, diag::Reported> targets =
       resolve_artifacts(ctx, root, manifest_file, manifest_name,
-                        ArtifactScope::All, &package_name);
+                        ArtifactScope::All, &package_name, mode, &cached_front);
   if (targets.is_err() || ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -1191,7 +1159,7 @@ base::Result<BuildResult, diag::Reported> build_package(
             : mode;
     // A binary that will be linked needs its entry point before the
     // linker sees it.
-    if (target_mode == EmitMode::Executable &&
+    if (target_mode == EmitMode::Executable && !cached_front.has_value() &&
         !check_entry_point(ctx, target)) {
       return base::make_err(diag::Reported{});
     }
@@ -1244,15 +1212,29 @@ base::Result<BuildResult, diag::Reported> build_package(
   for (PlannedArtifact& planned_target : planned) {
     bool target_cached = false;
     std::optional<FrontCache> front_cache;
-    base::Result<lowering::LoweredPackage, diag::Reported> lowered =
-        lower_target(ctx, planned_target, root, manifest_file, &target_cached,
-                     &front_cache);
-    targets_cached = targets_cached && target_cached;
-    if (lowered.is_err()) {
-      failed = true;
-      break;
+    if (cached_front.has_value()) {
+      // The run cache answered before the frontend ran: the reading is
+      // the lowered package, and the entry's key names the object
+      // cache beside it.
+      target_cached = true;
+      front_cache = cached_front->front;
     }
-    lowering::LoweredPackage package = std::move(lowered).unwrap();
+    std::optional<lowering::LoweredPackage> lowered;
+    if (!cached_front.has_value()) {
+      base::Result<lowering::LoweredPackage, diag::Reported> lowered_result =
+          lower_target(ctx, planned_target, root, manifest_file, &target_cached,
+                       &front_cache);
+      if (lowered_result.is_err()) {
+        failed = true;
+        break;
+      }
+      lowered = std::move(lowered_result).unwrap();
+    } else {
+      target_cached = true;
+    }
+    targets_cached = targets_cached && target_cached;
+    lowering::LoweredPackage& package =
+        cached_front.has_value() ? *cached_front->package : *lowered;
     base::Result<std::string, diag::Reported> written =
         emit_target(ctx, planned_target, plan, package, front_cache);
     if (written.is_err() || ctx.bag.has_errors()) {
