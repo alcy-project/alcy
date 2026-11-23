@@ -28,6 +28,8 @@ struct SettingsOptions {
   const Catalog* catalog = nullptr;
   std::string_view language;
   std::vector<LanguageOption> languages;
+  // The site navigation, repeated inside the menu for narrow screens.
+  std::string_view nav_markup;
 };
 
 std::string render_settings(const SettingsOptions& options);
