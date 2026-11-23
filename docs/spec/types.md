@@ -324,6 +324,14 @@
   names it (`&a[1..<3]`); borrowing a view
   is rejected, since no place stands behind one. A run is not a place
   and cannot be assigned to.
+- The interval can be read without a cursor. `Bound::is_bounded`
+  reports whether a side names an endpoint, and `Bound::value` answers
+  `Option<T>` with it (`None` for `Unbounded`). `Range::contains`
+  tests membership using the same bounds the cursor uses: an included
+  start admits its endpoint, an excluded one does not, and an open end
+  admits every later value. `Range::is_empty` is the negation of that
+  membership test at the first value a started range would yield; an
+  open-ended range is never empty, and an inverted one always is.
 - Iteration is explicit and separate: core declares `Iterator` as
   the capability, and only integer ranges expose one, through a
   `RangeIter` cursor built by `into_iter`; float ranges have no

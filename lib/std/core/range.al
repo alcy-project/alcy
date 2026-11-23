@@ -39,6 +39,15 @@ pub struct RangeIter<T> {
 }
 
 impl<T> Bound<T> {
+  // Whether the bound names an endpoint. `Unbounded` does not.
+  pub fn is_bounded(self: &Self) -> bool {
+    ret match self {
+      Bound::Included(_) => true,
+      Bound::Excluded(_) => true,
+      Bound::Unbounded => false,
+    }
+  }
+
   // The first value a range starting at this bound yields. `Excluded`
   // steps once, honoring the language's wrapping arithmetic, so a
   // start at the width's maximum wraps instead of leaving the type;
@@ -55,6 +64,17 @@ impl<T> Bound<T> {
 }
 
 impl<T: PartialOrd> Bound<T> {
+  // Whether `value` is at or past this start bound. An excluded start
+  // excludes its own endpoint, the way the cursor's `first` steps one
+  // past it.
+  fn starts_at_or_after(self: Self, value: &T) -> bool {
+    ret match self {
+      Bound::Included(s) => *value >= s,
+      Bound::Excluded(s) => *value > s,
+      Bound::Unbounded => true,
+    }
+  }
+
   // Whether this end bound admits `current` and possibly more: every
   // value up to an inclusive end, every value below an exclusive one,
   // and everything when the end is open.
@@ -86,6 +106,17 @@ fn step_reaches<T: PartialOrd + PartialEq>(end: T, current: T, stride: T, inclus
   ret stepped >= end
 }
 
+impl<T> Bound<T> {
+  // The endpoint this bound names, or `None` for `Unbounded`.
+  pub fn value(self: &Self) -> Option<T> {
+    ret match self {
+      Bound::Included(v) => Option::Some(*v),
+      Bound::Excluded(v) => Option::Some(*v),
+      Bound::Unbounded => Option::None,
+    }
+  }
+}
+
 impl<T: PartialOrd + PartialEq> Bound<T> {
   // Whether the cursor is spent after yielding `current` with this
   // stride: an inclusive end hit exactly, or a next step that would
@@ -96,6 +127,26 @@ impl<T: PartialOrd + PartialEq> Bound<T> {
       Bound::Excluded(e) => step_reaches(e, current, stride, false),
       Bound::Unbounded => false,
     }
+  }
+}
+
+impl<T: PartialOrd> Range<T> {
+  // Whether `value` lies in the interval. An open end admits every
+  // value past the start, and a hand-built excluded start excludes
+  // its own endpoint, as the cursor does.
+  pub fn contains(self: &Self, value: T) -> bool {
+    after_start := self.start.starts_at_or_after(&value)
+    ret after_start && self.end.admits(value)
+  }
+
+  // Whether the interval holds no value. An open end never empties
+  // one; a bounded start compares against the end through the same
+  // rule `contains` uses, so an inverted interval is empty.
+  pub fn is_empty(self: &Self) -> bool {
+    if !self.start.is_bounded() {
+      ret false
+    }
+    ret !self.contains(self.start.first())
   }
 }
 
@@ -209,6 +260,43 @@ impl<T: PartialOrd + PartialEq> Iterator < T > for RangeIter<T> {
   #[test] fn cursor_iterates_as_itself() {
     cursor := (0..<3).into_iter()
     assert(how_many(cursor.into_iter()) == 3, "naming the cursor again changes nothing")
+  }
+
+  #[test] fn bound_reports_whether_it_names_an_endpoint() {
+    assert((0..<3).start.is_bounded(), "a spelled start is bounded")
+    assert((0..<3).end.is_bounded(), "a spelled end is bounded")
+    assert(!(5..).end.is_bounded(), "an open end names no endpoint")
+  }
+
+  #[test] fn bound_value_is_the_endpoint_or_none() {
+    match (0..<3).end.value() {
+      Option::Some(v) => assert(v == 3, "the end bound names the endpoint"),
+      Option::None => panic("a spelled end has a value"),
+    }
+    match (5..).end.value() {
+      Option::Some(_) => panic("an open end has no value"),
+      Option::None => assert(true, "the open end answers none"),
+    }
+  }
+
+  #[test] fn contains_uses_the_bounds() {
+    r := 1..<3
+    assert(r.contains(1), "the included start is a member")
+    assert(r.contains(2), "the value below the end is a member")
+    assert(!r.contains(3), "the excluded end is not")
+    assert(!r.contains(0), "a value before the start is not")
+    hand: Range<i32> := Range { start: Bound::Excluded(0), end: Bound::Included(2) }
+    assert(!hand.contains(0), "an excluded start omits its endpoint")
+    assert(hand.contains(1), "the values after it are members")
+    assert(hand.contains(2), "the included end is a member")
+    assert((5..).contains(100), "an open end admits every later value")
+  }
+
+  #[test] fn empty_and_inverted_intervals_are_empty() {
+    assert(!(0..<3).is_empty(), "a populated interval is not empty")
+    assert((3..<3).is_empty(), "an equal exclusive pair holds nothing")
+    assert((5..<2).is_empty(), "an inverted interval holds nothing")
+    assert(!(5..).is_empty(), "an open end never empties an interval")
   }
 
   #[test] fn step_by_yields_every_stride_value() {
