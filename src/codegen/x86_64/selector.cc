@@ -312,6 +312,10 @@ class Selector {
   ir::Opcode current_op_ = ir::Opcode::Noop;
 
   Body body_;
+  // The names body_.symbols holds, by index: a body that calls in a
+  // loop names the same symbols once per call, and a linear scan per
+  // name was quadratic in the number of calls.
+  std::unordered_map<std::string, u32> symbol_ids_;
   std::unordered_map<u32, u32> vreg_of_register_;
   std::unordered_map<u32, ir::TypeIdx> pointee_of_register_;
   // The vregs an `alloca` named, whose slot is the storage itself. A
@@ -378,12 +382,12 @@ Operand Selector::place_of(const ir::Operand& place, const i32 offset) {
 }
 
 SymbolRef Selector::string_ref(const std::string& symbol) {
-  for (u32 at = 0; at < body_.symbols.size(); ++at) {
-    if (body_.symbols[at] == symbol) {
-      return SymbolRef{at};
-    }
+  const auto found = symbol_ids_.find(symbol);
+  if (found != symbol_ids_.end()) {
+    return SymbolRef{found->second};
   }
   body_.symbols.push_back(symbol);
+  symbol_ids_.emplace(symbol, static_cast<u32>(body_.symbols.size() - 1));
   return SymbolRef{static_cast<u32>(body_.symbols.size() - 1)};
 }
 
@@ -2035,16 +2039,7 @@ bool Selector::emit_call(const ir::Instruction& instr,
       (void)unsupported(span, "a call the backend cannot name");
       return false;
     }
-    symbol_id = body_.symbols.size();
-    for (u32 existing = 0; existing < body_.symbols.size(); ++existing) {
-      if (body_.symbols[existing] == symbol) {
-        symbol_id = existing;
-        break;
-      }
-    }
-    if (symbol_id == body_.symbols.size()) {
-      body_.symbols.push_back(symbol);
-    }
+    symbol_id = string_ref(symbol).id;
   }
 
   // The argument registers, in the order the call fills them. A
