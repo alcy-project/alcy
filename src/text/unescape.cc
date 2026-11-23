@@ -121,7 +121,7 @@ u32 char_literal_value(std::string_view spelling) {
   // first so a lead byte such as 0xE6 is not sign-extended into a
   // four-byte scalar before the width decode.
   const auto at = [&](usize i) {
-    return static_cast<u32>(static_cast<unsigned char>(bytes[i]));
+    return static_cast<u32>(static_cast<u8>(bytes[i]));
   };
   u32 scalar = at(0);
   usize width = 1;
