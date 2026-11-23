@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "config/build_config.h"
 #include "doctest/doctest.h"
 #include "fpag/base/result.h"
 
@@ -53,6 +54,20 @@ TEST_CASE("Path compares spelling variants equally") {
   CHECK("pkg/dep" == a);
   CHECK(a < Path::from_native("pkg/deq").unwrap());
 }
+
+#if BUILD_FLAG(IS_OS_WIN)
+TEST_CASE("Path keeps Windows drive and UNC roots") {
+  const Path drive = Path::from_native("C:/x/../..").unwrap();
+  CHECK(drive.as_view() == "C:/");
+  CHECK(drive.is_absolute());
+  CHECK(Path::from_native("C:\\x\\..\\..\\y").unwrap().as_view() == "C:/y");
+  const Path unc = Path::from_native("//host/share/a/../..").unwrap();
+  CHECK(unc.as_view() == "//host/share");
+  CHECK(unc.is_absolute());
+  CHECK(Path::from_native("C:/x").unwrap().parent().as_view() == "C:/");
+  CHECK(Path::from_native("C:/").unwrap().parent().as_view() == "C:/");
+}
+#endif
 
 TEST_CASE("Path reports parents") {
   CHECK(Path::from_native("a/b/c").unwrap().parent().as_view() == "a/b");

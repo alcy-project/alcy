@@ -18,19 +18,52 @@ namespace {
 
 // Input is already separator-folded here.
 std::string normalize_canonical(std::string_view path) {
-  const bool absolute = !path.empty() && path.front() == DEFAULT_PATH_SEPARATOR;
+  bool absolute = false;
+  // Everything up to `prefix` is a root a `..` cannot walk past. It is
+  // copied to the output verbatim: a drive letter carries its colon and
+  // a UNC root carries both of its leading separators.
+  usize prefix = 0;
+  usize start = 0;
+#if BUILD_FLAG(IS_OS_WIN)
+  if (path.size() >= 2 && path[1] == ':') {
+    absolute = true;
+    prefix = 2;
+    if (prefix < path.size() && path[prefix] == DEFAULT_PATH_SEPARATOR) {
+      ++prefix;
+    }
+    start = prefix;
+  } else if (path.starts_with("//") &&
+             path.find(DEFAULT_PATH_SEPARATOR, 2) != std::string_view::npos) {
+    absolute = true;
+    // The authority and the share are the root of a UNC path. Keep both
+    // whole, so a `..` cannot collapse the share into the authority.
+    usize at = 2;
+    for (i32 part = 0; part < 2 && at < path.size(); ++part) {
+      const usize slash = path.find(DEFAULT_PATH_SEPARATOR, at + 1);
+      if (slash == std::string_view::npos) {
+        at = path.size();
+        break;
+      }
+      at = slash;
+    }
+    prefix = at;
+    start =
+        at < path.size() && path[at] == DEFAULT_PATH_SEPARATOR ? at + 1 : at;
+  }
+#endif
+  if (!absolute && !path.empty() && path.front() == DEFAULT_PATH_SEPARATOR) {
+    absolute = true;
+    prefix = 1;
+    start = 1;
+  }
   // The result never outgrows the input plus its leading separator, and a
   // segment takes at least two bytes: reserving both up front leaves the
   // walk below with no reallocation to make.
-  std::string out;
+  std::string out(path.substr(0, prefix));
   out.reserve(path.size() + 1);
-  if (absolute) {
-    out.push_back(DEFAULT_PATH_SEPARATOR);
-  }
-  const usize prefix = out.size();
   std::vector<usize> starts;
   starts.reserve(path.size() / 2 + 1);
-  usize i = absolute ? 1 : 0;
+  usize i = start;
   while (i <= path.size()) {
     usize end = i;
     while (end < path.size() && path[end] != DEFAULT_PATH_SEPARATOR) {
@@ -49,7 +82,7 @@ std::string normalize_canonical(std::string_view path) {
       }
     } else if (!part.empty() && part != ".") {
       starts.push_back(static_cast<usize>(out.size()));
-      if (out.size() > prefix) {
+      if (!out.empty() && out.back() != DEFAULT_PATH_SEPARATOR) {
         out.push_back(DEFAULT_PATH_SEPARATOR);
       }
       out.append(part);
@@ -161,6 +194,13 @@ Path Path::parent() const {
   if (slash == 0) {
     return Path(std::string(1, DEFAULT_PATH_SEPARATOR));
   }
+#if BUILD_FLAG(IS_OS_WIN)
+  // The parent of a file in a drive root is the root with its slash,
+  // not the bare drive name, which would no longer name a directory.
+  if (slash == 2 && value_.size() >= 2 && value_[1] == ':') {
+    return Path(value_.substr(0, 3));
+  }
+#endif
   return Path(value_.substr(0, slash));
 }
 
