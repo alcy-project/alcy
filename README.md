@@ -53,6 +53,12 @@ for the output each backend writes and how the choice changes it.
 There is no interpreter and no runtime to ship: a
 compiled program runs on its own.
 
+`alcy` is a single command for the whole development loop: it compiles
+packages and single files, checks and tests them, formats and lints
+their sources, and speaks the Language Server Protocol to editors. The
+compiler and the tools that read its sources are one binary and one
+version. See the [command reference](docs/tools/index.md).
+
 It builds and tests on Linux (x86_64 and arm64), macOS (aarch64 and
 x86_64), and Windows (x64 and arm64), which is what CI runs;
 `wasm32-unknown-emscripten` is also a target.

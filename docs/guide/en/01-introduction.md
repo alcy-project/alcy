@@ -22,3 +22,5 @@ its normative description.
   first program.
 - [A tour of the language](03-language-tour.md) walks through what the
   compiler accepts today.
+- [The command reference](../../tools/index.md) lists what the `alcy`
+  command does beyond compiling.

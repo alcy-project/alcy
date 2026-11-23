@@ -1,12 +1,13 @@
 # alcy command reference (Tools)
 
-The `alcy` command line is the whole toolchain: it builds packages and
-single files, checks them, runs them, tests them, and serves the
-language server until your editor closes. This page is the shared
-reference - every subcommand and the parts of the command line they
-all carry. Each verb has its own page of flags, positionals, exit
-codes, and examples; the language itself is described in the
-[specification](../spec/overview.md) and is not repeated here.
+The [README](../../README.md) calls `alcy` one command for the whole
+development loop. This page is that claim in detail: every subcommand,
+and the parts of the command line they all carry. The compiler and the
+tools that read its sources are one binary and one version, so there is
+no separate formatter, linter or language server to install. Each verb
+has its own page of flags, positionals, exit codes, and examples; the
+language itself is described in the [specification](../spec/overview.md)
+and is not repeated here.
 
 ## Commands at a glance
 
