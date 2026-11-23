@@ -89,12 +89,9 @@ void check_tree(PackageAnalysis& out,
         // already built, so editor type answers can still use them.
         lowered = std::move(lowered_out);
       } else {
-        // Lowering itself failed: the consumed package's types were
-        // moved out and no lowered storage exists. No feature may read
-        // those tables, so answer nothing instead of indexing an empty
-        // table. This is a deliberate trade-off: keeping checked types
-        // for this rare case would need a clone on every analysis, and
-        // a borrow error already keeps its lowered storage above.
+        // No lowered storage exists: the checked types were moved into
+        // lowering. Decline features rather than index empty tables;
+        // keeping a copy for this rare exit would clone every analysis.
         types_unavailable = true;
       }
       // The call hands the consumed package back on every exit.
