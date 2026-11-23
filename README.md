@@ -48,7 +48,9 @@ x86_64 Linux a debug build uses alcy's own x86_64 emitter
 (`--backend=direct-x86_64`), which writes the object without LLVM;
 an optimized build uses the LLVM backend. WebAssembly uses
 `--backend=direct-wasm`, alcy's own WASI emitter, with no LLVM and no
-linker behind it. There is no interpreter and no runtime to ship: a
+linker behind it. See [Backends and output formats](docs/tools/backends.md)
+for the output each backend writes and how the choice changes it.
+There is no interpreter and no runtime to ship: a
 compiled program runs on its own.
 
 It builds and tests on Linux (x86_64 and arm64), macOS (aarch64 and

@@ -6,7 +6,7 @@
 #include <optional>
 #include <span>
 
-#include "codegen/x86_64/encode.h"
+#include "codegen/x86_64/encoder.h"
 #include "codegen/x86_64/isa.h"
 #include "codegen/x86_64/minst.h"
 #include "doctest/doctest.h"

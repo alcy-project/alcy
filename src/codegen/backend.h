@@ -30,8 +30,9 @@ enum class Backend : u8 { None, Llvm, DirectWasm, DirectX86_64 };
 // What a backend is asked to write. `Object` is a relocatable object for
 // the linker; `Module` is a final module that needs no link (wasm today);
 // `Text` and `Bitcode` are the two readable LLVM forms, which only a
-// backend with a module to print can answer.
-enum class OutputKind : u8 { Object, Module, Text, Bitcode };
+// backend with a module to print can answer; `Assembly` is the target's
+// textual assembly, which a backend prints from the code it would emit.
+enum class OutputKind : u8 { Object, Module, Text, Bitcode, Assembly };
 
 // Why an emission failed. Anything finer lives in the bag the request
 // carries; this is what a caller switches on to choose its own message.

@@ -128,7 +128,11 @@ bool Llvm::supports(codegen::OutputKind kind, const codegen::Target& target) {
   // Whether the linked LLVM has the target's backend is answered when the
   // target machine is resolved; a target it does not know fails emission
   // with UnknownTarget, which is a better message than a silent false.
-  (void)target;
+  if (kind == codegen::OutputKind::Assembly) {
+    // A wasm module has no textual assembly form; leaving this true would
+    // let selection print a meaningless .s for a wasm target.
+    return !target.is_wasm();
+  }
   return kind != codegen::OutputKind::Module;
 }
 
@@ -153,6 +157,17 @@ base::Result<std::vector<u8>, codegen::EmitError> Llvm::emit(
         return base::make_err(codegen::EmitError::CannotEmit);
       }
       return base::make_ok(std::move(object).unwrap());
+    }
+    case codegen::OutputKind::Assembly: {
+      PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                               "emit-asm", "backend");
+      base::Result<std::vector<u8>, ObjectEmitError> assembly =
+          emit_assembly(*emitted.module, request.target,
+                        request.options.profiler, request.options.optimize);
+      if (assembly.is_err()) {
+        return base::make_err(codegen::EmitError::CannotEmit);
+      }
+      return base::make_ok(std::move(assembly).unwrap());
     }
     case codegen::OutputKind::Text: {
       PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,

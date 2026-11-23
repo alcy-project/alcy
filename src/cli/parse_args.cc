@@ -377,8 +377,8 @@ arg::Parser build_parser(i18n::Language language) {
                        .build())
           .add_arg(arg::ArgBuilder("emit")
                        .help(usage.text(i18n::Key::CliEmitHelp))
-                       .choices({"executable", "object", "llvm-ir", "llvm-bc",
-                                 "ir", "ir-bc"})
+                       .choices({"executable", "object", "asm", "llvm-ir",
+                                 "llvm-bc", "ir", "ir-bc"})
                        .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("backend")
@@ -441,8 +441,8 @@ arg::Parser build_parser(i18n::Language language) {
                        .build())
           .add_arg(arg::ArgBuilder("emit")
                        .help(usage.text(i18n::Key::CliEmitHelp))
-                       .choices({"executable", "object", "llvm-ir", "llvm-bc",
-                                 "ir", "ir-bc"})
+                       .choices({"executable", "object", "asm", "llvm-ir",
+                                 "llvm-bc", "ir", "ir-bc"})
                        .default_value("executable")
                        .build())
           .add_arg(arg::ArgBuilder("backend")

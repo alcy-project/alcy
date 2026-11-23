@@ -413,6 +413,7 @@
   F(PipelineBackendNoOptimizer, Error, Pipeline, "The '{}' backend does not optimize; build with a profile that does not") \
   F(PipelineBackendNotBuilt, Error, Pipeline, "The '{}' backend is not part of this build of the compiler") \
   F(PipelineBackendUnsupported, Error, Pipeline, "The '{}' backend cannot write this output") \
+  F(PipelineWasmHasNoAssembly, Error, Pipeline, "--emit=asm has no assembly form for a wasm target; use --emit=executable or --emit=object") \
   F(PipelineBinArtifactNotDiscovered, Error, Pipeline, "Bin artifact '{}' was not discovered") \
   F(PipelineBinArtifactNotSelected, Error, Pipeline, "Bin artifact '{}' is not in [modules]") \
   F(PipelineCannotCreateDirectory, Error, Pipeline, "Cannot create directory '{}'") \
@@ -523,7 +524,7 @@
   F(CliDepsHelp, Note, Pipeline, "A dependency on top of the default suite (`alcy/std/*`), as a package specifier or `specifier = { ... }`. The default already globs every member; repeatable.") \
   F(CliDepsOnlyForCompile, Note, Pipeline, "The `--no-std` and `--deps` flags only mean anything for `compile`") \
   F(CliDidYouMean, Note, Pipeline, "{} (did you mean '{}'?)") \
-  F(CliEmitHelp, Note, Pipeline, "What to write: executable (default), object, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
+  F(CliEmitHelp, Note, Pipeline, "What to write: executable (default), object, asm, llvm-ir, llvm-bc, or ir. The output's extension no longer decides.") \
   F(CliFilePlural, Note, Pipeline, "files") \
   F(CliFileSingular, Note, Pipeline, "file") \
   F(CliFmtAbout, Note, Pipeline, "Format source files") \

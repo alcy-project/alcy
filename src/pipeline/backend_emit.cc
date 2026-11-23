@@ -78,6 +78,7 @@ codegen::OutputKind output_kind_for(EmitMode mode,
       return target.is_wasm() ? codegen::OutputKind::Module
                               : codegen::OutputKind::Object;
     case EmitMode::Object: return codegen::OutputKind::Object;
+    case EmitMode::Asm: return codegen::OutputKind::Assembly;
     case EmitMode::LlvmIr: return codegen::OutputKind::Text;
     case EmitMode::LlvmBitcode: return codegen::OutputKind::Bitcode;
     case EmitMode::Ir:

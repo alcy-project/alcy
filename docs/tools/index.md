@@ -166,6 +166,7 @@ feature.
 
 ## See also
 
+- [Backends and output formats](backends.md)
 - [The getting-started guide](../guide/en/02-getting-started.md)
 - `alcy --help` on your machine - the authoritative synopsis for the build you
   have

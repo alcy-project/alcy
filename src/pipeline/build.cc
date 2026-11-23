@@ -137,6 +137,7 @@ namespace {
 std::string suffix_for(const codegen::Target& target, EmitMode mode) {
   switch (mode) {
     case EmitMode::Object: return ".o";
+    case EmitMode::Asm: return ".s";
     case EmitMode::LlvmIr: return ".ll";
     case EmitMode::LlvmBitcode: return ".bc";
     case EmitMode::Ir: return ".ir";
@@ -283,6 +284,12 @@ base::Result<void, diag::Reported> check_emission(PipelineContext& ctx,
     (void)index;
     return base::make_err(diag::Reported{});
   }
+  if (kind == codegen::OutputKind::Assembly && ctx.target.is_wasm()) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineWasmHasNoAssembly>(
+        DiagCode::UnsupportedOutput);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
   if (!backend_supports(ctx.backend, kind, ctx.target)) {
     const u32 index = ctx.bag.emit<i18n::Key::PipelineBackendUnsupported>(
         DiagCode::UnsupportedOutput, codegen::backend_name(ctx.backend));
@@ -406,6 +413,7 @@ struct Emission {
 std::string_view emission_scope(codegen::OutputKind kind) {
   switch (kind) {
     case codegen::OutputKind::Object: return "emit-object";
+    case codegen::OutputKind::Assembly: return "emit-asm";
     case codegen::OutputKind::Text: return "emit-ir";
     case codegen::OutputKind::Bitcode: return "emit-bitcode";
     case codegen::OutputKind::Module: return "emit-wasm";
@@ -826,6 +834,11 @@ base::Result<std::string, diag::Reported> emit_output(
     if (mode == EmitMode::Object) {
       return emit_package_output(ctx, lowered, plan.profile, output_path,
                                  is_lib, codegen::OutputKind::Object, "object");
+    }
+    if (mode == EmitMode::Asm) {
+      return emit_package_output(ctx, lowered, plan.profile, output_path,
+                                 is_lib, codegen::OutputKind::Assembly,
+                                 "assembly");
     }
     if (mode == EmitMode::LlvmIr) {
       return emit_package_output(ctx, lowered, plan.profile, output_path,

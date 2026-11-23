@@ -23,6 +23,7 @@
 #include "fpag/io/io_util.h"
 #include "fpag/io/temp_dir.h"
 #include "i18n/language.h"
+#include "ir/type.h"
 #include "path/path.h"
 #include "pipeline/build.h"
 #include "pipeline/build_plan.h"
@@ -584,4 +585,47 @@ TEST_CASE("A suite builds every member into its own out/") {
   }
 }
 
+#if !BUILD_FLAG(IS_OS_ASMJS)
+TEST_CASE("A build writes assembly where it was asked for one") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_emit_asm_test_");
+  CHECK(dir.write_file("main.al", PROGRAM));
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  ctx.backend = LLVM_BACKEND;
+  const std::string asm_path = dir.join("out.s");
+  base::Result<std::string, diag::Reported> built =
+      build_single_file(ctx, dir.join("main.al"), asm_path, BuildPlan{},
+                        EmitMode::Asm, pipeline::full_std_selection());
+  CHECK(built.is_ok());
+  const std::optional<std::string> text = io::read_file(asm_path);
+  CHECK(text.has_value());
+  if (text.has_value()) {
+    CHECK(text->find(".text") != std::string::npos);
+    CHECK(text->find("main") != std::string::npos);
+  }
+}
+#endif  // !BUILD_FLAG(IS_OS_ASMJS)
+
+TEST_CASE("A wasm target refuses assembly output") {
+  io::TempDir dir = io::TempDir::create_unique("alcy_wasm_asm_test_");
+  CHECK(dir.write_file("main.al", PROGRAM));
+
+  PipelineContext ctx{i18n::Language::EnUs};
+  ctx.backend = codegen::Backend::DirectWasm;
+  ctx.target =
+      codegen::Target{"wasm32-unknown-emscripten", ir::PointerWidth::W32};
+  base::Result<std::string, diag::Reported> refused = build_single_file(
+      ctx, dir.join("main.al"), dir.join("out.s"), BuildPlan{}, EmitMode::Asm,
+      pipeline::full_std_selection());
+  CHECK(refused.is_err());
+  const diag::Diagnostic* const only = ctx.bag.at(0);
+  CHECK(only != nullptr);
+  if (only != nullptr) {
+    CHECK(only->code ==
+          diag::Code{diag::Stage::Pipeline,
+                     static_cast<u8>(DiagCode::UnsupportedOutput)});
+  }
+}
+
 }  // namespace pipeline
+

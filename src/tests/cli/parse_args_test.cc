@@ -193,6 +193,8 @@ TEST_CASE("Parse emit modes") {
   CHECK(parse_ok(exe).emit == pipeline::EmitMode::Executable);
   const std::string_view obj[] = {"alcy", "build", "--emit=object"};
   CHECK(parse_ok(obj).emit == pipeline::EmitMode::Object);
+  const std::string_view asm_mode[] = {"alcy", "build", "--emit=asm"};
+  CHECK(parse_ok(asm_mode).emit == pipeline::EmitMode::Asm);
   const std::string_view llvm[] = {"alcy", "build", "--emit=llvm-ir"};
   CHECK(parse_ok(llvm).emit == pipeline::EmitMode::LlvmIr);
   const std::string_view bc[] = {"alcy", "build", "--emit=llvm-bc"};

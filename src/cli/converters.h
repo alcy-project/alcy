@@ -68,6 +68,8 @@ struct arg::Converter<pipeline::EmitMode> {
       return make_ok(EmitMode::Executable);
     } else if (v == "object") {
       return make_ok(EmitMode::Object);
+    } else if (v == "asm") {
+      return make_ok(EmitMode::Asm);
     } else if (v == "llvm-ir") {
       return make_ok(EmitMode::LlvmIr);
     } else if (v == "llvm-bc") {

@@ -16,6 +16,10 @@ enum class EmitMode : u8 {
   Executable,
   // Write one relocatable object and stop.
   Object,
+  // Write the target's textual assembly and stop. For the direct x86_64
+  // backend this is AT&T assembly an assembler can consume; LLVM prints
+  // its own. A wasm target has no assembly form and refuses this mode.
+  Asm,
   // Write the module as LLVM's textual IR and stop. Needs no target, so it
   // is the one mode that works before a backend is chosen.
   LlvmIr,

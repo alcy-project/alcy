@@ -47,6 +47,15 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
     debug::Profiler* profiler,
     bool optimize);
 
+// Emits the module as its target's textual assembly, from the same target
+// machine and pass pipeline as emit_object. Only the streamer's file type
+// differs, so the two answers describe the same generated code.
+base::Result<std::vector<u8>, ObjectEmitError> emit_assembly(
+    llvm::Module& module,
+    const Target& target,
+    debug::Profiler* profiler,
+    bool optimize);
+
 // A freestanding program has no libc for the pipeline to synthesize
 // calls to; passing true says so.
 //

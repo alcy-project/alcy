@@ -289,11 +289,16 @@ base::Result<void, ObjectEmitError> optimize_module(llvm::Module& module,
   return base::make_ok();
 }
 
-base::Result<std::vector<u8>, ObjectEmitError> emit_object(
+namespace {
+
+// Both the object and the textual assembly come from the same target
+// machine and pass pipeline; only the streamer's file type differs.
+base::Result<std::vector<u8>, ObjectEmitError> emit_code(
     llvm::Module& module,
     const Target& target,
     debug::Profiler* profiler,
-    bool optimize) {
+    bool optimize,
+    llvm::CodeGenFileType file_type) {
   base::Result<void, ObjectEmitError> configured =
       configure_target(module, target);
   if (configured.is_err()) {
@@ -320,8 +325,7 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
   {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(profiler, "add-emit-passes",
                                              "backend");
-    if (owned->addPassesToEmitFile(passes, output, nullptr,
-                                   llvm::CodeGenFileType::ObjectFile)) {
+    if (owned->addPassesToEmitFile(passes, output, nullptr, file_type)) {
       return base::make_err(ObjectEmitError::CannotEmit);
     }
   }
@@ -333,6 +337,26 @@ base::Result<std::vector<u8>, ObjectEmitError> emit_object(
 
   std::vector<u8> result(buffer_vec.begin(), buffer_vec.end());
   return base::make_ok(std::move(result));
+}
+
+}  // namespace
+
+base::Result<std::vector<u8>, ObjectEmitError> emit_object(
+    llvm::Module& module,
+    const Target& target,
+    debug::Profiler* profiler,
+    bool optimize) {
+  return emit_code(module, target, profiler, optimize,
+                   llvm::CodeGenFileType::ObjectFile);
+}
+
+base::Result<std::vector<u8>, ObjectEmitError> emit_assembly(
+    llvm::Module& module,
+    const Target& target,
+    debug::Profiler* profiler,
+    bool optimize) {
+  return emit_code(module, target, profiler, optimize,
+                   llvm::CodeGenFileType::AssemblyFile);
 }
 
 std::string emit_ir(llvm::Module& module) {

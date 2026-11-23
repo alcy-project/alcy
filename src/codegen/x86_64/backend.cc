@@ -17,14 +17,15 @@
 #include "codegen/object/elf64.h"
 #include "codegen/reach.h"
 #include "codegen/target.h"
-#include "codegen/x86_64/allocate.h"
-#include "codegen/x86_64/encode.h"
+#include "codegen/x86_64/allocator.h"
+#include "codegen/x86_64/encoder.h"
 #include "codegen/x86_64/frame.h"
 #include "codegen/x86_64/isa.h"
 #include "codegen/x86_64/minst.h"
+#include "codegen/x86_64/printer.h"
 #include "codegen/x86_64/rodata.h"
 #include "codegen/x86_64/runtime.h"
-#include "codegen/x86_64/select.h"
+#include "codegen/x86_64/selector.h"
 #include "diag/bag.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
@@ -93,7 +94,8 @@ bool is_entry_candidate(const ir::Storage& storage,
 
 bool X8664::supports(const codegen::OutputKind kind,
                      const codegen::Target& target) {
-  return kind == codegen::OutputKind::Object &&
+  return (kind == codegen::OutputKind::Object ||
+          kind == codegen::OutputKind::Assembly) &&
          target.triple.rfind("x86_64", 0) == 0 &&
          target.triple.find("linux") != std::string::npos;
 }
@@ -164,6 +166,8 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     u64 offset;
     u64 size;
   };
+  const bool want_assembly = request.kind == codegen::OutputKind::Assembly;
+  std::vector<PrintedBody> printed;
   const auto emit_body = [&](Body& body, const std::string& symbol,
                              const object::SymbolBind bind,
                              Encoded* captured = nullptr) -> EmittedBody {
@@ -176,6 +180,10 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     const u64 at = text.bytes.size();
     text.bytes.insert(text.bytes.end(), encoded.bytes.begin(),
                       encoded.bytes.end());
+    if (want_assembly) {
+      printed.push_back(
+          PrintedBody{symbol, body, bind, {}, at, encoded.bytes.size()});
+    }
     object.symbols.push_back(object::Symbol{
         .name = symbol,
         .section = 0,
@@ -274,6 +282,9 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
           .bind = object::SymbolBind::Local,
           .type = object::SymbolType::Func,
       });
+    }
+    if (want_assembly && !printed.empty()) {
+      printed.back().aliases.push_back(internal_symbol(index));
     }
     if (request.options.backtrace) {
       std::string shown = std::string(strings.get(function.meta.path));
@@ -486,6 +497,15 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     const u64 at = text.bytes.size();
     text.bytes.insert(text.bytes.end(), encoded.bytes.begin(),
                       encoded.bytes.end());
+    if (want_assembly) {
+      printed.push_back(
+          PrintedBody{request.options.freestanding ? "_start" : "main",
+                      wrapper,
+                      object::SymbolBind::Global,
+                      {},
+                      at,
+                      encoded.bytes.size()});
+    }
     object.symbols.push_back(object::Symbol{
         .name = request.options.freestanding ? "_start" : "main",
         .section = 0,
@@ -674,6 +694,10 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     }
   }
 
+  if (want_assembly) {
+    const std::string text = print_assembly(object, printed);
+    return base::make_ok(std::vector<u8>(text.begin(), text.end()));
+  }
   return base::make_ok(object::write_elf64_x86_64(object));
 }
 

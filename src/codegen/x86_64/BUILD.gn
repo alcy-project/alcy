@@ -6,22 +6,24 @@
 # point of it.
 source_set("x86_64") {
   sources = [
-    "allocate.cc",
-    "allocate.h",
+    "allocator.cc",
+    "allocator.h",
     "backend.cc",
     "backend.h",
-    "encode.cc",
-    "encode.h",
+    "encoder.cc",
+    "encoder.h",
     "frame.cc",
     "frame.h",
     "isa.h",
     "minst.h",
+    "printer.cc",
+    "printer.h",
     "rodata.cc",
     "rodata.h",
     "runtime.cc",
     "runtime.h",
-    "select.cc",
-    "select.h",
+    "selector.cc",
+    "selector.h",
   ]
   deps = [
     "//src:base_modules",

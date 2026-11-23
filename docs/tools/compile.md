@@ -35,6 +35,7 @@ the suffix never decides what parses.
 | --- | --- |
 | `executable` (default) | With one input: the input with the last extension replaced by the platform's suffix (none on POSIX; `.exe` on Windows; `.wasm` for a wasm target); with `--stdin`: required, otherwise refused |
 | `object` | Input: replace the extension with `.o`; `--stdin`: required |
+| `asm` | Input: replace with `.s`; textual assembly, no linking |
 | `llvm-ir` | Input: replace with `.ll`; needs no linking |
 | `llvm-bc` | Input: replace with `.bc` |
 | `ir` | Input: replace with `.ir` |
@@ -50,8 +51,8 @@ tools, so a build with no LLVM still answers either.
 | Flag | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `-o`, `--output` | path | (per table) | Literal output path. With `--stdin`, required |
-| `--emit` | `executable`, `object`, `llvm-ir`, `llvm-bc`, `ir`, `ir-bc` | `executable` | Artifact kind to write; replaces, never appends an extension |
-| `--backend` | `llvm`, `direct-wasm`, `direct-x86_64` | native x86_64 Linux debug: `direct-x86_64`; otherwise `llvm` | Which backend writes the code |
+| `--emit` | `executable`, `object`, `asm`, `llvm-ir`, `llvm-bc`, `ir`, `ir-bc` | `executable` | Artifact kind to write; replaces, never appends an extension |
+| `--backend` | `llvm`, `direct-wasm`, `direct-x86_64` | native x86_64 Linux debug: `direct-x86_64`; otherwise `llvm` | Which backend writes the code. See [Backends and output formats](backends.md) |
 | `--target` | `<triple>` | `host` | The machine to build for |
 | `--linker` | driver | system default | System linker driver for executable builds |
 | `--link-args` | argument | (empty) | Argument for the linker. Repeatable |
