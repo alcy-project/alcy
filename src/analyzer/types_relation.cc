@@ -515,6 +515,23 @@ ir::TypeIdx Checker::unify(ir::TypeIdx expected,
     (void)index;
     return error_type();
   }
+  // A char and a rune are different widths with different promises:
+  // ASCII byte versus any Unicode scalar. Name that distinction rather
+  // than reporting two short type tags.
+  const ir::TypeTag expected_tag = tag_of(expected);
+  const ir::TypeTag actual_tag = tag_of(actual);
+  if (expected_tag == ir::TypeTag::Char && actual_tag == ir::TypeTag::Rune) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerExpectedCharFoundRune>(
+        DiagCode::TypeMismatch, span);
+    (void)index;
+    return error_type();
+  }
+  if (expected_tag == ir::TypeTag::Rune && actual_tag == ir::TypeTag::Char) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerExpectedRuneFoundChar>(
+        DiagCode::TypeMismatch, span);
+    (void)index;
+    return error_type();
+  }
   const u32 index = bag.emit<i18n::Key::AnalyzerTypeMismatchExpectedFound>(
       DiagCode::TypeMismatch, span, what, type_display(expected),
       type_display(actual));

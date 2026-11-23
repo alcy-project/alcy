@@ -58,6 +58,7 @@ pub use package::parse::Parse;
 pub use package::scalar::char_from_u8;
 pub use package::scalar::char_from_rune;
 pub use package::scalar::rune_from_u32;
+pub use package::scalar::rune_from_char;
 pub use package::scalar::rune_from_utf8;
 pub use package::scalar::rune_from_str;
 pub use package::string::from_utf8;

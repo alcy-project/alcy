@@ -304,6 +304,10 @@
   F(AnalyzerTypeInStandardLibrary, Error, Analyzer, "Type '{}' is not found; `{}` is in the standard library (alcy/std/{}); add it to [dependencies]") \
   F(AnalyzerTypeMismatch, Error, Analyzer, "Type mismatch in {}: '{}' vs '{}'") \
   F(AnalyzerTypeMismatchExpectedFound, Error, Analyzer, "Type mismatch in {}: expected '{}', found '{}'") \
+  F(AnalyzerCharRuneBinaryMismatch, Error, Analyzer, "Cannot compare a `char` with a `rune`: `char` is an ASCII byte (0x00-0x7F) and `rune` is any Unicode scalar; widen the ASCII side with `rune_from_char(...)` or narrow the Unicode side with `char_from_rune(...)`") \
+  F(AnalyzerCharacterLiteralNotAscii, Error, Analyzer, "The literal {} is a Unicode scalar, so its type is `rune`, not `char`: `char` holds only ASCII bytes (0x00-0x7F). Use `rune` for this value, or `str`/`String` for text") \
+  F(AnalyzerExpectedCharFoundRune, Error, Analyzer, "Expected `char` (an ASCII byte), found `rune` (a Unicode scalar); convert with `char_from_rune(...)` or change the type to `rune`") \
+  F(AnalyzerExpectedRuneFoundChar, Error, Analyzer, "Expected `rune` (a Unicode scalar), found `char` (an ASCII byte); widen with `rune_from_char(...)`") \
   F(AnalyzerTypeNotSupported, Error, Analyzer, "Type is not supported yet") \
   F(AnalyzerTypeParameterAsValue, Error, Analyzer, "Type parameter '{}' cannot be used as a value") \
   F(AnalyzerUnexpectedTypeArguments, Error, Analyzer, "Type '{}' takes no type arguments") \
