@@ -6,6 +6,7 @@
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import header_license
@@ -117,8 +118,28 @@ def tool_commands(dry_run: bool) -> list[list[str]]:
     return commands
 
 
-def format_files(dry_run: bool) -> int:
+def command_label(cmd: list[str]) -> str:
+    """A short name for a subprocess, for the timing report."""
+    if cmd[0] == "uv" and len(cmd) > 2:
+        return " ".join(cmd[:3])
+    if cmd[0] == "env" and len(cmd) > 2:
+        return " ".join(cmd[2:4])
+    return cmd[0]
+
+
+def format_files(dry_run: bool, timings: bool = False) -> int:
+    started = time.perf_counter()
+    last = started
+
+    def mark(label: str) -> None:
+        nonlocal last
+        now = time.perf_counter()
+        if timings:
+            print(f"format: {now - last:7.3f}s  {label}", file=sys.stderr)
+        last = now
+
     ok = header_license.apply_to_files(dry_run)
+    mark("header_license")
     target_dirs = []
     for d in project_source_dirs:
         if not d.is_dir():
@@ -126,6 +147,7 @@ def format_files(dry_run: bool) -> int:
             continue
 
         target_dirs.append(d)
+    mark("collect files")
 
     # The rule fixes come before clang-format, so the final pass
     # normalizes whatever they rewrote.
@@ -136,6 +158,7 @@ def format_files(dry_run: bool) -> int:
     # failure's diagnostics print where they can be read.
     for cmd in commands:
         proc = subprocess.run(cmd, cwd=project_root_dir, capture_output=True, text=True)
+        mark(command_label(cmd))
         if proc.returncode != 0:
             ok = False
             print(f"format: failed: {' '.join(cmd)}")
@@ -152,6 +175,12 @@ def format_files(dry_run: bool) -> int:
     if len(commands) == 0:
         print("None of the files were formatted")
         ok = False
+    mark("summary")
+    if timings:
+        print(
+            f"format: {time.perf_counter() - started:7.3f}s  total",
+            file=sys.stderr,
+        )
     if ok:
         print(
             "format: the tree is formatted"
@@ -162,17 +191,19 @@ def format_files(dry_run: bool) -> int:
 
 
 def main():
-    dry_run = False
-    if sys.argv[1:] == ["--dry-run"]:
+    argv = sys.argv[1:]
+    dry_run = "--dry-run" in argv
+    timings = "--timings" in argv
+    rest = [arg for arg in argv if arg not in ("--dry-run", "--timings")]
+    if rest:
+        print(f"usage: {sys.argv[0]} [--dry-run] [--timings]", file=sys.stderr)
+        return 2
+    if dry_run:
         import os
 
         print(f"{os.path.basename(__file__)}: dry run enabled")
-        dry_run = True
-    elif sys.argv[1:]:
-        print(f"usage: {sys.argv[0]} [--dry-run]", file=sys.stderr)
-        return 2
 
-    return format_files(dry_run)
+    return format_files(dry_run, timings)
 
 
 if __name__ == "__main__":
