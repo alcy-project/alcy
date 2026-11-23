@@ -317,7 +317,7 @@ TEST_CASE("An unresolved standard library name offers a manifest fix") {
   CHECK(f.dir.write_file("proj/main.al", source));
   const Document document(f.main_uri, "alcy", 1, std::string(source));
   AnalysisCache cache;
-  CHECK(cache.get(document).ok());
+  CHECK(cache.analysis_for(document).ok());
 
   const text::JsonValue actions =
       code_actions(document, cache, Position{0, 0}, Position{4, 1});
@@ -506,10 +506,12 @@ TEST_CASE("Incoming calls resolve for a declaration in an unopened file") {
   }
   const text::JsonValue items =
       prepare_call_hierarchy(document, analysis, Position{8, 8});
-  CHECK_FALSE(items.as_array().empty());
+  CHECK(items.as_array().size() == 1);
   if (items.as_array().empty()) {
     return;
   }
+  CHECK(items.as_array().front().find("name")->as_string() == "helper_fn");
+  CHECK(items.as_array().front().find("uri")->as_string() == f.helper_uri);
   const std::optional<source::FileId> item_file =
       file_of_uri(analysis, f.helper_uri);
   if (!item_file.has_value()) {
@@ -517,7 +519,13 @@ TEST_CASE("Incoming calls resolve for a declaration in an unopened file") {
   }
   const text::JsonValue calls =
       incoming_calls(document, analysis, items.as_array().front(), *item_file);
-  CHECK_FALSE(calls.as_array().empty());
+  CHECK(calls.as_array().size() == 1);
+  if (!calls.as_array().empty()) {
+    CHECK(calls.as_array().front().find("from")->find("name")->as_string() ==
+          "main");
+    CHECK(calls.as_array().front().find("from")->find("uri")->as_string() ==
+          f.main_uri);
+  }
 }
 
 TEST_CASE("Hover on a reference shows the declaration and its docs") {
