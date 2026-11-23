@@ -44,8 +44,11 @@ remaining arguments, one per placeholder.
 ## Convertible types
 
 - Integers format as decimal, `bool` as `true`/`false`, `str` as its
-  bytes, and `f32`/`f64` as decimal magnitudes. Any other argument
-  type is a compile-time error unless it implements `Display`.
+  bytes, `char` as its single ASCII byte, `rune` as the UTF-8 bytes of
+  its scalar, and `f32`/`f64` as decimal magnitudes. A precision
+  applies only to floats, so a scalar literal with `{:.N}` is an
+  error. Any other argument type is a compile-time error unless it
+  implements `Display`.
 - A nominal type formats through `fmt`'s `Display` spec when it
   implements it: `fn display(self: &Self, out: &mut [u8]) -> usize`
   writes the prefix of its rendering that fits into `out` and returns

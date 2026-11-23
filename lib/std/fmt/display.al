@@ -124,6 +124,50 @@ pub fn display_str(value: str, out: *mut u8, cap: usize) -> usize {
   ret n
 }
 
+// A char is already an ASCII byte, so it writes as one byte.
+pub fn display_char(value: char, out: *mut u8, cap: usize) -> usize {
+  if cap == 0 {
+    ret 1
+  }
+  unsafe { *ptr_offset_mut(out, 0 as isize) = value as u8 }
+  ret 1
+}
+
+// A rune writes as the UTF-8 bytes of its scalar, the same spelling a
+// `str` holding that scalar would have.
+pub fn display_rune(value: rune, out: *mut u8, cap: usize) -> usize {
+  code := value as u32
+  mut buf := [0u8, 0u8, 0u8, 0u8]
+  mut n := 0 as usize
+  if code <= 0x7Fu32 {
+    buf[0] = code as u8
+    n = 1
+  } else if code <= 0x7FFu32 {
+    buf[0] = (0xC0u32 | (code >> 6)) as u8
+    buf[1] = (0x80u32 | (code & 0x3Fu32)) as u8
+    n = 2
+  } else if code <= 0xFFFFu32 {
+    buf[0] = (0xE0u32 | (code >> 12)) as u8
+    buf[1] = (0x80u32 | ((code >> 6) & 0x3Fu32)) as u8
+    buf[2] = (0x80u32 | (code & 0x3Fu32)) as u8
+    n = 3
+  } else {
+    buf[0] = (0xF0u32 | (code >> 18)) as u8
+    buf[1] = (0x80u32 | ((code >> 12) & 0x3Fu32)) as u8
+    buf[2] = (0x80u32 | ((code >> 6) & 0x3Fu32)) as u8
+    buf[3] = (0x80u32 | (code & 0x3Fu32)) as u8
+    n = 4
+  }
+  if cap >= n {
+    mut i := 0 as usize
+    while i < n {
+      unsafe { *ptr_offset_mut(out, i as isize) = buf[i] }
+      i += 1
+    }
+  }
+  ret n
+}
+
 pub fn display_bool(value: bool, out: *mut u8, cap: usize) -> usize {
   yes := [0x74u8, 0x72u8, 0x75u8, 0x65u8]
   no := [0x66u8, 0x61u8, 0x6cu8, 0x73u8, 0x65u8]

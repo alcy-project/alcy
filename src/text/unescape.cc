@@ -117,7 +117,12 @@ u32 char_literal_value(std::string_view spelling) {
   if (bytes.empty()) {
     return 0xFFFD;
   }
-  const auto at = [&](usize i) { return static_cast<u32>(bytes[i]); };
+  // `char` is signed on the targets we build for: cast through `u8`
+  // first so a lead byte such as 0xE6 is not sign-extended into a
+  // four-byte scalar before the width decode.
+  const auto at = [&](usize i) {
+    return static_cast<u32>(static_cast<unsigned char>(bytes[i]));
+  };
   u32 scalar = at(0);
   usize width = 1;
   if (scalar >= 0xF0) {
