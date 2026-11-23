@@ -6,6 +6,8 @@ extend-exclude = [
   "treesitter/src",
 ]
 
+# Words from the compiler's own vocabulary. These appear in production
+# sources, not just in test inputs.
 [default.extend-words]
 # GN's restat attribute on ninja actions (build/toolchains/*.gni): a keyword,
 # not a misspelling.
@@ -18,13 +20,19 @@ Cpy = "Cpy"
 # map names its slots after the signal's short name.
 WRONLY = "WRONLY"
 acces = "acces"
-# Misspellings under test, fed to the matcher on purpose by
-# src/tests/cli/{parse_args_test,parse_output_test,suggest_test}.cc and
-# src/tests/lsp/workspace_symbols_test.cc. This version of typos
-# (1.48.0) has no per-file word keys, and a directory-scoped
-# `_typos.toml` replaces the whole configuration for that subtree rather
-# than merging with this one (verified against the file's own docs), so
-# the words stay global.
+# The ELF relocation section, .rela.dyn.
+rela = "rela"
+# C++20 <bit> API std::countr_zero.
+countr = "countr"
+
+# Intentional misspellings and truncations in editor and CLI test inputs.
+# typos 1.48 scopes words by file-name pattern, not by directory; test
+# sources are the files ending in _test.cc.
+[type.test-inputs]
+extend-glob = ["**/*_test.cc"]
+check-file = true
+
+[type.test-inputs.extend-words]
 buid = "buid"
 buil = "buil"
 comiple = "comiple"
@@ -38,7 +46,13 @@ hel = "hel"
 Som = "Som"
 # The workspace_symbols subsequence test queries "pn" ("Point").
 pn = "pn"
-# The ELF relocation section, .rela.dyn.
-rela = "rela"
-# C++20 <bit> API std::countr_zero.
-countr = "countr"
+
+# The same truncated strings also appear in #[test] blocks in the standard
+# library and in .al acceptance cases, so allow them only in .al sources.
+[type.al-sources]
+extend-glob = ["**/*.al"]
+check-file = true
+
+[type.al-sources.extend-words]
+abd = "abd"
+hel = "hel"
