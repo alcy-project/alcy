@@ -128,19 +128,23 @@ std::vector<DocPage> pages_for_language(const Catalog& catalog,
   std::vector<DocPage> pages;
   pages.reserve(sources.size());
   const std::string prefix(prefix_of(catalog, language));
-  // The default language defines which pages exist. A translation
+  // The default language defines which guide pages exist. A translation
   // replaces its counterpart; one that has not been written yet leaves
   // the default text in place, so a new translation can land a page at
-  // a time.
+  // a time. Spec and tools sources carry no language and are published
+  // unchanged in every tree.
   for (const DocSource& fallback : sources) {
-    if (fallback.language != catalog.default_language) {
+    const bool shared = fallback.language.empty();
+    if (!shared && fallback.language != catalog.default_language) {
       continue;
     }
     const DocSource* source = &fallback;
-    for (const DocSource& candidate : sources) {
-      if (candidate.language == language && candidate.path == fallback.path) {
-        source = &candidate;
-        break;
+    if (!shared) {
+      for (const DocSource& candidate : sources) {
+        if (candidate.language == language && candidate.path == fallback.path) {
+          source = &candidate;
+          break;
+        }
       }
     }
     DocPage page;
