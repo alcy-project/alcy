@@ -228,9 +228,16 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     }
     const ir::Function& function = storage.functions()[index];
     base::Result<Body, codegen::EmitError> selected =
-        select_function(storage, strings, request.instr_spans, function, bag,
-                        request.target.width, rodata, request.overlay,
-                        request.instr_site_names, request.options.backtrace);
+        select_function(SelectContext{.storage = storage,
+                                      .strings = strings,
+                                      .spans = request.instr_spans,
+                                      .function = function,
+                                      .bag = bag,
+                                      .width = request.target.width,
+                                      .rodata = rodata,
+                                      .overlay = request.overlay,
+                                      .site_names = request.instr_site_names,
+                                      .backtrace = request.options.backtrace});
     if (selected.is_err()) {
       return base::make_err(std::move(selected).unwrap_err());
     }

@@ -639,7 +639,8 @@ filesystem or writing an output artifact.
   the CLI; settings that only choose an artifact or a machine are not
   profile keys. No dimension is configured in both places without a
   documented precedence, and environment variables are never a
-  behavioral input channel.
+  behavioral input channel, other than the host SDK discovery named as
+  an exception under "No ambient inputs" above.
 
 - **Deterministic output**: Where the toolchain permits deterministic
   emission, identical inputs and build configuration should produce

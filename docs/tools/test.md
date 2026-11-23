@@ -12,6 +12,7 @@ $ alcy test [--release | --profile <NAME>] [PACKAGE-DIR]
            [--filter TEXT] [--list] [--no-run]
            [--execution multi-process|single-thread]
            [--linker DRIVER] [--link-args ARG]... [--no-cache]
+           [--freestanding]
            [--on-panic abort|backtrace] [--optimize on|off]
            [--overflow-checks on|off]
 ```
