@@ -38,7 +38,13 @@ TEST_CASE("Signature help names the call and starts at the first parameter") {
     const text::JsonValue* label = signature.find("label");
     CHECK(label != nullptr);
     if (label != nullptr) {
-      CHECK(label->as_string() == "fn add(i32, i32) -> i32");
+      CHECK(label->as_string() == "fn add(a: i32, b: i32) -> i32");
+    }
+    const text::JsonValue* params = signature.find("parameters");
+    CHECK(params != nullptr);
+    if (params != nullptr && params->as_array().size() == 2) {
+      CHECK(params->as_array()[0].find("label")->as_string() == "a: i32");
+      CHECK(params->as_array()[1].find("label")->as_string() == "b: i32");
     }
   }
   const text::JsonValue* active = result.find("activeParameter");

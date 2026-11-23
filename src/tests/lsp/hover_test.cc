@@ -57,7 +57,7 @@ TEST_CASE("Hover on a function shows its signature") {
       hover("fn add(a: i32, b: i32) -> i32 {\n  ret a\n}\n", 0, 4);
   CHECK(markdown.has_value());
   if (markdown.has_value()) {
-    CHECK(markdown->find("fn add(i32, i32) -> i32") != std::string::npos);
+    CHECK(markdown->find("fn add(a: i32, b: i32) -> i32") != std::string::npos);
   }
 }
 

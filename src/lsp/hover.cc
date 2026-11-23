@@ -36,16 +36,22 @@ std::string signature_markdown(const pipeline::PipelineContext& context,
                                std::string_view name,
                                std::span<const ir::TypeIdx> params,
                                ir::TypeIdx ret,
-                               std::string_view variadic_name) {
+                               std::string_view variadic_name,
+                               ast::ItemIdx item) {
   std::string out =
       "~~~alcy\n" + std::string(keyword) + " " + std::string(name) + "(";
   bool first = true;
-  for (const ir::TypeIdx param : params) {
+  for (usize i = 0; i < params.size(); ++i) {
     if (!first) {
       out += ", ";
     }
     first = false;
-    out += ir::type_display(state, context.strings, param);
+    const std::string_view name = param_name(context, item, i);
+    if (!name.empty()) {
+      out += name;
+      out += ": ";
+    }
+    out += ir::type_display(state, context.strings, params[i]);
   }
   if (!variadic_name.empty()) {
     if (!first) {
@@ -300,7 +306,8 @@ std::optional<std::string> render_target(const DocumentAnalysis& analysis,
       return signature_markdown(context, state,
                                 item.kind == K::Fn ? "fn" : "intrinsic",
                                 item.name(), signature->params, signature->ret,
-                                variadic_param_name(context, signature->item)) +
+                                variadic_param_name(context, signature->item),
+                                signature->item) +
              doc_markdown(source, item.docs);
     }
     case K::Static:

@@ -94,15 +94,21 @@ std::string signature_label(const pipeline::PipelineContext& context,
                             std::string_view name,
                             std::span<const ir::TypeIdx> params,
                             ir::TypeIdx ret,
-                            std::string_view variadic_name) {
+                            std::string_view variadic_name,
+                            ast::ItemIdx item) {
   std::string out = "fn " + std::string(name) + "(";
   bool first = true;
-  for (const ir::TypeIdx param : params) {
+  for (usize i = 0; i < params.size(); ++i) {
     if (!first) {
       out += ", ";
     }
     first = false;
-    out += ir::type_display(state, context.strings, param);
+    const std::string_view name = param_name(context, item, i);
+    if (!name.empty()) {
+      out += name;
+      out += ": ";
+    }
+    out += ir::type_display(state, context.strings, params[i]);
   }
   if (!variadic_name.empty()) {
     if (!first) {
@@ -144,6 +150,7 @@ text::JsonValue signature_help(const Document& document,
 
   std::string_view name;
   std::string_view variadic_name;
+  ast::ItemIdx declaration_item = ast::ItemIdx::invalid();
   std::span<const ir::TypeIdx> params;
   ir::TypeIdx ret = ir::primitive_idx(ir::TypeTag::Void);
   if (target->is_method) {
@@ -154,6 +161,7 @@ text::JsonValue signature_help(const Document& document,
         module.methods[target->index];
     name = method.name;
     variadic_name = variadic_param_name(context, method.item);
+    declaration_item = method.item;
     params = method.params;
     ret = method.ret;
   } else {
@@ -163,6 +171,7 @@ text::JsonValue signature_help(const Document& document,
     const analyzer::CheckedModule::FnSig& fn = module.functions[target->index];
     name = fn.name;
     variadic_name = variadic_param_name(context, fn.item);
+    declaration_item = fn.item;
     params = fn.params;
     ret = fn.ret;
   }
@@ -184,10 +193,15 @@ text::JsonValue signature_help(const Document& document,
 
   const ir::StorageState& state = analysis.types();
   text::JsonValue parameters = text::JsonValue::make_array();
-  for (const ir::TypeIdx param : params) {
+  for (usize i = 0; i < params.size(); ++i) {
+    const std::string_view name = param_name(context, declaration_item, i);
+    std::string label = ir::type_display(state, context.strings, params[i]);
+    if (!name.empty()) {
+      label.insert(0, ": ");
+      label.insert(0, name);
+    }
     text::JsonValue entry = text::JsonValue::make_object();
-    entry.set("label", text::JsonValue::make_string(
-                           ir::type_display(state, context.strings, param)));
+    entry.set("label", text::JsonValue::make_string(std::move(label)));
     parameters.push(std::move(entry));
   }
 
@@ -198,9 +212,9 @@ text::JsonValue signature_help(const Document& document,
                                                     ": .."));
     parameters.push(std::move(entry));
   }
-  signature.set("label",
-                text::JsonValue::make_string(signature_label(
-                    context, state, name, params, ret, variadic_name)));
+  signature.set("label", text::JsonValue::make_string(
+                             signature_label(context, state, name, params, ret,
+                                             variadic_name, declaration_item)));
   signature.set("parameters", std::move(parameters));
 
   text::JsonValue signatures = text::JsonValue::make_array();

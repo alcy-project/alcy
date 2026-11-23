@@ -265,34 +265,59 @@ const ir::StorageState& DocumentAnalysis::types() const {
   return package_->types->state();
 }
 
-std::string_view variadic_param_name(const pipeline::PipelineContext& context,
-                                     ast::ItemIdx item) {
+namespace {
+
+std::string_view declared_param_name(const pipeline::PipelineContext& context,
+                                     const ast::ItemFnParam& param) {
+  const ast::PatternNode& pattern = context.ast.patterns[param.pattern];
+  if (pattern.kind == ast::PatternKind::Ident) {
+    return pattern.payload.ident.name.name;
+  }
+  if (pattern.kind == ast::PatternKind::MutIdent) {
+    return pattern.payload.mut_ident.name.name;
+  }
+  return {};
+}
+
+std::span<const ast::ItemFnParam> declared_params(
+    const pipeline::PipelineContext& context,
+    ast::ItemIdx item) {
   if (!item.is_valid()) {
     return {};
   }
   const ast::ItemNode& node = context.ast.items[item];
-  if (node.kind != ast::ItemKind::Fn && node.kind != ast::ItemKind::Intrinsic) {
-    return {};
+  if (node.kind == ast::ItemKind::Fn) {
+    return node.payload.get<ast::ItemFn>().params;
   }
-  for (const ast::ItemFnParam& param : node.payload.get<ast::ItemFn>().params) {
-    if (!param.is_variadic) {
+  if (node.kind == ast::ItemKind::Intrinsic) {
+    return node.payload.get<ast::ItemIntrinsic>().params;
+  }
+  return {};
+}
+
+}  // namespace
+
+std::string_view param_name(const pipeline::PipelineContext& context,
+                            ast::ItemIdx item,
+                            usize index) {
+  usize seen = 0;
+  for (const ast::ItemFnParam& param : declared_params(context, item)) {
+    if (param.is_variadic) {
       continue;
     }
-    const ast::PatternNode& pattern = context.ast.patterns[param.pattern];
-    diag::Span name;
-    if (pattern.kind == ast::PatternKind::Ident) {
-      name = pattern.payload.ident.name.span;
-    } else if (pattern.kind == ast::PatternKind::MutIdent) {
-      name = pattern.payload.mut_ident.name.span;
-    } else {
-      return {};
+    if (seen++ == index) {
+      return declared_param_name(context, param);
     }
-    const std::optional<std::string_view> bytes =
-        context.sources.bytes(name.file);
-    if (!bytes.has_value() || name.offset + name.length > bytes->size()) {
-      return {};
+  }
+  return {};
+}
+
+std::string_view variadic_param_name(const pipeline::PipelineContext& context,
+                                     ast::ItemIdx item) {
+  for (const ast::ItemFnParam& param : declared_params(context, item)) {
+    if (param.is_variadic) {
+      return declared_param_name(context, param);
     }
-    return bytes->substr(name.offset, name.length);
   }
   return {};
 }
