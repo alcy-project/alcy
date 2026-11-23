@@ -148,14 +148,27 @@ the program's own description of itself. Only the goal package's
 The key grammar inside each file is on the page of the command that
 reads it: [`build`](build.md), [`lint`](lint.md).
 
-## Environment rules
+## Configuration and environment
 
-The toolchain does not read the environment for behavior. The locale
-is not consulted, the set of variables the shell exports changes
-nothing about what a command accepts or selects, and no exit code
-depends on them. One command is exact: `new` writes a `.gitignore`
-because you asked for `git`. Nothing else is a hint, a default, or a
-feature.
+Where a build setting comes from is part of the command's contract:
+
+- Environment variables do not decide what a command accepts or
+  selects. Flags, profiles, targets, backends, and output kinds come
+  from the command line or the project's files. The locale is never
+  consulted: `--lang` chooses the message language. `NO_COLOR` is the
+  one environment input and it only turns color off; no exit code
+  depends on it.
+- `compile` reads no configuration file. It never consults `alcy.toml`
+  or `.alcy/`, so one command line is the whole story. Its profile and
+  toolchain choices are built in or given as flags.
+- `build` reads the goal package's `alcy.toml`, which declares what is
+  built, and its `.alcy/` files, which say how. A flag overrides any
+  key in a `.alcy/` profile or toolchain file. A dependency's `.alcy/`
+  is never read.
+- The two commands accept the same build and emission flags, including
+  `--emit`, `--backend`, and `--freestanding`. `compile`'s `--stdin`,
+  `--no-std`, and `--deps` exist because its input has no package;
+  a package states those choices in its manifest.
 
 ## Where things live
 

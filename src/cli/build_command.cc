@@ -55,6 +55,7 @@ ResultCode run_build(const CliConfig& config,
       return failed;
     }
     pipeline::StdSelection selection = std::move(selected).unwrap();
+    ctx.freestanding = config.freestanding;
     const pipeline::LinkOptions link =
         resolve_link_options(config, pkg::Toolchain{}, ctx.target.triple);
     base::Result<pipeline::BuildProfile, diag::Reported> resolved =
@@ -96,7 +97,8 @@ ResultCode run_build(const CliConfig& config,
     return failed;
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  ctx.freestanding = tool.freestanding || ctx.freestanding;
+  ctx.freestanding =
+      config.freestanding || tool.freestanding || ctx.freestanding;
   ctx.no_cache = config.no_cache;
   const pipeline::LinkOptions link =
       resolve_link_options(config, tool, ctx.target.triple);

@@ -88,7 +88,8 @@ i32 run_run(const CliConfig& config,
     return failed;
   }
   const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  ctx.freestanding = tool.freestanding || ctx.freestanding;
+  ctx.freestanding =
+      config.freestanding || tool.freestanding || ctx.freestanding;
   // The run's front half consults and stores the build's cache, so the
   // opt-out the build carries is the run's too.
   ctx.no_cache = config.no_cache;

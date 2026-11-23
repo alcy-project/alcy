@@ -11,7 +11,7 @@ it beside the manifest, and tells you where it went.
 $ alcy build [--release | --profile <NAME>] [--emit MODE]
              [--backend NAME] [--target TRIPLE]
              [--output PATH] [--linker DRIVER] [--link-args ARG]...
-             [--file FILE] [--no-cache] [PACKAGE-DIR]
+             [--file FILE] [--no-cache] [--freestanding] [PACKAGE-DIR]
 ```
 
 `PACKAGE-DIR` defaults to the current directory. A positional that
@@ -81,6 +81,7 @@ linking. The text depends on the backend the profile selects, so pin
 | --- | --- | --- | --- |
 | `--linker` | driver | (default) | System linker driver for executable builds; overrides `.alcy/toolchain.toml` |
 | `--link-args` | argument | (empty) | Argument for the link driver after the objects. Repeatable, one element each; overrides `.alcy/toolchain.toml` |
+| `--freestanding` | flag | off | Link without the C runtime and enter at `_start`; overrides `.alcy/toolchain.toml` |
 
 The default is an in-process link with the lld the compiler carries,
 on Linux, macOS, and Windows; it falls back to a `clang` from PATH when
@@ -116,6 +117,8 @@ no libc, and the compiler emits `_start` as the entry instead of
 value becomes the process's exit code. On Linux the hosted default
 links the system C runtime, so the flag is how a Linux build asks
 for the kernel-only link.
+A `--freestanding` flag replaces this key for one invocation; the
+file's value stands when the flag is absent.
 A macOS target has no freestanding mode: libSystem is the only
 sanctioned route there, so the flag is refused with a diagnostic
 naming the target.

@@ -553,6 +553,7 @@
   F(CliTargetPlural, Note, Pipeline, "targets") \
   F(CliTargetSingular, Note, Pipeline, "target") \
   F(CliNewAbout, Note, Pipeline, "Create a new package, or a suite with `--suite <name|owner/name>`") \
+  F(CliFreestandingHelp, Note, Pipeline, "Link without the C runtime and enter at _start; overrides .alcy/toolchain.toml in a package build") \
   F(CliNoStdHelp, Note, Pipeline, "Start with no standard library instead of the default suite. Add back with --deps.") \
   F(CliNoCacheHelp, Note, Pipeline, "Skip the build cache for this invocation: no lookup and no store.") \
   F(CliNoSubcommand, Note, Pipeline, "No subcommand given") \

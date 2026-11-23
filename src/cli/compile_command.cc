@@ -102,6 +102,7 @@ ResultCode run_compile(const CliConfig& config,
   const pipeline::StdSelection selection = std::move(selected).unwrap();
   // `compile` never reads a toolchain file, so one file stays
   // reproducible from the command alone.
+  ctx.freestanding = config.freestanding;
   const pipeline::LinkOptions link =
       resolve_link_options(config, pkg::Toolchain{}, ctx.target.triple);
   // The same rule for profiles: `--profile` selects a built-in one and

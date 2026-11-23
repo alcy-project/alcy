@@ -57,6 +57,10 @@ struct CliConfig {
   // Whether `--profile` was named explicitly, which `--release` must
   // not silently stand in for.
   bool profile_given = false;
+  // Whether this invocation links without the C runtime. An explicit
+  // --freestanding stands even in `compile`, which reads no toolchain
+  // file; in a package build it replaces `.alcy/toolchain.toml`'s key.
+  bool freestanding = false;
   // A panic-behavior override for this invocation; unset keeps what the
   // selected profile says.
   std::optional<pkg::OnPanic> on_panic = std::nullopt;

@@ -98,6 +98,16 @@ TEST_CASE("A Linux hosted target links the system C runtime by default") {
   CHECK(!macos.freestanding);
 }
 
+TEST_CASE("An explicit flag overrides the file's link kind") {
+  const pkg::Toolchain hosted{
+      .linker = FILE_DRIVER, .link_args = FILE_ARGS, .freestanding = false};
+  CliConfig config;
+  config.freestanding = true;
+  const pipeline::LinkOptions link =
+      resolve_link_options(config, hosted, "x86_64-unknown-linux-gnu");
+  CHECK(link.freestanding);
+}
+
 TEST_CASE("The file's freestanding flag rides onto any target") {
   const pkg::Toolchain freestanding_file{
       .linker = FILE_DRIVER, .link_args = FILE_ARGS, .freestanding = true};

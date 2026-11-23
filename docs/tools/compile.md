@@ -11,8 +11,8 @@ options, and the output.
 ```console
 $ alcy compile FILE [--release | --profile <NAME>] [--emit MODE]
                  [--backend NAME] [--target TRIPLE] [--output PATH]
-                 [--emit MODE] [--linker DRIVER] [--link-args ARG]...
-                 [--stdin] [--no-std] [--deps FRAGMENT]... [--no-cache]
+                 [--linker DRIVER] [--link-args ARG]... [--freestanding]
+                 [--stdin] [--no-std] [--deps FRAGMENT]...
 ```
 
 `FILE` defaults to absent only when `--stdin` is the input; without
@@ -56,6 +56,7 @@ tools, so a build with no LLVM still answers either.
 | `--target` | `<triple>` | `host` | The machine to build for |
 | `--linker` | driver | system default | System linker driver for executable builds |
 | `--link-args` | argument | (empty) | Argument for the linker. Repeatable |
+| `--freestanding` | flag | off | Link without the C runtime and enter at `_start` |
 | `--no-std` | flag | off | Start with no standard library selection |
 | `--deps` | fragment | (empty) | A dependency on top of the default suite, spelled as a manifest specifier or `specifier = { ... }`. Repeatable |
 | `--release` | flag | off | The built-in `release` profile |
@@ -63,7 +64,6 @@ tools, so a build with no LLVM still answers either.
 | `--on-panic` | `abort`, `backtrace` | `abort` | Panic behavior; overrides the profile |
 | `--optimize` | `on`, `off` | on | Run the optimizer |
 | `--overflow-checks` | `on`, `off` | on | Abort on integer overflow |
-| `--no-cache` | flag | off | Neither read nor write the build cache |
 
 `--profile` for a package's own `[fast]` means there is no such profile:
 `compile` takes no `.alcy/`, so `--profile fast` is an unknown profile.

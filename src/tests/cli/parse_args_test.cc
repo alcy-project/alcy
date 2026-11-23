@@ -208,6 +208,15 @@ TEST_CASE("Parse emit modes") {
   CHECK(parse_ok(alcy_ir_bc).emit != pipeline::EmitMode::LlvmBitcode);
 }
 
+TEST_CASE("Parse the freestanding override in build and compile") {
+  const std::string_view build_args[] = {"alcy", "build", "--freestanding"};
+  CHECK(parse_ok(build_args).freestanding);
+  const std::string_view compile_args[] = {"alcy", "compile", "--freestanding"};
+  CHECK(parse_ok(compile_args).freestanding);
+  const std::string_view plain[] = {"alcy", "compile"};
+  CHECK(!parse_ok(plain).freestanding);
+}
+
 TEST_CASE("Parse rejects an unknown emit spelling") {
   const std::string_view exe[] = {"alcy", "build", "--emit=exe"};
   CHECK(parse(exe).is<ParseFailure>());

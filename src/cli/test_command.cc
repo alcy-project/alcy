@@ -126,8 +126,8 @@ i32 run_test(const CliConfig& config,
   // Set it before any file is read so the parser drops items of every
   // other build before resolution sees them.
   ctx.testing = true;
-  ctx.freestanding =
-      tool.freestanding || force_freestanding_elf(ctx.target.triple);
+  ctx.freestanding = config.freestanding || tool.freestanding ||
+                     force_freestanding_elf(ctx.target.triple);
   if (ctx.target.is_wasm() ||
       (ctx.freestanding && !force_freestanding_elf(ctx.target.triple))) {
     const u32 index = ctx.bag.emit<i18n::Key::CliTestTargetNotRunnable>(

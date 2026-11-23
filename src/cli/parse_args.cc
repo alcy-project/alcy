@@ -184,6 +184,7 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
                          : testgen::Execution::MultiProcess;
   c.no_std = matches.get<bool>("no-std").unwrap_or(false);
   c.no_cache = matches.get<bool>("no-cache").unwrap_or(false);
+  c.freestanding = matches.get<bool>("freestanding").unwrap_or(false);
   // `vcs` is declared on the two scaffolding verbs only, so the default
   // stands wherever it is absent.
   c.vcs = matches.get<pipeline::Vcs>("vcs").unwrap_or(c.vcs);
@@ -370,6 +371,10 @@ arg::Parser build_parser(i18n::Language language) {
                        .choices({"on", "off"})
                        .value_name("ON|OFF")
                        .build())
+          .add_arg(arg::ArgBuilder("freestanding")
+                       .help(usage.text(i18n::Key::CliFreestandingHelp))
+                       .is_flag(true)
+                       .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
                        .help(usage.text(i18n::Key::CliBuildOutputHelp))
@@ -433,6 +438,10 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliOverflowChecksHelp))
                        .choices({"on", "off"})
                        .value_name("ON|OFF")
+                       .build())
+          .add_arg(arg::ArgBuilder("freestanding")
+                       .help(usage.text(i18n::Key::CliFreestandingHelp))
+                       .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("output")
                        .short_name('o')
@@ -505,6 +514,10 @@ arg::Parser build_parser(i18n::Language language) {
                        .choices({"on", "off"})
                        .value_name("ON|OFF")
                        .build())
+          .add_arg(arg::ArgBuilder("freestanding")
+                       .help(usage.text(i18n::Key::CliFreestandingHelp))
+                       .is_flag(true)
+                       .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help(usage.text(i18n::Key::CliLinkerOverrideHelp))
                        .default_value("")
@@ -556,6 +569,10 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliOverflowChecksHelp))
                        .choices({"on", "off"})
                        .value_name("ON|OFF")
+                       .build())
+          .add_arg(arg::ArgBuilder("freestanding")
+                       .help(usage.text(i18n::Key::CliFreestandingHelp))
+                       .is_flag(true)
                        .build())
           .add_arg(arg::ArgBuilder("linker")
                        .help(usage.text(i18n::Key::CliLinkerOverrideHelp))

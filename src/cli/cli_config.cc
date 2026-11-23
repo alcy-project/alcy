@@ -36,7 +36,7 @@ pipeline::LinkOptions resolve_link_options(const CliConfig& config,
   return pipeline::LinkOptions{
       .driver = config.linker.empty() ? tool.linker : config.linker,
       .args = args,
-      .freestanding = tool.freestanding};
+      .freestanding = config.freestanding || tool.freestanding};
 }
 
 void resolve_backend_options(const CliConfig& config,
