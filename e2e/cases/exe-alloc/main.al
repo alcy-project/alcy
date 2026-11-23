@@ -59,7 +59,7 @@ fn main() -> i32 {
   }
   unsafe { dealloc(wide, 2) }
 
-  // A zero-size request still yields a distinct freeable pointer.
+  // A zero-size request yields an aligned dangling address and no block.
   z := make(0)
   unsafe { dealloc(z.data, 0) }
   ret bad

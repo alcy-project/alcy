@@ -3150,8 +3150,16 @@ class RuntimeBuilder {
     }
     llvm::Value* size_is_zero =
         builder_.CreateICmpEQ(size, zero, "size_is_zero");
-    llvm::Value* requested =
-        builder_.CreateSelect(size_is_zero, effective, size, "requested");
+    llvm::BasicBlock* no_bytes =
+        llvm::BasicBlock::Create(context, "no_bytes", function);
+    llvm::BasicBlock* allocate =
+        llvm::BasicBlock::Create(context, "allocate", function);
+    builder_.CreateCondBr(size_is_zero, no_bytes, allocate);
+    builder_.SetInsertPoint(no_bytes);
+    builder_.CreateRet(
+        builder_.CreateIntToPtr(align, builder_.getPtrTy(), "dangling"));
+    builder_.SetInsertPoint(allocate);
+    llvm::Value* requested = size;
 
     if (windows_) {
       // VirtualAlloc gives page-granular blocks, which answer every
@@ -3226,12 +3234,24 @@ class RuntimeBuilder {
         llvm::BasicBlock::Create(context, "done", function);
 
     llvm::Value* block = function->getArg(0);
+    llvm::BasicBlock* zero_bytes =
+        llvm::BasicBlock::Create(context, "zero_bytes", function);
+    llvm::BasicBlock* has_bytes =
+        llvm::BasicBlock::Create(context, "has_bytes", function);
+    builder_.SetInsertPoint(entry);
+    builder_.CreateCondBr(
+        builder_.CreateICmpEQ(function->getArg(1),
+                              llvm::ConstantInt::get(usize_, 0)),
+        zero_bytes, has_bytes);
+    builder_.SetInsertPoint(zero_bytes);
+    builder_.CreateBr(done);
+    builder_.SetInsertPoint(has_bytes);
 
     if (windows_) {
       release->eraseFromParent();
       // MEM_RELEASE: the pointer is the whole reservation, so the size
       // the caller carries is not needed and the kernel wants none.
-      builder_.SetInsertPoint(entry);
+      builder_.SetInsertPoint(has_bytes);
       llvm::Value* is_null =
           builder_.CreateICmpEQ(block, null_pointer(), "is_null");
       llvm::BasicBlock* release_win =
@@ -3253,7 +3273,7 @@ class RuntimeBuilder {
       return;
     }
 
-    builder_.SetInsertPoint(entry);
+    builder_.SetInsertPoint(has_bytes);
     llvm::Value* is_null =
         builder_.CreateICmpEQ(block, null_pointer(), "is_null");
     builder_.CreateCondBr(is_null, done, release);
@@ -3310,7 +3330,17 @@ class RuntimeBuilder {
     builder_.SetInsertPoint(reject);
     fail_allocation();
 
+    llvm::BasicBlock* no_bytes =
+        llvm::BasicBlock::Create(context, "no_bytes", function);
+    llvm::BasicBlock* map_block =
+        llvm::BasicBlock::Create(context, "map_block", function);
     builder_.SetInsertPoint(mapped);
+    builder_.CreateCondBr(builder_.CreateICmpEQ(size, constant(0)), no_bytes,
+                          map_block);
+    builder_.SetInsertPoint(no_bytes);
+    builder_.CreateRet(
+        builder_.CreateIntToPtr(align, builder_.getPtrTy(), "dangling"));
+    builder_.SetInsertPoint(map_block);
     llvm::Value* effective =
         builder_.CreateSelect(builder_.CreateICmpULT(align, constant(8)),
                               constant(8), align, "effective");
@@ -3363,9 +3393,11 @@ class RuntimeBuilder {
 
     llvm::Value* block = function->getArg(0);
     builder_.SetInsertPoint(entry);
+    llvm::Value* is_zero = builder_.CreateICmpEQ(
+        function->getArg(1), llvm::ConstantInt::get(usize_, 0), "is_zero");
     llvm::Value* is_null =
         builder_.CreateICmpEQ(block, null_pointer(), "is_null");
-    builder_.CreateCondBr(is_null, done, release);
+    builder_.CreateCondBr(builder_.CreateOr(is_zero, is_null), done, release);
 
     builder_.SetInsertPoint(release);
     llvm::Value* base_slot = builder_.CreateGEP(

@@ -211,8 +211,11 @@ interaction.
     built from.
   - `alloc<T>(count: usize) -> &mut MaybeUninit<T>` reserves room for
     `count` elements of `T` at `T`'s own size and alignment, and
-    returns the unique owning reference. A zero `count` still yields a
-    distinct, freeable pointer. A request the runtime cannot meet aborts
+    returns the unique owning reference. A request that reserves no
+    bytes answers an aligned dangling address without allocating, and
+    `dealloc` ignores such a request; neither a zero count nor a
+    zero-sized element consumes a heap block. A request the runtime
+    cannot meet aborts
     the process with the site-less `panic: allocation failed`,
     so the answer is never null; a size or alignment past
     the largest object the address space can hold is refused the same
@@ -331,7 +334,8 @@ interaction.
   one is an aligned but dangling address, and indexing a zero-sized
   array repeats that address. Construction and destruction still run
   their effects, and `alloc`/`dealloc` for a zero-sized element are
-  elided by the compiler, so a `Vec<()>` allocates no heap block.
+  handled by the runtime without a block, so a `Vec<()>` allocates no
+  heap memory.
 - Nothing else is promised. Field order, an enum's discriminant width
   and placement, and padding are the compiler's, and `size_of` and
   `align_of` are a function of the type for one compiler version and

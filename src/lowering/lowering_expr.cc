@@ -2676,19 +2676,6 @@ Val Lowerer::lower_alloc_intrinsic(ast::ExprIdx expr,
     }
     args.push_back(arg_for(arg, sig.params[i]));
   }
-  if (is_zst(type_args[0])) {
-    // A zero-sized element reserves no block. `dealloc` has nothing to
-    // free, and `alloc` answers a dangling but aligned address, so a
-    // container of them never reaches the runtime allocator.
-    if (name == "dealloc") {
-      return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
-    }
-    const u64 align =
-        ir::type_layout(builder.state(), type_args[0], width).align;
-    const ir::RegisterIdx dangling =
-        emit(ir::Opcode::TypeCast, sig.ret, {const_usize(align)});
-    return Val{to_operand(dangling, sig.ret), sig.ret, false, false};
-  }
   if (name == "dealloc") {
     // The runtime counts bytes; the compiler supplies the element
     // size and alignment it reserved them at.
