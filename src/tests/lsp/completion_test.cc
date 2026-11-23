@@ -129,6 +129,25 @@ TEST_CASE("Variant completion inserts the qualified name") {
   }
 }
 
+TEST_CASE("A documented struct offers its doc comment in completion") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "/// A point in 2D.\nstruct Point {\n  x: i32,\n}\n"
+                          "fn f() -> i32 {\n  Poi\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{5, 5});
+  const text::JsonValue* item = find_item(list, "Point");
+  CHECK(item != nullptr);
+  if (item == nullptr) {
+    return;
+  }
+  const text::JsonValue* doc = item->find("documentation");
+  CHECK(doc != nullptr);
+  if (doc != nullptr) {
+    CHECK(doc->find("value")->as_string() == "A point in 2D.");
+  }
+}
+
 TEST_CASE("Qualified variant completion replaces the whole path") {
   const Document document("file:///main.al", "alcy", 1,
                           "enum Option {\n  Some,\n  None,\n}\n"

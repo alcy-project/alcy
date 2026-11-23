@@ -200,7 +200,23 @@ void collect(const DocumentAnalysis& analysis,
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
       const ir::TypeNode& type = state.types[named.type];
-      emit(module.module, ast::ItemIdx::invalid(), named.name,
+      ast::ItemIdx declaration = ast::ItemIdx::invalid();
+      if (type.tag == ir::TypeTag::Enum) {
+        for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
+          if (info.type == named.type) {
+            declaration = info.item;
+            break;
+          }
+        }
+      } else {
+        for (const analyzer::CheckedModule::StructInfo& info : module.structs) {
+          if (info.type == named.type) {
+            declaration = info.item;
+            break;
+          }
+        }
+      }
+      emit(module.module, declaration, named.name,
            ir::type_display(state, context.strings, named.type),
            type.tag == ir::TypeTag::Enum ? CompletionItemKind::Enum
                                          : CompletionItemKind::Struct);
