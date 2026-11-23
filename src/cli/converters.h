@@ -85,6 +85,20 @@ struct arg::Converter<pipeline::EmitMode> {
 };
 
 template <>
+struct arg::Converter<codegen::AsmSyntax> {
+  static base::Result<codegen::AsmSyntax, arg::GetError> from_string(
+      std::string_view v) {
+    using arg::GetError, base::make_err, base::make_ok, codegen::AsmSyntax;
+    if (v == "att") {
+      return make_ok(AsmSyntax::Att);
+    } else if (v == "intel") {
+      return make_ok(AsmSyntax::Intel);
+    }
+    return make_err(GetError::InvalidArgument);
+  }
+};
+
+template <>
 struct arg::Converter<codegen::Target> {
   static base::Result<codegen::Target, arg::GetError> from_string(
       std::string_view v) {

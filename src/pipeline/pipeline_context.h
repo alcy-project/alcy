@@ -81,6 +81,8 @@ struct PipelineContext {
   // `_start` instead of `main`, and the link skips the C runtime
   //. Set from the goal package's toolchain file.
   bool freestanding = false;
+  // The spelling an --emit=asm output uses; set from the CLI.
+  codegen::AsmSyntax asm_syntax = codegen::AsmSyntax::Att;
   // The host SDK or import library the embedded linker chose, when the
   // link used it. Reported by --json as the one host input a native
   // executable build depends on; empty for every other artifact.

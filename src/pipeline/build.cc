@@ -388,6 +388,7 @@ struct Emission {
         .options =
             codegen::EmitOptions{
                 .freestanding = ctx.freestanding,
+                .asm_syntax = ctx.asm_syntax,
                 .backtrace = profile.on_panic == pkg::OnPanic::Backtrace,
                 .optimize = profile.optimize,
                 .parts = parts,

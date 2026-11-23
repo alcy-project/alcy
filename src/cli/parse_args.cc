@@ -161,6 +161,8 @@ base::Result<CliConfig, ParseFailure> extract_from_matches(
   // it against the target; the converter already rejected a spelling this
   // build does not know.
   c.backend = matches.get<codegen::Backend>("backend").unwrap_or(c.backend);
+  c.asm_syntax =
+      matches.get<codegen::AsmSyntax>("asm-syntax").unwrap_or(c.asm_syntax);
   c.target = matches.get<codegen::Target>("target").unwrap_or(c.target);
   c.output = matches.get<std::string_view>("output").unwrap_or(c.output);
   c.linker = matches.get<std::string_view>("linker").unwrap_or(c.linker);
@@ -391,6 +393,11 @@ arg::Parser build_parser(i18n::Language language) {
                        .choices({"llvm", "direct-wasm", "direct-x86_64"})
                        .value_name("NAME")
                        .build())
+          .add_arg(arg::ArgBuilder("asm-syntax")
+                       .help(usage.text(i18n::Key::CliAsmSyntaxHelp))
+                       .choices({"att", "intel"})
+                       .default_value("att")
+                       .build())
           .add_arg(arg::ArgBuilder("target")
                        .help(usage.text(i18n::Key::CliTargetHelp))
                        .choices(codegen::target_names())
@@ -458,6 +465,11 @@ arg::Parser build_parser(i18n::Language language) {
                        .help(usage.text(i18n::Key::CliBackendHelp))
                        .choices({"llvm", "direct-wasm", "direct-x86_64"})
                        .value_name("NAME")
+                       .build())
+          .add_arg(arg::ArgBuilder("asm-syntax")
+                       .help(usage.text(i18n::Key::CliAsmSyntaxHelp))
+                       .choices({"att", "intel"})
+                       .default_value("att")
                        .build())
           .add_arg(arg::ArgBuilder("target")
                        .help(usage.text(i18n::Key::CliTargetHelp))

@@ -24,7 +24,7 @@ and ignore `--backend`.
 | --- | --- | --- | --- |
 | `executable` | object, then the system linker | object, then the system linker | final WASI module |
 | `object` | relocatable object | relocatable ELF64 object | - |
-| `asm` | textual assembly | textual assembly, AT&T syntax | rejected, see below |
+| `asm` | textual assembly | textual assembly, AT&T or Intel | rejected, see below |
 | `llvm-ir`, `llvm-bc` | textual IR / bitcode | - | - |
 | `ir`, `ir-bc` | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline |
 
@@ -32,6 +32,9 @@ and ignore `--backend`.
 suffix. It replaces an unnamed output's suffix like the other modes; it
 stops before linking. `-j` does not split an assembly output, the same
 as `--emit=llvm-ir`.
+
+The direct backend writes AT&T syntax by default; `--asm-syntax=intel`
+selects Intel syntax. LLVM prints its own assembly and ignores the flag.
 
 ## Consequences of the choice
 
