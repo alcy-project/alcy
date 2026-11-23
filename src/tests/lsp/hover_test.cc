@@ -167,6 +167,23 @@ TEST_CASE("Hover on a variadic function shows its variadic slot") {
   }
 }
 
+TEST_CASE("Hover shows parameter modifiers") {
+  const std::optional<std::string> markdown = hover(
+      "fn bump(mut x: i32, y: i32) -> i32 {\n  x = y\n  ret x\n}\n", 0, 4);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("fn bump(mut x: i32, y: i32) -> i32") !=
+          std::string::npos);
+  }
+  const std::optional<std::string> comp =
+      hover("fn pick(comp i: usize, x: i32) -> i32 {\n  ret x\n}\n", 0, 3);
+  CHECK(comp.has_value());
+  if (comp.has_value()) {
+    CHECK(comp->find("fn pick(comp i: usize, x: i32) -> i32") !=
+          std::string::npos);
+  }
+}
+
 TEST_CASE("Hover off every node answers nothing") {
   const std::optional<std::string> markdown =
       hover("struct Mix {\n  // just a note\n  a: u8,\n}\n", 1, 6);

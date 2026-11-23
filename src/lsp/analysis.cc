@@ -297,17 +297,23 @@ std::span<const ast::ItemFnParam> declared_params(
 
 }  // namespace
 
-std::string_view param_name(const pipeline::PipelineContext& context,
-                            ast::ItemIdx item,
-                            usize index) {
+ParamSyntax param_syntax(const pipeline::PipelineContext& context,
+                         ast::ItemIdx item,
+                         usize index) {
   usize seen = 0;
   for (const ast::ItemFnParam& param : declared_params(context, item)) {
     if (param.is_variadic) {
       continue;
     }
-    if (seen++ == index) {
-      return declared_param_name(context, param);
+    if (seen++ != index) {
+      continue;
     }
+    ParamSyntax syntax;
+    syntax.name = declared_param_name(context, param);
+    syntax.is_comp = param.is_comp;
+    const ast::PatternNode& pattern = context.ast.patterns[param.pattern];
+    syntax.is_mut = pattern.kind == ast::PatternKind::MutIdent;
+    return syntax;
   }
   return {};
 }

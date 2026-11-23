@@ -76,6 +76,27 @@ TEST_CASE("Signature help outside a call answers nothing") {
   CHECK(!signature_help(document, analysis, Position{1, 5}).is_object());
 }
 
+TEST_CASE("Signature help labels a mutable parameter") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn bump(mut x: i32) -> i32 {\n  ret x\n}\n"
+                          "fn main() -> i32 {\n  ret bump(1)\n}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue result =
+      signature_help(document, analysis, Position{4, 8});
+  const text::JsonValue* signatures = result.find("signatures");
+  CHECK(signatures != nullptr);
+  if (signatures == nullptr || signatures->as_array().empty()) {
+    return;
+  }
+  const text::JsonValue& signature = signatures->as_array().front();
+  CHECK(signature.find("label")->as_string() == "fn bump(mut x: i32) -> i32");
+  const text::JsonValue* params = signature.find("parameters");
+  CHECK(params != nullptr);
+  if (params != nullptr && !params->as_array().empty()) {
+    CHECK(params->as_array()[0].find("label")->as_string() == "mut x: i32");
+  }
+}
+
 TEST_CASE("Signature help shows a variadic parameter") {
   const Document document(
       "file:///main.al", "alcy", 1,

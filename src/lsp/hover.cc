@@ -46,9 +46,15 @@ std::string signature_markdown(const pipeline::PipelineContext& context,
       out += ", ";
     }
     first = false;
-    const std::string_view name = param_name(context, item, i);
-    if (!name.empty()) {
-      out += name;
+    const ParamSyntax param = param_syntax(context, item, i);
+    if (param.is_comp) {
+      out += "comp ";
+    }
+    if (param.is_mut) {
+      out += "mut ";
+    }
+    if (!param.name.empty()) {
+      out += param.name;
       out += ": ";
     }
     out += ir::type_display(state, context.strings, params[i]);

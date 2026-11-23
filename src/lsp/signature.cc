@@ -103,9 +103,15 @@ std::string signature_label(const pipeline::PipelineContext& context,
       out += ", ";
     }
     first = false;
-    const std::string_view name = param_name(context, item, i);
-    if (!name.empty()) {
-      out += name;
+    const ParamSyntax param = param_syntax(context, item, i);
+    if (param.is_comp) {
+      out += "comp ";
+    }
+    if (param.is_mut) {
+      out += "mut ";
+    }
+    if (!param.name.empty()) {
+      out += param.name;
       out += ": ";
     }
     out += ir::type_display(state, context.strings, params[i]);
@@ -194,11 +200,17 @@ text::JsonValue signature_help(const Document& document,
   const ir::StorageState& state = analysis.types();
   text::JsonValue parameters = text::JsonValue::make_array();
   for (usize i = 0; i < params.size(); ++i) {
-    const std::string_view name = param_name(context, declaration_item, i);
+    const ParamSyntax param = param_syntax(context, declaration_item, i);
     std::string label = ir::type_display(state, context.strings, params[i]);
-    if (!name.empty()) {
+    if (!param.name.empty()) {
       label.insert(0, ": ");
-      label.insert(0, name);
+      label.insert(0, param.name);
+    }
+    if (param.is_mut) {
+      label.insert(0, "mut ");
+    }
+    if (param.is_comp) {
+      label.insert(0, "comp ");
     }
     text::JsonValue entry = text::JsonValue::make_object();
     entry.set("label", text::JsonValue::make_string(std::move(label)));

@@ -134,11 +134,17 @@ std::optional<text::JsonValue> location_json(const DocumentAnalysis& analysis,
                                              PositionEncoding encoding,
                                              PositionCache* cache);
 
-// The name of the Nth non-variadic parameter of a function declaration,
-// or empty when the declaration is unavailable or unnamed.
-std::string_view param_name(const pipeline::PipelineContext& context,
-                            ast::ItemIdx item,
-                            usize index);
+// How the Nth non-variadic parameter of a function declaration was
+// spelled: its name and the modifiers that must be repeated at a use.
+struct ParamSyntax {
+  std::string_view name;
+  bool is_comp = false;
+  bool is_mut = false;
+};
+
+ParamSyntax param_syntax(const pipeline::PipelineContext& context,
+                         ast::ItemIdx item,
+                         usize index);
 
 // The name written at a function's `args: ..` slot, or empty when the
 // declaration has no variadic parameter or is a synthesized signature.
