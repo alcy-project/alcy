@@ -30,6 +30,7 @@
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "fpag/base/result.h"
+#include "fpag/debug/profiler/profile_scope.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -142,8 +143,13 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       }
     }
   }
-  const std::vector<bool> reachable = codegen::reachable_functions(
-      storage, std::span(roots.data(), roots.size()));
+  std::vector<bool> reachable;
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                             "reachability", "backend");
+    reachable = codegen::reachable_functions(
+        storage, std::span(roots.data(), roots.size()));
+  }
 
   // One section for the code, every function at its own offset, and the
   // patches each body's references asked for, moved by that offset.
@@ -227,6 +233,9 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       continue;
     }
     const ir::Function& function = storage.functions()[index];
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                             strings.get(function.meta.name),
+                                             "emit-fn");
     base::Result<Body, codegen::EmitError> selected =
         select_function(SelectContext{.storage = storage,
                                       .strings = strings,
@@ -326,9 +335,13 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // The runtime, for the names the program reaches. A body is built
   // before the data section is written, because the text it prints is
   // data too.
-  for (const std::string& name : runtime_names) {
-    Body body = runtime::build(name, rodata);
-    emit_body(body, name, object::SymbolBind::Local);
+  {
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
+                                             "runtime", "backend");
+    for (const std::string& name : runtime_names) {
+      Body body = runtime::build(name, rodata);
+      emit_body(body, name, object::SymbolBind::Local);
+    }
   }
 
   // The wrapper the startup calls. It hands the program's own `main`
@@ -706,6 +719,8 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
         print_assembly(object, printed, request.options.asm_syntax);
     return base::make_ok(std::vector<u8>(text.begin(), text.end()));
   }
+  PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler, "elf64",
+                                           "backend");
   return base::make_ok(object::write_elf64_x86_64(object));
 }
 
