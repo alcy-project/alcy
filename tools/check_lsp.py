@@ -1048,7 +1048,12 @@ def package_session(alcy: Path) -> int:
 
 
 if __name__ == "__main__":
-    code = main()
-    if code != 0:
-        sys.exit(code)
-    sys.exit(package_session(alcy_binary(BUILD_SUBDIR)))
+    from utils.timing import run_with_timings
+
+    def run() -> int:
+        code = main()
+        if code != 0:
+            return code
+        return package_session(alcy_binary(BUILD_SUBDIR))
+
+    sys.exit(run_with_timings(run))

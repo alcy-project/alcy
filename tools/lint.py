@@ -415,8 +415,10 @@ def main():
 
 
 if __name__ == "__main__":
+    from utils.timing import run_with_timings
+
     try:
-        sys.exit(main())
+        sys.exit(run_with_timings(main))
     except KeyboardInterrupt:
         print("\nInterrupted by user. Exiting immediately...", file=sys.stderr)
         os._exit(130)

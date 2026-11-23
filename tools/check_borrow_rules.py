@@ -1366,4 +1366,6 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from utils.timing import run_with_timings
+
+    sys.exit(run_with_timings(main))
