@@ -124,3 +124,19 @@ TEST_CASE("the spec discovery rewrites a sibling reference") {
     }
   }
 }
+
+TEST_CASE("language-agnostic sources publish in every tree") {
+  ssg::DocSource shared;
+  shared.source_rel = "types.md";
+  shared.path = "reference/types.html";
+  shared.title = "Types";
+  const std::vector<ssg::DocSource> sources = {shared};
+  const std::vector<ssg::DocPage> pages =
+      ssg::pages_for_language(ssg_test::test_catalog(), sources, "ja");
+  CHECK(pages.size() == 1);
+  if (pages.size() != 1) {
+    return;
+  }
+  CHECK(pages[0].language == "ja");
+  CHECK(pages[0].route == "ja/reference/types.html");
+}
