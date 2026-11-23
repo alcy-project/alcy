@@ -739,12 +739,12 @@ Body build_env_find() {
     body.insts.push_back(nop);
   };
 
-  const SymbolRef environ = callee(body, "alcy_environ");
+  const SymbolRef environ_symbol = callee(body, "alcy_environ");
   // rdi = name pointer, rsi = name length. Keep the name in r10/r11 so
   // the byte comparison can use rax/rcx/rdx freely.
   mov(MOp::Mov, 8, Operand{Reg::R10}, Operand{Reg::Rdi});
   mov(MOp::Mov, 8, Operand{Reg::R11}, Operand{Reg::Rsi});
-  mov(MOp::Mov, 8, Operand{Reg::Rax}, Operand{environ});
+  mov(MOp::Mov, 8, Operand{Reg::Rax}, Operand{environ_symbol});
   mov(MOp::Mov, 8, Operand{Reg::Rax},
       Operand{
           Mem{.base = Reg::Rax, .index = std::nullopt, .scale = 1, .disp = 0}});
