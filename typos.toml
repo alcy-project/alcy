@@ -34,6 +34,8 @@ halp = "halp"
 abd = "abd"
 # The String::truncate and strip_suffix cases cut "hello" short.
 hel = "hel"
+# Completion tests request a prefix of "Some" ("Som" and "Option::Som").
+Som = "Som"
 # The workspace_symbols subsequence test queries "pn" ("Point").
 pn = "pn"
 # The ELF relocation section, .rela.dyn.
