@@ -233,9 +233,8 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       continue;
     }
     const ir::Function& function = storage.functions()[index];
-    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(request.options.profiler,
-                                             strings.get(function.meta.name),
-                                             "emit-fn");
+    PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(
+        request.options.profiler, strings.get(function.meta.name), "emit-fn");
     base::Result<Body, codegen::EmitError> selected =
         select_function(SelectContext{.storage = storage,
                                       .strings = strings,
