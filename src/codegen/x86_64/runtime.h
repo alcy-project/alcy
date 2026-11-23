@@ -19,9 +19,7 @@ namespace codegen::x86_64::runtime {
 
 // The body for one name. `defines` answers first; a name it refuses is
 // an emitter bug, not an input the reader can fix.
-[[nodiscard]] Body build(std::string_view name,
-                         RoData& rodata,
-                         bool freestanding = false);
+[[nodiscard]] Body build(std::string_view name, RoData& rodata);
 
 }  // namespace codegen::x86_64::runtime
 

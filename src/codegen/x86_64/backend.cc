@@ -15,7 +15,7 @@
 #include "codegen/backend.h"
 #include "codegen/diag_code.h"
 #include "codegen/object/elf64.h"
-#include "codegen/reach.h"
+#include "codegen/reachability.h"
 #include "codegen/target.h"
 #include "codegen/x86_64/allocator.h"
 #include "codegen/x86_64/encoder.h"
@@ -327,7 +327,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
   // before the data section is written, because the text it prints is
   // data too.
   for (const std::string& name : runtime_names) {
-    Body body = runtime::build(name, rodata, request.options.freestanding);
+    Body body = runtime::build(name, rodata);
     emit_body(body, name, object::SymbolBind::Local);
   }
 

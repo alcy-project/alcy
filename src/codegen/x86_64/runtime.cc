@@ -917,7 +917,7 @@ bool defines(const std::string_view name) {
   return find(name) != nullptr;
 }
 
-Body build(const std::string_view name, RoData& rodata, bool) {
+Body build(const std::string_view name, RoData& rodata) {
   const RuntimeEntry* entry = find(name);
   DCHECK_MSG(entry != nullptr,
              "the runtime was asked for a name it does not define");
