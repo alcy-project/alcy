@@ -200,11 +200,15 @@ function opensSearch(event: KeyboardEvent): boolean {
 }
 
 export function initSearch(): void {
-  const opener = document.querySelector<HTMLButtonElement>('[data-action="search"]');
-  if (opener === null) {
-    return;
+  // The header and the narrow-screen menu each carry a button.
+  for (const opener of document.querySelectorAll<HTMLButtonElement>(
+    '[data-action="search"]',
+  )) {
+    opener.addEventListener("click", () => {
+      opener.closest(".settings")?.removeAttribute("open");
+      openSearch();
+    });
   }
-  opener.addEventListener("click", openSearch);
   document.addEventListener("keydown", (event) => {
     if (!event.defaultPrevented && opensSearch(event)) {
       event.preventDefault();

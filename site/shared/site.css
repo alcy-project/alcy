@@ -225,6 +225,11 @@ body.site {
   margin-left: auto;
 }
 
+/* The menu carries a copy of the site navigation only on narrow screens. */
+.settings-nav {
+  display: none;
+}
+
 .settings > summary {
   display: inline-flex;
   align-items: center;
@@ -708,9 +713,43 @@ body.site {
     gap: 10px;
   }
 
-  .site-nav a,
-  .site-nav .site-search-open {
-    font-size: 12px;
+  .site-nav {
+    display: none;
+  }
+
+  .settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settings-nav a,
+  .settings-nav .site-search-open {
+    color: var(--fg-soft);
+    font-size: 13px;
+    text-align: left;
+    text-decoration: none;
+  }
+
+  .settings-nav a:hover,
+  .settings-nav .site-search-open:hover {
+    color: var(--fg);
+    text-decoration: underline;
+  }
+
+  .settings-nav .site-search-open {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .settings-nav a[aria-current="page"] {
+    color: var(--fg);
   }
 
   .guide-layout {

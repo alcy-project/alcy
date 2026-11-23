@@ -381,30 +381,34 @@ std::string site_header(const Catalog& catalog,
          .href = language_href(catalog, route, target, tree_path),
          .current = target == language});
   }
-  const std::string settings = render_settings(
-      {.catalog = &catalog, .language = language, .languages = languages});
   const auto current = [&current_segment](std::string_view segment) {
     return segment == current_segment ? std::string(" aria-current=\"page\"")
                                       : std::string();
   };
   std::string out;
-  out += "<header class=\"site-header\">\n";
-  out += "      <a class=\"site-brand\" href=\"" + home + "\">alcy</a>\n";
-  out +=
-      "      <nav class=\"site-nav\" aria-label=\"" + t("site.nav") + "\">\n";
-  out += "        <a href=\"" + home + "guide/\"" + current("guide") + ">" +
+  // One copy of the links for the header, and the same markup inside the
+  // menu for screens where the row cannot fit beside the hamburger.
+  std::string nav;
+  nav += "        <a href=\"" + home + "guide/\"" + current("guide") + ">" +
          t("site.guide") + "</a>\n";
-  out += "        <a href=\"" + home + "reference/\"" + current("reference") +
+  nav += "        <a href=\"" + home + "reference/\"" + current("reference") +
          ">" + t("site.reference") + "</a>\n";
-  out += "        <a href=\"" + home + "tools/\"" + current("tools") + ">" +
+  nav += "        <a href=\"" + home + "tools/\"" + current("tools") + ">" +
          t("site.tools") + "</a>\n";
-  out += "        <a href=\"" + home + "playground/\"" + current("playground") +
+  nav += "        <a href=\"" + home + "playground/\"" + current("playground") +
          ">" + t("site.playground") + "</a>\n";
-  out +=
+  nav +=
       "        <button type=\"button\" class=\"site-search-open\" "
       "data-action=\"search\">" +
       t("site.search") + "</button>\n";
-  out += "      </nav>\n      " + settings + "\n    </header>";
+  const std::string settings = render_settings({.catalog = &catalog,
+                                                .language = language,
+                                                .languages = languages,
+                                                .nav_markup = nav});
+  out += "<header class=\"site-header\">\n";
+  out += "      <a class=\"site-brand\" href=\"" + home + "\">alcy</a>\n";
+  out += "      <nav class=\"site-nav\" aria-label=\"" + t("site.nav") +
+         "\">\n" + nav + "      </nav>\n      " + settings + "\n    </header>";
   return out;
 }
 std::string render_guide_page(const DocPage& page, const PageOptions& options) {

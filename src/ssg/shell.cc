@@ -73,6 +73,15 @@ std::string render_settings(const SettingsOptions& options) {
          escape_attribute_text(label_settings) + "\">" +
          std::string(MENU_ICON) + "</summary>\n";
   out += "        <div class=\"settings-panel\">\n";
+  if (!options.nav_markup.empty()) {
+    out += "          <nav class=\"settings-nav\" aria-label=\"" +
+           escape_attribute_text(
+               translate(catalog, options.language, "site.nav") + ": " +
+               translate(catalog, options.language, "label.settings")) +
+           "\">\n";
+    out += options.nav_markup;
+    out += "          </nav>\n";
+  }
   out += "          <div class=\"settings-row\">\n";
   out += "            <span class=\"settings-label\">" + theme + "</span>\n";
   out +=
