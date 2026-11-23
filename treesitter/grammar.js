@@ -859,7 +859,7 @@ module.exports = grammar({
     struct_expression: $ => prec.left(PREC.POSTFIX, seq(
       field('path', $.path),
       '{',
-      sepByTrailing($.field_initializer, ','),
+      optional(sepByTrailing($.field_initializer, ',')),
       // `..base` move-update.
       optional(seq('..', field('base', $._expression))),
       '}',

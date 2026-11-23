@@ -89,10 +89,12 @@ params      = [ [ "comp" ] , pattern , ":" , ( ".." | type ) ,
                  the compiler-expanded functions may declare it. See
                  docs/spec/comp.md. *)
 struct_item = "struct" , IDENT , [ type_params ] , "{"
-            , field , { "," , field } , [ "," ] , "}" ;
+            , [ field , { "," , field } , [ "," ] ] , "}" ;
+              (* An empty body declares a zero-sized type. *)
 field       = [ vis ] , IDENT , ":" , type ;
 enum_item   = "enum" , IDENT , [ type_params ] , "{"
-            , variant , { "," , variant } , [ "," ] , "}" ;
+            , [ variant , { "," , variant } , [ "," ] ] , "}" ;
+              (* An empty body is uninhabited and zero-sized. *)
 variant     = IDENT | IDENT , "(" , [ type , { "," , type } ] , ")" ;
 impl_item   = "impl" , [ type_params ] , type , [ "for" , type ] , "{"
             , { [ "pub" ] , fn_item } , "}" ;

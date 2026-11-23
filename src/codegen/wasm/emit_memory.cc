@@ -84,7 +84,7 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       }
       const ir::TypeIdx elem = storage_.registers()[instr.dst].type;
       const ir::TypeLayout layout = storage_.layout_of(elem, target_.width);
-      const u32 size = layout.size == 0 ? 1 : static_cast<u32>(layout.size);
+      const u32 size = static_cast<u32>(layout.size);
       const u32 align = layout.align == 0 ? 1 : static_cast<u32>(layout.align);
       alloca_elem_[instr.dst.idx] = elem;
       const u32 reserved = reg_slot_[instr.dst.idx];
@@ -512,7 +512,7 @@ Emitter::EmitResult Emitter::emit_elem_offset(const ir::Operand& base,
                                               ir::TypeIdx elem,
                                               const ir::Instruction& instr) {
   const ir::TypeLayout layout = storage_.layout_of(elem, target_.width);
-  const u32 stride = layout.size == 0 ? 1 : static_cast<u32>(layout.size);
+  const u32 stride = static_cast<u32>(layout.size);
   if (push_word(base, 0, ValType::I32).is_err() ||
       push_word(index, 0, ValType::I32).is_err()) {
     return base::make_err(codegen::EmitError::Unsupported);
@@ -555,7 +555,7 @@ Emitter::EmitResult Emitter::emit_field_projection(
         constant += value * size;
       } else if (dynamic == nullptr) {
         dynamic = &index_op;
-        stride = size == 0 ? 1 : static_cast<u32>(size);
+        stride = static_cast<u32>(size);
       } else {
         return unsupported(current_span_, "two scaled indices");
       }
@@ -616,7 +616,7 @@ Emitter::EmitResult Emitter::emit_field_projection(
         constant += value * size;
       } else if (dynamic == nullptr) {
         dynamic = &index_op;
-        stride = size == 0 ? 1 : static_cast<u32>(size);
+        stride = static_cast<u32>(size);
       } else {
         return unsupported(current_span_, "two scaled array indices");
       }

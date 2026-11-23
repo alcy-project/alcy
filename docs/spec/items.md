@@ -324,10 +324,18 @@ interaction.
   a byte. A reference to a slice is fat - a data pointer and a length -
   and a niche there is not promised: an enum over one carries a
   discriminant like any other enum.
+- A zero-sized type has `size_of` zero and `align_of` one. The unit,
+  the never type, a zero-length array, an empty `struct`, an empty
+  `enum`, and an aggregate whose parts are all zero-sized are such
+  types. A zero-sized value has no storage of its own: a reference to
+  one is an aligned but dangling address, and indexing a zero-sized
+  array repeats that address. Construction and destruction still run
+  their effects, and `alloc`/`dealloc` for a zero-sized element are
+  elided by the compiler, so a `Vec<()>` allocates no heap block.
 - Nothing else is promised. Field order, an enum's discriminant width
-  and placement, a zero-sized type's treatment, and padding are the
-  compiler's, and `size_of` and `align_of` are a function of the type
-  for one compiler version and target, not across them.
+  and placement, and padding are the compiler's, and `size_of` and
+  `align_of` are a function of the type for one compiler version and
+  target, not across them.
 - The only stable boundary is a declaration in the C convention
   (`extern "C"`), whose scalar parameters and returns map to the
   platform's C ABI. A struct crossing it does so under `#[repr(C)]`,

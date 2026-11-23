@@ -231,6 +231,10 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
       return builder_->getPtrTy();
     }
     case T::Enum: {
+      const ir::EnumType& shape = storage_->state().enum_types[node.as_enum()];
+      if (shape.variants.size() == 0) {
+        return llvm::StructType::get(module_->getContext(), {});
+      }
       // A niche-carrying enum is its payload: the discriminant lives in
       // the payload's spare pattern and takes no room of its own
       //. The layout check below holds the two against each

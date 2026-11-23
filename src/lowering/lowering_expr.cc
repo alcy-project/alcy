@@ -2611,6 +2611,10 @@ Val Lowerer::lower_size_of_intrinsic(
     internal(node.span, "intrinsic arity");
     return Val{size_one, error_type(), false, false};
   }
+  if (name == "size_of" && is_zst(type_args[0])) {
+    return Val{imm_from_u64(ir::TypeTag::Usize, usize_type(), 0), usize_type(),
+               false, false};
+  }
   const ir::RegisterIdx measured = emit_type_query(
       name == "size_of" ? ir::Opcode::TypeSizeOf : ir::Opcode::TypeAlignOf,
       type_args[0]);
@@ -2671,6 +2675,19 @@ Val Lowerer::lower_alloc_intrinsic(ast::ExprIdx expr,
       return stopped_value();
     }
     args.push_back(arg_for(arg, sig.params[i]));
+  }
+  if (is_zst(type_args[0])) {
+    // A zero-sized element reserves no block. `dealloc` has nothing to
+    // free, and `alloc` answers a dangling but aligned address, so a
+    // container of them never reaches the runtime allocator.
+    if (name == "dealloc") {
+      return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+    }
+    const u64 align =
+        ir::type_layout(builder.state(), type_args[0], width).align;
+    const ir::RegisterIdx dangling =
+        emit(ir::Opcode::TypeCast, sig.ret, {const_usize(align)});
+    return Val{to_operand(dangling, sig.ret), sig.ret, false, false};
   }
   if (name == "dealloc") {
     // The runtime counts bytes; the compiler supplies the element
@@ -4259,6 +4276,9 @@ Val Lowerer::lower_struct(ast::ExprIdx expr) {
     internal(node.span, "struct without type");
     return Val{size_one, error_type(), false, false};
   }
+  if (is_zst(struct_type)) {
+    return Val{size_one, struct_type, false, false};
+  }
   const ir::RegisterIdx addr =
       emit(ir::Opcode::Alloca, struct_type, {size_one});
   u32 field_count = 0;
@@ -4345,6 +4365,9 @@ Val Lowerer::lower_tuple(ast::ExprIdx expr) {
   // grow the tuple table under it.
   const ir::TupleType shape =
       builder.state().tuple_types[builder.state().types[tuple_type].as_tuple()];
+  if (is_zst(tuple_type)) {
+    return Val{size_one, tuple_type, false, false};
+  }
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, tuple_type, {size_one});
   for (u32 i = 0; i < static_cast<u32>(tuple.elements.size()) && !failed; ++i) {
     const ir::TypeIdx* element_expected = nullptr;
@@ -4423,6 +4446,22 @@ Val Lowerer::lower_array(ast::ExprIdx expr) {
   // grow the array table under it.
   const ir::ArrayType shape =
       builder.state().array_types[builder.state().types[array_type].as_array()];
+  if (is_zst(array_type)) {
+    // The elements still have to be evaluated for their effects, but
+    // no slot stores them: a zero-sized array is a placeholder too.
+    if (array.repeat.is_valid()) {
+      (void)lower_moved(array.repeat, &shape.element);
+    } else {
+      for (u32 i = 0; i < static_cast<u32>(array.elements.size()) && !failed;
+           ++i) {
+        (void)lower_moved(array.elements[i], &shape.element);
+      }
+    }
+    if (failed) {
+      return Val{size_one, error_type(), false, false};
+    }
+    return Val{size_one, array_type, false, false};
+  }
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, array_type, {size_one});
   if (array.repeat.is_valid()) {
     if (shape.count == 0) {

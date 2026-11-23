@@ -343,6 +343,14 @@ inline TypeLayout type_layout(const StorageState& state,
       return {element.size * array.count, element.align};
     }
     case TypeTag::Enum: {
+      // No variant can hold a value, so there is no discriminant to
+      // store. An empty enum is a zero-sized type like the unit and the
+      // empty struct.
+      const EnumType& empty_check =
+          state.enum_types[state.types[idx].as_enum()];
+      if (empty_check.variants.size() == 0) {
+        return {};
+      }
       // A niche-carrying enum is its payload: the discriminant lives in
       // the payload's spare pattern and takes no room of its own
       const EnumNiche niche = enum_niche(state, idx);

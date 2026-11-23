@@ -328,6 +328,9 @@ class Lowerer {
     return is_copy_slow(type);
   }
   bool is_copy_slow(ir::TypeIdx type);
+  // A zero-sized type has no storage. The frontend normalizes every use
+  // of one so the backends never see a zero-byte access or allocation.
+  bool is_zst(ir::TypeIdx type) const;
   ir::TypeTag tag_of(ir::TypeIdx idx) const {
     return builder.state().types[idx].tag;
   }

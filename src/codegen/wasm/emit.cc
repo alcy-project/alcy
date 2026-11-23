@@ -600,7 +600,7 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
       frame_bytes_ = static_cast<u32>(
           ir::align_up(frame_bytes_, layout.align == 0 ? 1 : layout.align));
       reg_slot_[instr.dst.idx] = frame_bytes_;
-      frame_bytes_ += static_cast<u32>(layout.size == 0 ? 1 : layout.size);
+      frame_bytes_ += static_cast<u32>(layout.size);
     }
   }
   // A constant-count alloca is frame storage the same way. Reserving it
@@ -629,8 +629,7 @@ Emitter::EmitResult Emitter::build_locals(const ir::Function& function) {
       const u64 elements = imm.as_u64_integer(tag);
       const ir::TypeIdx type = storage_.registers()[instr.dst].type;
       const ir::TypeLayout layout = storage_.layout_of(type, target_.width);
-      const u64 bytes = (layout.size == 0 ? 1 : static_cast<u64>(layout.size)) *
-                        (elements == 0 ? 1 : elements);
+      const u64 bytes = layout.size * elements;
       if (bytes > 0x7fffffff) {
         continue;
       }
@@ -1750,7 +1749,7 @@ Emitter::EmitResult Emitter::emit_start() {
     // else panics, matching the LLVM entry thunk.
     const ir::TypeLayout layout =
         storage_.layout_of(return_type, target_.width);
-    const u32 size = layout.size == 0 ? 1 : static_cast<u32>(layout.size);
+    const u32 size = static_cast<u32>(layout.size);
     const u32 align = layout.align == 0 ? 1 : static_cast<u32>(layout.align);
     const u32 slot = allocate_local(ValType::I32);
     const u32 end = allocate_local(ValType::I32);

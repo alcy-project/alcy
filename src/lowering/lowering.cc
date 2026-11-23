@@ -519,12 +519,12 @@ void Lowerer::emit_void(ir::Opcode op,
                         std::span<const ir::OperandIdx> ops,
                         ir::InstructionFlags flags,
                         ir::TypeIdx measure) {
-  // A store through a pointer to the unit type writes nothing. The
-  // value a `()` expression carries is a placeholder with a width of
-  // its own, and spilling it would land on whatever the layout put at
-  // the same offset, which for a struct field is the field beside it.
+  // A store to a zero-sized place writes nothing. The value a `()`
+  // expression carries is a placeholder with a width of its own, and
+  // spilling it would land on whatever the layout put at the same
+  // offset, which for a struct field is the field beside it.
   if (op == ir::Opcode::Store && ops.size() == 2 &&
-      tag_of(builder.state().operands[ops[1]].type) == ir::TypeTag::Void) {
+      is_zst(builder.state().operands[ops[1]].type)) {
     return;
   }
   const ir::OperandIdxRange range = operand_range(ops);
@@ -566,9 +566,57 @@ Val Lowerer::materialize_slow(Val v) {
   return Val{to_operand(reg, v.type), v.type, false, false};
 }
 
+bool Lowerer::is_zst(ir::TypeIdx type) const {
+  // A structural question, so an unspecialized parameter inside an
+  // aggregate does not ask layout for a type that has none yet.
+  const ir::StorageState& state = builder.state();
+  const ir::TypeNode& node = state.types[type];
+  switch (node.tag) {
+    case ir::TypeTag::Void:
+    case ir::TypeTag::Never:
+    case ir::TypeTag::Error: return true;
+    case ir::TypeTag::Array: {
+      const ir::ArrayType& shape = state.array_types[node.as_array()];
+      return shape.count == 0 || is_zst(shape.element);
+    }
+    case ir::TypeTag::Tuple: {
+      for (ir::TypeIdx element : state.tuple_types[node.as_tuple()].elements) {
+        if (!is_zst(element)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Struct: {
+      for (ir::TypeIdx field : state.struct_types[node.as_struct()].fields) {
+        if (!is_zst(field)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case ir::TypeTag::Enum:
+      // A variant means a discriminant, and a niche needs a payload
+      // with bytes of its own. Only an empty enum is zero-sized.
+      return state.enum_types[node.as_enum()].variants.size() == 0;
+    default: return false;
+  }
+}
+
 Val Lowerer::address_of(Val v) {
   if (v.address) {
     return v;
+  }
+  if (is_zst(v.type)) {
+    // No storage exists to point at. An aligned but dangling address is
+    // enough for every operation that can name a zero-sized place:
+    // borrowing it, indexing an array of them, or passing it as a
+    // placeholder. Nothing loads or stores through the pointer.
+    const u64 align = ir::type_layout(builder.state(), v.type, width).align;
+    const ir::RegisterIdx dangling =
+        emit(ir::Opcode::TypeCast, builder.primitive(ir::TypeTag::Ptr),
+             {const_usize(align)});
+    return Val{to_operand(dangling, v.type), v.type, true, v.place};
   }
   const Val material = materialize(v);
   const ir::RegisterIdx addr = emit(ir::Opcode::Alloca, v.type, {size_one});

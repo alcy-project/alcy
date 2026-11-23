@@ -126,6 +126,17 @@ TEST_CASE("Layout sizes an array from its element") {
   CHECK(layout_of(state, empty, PointerWidth::W64).size == 0);
 }
 
+TEST_CASE("Layout gives an empty enum no size") {
+  StorageBuilder builder;
+  const TypeIdx empty_enum = builder.enum_type(
+      str::INVALID_STRING_POOL_ID, EnumVariantTypeIdxRange{}, TypeIdxRange{});
+  Storage storage = std::move(builder).build().unwrap().unwrap();
+  const StorageState& state = storage.state();
+  const TypeLayout layout = layout_of(state, empty_enum, PointerWidth::W64);
+  CHECK(layout.size == 0);
+  CHECK(layout.align == 1);
+}
+
 TEST_CASE("Layout gives an enum a discriminant and a payload area") {
   StorageBuilder builder;
   const TypeIdx i32_ty = builder.primitive(TypeTag::I32);

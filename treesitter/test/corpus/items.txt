@@ -933,3 +933,34 @@ A group needs an attribute
     (parameters)
     (block))
   (ERROR))
+
+================================================================================
+An empty struct literal has no initializers
+================================================================================
+
+struct Empty {}
+
+fn main() -> i32 {
+  e := Empty {}
+  ret 0
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (declaration_statement
+        (identifier_pattern
+          (identifier))
+        (struct_expression
+          (path
+            (identifier))))
+      (return_expression
+        (integer)))))

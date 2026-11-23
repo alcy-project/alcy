@@ -24,7 +24,9 @@
   array element, and variant payload is. No declaration implements or
   refuses it, and the only thing that takes it away is `core`'s
   `Anchor`, a zero-sized value that is itself unmovable. A type holding
-  one is unmovable, and so is anything holding that type.
+  one is unmovable, and so is anything holding that type. The anchor
+  marks its holder; it is the address of the value that holds it that
+  matters, not an area of its own.
 - An unmovable value is built by an initializer that writes it
   directly into its place, read through `&`/`&mut` only, and ended in
   place. A parameter, return, and type argument is `Movable`, so an

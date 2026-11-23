@@ -146,6 +146,8 @@ initial ABI is scalars, raw pointers, and `()` as a return; see
 ## Types
 
 `()` is the unit type. `!` is the never type and coerces to any type.
+A `struct` or `enum` may have an empty body; both are zero-sized, and
+the latter has no values.
 Tuple types are structural and concrete (no polymorphism).
 A path takes type arguments for generic enums and structs only, and a
 closing `>>` splits into two `>` (dangling halves error). A function
