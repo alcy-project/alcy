@@ -206,9 +206,8 @@ ir::TypeIdx Checker::check_literal(ast::LiteralIdx value,
       }
       if (expected != nullptr && tag_of(*expected) == ir::TypeTag::Char &&
           tag == ir::TypeTag::Rune) {
-        const u32 index =
-            bag.emit<i18n::Key::AnalyzerCharacterLiteralNotAscii>(
-                DiagCode::TypeMismatch, lit.span, lit.spelling);
+        const u32 index = bag.emit<i18n::Key::AnalyzerCharacterLiteralNotAscii>(
+            DiagCode::TypeMismatch, lit.span, lit.spelling);
         (void)index;
         return error_type();
       }

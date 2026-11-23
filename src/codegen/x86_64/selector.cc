@@ -721,16 +721,14 @@ bool Selector::emit_check_prelude(const ir::Instruction& instr,
     const ir::TypeTag tag =
         storage_.types()[storage_.operands()[instr.operands.head()].type].tag;
     const u8 width = compute_width_of(tag);
-    const u64 bits =
-        tag == ir::TypeTag::I8 || tag == ir::TypeTag::U8 ||
-                tag == ir::TypeTag::Char
-            ? 8
-            : tag == ir::TypeTag::I16 || tag == ir::TypeTag::U16
-                  ? 16
-                  : tag == ir::TypeTag::I32 || tag == ir::TypeTag::U32 ||
-                          tag == ir::TypeTag::Rune
-                      ? 32
-                      : 64;
+    const u64 bits = tag == ir::TypeTag::I8 || tag == ir::TypeTag::U8 ||
+                             tag == ir::TypeTag::Char
+                         ? 8
+                     : tag == ir::TypeTag::I16 || tag == ir::TypeTag::U16 ? 16
+                     : tag == ir::TypeTag::I32 || tag == ir::TypeTag::U32 ||
+                             tag == ir::TypeTag::Rune
+                         ? 32
+                         : 64;
     const u32 ok = fresh_label();
     push(make_inst(MOp::Mov, width, Operand{Reg::R9}, *raw));
     if (bits <= 0x7fffffffULL) {
@@ -1835,12 +1833,11 @@ bool Selector::emit_cast(const ir::Instruction& instr, const diag::Span span) {
             dst == ir::TypeTag::I8 || dst == ir::TypeTag::U8 ||
                     dst == ir::TypeTag::Char
                 ? 1
-                : dst == ir::TypeTag::I16 || dst == ir::TypeTag::U16
-                      ? 2
-                      : dst == ir::TypeTag::I32 || dst == ir::TypeTag::U32 ||
-                              dst == ir::TypeTag::Rune
-                          ? 4
-                          : 8;
+            : dst == ir::TypeTag::I16 || dst == ir::TypeTag::U16 ? 2
+            : dst == ir::TypeTag::I32 || dst == ir::TypeTag::U32 ||
+                    dst == ir::TypeTag::Rune
+                ? 4
+                : 8;
         const i64 tagged =
             dst == ir::TypeTag::I1 ? -16
             : (dst == ir::TypeTag::U8 || dst == ir::TypeTag::U16 ||

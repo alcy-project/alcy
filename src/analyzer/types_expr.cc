@@ -801,9 +801,8 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
     const ir::TypeTag rt = tag_of(right);
     if ((lt == ir::TypeTag::Char && rt == ir::TypeTag::Rune) ||
         (lt == ir::TypeTag::Rune && rt == ir::TypeTag::Char)) {
-      const u32 index =
-          bag.emit<i18n::Key::AnalyzerCharRuneBinaryMismatch>(
-              DiagCode::TypeMismatch, span);
+      const u32 index = bag.emit<i18n::Key::AnalyzerCharRuneBinaryMismatch>(
+          DiagCode::TypeMismatch, span);
       (void)index;
       return error_type();
     }
@@ -847,9 +846,8 @@ ir::TypeIdx Checker::check_binary_operands(u32 module,
   const ir::TypeTag rt = tag_of(right);
   if ((lt == ir::TypeTag::Char && rt == ir::TypeTag::Rune) ||
       (lt == ir::TypeTag::Rune && rt == ir::TypeTag::Char)) {
-    const u32 index =
-        bag.emit<i18n::Key::AnalyzerCharRuneBinaryMismatch>(
-            DiagCode::TypeMismatch, span);
+    const u32 index = bag.emit<i18n::Key::AnalyzerCharRuneBinaryMismatch>(
+        DiagCode::TypeMismatch, span);
     (void)index;
     return error_type();
   }
