@@ -771,6 +771,13 @@ body.site {
     display: none;
   }
 
+  /* With the drawer open the article behind it is frozen: scrolling
+     the backdrop must not move it, and the panel keeps its own scroll
+     at both ends instead of chaining to the page. */
+  body:has(.guide-drawer[open]) {
+    overflow: hidden;
+  }
+
   .guide-drawer {
     display: block;
   }
@@ -810,6 +817,7 @@ body.site {
     width: min(82vw, 300px);
     padding: 18px;
     overflow-y: auto;
+    overscroll-behavior-y: contain;
     background: var(--bg-soft);
     border-right: 1px solid var(--line);
     box-shadow: 0 10px 36px rgba(0, 0, 0, 0.22);
