@@ -247,6 +247,64 @@ const analyzer::CheckedModule::StaticInfo* find_static_of(
   return nullptr;
 }
 
+// The type the checker gave a local binding. Bindings are not tabled: they
+// live and die with the checker's scope stack. Each use resolves to the
+// binding's declaration and records the use's expression type, so a
+// reference back to the declaration recovers the type for a hover on the
+// binding itself.
+std::optional<ir::TypeIdx> local_binding_type(const DocumentAnalysis& analysis,
+                                              diag::Span declaration) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::Reference& reference :
+         module.references) {
+      if (!same_span(reference.declaration, declaration)) {
+        continue;
+      }
+      const std::optional<ast::ExprIdx> expr =
+          innermost_expr(context, reference.site.offset, reference.site.file);
+      if (!expr.has_value()) {
+        continue;
+      }
+      if (const std::optional<ir::TypeIdx> type =
+              checked_expr_type(package, *expr);
+          type.has_value()) {
+        return type;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+// Whether the cursor sits on the name a pattern binds. A hover there must
+// not fall through to the enclosing expression: its span covers the name
+// but names a different type.
+bool is_pattern_binding_at(const pipeline::PipelineContext& context,
+                           usize offset,
+                           source::FileId root) {
+  bool found = false;
+  context.ast.patterns.for_each_node([&](ast::PatternIdx index) {
+    if (found) {
+      return;
+    }
+    const ast::PatternNode& node = context.ast.patterns[index];
+    diag::Span name;
+    if (node.kind == ast::PatternKind::Ident) {
+      name = node.payload.ident.name.span;
+    } else if (node.kind == ast::PatternKind::MutIdent) {
+      name = node.payload.mut_ident.name.span;
+    } else {
+      return;
+    }
+    if (name.file == root && name.offset <= offset &&
+        offset < name.offset + name.length) {
+      found = true;
+    }
+  });
+  return found;
+}
+
 std::optional<std::string> render_target(const DocumentAnalysis& analysis,
                                          const HoverTarget& target,
                                          std::string_view source) {
@@ -378,6 +436,14 @@ std::optional<std::string> hover_markdown(const Document& document,
         return render_target(analysis, *target, *declaration_source);
       }
     }
+    if (const std::optional<ir::TypeIdx> type =
+            local_binding_type(analysis, *declaration);
+        type.has_value()) {
+      return type_markdown(context, state, *type);
+    }
+  }
+  if (is_pattern_binding_at(context, offset, root)) {
+    return std::nullopt;
   }
   if (const std::optional<ast::TypeIdx> type =
           innermost_type(context, offset, root);

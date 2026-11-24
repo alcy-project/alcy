@@ -109,6 +109,24 @@ TEST_CASE("Hover on a binding name shows the inferred type") {
   }
 }
 
+TEST_CASE("Hover on a for-loop binding shows the element type") {
+  const std::string text =
+      "fn main() -> i32 {\n"
+      "  mut n := 10\n"
+      "  for i in (2..=n) {\n"
+      "    n = n + i\n"
+      "  }\n"
+      "  ret n\n"
+      "}\n";
+  const std::optional<std::string> declared = hover(text, 2, 6);
+  const std::optional<std::string> used = hover(text, 3, 12);
+  CHECK(declared.has_value());
+  CHECK(declared == used);
+  if (declared.has_value()) {
+    CHECK(declared->find("i32") != std::string::npos);
+  }
+}
+
 TEST_CASE("Hover keeps the inferred type when borrow checking fails") {
   const std::optional<std::string> markdown = hover(
       "fn main() {\n  x := 1\n  m := &mut x\n  n := &mut x\n"
