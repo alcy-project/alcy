@@ -488,8 +488,13 @@ that happens to read them.
    initializers, comp bodies, comp blocks and for/if, constant
    splices, method calls with `&mut` receiver write-back, and expansion
    bodies. `CompStrByte` reads a compile-time string at a runtime
-   index inside the interpreter. The AST comp evaluator and the
-   differential engine pair are gone; published IR is low only. The
+   index inside the interpreter. An IR failure carries its instruction
+   index; the emitter records a local range per expression so the
+   diagnostic points at the expression that emitted the failing
+   instruction. The ranges die with the synthetic function, so no span
+   state enters the published IR or the passes that renumber it. The AST
+   comp evaluator and the differential engine pair are gone; published IR
+   is low only. The
    multi-level direction is realized as phase-specific semantic values
    on one opcode set rather than a separate high-level body list, so
    no re-interning from AST is needed and `take_state` stays the only
