@@ -10,6 +10,7 @@
 #include "ast/ast.h"
 #include "comp/comp_value.h"
 #include "comp/ir_interpreter.h"
+#include "diag/span.h"
 #include "ir/common.h"
 #include "ir/storage_builder.h"
 #include "ir/type.h"
@@ -60,6 +61,7 @@ bool evaluate_const_ir(const ast::AstArena& ast,
                        u64& quota,
                        u32& depth,
                        comp::CompVal& out,
-                       comp::IrRunError* error = nullptr);
+                       comp::IrRunError* error = nullptr,
+                       diag::Span* failure_span = nullptr);
 
 }  // namespace analyzer

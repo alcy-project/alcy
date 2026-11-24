@@ -17,6 +17,7 @@
 #include "ast/ast.h"
 #include "comp/comp_value.h"
 #include "comp/ir_interpreter.h"
+#include "diag/span.h"
 #include "fpag/base/idx.h"
 #include "fpag/base/limits.h"
 #include "fpag/base/numeric.h"
@@ -178,6 +179,33 @@ class ConstEmitter {
       }
     }
     return nullptr;
+  }
+
+  // The synthetic function lives only until it has been interpreted. A
+  // range per emitted expression is enough to map an IR failure back to
+  // the source that produced the instruction, without carrying span state
+  // through the builder's published tables.
+  struct SpanRange {
+    u32 first = 0;
+    diag::Span span;
+  };
+  std::vector<SpanRange> span_ranges_;
+
+  void record_span(u32 first, diag::Span span) {
+    span_ranges_.push_back({first, span});
+  }
+
+  std::optional<diag::Span> span_of(ir::InstructionIdx instr) const {
+    if (!instr.is_valid()) {
+      return std::nullopt;
+    }
+    std::optional<diag::Span> found;
+    for (const SpanRange& range : span_ranges_) {
+      if (range.first <= instr.idx) {
+        found = range.span;
+      }
+    }
+    return found;
   }
 
   ir::OperandIdx add_semantic(const comp::CompVal& value, ir::TypeIdx type) {
@@ -3870,6 +3898,8 @@ ir::OperandIdx emit_expr(const ast::AstArena& ast,
                          const EmitContext& ctx,
                          const ParamEnv* params = nullptr) {
   const ast::ExprNode& node = ast.exprs[expr];
+  emitter.record_span(static_cast<u32>(emitter.builder().state().instrs.size()),
+                      node.span);
   switch (node.kind) {
     case ast::ExprKind::Return:
       return emit_return_expr(ast, expr, type, emitter, ctx, params);
@@ -3937,7 +3967,8 @@ bool evaluate_const_ir(const ast::AstArena& ast,
                        u64& quota,
                        u32& depth,
                        comp::CompVal& out,
-                       comp::IrRunError* error) {
+                       comp::IrRunError* error,
+                       diag::Span* failure_span) {
   const ir::StorageBuilder::Checkpoint cp = builder.checkpoint();
   ConstEmitter emitter(builder);
   emitter.set_variant_index_fn(ctx.resolve_variant_index);
@@ -4010,8 +4041,15 @@ bool evaluate_const_ir(const ast::AstArena& ast,
   // out of the builder so no HIR reaches the published artifact.
   builder.rollback(cp);
   if (result.is_err()) {
+    comp::IrRunError run_error = std::move(result).unwrap_err();
+    if (failure_span != nullptr) {
+      if (const std::optional<diag::Span> span =
+              emitter.span_of(run_error.instr)) {
+        *failure_span = *span;
+      }
+    }
     if (error != nullptr) {
-      *error = std::move(result).unwrap_err();
+      *error = run_error;
     }
     return false;
   }

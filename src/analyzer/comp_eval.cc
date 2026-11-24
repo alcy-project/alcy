@@ -713,9 +713,9 @@ bool CompEval::try_ir_eval(u32 mod,
                         [&](ir::TypeIdx ty, std::string_view name, u32& index) {
                           return variant_index(ty, name, index);
                         }};
+  diag::Span span = ast.exprs[expr].span;
   if (!evaluate_const_ir(ast, expr, type, builder, width, ctx, quota_,
-                         call_depth_, ir_value, &ir_error)) {
-    const diag::Span span = ast.exprs[expr].span;
+                         call_depth_, ir_value, &ir_error, &span)) {
     switch (ir_error.kind) {
       case comp::IrRunError::Kind::DivisionByZero:
         fail_div_zero(span, ir_error.what);
