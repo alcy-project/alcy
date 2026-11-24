@@ -60,6 +60,10 @@ struct IrRunError {
   std::string_view what;
 };
 
+// A register limit of zero means the whole frame; a synthetic
+// function passes the window it actually owns.
+inline constexpr u32 ALL_REGISTERS = 0;
+
 // The control-flow budget of compile-time evaluation. One call and
 // one loop back edge spend one unit.
 inline constexpr u64 COMP_BRANCH_QUOTA = 1'000'000;
@@ -151,7 +155,7 @@ base::Result<CompVal, IrRunError> interpret_function(
     u32& depth,
     std::span<const CompVal> comp_values = {},
     u32 reg_base = 0,
-    u32 reg_limit = 0);
+    u32 reg_limit = ALL_REGISTERS);
 
 inline base::Result<CompVal, IrRunError> interpret_function(
     const ir::Storage& storage,
@@ -163,11 +167,12 @@ inline base::Result<CompVal, IrRunError> interpret_function(
     u32& depth,
     std::span<const CompVal> comp_values = {},
     u32 reg_base = 0,
-    u32 reg_limit = 0) {
-  return interpret_function(
-      storage.state(), strings, width, function, args, quota, depth,
-      comp_values, reg_base,
-      reg_limit == 0 ? storage.state().registers.size() : reg_limit);
+    u32 reg_limit = ALL_REGISTERS) {
+  return interpret_function(storage.state(), strings, width, function, args,
+                            quota, depth, comp_values, reg_base,
+                            reg_limit == ALL_REGISTERS
+                                ? storage.state().registers.size()
+                                : reg_limit);
 }
 
 }  // namespace comp
