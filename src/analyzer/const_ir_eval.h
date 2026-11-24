@@ -29,6 +29,9 @@ struct CompFnInfo {
   bool variadic = false;
   // A method call's receiver occupies the first parameter (`self`).
   bool is_method = false;
+  // The module and instantiation the callee body was checked under.
+  u32 module = 0;
+  u32 inst = 0;
 };
 
 // The checked tables and resolution callbacks shared by every emitter
@@ -38,7 +41,9 @@ struct EmitContext {
   std::function<ir::TypeIdx(ast::ExprIdx)> expr_type;
   std::function<bool(ast::PathIdx, comp::CompVal&)> resolve_path;
   std::function<ir::TypeIdx(ast::ExprIdx)> resolve_layout_type;
-  std::function<bool(ast::ExprIdx, CompFnInfo&)> resolve_comp_fn;
+  // Fills `callee` with callbacks bound to the callee's module and
+  // instantiation; the caller keeps its own context for arguments.
+  std::function<bool(ast::ExprIdx, CompFnInfo&, EmitContext&)> resolve_comp_fn;
   std::function<bool(ir::TypeIdx, std::string_view, u32&)> resolve_field_index;
   std::function<bool(ir::TypeIdx, std::string_view, u32&)>
       resolve_variant_index;

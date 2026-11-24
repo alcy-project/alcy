@@ -23,6 +23,8 @@
 
 namespace analyzer {
 
+struct EmitContext;
+
 // One expression at a time spends one unit; nothing raises the quota
 // yet, so evaluation is bounded deterministically by control flow.
 inline constexpr u64 COMP_BRANCH_QUOTA = comp::COMP_BRANCH_QUOTA;
@@ -140,6 +142,16 @@ class CompEval {
                                                   u32 inst) const;
   u32 generic_inst_index(ir::TypeIdx type) const;
   u32 callee_inst(const CheckedModule::CallTarget* target) const;
+
+  EmitContext emit_context_for(u32 mod,
+                               u32 inst,
+                               comp::CompScope& scope,
+                               ast::ExprIdx expr);
+
+  ir::TypeIdx expr_type_at(u32 mod, u32 inst, ast::ExprIdx expr);
+  const CheckedModule::CallTarget* call_target_at(u32 mod,
+                                                  u32 inst,
+                                                  ast::ExprIdx callee) const;
 
   bool try_ir_eval(u32 mod, ast::ExprIdx expr, CompScope& scope, CompVal& out);
 

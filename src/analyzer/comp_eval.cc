@@ -294,11 +294,18 @@ ir::TypeIdx CompEval::expr_type_in_fallback(u32 mod, ast::ExprIdx expr) {
   return declared;
 }
 
-const analyzer::CheckedModule::CallTarget* CompEval::call_target_in(
-    u32 mod,
-    ast::ExprIdx callee) const {
+ir::TypeIdx CompEval::expr_type_at(u32 mod, u32 inst, ast::ExprIdx expr) {
+  const u32 saved = inst_;
+  inst_ = inst;
+  const ir::TypeIdx type = expr_type_in(mod, expr);
+  inst_ = saved;
+  return type;
+}
+
+const analyzer::CheckedModule::CallTarget*
+CompEval::call_target_at(u32 mod, u32 inst, ast::ExprIdx callee) const {
   const analyzer::CheckedModule& module = inputs_.modules[mod];
-  if (const auto* target = module.callee_of(callee, inst_)) {
+  if (const auto* target = module.callee_of(callee, inst)) {
     return target;
   }
   // A generic body reached from a comp call is checked once at its
@@ -307,6 +314,12 @@ const analyzer::CheckedModule::CallTarget* CompEval::call_target_in(
   // names the method to dispatch; its body's expressions carry their
   // own instantiation keys.
   return module.callee_of(callee, PARAM_INST);
+}
+
+const analyzer::CheckedModule::CallTarget* CompEval::call_target_in(
+    u32 mod,
+    ast::ExprIdx callee) const {
+  return call_target_at(mod, inst_, callee);
 }
 
 const CheckedModule::ValueSplice* CompEval::value_splice_in(u32 mod,
@@ -553,24 +566,16 @@ bool CompEval::comp_match_pattern(u32 mod,
 // A range expression is `Range<T>` data: a struct of two `Bound<T>`
 // values. The checker records the variant uses and payload types, so
 // this builds the same value the runtime lowering stores.
-bool CompEval::try_ir_eval(u32 mod,
-                           ast::ExprIdx expr,
-                           CompScope& scope,
-                           CompVal& out) {
-  if (quota_ == 0) {
-    fail_budget(ast.exprs[expr].span, "comp evaluation quota exhausted");
-    return false;
-  }
-  --quota_;
-  const ir::TypeIdx type = expr_type_in(mod, expr);
-  if (tag_of(type) == ir::TypeTag::Error) {
-    fail_internal(ast.exprs[expr].span, "comp operand without a type");
-    return false;
-  }
-  const auto expr_type = [&](ast::ExprIdx sub) -> ir::TypeIdx {
-    return expr_type_in(mod, sub);
+
+EmitContext CompEval::emit_context_for(u32 mod,
+                                       u32 inst,
+                                       comp::CompScope& scope,
+                                       ast::ExprIdx expr) {
+  const auto expr_type = [this, mod, inst](ast::ExprIdx sub) -> ir::TypeIdx {
+    return expr_type_at(mod, inst, sub);
   };
-  const auto resolve_path = [&](ast::PathIdx path,
+  const auto resolve_path = [this, mod, inst, &scope, expr](
+                                ast::PathIdx path,
                                 comp::CompVal& resolved) -> bool {
     const std::span<const ast::Ident> segments = ast.paths[path].segments;
     if (segments.size() != 1) {
@@ -588,6 +593,7 @@ bool CompEval::try_ir_eval(u32 mod,
         }
         CompVal value;
         const u32 saved_inst = inst_;
+        inst_ = inst;
         CompScope nested;
         nested.frames.emplace_back();
         ++call_depth_;
@@ -609,7 +615,7 @@ bool CompEval::try_ir_eval(u32 mod,
     }
     const ast::ExprIdx splice_expr(found->second);
     const CheckedModule::ValueSplice* splice =
-        value_splice_in(mod, splice_expr, inst_);
+        value_splice_in(mod, splice_expr, inst);
     if (splice == nullptr) {
       return false;
     }
@@ -618,7 +624,8 @@ bool CompEval::try_ir_eval(u32 mod,
     resolved.value.int_value = splice->value;
     return true;
   };
-  const auto resolve_layout_type = [&](ast::ExprIdx sub) -> ir::TypeIdx {
+  const auto resolve_layout_type = [this, mod,
+                                    inst](ast::ExprIdx sub) -> ir::TypeIdx {
     const ast::ExprNode& sub_node = ast.exprs[sub];
     if (sub_node.kind != ast::ExprKind::Call) {
       return ir::TypeIdx(base::INVALID_IDX);
@@ -629,7 +636,7 @@ bool CompEval::try_ir_eval(u32 mod,
     }
     // A measured value argument binds its own checked type.
     if (!sub_call.args.empty()) {
-      const ir::TypeIdx measured = expr_type_in(mod, sub_call.args[0]);
+      const ir::TypeIdx measured = expr_type_at(mod, inst, sub_call.args[0]);
       if (tag_of(measured) != ir::TypeTag::Error) {
         return measured;
       }
@@ -638,7 +645,7 @@ bool CompEval::try_ir_eval(u32 mod,
     // is the fn instance keyed by the call target's item and inst, the
     // same row the evaluator reads.
     const CheckedModule::CallTarget* target =
-        call_target_in(mod, sub_call.callee);
+        call_target_at(mod, inst, sub_call.callee);
     if (target != nullptr &&
         target->index < inputs_.modules[target->module].functions.size()) {
       const CheckedModule::FnSig& sig =
@@ -652,8 +659,9 @@ bool CompEval::try_ir_eval(u32 mod,
     }
     return ir::TypeIdx(base::INVALID_IDX);
   };
-  const auto resolve_comp_fn = [&](ast::ExprIdx call_expr,
-                                   CompFnInfo& info) -> bool {
+  const auto resolve_comp_fn = [this, mod, inst, &scope, expr](
+                                   ast::ExprIdx call_expr, CompFnInfo& info,
+                                   EmitContext& callee) -> bool {
     const ast::ExprNode& call_node = ast.exprs[call_expr];
     const bool is_method = call_node.kind == ast::ExprKind::MethodCall;
     if (call_node.kind != ast::ExprKind::Call && !is_method) {
@@ -663,8 +671,9 @@ bool CompEval::try_ir_eval(u32 mod,
     // for a plain call it is keyed by the callee expression.
     const ast::ExprIdx target_expr =
         is_method ? call_expr : call_node.payload.get<ast::ExprCall>().callee;
-    const CheckedModule::CallTarget* target = call_target_in(mod, target_expr);
-    if (target == nullptr || target->module != mod) {
+    const CheckedModule::CallTarget* target =
+        call_target_at(mod, inst, target_expr);
+    if (target == nullptr) {
       return false;
     }
     const CheckedModule& target_mod = inputs_.modules[target->module];
@@ -684,6 +693,8 @@ bool CompEval::try_ir_eval(u32 mod,
       return false;
     }
     info.body = fn.body;
+    info.module = target->module;
+    info.inst = callee_inst(target);
     info.ret = sig.ret;
     info.is_method = is_method;
     info.variadic = !fn.params.empty() && fn.params.back().is_variadic;
@@ -698,21 +709,43 @@ bool CompEval::try_ir_eval(u32 mod,
     const usize arg_count =
         is_method ? 1 + call_node.payload.get<ast::ExprMethodCall>().args.size()
                   : call_node.payload.get<ast::ExprCall>().args.size();
-    return info.variadic ? info.params.size() - 1 <= arg_count
-                         : info.params.size() == arg_count;
+    const bool arity_ok = info.variadic ? info.params.size() - 1 <= arg_count
+                                        : info.params.size() == arg_count;
+    if (!arity_ok) {
+      return false;
+    }
+    callee = emit_context_for(info.module, info.inst, scope, expr);
+    return true;
   };
+  return EmitContext{expr_type,
+                     resolve_path,
+                     resolve_layout_type,
+                     resolve_comp_fn,
+                     [this](ir::TypeIdx ty, std::string_view name, u32& index) {
+                       return struct_field_index(ty, name, index);
+                     },
+                     [this](ir::TypeIdx ty, std::string_view name, u32& index) {
+                       return variant_index(ty, name, index);
+                     }};
+}
+
+bool CompEval::try_ir_eval(u32 mod,
+                           ast::ExprIdx expr,
+                           CompScope& scope,
+                           CompVal& out) {
+  if (quota_ == 0) {
+    fail_budget(ast.exprs[expr].span, "comp evaluation quota exhausted");
+    return false;
+  }
+  --quota_;
+  const ir::TypeIdx type = expr_type_in(mod, expr);
+  if (tag_of(type) == ir::TypeTag::Error) {
+    fail_internal(ast.exprs[expr].span, "comp operand without a type");
+    return false;
+  }
+  const EmitContext ctx = emit_context_for(mod, inst_, scope, expr);
   comp::CompVal ir_value;
   comp::IrRunError ir_error;
-  const EmitContext ctx{expr_type,
-                        resolve_path,
-                        resolve_layout_type,
-                        resolve_comp_fn,
-                        [&](ir::TypeIdx ty, std::string_view name, u32& index) {
-                          return struct_field_index(ty, name, index);
-                        },
-                        [&](ir::TypeIdx ty, std::string_view name, u32& index) {
-                          return variant_index(ty, name, index);
-                        }};
   diag::Span span = ast.exprs[expr].span;
   if (!evaluate_const_ir(ast, expr, type, builder, width, ctx, quota_,
                          call_depth_, ir_value, &ir_error, &span)) {

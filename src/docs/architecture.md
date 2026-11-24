@@ -500,9 +500,10 @@ that happens to read them.
    multi-level direction is realized as phase-specific semantic values
    on one opcode set rather than a separate high-level body list, so
    no re-interning from AST is needed and `take_state` stays the only
-   handoff. The rollback checkpoint also restores reference types and
-   their intern entries, which speculative emission may add while
-   lowering a local's address.
+   handoff. A comp call reads the callee's body and checked tables from
+   the module that defines it; the call's own arguments stay in the
+   caller's module. The rollback checkpoint rebuilds the indexes derived
+   from the surviving type table after dropping the speculative function.
 
 5. **Ownership analysis** - `borrow` tracks `Move`/`Drop` instructions
    across the control-flow graph to enforce single-ownership guarantees.

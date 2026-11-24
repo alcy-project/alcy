@@ -1,0 +1,13 @@
+[package]
+name = "crossmod"
+version = "0.1.0"
+license = ""
+
+[modules]
+include = ["main", "shapes"]
+
+[dependencies]
+"alcy/std/core" = {}
+
+[[bin]]
+path = "main.al"

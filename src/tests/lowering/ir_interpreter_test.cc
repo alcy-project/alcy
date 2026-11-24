@@ -305,6 +305,45 @@ bool check_checker_and_lowered_value(const Scenario& scenario,
   return true;
 }
 
+// A comp call can name a function in another module of the same package.
+// Arguments are checked in the caller; the callee body and its nested
+// lookups must be checked in the definition's module.
+TEST_CASE("Comp evaluation follows a callee into another module") {
+  VirtualDir dir;
+  write_all(dir, {{"main.al",
+                   "use self::shapes::twice;\n"
+                   "const R: i32 := twice(21)\n"
+                   "fn main() {\n"
+                   "}\n"},
+                  {"shapes.al",
+                   "pub comp fn twice(x: i32) -> i32 {\n"
+                   "  ret x + x\n"
+                   "}\n"}});
+
+  Scenario scenario;
+  scenario.checked =
+      check_case(dir, "main.al", {"main.al", "shapes.al"}, scenario.fixture);
+  CHECK(scenario.checked.ok);
+  CHECK(scenario.checked.checked.has_value());
+  if (!scenario.checked.checked.has_value()) {
+    return;
+  }
+  const std::optional<comp::CompVal> value =
+      ast_value(scenario.fixture, *scenario.checked.checked, "R");
+  CHECK(value.has_value());
+  if (!value.has_value()) {
+    return;
+  }
+  scenario.lowered = lower_checked_case(std::move(*scenario.checked.checked),
+                                        scenario.fixture);
+  CHECK(scenario.lowered.lowered.has_value());
+  if (!scenario.lowered.lowered.has_value()) {
+    return;
+  }
+  scenario.storage = &*scenario.lowered.lowered->storage;
+  check_int_value(*scenario.storage, *value, 42);
+}
+
 }  // namespace
 
 TEST_CASE("Checker and lowering read one value from branches and arithmetic") {
