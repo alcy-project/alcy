@@ -721,20 +721,41 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
     }
     not_movable_[entry.type.idx] = 1;
   }
+  const auto ir_hints = [](const ast::LayoutSpec& spec) {
+    return ir::TypeLayoutHints{.min_align = spec.min_align,
+                               .max_align = spec.max_align,
+                               .tag_size = spec.tag_size};
+  };
   if (is_struct) {
+    const ast::ItemStruct& decl = node.payload.get<ast::ItemStruct>();
     std::vector<ir::TypeIdx> fields;
     fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
-    for (const ast::ItemStructField& field :
-         node.payload.get<ast::ItemStruct>().fields) {
+    for (const ast::ItemStructField& field : decl.fields) {
       // Exclusive references are legal fields; the structural Copy
       // rule marks the aggregate move-only.
-      fields.push_back(resolve_type(entry.module, field.type, nullptr));
+      const ir::TypeIdx field_type =
+          resolve_type(entry.module, field.type, nullptr);
+      if (field.layout.max_align != 0) {
+        const ir::TypeLayout natural =
+            ir::type_layout(builder.state(), field_type, width);
+        if (natural.size != 0 && natural.align > field.layout.max_align) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerLayoutUnalignedField>(
+              DiagCode::TypeMismatch, node.span);
+          (void)index;
+        }
+      }
+      fields.push_back(field_type);
     }
     ir::TypeSeq seq;
     for (ir::TypeIdx field : fields) {
       seq.push(storage_copy(field));
     }
-    builder.fill_struct(entry.type, seq.finish(), ir::TypeIdxRange{});
+    std::vector<ir::TypeLayoutHints> field_hints;
+    for (const ast::ItemStructField& field : decl.fields) {
+      field_hints.push_back(ir_hints(field.layout));
+    }
+    builder.fill_struct(entry.type, seq.finish(), ir::TypeIdxRange{},
+                        ir_hints(decl.layout), std::move(field_hints));
   } else {
     // Payloads resolve first so variant nodes append back-to-back.
     std::vector<std::vector<ir::TypeIdx>> payloads;
@@ -756,7 +777,8 @@ ir::TypeIdx Checker::intern_nominal(NominalEntry& entry) {
       }
       variants.push(builder.enum_variant(variant_names[i], seq.finish()));
     }
-    builder.fill_enum(entry.type, variants.finish(), ir::TypeIdxRange{});
+    builder.fill_enum(entry.type, variants.finish(), ir::TypeIdxRange{},
+                      ir_hints(node.payload.get<ast::ItemEnum>().layout));
   }
   if (!check_type_size(entry.type, node.span)) {
     return error_type();

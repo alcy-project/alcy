@@ -260,11 +260,16 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
       const ir::EnumNiche niche = ir::enum_niche(storage_->state(), enum_ty);
       llvm::Value* disc = nullptr;
       llvm::Type* const i32_ty = builder_->getInt32Ty();
-      if (!niche.has) {
+      if (ir::enum_is_zst(storage_->state(), enum_ty)) {
+        disc = builder_->getInt32(0);
+      } else if (!niche.has) {
         llvm::Value* tag_ptr = builder_->CreateInBoundsGEP(
             type(enum_ty), place,
             {builder_->getInt32(0), builder_->getInt32(0)});
-        disc = builder_->CreateLoad(i32_ty, tag_ptr);
+        llvm::Type* const tag_ty =
+            llvm::cast<llvm::StructType>(type(enum_ty))->getElementType(0);
+        disc = builder_->CreateZExtOrTrunc(
+            builder_->CreateLoad(tag_ty, tag_ptr), i32_ty);
       } else {
         llvm::Value* payload = builder_->CreateLoad(type(niche.slot), place);
         llvm::Value* fieldless = nullptr;
@@ -300,11 +305,17 @@ void LlvmIrEmitter::emit_memory(const ir::Instruction& instr) {
           ir::enum_place_type(storage_->state(), place_op.type);
       const ir::EnumNiche niche = ir::enum_niche(storage_->state(), enum_ty);
       llvm::Type* const i32_ty = builder_->getInt32Ty();
+      if (ir::enum_is_zst(storage_->state(), enum_ty)) {
+        break;
+      }
       if (!niche.has) {
         llvm::Value* tag_ptr = builder_->CreateInBoundsGEP(
             type(enum_ty), place,
             {builder_->getInt32(0), builder_->getInt32(0)});
-        builder_->CreateStore(tag, tag_ptr);
+        llvm::Type* const tag_ty =
+            llvm::cast<llvm::StructType>(type(enum_ty))->getElementType(0);
+        builder_->CreateStore(builder_->CreateZExtOrTrunc(tag, tag_ty),
+                              tag_ptr);
         break;
       }
       llvm::Value* fieldless = builder_->CreateICmpEQ(

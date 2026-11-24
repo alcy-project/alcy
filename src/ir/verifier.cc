@@ -250,6 +250,16 @@ VerificationResult verify_storage(const Storage& storage) {
                            storage.types().size())) {
         return err(VerificationErrorKind::StructParamsOutOfRange, sidx.idx);
       }
+      if (!range_in_bounds(struct_type.field_hints.head(),
+                           struct_type.field_hints.size(),
+                           storage.layout_hints().size())) {
+        return err(VerificationErrorKind::StructLayoutHintsOutOfRange,
+                   sidx.idx);
+      }
+      if (struct_type.field_hints.size() > struct_type.fields.size()) {
+        return err(VerificationErrorKind::StructLayoutHintsOutOfRange,
+                   sidx.idx);
+      }
     } else if (node.tag == TypeTag::Slice) {
       const SliceTypeIdx sidx = node.as_slice();
       if (sidx.idx >= storage.slice_types().size()) {

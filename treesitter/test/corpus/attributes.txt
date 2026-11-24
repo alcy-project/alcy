@@ -144,3 +144,76 @@ A test gated on the target
       (parameters)
       (block
         (return_expression)))))
+
+================================================================================
+A layout attribute names its settings
+================================================================================
+
+#[layout(min_align = 16, tag_size = 1)]
+enum Flag { Off, On }
+
+fn main() -> i32 { ret 0 }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (attribute
+    (identifier)
+    (layout_setting
+      (identifier)
+      (integer))
+    (layout_setting
+      (identifier)
+      (integer)))
+  (enum_item
+    (identifier)
+    (enum_variant
+      (identifier))
+    (enum_variant
+      (identifier)))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))
+
+================================================================================
+A field can carry a layout setting
+================================================================================
+
+struct S {
+  a: u8,
+  #[layout(max_align = 1)] tail: [u16; 0],
+}
+
+fn main() -> i32 { ret 0 }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (field_declaration
+      (identifier)
+      (primitive_type))
+    (field_declaration
+      (attribute
+        (identifier)
+        (layout_setting
+          (identifier)
+          (integer)))
+      (identifier)
+      (array_type
+        (primitive_type)
+        (integer))))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "debug/dcheck.h"
 #include "debug/fatal.h"
 #include "fpag/base/numeric.h"
@@ -112,6 +114,14 @@ constexpr TypeIdx primitive_idx(TypeTag tag) {
   return TypeIdx(static_cast<u32>(tag));
 }
 
+// Values from `#[layout(...)]`, in bytes. Zero means the compiler
+// chooses a value; `tag_size` is meaningful only on an enum.
+struct TypeLayoutHints {
+  u8 min_align = 0;
+  u8 max_align = 0;
+  u8 tag_size = 0;
+};
+
 struct StructType {
   str::StringPoolId name;
   // Field types in declaration order.
@@ -120,6 +130,10 @@ struct StructType {
   // non-generic declaration. A symbol names the arguments, so a type
   // has to carry its own.
   TypeIdxRange params;
+  TypeLayoutHints hints;
+  // Parallel to `fields`; a hint belongs to the field, not its type.
+  // The records live in the storage's dense hint table.
+  TypeLayoutHintsIdxRange field_hints;
 };
 
 struct ArrayType {
@@ -146,6 +160,7 @@ struct EnumType {
   EnumVariantTypeIdxRange variants;
   // Generic arguments, as for StructType.
   TypeIdxRange params;
+  TypeLayoutHints hints;
 };
 
 // Pointee of a Ref, MutRef, RawPtr, or RawMutPtr node. Pointer nodes

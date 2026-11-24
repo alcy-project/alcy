@@ -268,8 +268,12 @@ class StorageBuilder {
                       TypeIdxRange params) {
     TypeNode node{};
     node.tag = TypeTag::Struct;
-    node.data.set(state_.struct_types.emplace_back(
-        StructType{.name = name, .fields = fields, .params = params}));
+    node.data.set(
+        state_.struct_types.emplace_back(StructType{.name = name,
+                                                    .fields = fields,
+                                                    .params = params,
+                                                    .hints = {},
+                                                    .field_hints = {}}));
     return state_.types.emplace_back(node);
   }
 
@@ -295,17 +299,35 @@ class StorageBuilder {
   TypeIdx reserve_struct(str::StringPoolId name) {
     TypeNode node{};
     node.tag = TypeTag::Struct;
-    node.data.set(state_.struct_types.emplace_back(StructType{
-        .name = name, .fields = {TypeIdx(0), 0}, .params = {TypeIdx(0), 0}}));
+    node.data.set(
+        state_.struct_types.emplace_back(StructType{.name = name,
+                                                    .fields = {TypeIdx(0), 0},
+                                                    .params = {TypeIdx(0), 0},
+                                                    .hints = {},
+                                                    .field_hints = {}}));
     return state_.types.emplace_back(node);
   }
 
-  void fill_struct(TypeIdx idx, TypeIdxRange fields, TypeIdxRange params) {
+  void fill_struct(TypeIdx idx,
+                   TypeIdxRange fields,
+                   TypeIdxRange params,
+                   TypeLayoutHints hints = {},
+                   std::span<const TypeLayoutHints> field_hints = {}) {
     DCHECK(idx.idx < state_.types.size());
     TypeNode& node = state_.types[idx];
     DCHECK(node.tag == TypeTag::Struct);
-    state_.struct_types[node.as_struct()].fields = fields;
-    state_.struct_types[node.as_struct()].params = params;
+    StructType& shape = state_.struct_types[node.as_struct()];
+    shape.fields = fields;
+    shape.params = params;
+    shape.hints = hints;
+    if (!field_hints.empty()) {
+      const u32 head = static_cast<u32>(state_.layout_hints.size());
+      for (const TypeLayoutHints& hint : field_hints) {
+        state_.layout_hints.emplace_back(hint);
+      }
+      shape.field_hints = TypeLayoutHintsIdxRange{
+          TypeLayoutHintsIdx(head), static_cast<u32>(field_hints.size())};
+    }
   }
 
   // A slice interns by its element alone. The map answers what the
@@ -490,18 +512,22 @@ class StorageBuilder {
     node.data.set(state_.enum_types.emplace_back(
         EnumType{.name = name,
                  .variants = {EnumVariantTypeIdx(0), 0},
-                 .params = {TypeIdx(0), 0}}));
+                 .params = {TypeIdx(0), 0},
+                 .hints = {}}));
     return state_.types.emplace_back(node);
   }
 
   void fill_enum(TypeIdx idx,
                  EnumVariantTypeIdxRange variants,
-                 TypeIdxRange params) {
+                 TypeIdxRange params,
+                 TypeLayoutHints hints = {}) {
     DCHECK(idx.idx < state_.types.size());
     TypeNode& node = state_.types[idx];
     DCHECK(node.tag == TypeTag::Enum);
-    state_.enum_types[node.as_enum()].variants = variants;
-    state_.enum_types[node.as_enum()].params = params;
+    EnumType& shape = state_.enum_types[node.as_enum()];
+    shape.variants = variants;
+    shape.params = params;
+    shape.hints = hints;
   }
 
   TypeIdx enum_type(str::StringPoolId name,
@@ -509,8 +535,8 @@ class StorageBuilder {
                     TypeIdxRange params) {
     TypeNode node{};
     node.tag = TypeTag::Enum;
-    node.data.set(state_.enum_types.emplace_back(
-        EnumType{.name = name, .variants = variants, .params = params}));
+    node.data.set(state_.enum_types.emplace_back(EnumType{
+        .name = name, .variants = variants, .params = params, .hints = {}}));
     return state_.types.emplace_back(node);
   }
 

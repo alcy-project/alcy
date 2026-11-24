@@ -110,6 +110,8 @@ class LlvmIrEmitter {
 
   llvm::Type* type(ir::TypeIdx idx) const;
   llvm::Type* return_type(ir::TypeIdx idx) const;
+  llvm::Type* alignment_field(u64 align) const;
+
   llvm::Type* build_type(ir::TypeIdx idx) const;
   llvm::Type* enum_payload_area_type(ir::TypeIdx idx) const;
 

@@ -203,12 +203,10 @@ TEST_CASE("Layout sizes an enum area for its widest variant") {
   CHECK(both_layout.size == 16);
 }
 
-TEST_CASE("Layout rounds an enum up to its alignment") {
-  // `enum E { A(u8) }`: a discriminant and a one-byte area are five
-  // bytes, and the enum is four-aligned. Five is not a multiple of four,
-  // and an array of the enum strides by the size, so without the final
-  // rounding the second element would start at byte five - where the
-  // emitted LLVM struct, allocated at eight, has padding.
+TEST_CASE("Layout keeps an enum a whole number of alignment units") {
+  // `enum E { A(u8) }`: a one-byte discriminant and a one-byte area
+  // are two bytes. The type's size must still be a multiple of its
+  // alignment so an array of the enum strides correctly.
   StorageBuilder builder;
   const TypeIdx u8_ty = builder.primitive(TypeTag::U8);
   TypeSeq byte;
@@ -223,9 +221,9 @@ TEST_CASE("Layout rounds an enum up to its alignment") {
   Storage storage = std::move(builder).build().unwrap().unwrap();
   const TypeLayout layout =
       layout_of(storage.state(), byte_enum, PointerWidth::W64);
-  CHECK(layout.align == 4);
-  CHECK(layout.size == 8);
-  CHECK(layout_of(storage.state(), pair, PointerWidth::W64).size == 16);
+  CHECK(layout.align == 1);
+  CHECK(layout.size == 2);
+  CHECK(layout_of(storage.state(), pair, PointerWidth::W64).size == 4);
 }
 
 TEST_CASE("Layout gives a referencing option the payload's shape") {
@@ -309,7 +307,7 @@ TEST_CASE("Layout gives a bool option a byte") {
   (void)fieldless;
 }
 
-TEST_CASE("Layout gives a payload-less enum only its discriminant") {
+TEST_CASE("Layout gives a single fieldless enum no storage") {
   StorageBuilder builder;
   TypeSeq none;
   const EnumVariantTypeIdx unit =
@@ -321,8 +319,8 @@ TEST_CASE("Layout gives a payload-less enum only its discriminant") {
 
   const TypeLayout layout =
       layout_of(storage.state(), tag_only, PointerWidth::W64);
-  CHECK(layout.align == 4);
-  CHECK(layout.size == 4);
+  CHECK(layout.align == 1);
+  CHECK(layout.size == 0);
 }
 
 TEST_CASE("Layout of a nested enum flows into its containing struct") {

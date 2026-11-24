@@ -21,6 +21,7 @@
 #include "analyzer/fmt.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
+#include "debug/check.h"
 #include "diag/span.h"
 #include "fpag/base/numeric.h"
 #include "ir/block.h"
@@ -353,7 +354,13 @@ ir::TypeIdx Lowerer::mint_nominal(ir::TypeIdx generic_type,
     for (const ir::TypeIdx field : fields) {
       field_seq.push(storage_copy(field));
     }
-    builder.fill_struct(minted, field_seq.finish(), params.finish());
+    std::vector<ir::TypeLayoutHints> copied_hints;
+    for (const ir::TypeLayoutHintsIdx hint : shape.field_hints) {
+      CHECK(hint.idx < builder.state().layout_hints.size());
+      copied_hints.push_back(builder.state().layout_hints[hint.idx]);
+    }
+    builder.fill_struct(minted, field_seq.finish(), params.finish(),
+                        shape.hints, copied_hints);
     return minted;
   }
   if (node.tag != ir::TypeTag::Enum) {
@@ -381,7 +388,7 @@ ir::TypeIdx Lowerer::mint_nominal(ir::TypeIdx generic_type,
     }
     variants.push(builder.enum_variant(variant.name, field_seq.finish()));
   }
-  builder.fill_enum(minted, variants.finish(), params.finish());
+  builder.fill_enum(minted, variants.finish(), params.finish(), shape.hints);
   return minted;
 }
 

@@ -426,12 +426,17 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       }
     }
   };
+  const auto ir_hints = [](const ast::LayoutSpec& spec) {
+    return ir::TypeLayoutHints{.min_align = spec.min_align,
+                               .max_align = spec.max_align,
+                               .tag_size = spec.tag_size};
+  };
   if (is_struct) {
-    push_bindings(node.payload.get<ast::ItemStruct>().params);
+    const ast::ItemStruct& decl = node.payload.get<ast::ItemStruct>();
+    push_bindings(decl.params);
     std::vector<ir::TypeIdx> fields;
     fields.reserve(node.payload.get<ast::ItemStruct>().fields.size());
-    for (const ast::ItemStructField& field :
-         node.payload.get<ast::ItemStruct>().fields) {
+    for (const ast::ItemStructField& field : decl.fields) {
       fields.push_back(resolve_type(entry.module, field.type, nullptr));
     }
     // The copies must be adjacent, so every field resolves before any
@@ -440,7 +445,12 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
     for (ir::TypeIdx field : fields) {
       seq.push(storage_copy(field));
     }
-    builder.fill_struct(reserved, seq.finish(), args_seq.finish());
+    std::vector<ir::TypeLayoutHints> field_hints;
+    for (const ast::ItemStructField& field : decl.fields) {
+      field_hints.push_back(ir_hints(field.layout));
+    }
+    builder.fill_struct(reserved, seq.finish(), args_seq.finish(),
+                        ir_hints(decl.layout), std::move(field_hints));
   } else {
     const ast::ItemEnum& decl = node.payload.get<ast::ItemEnum>();
     push_bindings(decl.params);
@@ -463,7 +473,8 @@ ir::TypeIdx Checker::instantiate_generic(u32 nominal,
       }
       variants.push(builder.enum_variant(variant_names[i], seq.finish()));
     }
-    builder.fill_enum(reserved, variants.finish(), args_seq.finish());
+    builder.fill_enum(reserved, variants.finish(), args_seq.finish(),
+                      ir_hints(decl.layout));
   }
   if (!check_type_size(reserved, node.span)) {
     return error_type();

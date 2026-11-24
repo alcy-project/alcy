@@ -86,7 +86,7 @@
   F(ParserRangeEndNeedsBound, Error, Parser, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
   F(ParserRefSelfParameter, Error, Parser, "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)") \
   F(ParserReservedName, Error, Parser, "Name `{}` is reserved for future use") \
-  F(ParserUnknownAttribute, Error, Parser, "Unknown attribute `{}`; the known attributes are `when`, `repr`, and `test`") \
+  F(ParserUnknownAttribute, Error, Parser, "Unknown attribute `{}`; the known attributes are `when`, `repr`, `layout`, and `test`") \
   F(ParserWhenUnknownTarget, Error, Parser, "Unknown `target` argument `{}`; the known arguments are `os`, `arch`, and `freestanding`") \
   F(ParserWhenUnknownValue, Error, Parser, "Unknown value `{}` for `target.{}`; the known values are {}") \
   F(ParserWhenNotBoolean, Error, Parser, "`when` expects a boolean expression") \
@@ -96,6 +96,19 @@
   F(ParserReprUnknown, Error, Parser, "Unknown repr `{}`; the known repr is `C`") \
   F(ParserReprMalformed, Error, Parser, "`repr` takes one argument: `C`") \
   F(ParserReprEmpty, Error, Parser, "`repr(C)` does not apply to a struct with no fields") \
+  F(ParserLayoutMalformed, Error, Parser, "`layout` takes `name = value` settings") \
+  F(ParserLayoutUnknownKey, Error, Parser, "Unknown layout setting `{}`; the known settings are `min_align`, `max_align`, and `tag_size`") \
+  F(ParserLayoutNotPowerOfTwo, Error, Parser, "A layout size must be a power of two") \
+  F(ParserLayoutAlignTooLarge, Error, Parser, "An alignment must be a power of two from 1 to 16") \
+  F(AnalyzerLayoutUnalignedField, Error, Analyzer, "A field with a size cannot have its alignment capped below its natural alignment") \
+  F(ParserLayoutNotOnItem, Error, Parser, "Layout settings apply to structs and enums") \
+  F(ParserAttributeNotOnField, Error, Parser, "Attribute `{}` does not apply to a field") \
+  F(ParserLayoutTagOnStruct, Error, Parser, "`tag_size` applies to enums") \
+  F(ParserLayoutTagTooLarge, Error, Parser, "`tag_size` must be 1, 2, 4, or 8") \
+  F(ParserLayoutTagTooSmall, Error, Parser, "`tag_size` is too small for the number of variants") \
+  F(ParserLayoutTagOnField, Error, Parser, "`tag_size` applies to an enum, not a field") \
+  F(ParserLayoutMinAboveMax, Error, Parser, "`min_align` cannot exceed `max_align`") \
+  F(ParserLayoutRepeatedKey, Error, Parser, "Layout setting `{}` is given twice") \
   F(ParserWhenTargetIsBoolean, Error, Parser, "`{}` is a boolean; compare it to `true` or `false`") \
   F(ParserWhenTargetIsString, Error, Parser, "`target.{}` is a string; compare it to one of the known values") \
   F(ParserReturnSpelling, Error, Parser, "`ret` returns; write `ret ...`") \

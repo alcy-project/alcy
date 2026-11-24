@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "debug/check.h"
 #include "debug/dcheck.h"
 #include "ir/block.h"
 #include "ir/block_param.h"
@@ -593,8 +594,19 @@ StorageBases StorageBuilder::append_reachable(
       continue;
     }
     const StructType& entry = src.struct_types[StructTypeIdx(i)];
-    state_.struct_types.push_back(StructType{
-        name(entry.name), type_range(entry.fields), type_range(entry.params)});
+    TypeLayoutHintsIdxRange hints;
+    if (!entry.field_hints.empty()) {
+      const u32 head = static_cast<u32>(state_.layout_hints.size());
+      for (TypeLayoutHintsIdx idx : entry.field_hints) {
+        CHECK(idx.idx < src.layout_hints.size());
+        state_.layout_hints.emplace_back(src.layout_hints[idx.idx]);
+      }
+      hints = TypeLayoutHintsIdxRange{TypeLayoutHintsIdx(head),
+                                      entry.field_hints.size()};
+    }
+    state_.struct_types.push_back(
+        StructType{name(entry.name), type_range(entry.fields),
+                   type_range(entry.params), entry.hints, hints});
   }
   const std::vector<bool>& array_mark = reached.of(Reached::Kind::Array);
   for (usize i = 0; i < src.array_types.size(); ++i) {
@@ -621,7 +633,7 @@ StorageBases StorageBuilder::append_reachable(
     state_.enum_types.push_back(EnumType{
         name(entry.name),
         mapped_range(entry.variants, variant_map, bases.enum_variant_types),
-        type_range(entry.params)});
+        type_range(entry.params), entry.hints});
   }
   const std::vector<bool>& variant_mark =
       reached.of(Reached::Kind::EnumVariant);

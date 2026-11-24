@@ -133,9 +133,10 @@ module.exports = grammar({
 
     // Attributes ------------------------------------------------------------
 
-    // The three attributes may lead an item and repeat; the closed set is
+    // The four attributes may lead an item or field and repeat; the closed set is
     // `#[when(EXPR)]`, which gates an item on the build context,
-    // `#[repr(C)]`, which fixes a struct's layout to the platform's C
+    // `#[repr(C)]`, which fixes a struct's layout to the platform's C,
+    // `#[layout(...)]`, which names layout settings,
     // one, and `#[test]`, which marks a function a test (grammar.ebnf,
     // `attribute`). Word-like parts read as identifiers so the rest of
     // the language keeps its words, and the parser validates the
@@ -151,10 +152,22 @@ module.exports = grammar({
           $._when_expr,
           // The repr argument is the one letter `C`.
           $._repr_argument,
+          $._layout_args,
         ),
         ')',
       )),
       ']',
+    ),
+
+    layout_setting: $ => seq(
+      field('key', $.identifier),
+      '=',
+      field('value', $.integer),
+    ),
+
+    _layout_args: $ => seq(
+      $.layout_setting,
+      repeat(seq(',', $.layout_setting)),
     ),
 
     _when_expr: $ => prec.left(PREC.OR, seq($._when_and, repeat(seq('||', $._when_and)))),
@@ -274,6 +287,7 @@ module.exports = grammar({
     ),
 
     field_declaration: $ => seq(
+      repeat($.attribute),
       optional(field('visibility', $.visibility)),
       field('name', $.identifier),
       ':',

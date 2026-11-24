@@ -579,3 +579,49 @@ TEST_CASE("A corrupt summary is refused") {
 }
 
 }  // namespace ir
+
+TEST_CASE("Field layout hints survive a binary round trip") {
+  ir::SymbolTable strings;
+  ir::StorageBuilder builder;
+  const ir::TypeIdx byte = builder.primitive(ir::TypeTag::U8);
+  ir::TypeSeq fields;
+  fields.push(byte);
+  const ir::TypeIdx st = builder.reserve_struct(strings.intern("S"));
+  builder.fill_struct(
+      st, fields.finish(), ir::TypeIdxRange{},
+      ir::TypeLayoutHints{.min_align = 16},
+      std::vector<ir::TypeLayoutHints>{ir::TypeLayoutHints{.max_align = 1}});
+  const ir::Storage storage = std::move(builder).build().unwrap().unwrap();
+  const ir::WriteInput input{.storage = &storage,
+                             .strings = &strings,
+                             .instr_spans = {},
+                             .files = {.names = {}, .hashes = {}},
+                             .addr_names = {},
+                             .summary = {},
+                             .compiler_version = "0.0.0-test"};
+  const std::vector<u8> bytes = serialize(input);
+  const auto loaded = ir::deserialize(bytes);
+  CHECK(loaded.is_ok());
+  if (loaded.is_err()) {
+    return;
+  }
+  const ir::Storage& read = *loaded.value().storage;
+  ir::TypeIdx loaded_st = ir::TypeIdx(base::INVALID_IDX);
+  for (u32 i = 0; i < read.types().size(); ++i) {
+    if (read.types()[ir::TypeIdx(i)].tag == ir::TypeTag::Struct) {
+      loaded_st = ir::TypeIdx(i);
+      break;
+    }
+  }
+  CHECK(loaded_st.is_valid());
+  if (!loaded_st.is_valid()) {
+    return;
+  }
+  const ir::StructType& shape =
+      read.struct_types()[read.types()[loaded_st].as_struct()];
+  CHECK(shape.hints.min_align == 16);
+  CHECK(shape.field_hints.size() == 1);
+  CHECK(read.layout_hints()[shape.field_hints.head().idx].max_align == 1);
+  CHECK(ir::type_layout(read.state(), loaded_st, ir::PointerWidth::W64).align ==
+        16);
+}

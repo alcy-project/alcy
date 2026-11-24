@@ -47,6 +47,8 @@ enum class VerificationErrorKind : u8 {
   // A struct's or enum's generic argument range leaves the type table.
   StructParamsOutOfRange,
   EnumParamsOutOfRange,
+  // A struct's field-layout hint range leaves the hint table.
+  StructLayoutHintsOutOfRange,
   // A function's instantiation argument range leaves the type table.
   FunctionGenericsOutOfRange,
   // A symbol kind or calling convention the format does not define.
@@ -120,6 +122,7 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::TupleFieldsOutOfRange: return "TupleFieldsOutOfRange";
     case K::FuncFieldsOutOfRange: return "FuncFieldsOutOfRange";
     case K::StructParamsOutOfRange: return "StructParamsOutOfRange";
+    case K::StructLayoutHintsOutOfRange: return "StructLayoutHintsOutOfRange";
     case K::EnumParamsOutOfRange: return "EnumParamsOutOfRange";
     case K::FunctionGenericsOutOfRange: return "FunctionGenericsOutOfRange";
     case K::InvalidSymbolKind: return "InvalidSymbolKind";

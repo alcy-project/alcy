@@ -56,6 +56,8 @@ struct StorageState {
   using TupleTypes = base::Vec<TupleType, TupleTypeIdx, Alloc<TupleType>>;
   using FuncTypes = base::Vec<FuncType, FuncTypeIdx, Alloc<FuncType>>;
   using ConstTypes = base::Vec<ConstType, ConstTypeIdx, Alloc<ConstType>>;
+  using LayoutHints =
+      base::Vec<TypeLayoutHints, TypeLayoutHintsIdx, Alloc<TypeLayoutHints>>;
 
   Functions functions;
   Blocks blocks;
@@ -88,6 +90,7 @@ struct StorageState {
   TupleTypes tuple_types;
   FuncTypes func_types;
   ConstTypes const_types;
+  LayoutHints layout_hints;
   // Answers `type_names_param` keeps per type: 0 unanswered, 1 no, 2
   // yes, 3 on the walk's own stack. Type nodes never change once
   // interned, so an answer holds for the state's lifetime.
@@ -115,7 +118,10 @@ inline TypeLayout type_layout(const StorageState& state,
                               PointerWidth width);
 inline TypeLayout fields_layout(const StorageState& state,
                                 TypeIdxRange fields,
-                                PointerWidth width);
+                                PointerWidth width,
+                                const TypeLayoutHints& hints = {},
+                                const TypeLayoutHints* field_hints = nullptr,
+                                u32 field_hint_count = 0);
 // The niche an option-shaped enum's discriminant lives in :
 // exactly two variants, one carrying nothing and one carrying a single
 // reference. The reference's unused null pattern holds the fieldless
@@ -215,38 +221,119 @@ inline TypeLayout enum_payload_area(const StorageState& state,
                                     TypeIdx idx,
                                     PointerWidth width);
 
-// Layout of a field list: each field at the next offset its alignment
-// allows, the whole rounded up to the strictest field. An empty list has
-// no size, which is what an uninhabited payload needs.
+// The per-field layout overrides of a struct, as a span into the
+// storage's dense hint table. An empty span means the compiler's natural
+// layout. The range is validated by the verifier before any IR is built.
+inline std::pair<const TypeLayoutHints*, u32> field_hints_of(
+    const StorageState& state,
+    const StructType& shape) {
+  const TypeLayoutHintsIdxRange& range = shape.field_hints;
+  if (!range.empty() && static_cast<u64>(range.head().idx) + range.size() <=
+                            state.layout_hints.size()) {
+    return {&state.layout_hints[range.head().idx], range.size()};
+  }
+  return {nullptr, 0};
+}
+
+// Layout of a field list: each field at the next offset its effective
+// alignment allows, where a field's layout setting can raise or cap it.
+// An empty list has no size, which is what an uninhabited payload needs.
 inline TypeLayout fields_layout(const StorageState& state,
                                 TypeIdxRange fields,
-                                PointerWidth width) {
+                                PointerWidth width,
+                                const TypeLayoutHints& hints,
+                                const TypeLayoutHints* field_hints,
+                                u32 field_hint_count) {
   TypeLayout out{};
-  if (fields.empty()) {
-    return out;
-  }
-  for (TypeIdx field : fields) {
-    const TypeLayout field_layout = type_layout(state, field, width);
+  for (u32 i = 0; i < fields.size(); ++i) {
+    const TypeIdx field = fields[i];
+    TypeLayout field_layout = type_layout(state, field, width);
+    if (field_hints != nullptr && i < field_hint_count) {
+      const TypeLayoutHints& hint = field_hints[i];
+      if (hint.max_align != 0 && field_layout.align > hint.max_align) {
+        field_layout.align = hint.max_align;
+      }
+      if (hint.min_align != 0 && field_layout.align < hint.min_align) {
+        field_layout.align = hint.min_align;
+      }
+    }
     out.size = align_up(out.size, field_layout.align) + field_layout.size;
     out.align = field_layout.align > out.align ? field_layout.align : out.align;
+  }
+  if (hints.min_align != 0 && out.align < hints.min_align) {
+    out.align = hints.min_align;
+  }
+  if (hints.max_align != 0 && out.align > hints.max_align) {
+    out.align = hints.max_align;
   }
   out.size = align_up(out.size, out.align);
   return out;
 }
 
-// Byte offset of field `index` within a field list laid out by
-// fields_layout. The same walk, so an offset and the size that reserved
-// it cannot disagree.
+// Byte offset of field `index` in a field list laid out by
+// fields_layout. Callers pass the same field layout settings so an offset
+// and the size that reserved it cannot disagree.
 inline u64 field_offset(const StorageState& state,
                         TypeIdxRange fields,
                         u32 index,
-                        PointerWidth width) {
+                        PointerWidth width,
+                        const TypeLayoutHints* hints = nullptr,
+                        u32 hint_count = 0) {
+  const auto effective = [&](u32 i) {
+    TypeLayout layout = type_layout(state, fields[i], width);
+    if (hints != nullptr && i < hint_count) {
+      if (hints[i].max_align != 0 && layout.align > hints[i].max_align) {
+        layout.align = hints[i].max_align;
+      }
+      if (hints[i].min_align != 0 && layout.align < hints[i].min_align) {
+        layout.align = hints[i].min_align;
+      }
+    }
+    return layout;
+  };
   u64 cursor = 0;
   for (u32 i = 0; i < index; ++i) {
-    const TypeLayout layout = type_layout(state, fields[i], width);
+    const TypeLayout layout = effective(i);
     cursor = align_up(cursor, layout.align) + layout.size;
   }
-  return align_up(cursor, type_layout(state, fields[index], width).align);
+  return align_up(cursor, effective(index).align);
+}
+
+// The discriminant's byte count: the smallest whole byte count that
+// names every variant, unless the declaration fixed one.
+inline u8 enum_tag_width(const StorageState& state, TypeIdx idx) {
+  const EnumType& shape = state.enum_types[state.types[idx].as_enum()];
+  if (shape.hints.tag_size != 0) {
+    return shape.hints.tag_size;
+  }
+  if (shape.variants.size() <= 256) {
+    return 1;
+  }
+  if (shape.variants.size() <= 65536) {
+    return 2;
+  }
+  return 4;
+}
+
+// An enum needs no discriminant when it has no values, or when its
+// single variant carries nothing but zero-sized payloads.
+inline bool enum_is_zst(const StorageState& state, TypeIdx idx) {
+  const EnumType& shape = state.enum_types[state.types[idx].as_enum()];
+  if (shape.variants.size() == 0) {
+    return true;
+  }
+  if (shape.variants.size() != 1) {
+    return false;
+  }
+  const EnumVariantType& only = state.enum_variant_types[shape.variants.head()];
+  for (TypeIdx field : only.fields) {
+    const TypeTag tag = state.types[field].tag;
+    if (tag == TypeTag::Param || tag == TypeTag::Const ||
+        type_layout(state, field, PointerWidth::W64).size != 0) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Layout of an enum's payload area: room for the widest variant
@@ -328,16 +415,32 @@ inline TypeLayout type_layout(const StorageState& state,
       }
       return {word, word};
     }
-    case TypeTag::Struct:
-      return fields_layout(state, state.struct_types[node.as_struct()].fields,
-                           width);
+    case TypeTag::Struct: {
+      const StructType& shape = state.struct_types[node.as_struct()];
+      const TypeLayoutHintsIdxRange& hints = shape.field_hints;
+      const bool have_hints =
+          !hints.empty() && static_cast<u64>(hints.head().idx) + hints.size() <=
+                                state.layout_hints.size();
+      return fields_layout(
+          state, shape.fields, width, shape.hints,
+          have_hints ? &state.layout_hints[hints.head().idx] : nullptr,
+          have_hints ? hints.size() : 0);
+    }
     case TypeTag::Tuple:
       return fields_layout(state, state.tuple_types[node.as_tuple()].elements,
                            width);
     case TypeTag::Array: {
       const ArrayType& array = state.array_types[node.as_array()];
+      const TypeTag element_tag = state.types[array.element].tag;
       if (array.count == 0) {
-        return {};
+        // No element is stored, but the type keeps its element's
+        // alignment so a zero-length array still serves as an aligned
+        // placeholder in a containing aggregate.
+        const u64 align =
+            element_tag == TypeTag::Param || element_tag == TypeTag::Const
+                ? 1
+                : type_layout(state, array.element, width).align;
+        return {0, align};
       }
       const TypeLayout element = type_layout(state, array.element, width);
       return {element.size * array.count, element.align};
@@ -346,10 +449,13 @@ inline TypeLayout type_layout(const StorageState& state,
       // No variant can hold a value, so there is no discriminant to
       // store. An empty enum is a zero-sized type like the unit and the
       // empty struct.
-      const EnumType& empty_check =
-          state.enum_types[state.types[idx].as_enum()];
-      if (empty_check.variants.size() == 0) {
-        return {};
+      const EnumType& shape = state.enum_types[state.types[idx].as_enum()];
+      if (enum_is_zst(state, idx)) {
+        TypeLayout empty{};
+        if (shape.hints.min_align != 0 && empty.align < shape.hints.min_align) {
+          empty.align = shape.hints.min_align;
+        }
+        return empty;
       }
       // A niche-carrying enum is its payload: the discriminant lives in
       // the payload's spare pattern and takes no room of its own
@@ -364,11 +470,17 @@ inline TypeLayout type_layout(const StorageState& state,
       // emitter builds is allocated at its own alignment, so a size that
       // is not a multiple of it puts every element after the first at
       // the wrong offset. A byte payload is where the two part company -
-      // `{i32, [1 x i8]}` is five bytes and allocates eight.
-      constexpr u64 DISC = 4;
+      // `{i8, [1 x i8]}` is two bytes and allocates two.
+      const u64 disc = enum_tag_width(state, idx);
       const TypeLayout area = enum_payload_area(state, idx, width);
-      const u64 align = area.align > DISC ? area.align : DISC;
-      const u64 payload_start = align_up(DISC, area.align);
+      u64 align = area.align > disc ? area.align : disc;
+      if (shape.hints.min_align != 0 && align < shape.hints.min_align) {
+        align = shape.hints.min_align;
+      }
+      if (shape.hints.max_align != 0 && align > shape.hints.max_align) {
+        align = shape.hints.max_align;
+      }
+      const u64 payload_start = align_up(disc, area.align);
       return {align_up(payload_start + area.size, align), align};
     }
     // A const argument is never a value, so no layout exists for it; a
@@ -670,6 +782,9 @@ class Storage {
   const StorageState::Types& types() const { return state_.types; }
   const StorageState::StructTypes& struct_types() const {
     return state_.struct_types;
+  }
+  const StorageState::LayoutHints& layout_hints() const {
+    return state_.layout_hints;
   }
   const StorageState::ArrayTypes& array_types() const {
     return state_.array_types;

@@ -154,8 +154,10 @@ std::optional<StructLayout> struct_layout_of(const DocumentAnalysis& analysis,
       entry.name = std::string(declaration.fields[i].name.name);
     }
     entry.type = ir::type_display(state, context.strings, field_type);
+    const auto hints = ir::field_hints_of(state, struct_type);
     entry.offset =
-        ir::field_offset(state, struct_type.fields, i, context.target.width);
+        ir::field_offset(state, struct_type.fields, i, context.target.width,
+                         hints.first, hints.second);
     entry.size = field.size;
     entry.align = field.align;
     layout.fields.push_back(std::move(entry));

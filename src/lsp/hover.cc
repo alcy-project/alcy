@@ -140,9 +140,6 @@ std::string layout_line(const pipeline::PipelineContext& context,
   }
   const ir::TypeLayout layout =
       ir::type_layout(state, type, context.target.width);
-  if (layout.size == 0) {
-    return {};
-  }
   return "\nsize " + std::to_string(layout.size) + " bytes, align " +
          std::to_string(layout.align) + "\n";
 }

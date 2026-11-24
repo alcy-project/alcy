@@ -57,6 +57,10 @@ using TypeIdxRange = base::IdxRange<TypeIdx>;
 struct StructType;
 using StructTypeIdx = details::Idx<StructType>;
 
+struct TypeLayoutHints;
+using TypeLayoutHintsIdx = details::Idx<TypeLayoutHints>;
+using TypeLayoutHintsIdxRange = base::IdxRange<TypeLayoutHintsIdx>;
+
 struct ArrayType;
 using ArrayTypeIdx = details::Idx<ArrayType>;
 

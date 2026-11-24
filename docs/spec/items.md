@@ -98,11 +98,29 @@
 
 The names are a closed set, and each one names its own section or
 ruler: `when(EXPR)` on an item gates it on the build descriptor,
-`repr(C)` on a `struct` fixes its FFI layout, and `test` on a `fn`
-marks the function a test. Other names are rejected with guidance
+`repr(C)` on a `struct` fixes its FFI layout, `layout(...)` names
+layout settings, and `test` on a `fn` marks the function a test.
+Other names are rejected with guidance
 naming the known set; they are not read past or remembered silently.
-Each attribute sits on the line above the item and may repeat without
-interaction.
+An attribute sits on the line above the item; a field layout attribute sits
+on the line above its field. Attributes may repeat, but a repeated layout
+setting on one item is refused.
+
+## The `layout` attribute
+
+`#[layout(name = value, ...)]` sets layout values by name. The known names are
+`min_align`, `max_align`, and `tag_size`; each alignment value is a power of two
+from 1 to 16, and `tag_size` is 1, 2, 4, or 8. `tag_size` may be 1, 2, 4, or 8
+and applies only to an `enum`; a smaller value than the variant count needs is
+refused.
+
+On a `struct` or `enum`, `min_align` raises the type's alignment and
+`max_align` caps it. On a field, `min_align` places the field on a
+boundary of at least that size and `max_align` caps the alignment used
+for its offset; the field's own type layout is unchanged. A field with
+a non-zero size must not have a natural alignment above `max_align`,
+so no unaligned access is generated; a zero-sized field is exempt.
+`min_align` above `max_align` is refused.
 
 ## The `when` gate
 
@@ -327,7 +345,9 @@ interaction.
   a byte. A reference to a slice is fat - a data pointer and a length -
   and a niche there is not promised: an enum over one carries a
   discriminant like any other enum.
-- A zero-sized type has `size_of` zero and `align_of` one. The unit,
+- A zero-sized type has `size_of` zero and `align_of` one, unless its
+  declaration raises that alignment with `#[layout(min_align = N)]`.
+  A zero-length array keeps its element's alignment. The unit,
   the never type, a zero-length array, an empty `struct`, an empty
   `enum`, and an aggregate whose parts are all zero-sized are such
   types. A zero-sized value has no storage of its own: a reference to
@@ -336,13 +356,18 @@ interaction.
   their effects, and `alloc`/`dealloc` for a zero-sized element are
   handled by the runtime without a block, so a `Vec<()>` allocates no
   heap memory.
-- Nothing else is promised. Field order, an enum's discriminant width
-  and placement, and padding are the compiler's, and `size_of` and
+- An enum's discriminant is the smallest whole byte count that can
+  name its variants, unless `#[layout(tag_size = N)]` fixes it. When
+  every variant carries only zero-sized payloads, a single-variant
+  enum has no discriminant and is zero-sized.
+- Nothing else is promised. Field order, an enum's discriminant
+  placement, and padding are the compiler's, and `size_of` and
   `align_of` are a function of the type for one compiler version and
   target, not across them.
 - The only stable boundary is a declaration in the C convention
   (`extern "C"`), whose scalar parameters and returns map to the
   platform's C ABI. A struct crossing it does so under `#[repr(C)]`,
-  which fixes its layout. An enum cannot: its discriminant's width
-  and placement are the compiler's choice, and no item fixes them.
+  which fixes its layout. An enum cannot use that C contract: its
+  discriminant's placement is the compiler's choice. `#[layout(tag_size
+  = N)]` sets a width in alcy bytes, not a C ABI type.
   The internal calling convention is not a promise.

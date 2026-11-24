@@ -123,6 +123,16 @@ llvm::Type* LlvmIrEmitter::type(ir::TypeIdx idx) const {
   return built;
 }
 
+// A zero-length field of a wide integer raises a struct's alignment
+// without changing its allocation size. LLVM's struct types here do
+// not carry an explicit alignment attribute, so this is how an
+// `#[layout(min_align = N)]` reaches the emitted layout.
+llvm::Type* LlvmIrEmitter::alignment_field(u64 align) const {
+  llvm::Type* wide = llvm::IntegerType::get(module_->getContext(),
+                                            static_cast<u32>(align * 8));
+  return llvm::ArrayType::get(wide, 0);
+}
+
 llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
   const ir::TypeNode& node = storage_->types()[idx];
   const ir::TypeTag tag = node.tag;
@@ -198,10 +208,29 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
           storage_->struct_types()[node.as_struct()];
       llvm::SmallVector<llvm::Type*, FUNCTION_ARGS_SOO_SIZE> field_types;
       field_types.reserve(struct_type.fields.size());
-      for (const ir::TypeIdx field : struct_type.fields) {
-        field_types.emplace_back(type(field));
+      for (u32 fi = 0; fi < struct_type.fields.size(); ++fi) {
+        const ir::TypeIdx field = struct_type.fields[fi];
+        llvm::Type* field_ty = type(field);
+        const ir::TypeLayoutHintsIdxRange& hint_range = struct_type.field_hints;
+        const u32 hint_idx = hint_range.head().idx + fi;
+        if (fi < hint_range.size() &&
+            hint_idx < storage_->state().layout_hints.size()) {
+          const ir::TypeLayout natural =
+              ir::type_layout(storage_->state(), field, width_);
+          const u8 cap = storage_->state().layout_hints[hint_idx].max_align;
+          if (cap != 0 && natural.align > cap) {
+            field_ty = llvm::ArrayType::get(builder_->getInt8Ty(),
+                                            static_cast<u64>(natural.size));
+          }
+        }
+        field_types.emplace_back(field_ty);
       }
       // Anonymous structural type; LLVM deduplicates identical shapes.
+      const ir::TypeLayout expected =
+          ir::type_layout(storage_->state(), idx, width_);
+      if (struct_type.hints.min_align != 0) {
+        field_types.emplace_back(alignment_field(expected.align));
+      }
       return llvm::StructType::get(module_->getContext(), field_types);
     }
     case T::Array: {
@@ -232,8 +261,13 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
     }
     case T::Enum: {
       const ir::EnumType& shape = storage_->state().enum_types[node.as_enum()];
-      if (shape.variants.size() == 0) {
-        return llvm::StructType::get(module_->getContext(), {});
+      if (ir::enum_is_zst(storage_->state(), idx)) {
+        llvm::SmallVector<llvm::Type*, 1> empty;
+        if (shape.hints.min_align != 0) {
+          empty.emplace_back(alignment_field(
+              ir::type_layout(storage_->state(), idx, width_).align));
+        }
+        return llvm::StructType::get(module_->getContext(), empty);
       }
       // A niche-carrying enum is its payload: the discriminant lives in
       // the payload's spare pattern and takes no room of its own
@@ -246,11 +280,18 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
       // A discriminant, then the payload in the slot itself. Keeping the
       // payload here rather than behind a pointer is what lets an enum
       // value outlive the frame that built it.
+      const u64 disc = ir::enum_tag_width(storage_->state(), idx);
+      llvm::Type* tag_ty = builder_->getInt32Ty();
+      if (disc == 1) {
+        tag_ty = builder_->getInt8Ty();
+      } else if (disc == 2) {
+        tag_ty = builder_->getInt16Ty();
+      } else if (disc == 8) {
+        tag_ty = builder_->getInt64Ty();
+      }
       llvm::SmallVector<llvm::Type*, 2> slot_types;
-      slot_types.emplace_back(builder_->getInt32Ty());
+      slot_types.emplace_back(tag_ty);
       slot_types.emplace_back(enum_payload_area_type(idx));
-      llvm::StructType* slot =
-          llvm::StructType::get(module_->getContext(), slot_types);
       // The layout ir::type_layout publishes is what field offsets are
       // computed against, so the type built here has to match it. The
       // module carries the target's layout before the emitter runs, so
@@ -260,6 +301,11 @@ llvm::Type* LlvmIrEmitter::build_type(ir::TypeIdx idx) const {
           ir::type_layout(storage_->state(), idx, width_);
       const llvm::DataLayout& dl = module_->getDataLayout();
       DCHECK(!dl.isDefault());
+      if (shape.hints.min_align != 0) {
+        slot_types.emplace_back(alignment_field(expected.align));
+      }
+      llvm::StructType* slot =
+          llvm::StructType::get(module_->getContext(), slot_types);
       DCHECK_EQ(dl.getTypeAllocSize(slot).getFixedValue(), expected.size);
       DCHECK_EQ(dl.getABITypeAlign(slot).value(), expected.align);
       return slot;
@@ -1592,12 +1638,21 @@ void LlvmIrEmitter::emit_entry_body(llvm::Function* wrapper,
     result = builder_->CreateCall(entry_function);
   }
   const auto result_tag = [&]() -> llvm::Value* {
-    if (result_slot == nullptr) {
-      return builder_->CreateExtractValue(result, 0);
+    if (storage_->state().types[entry_return.idx].tag == ir::TypeTag::Enum &&
+        ir::enum_is_zst(storage_->state(), entry_return)) {
+      return builder_->getInt32(0);
     }
-    return builder_->CreateLoad(
-        builder_->getInt32Ty(),
-        builder_->CreateStructGEP(type(entry_return), result_slot, 0));
+    llvm::Value* tag = nullptr;
+    if (result_slot == nullptr) {
+      tag = builder_->CreateExtractValue(result, 0);
+    } else {
+      llvm::Type* const slot_ty =
+          llvm::cast<llvm::StructType>(type(entry_return))->getElementType(0);
+      tag = builder_->CreateLoad(
+          slot_ty,
+          builder_->CreateStructGEP(type(entry_return), result_slot, 0));
+    }
+    return builder_->CreateZExtOrTrunc(tag, builder_->getInt32Ty());
   };
   // A windows target always exits through ExitProcess: the freestanding
   // flag carries no other meaning there, and the syscall exit below is

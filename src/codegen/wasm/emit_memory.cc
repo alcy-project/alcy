@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <optional>
+#include <utility>
 
 #include "codegen/backend.h"
 #include "codegen/wasm/emit.h"
@@ -67,6 +68,18 @@ std::optional<Access> access_for(ir::TypeTag tag, ir::PointerWidth width) {
     case T::Ref:
     case T::MutRef: return Access{0x28, 2, 0x36, 2};
     default: return std::nullopt;
+  }
+}
+// The wasm access used for an enum's discriminant, derived from the
+// single byte-count rule in the IR.
+static std::optional<Access> enum_tag_access(const ir::StorageState& state,
+                                             ir::TypeIdx type,
+                                             ir::PointerWidth width) {
+  switch (ir::enum_tag_width(state, type)) {
+    case 1: return access_for(ir::TypeTag::U8, width);
+    case 2: return access_for(ir::TypeTag::U16, width);
+    case 8: return access_for(ir::TypeTag::U64, width);
+    default: return access_for(ir::TypeTag::U32, width);
   }
 }
 
@@ -343,11 +356,23 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const ir::TypeIdx enum_ty =
           ir::enum_place_type(storage_.state(), place.type);
       const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_ty);
+      if (ir::enum_is_zst(storage_.state(), enum_ty)) {
+        i32_const(0);
+        local_set(reg_base_[instr.dst.idx]);
+        return base::make_ok();
+      }
       if (!niche.has) {
         if (push_word(place, 0, ValType::I32).is_err()) {
           return base::make_err(codegen::EmitError::Unsupported);
         }
-        i32_load(body_, 2, 0);
+        const std::optional<Access> tag_access =
+            enum_tag_access(storage_.state(), enum_ty, target_.width);
+        if (!tag_access.has_value()) {
+          return unsupported(current_span_, "this enum");
+        }
+        body_.byte(tag_access->load);
+        body_.u32_leb(tag_access->load_align);
+        body_.u32_leb(0);
       } else {
         // The discriminant is the payload's spare pattern :
         // pick the variant index the spell names.
@@ -383,12 +408,22 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
       const ir::TypeIdx enum_ty =
           ir::enum_place_type(storage_.state(), place.type);
       const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_ty);
+      if (ir::enum_is_zst(storage_.state(), enum_ty)) {
+        return base::make_ok();
+      }
       if (!niche.has) {
         if (push_word(place, 0, ValType::I32).is_err() ||
             push_word(tag, 0, ValType::I32).is_err()) {
           return base::make_err(codegen::EmitError::Unsupported);
         }
-        i32_store(body_, 2, 0);
+        const std::optional<Access> tag_access =
+            enum_tag_access(storage_.state(), enum_ty, target_.width);
+        if (!tag_access.has_value()) {
+          return unsupported(current_span_, "this enum");
+        }
+        body_.byte(tag_access->store);
+        body_.u32_leb(tag_access->store_align);
+        body_.u32_leb(0);
         return base::make_ok();
       }
       // The fieldless spell for the fieldless variant; the carrying
@@ -454,7 +489,8 @@ Emitter::EmitResult Emitter::emit_memory(const ir::Instruction& instr) {
         DCHECK(field < fields.size());
         const ir::TypeLayout area =
             ir::enum_payload_area(storage_.state(), enum_ty, target_.width);
-        const u64 at = ir::align_up(4, area.align) +
+        const u64 disc = ir::enum_tag_width(storage_.state(), enum_ty);
+        const u64 at = ir::align_up(disc, area.align) +
                        ir::field_offset(storage_.state(), fields,
                                         static_cast<u32>(field), target_.width);
         i32_const(static_cast<i32>(at));
@@ -566,12 +602,18 @@ Emitter::EmitResult Emitter::emit_field_projection(
         return unsupported(current_span_, "a dynamic field index");
       }
       const ir::TypeNode& node = storage_.types()[cur];
+      const bool is_struct = tag == ir::TypeTag::Struct;
       const ir::TypeIdxRange fields =
-          tag == ir::TypeTag::Struct
-              ? storage_.struct_types()[node.as_struct()].fields
-              : storage_.tuple_types()[node.as_tuple()].elements;
-      constant += ir::field_offset(storage_.state(), fields,
-                                   static_cast<u32>(value), target_.width);
+          is_struct ? storage_.struct_types()[node.as_struct()].fields
+                    : storage_.tuple_types()[node.as_tuple()].elements;
+      const auto hints =
+          is_struct
+              ? ir::field_hints_of(storage_.state(),
+                                   storage_.struct_types()[node.as_struct()])
+              : std::pair<const ir::TypeLayoutHints*, u32>{nullptr, 0};
+      constant +=
+          ir::field_offset(storage_.state(), fields, static_cast<u32>(value),
+                           target_.width, hints.first, hints.second);
       cur = fields[static_cast<u32>(value)];
       continue;
     }
@@ -668,12 +710,18 @@ Emitter::EmitResult Emitter::emit_field_load(const ir::Operand& aggregate,
       return unsupported(current_span_, "this extraction");
     }
     const ir::TypeNode& node = storage_.types()[cur];
+    const bool is_struct = tag == ir::TypeTag::Struct;
     const ir::TypeIdxRange fields =
-        tag == ir::TypeTag::Struct
-            ? storage_.struct_types()[node.as_struct()].fields
-            : storage_.tuple_types()[node.as_tuple()].elements;
-    offset += static_cast<u32>(ir::field_offset(
-        storage_.state(), fields, static_cast<u32>(value), target_.width));
+        is_struct ? storage_.struct_types()[node.as_struct()].fields
+                  : storage_.tuple_types()[node.as_tuple()].elements;
+    const auto hints =
+        is_struct
+            ? ir::field_hints_of(storage_.state(),
+                                 storage_.struct_types()[node.as_struct()])
+            : std::pair<const ir::TypeLayoutHints*, u32>{nullptr, 0};
+    offset += static_cast<u32>(
+        ir::field_offset(storage_.state(), fields, static_cast<u32>(value),
+                         target_.width, hints.first, hints.second));
     cur = fields[static_cast<u32>(value)];
   }
   if (!instr.dst.is_valid()) {

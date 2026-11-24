@@ -3,9 +3,11 @@
 
 #include "parser/parser.h"
 
+#include <charconv>
 #include <optional>
 #include <span>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -255,6 +257,9 @@ Parser::Attributes Parser::parse_attribute() {
   if (attr_name == "repr") {
     return parse_repr_attribute(name.span);
   }
+  if (attr_name == "layout") {
+    return parse_layout_attribute(name.span);
+  }
   if (attr_name != "when") {
     const u32 index = bag_.emit<i18n::Key::ParserUnknownAttribute>(
         DiagCode::UnknownAttribute, name.span, attr_name);
@@ -351,6 +356,126 @@ Parser::Attributes Parser::parse_repr_attribute(diag::Span name_span) {
   }
   out.repr_c = true;
   out.repr_span = name_span;
+  return out;
+}
+
+void Parser::validate_layout(const ast::LayoutSpec& layout, diag::Span span) {
+  if (layout.min_align != 0 && layout.max_align != 0 &&
+      layout.min_align > layout.max_align) {
+    const u32 index = bag_.emit<i18n::Key::ParserLayoutMinAboveMax>(
+        DiagCode::UnknownAttribute, span);
+    (void)index;
+  }
+}
+
+Parser::Attributes Parser::parse_layout_attribute(diag::Span name_span) {
+  Attributes out;
+  if (!expect(lexer::TokenKind::LParen, "`(` after `layout`")) {
+    synchronize_attribute();
+    return out;
+  }
+  bool saw_min = false;
+  bool saw_max = false;
+  bool saw_tag = false;
+  while (!check(lexer::TokenKind::RParen) && !at_end()) {
+    const lexer::Token key = peek();
+    if (key.kind != lexer::TokenKind::Ident) {
+      const u32 index = bag_.emit<i18n::Key::ParserLayoutMalformed>(
+          DiagCode::UnknownAttribute, key.span);
+      (void)index;
+      synchronize_attribute();
+      return out;
+    }
+    advance();
+    const std::string_view spelling =
+        bytes_.substr(key.span.offset, key.span.length);
+    if (!expect(lexer::TokenKind::Eq, "`=` after a layout setting")) {
+      synchronize_attribute();
+      return out;
+    }
+    const lexer::Token value = peek();
+    if (value.kind != lexer::TokenKind::Integer) {
+      const u32 index = bag_.emit<i18n::Key::ParserLayoutMalformed>(
+          DiagCode::UnknownAttribute, value.span);
+      (void)index;
+      synchronize_attribute();
+      return out;
+    }
+    advance();
+    const std::string_view digits =
+        bytes_.substr(value.span.offset, value.span.length);
+    u64 number = 0;
+    const auto parsed =
+        std::from_chars(digits.data(), digits.data() + digits.size(), number);
+    const bool is_tag_size = spelling == "tag_size";
+    const bool power_of_two = number != 0 && (number & (number - 1)) == 0;
+    const bool in_range =
+        is_tag_size ? (number == 1 || number == 2 || number == 4 || number == 8)
+                    : number <= 16;
+    if (parsed.ec != std::errc{} ||
+        parsed.ptr != digits.data() + digits.size() || !power_of_two ||
+        !in_range) {
+      if (!power_of_two) {
+        const u32 index = bag_.emit<i18n::Key::ParserLayoutNotPowerOfTwo>(
+            DiagCode::UnknownAttribute, value.span);
+        (void)index;
+      } else if (is_tag_size) {
+        const u32 index = bag_.emit<i18n::Key::ParserLayoutTagTooLarge>(
+            DiagCode::UnknownAttribute, value.span);
+        (void)index;
+      } else {
+        const u32 index = bag_.emit<i18n::Key::ParserLayoutAlignTooLarge>(
+            DiagCode::UnknownAttribute, value.span);
+        (void)index;
+      }
+      if (!match(lexer::TokenKind::Comma)) {
+        break;
+      }
+      continue;
+    }
+    u8* slot = nullptr;
+    bool* seen = nullptr;
+    if (spelling == "min_align") {
+      slot = &out.layout.min_align;
+      seen = &saw_min;
+    } else if (spelling == "max_align") {
+      slot = &out.layout.max_align;
+      seen = &saw_max;
+    } else if (spelling == "tag_size") {
+      slot = &out.layout.tag_size;
+      seen = &saw_tag;
+    } else {
+      const u32 index = bag_.emit<i18n::Key::ParserLayoutUnknownKey>(
+          DiagCode::UnknownAttribute, key.span, spelling);
+      (void)index;
+      if (!match(lexer::TokenKind::Comma)) {
+        break;
+      }
+      continue;
+    }
+    if (*seen) {
+      const u32 index = bag_.emit<i18n::Key::ParserLayoutRepeatedKey>(
+          DiagCode::UnknownAttribute, key.span, spelling);
+      (void)index;
+    } else {
+      *seen = true;
+      *slot = static_cast<u8>(number);
+    }
+    if (!match(lexer::TokenKind::Comma)) {
+      break;
+    }
+  }
+  if (!expect(lexer::TokenKind::RParen, "`)` after `layout`")) {
+    synchronize_attribute();
+    return out;
+  }
+  if (!match(lexer::TokenKind::RBracket)) {
+    const u32 index = bag_.emit<i18n::Key::ParserLayoutMalformed>(
+        DiagCode::UnknownAttribute, name_span);
+    (void)index;
+    synchronize_attribute();
+    return out;
+  }
   return out;
 }
 
@@ -675,6 +800,13 @@ void Parser::parse_conditional_group(Attributes attributes,
     (void)index;
     attributes.repr_c = false;
   }
+  if (attributes.layout.min_align != 0 || attributes.layout.max_align != 0 ||
+      attributes.layout.tag_size != 0) {
+    const u32 index = bag_.emit<i18n::Key::ParserLayoutNotOnItem>(
+        DiagCode::UnknownAttribute, peek().span);
+    (void)index;
+    attributes.layout = {};
+  }
   if (!expect(K::LBrace, "`{`")) {
     return;
   }
@@ -756,6 +888,15 @@ ast::ItemIdx Parser::parse_item(Attributes attributes) {
       if (attributes.is_test && !apply_test_marker(item, node.span)) {
         return ast::ItemIdx::invalid();
       }
+      if ((attributes.layout.min_align != 0 ||
+           attributes.layout.max_align != 0 ||
+           attributes.layout.tag_size != 0) &&
+          node.kind != ast::ItemKind::Struct &&
+          node.kind != ast::ItemKind::Enum) {
+        const u32 index = bag_.emit<i18n::Key::ParserLayoutNotOnItem>(
+            DiagCode::UnknownAttribute, node.span);
+        (void)index;
+      }
       if (attributes.repr_c) {
         if (node.kind != ast::ItemKind::Struct) {
           const u32 index = bag_.emit<i18n::Key::ParserReprNotOnStruct>(
@@ -826,10 +967,10 @@ ast::ItemIdx Parser::parse_item(Attributes attributes) {
     }
     case lexer::TokenKind::Struct:
       only_functions();
-      return finish(parse_struct(is_pub));
+      return finish(parse_struct(is_pub, attributes));
     case lexer::TokenKind::Enum:
       only_functions();
-      return finish(parse_enum(is_pub));
+      return finish(parse_enum(is_pub, attributes));
     case lexer::TokenKind::Impl:
       only_functions();
       return finish(parse_impl(is_pub));
@@ -1279,8 +1420,14 @@ ast::ItemIdx Parser::parse_extern(bool is_pub) {
   return ast_.items.push_back(block);
 }
 
-ast::ItemIdx Parser::parse_struct(bool is_pub) {
+ast::ItemIdx Parser::parse_struct(bool is_pub, const Attributes& attrs) {
   const usize mark = pos_;
+  validate_layout(attrs.layout, span_from(mark));
+  if (attrs.layout.tag_size != 0) {
+    const u32 index = bag_.emit<i18n::Key::ParserLayoutTagOnStruct>(
+        DiagCode::UnknownAttribute, span_from(mark));
+    (void)index;
+  }
   if (!expect(lexer::TokenKind::Struct, "struct")) {
     return ast::ItemIdx::invalid();
   }
@@ -1297,6 +1444,33 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
   }
   std::vector<ast::ItemStructField> fields;
   while (!check(lexer::TokenKind::RBrace) && !at_end()) {
+    Attributes field_attrs;
+    if (peek_kind() == lexer::TokenKind::Hash) {
+      const diag::Span field_span = peek().span;
+      field_attrs = parse_attribute_list();
+      if (field_attrs.repr_c) {
+        const u32 index = bag_.emit<i18n::Key::ParserAttributeNotOnField>(
+            DiagCode::UnknownAttribute, field_span, "repr");
+        (void)index;
+      }
+      if (field_attrs.is_test) {
+        const u32 index = bag_.emit<i18n::Key::ParserAttributeNotOnField>(
+            DiagCode::UnknownAttribute, field_span, "test");
+        (void)index;
+      }
+      if (field_attrs.when_false) {
+        const u32 index = bag_.emit<i18n::Key::ParserAttributeNotOnField>(
+            DiagCode::UnknownAttribute, field_span, "when");
+        (void)index;
+      }
+      if (field_attrs.layout.tag_size != 0) {
+        const u32 index = bag_.emit<i18n::Key::ParserLayoutTagOnField>(
+            DiagCode::UnknownAttribute, peek().span);
+        (void)index;
+        field_attrs.layout.tag_size = 0;
+      }
+      validate_layout(field_attrs.layout, peek().span);
+    }
     const bool field_pub = match(lexer::TokenKind::Pub);
     base::Result<ast::Ident, diag::Reported> field_name =
         parse_ident("field name");
@@ -1310,8 +1484,8 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
     if (!type.is_valid()) {
       return ast::ItemIdx::invalid();
     }
-    fields.push_back(
-        ast::ItemStructField{std::move(field_name).unwrap(), type, field_pub});
+    fields.push_back(ast::ItemStructField{std::move(field_name).unwrap(), type,
+                                          field_pub, field_attrs.layout});
     if (!match(lexer::TokenKind::Comma)) {
       break;
     }
@@ -1327,12 +1501,14 @@ ast::ItemIdx Parser::parse_struct(bool is_pub) {
       .name = std::move(name).unwrap(),
       .params = ast::copy_to_arena(ast_.spans, params),
       .fields = ast::copy_to_arena(ast_.spans, fields),
+      .layout = attrs.layout,
   });
   return ast_.items.push_back(node);
 }
 
-ast::ItemIdx Parser::parse_enum(bool is_pub) {
+ast::ItemIdx Parser::parse_enum(bool is_pub, const Attributes& attrs) {
   const usize mark = pos_;
+  validate_layout(attrs.layout, span_from(mark));
   if (!expect(lexer::TokenKind::Enum, "enum")) {
     return ast::ItemIdx::invalid();
   }
@@ -1385,6 +1561,16 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
   if (!expect(lexer::TokenKind::RBrace, "`}`")) {
     return ast::ItemIdx::invalid();
   }
+  // An eight-byte tag can name every representable variant index; a
+  // smaller one has a hard limit that a 64-bit shift would wrap past.
+  const u64 tag_limit = attrs.layout.tag_size == 8
+                            ? ~u64{0}
+                            : (1ull << (attrs.layout.tag_size * 8ull));
+  if (attrs.layout.tag_size != 0 && variants.size() > tag_limit) {
+    const u32 index = bag_.emit<i18n::Key::ParserLayoutTagTooSmall>(
+        DiagCode::UnknownAttribute, span_from(mark));
+    (void)index;
+  }
   ast::ItemNode node;
   node.kind = ast::ItemKind::Enum;
   node.span = span_from(mark);
@@ -1393,6 +1579,7 @@ ast::ItemIdx Parser::parse_enum(bool is_pub) {
       .name = std::move(name).unwrap(),
       .params = ast::copy_to_arena(ast_.spans, params),
       .variants = ast::copy_to_arena(ast_.spans, variants),
+      .layout = attrs.layout,
   });
   return ast_.items.push_back(node);
 }

@@ -56,14 +56,13 @@ Literals: decimal, `0b`/`0o`/`0x` with type suffixes; `"..."`
 strings; `'...'` characters (`char` for ASCII, `rune` otherwise,
 see `types.md`); `true`, `false`
 
-Operators and delimiters: `+ - * / % **` `& | ^ ~ << >>` and
-assignment forms; `:=` (declare), `=` (reassign); `!` `&&` `||`
-`!=` `>` `<` `>=` `<=`; `->` `=>` `:` `::` `,` `.` `..` `..=` `..<`
-(a range end is spelled `..=` or `..<`; bare `..` names no end, see
-`types.md`) `(` `)` `{` `}` `[` `]` `?` (error propagation),
-`_` (wildcard), `#` (attributes: `#[when(...)]` gates an item on the
-target; a gate evaluates to a boolean expression over the `target`
-descriptor, and the attribute sits on the line above the item. See
+Operators and delimiters: `+ - * / % **` `& | ^ ~ << >>` and assignment forms;
+`:=` (declare), `=` (reassign); `!` `&&` `||` `!=` `>` `<` `>=` `<=`; `->` `=>`
+`:` `::` `,` `.` `..` `..=` `..<` (a range end is spelled `..=` or `..<`; bare
+`..` names no end, see `types.md`) `(` `)` `{` `}` `[` `]` `?` (error
+propagation), `_` (wildcard), `#` (attributes: `#[when(...)]`, `#[layout(...)]`
+gates an item on the target; a gate evaluates to a boolean expression over the
+`target` descriptor, and the attribute sits on the line above the item. See
 `items.md`). `;` separates multiple statements on one line only.
 
 Comments: `//`, `/* */`, `///` (only one doc-comment style exists).

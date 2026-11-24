@@ -27,12 +27,14 @@ item        = { attribute } , [ vis ] , ( fn_item | intrinsic_fn_item | extern_i
                         | conditional_group ) ;
               (* An attribute is required in front of a conditional group;
                  a bare brace is not an item. *)
-attribute   = "#" , "[" , ident , [ "(" , ( when_expr | repr_arg ) , ")" ] , "]" ;
+attribute   = "#" , "[" , ident , [ "(" , ( when_expr | repr_arg | layout_args ) , ")" ] , "]" ;
+layout_args = layout_setting , { "," , layout_setting } ;
+layout_setting = ident , "=" , INTEGER ;
               (* The closed set of attributes today: `when`, an item gate
                  evaluated on the build descriptor — an item whose gate is
                  false is not part of the module — `repr(C)`, an FFI-layout
-                 marker on a struct, and `test`, a marker on a free
-                 function. A gated item is still parsed: an error in its
+                 marker on a struct, `layout(...)`, layout settings on a
+                 type or field, and `test`, a marker on a free function. A gated item is still parsed: an error in its
                  body is reported; analysis and emission never see it. A
                  `#[when(EXPR)]` attribute followed by a brace groups items
                  without making a namespace: they join the module's own
@@ -91,7 +93,7 @@ params      = [ [ "comp" ] , pattern , ":" , ( ".." | type ) ,
 struct_item = "struct" , IDENT , [ type_params ] , "{"
             , [ field , { "," , field } , [ "," ] ] , "}" ;
               (* An empty body declares a zero-sized type. *)
-field       = [ vis ] , IDENT , ":" , type ;
+field       = { attribute } , [ vis ] , IDENT , ":" , type ;
 enum_item   = "enum" , IDENT , [ type_params ] , "{"
             , [ variant , { "," , variant } , [ "," ] ] , "}" ;
               (* An empty body is uninhabited and zero-sized. *)

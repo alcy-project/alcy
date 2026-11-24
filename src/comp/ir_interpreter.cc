@@ -33,7 +33,6 @@
 
 namespace comp {
 namespace {
-
 using ir::Opcode;
 using ir::TypeTag;
 
@@ -680,8 +679,13 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
           ir::enum_place_type(storage_, operand_at(instr, 0).type);
       const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
       u64 disc = 0;
+      if (ir::enum_is_zst(storage_, enum_ty)) {
+        frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, 0, 0};
+        return true;
+      }
       if (!niche.has) {
-        if (!read_bytes(place.address, 4, instr, disc)) {
+        const u64 disc_bytes = ir::enum_tag_width(storage_, enum_ty);
+        if (!read_bytes(place.address, disc_bytes, instr, disc)) {
           return false;
         }
       } else {
@@ -716,8 +720,12 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const ir::TypeIdx enum_ty =
           ir::enum_place_type(storage_, operand_at(instr, 0).type);
       const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
+      if (ir::enum_is_zst(storage_, enum_ty)) {
+        return true;
+      }
       if (!niche.has) {
-        return write_bytes(place.address, 4, tag, instr);
+        const u64 disc_bytes = ir::enum_tag_width(storage_, enum_ty);
+        return write_bytes(place.address, disc_bytes, tag, instr);
       }
       if (tag != niche.fieldless) {
         // The carrying variant's payload follows; the tag itself
@@ -777,7 +785,8 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const ir::TypeLayout area =
           ir::enum_payload_area(storage_, enum_ty, width_);
       const u64 align_mask = area.align == 0 ? 0 : area.align - 1;
-      const u64 area_at = (4 + align_mask) & ~align_mask;
+      const u64 disc = ir::enum_tag_width(storage_, enum_ty);
+      const u64 area_at = (disc + align_mask) & ~align_mask;
       const u64 at =
           place.address + area_at +
           ir::field_offset(storage_, fields, static_cast<u32>(field), width_);
@@ -964,14 +973,16 @@ bool Interpreter::execute_gep(ir::InstructionIdx instr, Frame& frame) {
     }
     const TypeTag tag = tag_of(current);
     if (tag == TypeTag::Struct) {
-      const ir::TypeIdxRange fields =
-          storage_.struct_types[storage_.types[current].as_struct()].fields;
+      const ir::StructType& shape =
+          storage_.struct_types[storage_.types[current].as_struct()];
+      const ir::TypeIdxRange fields = shape.fields;
       if (index >= fields.size()) {
         return fail(IrRunError::Kind::Internal, instr,
                     "getelementptr field out of range");
       }
-      offset +=
-          ir::field_offset(storage_, fields, static_cast<u32>(index), width_);
+      const auto hints = ir::field_hints_of(storage_, shape);
+      offset += ir::field_offset(storage_, fields, static_cast<u32>(index),
+                                 width_, hints.first, hints.second);
       current = fields[static_cast<u32>(index)];
       continue;
     }

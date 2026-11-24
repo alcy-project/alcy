@@ -71,12 +71,12 @@ it is implemented.
   like `Movable`, land with the first concurrency package that needs
   them. Memory shared outside the process is outside the language's
   types and is a contract each owning package documents per operation.
-- Attribute system in full (a general annotation layer, `repr` other
-  than `C`, layout precision beyond the C rule). `#[when]` — the item
-  gate on the target's `os`, `arch`, and `freestanding` — and
-  `#[repr(C)]` are not deferred: they ship with the attribute slices.
-  Attributes on statements, expressions, and parameters, and
-  feature flags of a package's own, are not adopted.
+- Attribute system in full (a general annotation layer, `repr` other than `C`,
+  layout precision beyond the C rule and the layout attribute). `#[when]` — the
+  item gate on the target's `os`, `arch`, and `freestanding` — and `#[repr(C)]`
+  are not deferred: they ship with the attribute slices. Attributes on
+  statements, expressions, and parameters, and feature flags of a package's own,
+  are not adopted.
 
 ## Compile-time evaluation
 

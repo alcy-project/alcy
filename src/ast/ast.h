@@ -963,12 +963,21 @@ struct ItemIntrinsic {
   bool is_unsafe = false;
 };
 
+// Values from `#[layout(...)]`, in bytes. Zero means the compiler
+// chooses; `tag_size` is meaningful only on an enum.
+struct LayoutSpec {
+  u8 min_align = 0;
+  u8 max_align = 0;
+  u8 tag_size = 0;
+};
+
 struct ItemStructField {
   Ident name;
   TypeIdx type = TypeIdx::invalid();
   // `pub` on the field; a field without it is private to the module
   // that declares the struct.
   bool is_pub = false;
+  LayoutSpec layout;
 };
 
 // One declaration in an `extern "C"` block: signature without a body,
@@ -993,6 +1002,7 @@ struct ItemStruct {
   Ident name;
   std::span<const GenericParam> params;
   std::span<const ItemStructField> fields;
+  LayoutSpec layout;
 };
 
 struct ItemEnumVariant {
@@ -1004,6 +1014,7 @@ struct ItemEnum {
   Ident name;
   std::span<const GenericParam> params;
   std::span<const ItemEnumVariant> variants;
+  LayoutSpec layout;
 };
 
 struct ItemImpl {

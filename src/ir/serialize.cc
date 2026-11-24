@@ -169,6 +169,16 @@ class Serializer {
     if (!input_.needs_drop.empty() || !input_.not_movable.empty()) {
       sections.push_back({Section::TypeTraits, type_traits_section()});
     }
+    if (!state_.layout_hints.empty()) {
+      ByteWriter hints;
+      hints.put_u32(static_cast<u32>(state_.layout_hints.size()));
+      for (const TypeLayoutHints& hint : state_.layout_hints) {
+        hints.put_u8(hint.min_align);
+        hints.put_u8(hint.max_align);
+        hints.put_u8(hint.tag_size);
+      }
+      sections.push_back({Section::LayoutHints, std::move(hints)});
+    }
 
     // The header and the table come first, so an offset depends on the
     // table's own size; compute them before writing anything.
@@ -394,6 +404,11 @@ class Serializer {
       out.put_u32(string_index(strukt.name));
       write_range(out, strukt.fields);
       write_range(out, strukt.params);
+      out.put_u8(strukt.hints.min_align);
+      out.put_u8(strukt.hints.max_align);
+      out.put_u8(strukt.hints.tag_size);
+      out.put_u32(strukt.field_hints.head().idx);
+      out.put_u32(strukt.field_hints.size());
     }
     return out;
   }
@@ -425,6 +440,9 @@ class Serializer {
       out.put_u32(string_index(enum_type.name));
       write_range(out, enum_type.variants);
       write_range(out, enum_type.params);
+      out.put_u8(enum_type.hints.min_align);
+      out.put_u8(enum_type.hints.max_align);
+      out.put_u8(enum_type.hints.tag_size);
     }
     return out;
   }

@@ -1284,15 +1284,24 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
             (void)unsupported(span, "a dynamic field projection");
             return false;
           }
+          const bool is_struct = tag == ir::TypeTag::Struct;
+          const ir::StructType* shape =
+              is_struct
+                  ? &storage_
+                         .struct_types()[storage_.types()[ty->idx].as_struct()]
+                  : nullptr;
           const ir::TypeIdxRange fields =
-              tag == ir::TypeTag::Struct
-                  ? storage_
-                        .struct_types()[storage_.types()[ty->idx].as_struct()]
-                        .fields
+              is_struct
+                  ? shape->fields
                   : storage_.tuple_types()[storage_.types()[ty->idx].as_tuple()]
                         .elements;
+          const auto hints =
+              shape == nullptr
+                  ? std::pair<const ir::TypeLayoutHints*, u32>{nullptr, 0}
+                  : ir::field_hints_of(storage_.state(), *shape);
           offset += static_cast<i64>(ir::field_offset(
-              storage_.state(), fields, static_cast<u32>(imm->value), width_));
+              storage_.state(), fields, static_cast<u32>(imm->value), width_,
+              hints.first, hints.second));
           ty = fields[static_cast<u32>(imm->value)];
           continue;
         }
@@ -1487,8 +1496,16 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
                       .tuple_types()[storage_.types()[aggregate_type.idx]
                                          .as_tuple()]
                       .elements;
-        offset = static_cast<i64>(ir::field_offset(
-            storage_.state(), fields, static_cast<u32>(which), width_));
+        const auto hints =
+            tag == ir::TypeTag::Struct
+                ? ir::field_hints_of(
+                      storage_.state(),
+                      storage_.struct_types()
+                          [storage_.types()[aggregate_type.idx].as_struct()])
+                : std::pair<const ir::TypeLayoutHints*, u32>{nullptr, 0};
+        offset = static_cast<i64>(
+            ir::field_offset(storage_.state(), fields, static_cast<u32>(which),
+                             width_, hints.first, hints.second));
       } else if (tag == ir::TypeTag::Str ||
                  ((tag == ir::TypeTag::Ref || tag == ir::TypeTag::MutRef) &&
                   passage_of(aggregate_type) == Passage::TwoWord)) {
@@ -1904,8 +1921,17 @@ bool Selector::emit_enum(const ir::Instruction& instr,
         ir::enum_place_type(storage_.state(), operand_at(instr, 0).type);
     const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_type);
     const Operand place = place_of(operand_at(instr, 0), 0);
+    if (ir::enum_is_zst(storage_.state(), enum_type)) {
+      push(make_inst(MOp::Mov, 4, dst_reg_operand(instr), Operand{Imm{0}}));
+      return true;
+    }
     if (!niche.has) {
-      push(make_inst(MOp::Mov, 4, dst_reg_operand(instr), place));
+      const u8 tag_width = ir::enum_tag_width(storage_.state(), enum_type);
+      if (tag_width < 4) {
+        push(make_inst(MOp::Movzx, tag_width, dst_reg_operand(instr), place));
+      } else {
+        push(make_inst(MOp::Mov, tag_width, dst_reg_operand(instr), place));
+      }
       return true;
     }
     // The payload's spare pattern spells the fieldless variant: a null
@@ -1942,12 +1968,16 @@ bool Selector::emit_enum(const ir::Instruction& instr,
         ir::enum_place_type(storage_.state(), operand_at(instr, 0).type);
     const ir::EnumNiche niche = ir::enum_niche(storage_.state(), enum_type);
     const Operand place = place_of(operand_at(instr, 0), 0);
+    if (ir::enum_is_zst(storage_.state(), enum_type)) {
+      return true;
+    }
     if (!niche.has) {
       const std::optional<Operand> tag = scalar_of(operand_at(instr, 1), span);
       if (!tag.has_value()) {
         return false;
       }
-      push(make_inst(MOp::Mov, 4, place, *tag));
+      push(make_inst(MOp::Mov, ir::enum_tag_width(storage_.state(), enum_type),
+                     place, *tag));
       return true;
     }
     const std::optional<Operand> tag = scalar_of(operand_at(instr, 1), span);
@@ -2006,8 +2036,10 @@ bool Selector::emit_enum(const ir::Instruction& instr,
   // alignment allows.
   const ir::TypeLayout area =
       ir::enum_payload_area(storage_.state(), enum_type, width_);
+  const u64 disc = ir::enum_tag_width(storage_.state(), enum_type);
   const u64 payload_start =
-      area.align <= 1 ? 4 : (4 + area.align - 1) / area.align * area.align;
+      area.align <= 1 ? disc
+                      : (disc + area.align - 1) / area.align * area.align;
   const i64 offset = static_cast<i64>(
       payload_start + ir::field_offset(storage_.state(), fields,
                                        static_cast<u32>(field), width_));

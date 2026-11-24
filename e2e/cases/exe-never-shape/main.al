@@ -29,7 +29,7 @@ fn main() -> i32 {
   if size_of::<[!; 4]>() != 0 {
     ret 3
   }
-  if size_of::<Maybe>() != 4 {
+  if size_of::<Maybe>() != 1 {
     ret 4
   }
   if size_of::<()>() != 0 {

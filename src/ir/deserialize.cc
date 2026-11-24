@@ -300,7 +300,7 @@ bool read_range(Cursor& cursor, u32& head, u32& size) {
 }
 
 bool read_structs(Parsed& parsed, std::span<const u8> payload) {
-  const u32 count = record_count(payload.size(), 20);
+  const u32 count = record_count(payload.size(), 31);
   if (count == NONE) {
     return false;
   }
@@ -320,11 +320,57 @@ bool read_structs(Parsed& parsed, std::span<const u8> payload) {
         !read_range(cursor, params_head, params_size)) {
       return false;
     }
+    TypeLayoutHints hints;
+    u8 value = 0;
+    if (!cursor.read_u8(value)) {
+      return false;
+    }
+    hints.min_align = value;
+    if (!cursor.read_u8(value)) {
+      return false;
+    }
+    hints.max_align = value;
+    if (!cursor.read_u8(value)) {
+      return false;
+    }
+    hints.tag_size = value;
+    u32 hints_head = 0;
+    u32 hints_count = 0;
+    if (!cursor.read_u32(hints_head) || !cursor.read_u32(hints_count)) {
+      return false;
+    }
     parsed.state.struct_types.emplace_back(StructType{
         .name = string_id(parsed, name),
         .fields = TypeIdxRange{TypeIdx(fields_head), fields_size},
         .params = TypeIdxRange{TypeIdx(params_head), params_size},
+        .hints = hints,
+        .field_hints = TypeLayoutHintsIdxRange{TypeLayoutHintsIdx(hints_head),
+                                               hints_count},
     });
+  }
+  return true;
+}
+
+bool read_layout_hints(Parsed& parsed, std::span<const u8> payload) {
+  const u32 count = record_count(payload.size(), 3);
+  if (count == NONE) {
+    return false;
+  }
+  Cursor cursor(payload);
+  u32 rows = 0;
+  if (!cursor.read_u32(rows) || rows != count) {
+    return false;
+  }
+  for (u32 i = 0; i < rows; ++i) {
+    u8 min_align = 0;
+    u8 max_align = 0;
+    u8 tag_size = 0;
+    if (!cursor.read_u8(min_align) || !cursor.read_u8(max_align) ||
+        !cursor.read_u8(tag_size)) {
+      return false;
+    }
+    parsed.state.layout_hints.emplace_back(TypeLayoutHints{
+        .min_align = min_align, .max_align = max_align, .tag_size = tag_size});
   }
   return true;
 }
@@ -375,7 +421,7 @@ bool read_slices(Parsed& parsed, std::span<const u8> payload) {
 }
 
 bool read_enums(Parsed& parsed, std::span<const u8> payload) {
-  const u32 count = record_count(payload.size(), 20);
+  const u32 count = record_count(payload.size(), 23);
   if (count == NONE) {
     return false;
   }
@@ -395,11 +441,19 @@ bool read_enums(Parsed& parsed, std::span<const u8> payload) {
         !read_range(cursor, params_head, params_size)) {
       return false;
     }
+    TypeLayoutHints hints;
+    u8 value = 0;
+    if (!cursor.read_u8(value) || !cursor.read_u8(hints.max_align) ||
+        !cursor.read_u8(hints.tag_size)) {
+      return false;
+    }
+    hints.min_align = value;
     parsed.state.enum_types.emplace_back(EnumType{
         .name = string_id(parsed, name),
         .variants = EnumVariantTypeIdxRange{EnumVariantTypeIdx(variants_head),
                                             variants_size},
         .params = TypeIdxRange{TypeIdx(params_head), params_size},
+        .hints = hints,
     });
   }
   return true;
@@ -1197,6 +1251,7 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
     case Section::Arrays: return read_arrays(parsed, payload);
     case Section::Slices: return read_slices(parsed, payload);
     case Section::Enums: return read_enums(parsed, payload);
+    case Section::LayoutHints: return read_layout_hints(parsed, payload);
     case Section::EnumVariants: return read_enum_variants(parsed, payload);
     case Section::Refs: return read_refs(parsed, payload);
     case Section::Tuples: return read_tuples(parsed, payload);
@@ -1231,7 +1286,7 @@ bool read_section(Parsed& parsed, Section kind, std::span<const u8> payload) {
 
 bool known_kind(u32 kind) {
   return kind >= static_cast<u32>(Section::Strings) &&
-         kind <= static_cast<u32>(Section::TypeTraits);
+         kind <= static_cast<u32>(Section::LayoutHints);
 }
 
 base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
@@ -1347,7 +1402,7 @@ base::Result<LoadedIr, IrLoadError> load(std::span<const u8> bytes) {
   }
 
   for (u32 kind = static_cast<u32>(Section::Strings);
-       kind <= static_cast<u32>(Section::TypeTraits); ++kind) {
+       kind <= static_cast<u32>(Section::LayoutHints); ++kind) {
     if (!sections[kind].present) {
       continue;
     }

@@ -16,9 +16,11 @@ inline constexpr u8 MAGIC[4] = {'A', 'L', 'I', 'R'};
 // Major 6 sets bit 6 of the instruction flags (subsumes_parts); a
 // reader that predates it must refuse the file rather than guess at a
 // flag it never read.
+// Major 8 added the layout setting records; major 9 widened the struct
+// and enum rows and added the per-field layout hint table.
 // Major 7 adds the pointer-width type spellings to the pre-interned
 // prefix of the type table; a reader that predates it must refuse.
-inline constexpr u16 MAJOR = 8;
+inline constexpr u16 MAJOR = 9;
 // Minor 1 adds the specialization and synthetic function lists.
 // Minor 2 adds the per-type trait tables.
 inline constexpr u16 MINOR = 2;
@@ -97,6 +99,10 @@ enum class Section : u8 {
   // its carried types reached into its own tables. Absent means the
   // writer measured neither.
   TypeTraits = 30,
+  // Per-field layout settings, kept in a flat table that struct rows
+  // address by an index and a count. Rows: a u32 count, then three
+  // bytes per hint.
+  LayoutHints = 31,
 };
 
 }  // namespace ir::binary

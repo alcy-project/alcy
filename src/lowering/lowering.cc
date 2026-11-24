@@ -595,10 +595,7 @@ bool Lowerer::is_zst(ir::TypeIdx type) const {
       }
       return true;
     }
-    case ir::TypeTag::Enum:
-      // A variant means a discriminant, and a niche needs a payload
-      // with bytes of its own. Only an empty enum is zero-sized.
-      return state.enum_types[node.as_enum()].variants.size() == 0;
+    case ir::TypeTag::Enum: return ir::enum_is_zst(state, type);
     default: return false;
   }
 }

@@ -221,6 +221,8 @@ class Parser {
     // is a separate question answered by a `#[when(EXPR)]` gate.
     bool is_test = false;
     diag::Span test_span;
+    // `#[layout(...)]` settings carried to the declaration.
+    ast::LayoutSpec layout;
 
     // Folds another attribute's contributions into these. Used both by
     // a run of attributes on one item and by a group passing its gates
@@ -235,6 +237,15 @@ class Parser {
         repr_c = true;
         repr_span = other.repr_span;
       }
+      if (other.layout.min_align != 0) {
+        layout.min_align = other.layout.min_align;
+      }
+      if (other.layout.max_align != 0) {
+        layout.max_align = other.layout.max_align;
+      }
+      if (other.layout.tag_size != 0) {
+        layout.tag_size = other.layout.tag_size;
+      }
     }
   };
 
@@ -243,6 +254,8 @@ class Parser {
   Attributes parse_attribute();
   // `#[repr(C)]`, starting at the first argument.
   Attributes parse_repr_attribute(diag::Span name_span);
+  Attributes parse_layout_attribute(diag::Span name_span);
+  void validate_layout(const ast::LayoutSpec& layout, diag::Span span);
   // Skips to the end of an attribute on a malformed spelling, tracking
   // nesting so an inner `]` never ends the skip.
   void synchronize_attribute();
@@ -331,8 +344,8 @@ class Parser {
   // binding and its reference type.
   bool ref_self_parameter_shape() const;
   ast::TypeIdx ref_self_type(bool is_mut, diag::Span span);
-  ast::ItemIdx parse_struct(bool is_pub);
-  ast::ItemIdx parse_enum(bool is_pub);
+  ast::ItemIdx parse_struct(bool is_pub, const Attributes& attrs);
+  ast::ItemIdx parse_enum(bool is_pub, const Attributes& attrs);
   ast::ItemIdx parse_impl(bool is_pub);
   ast::ItemIdx parse_spec(bool is_pub, bool keyword_consumed = false);
   bool parse_fn_signature(FnSignature& signature,

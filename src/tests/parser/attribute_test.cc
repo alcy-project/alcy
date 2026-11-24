@@ -186,7 +186,7 @@ TEST_CASE("An unknown attribute is refused with guidance") {
   (void)r;
   CHECK(has_message(f.bag,
                     "Unknown attribute `blorch`; the known attributes are "
-                    "`when`, `repr`, and `test`"));
+                    "`when`, `repr`, `layout`, and `test`"));
 }
 
 TEST_CASE("An unknown value for a known key is refused with the known set") {
@@ -363,4 +363,104 @@ TEST_CASE("The wasi os value is a recognized arm") {
       "#[when(target.os == \"wasi\")]\nfn x() -> i32 { ret 1 }\n", kWasi, f);
   CHECK(r.ok);
   CHECK(r.items.size() == 1);
+}
+
+TEST_CASE("A layout attribute records its settings") {
+  Fixture f;
+  ParseResult r = parse_with(
+      "#[layout(min_align = 16, max_align = 16)]\n"
+      "struct Wide { x: u8 }\n"
+      "#[layout(tag_size = 1)]\n"
+      "enum Flag { Off, On }\n"
+      "fn main() -> i32 { ret 0 }\n",
+      LINUX_X86_64, f);
+  CHECK(r.ok);
+  CHECK(r.items.size() >= 2);
+  const ast::ItemNode& wide = f.ast.items[r.items[0]];
+  const ast::ItemNode& flag = f.ast.items[r.items[1]];
+  CHECK(wide.payload.get<ast::ItemStruct>().layout.min_align == 16);
+  CHECK(wide.payload.get<ast::ItemStruct>().layout.max_align == 16);
+  CHECK(flag.payload.get<ast::ItemEnum>().layout.tag_size == 1);
+}
+
+TEST_CASE("A field layout attribute records its setting") {
+  Fixture f;
+  ParseResult r = parse_with(
+      "struct Packed {\n"
+      "  a: u8,\n"
+      "  #[layout(max_align = 1)] tail: [u16; 0],\n"
+      "}\n"
+      "fn main() -> i32 { ret 0 }\n",
+      LINUX_X86_64, f);
+  CHECK(r.ok);
+  CHECK(r.items.size() >= 1);
+  const auto& fields =
+      f.ast.items[r.items[0]].payload.get<ast::ItemStruct>().fields;
+  CHECK(fields.size() == 2);
+  CHECK(fields[1].layout.max_align == 1);
+}
+
+TEST_CASE("Layout settings are validated") {
+  struct Case {
+    std::string_view source;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"#[layout(nope = 2)]\nstruct S { a: u8 }\n",
+       "Unknown layout setting `nope`; the known settings are `min_align`, "
+       "`max_align`, and `tag_size`"},
+      {"#[layout(min_align = 3)]\nstruct S { a: u8 }\n",
+       "A layout size must be a power of two"},
+      {"#[layout(tag_size = 0)]\nenum E { A, B }\n",
+       "A layout size must be a power of two"},
+      {"#[layout(tag_size = 3)]\nenum E { A, B }\n",
+       "A layout size must be a power of two"},
+      {"#[layout(tag_size = 16)]\nenum E { A, B }\n",
+       "`tag_size` must be 1, 2, 4, or 8"},
+      {"#[layout(tag_size = 1)]\nstruct S { a: u8 }\n",
+       "`tag_size` applies to enums"},
+      {"#[layout(min_align = 16, max_align = 1)]\nstruct S { a: u8 }\n",
+       "`min_align` cannot exceed `max_align`"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    ParseResult r =
+        parse_with(std::string(c.source) + "fn main() -> i32 { ret 0 }\n",
+                   LINUX_X86_64, f);
+    (void)r;
+    CHECK(has_message(f.bag, c.message));
+  }
+}
+
+TEST_CASE("Layout values and targets are validated") {
+  struct Case {
+    std::string_view source;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"#[layout(tag_size = 8)]\nenum E { A, B }\n", ""},
+      {"#[layout(min_align = 32)]\nstruct S { a: u8 }\n",
+       "An alignment must be a power of two from 1 to 16"},
+      {"#[layout(min_align = 8)]\nfn f() {}\n",
+       "Layout settings apply to structs and enums"},
+      {"struct S { #[when(false)] a: u8 }\n",
+       "Attribute `when` does not apply to a field"},
+      {"#[layout(min_align = 256)]\nstruct S { a: u8 }\n",
+       "An alignment must be a power of two from 1 to 16"},
+      {"#[layout(min_align = 0)]\nstruct S { a: u8 }\n",
+       "A layout size must be a power of two"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    ParseResult r =
+        parse_with(std::string(c.source) + "fn main() -> i32 { ret 0 }\n",
+                   LINUX_X86_64, f);
+    if (c.message.empty()) {
+      CHECK(r.ok);
+      CHECK(!f.bag.has_errors());
+    } else {
+      (void)r;
+      CHECK(has_message(f.bag, c.message));
+    }
+  }
 }

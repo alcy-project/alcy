@@ -653,6 +653,7 @@ TEST_CASE("Verify enum types") {
         .name = str::EMPTY_STRING_ID,
         .variants = {EnumVariantTypeIdx(7), 1},
         .params = {TypeIdx(0), 0},
+        .hints = {},
     });
     TypeNode bad{};
     bad.tag = TypeTag::Enum;
@@ -673,6 +674,7 @@ TEST_CASE("Verify enum types") {
         .name = str::EMPTY_STRING_ID,
         .variants = {EnumVariantTypeIdx(0), 1},
         .params = {TypeIdx(0), 0},
+        .hints = {},
     });
     TypeNode bad{};
     bad.tag = TypeTag::Enum;

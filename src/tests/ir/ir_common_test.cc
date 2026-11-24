@@ -40,7 +40,7 @@ TEST_CASE("Static assertion for IR elements") {
   static_assert(sizeof(Register) == 8);
   static_assert(sizeof(TypeTag) == 1);
   static_assert(sizeof(TypeNode) == 8);
-  static_assert(sizeof(StructType) == 20);
+  static_assert(sizeof(StructType) == 32);
 }
 
 TEST_CASE("SeqBuilder accumulates consecutive indexes") {

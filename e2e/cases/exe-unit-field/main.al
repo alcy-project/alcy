@@ -57,7 +57,7 @@ fn main() -> i32 {
   if size_of::<Holder>() != 1 {
     ret 8
   }
-  if size_of::<HasUnit>() != 4 {
+  if size_of::<HasUnit>() != 1 {
     ret 9
   }
   ret 0

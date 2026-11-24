@@ -667,6 +667,12 @@ bool spell_function(const SpellContext& ctx,
 // field names and visibility the row recorded, an enum carries the
 // variant names its table already holds. A dependent can then name the
 // type, and the layout it spells is the one the library lays out.
+ast::LayoutSpec spell_layout(const ir::TypeLayoutHints& hints) {
+  return ast::LayoutSpec{.min_align = hints.min_align,
+                         .max_align = hints.max_align,
+                         .tag_size = hints.tag_size};
+}
+
 bool spell_declaration(const SpellContext& ctx,
                        const ir::SummaryEntry& row,
                        std::string_view name,
@@ -700,9 +706,15 @@ bool spell_declaration(const SpellContext& ctx,
       if (!field_name.has_value()) {
         return false;
       }
+      ast::LayoutSpec field_layout;
+      const auto hints = ir::field_hints_of(storage.state(), shape);
+      if (hints.first != nullptr && i < hints.second) {
+        field_layout = spell_layout(hints.first[i]);
+      }
       fields.push_back(ast::ItemStructField{.name = *field_name,
                                             .type = spelled,
-                                            .is_pub = row.fields[i].is_pub});
+                                            .is_pub = row.fields[i].is_pub,
+                                            .layout = field_layout});
     }
     std::vector<ast::GenericParam> declared;
     if (!spell_declared_params(ctx, shape.params, declared)) {
@@ -714,7 +726,8 @@ bool spell_declaration(const SpellContext& ctx,
     node.payload.set(
         ast::ItemStruct{.name = ast::Ident{name, diag::Span{}},
                         .params = ast::copy_to_arena(ast.spans, declared),
-                        .fields = ast::copy_to_arena(ast.spans, fields)});
+                        .fields = ast::copy_to_arena(ast.spans, fields),
+                        .layout = spell_layout(shape.hints)});
     item_out = ast.items.push_back(node);
     return item_out.is_valid();
   }
@@ -759,7 +772,8 @@ bool spell_declaration(const SpellContext& ctx,
   node.payload.set(
       ast::ItemEnum{.name = ast::Ident{name, diag::Span{}},
                     .params = ast::copy_to_arena(ast.spans, declared),
-                    .variants = ast::copy_to_arena(ast.spans, variants)});
+                    .variants = ast::copy_to_arena(ast.spans, variants),
+                    .layout = spell_layout(shape.hints)});
   item_out = ast.items.push_back(node);
   return item_out.is_valid();
 }
