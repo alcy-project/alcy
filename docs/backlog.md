@@ -63,13 +63,15 @@ replaced. The foundations are in `roadmap.md`.
   same evaluator from the finished package, so every comp site sees
   one implementation: const initializers, comp bodies, comp blocks and
   for/if, const splices, method calls and `&mut` receiver write-back,
-  and expansion bodies. The AST evaluator and the differential engine
-  pair are gone (`comp_eval.cc/.h` is the sole driver). `CompStrByte`
+  and expansion bodies. The AST evaluator and differential engine in
+  `comp_evaluator.cc/.h` are gone; `comp_eval.cc/.h` is the sole driver.
+  `CompStrByte`
   lets a runtime index read a compile-time string during evaluation.
   `const_ir_eval.cc` emits the synthetic function, `comp_eval.cc` owns
   the shared state and diagnostics, and published IR stays low only.
   borrow stays on the low level: region lifetimes are flow-sensitive
-  and fit SSA/CFG. All gates green; const behavior unchanged.
+  and fit SSA/CFG. Existing const results stay the same; layout queries
+  and failure spans now follow the IR path.
 
 - [ ] `core::string`'s `trim_start_matches` once reported `Returns
   reference to local 's'` for the `None` arm's `ret s` - the loop

@@ -48,9 +48,9 @@ units include. It is checking state, not public API.
 ## Compile-time evaluation
 
 `CompEval` owns the quota, depth and failure state. Its two callers are
-`types.cc` (the checker's `const_int_value`) and `Lowerer::Comp` (every
-lowering comp site). `evaluate_item` resets the quota for a const item;
-`evaluate` carries the caller's bindings for an arbitrary expression.
+`types.cc` (the checker's `const_int_value`) and `Lowerer::Comp` (every lowering
+comp site). Both reset the quota and call depth; `evaluate_item` runs in item
+scope with no caller bindings, while `evaluate` carries them.
 
 `const_ir_eval` does the work:
 
@@ -60,16 +60,18 @@ lowering comp site). `evaluate_item` resets the quota for a const item;
 2. `evaluate_const_ir` borrows a `StorageBuilder` and emits one synthetic
    function for the expression. Control flow, aggregates, paths, casts,
    variadics and string intrinsics become IR instructions; strings,
-   aggregates and other compile-time values live in a side table reached
-   by `CompValue` and `tag_register`.
+   aggregates and other compile-time values live in a side table; a
+   `CompValue` opcode makes one visible and `tag_register` writes its
+   semantic tag.
 3. `interpret_function` runs the synthetic function. An IR failure carries
    its instruction index; expression ranges recorded during emission map
    that index back to the source span, then `CompEval` turns it into the
    diagnostic its caller expects.
-4. `builder.rollback(cp)` removes the synthetic function, its instructions
-   and any reference types it interned. Nothing const-only reaches the
-   published artifact, and no re-interning from AST is needed; `take_state`
-   is the only handoff.
+4. `builder.rollback(cp)` removes every table entry the emission added,
+   including interned reference types and their intern entries. Nothing
+   const-only reaches the published artifact, and no re-interning from AST
+   is needed. Ownership leaves the builder only through `take_state`; the
+   checked tables and comp side table are borrowed views.
 
 ## Entry points
 

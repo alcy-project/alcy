@@ -188,7 +188,7 @@ state between stages beyond the data explicitly passed along.
 | `path`                    | Canonical path value type: native-separator folding, lexical normalization, and joining.                                                              | Owned strings; setup-time use only.                                             |
 | `ast`                     | Abstract syntax tree node definitions shared by the parser and later stages.                                                                          | Arena-allocated nodes; no independent heap allocation outside the arena.        |
 | `ir`                      | Core intermediate representation: functions, blocks, instructions, operands, and types, plus storage that owns them.                                  | Flat, arena-backed storage.                                                     |
-| `analyzer`                | Name resolution and type checking on the AST: module imports, types, and bodies. Ownership is `borrow`'s, over lowered IR.                            | No heap allocation on hot paths; operates over immutable views where possible.  |
+| `analyzer`                | Name resolution and type checking on the AST, plus synthetic IR emission for compile-time values that is interpreted and rolled back. Ownership is `borrow`'s, over lowered IR. | No heap allocation on hot paths; comp evaluation is a compile-time query, not part of the steady-state loop. |
 | `lowering`                | AST-to-IR lowering: a checked package becomes verifier-ready IR storage, reusing the checked type table in place. Its out-params hand the consumed package and lowered storage back to callers that keep editor views. | Borrows the caller's arena, sources, and interner; owns the storage it returns. |
 | `borrow`                  | Ownership checking over lowered IR: use-after-move, borrow exclusivity, assignment to borrowed places, and reference escape.                          | No heap allocation; per-block states live in the pass's own frames.             |
 | `opt`                     | The release IR passes: over verified lowered storage, rebuilt through the verifier.                                                        | One rebuilt storage per run; release builds only.                               |
@@ -469,7 +469,9 @@ that happens to read them.
    strings.
 
 2. **Parsing** - `parser` consumes the token buffer and emits a typed AST
-   into the module's arena. IR construction is a later stage.
+   into the module's arena. The published IR is built in lowering;
+   analyzer emits only the temporary synthetic IR used to evaluate comp
+   values.
 
 3. **Semantic analysis** - `analyzer` resolves names and checks types on
    the attributed AST:

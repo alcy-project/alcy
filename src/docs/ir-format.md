@@ -177,6 +177,13 @@ Named values (`@function`, immutables) print inline.
 | `Move` | `v = move x` |
 | `Drop` | `drop x` |
 | `Borrow` | `v = &place` or `v = &mut place`, by the destination's type |
+| `CompValue` | `v = comp_value(N)`, a value at index `N` of the side table |
+| `CompStrByte` | `v = comp_str_byte(s, i)`, byte `i` of a compile-time string |
+
+`CompValue` and `CompStrByte` are semantic-only: the verifier refuses
+them in a resolved body. Synthetic functions used by comp evaluation
+are rolled back before publication, so they never appear in a loaded
+package.
 
 Operands: a register is `vN`, a block `bN`, an immutable is inline, a
 function is its name (or `name#idx`), an external is its name, an

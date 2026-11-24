@@ -14,7 +14,13 @@ is the structural checker both build-time and test-time use.
 - `StorageBuilder::build()` ->
   `base::Result<VerifiedStorage, ir::VerificationError>`. Invalid builder
   output becomes a structured error instead of corrupt IR.
+- `StorageBuilder::checkpoint()` / `rollback(cp)` -> a point a speculative
+  emission can return to. Rollback drops every table entry added after the
+  checkpoint, including interned reference types and their intern entries.
 - `verify_storage(storage)` -> `VerificationResult`. Pure structural check.
+  `CompValue` and `CompStrByte` are refused in a resolved body: they carry
+  compile-time values for a synthetic function that is rolled back before
+  publication.
 - `VerifiedStorage` - move-only proof that verification ran. The
   constructor is private (`StorageBuilder` is the only factory);
   consumers that require valid IR (`LoweredPackage::storage`, the
