@@ -3,7 +3,4 @@ subcommand = "test"
 
 [cli.expect]
 exit = 0
-contains = [
-  "Running   0 tests (package test-empty)",
-  "Summary   0 tests run: 0 tests passed, 0 tests failed",
-]
+contains = ["Running   0 tests (package test-empty)", "Summary   0 tests run: 0 passed, 0 failed"]

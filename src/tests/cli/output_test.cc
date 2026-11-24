@@ -218,9 +218,8 @@ TEST_CASE("A test summary is the one line a tail of the log shows") {
   passed.test_count = 305;
   passed.test_failed = 0;
   passed.wall_ns = 1'470'000'000ull;
-  CHECK(
-      text(passed) ==
-      "Summary   305 tests run: 305 tests passed, 0 tests failed  (1.47 s)\n");
+  CHECK(text(passed) ==
+        "Summary   305 tests run: 305 passed, 0 failed  (1.47 s)\n");
 
   // A failing run has an Error status, but it still reached its tests:
   // the summary is a result rather than a diagnostic, and it is the
@@ -233,9 +232,8 @@ TEST_CASE("A test summary is the one line a tail of the log shows") {
   failed.test_count = 305;
   failed.test_failed = 2;
   failed.wall_ns = 1'470'000'000ull;
-  CHECK(
-      text(failed) ==
-      "Summary   305 tests run: 303 tests passed, 2 tests failed  (1.47 s)\n");
+  CHECK(text(failed) ==
+        "Summary   305 tests run: 303 passed, 2 failed  (1.47 s)\n");
 
   // A run that stopped inside a test cannot say how many passed, so it
   // names the stop instead of turning the missing verdicts into failures.
@@ -257,8 +255,7 @@ TEST_CASE("A test summary is the one line a tail of the log shows") {
   empty.status = Status::Ok;
   empty.outcome = Outcome::Tested;
   empty.wall_ns = 1'470'000'000ull;
-  CHECK(text(empty) ==
-        "Summary   0 tests run: 0 tests passed, 0 tests failed  (1.47 s)\n");
+  CHECK(text(empty) == "Summary   0 tests run: 0 passed, 0 failed  (1.47 s)\n");
 }
 
 TEST_CASE("A scaffold reports its own shape, not a padded column") {

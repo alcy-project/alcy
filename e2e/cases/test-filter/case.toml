@@ -7,5 +7,5 @@ exit = 0
 contains = [
   "Running   1 test (package test-filter)",
   "  PASS    util::doubles",
-  "Summary   1 test run: 1 test passed, 0 tests failed",
+  "Summary   1 test run: 1 passed, 0 failed",
 ]

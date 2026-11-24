@@ -6,5 +6,5 @@ exit = 1
 contains = [
   "  PASS    main::passing",
   "  FAILED  main::failing",
-  "Summary   2 tests run: 1 test passed, 1 test failed",
+  "Summary   2 tests run: 1 passed, 1 failed",
 ]

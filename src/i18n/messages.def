@@ -603,7 +603,7 @@
   F(CliTestPlural, Note, Pipeline, "tests") \
   F(CliTestRunning, Note, Pipeline, "{} {} (package {})") \
   F(CliTestSingular, Note, Pipeline, "test") \
-  F(CliTestSummary, Note, Pipeline, "{} {} run: {} {} passed, {} {} failed") \
+  F(CliTestSummary, Note, Pipeline, "{} {} run: {} passed, {} failed") \
   F(CliTestStopped, Note, Pipeline, "the run stopped before every test finished") \
   F(CliTestSummaryStopped, Note, Pipeline, "{} {} run: stopped early") \
   F(CliTestSuiteNotSupported, Note, Pipeline, "The `test` command tests one package; give a member's directory instead of the suite's") \

@@ -215,9 +215,7 @@ std::string test_summary(const Envelope& envelope, i18n::Language language) {
   const usize passed = envelope.test_count - failed;
   return i18n::format<Key::CliTestSummary>(
       language, envelope.test_count,
-      test_count_word(envelope.test_count, language), passed,
-      test_count_word(passed, language), failed,
-      test_count_word(failed, language));
+      test_count_word(envelope.test_count, language), passed, failed);
 }
 
 // The verb each outcome reports itself as. Owned here so the wording
