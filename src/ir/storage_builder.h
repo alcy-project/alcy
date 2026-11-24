@@ -234,12 +234,15 @@ class StorageBuilder {
     usize block_params = 0;
     usize functions = 0;
     usize synthetic = 0;
+    usize types = 0;
+    usize ref_types = 0;
   };
   Checkpoint checkpoint() const {
     return {state_.immutables.size(), state_.operands.size(),
             state_.instrs.size(),     state_.registers.size(),
             state_.blocks.size(),     state_.block_params.size(),
-            state_.functions.size(),  state_.synthetic_functions.size()};
+            state_.functions.size(),  state_.synthetic_functions.size(),
+            state_.types.size(),      state_.ref_types.size()};
   }
   void rollback(Checkpoint cp) {
     auto pop_to = [](auto& vec, usize size) {
@@ -255,6 +258,24 @@ class StorageBuilder {
     pop_to(state_.block_params, cp.block_params);
     pop_to(state_.functions, cp.functions);
     pop_to(state_.synthetic_functions, cp.synthetic);
+    // Speculative emission can intern a reference type for a local's
+    // address. Drop its intern entry before the type itself so a later
+    // request cannot resolve to an index the rollback removed.
+    for (usize i = state_.types.size(); i > cp.types; --i) {
+      const TypeNode& node = state_.types[TypeIdx(static_cast<u32>(i - 1))];
+      if (node.tag != TypeTag::Ref && node.tag != TypeTag::MutRef) {
+        continue;
+      }
+      const u32 pointee =
+          state_.ref_types[node.data.get<RefTypeIdx>()].pointee.idx;
+      std::unordered_map<u32, TypeIdx>* const interned =
+          pointer_table(node.tag);
+      if (interned != nullptr) {
+        interned->erase(pointee);
+      }
+    }
+    pop_to(state_.types, cp.types);
+    pop_to(state_.ref_types, cp.ref_types);
   }
   // Sizes the tables a caller knows the population of before it fills
   // them. A table grown by doubling halves its own headroom: every

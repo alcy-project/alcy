@@ -187,13 +187,30 @@ class ConstEmitter {
   // through the builder's published tables.
   struct SpanRange {
     u32 first = 0;
+    u32 last = 0;
     diag::Span span;
   };
   std::vector<SpanRange> span_ranges_;
 
-  void record_span(u32 first, diag::Span span) {
-    span_ranges_.push_back({first, span});
-  }
+  // Records the instruction window one expression occupies. The window
+  // closes on scope exit so a lookup can tell the instruction emitted by
+  // the expression from the ones its children emitted.
+  class SpanScope {
+   public:
+    SpanScope(ConstEmitter& emitter, diag::Span span)
+        : emitter_(emitter), index_(emitter.span_ranges_.size()) {
+      const u32 at = static_cast<u32>(emitter.builder().state().instrs.size());
+      emitter.span_ranges_.push_back({at, at, span});
+    }
+    ~SpanScope() {
+      emitter_.span_ranges_[index_].last =
+          static_cast<u32>(emitter_.builder().state().instrs.size());
+    }
+
+   private:
+    ConstEmitter& emitter_;
+    usize index_;
+  };
 
   std::optional<diag::Span> span_of(ir::InstructionIdx instr) const {
     if (!instr.is_valid()) {
@@ -201,7 +218,7 @@ class ConstEmitter {
     }
     std::optional<diag::Span> found;
     for (const SpanRange& range : span_ranges_) {
-      if (range.first <= instr.idx) {
+      if (range.first <= instr.idx && instr.idx < range.last) {
         found = range.span;
       }
     }
@@ -3898,8 +3915,7 @@ ir::OperandIdx emit_expr(const ast::AstArena& ast,
                          const EmitContext& ctx,
                          const ParamEnv* params = nullptr) {
   const ast::ExprNode& node = ast.exprs[expr];
-  emitter.record_span(static_cast<u32>(emitter.builder().state().instrs.size()),
-                      node.span);
+  ConstEmitter::SpanScope span_scope(emitter, node.span);
   switch (node.kind) {
     case ast::ExprKind::Return:
       return emit_return_expr(ast, expr, type, emitter, ctx, params);

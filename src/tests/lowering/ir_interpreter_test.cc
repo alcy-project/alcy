@@ -34,10 +34,12 @@ namespace lowering {
 
 namespace {
 
-// The two engines read one budget; the interpreter keeps its own copy
-// of the numbers because comp cannot depend on analyzer.
-static_assert(comp::COMP_BRANCH_QUOTA == analyzer::COMP_BRANCH_QUOTA);
-static_assert(comp::COMP_MAX_CALL_DEPTH == analyzer::COMP_MAX_CALL_DEPTH);
+// The checker and the interpreter share one budget, but pin the numbers
+// themselves: comparing the two aliases would never fail.
+static_assert(comp::COMP_BRANCH_QUOTA == 1'000'000);
+static_assert(comp::COMP_MAX_CALL_DEPTH == 64);
+static_assert(analyzer::COMP_BRANCH_QUOTA == 1'000'000);
+static_assert(analyzer::COMP_MAX_CALL_DEPTH == 64);
 
 // The initializer of the const item `name`, or an invalid index.
 ast::ExprIdx find_const_init(const ast::AstArena& ast, std::string_view name) {
@@ -179,7 +181,7 @@ RunResult run_function(const Fixture& f,
   return out;
 }
 
-// Both engines carry one value; integers wrap like the opcodes that
+// Both sides carry one value; integers wrap like the opcodes that
 // produced them, so the comparison reads through the type's width.
 void check_same_value(const ir::Storage& storage,
                       const comp::CompVal& expected,
@@ -277,10 +279,10 @@ bool build_scenario(VirtualDir& dir,
 
 // The checker-side value and the lowered IR's value for the same call
 // carry one value.
-bool check_engines_agree(const Scenario& scenario,
-                         std::string_view name,
-                         std::initializer_list<u64> args,
-                         u32 index) {
+bool check_checker_and_lowered_value(const Scenario& scenario,
+                                     std::string_view name,
+                                     std::initializer_list<u64> args,
+                                     u32 index) {
   const ir::Storage& storage = *scenario.storage;
   const ir::FunctionIdx fn =
       find_function(storage, scenario.fixture.strings, name);
@@ -493,12 +495,11 @@ TEST_CASE("IR interpreter agrees on casts and signed shifts") {
   check_same_value(storage, scenario.asts[0], run.value);
 }
 
-TEST_CASE("Both engines widen a negative value by its sign") {
+TEST_CASE("Comp evaluation widens a negative value by its sign") {
   VirtualDir dir;
   Scenario scenario;
-  // The engines are one implementation of the arithmetic in two places,
-  // so a value both of them agree on proves nothing; these assert what
-  // the widened value is.
+  // Both paths use the same interpreter, so agreeing on a value proves
+  // nothing; these assert what the widened value is.
   const bool built = build_scenario(dir,
                                     "comp fn widen(x: i32) -> i64 {\n"
                                     "  ret x as i64\n"
@@ -1192,7 +1193,7 @@ TEST_CASE("Checker falls back from a definition-site method row") {
 }
 
 // An early `ret` reached inside a branch hands the return to the body
-// that owns it, so both engines end the call with the same value.
+// that owns it, so both paths end the call with the same value.
 TEST_CASE("IR interpreter agrees on an early return") {
   VirtualDir dir;
   Scenario scenario;
@@ -1240,9 +1241,9 @@ TEST_CASE("IR interpreter agrees on an early return") {
   check_int_value(storage, scenario.asts[0], 10);
   check_int_value(storage, scenario.asts[1], 7);
   check_int_value(storage, scenario.asts[2], 5);
-  CHECK(check_engines_agree(scenario, "clamp_high", {42}, 0));
-  CHECK(check_engines_agree(scenario, "pick", {0}, 1));
-  CHECK(check_engines_agree(scenario, "inner", {2}, 2));
+  CHECK(check_checker_and_lowered_value(scenario, "clamp_high", {42}, 0));
+  CHECK(check_checker_and_lowered_value(scenario, "pick", {0}, 1));
+  CHECK(check_checker_and_lowered_value(scenario, "inner", {2}, 2));
 }
 
 TEST_CASE("IR interpreter agrees on a jump in a match arm") {
@@ -1295,8 +1296,8 @@ TEST_CASE("IR interpreter agrees on a jump in a match arm") {
   }
   check_int_value(storage, scenario.asts[0], 1);
   check_int_value(storage, scenario.asts[1], 7);
-  CHECK(check_engines_agree(scenario, "stop_at", {}, 0));
-  CHECK(check_engines_agree(scenario, "skip_three", {}, 1));
+  CHECK(check_checker_and_lowered_value(scenario, "stop_at", {}, 0));
+  CHECK(check_checker_and_lowered_value(scenario, "skip_three", {}, 1));
 }
 
 // One instruction row over `operands`, which the caller emitted

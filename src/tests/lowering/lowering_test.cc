@@ -857,6 +857,37 @@ TEST_CASE("Lowering refuses a package past its function budget") {
   CHECK(reported);
 }
 
+// An IR failure inside an inlined comp fn is reported at the expression
+// that emitted the failing instruction, not at the outer call site.
+TEST_CASE("Comp failure span points at the failing expression") {
+  VirtualDir dir;
+  const std::string source =
+      "comp fn div(x: i32, y: i32) -> i32 {\n"
+      "  ret x / y\n"
+      "}\n"
+      "fn main() -> i32 {\n"
+      "  ret comp { div(10, 0) }\n"
+      "}\n";
+  write_all(dir, {{"main.al", source}});
+
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.ok);
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->code == diag::Code{diag::Stage::Lowering,
+                                 static_cast<u8>(DiagCode::CompDivZero)}) {
+      reported = true;
+      CHECK(diag->has_primary_span);
+      CHECK(diag->primary_span.offset == source.find("x / y"));
+      CHECK(diag->primary_span.length == 5);
+    }
+  }
+  CHECK(reported);
+}
+
 // A constant expression the compiler evaluates overflows its type: the
 // program is refused with the check's own code rather than a
 // not-supported report.
