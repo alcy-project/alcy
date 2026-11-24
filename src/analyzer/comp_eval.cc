@@ -199,6 +199,9 @@ const CheckedModule::VariantUse* CompEval::variant_use_in(ast::PathIdx path,
   return declared == variants_.end() ? nullptr : declared->second;
 }
 
+// A range expression is `Range<T>` data: a struct of two `Bound<T>`
+// values. The checker records the variant uses and payload types, so
+// this builds the same value the runtime lowering stores.
 std::vector<ir::TypeIdx> CompEval::variant_payload(ir::TypeIdx enum_type,
                                                    u32 variant) const {
   const ir::EnumType& enum_ty =
@@ -562,10 +565,6 @@ bool CompEval::comp_match_pattern(u32 mod,
     }
   }
 }
-
-// A range expression is `Range<T>` data: a struct of two `Bound<T>`
-// values. The checker records the variant uses and payload types, so
-// this builds the same value the runtime lowering stores.
 
 EmitContext CompEval::emit_context_for(u32 mod,
                                        u32 inst,

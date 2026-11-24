@@ -73,27 +73,29 @@ skips value binding for any producer with an invalid `dst`.
 
 ## Opcode conventions
 
-| Category | Layout |
-|---|---|
-| `Call` | `operands[0]` is the callee (`Function`/`ExternalFunction`, or a `ParametricCallee` the specialization resolves); the rest are arguments, count-checked against the signature. |
-| `Br` | `operands[0]` is the target block; `operands[1..]` fill its block parameters positionally. |
-| `CondBr` | Exactly `[cond(i1), true_block, false_block]`. Targets take no block parameters. |
-| `Switch` | `[value(integer), default_block, (case_imm, case_block)...]`; case values are integer immediates; targets take no block parameters. |
-| `Ret` | One operand, or none for `void` (`CreateRetVoid`). |
-| `Alloca` | The allocated element type comes from the destination register's type; the operand is the array size. |
-| `Load` / `Store` | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register. |
-| `Memcopy` | `[dst_ptr, src_ptr, len(integer)]`, discarded value; bytewise copy. A reference operand promises its pointee's alignment; a bare pointer promises byte alignment only. |
-| `Memset` | `[dst_ptr, byte(u8), len(integer)]`, discarded value; fills `len` bytes at `dst_ptr` with `byte`. The alignment follows the destination's type. |
-| `GetElementPtr` | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site when there is one, and otherwise from the base pointer's register type. |
-| `ElemOffset` | `[base_ptr(register), integer index]`. The destination register carries the element reference, so the borrow checker extends the buffer's place with one element step. |
-| `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second). |
-| `TypeCast` | Determined by source/destination tags: integer resizing by width and signedness, int<->float, float resizing, int<->pointer. |
-| `FNeg` | `[a]`; the destination carries the operand's type, and the result is the operand's sign flip. |
-| Comparisons | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only. |
-| Atomics | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent. |
-| `Move` / `Drop` | Register alias / ownership marker; no code emitted. |
-| `ParametricDrop` | `[place]`, discarded value; an end whose destructor only the substitution decides. The specialization rewrites it to the concrete glue call or removes it, and no backend meets one. |
-| `Select` | `[cond, true_value, false_value]`. |
+| Category                       | Layout                                                                                                                                                                                               |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Call`                         | `operands[0]` is the callee (`Function`/`ExternalFunction`, or a `ParametricCallee` the specialization resolves); the rest are arguments, count-checked against the signature.                       |
+| `Br`                           | `operands[0]` is the target block; `operands[1..]` fill its block parameters positionally.                                                                                                           |
+| `CondBr`                       | Exactly `[cond(i1), true_block, false_block]`. Targets take no block parameters.                                                                                                                     |
+| `Switch`                       | `[value(integer), default_block, (case_imm, case_block)...]`; case values are integer immediates; targets take no block parameters.                                                                  |
+| `Ret`                          | One operand, or none for `void` (`CreateRetVoid`).                                                                                                                                                   |
+| `Alloca`                       | The allocated element type comes from the destination register's type; the operand is the array size.                                                                                                |
+| `Load` / `Store`               | `[ptr]` / `[value, ptr]`; the loaded type comes from the destination register.                                                                                                                       |
+| `Memcopy`                      | `[dst_ptr, src_ptr, len(integer)]`, discarded value; bytewise copy. A reference operand promises its pointee's alignment; a bare pointer promises byte alignment only.                               |
+| `Memset`                       | `[dst_ptr, byte(u8), len(integer)]`, discarded value; fills `len` bytes at `dst_ptr` with `byte`. The alignment follows the destination's type.                                                      |
+| `GetElementPtr`                | `[base_ptr(register), integer index...]`. The element type is recovered from the base pointer's `Alloca` site when there is one, and otherwise from the base pointer's register type.                |
+| `ElemOffset`                   | `[base_ptr(register), integer index]`. The destination register carries the element reference, so the borrow checker extends the buffer's place with one element step.                               |
+| `ExtractValue` / `InsertValue` | Aggregate first, then integer-immediate indexes (`InsertValue` takes the field value second).                                                                                                        |
+| `TypeCast`                     | Determined by source/destination tags: integer resizing by width and signedness, int<->float, float resizing, int<->pointer.                                                                         |
+| `FNeg`                         | `[a]`; the destination carries the operand's type, and the result is the operand's sign flip.                                                                                                        |
+| `CompValue`                    | `[semantic_index]`; resolves a compile-time value from the side table. Only a synthetic function carries it.                                                                                         |
+| `CompStrByte`                  | `[string_value, index]`; the result is the byte at `index` of a compile-time string.                                                                                                                 |
+| Comparisons                    | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only.                                                                    |
+| Atomics                        | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent. |
+| `Move` / `Drop`                | Register alias / ownership marker; no code emitted.                                                                                                                                                  |
+| `ParametricDrop`               | `[place]`, discarded value; an end whose destructor only the substitution decides. The specialization rewrites it to the concrete glue call or removes it, and no backend meets one.                 |
+| `Select`                       | `[cond, true_value, false_value]`.                                                                                                                                                                   |
 
 `InstructionFlags` carries the per-opcode facts that are not operands:
 `rmw_op` for `AtomicRmw` and `inbounds` for `GetElementPtr` and
