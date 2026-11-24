@@ -191,12 +191,44 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
   out += ']';
 }
 
+// Whether the envelope carries a test run's own verdict. A test that
+// fails reports a status of Error, but it still reached its tests; its
+// summary is the one result line for the run, not a failure diagnostic.
+bool has_test_summary(const Envelope& envelope) {
+  return envelope.test_ran && (envelope.outcome == Outcome::Tested ||
+                               envelope.outcome == Outcome::Failed);
+}
+
+std::string_view test_count_word(usize count, i18n::Language language) {
+  return count == 1 ? i18n::text<i18n::Key::CliTestSingular>(language)
+                    : i18n::text<i18n::Key::CliTestPlural>(language);
+}
+
+std::string test_summary(const Envelope& envelope, i18n::Language language) {
+  using i18n::Key;
+  if (envelope.test_ended_early) {
+    return i18n::format<Key::CliTestSummaryStopped>(
+        language, envelope.test_count,
+        test_count_word(envelope.test_count, language));
+  }
+  const usize failed = envelope.test_failed;
+  const usize passed = envelope.test_count - failed;
+  return i18n::format<Key::CliTestSummary>(
+      language, envelope.test_count,
+      test_count_word(envelope.test_count, language), passed,
+      test_count_word(passed, language), failed,
+      test_count_word(failed, language));
+}
+
 // The verb each outcome reports itself as. Owned here so the wording
 // lives in one place and a new outcome cannot add a second phrasing of
 // the same result.
-std::string_view verb_for(Outcome outcome, i18n::Language language) {
+std::string_view verb_for(const Envelope& envelope, i18n::Language language) {
   using i18n::Key;
-  switch (outcome) {
+  if (has_test_summary(envelope)) {
+    return i18n::text<Key::CliVerbSummary>(language);
+  }
+  switch (envelope.outcome) {
     case Outcome::Failed: return i18n::text<Key::CliVerbFailed>(language);
     case Outcome::Built: return i18n::text<Key::CliVerbBuilt>(language);
     case Outcome::Compiled: return i18n::text<Key::CliVerbCompiled>(language);
@@ -305,7 +337,9 @@ bool note_has_size(const Envelope& envelope) {
 std::string result_subject(const Envelope& envelope, i18n::Language language) {
   using i18n::Key;
   switch (envelope.outcome) {
-    case Outcome::Failed: return {};
+    case Outcome::Failed:
+      return has_test_summary(envelope) ? test_summary(envelope, language)
+                                        : std::string();
     case Outcome::CreatedPackage: {
       std::string subject = i18n::format<Key::CliPackageCreatedAt>(
           language, envelope.package_name, envelope.package_dir);
@@ -370,7 +404,7 @@ std::string result_subject(const Envelope& envelope, i18n::Language language) {
       strip_trailing_separator(subject);
       return subject;
     }
-    case Outcome::Tested:
+    case Outcome::Tested: return test_summary(envelope, language);
     case Outcome::Listed: {
       std::string subject;
       append_count(subject, envelope.test_count,
@@ -443,7 +477,7 @@ void render_result_line(std::string& out,
                         bool color,
                         bool newline,
                         i18n::Language language) {
-  const std::string_view verb = verb_for(envelope.outcome, language);
+  const std::string_view verb = verb_for(envelope, language);
   const std::string subject = result_subject(envelope, language);
   const bool scaffolds = envelope.outcome == Outcome::CreatedPackage ||
                          envelope.outcome == Outcome::CreatedSuite;
@@ -591,7 +625,10 @@ std::string render_diagnostics(const Envelope& envelope,
 std::string render_result(const Envelope& envelope,
                           const diag::RenderOptions& options) {
   std::string out;
-  if (envelope.status == Status::Ok) {
+  // A test run that failed has an Error status, but its summary is a
+  // result rather than a diagnostic: the one line a reader tails says
+  // how many tests ran and how many of them passed.
+  if (envelope.status == Status::Ok || has_test_summary(envelope)) {
     // A run already announced itself before the program started, and a
     // second line after the program's own output would sit below that
     // output and read as more of it. A command that piped its result to

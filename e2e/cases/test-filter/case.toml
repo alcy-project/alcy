@@ -4,4 +4,8 @@ args = ["--filter", "doubles"]
 
 [cli.expect]
 exit = 0
-contains = ["running 1 test (package test-filter)", "test util::doubles ... ok", "1 test passed"]
+contains = [
+  "Running   1 test (package test-filter)",
+  "test util::doubles ... ok",
+  "Summary   1 test run: 1 test passed, 0 tests failed",
+]

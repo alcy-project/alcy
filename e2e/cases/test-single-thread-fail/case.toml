@@ -4,5 +4,5 @@ args = ["--execution=single-thread"]
 
 [cli.expect]
 exit = 1
-contains = ["alcy-test: running main::fails", "the run stopped before every test finished"]
+contains = ["alcy-test: running main::fails", "Summary   2 tests run: stopped early"]
 not_contains = ["alcy-test: running main::later", "tests passed"]

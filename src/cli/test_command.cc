@@ -47,11 +47,10 @@ std::string_view count_word(usize count, i18n::Language language) {
                     : i18n::text<i18n::Key::CliTestPlural>(language);
 }
 
-// Where the run's progress goes, and in which language.
+// Where the run's progress goes, and what the stream can show.
 struct Progress {
   const Logger& err;
-  i18n::Language language;
-  bool color;
+  diag::RenderOptions options;
 };
 
 // Reports one test as it finishes, from the process that watched it. The
@@ -60,8 +59,7 @@ struct Progress {
 // interleaved with the lines about it.
 void report_test(const pipeline::TestEvent& event, const void* ctx) {
   const auto& progress = *static_cast<const Progress*>(ctx);
-  progress.err.block(
-      render_test_case(event, progress.language, progress.color));
+  progress.err.block(render_test_case(event, progress.options));
 }
 
 }  // namespace
@@ -198,14 +196,14 @@ i32 run_test(const CliConfig& config,
     envelope.outcome = Outcome::Listed;
     return result_code(ResultCode::Success);
   }
-  const Progress progress{err, language, style != term::ColorStyle::Off};
+  const Progress progress{err, announce_options};
   const bool runs = !config.test_no_run;
   if (runs) {
-    err.block(render_test_line(
+    err.block(render_test_heading(
         i18n::format<i18n::Key::CliTestRunning>(
             language, chosen.size(), count_word(chosen.size(), language),
             built.artifact.name),
-        TestLineStyle::Heading, progress.color));
+        progress.options));
   }
   // A document is on standard output, so a test process's own bytes have
   // to stay off it; a run of prose sends the tests' bytes to the terminal.
@@ -225,6 +223,7 @@ i32 run_test(const CliConfig& config,
     return failed;
   }
   const pipeline::TestSummary done = std::move(summary).unwrap();
+  envelope.test_ran = true;
   envelope.test_count = done.total;
   envelope.test_failed = done.failed;
   envelope.test_ended_early = done.ended_early;
@@ -236,24 +235,9 @@ i32 run_test(const CliConfig& config,
     envelope.output_path = done.exe_path;
     return result_code(ResultCode::Success);
   }
-  if (done.ended_early) {
-    // The run died inside a test, so the ones after it have no verdict;
-    // a count of passes would read as if they all passed.
-    err.block(
-        render_test_line(i18n::format<i18n::Key::CliTestStopped>(language),
-                         TestLineStyle::Stopped, progress.color));
-    return result_code(ResultCode::TestFailed);
-  }
-  err.block(render_test_line(
-      i18n::format<i18n::Key::CliTestPassed>(language, done.passed,
-                                             count_word(done.passed, language)),
-      TestLineStyle::Passed, progress.color));
-  if (done.failed > 0) {
-    err.block(render_test_line(
-        i18n::format<i18n::Key::CliTestFailed>(
-            language, done.failed, count_word(done.failed, language)),
-        TestLineStyle::Failed, progress.color));
-  }
+  // A failed run still left counts on the envelope. The one summary
+  // line is rendered at report time from those counts, so a reader who
+  // tails the log sees the verdict whether the run passed or failed.
   if (!done.ok()) {
     return result_code(ResultCode::TestFailed);
   }

@@ -602,9 +602,11 @@
   F(CliTestNoRunHelp, Note, Pipeline, "Build the program the tests became and stop before executing it.") \
   F(CliTestPassed, Note, Pipeline, "{} {} passed") \
   F(CliTestPlural, Note, Pipeline, "tests") \
-  F(CliTestRunning, Note, Pipeline, "running {} {} (package {})") \
+  F(CliTestRunning, Note, Pipeline, "{} {} (package {})") \
   F(CliTestSingular, Note, Pipeline, "test") \
+  F(CliTestSummary, Note, Pipeline, "{} {} run: {} {} passed, {} {} failed") \
   F(CliTestStopped, Note, Pipeline, "the run stopped before every test finished") \
+  F(CliTestSummaryStopped, Note, Pipeline, "{} {} run: stopped early") \
   F(CliTestSuiteNotSupported, Note, Pipeline, "The `test` command tests one package; give a member's directory instead of the suite's") \
   F(CliTestTakesDirectory, Note, Pipeline, "The `test` command takes a package directory; use `check` for a file") \
   F(CliTestTargetNotRunnable, Error, Pipeline, "Cannot run tests for target '{}'; a test is a process the run starts") \
@@ -622,6 +624,8 @@
   F(CliVerbFormatted, Note, Pipeline, "Formatted") \
   F(CliVerbListed, Note, Pipeline, "Listed") \
   F(CliVerbRan, Note, Pipeline, "Ran") \
+  F(CliVerbRunning, Note, Pipeline, "Running") \
+  F(CliVerbSummary, Note, Pipeline, "Summary") \
   F(CliVerbTested, Note, Pipeline, "Tested") \
   /* linter */ \
   F(CliLintAbout, Note, Pipeline, "Check a package for lint findings") \

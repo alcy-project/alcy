@@ -127,6 +127,10 @@ struct Envelope {
   usize fix_count = 0;
   // Tests a test run selected, and how many of them failed. Zero for every
   // other verb, and zero for a run that stopped before the first test.
+  // Whether the tests were actually run, as opposed to listed, built
+  // without running, or rejected before any test was reached. An empty
+  // selection still ran and still reports a summary of zero tests.
+  bool test_ran = false;
   usize test_count = 0;
   usize test_failed = 0;
   // Whether a run in one process stopped inside a test. The counts above

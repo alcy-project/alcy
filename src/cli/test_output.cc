@@ -7,8 +7,11 @@
 #include <string_view>
 
 #include "cli/duration.h"
+#include "cli/output.h"
 #include "fpag/term/style.h"
+#include "i18n/language.h"
 #include "i18n/messages.h"
+#include "pipeline/test.h"
 
 namespace cli {
 
@@ -32,34 +35,18 @@ void styled(std::string& out,
 
 }  // namespace
 
-std::string render_test_line(std::string_view text,
-                             TestLineStyle style,
-                             bool color) {
-  std::string prefix;
-  switch (style) {
-    case TestLineStyle::Heading:
-      prefix = term::BOLD;
-      prefix += term::FG_CYAN;
-      break;
-    case TestLineStyle::Passed:
-      prefix = term::BOLD;
-      prefix += term::FG_BRIGHT_GREEN;
-      break;
-    case TestLineStyle::Failed:
-    case TestLineStyle::Stopped:
-      prefix = term::BOLD;
-      prefix += term::FG_BRIGHT_RED;
-      break;
-  }
-  std::string out;
-  styled(out, text, prefix, color);
-  out.push_back('\n');
-  return out;
+std::string render_test_heading(std::string_view subject,
+                                const diag::RenderOptions& options) {
+  std::string line;
+  render_labelled(line, i18n::text<i18n::Key::CliVerbRunning>(options.language),
+                  subject, true, options.color, true);
+  return line;
 }
 
 std::string render_test_case(const pipeline::TestEvent& event,
-                             i18n::Language language,
-                             bool color) {
+                             const diag::RenderOptions& options) {
+  const i18n::Language language = options.language;
+  const bool color = options.color;
   std::string body;
   std::string_view verdict_color = term::FG_RED;
   switch (event.ending) {

@@ -48,7 +48,8 @@ struct Announcement {
 
 void announce_exec(std::string_view program, const void* ctx) {
   const auto& a = *static_cast<const Announcement*>(ctx);
-  announce(a.err, "Running", program, a.options);
+  announce(a.err, i18n::text<i18n::Key::CliVerbRunning>(a.options.language),
+           program, a.options);
 }
 
 }  // namespace

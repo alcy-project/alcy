@@ -4,4 +4,8 @@ args = ["--execution=single-thread"]
 
 [cli.expect]
 exit = 0
-contains = ["alcy-test: running main::adds", "alcy-test: running util::doubles", "2 tests passed"]
+contains = [
+  "alcy-test: running main::adds",
+  "alcy-test: running util::doubles",
+  "Summary   2 tests run: 2 tests passed, 0 tests failed",
+]
