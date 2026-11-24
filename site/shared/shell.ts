@@ -7,8 +7,14 @@
 
 import { elements } from "./elements.js";
 import { initSearch } from "./search.js";
-import { enableLinkPrefetch, initThemeToggle, registerAssetWorker } from "./site.js";
+import {
+  enableLinkPrefetch,
+  initSettingsMenu,
+  initThemeToggle,
+  registerAssetWorker,
+} from "./site.js";
 
+initSettingsMenu();
 initThemeToggle(elements.theme);
 registerAssetWorker();
 initSearch();

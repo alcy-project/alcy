@@ -65,6 +65,28 @@ const THEME_LABEL: Record<ThemeMode, MessageKey> = {
   dark: "theme.dark",
 };
 
+// The settings menu is a details element; the browser closes it only
+// from its own summary. An outside pointer press or Escape closes it
+// too, the same as the page's other popovers.
+export function initSettingsMenu(): void {
+  const menu = document.querySelector<HTMLDetailsElement>(".settings");
+  if (menu === null) {
+    return;
+  }
+  document.addEventListener("pointerdown", (event) => {
+    if (menu.open && event.target instanceof Node &&
+        !menu.contains(event.target)) {
+      menu.open = false;
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && menu.open) {
+      menu.open = false;
+      menu.querySelector<HTMLElement>("summary")?.focus();
+    }
+  });
+}
+
 export function initThemeToggle(button: HTMLButtonElement): void {
   let mode = storedTheme();
 

@@ -5,7 +5,12 @@
 // callbacks, and start the flows. Everything else lives in the feature
 // modules next to this file.
 
-import { enableLinkPrefetch, initThemeToggle, registerAssetWorker } from "../shared/site.js";
+import {
+  enableLinkPrefetch,
+  initSettingsMenu,
+  initThemeToggle,
+  registerAssetWorker,
+} from "../shared/site.js";
 import { initSearch } from "../shared/search.js";
 import { writeClipboard } from "../shared/clipboard.js";
 
@@ -69,6 +74,7 @@ function initActionsMenu(): void {
 }
 
 function init(): void {
+  initSettingsMenu();
   initThemeToggle(elements.theme);
   initActionsMenu();
   registerAssetWorker();
