@@ -66,11 +66,21 @@ struct Object {
   std::vector<Relocation> relocations;
 };
 
-// Writes a relocatable ELF64 for x86-64. The symbol order is the
+// The ELF machine an object names. The section and symbol layout is
+// shared; the machine selects the header's e_machine and the numbering
+// of relocation types.
+enum class Machine : u8 { X86_64 = 62, Riscv64 = 243 };
+
+// Writes a relocatable ELF64 for `machine`. The symbol order is the
 // table's own: section symbols for the sections relocations touch, then
 // the locals, then the globals, and a relocation resolves the name it
 // carries against that table. A name no symbol carries is an emitter
 // bug, not an input the reader can fix.
+[[nodiscard]] std::vector<u8> write_elf64(const Object& object,
+                                          Machine machine);
+
+// The x86-64 spelling kept for the one backend that writes its objects
+// itself today.
 [[nodiscard]] std::vector<u8> write_elf64_x86_64(const Object& object);
 
 }  // namespace codegen::object

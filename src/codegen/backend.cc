@@ -16,6 +16,7 @@ std::string_view backend_name(Backend backend) {
     case Backend::Llvm: return "llvm";
     case Backend::DirectWasm: return "direct-wasm";
     case Backend::DirectX86_64: return "direct-x86_64";
+    case Backend::DirectRiscv64: return "direct-riscv64";
   }
   return "none";
 }
@@ -29,6 +30,9 @@ std::optional<Backend> backend_from_name(std::string_view name) {
   }
   if (name == "direct-x86_64") {
     return Backend::DirectX86_64;
+  }
+  if (name == "direct-riscv64") {
+    return Backend::DirectRiscv64;
   }
   return std::nullopt;
 }
@@ -44,6 +48,7 @@ bool backend_available(Backend backend) {
 #endif
     case Backend::DirectWasm:
     case Backend::DirectX86_64:
+    case Backend::DirectRiscv64:
       // The direct backends are built into every compiler; only the
       // optional LLVM implementation has an availability question.
       return true;

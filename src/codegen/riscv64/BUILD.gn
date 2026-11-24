@@ -1,0 +1,33 @@
+# Copyright 2026 The Alcy Project Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+source_set("riscv64") {
+  sources = [
+    "allocator.cc",
+    "allocator.h",
+    "backend.cc",
+    "backend.h",
+    "encoder.cc",
+    "encoder.h",
+    "frame.cc",
+    "frame.h",
+    "isa.h",
+    "minst.h",
+    "rodata.cc",
+    "rodata.h",
+    "runtime.cc",
+    "runtime.h",
+    "selector.cc",
+    "selector.h",
+  ]
+  deps = [
+    "//src:base_modules",
+    "//src/codegen",
+    "//src/codegen/object",
+    "//src/diag",
+    "//src/i18n",
+    "//src/ir",
+    "//src/overlay",
+  ]
+  configs += [ "//src:alcy_config" ]
+}

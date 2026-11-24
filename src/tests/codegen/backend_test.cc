@@ -64,6 +64,15 @@ TEST_CASE("Target names resolve") {
     CHECK(wasm->width == ir::PointerWidth::W32);
   }
 
+  const std::optional<Target> riscv =
+      target_from_name("riscv64-unknown-linux-gnu");
+  CHECK(riscv.has_value());
+  if (riscv.has_value()) {
+    CHECK(riscv->triple == "riscv64-unknown-linux-gnu");
+    CHECK(riscv->width == ir::PointerWidth::W64);
+    CHECK(!riscv->is_wasm());
+  }
+
   CHECK(!target_from_name("x86_64-unknown-linux-gnu").has_value());
   for (const std::string& name : target_names()) {
     CHECK(target_from_name(name).has_value());

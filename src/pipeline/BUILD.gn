@@ -141,6 +141,7 @@ source_set("pipeline") {
     "//src/ast",
     "//src/borrow",
     "//src/codegen",
+    "//src/codegen/riscv64",
     "//src/codegen/wasm",
     "//src/codegen/x86_64",
     "//src/diag",

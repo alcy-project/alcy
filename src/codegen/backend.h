@@ -25,7 +25,7 @@ namespace codegen {
 // Which emitter produces the machine code. `None` is a build that carries
 // no backend at all: `check` still works, and a build command reports it
 // rather than producing nothing.
-enum class Backend : u8 { None, Llvm, DirectWasm, DirectX86_64 };
+enum class Backend : u8 { None, Llvm, DirectWasm, DirectX86_64, DirectRiscv64 };
 
 // What a backend is asked to write. `Object` is a relocatable object for
 // the linker; `Module` is a final module that needs no link (wasm today);
@@ -64,7 +64,7 @@ struct EmitOptions {
   // every assembler reads; Intel is opt-in from the CLI.
   AsmSyntax asm_syntax = AsmSyntax::Att;
   // Whether a panic walks the frame chain and names the frames it can
-  //. Only the LLVM backend keeps frame pointers and emits the
+  //. The native direct backends keep frame pointers and emit the
   // table the walk reads; the direct wasm backend writes the message and
   // its site and no frames.
   bool backtrace = false;

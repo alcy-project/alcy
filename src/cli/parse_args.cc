@@ -390,7 +390,8 @@ arg::Parser build_parser(i18n::Language language) {
                        .build())
           .add_arg(arg::ArgBuilder("backend")
                        .help(usage.text(i18n::Key::CliBackendHelp))
-                       .choices({"llvm", "direct-wasm", "direct-x86_64"})
+                       .choices({"llvm", "direct-wasm", "direct-x86_64",
+                                 "direct-riscv64"})
                        .value_name("NAME")
                        .build())
           .add_arg(arg::ArgBuilder("asm-syntax")
@@ -463,7 +464,8 @@ arg::Parser build_parser(i18n::Language language) {
                        .build())
           .add_arg(arg::ArgBuilder("backend")
                        .help(usage.text(i18n::Key::CliBackendHelp))
-                       .choices({"llvm", "direct-wasm", "direct-x86_64"})
+                       .choices({"llvm", "direct-wasm", "direct-x86_64",
+                                 "direct-riscv64"})
                        .value_name("NAME")
                        .build())
           .add_arg(arg::ArgBuilder("asm-syntax")

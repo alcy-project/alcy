@@ -1067,7 +1067,8 @@ base::Result<std::string, diag::Reported> emit_target(
   std::optional<std::vector<std::vector<u8>>> cached_parts;
   if (front_cache.has_value() && planned.mode == EmitMode::Executable &&
       (ctx.backend == codegen::Backend::Llvm ||
-       ctx.backend == codegen::Backend::DirectX86_64)) {
+       ctx.backend == codegen::Backend::DirectX86_64 ||
+       ctx.backend == codegen::Backend::DirectRiscv64)) {
     const base::Digest128 object_key = object_cache_key(ObjectCacheInputs{
         .lowered = front_cache->key,
         .optimize = plan.profile.optimize,

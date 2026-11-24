@@ -35,6 +35,12 @@ std::vector<bool> reachable_functions(const ir::Storage& storage,
           const ir::Operand& operand = storage.operands()[operand_idx];
           if (operand.is<ir::FunctionIdx>()) {
             worklist.push_back(operand.as_function());
+          } else if (operand.is<ir::ParametricCalleeIdx>()) {
+            const ir::ParametricCallee& callee =
+                storage.parametric_callees()[operand.as_parametric_callee()];
+            if (callee.function.is_valid()) {
+              worklist.push_back(callee.function);
+            }
           }
         }
       }

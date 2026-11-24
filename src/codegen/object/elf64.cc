@@ -3,6 +3,7 @@
 
 #include "codegen/object/elf64.h"
 
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -15,7 +16,6 @@ namespace codegen::object {
 namespace {
 
 constexpr u16 ET_REL = 1;
-constexpr u16 EM_X86_64 = 62;
 constexpr u32 SHT_PROGBITS = 1;
 constexpr u32 SHT_SYMTAB = 2;
 constexpr u32 SHT_STRTAB = 3;
@@ -27,6 +27,11 @@ constexpr u64 SHF_EXECINSTR = 4;
 constexpr u32 R_X86_64_64 = 1;
 constexpr u32 R_X86_64_PC32 = 2;
 constexpr u32 R_X86_64_PLT32 = 4;
+// RISC-V relocation numbers used by `reloc_type`. CALL and CALL_PLT
+// reach a symbol through auipc+jalr; 64 is an absolute address.
+constexpr u32 R_RISCV_64 = 2;
+constexpr u32 R_RISCV_CALL = 18;
+constexpr u32 R_RISCV_CALL_PLT = 19;
 constexpr u64 EH_SIZE = 64;
 constexpr u64 SH_SIZE = 64;
 constexpr u64 SYM_SIZE = 24;
@@ -81,7 +86,15 @@ u32 flags_of(const Section& section) {
   return flags;
 }
 
-u32 reloc_type(const RelocKind kind) {
+u32 reloc_type(const RelocKind kind, const Machine machine) {
+  if (machine == Machine::Riscv64) {
+    switch (kind) {
+      case RelocKind::Abs64: return R_RISCV_64;
+      case RelocKind::Pc32: return R_RISCV_CALL;
+      case RelocKind::Plt32: return R_RISCV_CALL_PLT;
+    }
+    return R_RISCV_CALL;
+  }
   switch (kind) {
     case RelocKind::Abs64: return R_X86_64_64;
     case RelocKind::Pc32: return R_X86_64_PC32;
@@ -122,7 +135,7 @@ struct SymbolTable {
 
 }  // namespace
 
-std::vector<u8> write_elf64_x86_64(const Object& object) {
+std::vector<u8> write_elf64(const Object& object, const Machine machine) {
   // The ELF section table opens with a null section, so a caller's
   // section `i` is header `i + 1` and every symbol's `st_shndx` says so.
   const u32 section_count = static_cast<u32>(object.sections.size());
@@ -244,7 +257,11 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
   for (u32 at = 0; at < section_count; ++at) {
     shstrtab_name_of[at] = shstrtab.add(object.sections[at].name);
   }
-  const u32 rela_name = shstrtab.add(".rela.text");
+  const std::string rela_section =
+      object.relocations.empty()
+          ? ".rela.text"
+          : ".rela" + object.sections[object.relocations.front().section].name;
+  const u32 rela_name = shstrtab.add(rela_section);
   const u32 symtab_name = shstrtab.add(".symtab");
   const u32 strtab_name = shstrtab.add(".strtab");
   const u32 shstrtab_name = shstrtab.add(".shstrtab");
@@ -261,7 +278,7 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
                         0,    0,   0,   0,   0, 0, 0, 0};
   out.insert(out.end(), ident, ident + 16);
   put16(out, ET_REL);
-  put16(out, EM_X86_64);
+  put16(out, static_cast<u16>(machine));
   put32(out, 1);
   put64(out, 0);
   put64(out, 0);
@@ -300,7 +317,7 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
     for (const Relocation& reloc : object.relocations) {
       put64(out, reloc.offset);
       const u64 info = static_cast<u64>(resolve(reloc.symbol)) << 32 |
-                       reloc_type(reloc.kind);
+                       reloc_type(reloc.kind, machine);
       put64(out, info);
       put64(out, static_cast<u64>(reloc.addend));
     }
@@ -361,6 +378,10 @@ std::vector<u8> write_elf64_x86_64(const Object& object) {
   }
 
   return out;
+}
+
+std::vector<u8> write_elf64_x86_64(const Object& object) {
+  return write_elf64(object, Machine::X86_64);
 }
 
 }  // namespace codegen::object

@@ -19,6 +19,7 @@
 #if ALCY_BACKEND_LLVM
 #include "codegen_llvm/emit.h"
 #endif
+#include "codegen/riscv64/backend.h"
 #include "codegen/wasm/backend.h"
 #include "codegen/x86_64/backend.h"
 
@@ -43,6 +44,8 @@ bool backend_supports(codegen::Backend backend,
       return codegen::wasm::Wasm::supports(kind, target);
     case codegen::Backend::DirectX86_64:
       return codegen::x86_64::X8664::supports(kind, target);
+    case codegen::Backend::DirectRiscv64:
+      return codegen::riscv64::Riscv64::supports(kind, target);
   }
   return false;
 }
@@ -58,6 +61,7 @@ bool backend_can_optimize(codegen::Backend backend) {
 #endif
     case codegen::Backend::DirectWasm:
     case codegen::Backend::DirectX86_64:
+    case codegen::Backend::DirectRiscv64:
       // The direct emitters have no middle end of their own; the
       // pipeline's IR passes are the optimizer, and they run before
       // any backend is chosen.
@@ -93,16 +97,21 @@ codegen::OutputKind output_kind_for(EmitMode mode,
 codegen::Backend select_backend(const codegen::Target& target,
                                 codegen::OutputKind kind,
                                 bool optimize) {
-  // A native x86_64 Linux debug build uses the direct backend: it writes
-  // the final object without LLVM, which is the point of the backend.
+  // A native x86_64 or riscv64 Linux debug build uses the matching
+  // direct backend: it writes the final object without LLVM.
   // An optimized build keeps LLVM, which still carries the release
   // pipeline.
   const bool native_debug =
-      !optimize && backend_supports(codegen::Backend::DirectX86_64,
-                                    codegen::OutputKind::Object, target);
-  const codegen::Backend preferred = native_debug
-                                         ? codegen::Backend::DirectX86_64
-                                         : codegen::default_backend(target);
+      !optimize && (backend_supports(codegen::Backend::DirectX86_64,
+                                     codegen::OutputKind::Object, target) ||
+                    backend_supports(codegen::Backend::DirectRiscv64,
+                                     codegen::OutputKind::Object, target));
+  const codegen::Backend preferred =
+      native_debug ? (backend_supports(codegen::Backend::DirectRiscv64,
+                                       codegen::OutputKind::Object, target)
+                          ? codegen::Backend::DirectRiscv64
+                          : codegen::Backend::DirectX86_64)
+                   : codegen::default_backend(target);
   const auto usable = [&](codegen::Backend backend) {
     if (!codegen::backend_available(backend)) {
       return false;
@@ -117,7 +126,7 @@ codegen::Backend select_backend(const codegen::Target& target,
   }
   for (const codegen::Backend candidate :
        {codegen::Backend::Llvm, codegen::Backend::DirectWasm,
-        codegen::Backend::DirectX86_64}) {
+        codegen::Backend::DirectX86_64, codegen::Backend::DirectRiscv64}) {
     if (candidate != preferred && usable(candidate)) {
       return candidate;
     }
@@ -128,7 +137,6 @@ codegen::Backend select_backend(const codegen::Target& target,
 base::Result<std::vector<std::vector<u8>>, codegen::EmitError>
 emit_artifacts_with_backend(codegen::Backend backend,
                             codegen::EmitRequest request) {
-  (void)request;
   switch (backend) {
     case codegen::Backend::None:
       return base::make_err(codegen::EmitError::Unsupported);
@@ -144,6 +152,9 @@ emit_artifacts_with_backend(codegen::Backend backend,
           std::move(request));
     case codegen::Backend::DirectX86_64:
       return codegen::emit_artifacts_with<codegen::x86_64::X8664>(
+          std::move(request));
+    case codegen::Backend::DirectRiscv64:
+      return codegen::emit_artifacts_with<codegen::riscv64::Riscv64>(
           std::move(request));
   }
   return base::make_err(codegen::EmitError::Unsupported);
@@ -168,6 +179,8 @@ base::Result<std::vector<u8>, codegen::EmitError> emit_with_backend(
       return codegen::emit_with<codegen::wasm::Wasm>(std::move(request));
     case codegen::Backend::DirectX86_64:
       return codegen::emit_with<codegen::x86_64::X8664>(std::move(request));
+    case codegen::Backend::DirectRiscv64:
+      return codegen::emit_with<codegen::riscv64::Riscv64>(std::move(request));
   }
   return base::make_err(codegen::EmitError::Unsupported);
 }

@@ -396,6 +396,7 @@
   F(CodegenInvalidModuleTree, Error, Analyzer, "Internal error: invalid module tree: {}") \
   F(CodegenWasmUnsupported, Error, CodegenNative, "Construct '{}' is not supported in the wasm backend") \
   F(CodegenX86Unsupported, Error, CodegenNative, "Construct '{}' is not supported in the x86_64 backend; build with --backend=llvm") \
+  F(CodegenRiscv64Unsupported, Error, CodegenNative, "Construct '{}' is not supported in the riscv64 backend; build with --backend=llvm") \
   /* pkg */ \
   F(PkgDependencyBadSpecifier, Error, Pkg, "Manifest '{}': dependency '{}' is not of the form name, owner/name, or owner/suite/package") \
   F(PkgDependencyBadVersion, Error, Pkg, "Manifest '{}': dependency '{}' needs a version of the form 1.2.3, 1.2.x, or 1.x") \
@@ -523,7 +524,7 @@
   F(PipelineWasmExecutableNeedsModule, Error, Pipeline, "A wasm executable is one final module; the '{}' backend writes an object instead. Use --emit=object, or --backend=direct-wasm") \
   /* cli */ \
   F(CliAbout, Note, Pipeline, "alcy language compiler") \
-  F(CliBackendHelp, Note, Pipeline, "Which code generation backend writes the machine code: direct-x86_64 (the default for native x86_64 Linux debug builds), llvm (the default for optimized builds and the other targets), or direct-wasm for alcy's own wasm emitter.") \
+  F(CliBackendHelp, Note, Pipeline, "Which code generation backend writes the machine code: direct-x86_64 (the default for native x86_64 Linux debug builds), direct-riscv64 (the default for riscv64 Linux debug builds), llvm (the default for optimized builds and the other targets), or direct-wasm for alcy's own wasm emitter.") \
   F(CliBuildAbout, Note, Pipeline, "Build a package directory") \
   F(CliBuildFileHelp, Note, Pipeline, "Build one source file instead of a package directory.") \
   F(CliBuildOutputHelp, Note, Pipeline, "Where the output goes. Empty picks the package's out/ directory.") \
@@ -595,7 +596,7 @@
   F(CliStdinTakesNoInput, Note, Pipeline, "The `--stdin` flag takes no input") \
   F(CliFmtStdinTakesNoFiles, Note, Pipeline, "The `--stdin` flag takes no files") \
   F(CliSuiteHelp, Note, Pipeline, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
-  F(CliTargetHelp, Note, Pipeline, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
+  F(CliTargetHelp, Note, Pipeline, "The machine to build for: host (the default), riscv64-unknown-linux-gnu, or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
   F(CliTestAbout, Note, Pipeline, "Build a package with its tests and run them") \
   F(CliTestCaseExitStatus, Note, Pipeline, "(exit status {})") \
   F(CliTestCaseSignal, Note, Pipeline, "(aborted by signal {})") \
