@@ -498,7 +498,9 @@ that happens to read them.
    multi-level direction is realized as phase-specific semantic values
    on one opcode set rather than a separate high-level body list, so
    no re-interning from AST is needed and `take_state` stays the only
-   handoff.
+   handoff. The rollback checkpoint also restores reference types and
+   their intern entries, which speculative emission may add while
+   lowering a local's address.
 
 5. **Ownership analysis** - `borrow` tracks `Move`/`Drop` instructions
    across the control-flow graph to enforce single-ownership guarantees.
