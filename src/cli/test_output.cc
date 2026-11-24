@@ -9,6 +9,7 @@
 
 #include "cli/duration.h"
 #include "cli/output.h"
+#include "diag/render.h"
 #include "fpag/term/style.h"
 #include "i18n/language.h"
 #include "i18n/messages.h"
