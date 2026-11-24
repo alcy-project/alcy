@@ -3,6 +3,7 @@
 
 #include "cli/test_output.h"
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 
@@ -45,38 +46,45 @@ std::string render_test_heading(std::string_view subject,
 
 std::string render_test_case(const pipeline::TestEvent& event,
                              const diag::RenderOptions& options) {
+  using i18n::Key;
   const i18n::Language language = options.language;
-  const bool color = options.color;
-  std::string body;
-  std::string_view verdict_color = term::FG_RED;
-  switch (event.ending) {
-    case pipeline::TestEnding::Passed:
-      body = i18n::format<i18n::Key::CliTestCaseOk>(language, event.label);
-      verdict_color = term::FG_GREEN;
-      break;
-    case pipeline::TestEnding::Failed:
-      body = i18n::format<i18n::Key::CliTestCaseFailed>(language, event.label,
-                                                        event.code);
-      break;
-    case pipeline::TestEnding::Aborted:
-      body = i18n::format<i18n::Key::CliTestCaseAborted>(language, event.label,
-                                                         event.code);
-      break;
+  const std::string_view passed =
+      i18n::text<Key::CliTestVerdictPassed>(language);
+  const std::string_view failed =
+      i18n::text<Key::CliTestVerdictFailed>(language);
+  const bool ok = event.ending == pipeline::TestEnding::Passed;
+  const std::string_view verdict = ok ? passed : failed;
+  const std::string_view verdict_color = ok ? term::FG_GREEN : term::FG_RED;
+
+  // The verdict is a column, not a word inside a sentence: every path
+  // starts at the same character, so a reader scans a run by verdict
+  // first and by name second. The width comes from the translated words
+  // rather than the English ones, so the column survives a translation.
+  const usize width = std::max(passed.size(), failed.size()) + 2;
+  std::string line = "  ";
+  styled(line, verdict, verdict_color, options.color);
+  line.append(width - verdict.size(), ' ');
+  line.append(event.label);
+
+  if (event.ending == pipeline::TestEnding::Failed) {
+    line.push_back(' ');
+    line += i18n::format<Key::CliTestCaseExitStatus>(language, event.code);
+  } else if (event.ending == pipeline::TestEnding::Aborted) {
+    line.push_back(' ');
+    line += i18n::format<Key::CliTestCaseSignal>(language, event.code);
   }
-  std::string line;
-  styled(line, body, verdict_color, color);
-  // The measure follows the verdict, outside its colour: a wrap in a
-  // muted tone keeps the verdict the first thing a reader sees, and a
-  // terminal without colour still reads the same words in the same
-  // order.
+
+  // The measure follows the name, outside the verdict's colour: the
+  // path stays readable on a terminal without colour, and the muted
+  // tone keeps the verdict the first thing a reader sees.
   std::string timing = " (";
   if (event.duration_ns.has_value()) {
     timing += format_duration(*event.duration_ns);
   } else {
-    timing += i18n::text<i18n::Key::CliTestUnmeasured>(language);
+    timing += i18n::text<Key::CliTestUnmeasured>(language);
   }
   timing.push_back(')');
-  styled(line, timing, term::DIM, color);
+  styled(line, timing, term::DIM, options.color);
   line.push_back('\n');
   return line;
 }

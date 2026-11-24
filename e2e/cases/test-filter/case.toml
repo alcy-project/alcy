@@ -6,6 +6,6 @@ args = ["--filter", "doubles"]
 exit = 0
 contains = [
   "Running   1 test (package test-filter)",
-  "test util::doubles ... ok",
+  "  PASS    util::doubles",
   "Summary   1 test run: 1 test passed, 0 tests failed",
 ]

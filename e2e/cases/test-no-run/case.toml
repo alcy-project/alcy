@@ -5,4 +5,4 @@ args = ["--no-run"]
 [cli.expect]
 exit = 0
 contains = ["Built     out/test-no-run-test"]
-not_contains = ["Summary", "Running", " ok"]
+not_contains = ["Summary", "Running", "PASS"]

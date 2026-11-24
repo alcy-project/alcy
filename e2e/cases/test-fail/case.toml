@@ -4,7 +4,7 @@ subcommand = "test"
 [cli.expect]
 exit = 1
 contains = [
-  "test main::passing ... ok",
-  "test main::failing ... FAILED",
+  "  PASS    main::passing",
+  "  FAILED  main::failing",
   "Summary   2 tests run: 1 test passed, 1 test failed",
 ]

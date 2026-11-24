@@ -592,9 +592,8 @@
   F(CliSuiteHelp, Note, Pipeline, "Create a suite instead of a package. The value is <name> or <owner>/<name>.") \
   F(CliTargetHelp, Note, Pipeline, "The machine to build for: host (the default) or wasm32-unknown-emscripten. --emit chooses the artifact's kind, not this.") \
   F(CliTestAbout, Note, Pipeline, "Build a package with its tests and run them") \
-  F(CliTestCaseAborted, Note, Pipeline, "test {} ... FAILED (aborted by signal {})") \
-  F(CliTestCaseFailed, Note, Pipeline, "test {} ... FAILED (exit status {})") \
-  F(CliTestCaseOk, Note, Pipeline, "test {} ... ok") \
+  F(CliTestCaseExitStatus, Note, Pipeline, "(exit status {})") \
+  F(CliTestCaseSignal, Note, Pipeline, "(aborted by signal {})") \
   F(CliTestExecutionHelp, Note, Pipeline, "How a run executes the tests: multi-process (the default) gives each test a process of its own, so one that aborts does not end the run; single-thread runs them all in one process, where a failing test ends the run and the report says the run stopped early rather than how many tests passed.") \
   F(CliTestFailed, Note, Pipeline, "{} {} failed") \
   F(CliTestFilterHelp, Note, Pipeline, "Keep only the tests whose report name contains this text, so 'vector' keeps 'my_vector' too.") \
@@ -611,6 +610,8 @@
   F(CliTestTakesDirectory, Note, Pipeline, "The `test` command takes a package directory; use `check` for a file") \
   F(CliTestTargetNotRunnable, Error, Pipeline, "Cannot run tests for target '{}'; a test is a process the run starts") \
   F(CliTestUnmeasured, Note, Pipeline, "unmeasured") \
+  F(CliTestVerdictFailed, Note, Pipeline, "FAILED") \
+  F(CliTestVerdictPassed, Note, Pipeline, "PASS") \
   F(CliTimeTraceHelp, Note, Pipeline, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
   F(CliUnknownSubcommand, Note, Pipeline, "Unknown subcommand '{}'; see '{} --help'") \
   F(CliVcsHelp, Note, Pipeline, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \
