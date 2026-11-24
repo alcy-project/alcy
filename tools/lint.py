@@ -36,6 +36,34 @@ def git_output(args: list[str]) -> subprocess.CompletedProcess:
     )
 
 
+def git_paths(output: str) -> list[str]:
+    """Git's slash-separated names in the form target_files spells them."""
+    return sorted({p.replace("/", os.sep) for p in output.splitlines() if p})
+
+
+def git_staged_files() -> list[str] | None:
+    """Paths staged for the next commit, deletions aside."""
+    staged = git_output(["diff", "--cached", "--name-only", "--diff-filter=ACMR", "--"])
+    if staged.returncode != 0:
+        print(f"git diff --cached failed: {staged.stderr.strip()}", file=sys.stderr)
+        return None
+    paths = git_paths(staged.stdout)
+    # clang-tidy reads the file on disk, not the blob in the index. A
+    # partially staged file is checked as it sits in the working tree, so
+    # say so rather than letting the reader assume the staged bytes were
+    # the ones linted.
+    unstaged = git_output(["diff", "--name-only", "--diff-filter=ACMR", "--"])
+    if unstaged.returncode == 0:
+        dirty = set(paths) & set(git_paths(unstaged.stdout))
+        if dirty:
+            print(
+                f"lint: {len(dirty)} staged file(s) have unstaged edits; "
+                "checking the working-tree copy",
+                file=sys.stderr,
+            )
+    return paths
+
+
 def default_changed_base() -> str:
     """The closest commit HEAD forked from, or HEAD when there is none.
 
@@ -79,7 +107,7 @@ def git_changed_files(rev: str) -> list[str] | None:
         print(untracked.stderr.strip(), file=sys.stderr)
         return None
     paths = (tracked.stdout + untracked.stdout).splitlines()
-    return sorted({p for p in paths if p})
+    return git_paths("\n".join(paths))
 
 
 def target_files(target_dirs: list[Path]):
@@ -225,10 +253,20 @@ def lint_files(
     fix_errors: bool,
     verbose: bool,
     changed: str | None = None,
+    staged: bool = False,
     shard: tuple[int, int] | None = None,
 ):
     changed_set: set[str] | None = None
-    if changed is not None:
+    selection = "staged" if staged else "changed"
+    if staged:
+        paths = git_staged_files()
+        if paths is None:
+            return -1
+        changed_set = set(paths)
+        if not any(Path(p).suffix in source_extensions for p in changed_set):
+            print(f"lint: no {selection} source files")
+            return 0
+    elif changed is not None:
         paths = git_changed_files(changed)
         if paths is None:
             return -1
@@ -237,7 +275,7 @@ def lint_files(
         # reads; running gn gen and a whole-tree format for it is the
         # cost the flag exists to avoid.
         if not any(Path(p).suffix in source_extensions for p in changed_set):
-            print("lint: no changed source files")
+            print(f"lint: no {selection} source files")
             return 0
 
     ret = build(
@@ -275,7 +313,10 @@ def lint_files(
     # license headers, gn check, the ASCII check, the rules' own cases --
     # answer once, so a sharded run asks them with the first shard and
     # the rest carry only the clang-tidy share.
-    whole_tree = shard is None or shard[0] == 1
+    # A pre-commit run already asks format.py for the tree, and gn check
+    # reads files outside the staged set. Keep --staged to the files that
+    # are about to be committed.
+    whole_tree = not staged and (shard is None or shard[0] == 1)
     if whole_tree and format.format_files(dry_run=True) != 0:
         failed = True
     if whole_tree and not header_license.apply_to_files(dry_run=True):
@@ -300,7 +341,7 @@ def lint_files(
         # A changed source outside the linted directories leaves nothing
         # to check; that is a pass for this flag, not an empty run.
         if not files and not comp_files and not header_files:
-            print("lint: no changed source files")
+            print(f"lint: no {selection} source files")
             return 0
 
     if shard is not None:
@@ -382,7 +423,8 @@ def main():
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
-    parser.add_argument(
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
         "--changed",
         nargs="?",
         const="",
@@ -391,6 +433,12 @@ def main():
         help="Lint only files changed since REV, or since the merge base "
         "with main when REV is omitted. Local iteration; CI runs the full "
         "tree",
+    )
+    selection.add_argument(
+        "--staged",
+        action="store_true",
+        help="Lint only files staged for the next commit, as they sit in "
+        "the working tree. For the pre-commit hook",
     )
     parser.add_argument(
         "--shard",
@@ -417,6 +465,7 @@ def main():
         fix_errors,
         args.verbose,
         changed=args.changed,
+        staged=args.staged,
         shard=parse_shard(args.shard) if args.shard is not None else None,
     )
 

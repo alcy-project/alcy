@@ -280,9 +280,11 @@ The repository carries Git hooks in `.githooks/`. Enable them once per clone:
 git config core.hooksPath .githooks
 ```
 
-`pre-commit` runs the same tree checks as CI's fast half, and `commit-msg`
-checks the message against the convention below. A work in progress can bypass
-both with `git commit --no-verify`; CI still asks every question, so a hook is
+`pre-commit` runs the tree's formatting checks and lints the staged source
+files, and `commit-msg` checks the message against the convention below. Lint
+reads the working-tree copy of a staged file, so a partially staged edit is
+checked as it sits on disk. A work in progress can bypass both with
+`git commit --no-verify`; CI still asks every question, so a hook is
 a way to fail earlier rather than a second gate to remember.
 
 Commit messages follow
