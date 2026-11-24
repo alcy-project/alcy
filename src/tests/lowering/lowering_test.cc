@@ -888,6 +888,43 @@ TEST_CASE("Comp failure span points at the failing expression") {
   CHECK(reported);
 }
 
+// A compound reassign inside a comp block overflows the field's type:
+// the diagnostic names the reassign, not the enclosing initializer.
+TEST_CASE("Compound reassign overflow keeps its code and span") {
+  VirtualDir dir;
+  const std::string source =
+      "struct S { x: u8 }\n"
+      "comp fn bump() -> u8 {\n"
+      "  ret comp {\n"
+      "    mut s := S { x: 250u8 }\n"
+      "    s.x += 10u8\n"
+      "    s.x\n"
+      "  }\n"
+      "}\n"
+      "fn main() {\n"
+      "  const c := bump()\n"
+      "  _ := c\n"
+      "}\n";
+  write_all(dir, {{"main.al", source}});
+
+  Fixture f;
+  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
+  CHECK(!result.ok);
+  bool reported = false;
+  for (u32 i = 0; i < f.bag.size(); ++i) {
+    const diag::Diagnostic* const diag = f.bag.at(i);
+    if (diag != nullptr &&
+        diag->code == diag::Code{diag::Stage::Lowering,
+                                 static_cast<u8>(DiagCode::CompOverflow)}) {
+      reported = true;
+      CHECK(diag->has_primary_span);
+      CHECK(diag->primary_span.offset == source.find("s.x += 10u8"));
+      CHECK(diag->primary_span.length == 11);
+    }
+  }
+  CHECK(reported);
+}
+
 // A constant expression the compiler evaluates overflows its type: the
 // program is refused with the check's own code rather than a
 // not-supported report.

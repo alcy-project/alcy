@@ -3,4 +3,4 @@ subcommand = "check"
 
 [cli.expect]
 exit = 4
-contains = ["Constant evaluation cannot continue"]
+contains = ["Constant evaluation cannot continue: comp expression is not evaluable"]

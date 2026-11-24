@@ -4,6 +4,7 @@
 #include "ir/storage_builder.h"
 
 #include <string>
+#include <utility>
 
 #include "doctest/doctest.h"
 #include "ir/common.h"
@@ -36,6 +37,29 @@ TEST_CASE("A payload-free tag is the same type every time") {
   builder.primitive(TypeTag::I1);
   CHECK(builder.never_type() == never);
   CHECK(builder.error_type() == error);
+}
+
+TEST_CASE("Rollback removes the interned reference types it added") {
+  StorageBuilder builder;
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  const TypeIdx u8 = builder.primitive(TypeTag::U8);
+  const StorageBuilder::Checkpoint cp = builder.checkpoint();
+  const TypeIdx speculative = builder.reference_type(i32, false);
+  CHECK(speculative.is_valid());
+  const usize types_with_speculation = builder.state().types.size();
+
+  builder.rollback(cp);
+  CHECK(builder.state().types.size() == types_with_speculation - 1);
+
+  const TypeIdx ref_u8 = builder.reference_type(u8, false);
+  const TypeNode& u8_node = builder.types()[ref_u8];
+  CHECK(u8_node.tag == TypeTag::Ref);
+  CHECK(builder.state().ref_types[u8_node.as_ref()].pointee == u8);
+
+  const TypeIdx ref_i32 = builder.reference_type(i32, false);
+  const TypeNode& i32_node = builder.types()[ref_i32];
+  CHECK(builder.state().ref_types[i32_node.as_ref()].pointee == i32);
+  CHECK(std::move(builder).build().is_ok());
 }
 
 TEST_CASE("A reference shape is interned once") {

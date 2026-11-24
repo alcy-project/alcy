@@ -307,7 +307,7 @@ bool check_checker_and_lowered_value(const Scenario& scenario,
 
 }  // namespace
 
-TEST_CASE("IR interpreter agrees on branches and arithmetic") {
+TEST_CASE("Checker and lowering read one value from branches and arithmetic") {
   VirtualDir dir;
   Scenario scenario;
   const bool built =
@@ -353,9 +353,10 @@ TEST_CASE("IR interpreter agrees on branches and arithmetic") {
     return;
   }
   check_same_value(storage, scenario.asts[0], run.value);
+  check_int_value(storage, run.value, 25);
 }
 
-TEST_CASE("IR interpreter agrees on a while loop") {
+TEST_CASE("Checker and lowering read one value from a while loop") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -400,9 +401,10 @@ TEST_CASE("IR interpreter agrees on a while loop") {
     return;
   }
   check_same_value(storage, scenario.asts[0], run.value);
+  check_int_value(storage, run.value, 45);
 }
 
-TEST_CASE("IR interpreter agrees on a direct call") {
+TEST_CASE("Checker and lowering read one value from a direct call") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -443,16 +445,18 @@ TEST_CASE("IR interpreter agrees on a direct call") {
   CHECK(quad_run.ok);
   if (quad_run.ok) {
     check_same_value(storage, scenario.asts[0], quad_run.value);
+    check_int_value(storage, quad_run.value, 84);
   }
   const RunResult double_run = run_function(
       scenario.fixture, storage, doubled, no_args, comp::COMP_BRANCH_QUOTA, 0);
   CHECK(double_run.ok);
   if (double_run.ok) {
     check_same_value(storage, scenario.asts[1], double_run.value);
+    check_int_value(storage, double_run.value, 42);
   }
 }
 
-TEST_CASE("IR interpreter agrees on casts and signed shifts") {
+TEST_CASE("Checker and lowering read one value from casts and signed shifts") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -550,7 +554,8 @@ TEST_CASE("Comp evaluation widens a negative value by its sign") {
   check_int_value(storage, run.value, static_cast<u64>(-81));
 }
 
-TEST_CASE("IR interpreter agrees on unsigned bitwise operations") {
+TEST_CASE(
+    "Checker and lowering read one value from unsigned bitwise operations") {
   VirtualDir dir;
   Scenario scenario;
   const bool built =
@@ -590,9 +595,10 @@ TEST_CASE("IR interpreter agrees on unsigned bitwise operations") {
     return;
   }
   check_same_value(storage, scenario.asts[0], run.value);
+  check_int_value(storage, run.value, 102);
 }
 
-TEST_CASE("IR interpreter agrees on booleans") {
+TEST_CASE("Checker and lowering read one value from booleans") {
   VirtualDir dir;
   Scenario scenario;
   const bool built =
@@ -632,6 +638,8 @@ TEST_CASE("IR interpreter agrees on booleans") {
     return;
   }
   check_same_value(storage, scenario.asts[0], run.value);
+  CHECK(run.value.value.tag == comp::CompValue::Tag::Bool);
+  CHECK(run.value.value.bool_value);
 }
 
 TEST_CASE("IR interpreter returns from an early Ret") {
@@ -684,7 +692,7 @@ TEST_CASE("IR interpreter returns from an early Ret") {
   }
 }
 
-TEST_CASE("IR interpreter agrees on recursion inside the depth cap") {
+TEST_CASE("Checker and lowering read one value from recursion inside the cap") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -983,7 +991,8 @@ TEST_CASE("IR interpreter answers MIN % -1 as zero") {
 // The scrutinee is the constructed place itself, so no aggregate value
 // is ever loaded: comp evaluation carries scalars only, and the enum
 // opcodes are what the interpreter reads the variants through.
-TEST_CASE("IR interpreter agrees on enum variants and payloads") {
+TEST_CASE(
+    "Checker and lowering read one value from enum variants and payloads") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -1059,11 +1068,14 @@ TEST_CASE("IR interpreter agrees on enum variants and payloads") {
     return;
   }
   check_same_value(storage, scenario.asts[0], carried.value);
+  check_int_value(storage, carried.value, 42);
   check_same_value(storage, scenario.asts[1], given.value);
+  check_int_value(storage, given.value, 100);
   check_same_value(storage, scenario.asts[2], denied.value);
+  check_int_value(storage, denied.value, 0);
 }
 
-TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
+TEST_CASE("Checker and lowering read one value from a niche-carrying enum") {
   VirtualDir dir;
   Scenario scenario;
   const bool built =
@@ -1129,8 +1141,11 @@ TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
     return;
   }
   check_same_value(storage, scenario.asts[0], set.value);
+  check_int_value(storage, set.value, 1);
   check_same_value(storage, scenario.asts[1], unset.value);
+  check_int_value(storage, unset.value, 2);
   check_same_value(storage, scenario.asts[2], empty.value);
+  check_int_value(storage, empty.value, 3);
 }
 
 // A method row recorded at the definition site names no instantiation:
@@ -1194,7 +1209,7 @@ TEST_CASE("Checker falls back from a definition-site method row") {
 
 // An early `ret` reached inside a branch hands the return to the body
 // that owns it, so both paths end the call with the same value.
-TEST_CASE("IR interpreter agrees on an early return") {
+TEST_CASE("Checker and lowering read one value from an early return") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -1246,7 +1261,7 @@ TEST_CASE("IR interpreter agrees on an early return") {
   CHECK(check_checker_and_lowered_value(scenario, "inner", {2}, 2));
 }
 
-TEST_CASE("IR interpreter agrees on a jump in a match arm") {
+TEST_CASE("Checker and lowering read one value from a match-arm jump") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,

@@ -1273,6 +1273,42 @@ TEST_CASE("Verify a parametric end outside a parametric body") {
   CHECK(build(true).is_ok());
 }
 
+TEST_CASE("Verify a semantic marker never stays in a published body") {
+  const auto build = [](bool parametric) {
+    StorageBuilder builder;
+    InstrSeq instrs;
+    const RegisterIdx value(0);
+    const OperandIdx place = builder.operand(
+        Operand::from_register(value, primitive_idx(TypeTag::I32)));
+    const InstructionIdx comp = builder.instr({
+        .op = Opcode::CompValue,
+        .flags = {},
+        .dst = value,
+        .measure = primitive_idx(TypeTag::I32),
+        .operands = {place, 1},
+    });
+    instrs.push(comp);
+    const InstructionIdx ret = builder.instr({
+        .op = Opcode::Ret,
+        .flags = {},
+        .dst = RegisterIdx::invalid(),
+        .measure = TypeIdx::invalid(),
+        .operands = {},
+    });
+    instrs.push(ret);
+    builder.reg({.type = primitive_idx(TypeTag::I32), .def_idx = comp});
+    const BlockIdx block =
+        builder.block({.instrs = instrs.finish(), .block_params = {}});
+    builder.function({.meta = void_meta(), .blocks = {block, 1}});
+    if (parametric) {
+      builder.add_parametric_function(FunctionIdx(0));
+    }
+    return std::move(builder).build();
+  };
+  check_invalid(build(false), VerificationErrorKind::MisplacedSemanticMarker);
+  check_invalid(build(true), VerificationErrorKind::MisplacedSemanticMarker);
+}
+
 TEST_CASE("Verify an unresolved callee outside a parametric body") {
   // The specialization pass rewrites a callee record into the function
   // its arguments instantiate; a record left in a body it resolved
