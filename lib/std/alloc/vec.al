@@ -452,6 +452,20 @@ impl<T> Vec<T> {
     unsafe { dealloc(self.buf, self.cap) }
   }
 
+  // A new vector of `n` elements, each built by `make` from its index.
+  // The maker is called once per position, from zero upward, so an
+  // element type that is not `Copy` can be built in place without a
+  // source value to replicate.
+  pub fn from_fn(n: usize, make: (usize) -> T) -> Vec<T> {
+    mut out := Vec::<T>::with_capacity(n)
+    mut i := 0 as usize
+    while i < n {
+      out.push(make(i))
+      i = i + 1
+    }
+    ret out
+  }
+
   // A new vector of each element passed through `f`. The result's
   // element type is the closure's return type, which the call reads
   // from the closure argument's own signature.
@@ -870,6 +884,18 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     assert(value(&v, 0) == 1, "the element held stays first")
     assert(value(&v, 1) == 2, "the added elements follow in order")
     assert(value(&v, 2) == 3, "and end the vec")
+  }
+
+  #[test] fn from_fn_builds_one_element_per_index() {
+    v := Vec::<i32>::from_fn(4, (i: usize) -> i as i32 * i as i32)
+    assert(v.len() == 4, "one element per index")
+    assert(value(&v, 0) == 0, "the first index builds the first element")
+    assert(value(&v, 3) == 9, "the last index builds the last element")
+  }
+
+  #[test] fn from_fn_of_zero_indices_is_empty() {
+    v := Vec::<i32>::from_fn(0, (i: usize) -> 7)
+    assert(v.is_empty(), "no index means no element is built")
   }
 
   #[test] fn map_takes_each_element_through_the_closure() {

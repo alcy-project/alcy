@@ -263,6 +263,15 @@ fn main() {
 }
 ```
 
+`Vec::<T>::from_fn(n, make)` builds a vector of `n` elements by calling
+`make(i)` for each index from zero upward. The maker can build a value
+that is not `Copy`, so this is the way to fill a vector with owned text
+or other values that cannot be repeated from one source:
+
+```alcy
+labels := Vec::<String>::from_fn(3, (i: usize) -> format("v{}", i))
+```
+
 `at` takes a `usize` and hands back an `Option<&T>`, so an index that
 is past the end is `None` rather than a fault; `v[i]` instead panics
 when the index is out of range. This is the `Option` the match section
