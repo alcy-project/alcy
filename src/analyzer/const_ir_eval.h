@@ -27,6 +27,8 @@ struct CompFnInfo {
   // A variadic comp fn binds its trailing arguments as a shape; the
   // fixed params bind normally.
   bool variadic = false;
+  // The declared element type of a typed variadic, invalid when untyped.
+  ir::TypeIdx element = ir::TypeIdx(base::INVALID_IDX);
   // A method call's receiver occupies the first parameter (`self`).
   bool is_method = false;
   // The module and instantiation the callee body was checked under.

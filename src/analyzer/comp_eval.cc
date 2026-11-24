@@ -698,6 +698,7 @@ EmitContext CompEval::emit_context_for(u32 mod,
     info.ret = sig.ret;
     info.is_method = is_method;
     info.variadic = !fn.params.empty() && fn.params.back().is_variadic;
+    info.element = sig.variadic_element;
     for (usize i = 0; i < fn.params.size() && i < sig.params.size(); ++i) {
       info.params.push_back(fn.params[i].pattern);
       info.param_types.push_back(sig.params[i]);

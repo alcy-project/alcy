@@ -2040,6 +2040,7 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
   if (info.variadic && fixed_count < info.params.size()) {
     comp::CompVal shape;
     shape.value.tag = comp::CompValue::Tag::Variadic;
+    shape.value.element = info.element;
     for (usize i = fixed_count; i < args.size(); ++i) {
       shape.value.slot_types.push_back(expr_type(args[i]));
     }
@@ -3043,7 +3044,9 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
         return ir::OperandIdx(base::INVALID_IDX);
       }
       comp::CompVal slot_value;
-      slot_value.type = sem.value.slot_types[static_cast<usize>(slot)];
+      slot_value.type = sem.value.element.is_valid()
+                            ? sem.value.element
+                            : sem.value.slot_types[static_cast<usize>(slot)];
       slot_value.value.tag = comp::CompValue::Tag::RuntimeSlot;
       slot_value.value.int_value = slot;
       return emitter.add_semantic(slot_value, slot_value.type);
