@@ -258,8 +258,10 @@ def report(current: dict, limit: int) -> None:
     )
     modules = sorted(current["modules"].items(), key=lambda kv: percent(kv[1]))
     width = max(len(name) for name, _ in modules)
-    print("\nleast covered modules:")
-    for name, counts in modules[:limit]:
+    shown = modules if limit <= 0 else modules[:limit]
+    label = "modules by coverage:" if limit <= 0 else "least covered modules:"
+    print(f"\n{label}")
+    for name, counts in shown:
         print(
             f"  {name:<{width}}  {counts['covered']:>5}/{counts['count']:<5}"
             f" {percent(counts):>6.2f}%"
@@ -334,7 +336,7 @@ def main() -> int:
         "--limit",
         type=int,
         default=8,
-        help="modules to list in the report (default: 8)",
+        help="modules to list in the report; 0 means every module (default: 8)",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

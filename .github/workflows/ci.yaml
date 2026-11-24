@@ -260,7 +260,9 @@ jobs:
 
       - name: Check Coverage
         shell: bash
-        run: uv run ./tools/check_coverage.py --no-build
+        # The baseline ratchets every module, so the report should name
+        # every module too; --limit=0 prints all 31 of them.
+        run: uv run ./tools/check_coverage.py --no-build --limit=0
 
   # The layer that can see a wrong code-generation decision become memory
   # corruption: the generated program is instrumented, which alcy cannot
