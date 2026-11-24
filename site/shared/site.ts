@@ -65,23 +65,38 @@ const THEME_LABEL: Record<ThemeMode, MessageKey> = {
   dark: "theme.dark",
 };
 
-// The settings menu is a details element; the browser closes it only
-// from its own summary. An outside pointer press or Escape closes it
-// too, the same as the page's other popovers.
+// The settings menu and its language dropdown are details elements;
+// the browser closes each only from its own summary. A press outside
+// the menu closes it, and a press on the menu but outside the dropdown
+// closes just the dropdown.
 export function initSettingsMenu(): void {
   const menu = document.querySelector<HTMLDetailsElement>(".settings");
   if (menu === null) {
     return;
   }
+  const languages = menu.querySelector<HTMLDetailsElement>(".language-menu");
   document.addEventListener("pointerdown", (event) => {
-    if (menu.open && event.target instanceof Node &&
-        !menu.contains(event.target)) {
+    if (!(event.target instanceof Node)) {
+      return;
+    }
+    if (menu.open && !menu.contains(event.target)) {
       menu.open = false;
+      if (languages !== null) {
+        languages.open = false;
+      }
+      return;
+    }
+    if (languages !== null && languages.open &&
+        !languages.contains(event.target)) {
+      languages.open = false;
     }
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && menu.open) {
       menu.open = false;
+      if (languages !== null) {
+        languages.open = false;
+      }
       menu.querySelector<HTMLElement>("summary")?.focus();
     }
   });
