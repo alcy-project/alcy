@@ -470,11 +470,11 @@ std::string result_note(const Envelope& envelope, i18n::Language language) {
 // The verb, the subject, and the note, laid out in columns. The one
 // place a result line is built, so the text report and the JSON
 // `summary` cannot drift apart.
-void render_result_line(std::string& out,
-                        const Envelope& envelope,
-                        bool color,
-                        bool newline,
-                        i18n::Language language) {
+void render_result_line_internal(std::string& out,
+                                 const Envelope& envelope,
+                                 bool color,
+                                 bool newline,
+                                 i18n::Language language) {
   const std::string_view verb = verb_for(envelope, language);
   const std::string subject = result_subject(envelope, language);
   const bool scaffolds = envelope.outcome == Outcome::CreatedPackage ||
@@ -499,7 +499,7 @@ void render_result_line(std::string& out,
 // JSON document carries: a reader wants the sentence, not the layout.
 std::string result_line(const Envelope& envelope, i18n::Language language) {
   std::string line;
-  render_result_line(line, envelope, false, false, language);
+  render_result_line_internal(line, envelope, false, false, language);
   return line;
 }
 
@@ -620,6 +620,14 @@ std::string render_diagnostics(const Envelope& envelope,
   return out;
 }
 
+std::string render_result_line(const Envelope& envelope,
+                               const diag::RenderOptions& options) {
+  std::string out;
+  render_result_line_internal(out, envelope, options.color, true,
+                              options.language);
+  return out;
+}
+
 std::string render_result(const Envelope& envelope,
                           const diag::RenderOptions& options) {
   std::string out;
@@ -634,7 +642,8 @@ std::string render_result(const Envelope& envelope,
     // result, and the caller has it.
     if (envelope.outcome != Outcome::Ran &&
         envelope.outcome != Outcome::Piped) {
-      render_result_line(out, envelope, options.color, true, options.language);
+      render_result_line_internal(out, envelope, options.color, true,
+                                  options.language);
     }
   }
   append_trace_text(out, envelope, options.color);

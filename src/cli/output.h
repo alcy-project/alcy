@@ -185,6 +185,13 @@ std::string render_diagnostics(const Envelope& envelope,
 std::string render_result(const Envelope& envelope,
                           const diag::RenderOptions& r);
 
+// One result line, without the time trace, for a caller that needs it
+// on the other stream. `run` writes its build's result to standard
+// error before the program starts, since standard output belongs to the
+// program.
+std::string render_result_line(const Envelope& envelope,
+                               const diag::RenderOptions& r);
+
 // Shared styling helpers the renderers use; the definitions state what
 // each one does.
 void append_bold_bright_green(std::string& out, std::string_view text);

@@ -30,6 +30,13 @@ struct BuildProgressObserver;
 // something the reader has already watched happen.
 using AnnounceExec = void (*)(std::string_view program, const void* ctx);
 
+// Reports the build that just finished, before the program starts. The
+// duration is the build alone: a run's wall time would include the
+// program and could not be called a build.
+using AnnounceBuilt = void (*)(std::string_view program,
+                               u64 duration_ns,
+                               const void* ctx);
+
 // Outcome of a successful `run`: the exit code, which is program
 // output rather than a failure. A failed build, link, or execution is
 // diag::Reported with diagnostics in the bag.
@@ -46,6 +53,7 @@ base::Result<RunOutcome, diag::Reported> run_package(
     std::span<const std::string_view> args,
     AnnounceExec announce = nullptr,
     const void* announce_ctx = nullptr,
-    const BuildProgressObserver* progress = nullptr);
+    const BuildProgressObserver* progress = nullptr,
+    AnnounceBuilt announce_built = nullptr);
 
 }  // namespace pipeline

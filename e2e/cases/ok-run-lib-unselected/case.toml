@@ -3,5 +3,5 @@ subcommand = "run"
 
 [cli.expect]
 exit = 0
-contains = ["hi"]
+contains = ["hi", "Built     app"]
 not_contains = ["EI004", "error"]

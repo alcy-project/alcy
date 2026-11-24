@@ -3,6 +3,7 @@
 
 #include "pipeline/run.h"
 
+#include <chrono>
 #include <optional>
 #include <span>
 #include <string>
@@ -38,7 +39,9 @@ base::Result<RunOutcome, diag::Reported> execute(
     std::string_view target,
     std::span<const std::string_view> args,
     AnnounceExec announce,
-    const void* announce_ctx) {
+    const void* announce_ctx,
+    AnnounceBuilt announce_built,
+    u64 build_ns) {
   std::vector<std::string> argv;
   argv.reserve(args.size() + 1);
   argv.emplace_back(exe_path);
@@ -49,6 +52,9 @@ base::Result<RunOutcome, diag::Reported> execute(
   // above it is the compiler's own work: until the program starts, the
   // reader is waiting on a build, and saying otherwise would be a
   // claim about work that has not been done.
+  if (announce_built != nullptr) {
+    announce_built(target, build_ns, announce_ctx);
+  }
   if (announce != nullptr) {
     announce(target, announce_ctx);
   }
@@ -77,7 +83,9 @@ base::Result<RunOutcome, diag::Reported> run_package(
     std::span<const std::string_view> args,
     AnnounceExec announce,
     const void* announce_ctx,
-    const BuildProgressObserver* progress) {
+    const BuildProgressObserver* progress,
+    AnnounceBuilt announce_built) {
+  const auto started = std::chrono::steady_clock::now();
   std::string package_name;
   base::Result<std::vector<Artifact>, diag::Reported> targets =
       resolve_artifacts(ctx, root, manifest_file, manifest_name,
@@ -121,7 +129,12 @@ base::Result<RunOutcome, diag::Reported> run_package(
       ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
-  return execute(ctx, exe_path, bin.name, args, announce, announce_ctx);
+  const u64 build_ns =
+      static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now() - started)
+                           .count());
+  return execute(ctx, exe_path, bin.name, args, announce, announce_ctx,
+                 announce_built, build_ns);
 }
 
 }  // namespace pipeline

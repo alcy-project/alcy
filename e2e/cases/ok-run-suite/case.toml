@@ -3,4 +3,10 @@ subcommand = "run"
 
 [cli.expect]
 exit = 0
-contains = ["Running   one/app", "Running   two/app", "2 programs run, 0 failed"]
+contains = [
+  "Built     one/app",
+  "Built     two/app",
+  "Running   one/app",
+  "Running   two/app",
+  "2 programs run, 0 failed",
+]

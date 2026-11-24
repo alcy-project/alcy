@@ -28,11 +28,15 @@ package's directory.
 
 ```console
 $ alcy run
+Building  package hello (1 target)
+Built     out/hello (1.20 s, cache miss)
 Running   out/hello
 ```
 
-A `Running ...` line goes to standard error even when standard output is
-redirected, so a pipeline parses the program's output cleanly.
+The `Built ...` and `Running ...` lines go to standard error before the
+program starts, so a pipeline parses the program's own standard output
+cleanly. The build line reports the build alone; the command's exit code
+is the program's.
 
 A suite runs the members named by `[suite] default_run`, in declared
 order. Without that key, or with an empty list, `alcy run` stops with an

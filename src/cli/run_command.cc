@@ -46,6 +46,7 @@ namespace {
 struct Announcement {
   const diag::RenderOptions& options;
   const Logger& err;
+  const pipeline::PipelineContext& ctx;
   std::string_view prefix = "";
 };
 
@@ -55,6 +56,24 @@ void announce_exec(std::string_view program, const void* ctx) {
   labeled.append(program);
   announce(a.err, i18n::text<i18n::Key::CliVerbRunning>(a.options.language),
            labeled, a.options);
+}
+
+// The build's result goes to standard error before the program starts:
+// standard output belongs to the program, and a result line after its
+// output would read as more of it.
+void announce_built(std::string_view program,
+                    u64 duration_ns,
+                    const void* ctx) {
+  const auto& a = *static_cast<const Announcement*>(ctx);
+  std::string subject(a.prefix);
+  subject.append(program);
+  Envelope built;
+  built.status = Status::Ok;
+  built.outcome = Outcome::Built;
+  built.output_path = std::move(subject);
+  built.wall_ns = duration_ns;
+  built.cache = a.ctx.cache_outcome;
+  a.err.block(render_result_line(built, a.options));
 }
 
 }  // namespace
@@ -146,12 +165,12 @@ i32 run_run(const CliConfig& config,
     }
     const pipeline::BuildProfile selected = std::move(profile).unwrap();
     resolve_backend_options(config, ctx, selected);
-    const Announcement announcement{announce_options, err, prefixes[i]};
+    const Announcement announcement{announce_options, err, ctx, prefixes[i]};
     const pipeline::BuildPlan plan{.profile = selected, .link = link};
     base::Result<pipeline::RunOutcome, diag::Reported> result =
-        pipeline::run_package(ctx, found.root, found.manifest,
-                              found.manifest_name, plan, args, announce_exec,
-                              &announcement, &progress_observer);
+        pipeline::run_package(
+            ctx, found.root, found.manifest, found.manifest_name, plan, args,
+            announce_exec, &announcement, &progress_observer, announce_built);
     if (result.is_err()) {
       return failed;
     }
