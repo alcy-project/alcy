@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "analyzer/checker.h"
-#include "analyzer/comp_evaluator.h"
+#include "analyzer/comp_eval.h"
 #include "analyzer/diag_code.h"
 #include "analyzer/resolve.h"
 #include "ast/ast.h"
@@ -144,10 +144,6 @@ void Checker::register_nominals() {
 // carry, so it must name an integer type. The annotation may name a
 // previously registered nominal, so this runs with the whole table
 // filled.
-void Checker::record_comp_call(void* context, const CompCallRecord& record) {
-  static_cast<Checker*>(context)->comp_calls_.push_back(record);
-}
-
 NominalEntry* Checker::find_nominal(u32 module, std::string_view name) {
   if (module >= nominals_of_module.size()) {
     return nullptr;
@@ -2531,9 +2527,8 @@ bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
     return false;
   }
   comp::CompVal value;
-  CompEvaluator eval(CompInputs{tree, modules, {}, type_origins_, fn_instances},
-                     ast, builder, width);
-  eval.set_call_recorder(this, &Checker::record_comp_call);
+  CompEval eval(CompInputs{tree, modules, {}, type_origins_, fn_instances}, ast,
+                builder, width);
   if (!eval.evaluate_item(info.module, info.init, cur_inst, value) ||
       value.value.tag != comp::CompValue::Tag::Int) {
     return wrong();
@@ -5468,12 +5463,10 @@ base::Result<CheckedPackage, diag::Reported> check_package(
                          {},
                          {},
                          {},
-                         {},
                          {}};
   package.drop_glue = std::move(checker.drop_glue_);
   package.needs_drop = std::move(checker.needs_drop_);
   package.not_movable = std::move(checker.not_movable_);
-  package.comp_calls = std::move(checker.comp_calls_);
   package.parametric_bodies = std::move(checker.parametric_bodies);
   package.specs.reserve(checker.specs.size());
   for (const SpecEntry& spec : checker.specs) {

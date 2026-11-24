@@ -334,10 +334,6 @@ class Checker {
   // as it returns.
   std::vector<u32> movable_inside_;
   std::vector<u32> copy_inside_;
-  // Comp fn calls the const pre-pass answered, carried on the checked
-  // package so lowering can compare them against the IR engine once the
-  // storage exists.
-  std::vector<CompCallRecord> comp_calls_;
   // Interned name every `MaybeUninit` wrapper carries.
   str::StringPoolId uninit_name_id = str::INVALID_STRING_POOL_ID;
   // Interned name every closure literal's nominal type carries. The
@@ -569,9 +565,6 @@ class Checker {
   // ; the expansion is what gives the slot meaning.
   void validate_variadic_parameters();
   bool is_expanded_variadic(ast::ItemIdx item) const;
-  // The recorder the const pre-pass's evaluator reports through; the
-  // records ride the checked package to lowering.
-  static void record_comp_call(void* context, const CompCallRecord& record);
   NominalEntry* find_nominal(u32 module, std::string_view name);
   NominalEntry* find_nominal_wide(u32 module, std::string_view name);
   // A spec declaration by module and name; at most one per module.

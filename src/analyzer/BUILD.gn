@@ -5,8 +5,10 @@ source_set("analyzer") {
   sources = [
     "checker.cc",
     "checker.h",
-    "comp_evaluator.cc",
-    "comp_evaluator.h",
+    "comp_eval.cc",
+    "comp_eval.h",
+    "const_ir_eval.cc",
+    "const_ir_eval.h",
     "diag_code.h",
     "fmt.cc",
     "fmt.h",
