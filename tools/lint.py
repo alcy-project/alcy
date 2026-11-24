@@ -278,6 +278,7 @@ def lint_files(
     changed: str | None = None,
     staged: bool = False,
     shard: tuple[int, int] | None = None,
+    skip_whole_tree: bool = False,
 ):
     changed_set: set[str] | None = None
     selection = "staged" if staged else "changed"
@@ -344,8 +345,9 @@ def lint_files(
     # the rest carry only the clang-tidy share.
     # A pre-commit run already asks format.py for the tree, and gn check
     # reads files outside the staged set. Keep --staged to the files that
-    # are about to be committed.
-    whole_tree = not staged and (shard is None or shard[0] == 1)
+    # are about to be committed. --no-whole-tree makes the same trade for
+    # a local --changed run: the hook and CI still ask every question.
+    whole_tree = not staged and not skip_whole_tree and (shard is None or shard[0] == 1)
     if whole_tree and format.format_files(dry_run=True) != 0:
         failed = True
     if whole_tree and not header_license.apply_to_files(dry_run=True):
@@ -473,6 +475,13 @@ def main():
         "the working tree. For the pre-commit hook",
     )
     parser.add_argument(
+        "--no-whole-tree",
+        action="store_true",
+        help="With --changed, skip the checks that read the whole tree "
+        "(format, headers, gn check, ASCII, ast-grep's own cases). The "
+        "staged hook and CI still ask them",
+    )
+    parser.add_argument(
         "--shard",
         default=None,
         metavar="K/N",
@@ -481,6 +490,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if args.no_whole_tree and args.changed is None:
+        parser.error("--no-whole-tree needs --changed")
 
     fix = args.fix or args.fix_errors
     fix_errors = args.fix_errors
@@ -499,6 +510,7 @@ def main():
         changed=args.changed,
         staged=args.staged,
         shard=parse_shard(args.shard) if args.shard is not None else None,
+        skip_whole_tree=args.no_whole_tree,
     )
 
 
