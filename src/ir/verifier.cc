@@ -231,16 +231,32 @@ WordCount word_count(TypeTag tag) {
 
 // A resolved body may name no semantic construct whose meaning a later
 // pass was to supply. Parametric artifacts are the first shape; this
-// helper is where further high-level markers join the check as the IR
-// grows levels. `allow_parametric` is the membership in the list of
-// bodies the specialization pass still clones.
+// helper is where further semantic markers join the check.
+// `allow_parametric` is membership in the list of bodies the
+// specialization pass still clones; semantic markers are refused in
+// both cases.
 VerificationResult check_resolved_body(const Storage& storage,
                                        FunctionIdx fidx,
                                        bool allow_parametric) {
+  const Function& func = storage.functions()[fidx];
+  // Semantic markers never belong to a published body, including a
+  // parametric one; the specialization pass does not resolve them.
+  for (const BlockIdx block_idx : func.blocks) {
+    const Block& block = storage.blocks()[block_idx];
+    if (!range_in_bounds(block.instrs.head(), block.instrs.size(),
+                         storage.instrs().size())) {
+      continue;
+    }
+    for (const InstructionIdx iidx : block.instrs) {
+      const Opcode op = storage.instrs()[iidx].op;
+      if (op == Opcode::CompValue || op == Opcode::CompStrByte) {
+        return err(VerificationErrorKind::MisplacedSemanticMarker, iidx.idx);
+      }
+    }
+  }
   if (allow_parametric) {
     return base::make_ok();
   }
-  const Function& func = storage.functions()[fidx];
   if (type_names_param(storage.state(), func.meta.return_type) ||
       type_names_param(storage.state(), func.meta.owner)) {
     return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
@@ -274,12 +290,6 @@ VerificationResult check_resolved_body(const Storage& storage,
       const Instruction& instr = storage.instrs()[iidx];
       if (instr.op == Opcode::ParametricDrop) {
         return err(VerificationErrorKind::MisplacedParametricDrop, iidx.idx);
-      }
-      switch (instr.op) {
-        case Opcode::CompValue:
-        case Opcode::CompStrByte:
-          return err(VerificationErrorKind::MisplacedSemanticMarker, iidx.idx);
-        default: break;
       }
       if (type_names_param(storage.state(), instr.measure)) {
         return err(VerificationErrorKind::MisplacedParametricType, iidx.idx);

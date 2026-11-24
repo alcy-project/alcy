@@ -31,6 +31,8 @@ struct IrRunError {
     // A construct the engine does not carry yet: the program is
     // rejected rather than misread.
     Unsupported,
+    // A const expansion exceeded its iteration cap.
+    ExpansionCap,
     // Verified IR that violates an invariant the engine relies on: a
     // compiler bug, not a program property.
     Internal,
@@ -66,9 +68,8 @@ inline constexpr u64 COMP_BRANCH_QUOTA = 1'000'000;
 inline constexpr u32 COMP_MAX_CALL_DEPTH = 64;
 
 // Every wording a refusal (`IrRunError::Kind::Unsupported`) can carry,
-// declared in one place. What the engine does not carry is a decision
-//, so a case that refuses points at a wording this list owns,
-// and a debug build refuses to report one the list does not declare.
+// declared in one place. A case that refuses points at a wording this
+// list owns, and a debug build refuses to report one it does not declare.
 inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
     "aggregate argument in comp evaluation",
     "aggregate extraction in comp evaluation",
@@ -93,13 +94,11 @@ inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
     "comp value without a side-table entry",
     "comparison of a non-integer in comp evaluation",
     "deallocation in comp evaluation",
-    "division by zero in comp evaluation",
     "element offset in comp evaluation",
     "enum variant in comp evaluation",
     "fat reference load in comp evaluation",
     "fat reference store in comp evaluation",
     "fence in comp evaluation",
-    "high-level IR in the low-level comp interpreter",
     "float argument in comp evaluation",
     "float arithmetic in comp evaluation",
     "float cast in comp evaluation",
@@ -114,8 +113,11 @@ inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
     "niche enum in comp evaluation",
     "non-integer constant in comp evaluation",
     "ordering of references in comp evaluation",
+    "parametric drop in comp evaluation",
+    "path is not comp-evaluable",
     "reference argument in comp evaluation",
     "reference result in comp evaluation",
+    "slice not on a scalar boundary",
     "switch in comp evaluation",
     "type query in comp evaluation",
 };

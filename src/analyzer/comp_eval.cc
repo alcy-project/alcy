@@ -231,9 +231,9 @@ u32 CompEval::callee_inst(const CheckedModule::CallTarget* target) const {
     const CheckedModule::MethodInfo& info = def.methods[target->index];
     // A method with its own type arguments carries the instantiation its
     // body was checked under; a plain method's is its receiver's. The
-    // definition-site key the generic pass writes names no instantiation
-    //, so it falls back rather than reading a body that was
-    // recorded against declared parameters as if it were a value.
+    // definition-site key the generic pass writes names no
+    // instantiation, so it falls back rather than reading a body checked
+    // against declared parameters as if it were a value.
     if (info.method_inst != NO_INST && info.method_inst != PARAM_INST) {
       return info.method_inst;
     }
@@ -727,26 +727,23 @@ bool CompEval::try_ir_eval(u32 mod,
         fail_overflow(span, ir_error.what);
         break;
       case comp::IrRunError::Kind::Quota:
-        if (ir_error.what.find("expansion") != std::string_view::npos) {
-          fail_expansion_cap(span);
-        } else {
-          fail_budget(span, ir_error.what);
-        }
+        fail_budget(span, ir_error.what);
+        break;
+      case comp::IrRunError::Kind::ExpansionCap:
+        fail_expansion_cap(span);
         break;
       case comp::IrRunError::Kind::Depth:
         fail_budget(span, ir_error.what);
         break;
       case comp::IrRunError::Kind::Unsupported:
-        // There is no second engine to fall back to; every refusal is a
-        // source-level comp failure and must carry its reason.
-        fail(span, ir_error.what);
+        fail(span, ir_error.what.empty() ? "comp expression is not evaluable"
+                                         : ir_error.what);
         break;
       case comp::IrRunError::Kind::Internal:
-        // An IR shape the interpreter cannot carry is still a refusal at
-        // the source boundary; keep its reason in the diagnostic.
-        fail(span, ir_error.what);
+        fail_internal(span, ir_error.what.empty()
+                                ? "comp evaluation reported an internal error"
+                                : ir_error.what);
         break;
-      default: break;
     }
     return false;
   }

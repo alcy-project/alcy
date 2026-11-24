@@ -64,6 +64,7 @@ struct Census {
   usize overflow = 0;
   usize external = 0;
   usize params = 0;
+  usize source_errors = 0;
   std::map<std::string_view, usize> declined;
 };
 
@@ -136,11 +137,13 @@ bool eval_package(const char* path, Census& census) {
     const comp::IrRunError error = std::move(result).unwrap_err();
     switch (error.kind) {
       case comp::IrRunError::Kind::Quota:
-      case comp::IrRunError::Kind::Depth: ++census.budget; break;
+      case comp::IrRunError::Kind::Depth:
+      case comp::IrRunError::Kind::ExpansionCap: ++census.budget; break;
       case comp::IrRunError::Kind::Overflow: ++census.overflow; break;
       case comp::IrRunError::Kind::DivisionByZero:
       case comp::IrRunError::Kind::OutOfBounds: {
         const std::string_view name = strings.get(fn.meta.name);
+        ++census.source_errors;
         std::fprintf(stderr, "%s: %.*s: source error: %.*s\n", path,
                      static_cast<i32>(name.size()), name.data(),
                      static_cast<i32>(error.what.size()), error.what.data());
@@ -177,12 +180,12 @@ bool eval_package(const char* path, Census& census) {
 void print_census(std::string_view path, const Census& census) {
   std::printf(
       "%.*s: %zu functions, %zu evaluated, %zu budget, %zu overflow, "
-      "%zu external, %zu params, %zu declined\n",
+      "%zu external, %zu params, %zu source errors, %zu declined\n",
       static_cast<i32>(path.size()), path.data(), census.functions,
       census.evaluated, census.budget, census.overflow, census.external,
-      census.params,
+      census.params, census.source_errors,
       census.functions - census.evaluated - census.budget - census.overflow -
-          census.external - census.params);
+          census.external - census.params - census.source_errors);
   for (const auto& [what, count] : census.declined) {
     std::printf("    %zu %.*s\n", count, static_cast<i32>(what.size()),
                 what.data());

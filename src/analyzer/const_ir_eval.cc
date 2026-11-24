@@ -38,6 +38,8 @@ namespace {
 
 using ExprTypeFn = std::function<ir::TypeIdx(ast::ExprIdx)>;
 using ParamEnv = std::vector<std::pair<std::string_view, ir::OperandIdx>>;
+
+constexpr usize COMP_MAX_UNROLL = 4096;
 struct LocalBinding {
   ir::OperandIdx addr = ir::OperandIdx::invalid();
   ir::TypeIdx type = ir::TypeIdx::invalid();
@@ -191,6 +193,7 @@ class ConstEmitter {
     diag::Span span;
   };
   std::vector<SpanRange> span_ranges_;
+  std::vector<diag::Span> span_stack_;
 
   // Records the instruction window one expression occupies. The window
   // closes on scope exit so a lookup can tell the instruction emitted by
@@ -201,8 +204,10 @@ class ConstEmitter {
         : emitter_(emitter), index_(emitter.span_ranges_.size()) {
       const u32 at = static_cast<u32>(emitter.builder().state().instrs.size());
       emitter.span_ranges_.push_back({at, at, span});
+      emitter.span_stack_.push_back(span);
     }
     ~SpanScope() {
+      emitter_.span_stack_.pop_back();
       emitter_.span_ranges_[index_].last =
           static_cast<u32>(emitter_.builder().state().instrs.size());
     }
@@ -374,9 +379,15 @@ class ConstEmitter {
     SliceBoundary
   };
   EmitError emit_error = EmitError::None;
+  diag::Span error_span_{};
+  bool has_error_span_ = false;
   void set_emit_error(EmitError e) {
     if (emit_error == EmitError::None) {
       emit_error = e;
+      if (!span_stack_.empty()) {
+        error_span_ = span_stack_.back();
+        has_error_span_ = true;
+      }
     }
   }
 
@@ -542,6 +553,7 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
   const usize saved_locals = emitter.locals_size();
   for (const ast::StmtIdx stmt_idx : block.statements) {
     const ast::StmtNode& stmt = ast.stmts[stmt_idx];
+    ConstEmitter::SpanScope stmt_scope(emitter, stmt.span);
     if (stmt.kind == ast::StmtKind::Decl) {
       const ast::StmtDecl& decl = stmt.payload.get<ast::StmtDecl>();
       if (!decl.init.is_valid() || decl.for_cursor) {
@@ -1312,11 +1324,12 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
     if (!receiver.is_valid()) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
-    const comp::CompVal* src = emitter.get_semantic(receiver);
+    const comp::CompVal* const src = emitter.get_semantic(receiver);
     if (src == nullptr || src->value.tag != comp::CompValue::Tag::Str) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
-    const std::string& bytes = src->value.str_value;
+    const comp::CompVal value = *src;
+    const std::string& bytes = value.value.str_value;
     if (cname == "str_len") {
       const ir::ImmutableIdx imm = emitter.builder().immutable(
           {.type = type,
@@ -1377,6 +1390,7 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
       return ir::OperandIdx(base::INVALID_IDX);
     }
     if (end < index || end > bytes.size()) {
+      emitter.set_emit_error(ConstEmitter::EmitError::OutOfBounds);
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const auto boundary = [&](u64 at) {
@@ -1459,11 +1473,12 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
   if (!receiver.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  const comp::CompVal* src = emitter.get_semantic(receiver);
+  const comp::CompVal* const src = emitter.get_semantic(receiver);
   if (src == nullptr || src->value.tag != comp::CompValue::Tag::Str) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  const std::string& bytes = src->value.str_value;
+  const comp::CompVal value = *src;
+  const std::string& bytes = value.value.str_value;
   if (is_len_bytes) {
     const ir::ImmutableIdx imm = emitter.builder().immutable(
         {.type = type, .data = {.u64_value = static_cast<u64>(bytes.size())}});
@@ -1485,6 +1500,7 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
   }
   if (is_byte) {
     if (index >= bytes.size()) {
+      emitter.set_emit_error(ConstEmitter::EmitError::OutOfBounds);
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const ir::ImmutableIdx imm = emitter.builder().immutable(
@@ -1503,9 +1519,6 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
   }
   u64 end = 0;
   if (!operand_int(emitter, second, end)) {
-    return ir::OperandIdx(base::INVALID_IDX);
-  }
-  if (end < index || end > bytes.size()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
   // `byte_slice` returns `Option<str>`: build the enum as a semantic
@@ -1620,7 +1633,7 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
     // otherwise wrap forever, and even a large bound allocates before the
     // post-loop cap check gets a chance to refuse it.
     for (u64 v = first; range.inclusive ? v <= last : v < last; ++v) {
-      if (elements.size() >= 4096) {
+      if (elements.size() >= COMP_MAX_UNROLL) {
         emitter.set_emit_error(ConstEmitter::EmitError::ExpansionCap);
         return ir::OperandIdx(base::INVALID_IDX);
       }
@@ -1665,7 +1678,7 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
   if (elements.empty()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
-  if (elements.size() > 4096) {
+  if (elements.size() > COMP_MAX_UNROLL) {
     emitter.set_emit_error(ConstEmitter::EmitError::ExpansionCap);
     return ir::OperandIdx(base::INVALID_IDX);
   }
@@ -1943,9 +1956,6 @@ bool semantic_pattern_matches(const ast::AstArena& ast,
   }
 }
 
-// Emits one expression into `emitter` as a value operand. Returns an
-// invalid operand for any shape this slice does not carry; the caller
-// and records an error for any shape it does not carry.
 // Inlines a comp fn body into the caller. `args` lists the actual
 // arguments (for a method call the receiver is the first argument,
 // binding `self`). Parameter names are bound to the lowered arguments.
@@ -2301,8 +2311,6 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
       }
     }
   }
-  // A comp fn call is inlined: lower the callee body's value in the
-  // caller, with parameter names bound to the lowered arguments.
   const std::vector<ast::ExprIdx> call_args(call.args.begin(), call.args.end());
   return emit_comp_inline(ast, expr, call_args, emitter, ctx, params);
 }
@@ -3393,11 +3401,14 @@ static ir::OperandIdx emit_match_expr(const ast::AstArena& ast,
     }
   }
   if (sem != nullptr) {
+    // Matching a pattern emits values, which can reallocate the side
+    // table; keep the scrutinee before that happens.
+    const comp::CompVal scrutinee_value = *sem;
     const usize saved = emitter.value_bindings_size();
     for (const ast::ExprMatchArm& arm : match_node.arms) {
       std::vector<std::pair<std::string_view, ir::OperandIdx>> binds;
       const bool matched = semantic_pattern_matches(
-          ast, arm.pattern, *sem, emitter, ctx, params,
+          ast, arm.pattern, scrutinee_value, emitter, ctx, params,
           [&](std::string_view name, ir::OperandIdx op) {
             binds.emplace_back(name, op);
           });
@@ -3974,6 +3985,30 @@ ir::OperandIdx emit_expr(const ast::AstArena& ast,
 
 }  // namespace
 
+comp::IrRunError emit_failure(ConstEmitter::EmitError kind,
+                              std::string_view fallback) {
+  const ir::InstructionIdx no_instr(base::INVALID_IDX);
+  switch (kind) {
+    case ConstEmitter::EmitError::OutOfBounds:
+      return {comp::IrRunError::Kind::OutOfBounds, no_instr,
+              "index out of bounds in comp evaluation"};
+    case ConstEmitter::EmitError::Overflow:
+      return {comp::IrRunError::Kind::Overflow, no_instr,
+              "integer overflow in comp evaluation"};
+    case ConstEmitter::EmitError::UnresolvedPath:
+      return {comp::IrRunError::Kind::Unsupported, no_instr,
+              "path is not comp-evaluable"};
+    case ConstEmitter::EmitError::SliceBoundary:
+      return {comp::IrRunError::Kind::Unsupported, no_instr,
+              "slice not on a scalar boundary"};
+    case ConstEmitter::EmitError::ExpansionCap:
+      return {comp::IrRunError::Kind::ExpansionCap, no_instr,
+              "comp expansion exceeded its iteration cap"};
+    case ConstEmitter::EmitError::None: break;
+  }
+  return {comp::IrRunError::Kind::Unsupported, no_instr, fallback};
+}
+
 bool evaluate_const_ir(const ast::AstArena& ast,
                        ast::ExprIdx expr,
                        ir::TypeIdx type,
@@ -3996,28 +4031,11 @@ bool evaluate_const_ir(const ast::AstArena& ast,
   const ir::OperandIdx value = emit_expr(ast, expr, type, emitter, ctx);
   if (!value.is_valid()) {
     if (error != nullptr) {
-      if (emitter.emit_error == ConstEmitter::EmitError::OutOfBounds) {
-        *error = comp::IrRunError{comp::IrRunError::Kind::OutOfBounds,
-                                  ir::InstructionIdx(base::INVALID_IDX),
-                                  "index out of bounds in comp evaluation"};
-      } else if (emitter.emit_error == ConstEmitter::EmitError::Overflow) {
-        *error = comp::IrRunError{comp::IrRunError::Kind::Overflow,
-                                  ir::InstructionIdx(base::INVALID_IDX),
-                                  "integer overflow in comp evaluation"};
-      } else if (emitter.emit_error ==
-                 ConstEmitter::EmitError::UnresolvedPath) {
-        *error = comp::IrRunError{comp::IrRunError::Kind::Unsupported,
-                                  ir::InstructionIdx(base::INVALID_IDX),
-                                  "path is not comp-evaluable"};
-      } else if (emitter.emit_error == ConstEmitter::EmitError::SliceBoundary) {
-        *error = comp::IrRunError{comp::IrRunError::Kind::Unsupported,
-                                  ir::InstructionIdx(base::INVALID_IDX),
-                                  "slice not on a scalar boundary"};
-      } else if (emitter.emit_error == ConstEmitter::EmitError::ExpansionCap) {
-        *error = comp::IrRunError{comp::IrRunError::Kind::Quota,
-                                  ir::InstructionIdx(base::INVALID_IDX),
-                                  "comp expansion exceeded its iteration cap"};
-      }
+      *error =
+          emit_failure(emitter.emit_error, "comp expression is not evaluable");
+    }
+    if (failure_span != nullptr && emitter.has_error_span_) {
+      *failure_span = emitter.error_span_;
     }
     builder.rollback(cp);
     return false;
@@ -4037,6 +4055,17 @@ bool evaluate_const_ir(const ast::AstArena& ast,
                          1}});
   emitter.cur().push(ret);
   emitter.finish();
+  if (emitter.emit_error != ConstEmitter::EmitError::None) {
+    if (error != nullptr) {
+      *error =
+          emit_failure(emitter.emit_error, "comp expression is not evaluable");
+    }
+    if (failure_span != nullptr && emitter.has_error_span_) {
+      *failure_span = emitter.error_span_;
+    }
+    builder.rollback(cp);
+    return false;
+  }
   const ir::FunctionIdx fn = builder.function(
       {.meta = {.return_type = type,
                 .param_types = {},
@@ -4054,7 +4083,7 @@ bool evaluate_const_ir(const ast::AstArena& ast,
           emitter.semantic_values(), cp.registers,
           static_cast<u32>(builder.state().registers.size()));
   // The synthetic function existed only to read a value back. Roll it
-  // out of the builder so no HIR reaches the published artifact.
+  // out of the builder so no synthetic body reaches the artifact.
   builder.rollback(cp);
   if (result.is_err()) {
     comp::IrRunError run_error = std::move(result).unwrap_err();
@@ -4067,13 +4096,6 @@ bool evaluate_const_ir(const ast::AstArena& ast,
     if (error != nullptr) {
       *error = run_error;
     }
-    return false;
-  }
-  if (error != nullptr &&
-      emitter.emit_error == ConstEmitter::EmitError::OutOfBounds) {
-    *error = comp::IrRunError{comp::IrRunError::Kind::OutOfBounds,
-                              ir::InstructionIdx(base::INVALID_IDX),
-                              "index out of bounds in comp evaluation"};
     return false;
   }
   out = std::move(result).unwrap();

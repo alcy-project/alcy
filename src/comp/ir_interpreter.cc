@@ -44,9 +44,9 @@ constexpr u64 MEMORY_LIMIT = 1ull << 28;
 struct Slot {
   enum class Kind : u8 { Scalar, Address, Semantic };
   Kind kind = Kind::Scalar;
+  u32 semantic_index = 0;
   u64 bits = 0;
   u64 address = 0;
-  u32 semantic_index = 0;
 };
 
 u32 int_width_bits(TypeTag tag) {
@@ -88,8 +88,14 @@ class Interpreter {
   struct Frame {
     u32 base = 0;
     std::vector<Slot> regs;
-    Slot& at(u32 idx) { return regs[idx - base]; }
-    const Slot& at(u32 idx) const { return regs[idx - base]; }
+    Slot& at(u32 idx) {
+      DCHECK(idx >= base && idx - base < regs.size());
+      return regs[idx - base];
+    }
+    const Slot& at(u32 idx) const {
+      DCHECK(idx >= base && idx - base < regs.size());
+      return regs[idx - base];
+    }
   };
 
   struct Returned {
@@ -308,7 +314,7 @@ bool Interpreter::read(ir::TypeIdx type,
     if (!read_bytes(address, layout_of(type).size, instr, bits)) {
       return false;
     }
-    out = Slot{Slot::Kind::Scalar, bits & int_mask(tag), 0};
+    out = Slot{Slot::Kind::Scalar, 0, bits & int_mask(tag)};
     return true;
   }
   if (ir::is_pointer_type(tag)) {
@@ -320,7 +326,7 @@ bool Interpreter::read(ir::TypeIdx type,
     if (!read_bytes(address, word_bytes(), instr, word)) {
       return false;
     }
-    out = Slot{Slot::Kind::Address, 0, word};
+    out = Slot{Slot::Kind::Address, 0, 0, word};
     return true;
   }
   if (ir::is_float_type(tag)) {
@@ -379,8 +385,8 @@ bool Interpreter::resolve(const ir::Operand& operand,
       return fail(IrRunError::Kind::Unsupported, instr,
                   "non-integer constant in comp evaluation");
     }
-    out = Slot{Slot::Kind::Scalar,
-               immutable.as_u64_integer(tag) & int_mask(tag), 0};
+    out = Slot{Slot::Kind::Scalar, 0,
+               immutable.as_u64_integer(tag) & int_mask(tag)};
     return true;
   }
   return fail(IrRunError::Kind::Internal, instr, "operand without a value");
@@ -427,7 +433,7 @@ bool Interpreter::bind_slot(ir::TypeIdx type,
       return fail(IrRunError::Kind::Internal, instr,
                   "integer value of a non-scalar");
     }
-    to = Slot{Slot::Kind::Scalar, from.bits & int_mask(tag), 0};
+    to = Slot{Slot::Kind::Scalar, 0, from.bits & int_mask(tag)};
     return true;
   }
   if (ir::is_pointer_type(tag)) {
@@ -460,12 +466,12 @@ bool Interpreter::comp_val_to_slot(ir::TypeIdx type,
   }
   if (ir::is_integer_type(tag)) {
     if (value.value.tag == CompValue::Tag::Bool) {
-      out = Slot{Slot::Kind::Scalar,
-                 static_cast<u64>(value.value.bool_value ? 1 : 0), 0};
+      out = Slot{Slot::Kind::Scalar, 0,
+                 static_cast<u64>(value.value.bool_value ? 1 : 0)};
       return true;
     }
     if (value.value.tag == CompValue::Tag::Int) {
-      out = Slot{Slot::Kind::Scalar, value.value.int_value & int_mask(tag), 0};
+      out = Slot{Slot::Kind::Scalar, 0, value.value.int_value & int_mask(tag)};
       return true;
     }
     return fail(IrRunError::Kind::Unsupported,
@@ -621,7 +627,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       if (!alloc(reg_type(ins.dst), count, instr, address)) {
         return false;
       }
-      frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, address};
+      frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, 0, address};
       return true;
     }
     case Opcode::Load: {
@@ -699,7 +705,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
       u64 disc = 0;
       if (ir::enum_is_zst(storage_, enum_ty)) {
-        frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, 0, 0};
+        frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, 0, 0};
         return true;
       }
       if (!niche.has) {
@@ -720,7 +726,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
                 : payload.bits > static_cast<u64>(niche.sentinel) - 1;
         disc = fieldless ? niche.fieldless : niche.carrying;
       }
-      frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, disc, 0};
+      frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, 0, disc};
       return true;
     }
     case Opcode::EnumTagSet: {
@@ -782,7 +788,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
       if (niche.has) {
         // The payload is the slot itself.
-        frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, place.address};
+        frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, 0, place.address};
         return true;
       }
       const ir::EnumType& shape =
@@ -809,7 +815,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const u64 at =
           place.address + area_at +
           ir::field_offset(storage_, fields, static_cast<u32>(field), width_);
-      frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, at};
+      frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, 0, at};
       return true;
     }
     case Opcode::IntAdd:
@@ -954,7 +960,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const u64 value =
           ins.op == ir::Opcode::TypeSizeOf ? measured.size : measured.align;
       if (ins.dst.is_valid()) {
-        frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, value, 0};
+        frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, 0, value};
       }
       return true;
     }
@@ -982,7 +988,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
                     "comp value without a destination");
       }
       frame.at(ins.dst.idx) =
-          Slot{Slot::Kind::Semantic, 0, 0, static_cast<u32>(index)};
+          Slot{Slot::Kind::Semantic, static_cast<u32>(index)};
       return true;
     }
     case Opcode::CompStrByte: {
@@ -1008,9 +1014,9 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
         return fail(IrRunError::Kind::OutOfBounds, instr,
                     "comp string byte index out of bounds");
       }
-      frame.at(ins.dst.idx) = Slot{
-          Slot::Kind::Scalar,
-          static_cast<u8>(value.str_value[static_cast<usize>(index)]), 0, 0};
+      frame.at(ins.dst.idx) =
+          Slot{Slot::Kind::Scalar, 0,
+               static_cast<u8>(value.str_value[static_cast<usize>(index)])};
       return true;
     }
   }
@@ -1083,7 +1089,7 @@ bool Interpreter::execute_gep(ir::InstructionIdx instr, Frame& frame) {
                 "getelementptr through a non-aggregate in comp evaluation");
   }
   if (ins.dst.is_valid()) {
-    frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, offset};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, 0, offset};
   }
   return true;
 }
@@ -1182,7 +1188,7 @@ bool Interpreter::execute_binary(ir::InstructionIdx instr, Frame& frame) {
                   "opcode is not a binary operation");
   }
   if (ins.dst.is_valid()) {
-    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, result & int_mask(tag), 0};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, 0, result & int_mask(tag)};
   }
   return true;
 }
@@ -1204,7 +1210,7 @@ bool Interpreter::execute_not(ir::InstructionIdx instr, Frame& frame) {
   const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
     frame.at(ins.dst.idx) =
-        Slot{Slot::Kind::Scalar, ~value.bits & int_mask(tag), 0};
+        Slot{Slot::Kind::Scalar, 0, ~value.bits & int_mask(tag)};
   }
   return true;
 }
@@ -1233,7 +1239,7 @@ bool Interpreter::execute_bit_reverse(ir::InstructionIdx instr, Frame& frame) {
   }
   const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
-    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, reversed, 0};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, 0, reversed};
   }
   return true;
 }
@@ -1299,7 +1305,7 @@ bool Interpreter::execute_compare(ir::InstructionIdx instr, Frame& frame) {
   }
   if (ins.dst.is_valid()) {
     frame.at(ins.dst.idx) =
-        Slot{Slot::Kind::Scalar, static_cast<u64>(outcome ? 1 : 0), 0};
+        Slot{Slot::Kind::Scalar, 0, static_cast<u64>(outcome ? 1 : 0)};
   }
   return true;
 }
@@ -1338,7 +1344,7 @@ bool Interpreter::execute_cast(ir::InstructionIdx instr, Frame& frame) {
     } else {
       bits &= int_mask(target_tag);
     }
-    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, bits, 0};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, 0, bits};
     return true;
   }
   if (ir::is_pointer_type(source_tag) && ir::is_pointer_type(target_tag)) {

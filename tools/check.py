@@ -251,9 +251,10 @@ def main() -> int:
         "--backend=direct-x86_64",
     )
 
-    # The second engine, over the acceptance corpus: every case
-    # that compiles is evaluated function by function, and a construct
-    # the lowering emits that the engine refuses without declaring it
+    # The compile-time evaluator, over the acceptance corpus: every
+    # case that compiles is evaluated function by function, and a
+    # construct the lowering emits that the interpreter refuses
+    # without declaring it
     # fails here. Both the IR writer and the census read the release
     # binaries: the unoptimized IR they exchange is the same, and an
     # instrumented census spent minutes under ASan doing the same walk a
