@@ -26,21 +26,32 @@ if (outline !== null && window.matchMedia("(min-width: 761px)").matches) {
 // The drawer's toggle is a native details summary. Following one of its
 // links, Escape, or a click outside all close it again.
 const drawer = document.querySelector<HTMLDetailsElement>(".guide-drawer");
-if (drawer !== null) {
-  drawer.addEventListener("click", (event) => {
-    if (event.target instanceof Element && event.target.closest("a") !== null) {
-      drawer.open = false;
+const panel = document.querySelector<HTMLElement>(".guide-drawer-panel");
+if (drawer !== null && panel !== null) {
+  const close = (): void => {
+    drawer.open = false;
+  };
+  document.addEventListener("click", (event) => {
+    if (event.target instanceof Element && panel.contains(event.target) &&
+        event.target.closest("a") !== null) {
+      close();
     }
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && drawer.open) {
-      drawer.open = false;
+      close();
     }
   });
   document.addEventListener("pointerdown", (event) => {
-    if (drawer.open && event.target instanceof Node &&
-        !drawer.contains(event.target)) {
-      drawer.open = false;
+    if (!drawer.open || !(event.target instanceof Node) ||
+        drawer.contains(event.target)) {
+      return;
     }
+    // The backdrop is the panel's own paint, so its clicks land on the
+    // panel element itself rather than on one of the links inside it.
+    if (panel.contains(event.target) && event.target !== panel) {
+      return;
+    }
+    close();
   });
 }

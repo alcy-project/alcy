@@ -413,12 +413,16 @@ std::string site_header(const Catalog& catalog,
   std::string drawer;
   if (!drawer_markup.empty()) {
     const std::string label = t("guide.contents");
+    // The panel is a sibling of the details, not its child: a closed
+    // details stops painting its children, which leaves no frame to
+    // animate on the way out.
     drawer = "<details class=\"guide-drawer\">\n";
     drawer += "      <summary class=\"guide-drawer-trigger\" aria-label=\"" +
               escape_attribute(label) + "\">" + label + "</summary>\n";
+    drawer += "    </details>\n";
+    drawer += "      <div class=\"guide-drawer-backdrop\"></div>\n";
     drawer += "      <div class=\"guide-drawer-panel\">\n      " +
               std::string(drawer_markup) + "\n      </div>\n";
-    drawer += "    </details>\n";
   }
   out += "<header class=\"site-header\">\n";
   out += "      <a class=\"site-brand\" href=\"" + home + "\">alcy</a>\n";
