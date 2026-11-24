@@ -2244,11 +2244,13 @@ void Checker::process_module(u32 module) {
                 module, method_node.payload.get<ast::ItemFn>().return_type,
                 self_ok ? &self_type : nullptr);
           }
-          CheckedModule::FnSig& sig =
-              add_function(module,
-                           {method_node.payload.get<ast::ItemFn>().name.name,
-                            std::move(params), ret, method},
-                           true);
+          CheckedModule::FnSig& sig = add_function(
+              module,
+              {.name = method_node.payload.get<ast::ItemFn>().name.name,
+               .params = std::move(params),
+               .ret = ret,
+               .item = method},
+              true);
           CheckedModule::ReceiverKind receiver =
               CheckedModule::ReceiverKind::None;
           if (self_ok && !sig.params.empty()) {
@@ -2898,9 +2900,13 @@ void Checker::register_fn_signature(u32 module, ast::ItemIdx item) {
   }
   std::vector<ir::TypeIdx> params;
   bool is_variadic = false;
+  ir::TypeIdx variadic_element = ir::TypeIdx(base::INVALID_IDX);
   for (const ast::ItemFnParam& param : fn.params) {
     if (param.is_variadic) {
       is_variadic = true;
+      if (param.type.is_valid()) {
+        variadic_element = resolve_type(module, param.type, nullptr);
+      }
       continue;
     }
     params.push_back(resolve_type(module, param.type, nullptr));
@@ -2916,7 +2922,8 @@ void Checker::register_fn_signature(u32 module, ast::ItemIdx item) {
                 .item = item,
                 .is_unsafe = fn.is_unsafe,
                 .is_comp = fn.is_comp,
-                .is_variadic = is_variadic},
+                .is_variadic = is_variadic,
+                .variadic_element = variadic_element},
                false);
 }
 
@@ -4918,6 +4925,7 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   // while an enclosing body is mid-check, so the per-function state is
   // saved and restored rather than left reset.
   const ir::TypeIdx saved_fn_ret = fn_ret;
+  const ir::TypeIdx saved_variadic_element = fn_variadic_element;
   const bool saved_in_fn = in_fn;
   const u32 saved_loop_depth = loop_depth;
   const u32 saved_comp_eval = comp_eval_depth;
@@ -4933,6 +4941,12 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   if (node.payload.get<ast::ItemFn>().return_type.is_valid()) {
     fn_ret =
         resolve_type(module, node.payload.get<ast::ItemFn>().return_type, self);
+  }
+  fn_variadic_element = ir::TypeIdx(base::INVALID_IDX);
+  for (const ast::ItemFnParam& param : node.payload.get<ast::ItemFn>().params) {
+    if (param.is_variadic && param.type.is_valid()) {
+      fn_variadic_element = resolve_type(module, param.type, self);
+    }
   }
   if (recording) {
     record.ret = fn_ret;
@@ -5019,6 +5033,8 @@ bool Checker::check_fn(u32 module, ast::ItemIdx fn, const ir::TypeIdx* self) {
   scopes.pop_back();
   in_fn = saved_in_fn;
   fn_ret = saved_fn_ret;
+
+  fn_variadic_element = saved_variadic_element;
   loop_depth = saved_loop_depth;
   comp_eval_depth = saved_comp_eval;
   comp_depth = saved_comp;

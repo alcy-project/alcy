@@ -151,6 +151,12 @@ ParamSyntax param_syntax(const pipeline::PipelineContext& context,
 std::string_view variadic_param_name(const pipeline::PipelineContext& context,
                                      ast::ItemIdx item);
 
+// How the element type of a typed variadic (`args: T..`) is spelled in
+// the source, or empty for an untyped one.
+std::string_view variadic_param_element(
+    const pipeline::PipelineContext& context,
+    ast::ItemIdx item);
+
 // The type the checker recorded for an expression, if it recorded one.
 // An entry exists once per instantiation; the declaration's own entry is
 // the one a query without a call site wants.

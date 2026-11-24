@@ -252,9 +252,10 @@ peripheral work lives in `backlog.md`. The language record lives in
 
 - [ ] The `fmt` pilot.
 
-  Give compiler-expanded functions a shape-only view of a variadic
-  parameter (`args.len()` and `args[i]` with a comp-known index), and
-  rewrite `fmt`'s parse and conversions in alcy (the builtins gain
+  Compiler-expanded functions now read a variadic shape with
+  `args.len()` and `args[i]`; `args: T..` additionally constrains every
+  collected argument to `T`. Rewrite `fmt`'s parse and conversions in
+  alcy (the builtins gain
   conversion impls; a float carries its precision). Capture the code
   size, compile time, runtime, wasm, and digit baselines before the
   conversion moves. Retire the C++ conversion lane only after the

@@ -558,6 +558,9 @@ class Checker {
   // markers there select which runtime operations are emitted.
   bool allow_comp_markers = false;
   ir::TypeIdx fn_ret = ir::TypeIdx(0);
+  // The element type of the current function's typed variadic slot,
+  // invalid for an untyped one.
+  ir::TypeIdx fn_variadic_element = ir::TypeIdx(base::INVALID_IDX);
   void register_nominals();
   // Every annotated generic parameter names the type of a compile-time
   // value, so the annotation must resolve to an integer.
@@ -1559,14 +1562,16 @@ class Checker {
                                     diag::Span span,
                                     std::string_view what,
                                     const ir::TypeIdx* expected);
-  void check_call_args(u32 module,
-                       std::span<const ast::ExprIdx> args,
-                       const std::vector<ir::TypeIdx>& params,
-                       const std::vector<bool>& comp_params,
-                       diag::Span span,
-                       std::string_view what,
-                       bool skip_first,
-                       bool variadic = false);
+  void check_call_args(
+      u32 module,
+      std::span<const ast::ExprIdx> args,
+      const std::vector<ir::TypeIdx>& params,
+      const std::vector<bool>& comp_params,
+      diag::Span span,
+      std::string_view what,
+      bool skip_first,
+      bool variadic = false,
+      ir::TypeIdx variadic_element = ir::TypeIdx(base::INVALID_IDX));
   bool is_core_fmt(const CheckedModule::FnSig* fn) const;
   bool is_io_print(const CheckedModule::FnSig* fn) const;
   std::vector<bool> comp_param_flags(ast::ItemIdx item) const;

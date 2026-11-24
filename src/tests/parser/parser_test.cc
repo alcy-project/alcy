@@ -1142,6 +1142,24 @@ TEST_CASE("Parser reads a variadic parameter") {
   CHECK(!fn.params[1].type.is_valid());
 }
 
+TEST_CASE("Parser reads a typed variadic parameter") {
+  Fixture f;
+  const ParseResult result =
+      parse("comp fn count(args: i32..) -> usize { ret args.len() }", f);
+  CHECK(result.ok);
+  if (!result.ok || result.items.size() != 1) {
+    return;
+  }
+  const ast::ItemFn& fn = as_fn(result.items[0], f);
+  CHECK(fn.params.size() == 1);
+  if (fn.params.size() != 1) {
+    return;
+  }
+  CHECK(fn.params[0].is_variadic);
+  CHECK(fn.params[0].type.is_valid());
+  CHECK(f.ast.types[fn.params[0].type].kind == ast::TypeKind::Primitive);
+}
+
 TEST_CASE("Parser refuses a malformed variadic parameter") {
   {
     Fixture f;

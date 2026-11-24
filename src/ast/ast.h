@@ -925,9 +925,10 @@ struct ItemFnParam {
   PatternIdx pattern = PatternIdx::invalid();
   TypeIdx type = TypeIdx::invalid();
   bool is_comp = false;
-  // A parameter written `args: ..` collects the call's remaining
-  // arguments at compile time; only the compiler-expanded functions may
-  // declare one, and it is always the last parameter.
+  // A parameter written `args: ..` or `args: T..` collects the call's
+  // remaining arguments. `type` names the element type of a typed
+  // variadic and is invalid for an untyped one. A variadic is always the
+  // last parameter; only compiler-expanded and comp functions declare one.
   bool is_variadic = false;
 };
 

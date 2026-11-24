@@ -288,3 +288,42 @@ fn f() {
             (path_expression
               (path
                 (identifier)))))))))
+
+================================================================================
+A comp function can declare a typed variadic parameter
+================================================================================
+
+comp fn count(args: i32..) -> usize {
+  ret args.len()
+}
+
+fn main() -> i32 { ret 0 }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_item
+    (identifier)
+    (parameters
+      (variadic_parameter
+        (identifier)
+        (primitive_type)))
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (call_expression
+          (field_expression
+            (path_expression
+              (path
+                (identifier)))
+            (identifier))
+          (arguments)))))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))

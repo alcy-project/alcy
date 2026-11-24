@@ -438,16 +438,20 @@ module.exports = grammar({
       field('type', $._type),
     ),
 
-    // `args: ..` collects the call's remaining arguments; only a plain
-    // name may bind them and only a compiler-expanded function may
-    // declare one. The precedence matches `identifier_pattern`
-    // so the `:` after a lone name stays a conflict rather than being
-    // resolved before the token that follows it is read.
+    // `args: ..` collects untyped arguments; `args: T..` collects
+    // arguments that must all have type T. Only a plain name may bind
+    // them, and only a compiler-expanded or comp function may declare
+    // one. The precedence matches `identifier_pattern` so the `:` after
+    // a lone name stays a conflict rather than being resolved before the
+    // token that follows it is read.
     variadic_parameter: $ => prec(1, seq(
       optional(field('comp', 'comp')),
       field('name', $.identifier),
       ':',
-      '..',
+      choice(
+        '..',
+        seq(field('element', $._type), '..'),
+      ),
     )),
 
     // Types ----------------------------------------------------------------

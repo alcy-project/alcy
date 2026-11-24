@@ -1869,8 +1869,12 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       (void)index;
       return;
     }
-    CheckedModule::FnSig& sig =
-        add_function(module, {name, params, ret, method_item}, true);
+    CheckedModule::FnSig& sig = add_function(module,
+                                             {.name = name,
+                                              .params = std::move(params),
+                                              .ret = ret,
+                                              .item = method_item},
+                                             true);
     add_method(module, {self_type,
                         name,
                         sig.params,

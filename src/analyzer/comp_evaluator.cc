@@ -1226,6 +1226,17 @@ bool CompEvaluator::comp_run_fn(u32 def_module,
   CompVal shape;
   if (variadic && ok) {
     shape.value.tag = CompValue::Tag::Variadic;
+    const CheckedModule::FnSig* callee_sig = nullptr;
+    const analyzer::CheckedModule& callee_module = inputs_.modules[def_module];
+    for (const CheckedModule::FnSig& candidate : callee_module.functions) {
+      if (candidate.item == item && candidate.inst == inst) {
+        callee_sig = &candidate;
+        break;
+      }
+    }
+    if (callee_sig != nullptr) {
+      shape.value.element = callee_sig->variadic_element;
+    }
     for (usize i = fixed_count; i < args.size(); ++i) {
       const CheckedModule::ExprType* type =
           inputs_.modules[caller_module].expr_type_of(args[i], caller_inst);
@@ -2118,7 +2129,9 @@ bool CompEvaluator::comp_eval_expr(u32 mod,
         if (slot >= base.value.slot_types.size()) {
           return fail_oob(node.span, "variadic index out of bounds");
         }
-        out.type = base.value.slot_types[static_cast<usize>(slot)];
+        out.type = base.value.element.is_valid()
+                       ? base.value.element
+                       : base.value.slot_types[static_cast<usize>(slot)];
         out.value = {};
         out.value.tag = CompValue::Tag::RuntimeSlot;
         out.value.int_value = slot;

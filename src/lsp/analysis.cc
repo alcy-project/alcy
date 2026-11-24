@@ -328,6 +328,23 @@ std::string_view variadic_param_name(const pipeline::PipelineContext& context,
   return {};
 }
 
+std::string_view variadic_param_element(
+    const pipeline::PipelineContext& context,
+    ast::ItemIdx item) {
+  for (const ast::ItemFnParam& param : declared_params(context, item)) {
+    if (!param.is_variadic || !param.type.is_valid()) {
+      continue;
+    }
+    const diag::Span span = context.ast.types[param.type].span;
+    const std::optional<std::string_view> source =
+        context.sources.bytes(span.file);
+    if (source.has_value() && span.offset + span.length <= source->size()) {
+      return source->substr(span.offset, span.length);
+    }
+  }
+  return {};
+}
+
 std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
                                        source::FileId file) {
   for (const auto& [uri, id] : analysis.owner().files_by_uri) {

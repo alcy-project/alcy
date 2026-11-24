@@ -163,6 +163,12 @@ void Checker::validate_variadic_parameters() {
         case ast::ItemKind::Intrinsic:
           check(item, node.payload.get<ast::ItemIntrinsic>().params);
           break;
+        case ast::ItemKind::Spec:
+          for (const ast::SpecMethod& method :
+               node.payload.get<ast::ItemSpec>().methods) {
+            check(ast::ItemIdx::invalid(), method.params);
+          }
+          break;
         case ast::ItemKind::Extern:
           for (const ast::ItemExternFn& fn :
                node.payload.get<ast::ItemExtern>().fns) {
@@ -1143,7 +1149,16 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
     type_params.emplace_back(params[i].name.name, args[i]);
   }
   std::vector<ir::TypeIdx> sig_params;
+  bool is_variadic = false;
+  ir::TypeIdx variadic_element = ir::TypeIdx(base::INVALID_IDX);
   for (const ast::ItemFnParam& param : fn_params(item)) {
+    if (param.is_variadic) {
+      is_variadic = true;
+      if (param.type.is_valid()) {
+        variadic_element = resolve_type(module, param.type, nullptr);
+      }
+      continue;
+    }
     sig_params.push_back(resolve_type(module, param.type, nullptr));
   }
   ir::TypeIdx ret = builder.primitive(ir::TypeTag::Void);
@@ -1180,7 +1195,9 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
                 .item = item,
                 .inst = NO_INST,
                 .is_unsafe = fn_is_unsafe(item),
-                .is_comp = fn_is_comp(item)},
+                .is_comp = fn_is_comp(item),
+                .is_variadic = is_variadic,
+                .variadic_element = variadic_element},
                false);
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // The definition-site check records under its own key: no numbering

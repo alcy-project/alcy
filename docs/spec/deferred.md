@@ -87,9 +87,6 @@ it is implemented.
   refusal of intrinsics without a comp form and of external
   declarations is the policy today; a classification system would
   add call-site diagnostics, not a new runtime path.
-- Shape access for an expanded function's variadic parameter lands
-  with the fmt pilot, the only place compiler-expanded bodies are
-  evaluated today.
 
 ## Toolchain
 

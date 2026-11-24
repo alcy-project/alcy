@@ -111,8 +111,10 @@ the implementing type inside `impl` blocks, and the spec's own type inside
 `spec` declarations. An omitted return type means `()`; free functions, methods,
 and spec methods take type parameters, and a parameter annotated with an integer
 type (`N: usize`) is a value parameter. A last parameter written `args: ..`
-collects the call's remaining arguments; only the compiler-expanded functions
-declare one, and its declared body never runs.
+collects the call's remaining arguments untyped; `args: T..` collects arguments
+that must all have type `T`. Only compiler-expanded and `comp` functions declare
+one, and an expanded function's declared body never runs. A typed variadic with
+no collected arguments needs its type argument spelled explicitly.
 
 A `spec` declares a named capability as `;`-terminated method
 signatures, with no bodies. A spec may refine another: `spec Eq:

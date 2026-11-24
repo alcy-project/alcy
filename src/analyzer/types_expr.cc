@@ -864,7 +864,8 @@ void Checker::check_call_args(u32 module,
                               diag::Span span,
                               std::string_view what,
                               bool skip_first,
-                              bool variadic) {
+                              bool variadic,
+                              ir::TypeIdx variadic_element) {
   const usize fixed = skip_first ? 1 : 0;
   if (variadic ? args.size() + fixed < params.size()
                : args.size() + fixed != params.size()) {
@@ -878,7 +879,14 @@ void Checker::check_call_args(u32 module,
     // Collected variadic arguments have no declared parameter: their
     // types are the shape the callee reads at compile time.
     if (variadic && fixed + i >= params.size()) {
-      check_expr(module, args[i], nullptr);
+      if (variadic_element.is_valid()) {
+        const ir::TypeIdx actual =
+            check_expr(module, args[i], &variadic_element);
+        unify(variadic_element, actual, ast.exprs[args[i]].span,
+              "variadic argument");
+      } else {
+        check_expr(module, args[i], nullptr);
+      }
       continue;
     }
     const ir::TypeIdx param = params[fixed + i];
@@ -1830,7 +1838,8 @@ ir::TypeIdx Checker::check_call(u32 module,
     check_comp_fn_call(fn, span);
     record_call(module, callee, fn);
     check_call_args(module, call.args, fn->params, comp_param_flags(fn->item),
-                    span, fn->name, false, fn->is_variadic);
+                    span, fn->name, false, fn->is_variadic,
+                    fn->variadic_element);
     if (expected != nullptr) {
       return unify(*expected, fn->ret, span, "call");
     }
@@ -1856,7 +1865,7 @@ ir::TypeIdx Checker::check_call(u32 module,
       precheck_fn_body(*fn);
     }
     check_call_args(module, args, fn->params, comp_param_flags(fn->item), span,
-                    fn->name, false, fn->is_variadic);
+                    fn->name, false, fn->is_variadic, fn->variadic_element);
     if (expected != nullptr) {
       return unify(*expected, fn->ret, span, "call");
     }
@@ -2605,6 +2614,9 @@ ir::TypeIdx Checker::check_index(u32 module,
           DiagCode::TypeMismatch, ast.exprs[index.index].span);
       (void)diag;
       return error_type();
+    }
+    if (fn_variadic_element.is_valid()) {
+      return fn_variadic_element;
     }
     return variadic_slot_type();
   }

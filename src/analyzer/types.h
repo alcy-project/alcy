@@ -115,10 +115,11 @@ struct CheckedModule {
     // An `extern "C"` declaration: the name is the symbol
     // the linker resolves, and the body lives outside the program.
     bool is_extern = false;
-    // A parameter written `args: ..` collects the call's remaining
-    // arguments. Only the compiler-expanded functions carry
-    // one, and the slot is not part of `params`.
+    // A parameter written `args: ..` or `args: T..` collects the call's
+    // remaining arguments; the slot is not part of `params`. An invalid
+    // `variadic_element` means untyped.
     bool is_variadic = false;
+    ir::TypeIdx variadic_element = ir::TypeIdx(base::INVALID_IDX);
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never

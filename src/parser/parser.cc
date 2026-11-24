@@ -1245,6 +1245,12 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
           if (!type.is_valid()) {
             return false;
           }
+          // A typed variadic spells the element type before the dots:
+          // `args: T..`. An untyped one wrote `args: ..` above.
+          if (check(lexer::TokenKind::DotDot)) {
+            advance();
+            is_variadic = true;
+          }
         }
       }
       params.push_back(ast::ItemFnParam{pattern, type, is_comp, is_variadic});

@@ -121,7 +121,9 @@ std::string signature_label(const pipeline::PipelineContext& context,
       out += ", ";
     }
     out += variadic_name;
-    out += ": ..";
+    out += ": ";
+    out += variadic_param_element(context, item);
+    out += "..";
   }
   out += ')';
   if (ret != ir::primitive_idx(ir::TypeTag::Void)) {

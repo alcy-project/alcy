@@ -53,13 +53,12 @@ parameters (per call-site specialization). Types admitting comp-known
 values are integers, `bool`, `str`, and tuples, structs, and fixed
 arrays composed of comp-known values.
 
-Shape access for a variadic parameter is deferred with the fmt pilot,
-the only place compiler-expanded bodies are evaluated today. It will
-take the form of `args.len()` and `args[i]` during compilation when `i`
-is comp-known: the length is an integer and the indexed element keeps
-its own type. Values are not exposed there; they lower at runtime as
-they did before. An unknown shape or an index outside it is a
-compile-time error, and no runtime type information reaches user code.
+A variadic parameter is read during compilation with `args.len()` and
+`args[i]`, where `i` is comp-known. The length is an integer. For an
+untyped `args: ..` the indexed element keeps its own type; for `args: T..`
+it has type `T`. Values are not exposed there; they lower at runtime as
+they did before. An index outside the shape is a compile-time error, and
+no runtime type information reaches user code.
 
 ## Parameters
 

@@ -82,7 +82,7 @@ type_params = "<" , type_param , { "," , type_param } , ">" ;
                  `ArrayVec<T, N: usize>` fixes the kind at the
                  parameter, a value rather than a type. See
                  docs/spec/comp.md. *)
-params      = [ [ "comp" ] , pattern , ":" , ( ".." | type ) ,
+params      = [ [ "comp" ] , pattern , ":" , ( ".." | type , ".." | type ) ,
                 { "," , [ "comp" ] , pattern , ":" , type } , [ "," ] ] ;
               (* "comp" marks a compile-time parameter; plain functions
                  use the same shape without it. A parameter whose type

@@ -30,6 +30,8 @@ struct CompValue {
     Enum,
     // A variadic parameter seen at compile time. `slot_types` names
     // each collected argument's type; values are never exposed.
+    // `element` is the declared type of a typed variadic, invalid when
+    // the parameter was written untyped.
     Variadic,
     // One collected argument slot, selected by a comp-known index.
     // `int_value` is the slot number; the type rides on `CompVal`.
@@ -41,6 +43,7 @@ struct CompValue {
   std::string str_value;
   std::vector<CompValue> fields;
   std::vector<ir::TypeIdx> slot_types;
+  ir::TypeIdx element = ir::TypeIdx(base::INVALID_IDX);
   u32 variant = 0;
 };
 
