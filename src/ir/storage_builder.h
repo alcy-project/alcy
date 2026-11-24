@@ -258,24 +258,13 @@ class StorageBuilder {
     pop_to(state_.block_params, cp.block_params);
     pop_to(state_.functions, cp.functions);
     pop_to(state_.synthetic_functions, cp.synthetic);
-    // Speculative emission can intern a reference type for a local's
-    // address. Drop its intern entry before the type itself so a later
-    // request cannot resolve to an index the rollback removed.
-    for (usize i = state_.types.size(); i > cp.types; --i) {
-      const TypeNode& node = state_.types[TypeIdx(static_cast<u32>(i - 1))];
-      if (node.tag != TypeTag::Ref && node.tag != TypeTag::MutRef) {
-        continue;
-      }
-      const u32 pointee =
-          state_.ref_types[node.data.get<RefTypeIdx>()].pointee.idx;
-      std::unordered_map<u32, TypeIdx>* const interned =
-          pointer_table(node.tag);
-      if (interned != nullptr) {
-        interned->erase(pointee);
-      }
-    }
     pop_to(state_.types, cp.types);
     pop_to(state_.ref_types, cp.ref_types);
+    // Every other table is derived from the type table. Rebuild the
+    // indexes from what survived rather than trying to pop them: a
+    // shape reserved before the checkpoint can have gained payload
+    // rows after it, and an intern entry can name a live type by key.
+    index_interned();
   }
   // Sizes the tables a caller knows the population of before it fills
   // them. A table grown by doubling halves its own headroom: every
@@ -465,9 +454,10 @@ class StorageBuilder {
   // The interning table of a pointer kind, or null for every other tag.
   std::unordered_map<u32, TypeIdx>* pointer_table(TypeTag tag);
 
-  // Fills the interning tables from a type table this builder did not fill
-  // itself. The scan is the shape lookup used to make, so the first node of a
-  // shape is the one a later pointer interns to.
+  // Rebuilds every index derived from the type table. The scan is the
+  // shape lookup used to make, so the first node of a shape is the one a
+  // later request interns to. Rollback calls this after dropping the
+  // speculative types; import calls it after adopting a type table.
   void index_interned();
 
   StorageState state_;

@@ -62,6 +62,38 @@ TEST_CASE("Rollback removes the interned reference types it added") {
   CHECK(std::move(builder).build().is_ok());
 }
 
+TEST_CASE("Rollback rebuilds every index derived from the type table") {
+  StorageBuilder builder;
+  const TypeIdx i32 = builder.primitive(TypeTag::I32);
+  const TypeIdx live_ref = builder.reference_type(i32, false);
+  const StorageBuilder::Checkpoint cp = builder.checkpoint();
+
+  // A duplicate node shares the live reference's payload: dropping the
+  // speculative nodes must not drop the entry that names `live_ref`.
+  builder.ref_type(live_ref);
+  const TypeIdx raw = builder.raw_pointer_type(i32, false);
+  const TypeIdx const_arg = builder.const_type(42);
+  const TypeIdx slice = builder.slice_type(i32);
+  builder.never_type();
+  CHECK(raw.is_valid());
+  CHECK(const_arg.is_valid());
+  CHECK(slice.is_valid());
+
+  builder.rollback(cp);
+  CHECK(builder.state().types.size() == cp.types);
+  CHECK(builder.reference_type(i32, false) == live_ref);
+
+  const TypeIdx raw_again = builder.raw_pointer_type(i32, false);
+  CHECK(raw_again.is_valid());
+  CHECK(builder.types()[raw_again].tag == TypeTag::RawPtr);
+  const TypeIdx const_again = builder.const_type(42);
+  CHECK(const_again.is_valid());
+  CHECK(builder.types()[const_again].tag == TypeTag::Const);
+  const TypeIdx never_again = builder.never_type();
+  CHECK(builder.types()[never_again].tag == TypeTag::Never);
+  CHECK(std::move(builder).build().is_ok());
+}
+
 TEST_CASE("A reference shape is interned once") {
   StorageBuilder builder;
   const TypeIdx i32 = builder.primitive(TypeTag::I32);

@@ -16,7 +16,8 @@ is the structural checker both build-time and test-time use.
   output becomes a structured error instead of corrupt IR.
 - `StorageBuilder::checkpoint()` / `rollback(cp)` -> a point a speculative
   emission can return to. Rollback drops every table entry added after the
-  checkpoint, including interned reference types and their intern entries.
+  checkpoint and rebuilds every index derived from the surviving type
+  table, so no intern entry or cache can name a removed type.
 - `verify_storage(storage)` -> `VerificationResult`. Pure structural check.
   `CompValue` and `CompStrByte` are refused in a resolved body: they carry
   compile-time values for a synthetic function that is rolled back before

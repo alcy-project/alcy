@@ -1095,21 +1095,64 @@ void StorageBuilder::index_interned() {
   raw_ptr_by_pointee_.clear();
   raw_mut_ptr_by_pointee_.clear();
   param_by_index_.clear();
+  slice_by_element_.clear();
+  tuple_by_key_.clear();
+  const_by_value_.clear();
+  never_ = TypeIdx::invalid();
+  error_ = TypeIdx::invalid();
+  state_.names_param_memo.clear();
   for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size(); ++idx) {
     const TypeNode& node = state_.types[idx];
-    if (node.tag == TypeTag::Param) {
-      param_by_index_.emplace(node.as_param().value, idx);
-      continue;
+    switch (node.tag) {
+      case TypeTag::Param:
+        param_by_index_.emplace(node.as_param().value, idx);
+        break;
+      case TypeTag::Ref:
+      case TypeTag::MutRef:
+      case TypeTag::RawPtr:
+      case TypeTag::RawMutPtr: {
+        std::unordered_map<u32, TypeIdx>* const interned =
+            pointer_table(node.tag);
+        const RefTypeIdx ridx = node.data.get<RefTypeIdx>();
+        if (ridx.idx < state_.ref_types.size()) {
+          interned->emplace(state_.ref_types[ridx].pointee.idx, idx);
+        }
+        break;
+      }
+      case TypeTag::Slice: {
+        const SliceTypeIdx sidx = node.data.get<SliceTypeIdx>();
+        if (sidx.idx < state_.slice_types.size()) {
+          slice_by_element_.emplace(state_.slice_types[sidx].element.idx, idx);
+        }
+        break;
+      }
+      case TypeTag::Tuple: {
+        const TupleTypeIdx tidx = node.data.get<TupleTypeIdx>();
+        if (tidx.idx < state_.tuple_types.size()) {
+          tuple_by_key_[elements_key(state_.tuple_types[tidx].elements)]
+              .push_back(idx);
+        }
+        break;
+      }
+      case TypeTag::Const: {
+        const ConstTypeIdx cidx = node.data.get<ConstTypeIdx>();
+        if (cidx.idx < state_.const_types.size()) {
+          const_by_value_.emplace(state_.const_types[cidx].value, idx);
+        }
+        break;
+      }
+      case TypeTag::Never:
+        if (!never_.is_valid()) {
+          never_ = idx;
+        }
+        break;
+      case TypeTag::Error:
+        if (!error_.is_valid()) {
+          error_ = idx;
+        }
+        break;
+      default: break;
     }
-    std::unordered_map<u32, TypeIdx>* interned = pointer_table(node.tag);
-    if (interned == nullptr) {
-      continue;
-    }
-    const RefTypeIdx ridx = node.data.get<RefTypeIdx>();
-    if (ridx.idx >= state_.ref_types.size()) {
-      continue;
-    }
-    interned->emplace(state_.ref_types[ridx].pointee.idx, idx);
   }
 }
 
