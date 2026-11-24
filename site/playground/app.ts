@@ -45,8 +45,8 @@ function onInput(): void {
   session.scheduleCodeSave();
 }
 
-// The kebab is a <details> whose actions sit in a sibling row, so the
-// browser does not close it when one of those actions is used.
+// The actions sit in a sibling row, so using one leaves the menu open;
+// an outside press or Escape closes it.
 function initActionsMenu(): void {
   const menu = document.querySelector<HTMLDetailsElement>(".actions-menu");
   if (menu === null) {
@@ -68,9 +68,6 @@ function initActionsMenu(): void {
       menu.querySelector("summary")?.focus();
     }
   });
-  for (const button of document.querySelectorAll(".toolbar-actions button")) {
-    button.addEventListener("click", close);
-  }
 }
 
 function init(): void {
