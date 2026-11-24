@@ -5,11 +5,9 @@
 
 """The compile-time evaluator's census over the acceptance corpus.
 
-Lowering hands its IR to the backends and to the second engine
-, and the corpus is where the two are asked to agree. Every
-case that compiles is written in the binary IR form and handed to the
-comp_census driver, which runs each function the engine can start and fails
-while the engine reports a compiler bug or a refusal it has not
+Every case that compiles is written in the binary IR form and handed
+to the comp_census driver, which runs each function the interpreter can
+start and fails while it reports a compiler bug or a refusal it has not
 declared. A case the front end rejects is the corpus's
 expected-rejection half and sits this check out, so a construct the
 lowering emits and the engine cannot carry is caught here by the corpus

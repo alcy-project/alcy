@@ -89,12 +89,6 @@ struct LoweredPackage {
   // body is not a source function either, and counts through the
   // storage's parametric list.
   usize prelude_functions = 0;
-  // Comp calls the IR engine also ran and matched (
-  // comparison before the switch). A construct outside the engine's
-  // subset is not counted.
-  usize comp_engine_compared = 0;
-  // Comp calls the IR engine answered instead of the AST engine.
-  usize comp_engine_answered = 0;
   // The package's public surface, for the summary a dependent reads
   //. Empty when the package has no public items.
   std::vector<ir::SummaryEntry> summary;

@@ -235,8 +235,6 @@ std::optional<lowering::LoweredPackage> cache_load(
                                   std::move(entry.instr_spans),
                                   std::move(addr_names),
                                   entry.prelude_functions,
-                                  0,
-                                  0,
                                   std::move(entry.summary),
                                   std::move(summary_fields),
                                   // A stored entry was checked before it

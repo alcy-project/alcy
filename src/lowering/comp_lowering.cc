@@ -206,26 +206,26 @@ bool Lowerer::Comp::bind_pattern(u32 mod,
 
 void Lowerer::Comp::report_failure() {
   switch (owner_.comp_.failure_kind()) {
-    case analyzer::CompEvaluator::Failure::Internal:
+    case analyzer::CompEval::Failure::Internal:
       owner_.internal(owner_.comp_.failure_span(), owner_.comp_.failure());
       return;
-    case analyzer::CompEvaluator::Failure::Overflow:
+    case analyzer::CompEval::Failure::Overflow:
       owner_.comp_overflow(owner_.comp_.failure_span());
       return;
-    case analyzer::CompEvaluator::Failure::DivZero:
+    case analyzer::CompEval::Failure::DivZero:
       owner_.comp_div_zero(owner_.comp_.failure_span());
       return;
-    case analyzer::CompEvaluator::Failure::OutOfBounds:
+    case analyzer::CompEval::Failure::OutOfBounds:
       owner_.comp_oob(owner_.comp_.failure_span());
       return;
-    case analyzer::CompEvaluator::Failure::Budget:
+    case analyzer::CompEval::Failure::Budget:
       owner_.comp_budget(owner_.comp_.failure_span());
       return;
-    case analyzer::CompEvaluator::Failure::ExpansionCap:
+    case analyzer::CompEval::Failure::ExpansionCap:
       owner_.comp_expansion_cap(owner_.comp_.failure_span());
       return;
-    case analyzer::CompEvaluator::Failure::Program:
-    case analyzer::CompEvaluator::Failure::None: break;
+    case analyzer::CompEval::Failure::Program:
+    case analyzer::CompEval::Failure::None: break;
   }
   owner_.comp_not_evaluable(owner_.comp_.failure_span(),
                             owner_.comp_.failure());

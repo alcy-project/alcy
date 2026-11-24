@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/comp_evaluator.h"
+#include "analyzer/comp_eval.h"
 #include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
@@ -27,7 +27,6 @@
 #include "base/hash.h"
 #include "base/name.h"
 #include "comp/comp_value.h"
-#include "comp/ir_interpreter.h"
 #include "debug/dcheck.h"
 #include "debug/dlog.h"
 #include "diag/bag.h"
@@ -140,11 +139,6 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
             ast,
             builder,
             width) {
-  // The checker's answers are compared too; then this pass records its
-  // own through the same recorder.
-  comp_calls_ = std::move(pkg.comp_calls);
-  comp_.set_call_recorder(this, &Lowerer::record_comp_call);
-  comp_.set_ir_runner(this, &Lowerer::run_comp_ir);
   mark_drops();
   index_origins();
   index_structs();
@@ -1739,61 +1733,6 @@ void Lowerer::fn_key(std::string& key,
   }
 }
 
-void Lowerer::record_comp_call(void* context,
-                               const analyzer::CompCallRecord& record) {
-  static_cast<Lowerer*>(context)->comp_calls_.push_back(record);
-}
-
-bool Lowerer::run_comp_ir(void* context,
-                          u32 def_module,
-                          ast::ItemIdx item,
-                          const std::vector<ir::TypeIdx>& params,
-                          ir::TypeIdx ret,
-                          u32 inst,
-                          std::span<const CompVal> comp_args,
-                          std::span<const CompVal> args,
-                          u64& quota,
-                          u32& depth,
-                          CompVal& out) {
-  return static_cast<Lowerer*>(context)->try_run_comp_ir(
-      def_module, item, params, ret, inst, comp_args, args, quota, depth, out);
-}
-
-bool Lowerer::try_run_comp_ir(u32 def_module,
-                              ast::ItemIdx item,
-                              const std::vector<ir::TypeIdx>& params,
-                              ir::TypeIdx ret,
-                              u32 inst,
-                              std::span<const CompVal> comp_args,
-                              std::span<const CompVal> args,
-                              u64& quota,
-                              u32& depth,
-                              CompVal& out) {
-  (void)def_module;
-  fn_key(fn_key_scratch_, item, params, ret, inst, comp_args);
-  const auto found = fn_by_key_.find(std::string_view(fn_key_scratch_));
-  if (found == fn_by_key_.end()) {
-    return false;
-  }
-  const ir::FunctionIdx target(found->second);
-  base::Result<comp::CompVal, comp::IrRunError> result =
-      comp::interpret_function(builder.state(), strings, width, target, args,
-                               quota, depth);
-  if (result.is_err()) {
-    const comp::IrRunError error = std::move(result).unwrap_err();
-    if (error.kind == comp::IrRunError::Kind::Internal) {
-      // The AST engine is about to answer instead, which would hide a
-      // disagreement the comparison pass cannot see for this call.
-      DLOG("comp engines: internal interpreter failure: {}", error.what);
-    }
-    return false;
-  }
-  out = std::move(result).unwrap();
-  out.type = ret;
-  ++comp_engine_answered_;
-  return true;
-}
-
 // The function table and its key index grow to the package's function
 // count, which the checked package already carries: sizing them once keeps
 // every append from re-homing the entries a block of functions added
@@ -3379,52 +3318,6 @@ base::Result<ir::VerifiedStorage, ir::VerificationError> Lowerer::finish(
 }
 namespace {
 
-// Structural equality for the two engines' values: the AST engine and
-// the interpreter have to agree field for field, not by a printed form.
-bool comp_values_match(const comp::CompValue& a, const comp::CompValue& b) {
-  if (a.tag != b.tag) {
-    return false;
-  }
-  switch (a.tag) {
-    case comp::CompValue::Tag::Void: return true;
-    case comp::CompValue::Tag::Int: return a.int_value == b.int_value;
-    case comp::CompValue::Tag::Bool: return a.bool_value == b.bool_value;
-    case comp::CompValue::Tag::Str: return a.str_value == b.str_value;
-    case comp::CompValue::Tag::Tuple:
-    case comp::CompValue::Tag::Array:
-    case comp::CompValue::Tag::Struct: break;
-    case comp::CompValue::Tag::Variadic:
-      if (a.slot_types.size() != b.slot_types.size()) {
-        return false;
-      }
-      for (usize i = 0; i < a.slot_types.size(); ++i) {
-        if (a.slot_types[i].idx != b.slot_types[i].idx) {
-          return false;
-        }
-      }
-      break;
-    case comp::CompValue::Tag::RuntimeSlot: return a.int_value == b.int_value;
-    case comp::CompValue::Tag::Enum:
-      if (a.variant != b.variant) {
-        return false;
-      }
-      break;
-  }
-  if (a.fields.size() != b.fields.size()) {
-    return false;
-  }
-  for (usize i = 0; i < a.fields.size(); ++i) {
-    if (!comp_values_match(a.fields[i], b.fields[i])) {
-      return false;
-    }
-  }
-  return true;
-}
-
-}  // namespace
-
-namespace {
-
 // Whether a module belongs to the package being built rather than to
 // something staged beside it: the staged std members sit at the tail of
 // the module list, and a path dependency's modules carry its root.
@@ -3884,29 +3777,6 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
   std::vector<u8> not_movable = std::move(lowerer.pkg.not_movable);
   const usize prelude_functions = lowerer.prelude_functions_;
   std::vector<u8> needs_drop = std::move(lowerer.pkg.needs_drop);
-  const usize comp_engine_answered = lowerer.comp_engine_answered_;
-  // Resolve each recorded comp call to the function lowering reserved
-  // for it while the reservation table is still here.
-  struct CompRun {
-    ir::FunctionIdx function;
-    std::string name;
-    std::vector<comp::CompVal> args;
-    comp::CompVal result;
-  };
-  std::vector<CompRun> comp_runs;
-  comp_runs.reserve(lowerer.comp_calls_.size());
-  for (const analyzer::CompCallRecord& record : lowerer.comp_calls_) {
-    Lowerer::fn_key(lowerer.fn_key_scratch_, record.item, record.params,
-                    record.ret, record.inst, record.comp_args);
-    const auto found =
-        lowerer.fn_by_key_.find(std::string_view(lowerer.fn_key_scratch_));
-    if (found == lowerer.fn_by_key_.end()) {
-      continue;
-    }
-    const Lowerer::FnEntry& entry = lowerer.fns[found->second];
-    comp_runs.push_back(
-        CompRun{entry.idx, entry.name, record.args, record.result});
-  }
   base::Result<ir::VerifiedStorage, ir::VerificationError> built =
       std::move(lowerer).finish(recovered_types_out);
   if (built.is_err()) {
@@ -3923,52 +3793,11 @@ base::Result<LoweredPackage, diag::Reported> lower_package(
     return base::make_err(diag::Reported{});
   }
   ir::VerifiedStorage storage = std::move(built).unwrap();
-  LoweredPackage lowered{std::move(storage),
-                         std::move(spans),
-                         std::move(addrs),
-                         prelude_functions,
-                         0,
-                         0,
-                         std::move(summary),
-                         std::move(summary_fields),
-                         std::move(type_origins),
-                         std::move(not_movable),
+  LoweredPackage lowered{std::move(storage),      std::move(spans),
+                         std::move(addrs),        prelude_functions,
+                         std::move(summary),      std::move(summary_fields),
+                         std::move(type_origins), std::move(not_movable),
                          std::move(needs_drop)};
-  // : the IR engine is compared against the AST engine over
-  // every comp call lowering made, before it is trusted to answer. A
-  // disagreement is a compiler bug; a construct the interpreter does
-  // not carry yet is simply not compared.
-  usize compared = 0;
-  for (const CompRun& run : comp_runs) {
-    u64 quota = comp::COMP_BRANCH_QUOTA;
-    u32 depth = 0;
-    base::Result<comp::CompVal, comp::IrRunError> interpreted =
-        comp::interpret_function(*lowered.storage, strings, width, run.function,
-                                 run.args, quota, depth);
-    if (interpreted.is_err()) {
-      const comp::IrRunError error = std::move(interpreted).unwrap_err();
-      if (error.kind != comp::IrRunError::Kind::Internal) {
-        continue;
-      }
-      DLOG("comp engines: internal interpreter failure on '{}': {}", run.name,
-           error.what);
-    } else {
-      const comp::CompVal value = std::move(interpreted).unwrap();
-      if (value.type.idx == run.result.type.idx &&
-          comp_values_match(value.value, run.result.value)) {
-        ++compared;
-        continue;
-      }
-    }
-    const u32 index = bag.emit<i18n::Key::LowerCompEngineMismatch>(
-        DiagCode::Internal, diag::Span{}, run.name);
-    (void)index;
-    keep_types(std::move(lowered.storage).unwrap().take_state());
-    give_back();
-    return base::make_err(diag::Reported{});
-  }
-  lowered.comp_engine_compared = compared;
-  lowered.comp_engine_answered = comp_engine_answered;
   give_back();
   return base::make_ok(std::move(lowered));
 }

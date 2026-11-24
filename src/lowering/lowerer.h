@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/comp_evaluator.h"
+#include "analyzer/comp_eval.h"
 #include "analyzer/fmt.h"
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
@@ -182,9 +182,8 @@ class Lowerer {
   std::vector<usize> worklist_;
   // Per-function comp bindings (comp parameters); cleared per body.
   std::vector<std::pair<std::string_view, CompVal>> comp_scope_;
-  // The AST engine of compile-time evaluation; the entry points below
-  // delegate to it.
-  analyzer::CompEvaluator comp_;
+  // The compile-time evaluator; the entry points below delegate to it.
+  analyzer::CompEval comp_;
   // Lowered concrete prelude functions, excluded from reported
   // counts.
   usize prelude_functions_ = 0;
@@ -713,10 +712,9 @@ class Lowerer {
                           std::string& key);
   // The identity of one specialization: the declaration, the
   // instantiation, the signature, and the comp argument values. Used
-  // where a function is reserved and where the differential pass looks
-  // one up. It is written into `key` so that a caller can hand in
-  // storage it reuses: every call site builds one of these.
-  // Creates the row a reservation names, so every function's index is
+  // where a function is reserved and looked up. It is written into `key` so
+  // that a caller can hand in storage it reuses: every call site builds one of
+  // these. Creates the row a reservation names, so every function's index is
   // decided when it is reserved: a clone or a synthesized body created
   // in between can no longer take the index a later publish expects.
   void reserve_function_row(const FnEntry& entry,
@@ -1370,7 +1368,7 @@ class Lowerer {
   Val lower_while(ast::ExprIdx expr);
   Val lower_question(ast::ExprIdx expr);
 
-  // Compile-time evaluation: the AST engine lives in the analyzer, and
+  // Compile-time evaluation: the evaluator lives in the analyzer, and
   // the lowerer keeps the entry points, the persistent comp bindings
   // the evaluator reads through, and the reporting back into its own
   // diagnostic stage.
@@ -1705,36 +1703,6 @@ class Lowerer {
   std::unordered_map<u32, u32> display_fn_by_type_;
   // The synthesized drop walks, by the type they end.
   std::unordered_map<u32, u32> drop_fn_by_type_;
-  // Every `comp fn` call the AST engine answered, so the IR
-  // engine can be asked the same question once lowering is complete.
-  std::vector<analyzer::CompCallRecord> comp_calls_;
-  static void record_comp_call(void* context,
-                               const analyzer::CompCallRecord& record);
-  // The IR engine, offered before the AST one for a `comp fn` whose
-  // body this pass already materialized.
-  static bool run_comp_ir(void* context,
-                          u32 def_module,
-                          ast::ItemIdx item,
-                          const std::vector<ir::TypeIdx>& params,
-                          ir::TypeIdx ret,
-                          u32 inst,
-                          std::span<const CompVal> comp_args,
-                          std::span<const CompVal> args,
-                          u64& quota,
-                          u32& depth,
-                          CompVal& out);
-  bool try_run_comp_ir(u32 def_module,
-                       ast::ItemIdx item,
-                       const std::vector<ir::TypeIdx>& params,
-                       ir::TypeIdx ret,
-                       u32 inst,
-                       std::span<const CompVal> comp_args,
-                       std::span<const CompVal> args,
-                       u64& quota,
-                       u32& depth,
-                       CompVal& out);
-  // Comp calls the IR engine answered instead of the AST engine.
-  usize comp_engine_answered_ = 0;
   // Interns the recorded names and writes their handles into the
   // entries; false means the shared table is exhausted.
   bool resolve_names();
