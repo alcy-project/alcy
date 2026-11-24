@@ -13,6 +13,7 @@
 
 #include "cli/duration.h"
 #include "cli/logger.h"
+#include "cli/trace.h"
 #include "cli/trace_report.h"
 #include "debug/dcheck.h"
 #include "diag/bag.h"
@@ -187,6 +188,24 @@ void append_trace_json(std::string& out, const Envelope& envelope) {
     append_json_number(out, event.location.line);
     out += '}';
     out += '}';
+  }
+  // The resident set sampled on a cadence while the command ran, as
+  // counter events the trace viewers draw over the phases. The value is
+  // bytes, the unit the envelope's peak already speaks.
+  for (const MemorySample& sample : envelope.trace.memory_samples) {
+    if (!first) {
+      out += ',';
+    }
+    first = false;
+    out += R"({"name":"vm_rss","ph":"C","pid":)";
+    append_json_number(out, pid);
+    out += R"(,"tid":)";
+    append_json_number(out, main_tid);
+    out += R"(,"ts":)";
+    append_json_number(out, static_cast<f64>(sample.time_ns) / 1000.0);
+    out += R"(,"args":{"rss":)";
+    append_json_number(out, static_cast<f64>(sample.bytes) / 1024.0);
+    out += "}}";
   }
   out += ']';
 }

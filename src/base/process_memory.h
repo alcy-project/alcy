@@ -15,4 +15,10 @@ namespace base {
 // measured" rather than as zero bytes.
 u64 peak_memory_bytes();
 
+// Resident set size of this process right now, in bytes. The sampling
+// companion to the high-water mark: a caller that asks on a cadence
+// draws the memory a run held over time, which the peak alone cannot
+// attribute. Zero when the platform offers no way to ask (wasm).
+u64 current_memory_bytes();
+
 }  // namespace base

@@ -654,6 +654,12 @@ what to name.
   constructed, and the macro evaluates its argument before that, so a name
   built with `fmt::format` pays even when no profiler is attached. Pass what
   the work already holds.
+- **The resident set rides the trace as counters.** The session samples
+  `/proc`'s resident count every two milliseconds while the command runs
+  and records each reading as a `vm_rss` counter event, so a viewer draws
+  the memory a run held over the phases it spent it in. The peak the
+  result line prints is the high-water mark the kernel kept; the counters
+  are what attribute it.
 - **A region spread over threads passes no profiler.** Recording takes a mutex
   per event, so the workers would contend and interleave; they pass null and
   the region keeps one scope on the calling thread. Per-thread recording is
