@@ -479,9 +479,21 @@ that happens to read them.
 
 4. **Lowering** - `lowering` turns the checked package into IR, consuming
    the type information above. Typed high-level desugars (`?`,
-   `match` lowering, loop lowering) run here. A separate HIR is revisited
-   only if match-lowering complexity, optimization passes, or region
-   precision demand it.
+   `match` lowering, loop lowering) run here. Constant evaluation runs
+   on one IR through the interpreter: `const_ir_eval.cc` emits a
+   synthetic function against the shared `StorageState`, carrying
+   compile-time values in a side table via `CompValue` and
+   `tag_register`, and `comp_eval.cc` drives it from both the checker
+   and the lowering. Every comp site uses this path - const
+   initializers, comp bodies, comp blocks and for/if, constant
+   splices, method calls with `&mut` receiver write-back, and expansion
+   bodies. `CompStrByte` reads a compile-time string at a runtime
+   index inside the interpreter. The AST comp evaluator and the
+   differential engine pair are gone; published IR is low only. The
+   multi-level direction is realized as phase-specific semantic values
+   on one opcode set rather than a separate high-level body list, so
+   no re-interning from AST is needed and `take_state` stays the only
+   handoff.
 
 5. **Ownership analysis** - `borrow` tracks `Move`/`Drop` instructions
    across the control-flow graph to enforce single-ownership guarantees.

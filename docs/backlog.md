@@ -47,17 +47,29 @@ replaced. The foundations are in `roadmap.md`.
   record retire, and a call the parameter's type decides records a
   dispatch the specialization resolves.
 
-- [ ] The IR resolves its semantic operations in place, step by step
-  (the multi-level direction, MLIR-like without rebuilds): a construct
-  whose meaning needs more than its types waits for the pass that
-  knows them - dispatch and drops for the specialization pass - and
-  later passes patch what they resolve instead of rebuilding the IR.
-  Enum projections and a copy's alignment already resolve at emission;
-  that is the boundary's first shape. The decision that opened it was
-  written informally. Generalize it, and decide whether
-  the borrow pass moves to the semantic side and whether fine-grained
-  in-place patching needs more than `take_state` + `StorageBuilder`,
-  when the profile asks.
+- [x] Constant evaluation runs on one IR through the interpreter
+  (the multi-level direction, without re-interning from AST). A
+  construct whose meaning depends on later types is carried as a
+  semantic value in the IR side table and resolved by the phase that
+  knows them, not by re-running the frontend. Enum projections and a
+  copy's alignment resolve at emission; that is the boundary's first
+  shape.
+
+  The shipped design keeps one `StorageState` and one `Opcode` set.
+  Semantic values live in a side table read through `CompValue` and
+  `tag_register`; "rebuild" means re-interning from AST, never the
+  index-preserving `take_state` handoff. The checker seeds the
+  interpreter from its in-progress tables and the lowering reuses the
+  same evaluator from the finished package, so every comp site sees
+  one implementation: const initializers, comp bodies, comp blocks and
+  for/if, const splices, method calls and `&mut` receiver write-back,
+  and expansion bodies. The AST evaluator and the differential engine
+  pair are gone (`comp_eval.cc/.h` is the sole driver). `CompStrByte`
+  lets a runtime index read a compile-time string during evaluation.
+  `const_ir_eval.cc` emits the synthetic function, `comp_eval.cc` owns
+  the shared state and diagnostics, and published IR stays low only.
+  borrow stays on the low level: region lifetimes are flow-sensitive
+  and fit SSA/CFG. All gates green; const behavior unchanged.
 
 - [ ] `core::string`'s `trim_start_matches` once reported `Returns
   reference to local 's'` for the `None` arm's `ret s` - the loop
