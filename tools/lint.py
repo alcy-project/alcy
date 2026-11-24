@@ -64,7 +64,7 @@ def git_staged_files() -> list[str] | None:
     return paths
 
 
-def default_changed_base() -> str:
+def branch_changed_base() -> str:
     """The closest commit HEAD forked from, or HEAD when there is none.
 
     Candidates are every spelling of the integration branch; the one whose
@@ -90,6 +90,29 @@ def default_changed_base() -> str:
         if best_count is None or since < best_count:
             best, best_count = base, since
     return best
+
+
+def default_changed_base() -> str:
+    """The last commit on this branch, or HEAD when there is none.
+
+    A staged-file hook lints each commit before it lands, so linting the
+    whole branch on every local edit checks work that was already checked
+    and makes a long-lived branch slower the longer it grows. The last
+    commit plus the working tree is the local answer; `--changed=main`
+    asks for the whole branch when that is what is wanted.
+
+    A branch with no commits of its own must not use HEAD^: that would
+    diff against the integration branch's own previous commit and
+    report work nobody on this worktree did.
+    """
+    base = branch_changed_base()
+    if base == "HEAD":
+        return "HEAD"
+    count = git_output(["rev-list", "--count", f"{base}..HEAD"])
+    if count.returncode != 0 or int(count.stdout.strip() or "0") == 0:
+        return "HEAD"
+    parent = git_output(["rev-parse", "--verify", "--quiet", "HEAD^"])
+    return "HEAD^" if parent.returncode == 0 else "HEAD"
 
 
 def git_changed_files(rev: str) -> list[str] | None:
@@ -267,14 +290,20 @@ def lint_files(
             print(f"lint: no {selection} source files")
             return 0
     elif changed is not None:
+        base = changed or default_changed_base()
         paths = git_changed_files(changed)
         if paths is None:
             return -1
         changed_set = set(paths)
+        sources = [p for p in paths if Path(p).suffix in source_extensions]
+        # Name the base and the size of the answer before the build starts:
+        # a lint that takes minutes should say why, and a reader can see
+        # at once which revision to name for a faster or wider check.
+        print(f"lint: changed since {base} ({len(sources)} source files)")
         # A change to a manifest or a document has nothing this check
         # reads; running gn gen and a whole-tree format for it is the
         # cost the flag exists to avoid.
-        if not any(Path(p).suffix in source_extensions for p in changed_set):
+        if not sources:
             print(f"lint: no {selection} source files")
             return 0
 
@@ -430,9 +459,12 @@ def main():
         const="",
         default=None,
         metavar="REV",
-        help="Lint only files changed since REV, or since the merge base "
-        "with main when REV is omitted. Local iteration; CI runs the full "
-        "tree",
+        help="Lint only files changed since REV. With no REV: the last "
+        "commit on this branch plus the working tree, or the working tree "
+        "alone when the branch has no commits of its own; each commit is "
+        "already linted by the staged hook. Use '--changed=main' for the "
+        "whole branch, or '--changed=HEAD' for uncommitted edits only. "
+        "CI runs the full tree",
     )
     selection.add_argument(
         "--staged",
