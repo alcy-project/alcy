@@ -346,6 +346,59 @@ TEST_CASE("Suite manifest parses the std suite") {
   }
 }
 
+TEST_CASE("A suite's default run list is a subset of its packages") {
+  constexpr std::string_view base =
+      "[suite]\nname = \"tools\"\nlicense = \"\"\n"
+      "packages = [\"cli\", \"lib\"]\n";
+
+  Fixture with_run;
+  const std::string declared = std::string(base) + "default_run = [\"cli\"]\n";
+  base::Result<SuiteManifest, diag::Reported> parsed =
+      parse_suite_manifest(declared, "alcy.toml", source::UNKNOWN_FILE,
+                           with_run.bag, with_run.arena);
+  CHECK(parsed.is_ok());
+  if (parsed.is_ok()) {
+    const SuiteManifest manifest = std::move(parsed).unwrap();
+    CHECK(manifest.has_default_run);
+    CHECK(manifest.default_run_count == 1);
+    CHECK(manifest.default_run[0] == "cli");
+    CHECK(verify_suite_manifest(manifest).is_ok());
+  }
+
+  Fixture empty;
+  const std::string empty_list = std::string(base) + "default_run = []\n";
+  base::Result<SuiteManifest, diag::Reported> empty_parsed =
+      parse_suite_manifest(empty_list, "alcy.toml", source::UNKNOWN_FILE,
+                           empty.bag, empty.arena);
+  CHECK(empty_parsed.is_ok());
+  if (empty_parsed.is_ok()) {
+    const SuiteManifest manifest = std::move(empty_parsed).unwrap();
+    CHECK(manifest.has_default_run);
+    CHECK(manifest.default_run_count == 0);
+    CHECK(verify_suite_manifest(manifest).is_ok());
+  }
+
+  Fixture absent;
+  base::Result<SuiteManifest, diag::Reported> absent_parsed =
+      parse_suite_manifest(base, "alcy.toml", source::UNKNOWN_FILE, absent.bag,
+                           absent.arena);
+  CHECK(absent_parsed.is_ok());
+  if (absent_parsed.is_ok()) {
+    CHECK(!std::move(absent_parsed).unwrap().has_default_run);
+  }
+
+  Fixture alien;
+  const std::string not_a_member =
+      std::string(base) + "default_run = [\"missing\"]\n";
+  base::Result<SuiteManifest, diag::Reported> alien_parsed =
+      parse_suite_manifest(not_a_member, "alcy.toml", source::UNKNOWN_FILE,
+                           alien.bag, alien.arena);
+  CHECK(alien_parsed.is_ok());
+  if (alien_parsed.is_ok()) {
+    CHECK(verify_suite_manifest(std::move(alien_parsed).unwrap()).is_err());
+  }
+}
+
 TEST_CASE("Suite manifest rejects the wrong kind and bad shapes") {
   Fixture f;
   constexpr std::string_view package_manifest =

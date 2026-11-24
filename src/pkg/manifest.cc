@@ -635,6 +635,30 @@ base::Result<void, SuiteError> verify_suite_manifest(
       }
     }
   }
+  if (manifest.default_run_count > 0 && manifest.default_run == nullptr) {
+    return base::make_err(SuiteError::NullDefaultRunArray);
+  }
+  for (u32 i = 0; i < manifest.default_run_count; ++i) {
+    const std::string_view member = manifest.default_run[i];
+    if (member.empty()) {
+      return base::make_err(SuiteError::EmptyDefaultRunEntry);
+    }
+    for (u32 j = 0; j < i; ++j) {
+      if (manifest.default_run[j] == member) {
+        return base::make_err(SuiteError::DuplicateDefaultRunEntry);
+      }
+    }
+    bool listed = false;
+    for (u32 j = 0; j < manifest.package_count; ++j) {
+      if (manifest.packages[j] == member) {
+        listed = true;
+        break;
+      }
+    }
+    if (!listed) {
+      return base::make_err(SuiteError::DefaultRunNotAMember);
+    }
+  }
   return base::make_ok();
 }
 
@@ -658,6 +682,18 @@ void report_suite_error(SuiteError error,
       break;
     case SuiteError::DuplicatePackageName:
       detail = "duplicate [suite] package name";
+      break;
+    case SuiteError::NullDefaultRunArray:
+      detail = "default_run count without an array";
+      break;
+    case SuiteError::EmptyDefaultRunEntry:
+      detail = "[suite] default_run with an empty entry";
+      break;
+    case SuiteError::DuplicateDefaultRunEntry:
+      detail = "duplicate [suite] default_run entry";
+      break;
+    case SuiteError::DefaultRunNotAMember:
+      detail = "[suite] default_run entry not listed in packages";
       break;
   }
   const u32 index = bag.emit<i18n::Key::PkgManifestInvalid>(
@@ -1217,6 +1253,41 @@ base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
     packages[filled++] = copy_str(arena, *entry);
   }
 
+  const auto default_run_it = suite_table->find("default_run");
+  const std::string_view* default_run = nullptr;
+  u32 default_run_count = 0;
+  bool has_default_run = default_run_it != suite_table->end();
+  if (has_default_run) {
+    if (!default_run_it->second.is_array()) {
+      return suite_semantic_error(bag, filename,
+                                  "[suite] default_run must be an array");
+    }
+    const toml::array* const run_array = default_run_it->second.as_array();
+    default_run_count = static_cast<u32>(run_array->size());
+    std::string_view* const run_entries =
+        default_run_count > 0
+            ? static_cast<std::string_view*>(
+                  arena.alloc(sizeof(std::string_view) * default_run_count,
+                              alignof(std::string_view)))
+            : nullptr;
+    u32 run_filled = 0;
+    for (const toml::node& node : *run_array) {
+      const auto entry = node.value<std::string_view>();
+      if (!entry.has_value() || entry->empty()) {
+        return suite_semantic_error(
+            bag, filename, "[suite] default_run entries must be strings");
+      }
+      for (u32 i = 0; i < run_filled; ++i) {
+        if (run_entries[i] == *entry) {
+          return suite_semantic_error(bag, filename,
+                                      "duplicate [suite] default_run entry");
+        }
+      }
+      run_entries[run_filled++] = copy_str(arena, *entry);
+    }
+    default_run = run_entries;
+  }
+
   return base::make_ok(SuiteManifest{
       .owner = owner.text,
       .name = copy_str(arena, *name),
@@ -1225,6 +1296,9 @@ base::Result<SuiteManifest, diag::Reported> parse_suite_manifest(
       .license = license.text,
       .packages = packages,
       .package_count = filled,
+      .default_run = default_run,
+      .default_run_count = default_run_count,
+      .has_default_run = has_default_run,
   });
 }
 

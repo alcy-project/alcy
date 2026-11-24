@@ -159,6 +159,12 @@ struct SuiteManifest {
   // Arena-owned array of suite-relative member paths, possibly empty.
   const std::string_view* packages = nullptr;
   u32 package_count = 0;
+  // The members `run` executes when given the suite. Absent means the
+  // suite never opted in; present but empty means it opted into none.
+  // Both are an error for `run`, which will not guess at a program list.
+  const std::string_view* default_run = nullptr;
+  u32 default_run_count = 0;
+  bool has_default_run = false;
 };
 
 // Structural failure of a manifest assembled outside parse_manifest.
@@ -244,6 +250,10 @@ enum class SuiteError : u8 {
   BadPackageEntry,
   DuplicatePackageEntry,
   DuplicatePackageName,
+  NullDefaultRunArray,
+  EmptyDefaultRunEntry,
+  DuplicateDefaultRunEntry,
+  DefaultRunNotAMember,
 };
 
 // Pure structural verifier for suite manifests. Its own output satisfies

@@ -152,6 +152,58 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
                                      std::string(manifest_path.as_view())});
 }
 
+base::Result<TargetSet, diag::Reported> resolve_targets(PipelineContext& ctx,
+                                                        std::string_view raw,
+                                                        bool file_hint) {
+  base::Result<ManifestProbe, diag::Reported> probe =
+      require_package_manifest(ctx, raw, file_hint);
+  if (probe.is_err()) {
+    return base::make_err(std::move(probe).unwrap_err());
+  }
+  ManifestProbe found = std::move(probe).unwrap();
+  TargetSet targets;
+  const std::optional<std::string_view> bytes =
+      ctx.sources.bytes(found.manifest);
+  const bool is_suite = bytes.has_value() && pkg::probe_manifest_kind(*bytes) ==
+                                                 pkg::ManifestKind::Suite;
+  if (!is_suite) {
+    targets.members.push_back(std::move(found));
+    return base::make_ok(std::move(targets));
+  }
+
+  base::Result<pkg::SuiteManifest, diag::Reported> parsed =
+      pkg::parse_suite_manifest(*bytes, found.manifest_name, found.manifest,
+                                ctx.bag, ctx.arena);
+  if (parsed.is_err()) {
+    return base::make_err(std::move(parsed).unwrap_err());
+  }
+  targets.is_suite = true;
+  targets.suite = std::move(parsed).unwrap();
+  base::Result<void, pkg::SuiteError> verified =
+      pkg::verify_suite_manifest(targets.suite);
+  if (verified.is_err()) {
+    pkg::report_suite_error(std::move(verified).unwrap_err(),
+                            found.manifest_name, ctx.bag);
+    return base::make_err(diag::Reported{});
+  }
+  if (targets.suite.package_count == 0) {
+    const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteEmpty>(
+        DiagCode::NoTargets, found.manifest_name);
+    (void)index;
+    return base::make_err(diag::Reported{});
+  }
+  for (u32 i = 0; i < targets.suite.package_count; ++i) {
+    base::Result<ManifestProbe, diag::Reported> member =
+        require_package_manifest(
+            ctx, found.root.join(targets.suite.packages[i]).as_view(), false);
+    if (member.is_err()) {
+      return base::make_err(std::move(member).unwrap_err());
+    }
+    targets.members.push_back(std::move(member).unwrap());
+  }
+  return base::make_ok(std::move(targets));
+}
+
 namespace {
 
 bool suite_file_exists(std::string_view path) {

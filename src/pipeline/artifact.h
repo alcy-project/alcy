@@ -116,6 +116,21 @@ base::Result<ManifestProbe, diag::Reported> require_package_manifest(
     std::string_view raw,
     bool file_hint);
 
+// The packages a command applies to: one when the path names a package,
+// every listed member when it names a suite. Kept in one place so a
+// command cannot disagree with another about what a suite argument means.
+struct TargetSet {
+  bool is_suite = false;
+  pkg::SuiteManifest suite;
+  std::vector<ManifestProbe> members;
+};
+
+// Resolves `raw` into a target set. A suite is parsed, verified, and
+// checked for members here, so commands only have to loop over `members`.
+base::Result<TargetSet, diag::Reported> resolve_targets(PipelineContext& ctx,
+                                                        std::string_view raw,
+                                                        bool file_hint);
+
 // Which declared artifacts resolution returns. A run wants the binary
 // alone: a library it will not execute is not its business, so one
 // the module selection leaves out must not refuse the run.
