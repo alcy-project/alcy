@@ -180,10 +180,14 @@ std::string block_html(
   return std::string();
 }
 
-std::string chapter_list(const DocPage& page, const PageOptions& options) {
+std::string chapter_list(const DocPage& page,
+                         const PageOptions& options,
+                         std::string_view label_override = "") {
   const Catalog& catalog = *options.catalog;
   const std::string label =
-      translate(catalog, options.language, options.tree->label_key);
+      label_override.empty()
+          ? translate(catalog, options.language, options.tree->label_key)
+          : std::string(label_override);
   std::string out = "<nav class=\"guide-nav\" aria-label=\"" + label + "\">\n";
   out += "      <h2>" + label + "</h2>\n      <ol>\n";
   for (const DocPage& other : *options.pages) {
@@ -367,7 +371,8 @@ std::string site_header(const Catalog& catalog,
                         std::string_view route,
                         std::string_view language,
                         std::string_view tree_path,
-                        std::string_view current_segment) {
+                        std::string_view current_segment,
+                        std::string_view drawer_markup) {
   const std::string home = tree_home(catalog, route, language);
   const auto t = [&catalog, language](std::string_view key) {
     return translate(catalog, language, key);
@@ -405,10 +410,21 @@ std::string site_header(const Catalog& catalog,
                                                 .language = language,
                                                 .languages = languages,
                                                 .nav_markup = nav});
+  std::string drawer;
+  if (!drawer_markup.empty()) {
+    const std::string label = t("guide.contents");
+    drawer = "<details class=\"guide-drawer\">\n";
+    drawer += "      <summary class=\"guide-drawer-trigger\" aria-label=\"" +
+              escape_attribute(label) + "\">" + label + "</summary>\n";
+    drawer += "      <div class=\"guide-drawer-panel\">\n      " +
+              std::string(drawer_markup) + "\n      </div>\n";
+    drawer += "    </details>\n";
+  }
   out += "<header class=\"site-header\">\n";
   out += "      <a class=\"site-brand\" href=\"" + home + "\">alcy</a>\n";
   out += "      <nav class=\"site-nav\" aria-label=\"" + t("site.nav") +
-         "\">\n" + nav + "      </nav>\n      " + settings + "\n    </header>";
+         "\">\n" + nav + "      </nav>\n      " + drawer + settings +
+         "\n    </header>";
   return out;
 }
 std::string render_guide_page(const DocPage& page, const PageOptions& options) {
@@ -494,18 +510,22 @@ std::string render_guide_page(const DocPage& page, const PageOptions& options) {
   out += "  <body class=\"site\">\n";
   out += "    <a class=\"skip-link\" href=\"#content\">" + t("site.skip") +
          "</a>\n";
+  const std::string chapters = chapter_list(page, options);
+  const std::string outline_html = outline(sections, options);
+  std::string contents = chapters;
+  std::string drawer_contents = chapter_list(
+      page, options, t("guide.contents") + ": " + t(options.tree->label_key));
+  if (!outline_html.empty()) {
+    contents += "\n        " + outline_html;
+    drawer_contents += "\n        " + outline_html;
+  }
   out += "    " +
          site_header(catalog, page.route, options.language, page.path,
-                     options.tree->segment) +
+                     options.tree->segment, drawer_contents) +
          "\n\n";
   out += "    <div class=\"guide-layout\">\n";
-  out += "      <div class=\"guide-aside\">\n";
-  out += "        " + chapter_list(page, options) + "\n";
-  const std::string outline_html = outline(sections, options);
-  if (!outline_html.empty()) {
-    out += "        " + outline_html + "\n";
-  }
-  out += "      </div>\n\n";
+  out += "      <div class=\"guide-aside\">\n        " + contents +
+         "\n      </div>\n\n";
   out +=
       "      <main class=\"guide-article\" id=\"content\" tabindex=\"-1\" "
       "lang=\"" +

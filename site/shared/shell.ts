@@ -14,10 +14,33 @@ registerAssetWorker();
 initSearch();
 enableLinkPrefetch();
 
-// The page outline reads open beside the article on a wide screen,
-// where its sticky column has the room; a narrow one keeps it one tap
-// above the reading, closed.
-const outline = document.querySelector<HTMLDetailsElement>(".guide-outline");
+// The wide-screen aside reads open beside the article; the narrow-screen
+// drawer keeps its outline closed until the reader asks for it.
+const outline = document.querySelector<HTMLDetailsElement>(
+  ".guide-aside .guide-outline",
+);
 if (outline !== null && window.matchMedia("(min-width: 761px)").matches) {
   outline.open = true;
+}
+
+// The drawer's toggle is a native details summary. Following one of its
+// links, Escape, or a click outside all close it again.
+const drawer = document.querySelector<HTMLDetailsElement>(".guide-drawer");
+if (drawer !== null) {
+  drawer.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("a") !== null) {
+      drawer.open = false;
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && drawer.open) {
+      drawer.open = false;
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (drawer.open && event.target instanceof Node &&
+        !drawer.contains(event.target)) {
+      drawer.open = false;
+    }
+  });
 }

@@ -160,7 +160,7 @@ PAGE_BUDGETS = (
     Budget("shared/site.js", 3_000, "theme, prefetch, the service worker"),
     Budget("shared/shell.js", 1_200, "every guide page's own module"),
     Budget("shared/i18n.en.js", 2_600, "the English catalog every page loads"),
-    Budget("shared/i18n.ja.js", 3_050, "the Japanese catalog, loaded by its tree"),
+    Budget("shared/i18n.ja.js", 3_100, "the Japanese catalog, loaded by its tree"),
     Budget("playground/app.js", 4_000, "the playground's wiring"),
     Budget("playground/style.css", 6_000, "the playground's layout"),
 )

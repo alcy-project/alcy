@@ -97,11 +97,14 @@ std::string render_not_found(
     const std::function<std::string(std::string_view)>& highlight);
 
 // One header for every page, stamped with the same markup.
-std::string site_header(const Catalog& catalog,
-                        std::string_view route,
-                        std::string_view language,
-                        std::string_view tree_path,
-                        std::string_view current_segment);
+std::string site_header(
+    const Catalog& catalog,
+    std::string_view route,
+    std::string_view language,
+    std::string_view tree_path,
+    std::string_view current_segment,
+    // Guide articles repeat their contents in a narrow-screen drawer.
+    std::string_view drawer_markup = "");
 
 std::string footer(const Stamp& stamp);
 

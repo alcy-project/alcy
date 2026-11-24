@@ -515,6 +515,11 @@ body.site {
   font-size: 13px;
 }
 
+/* The narrow-screen copy of the same contents sits in the header. */
+.guide-drawer {
+  display: none;
+}
+
 /* "On this page", closed until the reader (or a wide screen's script)
    opens it. */
 .guide-outline {
@@ -758,38 +763,58 @@ body.site {
     padding-top: 20px;
   }
 
+  /* The contents leave the top of the article for a drawer opened from
+     the header, so the reading starts at the title instead. */
   .guide-aside {
-    position: static;
+    display: none;
   }
 
-  /* The chapter list becomes one wrapping row above the article
-     rather than a stack that pushes the reading down; the outline
-     follows it, closed. */
-  .guide-nav {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 2px 18px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid var(--line);
+  .guide-drawer {
+    display: block;
   }
 
-  .guide-nav h2 {
-    margin: 0;
+  .guide-drawer-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    padding: 0 8px;
+    color: var(--fg-soft);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    font-size: 12px;
+    list-style: none;
+    cursor: pointer;
   }
 
-  .guide-nav ol {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 2px 18px;
+  .guide-drawer-trigger::-webkit-details-marker {
+    display: none;
   }
 
-  .guide-nav li {
-    min-width: 0;
+  .guide-drawer-trigger:hover,
+  .guide-drawer[open] > .guide-drawer-trigger {
+    color: var(--fg);
+    background: var(--bg);
+    border-color: var(--line);
   }
 
-  .guide-outline {
-    margin: 14px 0 4px;
+  .guide-drawer-panel {
+    position: fixed;
+    top: 45px;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(82vw, 300px);
+    padding: 18px;
+    overflow-y: auto;
+    background: var(--bg-soft);
+    border-right: 1px solid var(--line);
+    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.22);
+    font-size: 13px;
+  }
+
+  .guide-drawer-panel .guide-outline {
+    margin-top: 18px;
   }
 }
 
