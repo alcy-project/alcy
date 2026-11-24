@@ -208,6 +208,7 @@ class Interpreter {
   bool execute_call(ir::InstructionIdx instr, Frame& frame);
 
   base::Result<CompVal, IrRunError> to_result(const Returned& returned);
+  bool zero_sized_value(ir::TypeIdx type, CompValue& out);
   bool read_value(ir::TypeIdx type, u64 address, CompValue& out);
 
   const ir::StorageState& storage_;
@@ -1464,6 +1465,80 @@ bool Interpreter::execute_call(ir::InstructionIdx instr, Frame& frame) {
   return true;
 }
 
+// A zero-sized value has no bytes to read: its shape is fixed by its
+// type. The checker builds the same canonical value from the AST, so
+// reading it back must use the same spelling (unit is an empty tuple).
+bool Interpreter::zero_sized_value(ir::TypeIdx type, CompValue& out) {
+  const ir::TypeTag tag = tag_of(type);
+  switch (tag) {
+    case ir::TypeTag::Void: out.tag = CompValue::Tag::Tuple; return true;
+    case ir::TypeTag::Struct: {
+      const ir::StructType& shape =
+          storage_.struct_types[storage_.types[type].as_struct()];
+      out.tag = CompValue::Tag::Struct;
+      for (const ir::TypeIdx field : shape.fields) {
+        CompValue value;
+        if (!zero_sized_value(field, value)) {
+          return false;
+        }
+        out.fields.push_back(std::move(value));
+      }
+      return true;
+    }
+    case ir::TypeTag::Tuple: {
+      const ir::TupleType& shape =
+          storage_.tuple_types[storage_.types[type].as_tuple()];
+      out.tag = CompValue::Tag::Tuple;
+      for (const ir::TypeIdx field : shape.elements) {
+        CompValue value;
+        if (!zero_sized_value(field, value)) {
+          return false;
+        }
+        out.fields.push_back(std::move(value));
+      }
+      return true;
+    }
+    case ir::TypeTag::Array: {
+      const ir::ArrayType& shape =
+          storage_.array_types[storage_.types[type].as_array()];
+      out.tag = CompValue::Tag::Array;
+      for (u64 i = 0; i < shape.count; ++i) {
+        CompValue value;
+        if (!zero_sized_value(shape.element, value)) {
+          return false;
+        }
+        out.fields.push_back(std::move(value));
+      }
+      return true;
+    }
+    case ir::TypeTag::Enum: {
+      const ir::EnumType& shape =
+          storage_.enum_types[storage_.types[type].as_enum()];
+      if (!ir::enum_is_zst(storage_, type) || shape.variants.empty()) {
+        return fail(IrRunError::Kind::Unsupported,
+                    ir::InstructionIdx(base::INVALID_IDX),
+                    "enum variant in comp evaluation");
+      }
+      const ir::EnumVariantType& only =
+          storage_.enum_variant_types[shape.variants.head()];
+      out.tag = CompValue::Tag::Enum;
+      out.variant = 0;
+      for (const ir::TypeIdx field : only.fields) {
+        CompValue value;
+        if (!zero_sized_value(field, value)) {
+          return false;
+        }
+        out.fields.push_back(std::move(value));
+      }
+      return true;
+    }
+    default:
+      return fail(IrRunError::Kind::Unsupported,
+                  ir::InstructionIdx(base::INVALID_IDX),
+                  "zero-sized value in comp evaluation");
+  }
+}
+
 bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
   const TypeTag tag = tag_of(type);
   if (ir::is_integer_type(tag)) {
@@ -1484,14 +1559,7 @@ bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
   if (tag == TypeTag::Enum) {
     enum_shape = &storage_.enum_types[storage_.types[type].as_enum()];
     if (ir::enum_is_zst(storage_, type)) {
-      if (enum_shape->variants.empty()) {
-        return fail(IrRunError::Kind::Unsupported,
-                    ir::InstructionIdx(base::INVALID_IDX),
-                    "enum variant in comp evaluation");
-      }
-      out.tag = CompValue::Tag::Enum;
-      out.variant = 0;
-      return true;
+      return zero_sized_value(type, out);
     }
     const ir::EnumNiche niche = ir::enum_niche(storage_, type);
     if (niche.has) {

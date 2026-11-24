@@ -1438,6 +1438,88 @@ ir::Storage touching_copy_storage(ir::SymbolTable& strings) {
   return std::move(builder).build().unwrap().unwrap();
 }
 
+// A single-variant enum whose only payload is zero-sized has no bytes in
+// memory. The interpreter must rebuild the field from the type, the way
+// the checker built it from the AST.
+ir::Storage zst_enum_storage(ir::SymbolTable& strings, bool unit_payload) {
+  ir::StorageBuilder builder;
+  const ir::TypeIdx empty = builder.reserve_struct(str::INVALID_STRING_POOL_ID);
+  builder.fill_struct(empty, ir::TypeIdxRange{}, ir::TypeIdxRange{});
+  ir::TypeSeq payload;
+  payload.push(unit_payload ? builder.primitive(ir::TypeTag::Void) : empty);
+  const ir::EnumVariantTypeIdx variant =
+      builder.enum_variant(str::INVALID_STRING_POOL_ID, payload.finish());
+  const ir::TypeIdx enum_ty = builder.enum_type(
+      str::INVALID_STRING_POOL_ID, ir::EnumVariantTypeIdxRange{variant, 1},
+      ir::TypeIdxRange{});
+  const ir::TypeIdx i32 = builder.primitive(ir::TypeTag::I32);
+  const ir::OperandIdx one = builder.operand(ir::Operand::from_immutable(
+      builder.immutable({.type = i32, .data = {.i32_value = 1}}), i32));
+
+  const ir::RegisterIdx addr(0);
+  const ir::InstructionIdx alloc =
+      emit(builder, ir::Opcode::Alloca, addr, {one});
+  emit(builder, ir::Opcode::Ret, ir::RegisterIdx::invalid(),
+       {builder.operand(ir::Operand::from_register(addr, enum_ty))});
+  builder.reg({.type = enum_ty, .def_idx = alloc});
+  const ir::BlockIdx entry =
+      builder.block({.instrs = {alloc, 2}, .block_params = {}});
+  builder.function({.meta = {.return_type = enum_ty,
+                             .param_types = {},
+                             .name = strings.intern("zst_enum"),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Free,
+                             .generics = ir::TypeIdxRange{}},
+                    .blocks = {entry, 1}});
+  return std::move(builder).build().unwrap().unwrap();
+}
+
+TEST_CASE("IR interpreter rebuilds a zero-sized enum payload") {
+  ir::SymbolTable strings;
+  const ir::Storage storage = zst_enum_storage(strings, false);
+  u64 quota = comp::COMP_BRANCH_QUOTA;
+  u32 depth = 0;
+  base::Result<comp::CompVal, comp::IrRunError> result =
+      comp::interpret_function(storage, strings, ir::PointerWidth::W64,
+                               ir::FunctionIdx(0),
+                               std::span<const comp::CompVal>{}, quota, depth);
+  CHECK(result.is_ok());
+  if (result.is_err()) {
+    INFO("interpreter refused the enum: ", std::move(result).unwrap_err().what);
+    return;
+  }
+  const comp::CompValue& value = result.value().value;
+  CHECK(value.tag == comp::CompValue::Tag::Enum);
+  CHECK(value.variant == 0);
+  if (value.fields.size() != 1) {
+    return;
+  }
+  CHECK(value.fields[0].tag == comp::CompValue::Tag::Struct);
+  CHECK(value.fields[0].fields.empty());
+}
+
+TEST_CASE("IR interpreter spells a unit payload as an empty tuple") {
+  ir::SymbolTable strings;
+  const ir::Storage storage = zst_enum_storage(strings, true);
+  u64 quota = comp::COMP_BRANCH_QUOTA;
+  u32 depth = 0;
+  base::Result<comp::CompVal, comp::IrRunError> result =
+      comp::interpret_function(storage, strings, ir::PointerWidth::W64,
+                               ir::FunctionIdx(0),
+                               std::span<const comp::CompVal>{}, quota, depth);
+  CHECK(result.is_ok());
+  if (result.is_err()) {
+    return;
+  }
+  const comp::CompValue& value = result.value().value;
+  CHECK(value.tag == comp::CompValue::Tag::Enum);
+  if (value.fields.size() != 1) {
+    return;
+  }
+  CHECK(value.fields[0].tag == comp::CompValue::Tag::Tuple);
+  CHECK(value.fields[0].fields.empty());
+}
+
 TEST_CASE("IR interpreter copies bytes a touching range already wrote") {
   ir::SymbolTable strings;
   const ir::Storage storage = touching_copy_storage(strings);
