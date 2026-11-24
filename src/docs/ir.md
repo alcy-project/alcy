@@ -91,6 +91,7 @@ skips value binding for any producer with an invalid `dst`.
 | `FNeg`                         | `[a]`; the destination carries the operand's type, and the result is the operand's sign flip.                                                                                                        |
 | `CompValue`                    | `[semantic_index]`; resolves a compile-time value from the side table. Only a synthetic function carries it.                                                                                         |
 | `CompStrByte`                  | `[string_value, index]`; the result is the byte at `index` of a compile-time string.                                                                                                                 |
+| `CompStrSlice` | `[string_value, start, end]`; the result is a semantic view over the same pooled bytes. |
 | Comparisons                    | Signedness follows the operand type (`I*` signed, `U*` unsigned); floats use ordered predicates; pointers support `Eq`/`Ne` only.                                                                    |
 | Atomics                        | `AtomicLoad [ptr]`, `AtomicStore [value, ptr]`, `AtomicRmw [ptr, value]` (operation from `InstructionFlags::rmw_op`), `AtomicCompareExchange [ptr, cmp, new]`, `Fence`. All sequentially consistent. |
 | `Move` / `Drop`                | Register alias / ownership marker; no code emitted.                                                                                                                                                  |

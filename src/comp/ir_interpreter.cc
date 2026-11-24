@@ -207,6 +207,15 @@ class Interpreter {
   bool execute_select(ir::InstructionIdx instr, Frame& frame);
   bool execute_call(ir::InstructionIdx instr, Frame& frame);
 
+  const CompVal* semantic_value(const Slot& slot) const {
+    const u32 index = slot.semantic_index;
+    if (index < comp_values_.size()) {
+      return &comp_values_[index];
+    }
+    const u32 local = index - static_cast<u32>(comp_values_.size());
+    return local < runtime_values_.size() ? &runtime_values_[local] : nullptr;
+  }
+
   base::Result<CompVal, IrRunError> to_result(const Returned& returned);
   bool zero_sized_value(ir::TypeIdx type, CompValue& out);
   bool read_value(ir::TypeIdx type, u64 address, CompValue& out);
@@ -225,6 +234,9 @@ class Interpreter {
   bool returned_ = false;
   Returned returned_value_;
   std::span<const CompVal> comp_values_;
+  // Slices made at runtime are views, so they join the semantic side
+  // table without copying bytes or growing the compilation's pool.
+  std::vector<CompVal> runtime_values_;
   u32 reg_base_ = 0;
   u32 reg_limit_ = 0;
 };
@@ -979,8 +991,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
                   "fence in comp evaluation");
     case Opcode::CompValue: {
       u64 index = 0;
-      if (!resolve_int_at(instr, 0, frame, index) ||
-          index >= comp_values_.size()) {
+      if (!resolve_int_at(instr, 0, frame, index)) {
         return fail(IrRunError::Kind::Unsupported, instr,
                     "comp value without a side-table entry");
       }
@@ -998,26 +1009,77 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
                     "comp string byte needs a string and an index");
       }
       Slot string_slot;
+      const CompVal* string_value = nullptr;
       if (!resolve_at(instr, 0, frame, string_slot) ||
           string_slot.kind != Slot::Kind::Semantic ||
-          string_slot.semantic_index >= comp_values_.size()) {
+          (string_value = semantic_value(string_slot)) == nullptr) {
         return fail(IrRunError::Kind::Internal, instr,
                     "comp string byte without a string value");
       }
-      const CompValue& value = comp_values_[string_slot.semantic_index].value;
+      const CompValue& value = string_value->value;
       if (value.tag != CompValue::Tag::Str) {
         return fail(IrRunError::Kind::Internal, instr,
                     "comp string byte on a non-string value");
       }
+      const std::string_view bytes = comp::string_bytes(value, strings_);
       u64 index = 0;
-      if (!resolve_int_at(instr, 1, frame, index) ||
-          index >= value.str_value.size()) {
+      if (!resolve_int_at(instr, 1, frame, index) || index >= bytes.size()) {
         return fail(IrRunError::Kind::OutOfBounds, instr,
                     "comp string byte index out of bounds");
       }
       frame.at(ins.dst.idx) =
           Slot{Slot::Kind::Scalar, 0,
-               static_cast<u8>(value.str_value[static_cast<usize>(index)])};
+               static_cast<u8>(bytes[static_cast<usize>(index)])};
+      return true;
+    }
+    case Opcode::CompStrSlice: {
+      if (ins.operands.size() < 3 || !ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "comp string slice needs a string and two indexes");
+      }
+      Slot string_slot;
+      const CompVal* string_value = nullptr;
+      if (!resolve_at(instr, 0, frame, string_slot) ||
+          string_slot.kind != Slot::Kind::Semantic ||
+          (string_value = semantic_value(string_slot)) == nullptr ||
+          string_value->value.tag != CompValue::Tag::Str) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "comp string slice without a string value");
+      }
+      const CompValue& source = string_value->value;
+      const std::string_view bytes = comp::string_bytes(source, strings_);
+      u64 start = 0;
+      u64 end = 0;
+      if (!resolve_int_at(instr, 1, frame, start) ||
+          !resolve_int_at(instr, 2, frame, end) || start > end ||
+          end > bytes.size()) {
+        return fail(IrRunError::Kind::OutOfBounds, instr,
+                    "comp string byte index out of bounds");
+      }
+      const auto boundary = [&bytes](u64 at) {
+        return at == 0 || at == bytes.size() ||
+               (static_cast<u8>(bytes[static_cast<usize>(at)]) & 0xC0u) !=
+                   0x80u;
+      };
+      if (!boundary(start) || !boundary(end)) {
+        return fail(IrRunError::Kind::Unsupported, instr,
+                    "slice not on a scalar boundary");
+      }
+      CompVal sliced;
+      sliced.type = reg_type(ins.dst);
+      sliced.value.tag = CompValue::Tag::Str;
+      if (source.str_id == str::INVALID_STRING_POOL_ID) {
+        sliced.value.owned_str = std::string(bytes.substr(
+            static_cast<usize>(start), static_cast<usize>(end - start)));
+      } else {
+        sliced.value.str_id = source.str_id;
+        sliced.value.str_offset = static_cast<u32>(source.str_offset + start);
+        sliced.value.str_length = static_cast<u32>(end - start);
+      }
+      runtime_values_.push_back(std::move(sliced));
+      frame.at(ins.dst.idx) = Slot{
+          Slot::Kind::Semantic,
+          static_cast<u32>(comp_values_.size() + runtime_values_.size() - 1)};
       return true;
     }
   }
@@ -1647,13 +1709,13 @@ bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
 base::Result<CompVal, IrRunError> Interpreter::to_result(
     const Returned& returned) {
   if (returned.slot.kind == Slot::Kind::Semantic) {
-    const u32 index = returned.slot.semantic_index;
-    if (index >= comp_values_.size()) {
+    const CompVal* value = semantic_value(returned.slot);
+    if (value == nullptr) {
       fail(IrRunError::Kind::Unsupported, ir::InstructionIdx(base::INVALID_IDX),
            "comp value without a side-table entry");
       return error_result();
     }
-    return base::make_ok(comp_values_[index]);
+    return base::make_ok(*value);
   }
   const TypeTag tag = tag_of(returned.type);
   CompValue value;

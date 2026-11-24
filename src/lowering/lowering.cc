@@ -134,8 +134,9 @@ Lowerer::Lowerer(analyzer::CheckedPackage package,
       strings(strings),
       bag(bag),
       profiler(profiler),
-      comp_(analyzer::CompInputs{pkg.tree, pkg.modules, pkg.generic_insts,
-                                 pkg.type_origins, pkg.fn_insts},
+      comp_(analyzer::CompInputs{pkg.tree, strings, pkg.modules,
+                                 pkg.generic_insts, pkg.type_origins,
+                                 pkg.fn_insts},
             ast,
             builder,
             width) {
@@ -1630,11 +1631,13 @@ void Lowerer::comp_key_into(std::string& key, const CompValue& value) {
       key += "i" + std::to_string(value.int_value) + ";";
       return;
     case CompValue::Tag::Bool: key += value.bool_value ? "t;" : "f;"; return;
-    case CompValue::Tag::Str:
-      key += "s" + std::to_string(value.str_value.size()) + ":";
-      key += value.str_value;
+    case CompValue::Tag::Str: {
+      const std::string_view bytes = comp::string_bytes(value, strings);
+      key += "s" + std::to_string(bytes.size()) + ":";
+      key += bytes;
       key.push_back(';');
       return;
+    }
     case CompValue::Tag::Tuple:
       key += "t(";
       for (const CompValue& field : value.fields) {

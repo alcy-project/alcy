@@ -37,7 +37,8 @@ Val Lowerer::Comp::materialize(const CompVal& value, diag::Span span) {
                  false};
     }
     case CompValue::Tag::Str: {
-      const str::StringPoolId id = owner_.intern_copied(value.value.str_value);
+      const str::StringPoolId id =
+          owner_.intern_copied(comp::string_bytes(value.value, owner_.strings));
       if (id == str::INVALID_STRING_POOL_ID) {
         return Val{owner_.size_one, owner_.error_type(), false, false};
       }

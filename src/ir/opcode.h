@@ -142,6 +142,10 @@ enum class Opcode : u8 {
   // Read a byte from a compile-time string at a runtime index. Operands:
   // the semantic string value and the index; result is a scalar byte.
   CompStrByte,
+  // Slice a compile-time string at runtime indices. Operands: the
+  // semantic string value, the start index and the end index; the result
+  // is a semantic view over the same pooled bytes.
+  CompStrSlice,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -174,6 +178,7 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
 
     case O::CompValue: return "CompValue";
     case O::CompStrByte: return "CompStrByte";
+    case O::CompStrSlice: return "CompStrSlice";
 
     case O::And: return "And";
     case O::Or: return "Or";

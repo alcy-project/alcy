@@ -179,6 +179,7 @@ Named values (`@function`, immutables) print inline.
 | `Borrow` | `v = &place` or `v = &mut place`, by the destination's type |
 | `CompValue` | `v = comp_value(N)`, a value at index `N` of the side table |
 | `CompStrByte` | `v = comp_str_byte(s, i)`, byte `i` of a compile-time string |
+| `CompStrSlice` | `v = comp_str_slice(s, start, end)`, a view of a compile-time string |
 
 `CompValue` and `CompStrByte` are semantic-only: the verifier refuses
 them in a resolved body. Synthetic functions used by comp evaluation

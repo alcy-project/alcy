@@ -2527,8 +2527,9 @@ bool Checker::const_int_value(const CheckedModule::StaticInfo& info,
     return false;
   }
   comp::CompVal value;
-  CompEval eval(CompInputs{tree, modules, {}, type_origins_, fn_instances}, ast,
-                builder, width);
+  CompEval eval(
+      CompInputs{tree, interner, modules, {}, type_origins_, fn_instances}, ast,
+      builder, width);
   if (!eval.evaluate_item(info.module, info.init, cur_inst, value) ||
       value.value.tag != comp::CompValue::Tag::Int) {
     return wrong();

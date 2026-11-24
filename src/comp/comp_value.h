@@ -10,7 +10,9 @@
 
 #include "fpag/base/idx.h"
 #include "fpag/base/numeric.h"
+#include "fpag/str/string_pool_id.h"
 #include "ir/common.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 
 namespace comp {
@@ -40,12 +42,36 @@ struct CompValue {
   Tag tag = Tag::Void;
   u64 int_value = 0;
   bool bool_value = false;
-  std::string str_value;
+  // A string from source is held in the compilation's pool; a
+  // value synthesized by comp evaluation keeps owned bytes.
+  str::StringPoolId str_id = str::INVALID_STRING_POOL_ID;
+  // A slice of a pooled string is a view: its offsets are relative to
+  // the pooled bytes, so no copy or new pool entry is needed.
+  constexpr static u32 WHOLE_STRING = 0xFFFFFFFFu;
+  u32 str_offset = 0;
+  u32 str_length = WHOLE_STRING;
+  std::string owned_str;
   std::vector<CompValue> fields;
   std::vector<ir::TypeIdx> slot_types;
   ir::TypeIdx element = ir::TypeIdx(base::INVALID_IDX);
   u32 variant = 0;
 };
+
+// The bytes a semantic string names, read from the pool when it has an id.
+inline std::string_view string_bytes(const CompValue& value,
+                                     const ir::SymbolTable& strings) {
+  if (value.str_id == str::INVALID_STRING_POOL_ID) {
+    return value.owned_str;
+  }
+  const std::string_view all = strings.get(value.str_id);
+  const usize from =
+      value.str_offset < all.size() ? value.str_offset : all.size();
+  const usize rest = all.size() - from;
+  const usize count = value.str_length == CompValue::WHOLE_STRING
+                          ? rest
+                          : (value.str_length < rest ? value.str_length : rest);
+  return all.substr(from, count);
+}
 
 struct CompVal {
   CompValue value;

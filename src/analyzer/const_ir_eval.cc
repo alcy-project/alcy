@@ -1340,6 +1340,29 @@ static ir::OperandIdx bool_immutable(ConstEmitter& emitter,
   return emitter.builder().operand(ir::Operand::from_immutable(imm, type));
 }
 
+static ir::OperandIdx emit_comp_str_slice(ConstEmitter& emitter,
+                                          ir::TypeIdx type,
+                                          ir::OperandIdx string,
+                                          ir::OperandIdx start,
+                                          ir::OperandIdx end) {
+  const auto copy = [&emitter](ir::OperandIdx index) {
+    return emitter.builder().state().operands[index.idx];
+  };
+  const ir::OperandIdx head = emitter.builder().operand(copy(string));
+  emitter.builder().operand(copy(start));
+  emitter.builder().operand(copy(end));
+  const ir::RegisterIdx dst(emitter.builder().state().registers.size());
+  const ir::InstructionIdx instr =
+      emitter.builder().instr({.op = ir::Opcode::CompStrSlice,
+                               .flags = {},
+                               .dst = dst,
+                               .measure = ir::TypeIdx::invalid(),
+                               .operands = ir::OperandIdxRange{head, 3}});
+  emitter.builder().reg({.type = type, .def_idx = instr});
+  emitter.cur().push(instr);
+  return emitter.builder().operand(ir::Operand::from_register(dst, type));
+}
+
 ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
                                   const ast::ExprCall& call,
                                   std::string_view cname,
@@ -1372,7 +1395,8 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
       return ir::OperandIdx(base::INVALID_IDX);
     }
     const comp::CompVal value = *src;
-    const std::string& bytes = value.value.str_value;
+    const std::string_view bytes =
+        comp::string_bytes(value.value, ctx.evaluator.strings());
     if (cname == "str_len") {
       const ir::ImmutableIdx imm = emitter.builder().immutable(
           {.type = type,
@@ -1405,6 +1429,14 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
         emitter.builder().reg({.type = type, .def_idx = instr});
         emitter.cur().push(instr);
         return emitter.builder().operand(ir::Operand::from_register(dst, type));
+      }
+      if (cname == "str_slice") {
+        const ir::OperandIdx second = emit_expr(
+            ast, call.args[2], expr_type(call.args[2]), emitter, ctx, params);
+        if (!second.is_valid()) {
+          return ir::OperandIdx(base::INVALID_IDX);
+        }
+        return emit_comp_str_slice(emitter, type, receiver, first, second);
       }
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -1449,8 +1481,8 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
     comp::CompVal result;
     result.type = type;
     result.value.tag = comp::CompValue::Tag::Str;
-    result.value.str_value = bytes.substr(static_cast<usize>(index),
-                                          static_cast<usize>(end - index));
+    result.value.owned_str = std::string(bytes.substr(
+        static_cast<usize>(index), static_cast<usize>(end - index)));
     return emitter.add_semantic(result, type);
   }
   return ir::OperandIdx(base::INVALID_IDX);
@@ -1520,7 +1552,8 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
     return ir::OperandIdx(base::INVALID_IDX);
   }
   const comp::CompVal value = *src;
-  const std::string& bytes = value.value.str_value;
+  const std::string_view bytes =
+      comp::string_bytes(value.value, ctx.evaluator.strings());
   if (is_len_bytes) {
     const ir::ImmutableIdx imm = emitter.builder().immutable(
         {.type = type, .data = {.u64_value = static_cast<u64>(bytes.size())}});
@@ -1561,7 +1594,7 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
   }
   u64 end = 0;
   if (!operand_int(emitter, second, end)) {
-    return ir::OperandIdx(base::INVALID_IDX);
+    return emit_comp_str_slice(emitter, type, receiver, first, second);
   }
   // `byte_slice` returns `Option<str>`: build the enum as a semantic
   // value so a `match` over it can be resolved without lowering the
@@ -1607,8 +1640,8 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
   comp::CompVal payload;
   payload.type = payload_ty;
   payload.value.tag = comp::CompValue::Tag::Str;
-  payload.value.str_value =
-      bytes.substr(static_cast<usize>(index), static_cast<usize>(end - index));
+  payload.value.owned_str = std::string(
+      bytes.substr(static_cast<usize>(index), static_cast<usize>(end - index)));
   comp::CompVal result;
   result.type = type;
   result.value.tag = comp::CompValue::Tag::Enum;
@@ -2174,7 +2207,13 @@ static ir::OperandIdx emit_literal_expr(
   if (literal.kind == ast::LiteralKind::String) {
     comp::CompVal value;
     value.value.tag = comp::CompValue::Tag::Str;
-    value.value.str_value = comp::unescape(literal.spelling);
+    const std::string decoded = comp::unescape(literal.spelling);
+    const std::optional<str::StringPoolId> id =
+        ctx.evaluator.strings().intern_copied(decoded);
+    if (!id.has_value()) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    value.value.str_id = *id;
     value.type = type;
     return emitter.add_semantic(value, type);
   }
@@ -2275,7 +2314,8 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
             arg_sem->value.tag != comp::CompValue::Tag::Str) {
           return ir::OperandIdx(base::INVALID_IDX);
         }
-        format_bytes = arg_sem->value.str_value;
+        format_bytes = std::string(
+            comp::string_bytes(arg_sem->value, ctx.evaluator.strings()));
         const analyzer::FmtTemplate parsed =
             analyzer::parse_format_string(format_bytes);
         if (parsed.error != analyzer::FmtError::None) {
@@ -2291,7 +2331,7 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
           item.fields[0].tag = comp::CompValue::Tag::Bool;
           item.fields[0].bool_value = piece.is_arg;
           item.fields[1].tag = comp::CompValue::Tag::Str;
-          item.fields[1].str_value = piece.literal;
+          item.fields[1].owned_str = piece.literal;
           item.fields[2].tag = comp::CompValue::Tag::Int;
           item.fields[2].int_value = piece.precision;
           item.fields[3].tag = comp::CompValue::Tag::Int;
@@ -2513,8 +2553,10 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
       lhs_sem->value.tag == comp::CompValue::Tag::Str &&
       rhs_sem->value.tag == comp::CompValue::Tag::Str) {
     bool answer = false;
-    const std::string& a = lhs_sem->value.str_value;
-    const std::string& b = rhs_sem->value.str_value;
+    const std::string_view a =
+        comp::string_bytes(lhs_sem->value, ctx.evaluator.strings());
+    const std::string_view b =
+        comp::string_bytes(rhs_sem->value, ctx.evaluator.strings());
     if (!fold_compare(bin.op, a, b, answer)) {
       return ir::OperandIdx(base::INVALID_IDX);
     }
@@ -4103,10 +4145,9 @@ bool evaluate_const_ir(const ast::AstArena& ast,
        .blocks = ir::BlockIdxRange{
            emitter.start(), static_cast<u32>(builder.state().blocks.size() -
                                              emitter.start().idx)}});
-  const ir::SymbolTable empty_strings;
   base::Result<comp::CompVal, comp::IrRunError> result =
       comp::interpret_function(
-          builder.state(), empty_strings, width, fn, {}, quota, depth,
+          builder.state(), ctx.evaluator.strings(), width, fn, {}, quota, depth,
           emitter.semantic_values(), cp.registers,
           static_cast<u32>(builder.state().registers.size()));
   // The synthetic function existed only to read a value back. Roll it

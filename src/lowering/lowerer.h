@@ -703,7 +703,7 @@ class Lowerer {
                          const std::vector<ast::ExprIdx>& borrowed_places);
   // Resolves the deferred checks after every body has been lowered.
   void finish_kept_checks();
-  static void comp_key_into(std::string& key, const CompValue& value);
+  void comp_key_into(std::string& key, const CompValue& value);
   // The identity of one specialization: the declaration, the type
   // arguments it clones under. It is written into `key` so a caller can
   // hand in storage it reuses, the way `fn_key` is.
@@ -724,13 +724,13 @@ class Lowerer {
   // the two tables in step, and the row takes the index.
   ir::FunctionIdx reserve_body_function(ir::FunctionMeta meta);
   static void append_index(std::string& out, u32 value, char separator);
-  static void fn_key(std::string& key,
-                     ast::ItemIdx item,
-                     const std::vector<ir::TypeIdx>& params,
-                     ir::TypeIdx ret,
-                     u32 inst,
-                     std::span<const CompVal> comp_args,
-                     std::span<const ir::TypeIdx> extra_generics = {});
+  void fn_key(std::string& key,
+              ast::ItemIdx item,
+              const std::vector<ir::TypeIdx>& params,
+              ir::TypeIdx ret,
+              u32 inst,
+              std::span<const CompVal> comp_args,
+              std::span<const ir::TypeIdx> extra_generics = {});
   // Whether a signature names an IR type parameter, or a nominal whose
   // member does: a call it decides records a parametric callee
   bool signature_mentions_param(const std::vector<ir::TypeIdx>& params,

@@ -459,7 +459,8 @@ bool CompEval::comp_match_pattern(u32 mod,
         if (value.value.tag != comp::CompValue::Tag::Str) {
           return false;
         }
-        return value.value.str_value == comp::unescape(lit.spelling);
+        return comp::string_bytes(value.value, strings()) ==
+               comp::unescape(lit.spelling);
       }
       return fail(node.span, "pattern is not comp-evaluable");
     }

@@ -19,6 +19,7 @@
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/storage_builder.h"
+#include "ir/symbol_table.h"
 #include "ir/type.h"
 
 namespace analyzer {
@@ -62,6 +63,8 @@ inline constexpr u32 COMP_MAX_CALL_DEPTH = comp::COMP_MAX_CALL_DEPTH;
 // tables, which is why nothing here owns anything.
 struct CompInputs {
   const ModuleTree& tree;
+  // The compilation's interner: source strings in comp values are ids here.
+  ir::SymbolTable& strings;
   std::span<const CheckedModule> modules;
   std::span<const ir::TypeIdx> generic_insts;
   // (copy, origin) pairs, newest last.
@@ -110,6 +113,8 @@ class CompEval {
   bool variant_index(ir::TypeIdx type, std::string_view name, u32& index_out);
 
   EmitContext emit_context_for(EvalSite site, comp::CompScope& scope);
+
+  ir::SymbolTable& strings() const { return inputs_.strings; }
 
   enum class Failure : u8 {
     None,

@@ -636,7 +636,8 @@ class TextWriter {
         break;
       }
       case O::CompValue:
-      case O::CompStrByte: {
+      case O::CompStrByte:
+      case O::CompStrSlice: {
         write_dst(instr);
         out_ += opcode_to_str(instr.op);
         for (const OperandIdx operand : instr.operands) {

@@ -115,6 +115,7 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::Call: return {1, ANY_OPERANDS, true};
     case O::CompValue: return {1, 1, true};
     case O::CompStrByte: return {2, 2, true};
+    case O::CompStrSlice: return {3, 3, true};
   }
   return {};
 }
@@ -249,7 +250,8 @@ VerificationResult check_resolved_body(const Storage& storage,
     }
     for (const InstructionIdx iidx : block.instrs) {
       const Opcode op = storage.instrs()[iidx].op;
-      if (op == Opcode::CompValue || op == Opcode::CompStrByte) {
+      if (op == Opcode::CompValue || op == Opcode::CompStrByte ||
+          op == Opcode::CompStrSlice) {
         return err(VerificationErrorKind::MisplacedSemanticMarker, iidx.idx);
       }
     }

@@ -3,6 +3,7 @@
 
 #include "comp/ir_interpreter.h"
 
+#include <array>
 #include <initializer_list>
 #include <optional>
 #include <span>
@@ -68,7 +69,7 @@ std::optional<comp::CompVal> ast_value(Fixture& f,
   comp::CompVal value;
   if (ok) {
     analyzer::CompEval evaluator(
-        analyzer::CompInputs{checked.tree, checked.modules,
+        analyzer::CompInputs{checked.tree, f.strings, checked.modules,
                              checked.generic_insts, checked.type_origins,
                              checked.fn_insts},
         f.ast, builder, ir::PointerWidth::W64);
@@ -202,7 +203,7 @@ void check_same_value(const ir::Storage& storage,
     return;
   }
   if (expected.value.tag == comp::CompValue::Tag::Str) {
-    CHECK(expected.value.str_value == actual.value.str_value);
+    CHECK(expected.value.owned_str == actual.value.owned_str);
     return;
   }
   if (expected.value.tag == comp::CompValue::Tag::Enum) {
@@ -1520,6 +1521,74 @@ TEST_CASE("IR interpreter spells a unit payload as an empty tuple") {
   CHECK(value.fields[0].fields.empty());
 }
 
+TEST_CASE("IR interpreter slices a pooled string at runtime indexes") {
+  ir::SymbolTable strings;
+  const str::StringPoolId text = strings.intern("abcd");
+  CHECK(text != str::INVALID_STRING_POOL_ID);
+  if (text == str::INVALID_STRING_POOL_ID) {
+    return;
+  }
+  ir::StorageBuilder builder;
+  const ir::TypeIdx str_ty = builder.primitive(ir::TypeTag::Str);
+  const ir::TypeIdx usize = builder.primitive(ir::TypeTag::Usize);
+  const auto imm = [&](u64 value) {
+    return builder.operand(ir::Operand::from_immutable(
+        builder.immutable({.type = usize, .data = {.u64_value = value}}),
+        usize));
+  };
+  const ir::OperandIdx zero = imm(0);
+
+  const ir::RegisterIdx source(0);
+  const ir::InstructionIdx make =
+      emit(builder, ir::Opcode::CompValue, source, {zero});
+  builder.reg({.type = str_ty, .def_idx = make});
+  ir::OperandSeq slice_ops;
+  slice_ops.push(builder.operand(ir::Operand::from_register(source, str_ty)));
+  slice_ops.push(builder.operand(ir::Operand::from_immutable(
+      builder.immutable({.type = usize, .data = {.u64_value = 1}}), usize)));
+  slice_ops.push(builder.operand(ir::Operand::from_immutable(
+      builder.immutable({.type = usize, .data = {.u64_value = 3}}), usize)));
+  const ir::RegisterIdx result(1);
+  const ir::InstructionIdx slice =
+      builder.instr({.op = ir::Opcode::CompStrSlice,
+                     .flags = {},
+                     .dst = result,
+                     .measure = ir::TypeIdx::invalid(),
+                     .operands = slice_ops.finish()});
+  builder.reg({.type = str_ty, .def_idx = slice});
+  emit(builder, ir::Opcode::Ret, ir::RegisterIdx::invalid(),
+       {builder.operand(ir::Operand::from_register(result, str_ty))});
+  const ir::BlockIdx entry =
+      builder.block({.instrs = {make, 3}, .block_params = {}});
+  builder.function({.meta = {.return_type = str_ty,
+                             .param_types = {},
+                             .name = strings.intern("slice_pooled"),
+                             .path = str::EMPTY_STRING_ID,
+                             .kind = ir::SymbolKind::Free,
+                             .generics = ir::TypeIdxRange{}},
+                    .blocks = {entry, 1}});
+  // Semantic markers never reach a published body, so this hand-built
+  // storage skips verification the way the synthetic function does.
+  const ir::Storage storage(std::move(builder).take_state());
+
+  comp::CompVal value;
+  value.type = str_ty;
+  value.value.tag = comp::CompValue::Tag::Str;
+  value.value.str_id = text;
+  std::array<comp::CompVal, 1> values{value};
+  u64 quota = comp::COMP_BRANCH_QUOTA;
+  u32 depth = 0;
+  base::Result<comp::CompVal, comp::IrRunError> outcome =
+      comp::interpret_function(storage, strings, ir::PointerWidth::W64,
+                               ir::FunctionIdx(0), {}, quota, depth, values);
+  if (outcome.is_err()) {
+    INFO("slice refused: ", std::move(outcome).unwrap_err().what);
+    CHECK(false);
+    return;
+  }
+  CHECK(comp::string_bytes(outcome.value().value, strings) == "bc");
+}
+
 TEST_CASE("IR interpreter copies bytes a touching range already wrote") {
   ir::SymbolTable strings;
   const ir::Storage storage = touching_copy_storage(strings);
@@ -1658,7 +1727,8 @@ TEST_CASE("Const IR path carries aggregates, strings and comp params") {
     CHECK(scenario.asts[1].value.fields[0].tag == comp::CompValue::Tag::Int);
     CHECK(scenario.asts[1].value.fields[0].int_value == 10);
   }
-  CHECK(scenario.asts[2].value.str_value == "abc");
+  CHECK(comp::string_bytes(scenario.asts[2].value, scenario.fixture.strings) ==
+        "abc");
 }
 
 }  // namespace lowering
