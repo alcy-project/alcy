@@ -72,12 +72,18 @@ TEST_CASE("Lower evaluates a comp fn through a const item") {
   VirtualDir dir;
   write_all(dir, {{"main.al",
                    "comp fn twice(x: i32) -> i32 {\n"
-                   "  ret x * 2\n"
+                   "  ret match x {\n"
+                   "    v if v > 0 => v * 2,\n"
+                   "    _ => 0,\n"
+                   "  }\n"
                    "}\n"
                    "const N: i32 := twice(21)\n"
+                   // Indexing a one-element array is an oracle for the
+                   // fold: any value but 42 is out of bounds and fails.
+                   "const CHECK: i32 := [0][N - 42]\n"
                    "\n"
                    "fn main() -> i32 {\n"
-                   "  ret N - 42\n"
+                   "  ret CHECK\n"
                    "}\n"}});
   Fixture f;
   const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
@@ -87,36 +93,6 @@ TEST_CASE("Lower evaluates a comp fn through a const item") {
   if (!result.ok || !result.lowered.has_value()) {
     return;
   }
-  // The IR engine answered the call; lowering's differential pass only
-  // sees AST-answered calls, so this is where the switch shows.
-  CHECK(result.lowered->comp_engine_answered >= 1);
-}
-
-TEST_CASE("Lower compares the checker's comp call against the IR engine") {
-  VirtualDir dir;
-  write_all(dir, {{"main.al",
-                   "comp fn twice(x: i32) -> i32 {\n"
-                   "  ret x * 2\n"
-                   "}\n"
-                   "const N: i32 := twice(2)\n"
-                   "\n"
-                   "fn main() -> i32 {\n"
-                   "  a: [i32; N] := [1, 2, 3, 4]\n"
-                   "  ret a[0]\n"
-                   "}\n"}});
-  Fixture f;
-  const LowerCase result = lower_case(dir, "main.al", {"main.al"}, f);
-  CHECK(result.ok);
-  CHECK(result.lowered.has_value());
-  if (!result.ok || !result.lowered.has_value()) {
-    return;
-  }
-  // The array length forced the checker's evaluator to answer; the
-  // comparison pass re-ran that call through the IR engine after
-  // lowering built the storage, and the lowering itself did not
-  // evaluate it again.
-  CHECK(result.lowered->comp_engine_compared >= 1);
-  CHECK(result.lowered->comp_engine_answered == 0);
 }
 
 TEST_CASE("Lower reports a const cycle instead of recursing") {

@@ -64,7 +64,7 @@ inline void write_all(
 }
 
 // A package that resolved and checked, before lowering consumes it: a
-// case that also runs the AST engine reads the checked package first.
+// case that also evaluates constants reads the checked package first.
 struct CheckCase {
   std::optional<analyzer::CheckedPackage> checked;
   bool ok = false;

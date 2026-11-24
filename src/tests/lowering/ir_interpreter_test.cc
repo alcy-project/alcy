@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "analyzer/comp_evaluator.h"
+#include "analyzer/comp_eval.h"
 #include "analyzer/types.h"
 #include "ast/ast.h"
 #include "comp/comp_value.h"
@@ -54,7 +54,7 @@ ast::ExprIdx find_const_init(const ast::AstArena& ast, std::string_view name) {
   return ast::ExprIdx(base::INVALID_IDX);
 }
 
-// The AST engine's value for the const item `name`. The checked type
+// The checker-side value for the const item `name`. The checked type
 // table is moved into the evaluator's builder and put back through
 // build(), so lowering reads the package it checked.
 std::optional<comp::CompVal> ast_value(Fixture& f,
@@ -65,7 +65,7 @@ std::optional<comp::CompVal> ast_value(Fixture& f,
   bool ok = init.is_valid();
   comp::CompVal value;
   if (ok) {
-    analyzer::CompEvaluator evaluator(
+    analyzer::CompEval evaluator(
         analyzer::CompInputs{checked.tree, checked.modules,
                              checked.generic_insts, checked.type_origins,
                              checked.fn_insts},
@@ -197,6 +197,28 @@ void check_same_value(const ir::Storage& storage,
     const ir::TypeTag tag = storage.types()[expected.type].tag;
     CHECK((expected.value.int_value & comp::mask(tag)) ==
           (actual.value.int_value & comp::mask(tag)));
+    return;
+  }
+  if (expected.value.tag == comp::CompValue::Tag::Str) {
+    CHECK(expected.value.str_value == actual.value.str_value);
+    return;
+  }
+  if (expected.value.tag == comp::CompValue::Tag::Enum) {
+    CHECK(expected.value.variant == actual.value.variant);
+  }
+  if (expected.value.tag == comp::CompValue::Tag::Tuple ||
+      expected.value.tag == comp::CompValue::Tag::Array ||
+      expected.value.tag == comp::CompValue::Tag::Struct ||
+      expected.value.tag == comp::CompValue::Tag::Enum) {
+    CHECK(expected.value.fields.size() == actual.value.fields.size());
+    if (expected.value.fields.size() != actual.value.fields.size()) {
+      return;
+    }
+    for (usize i = 0; i < expected.value.fields.size(); ++i) {
+      check_same_value(storage,
+                       comp::CompVal{expected.value.fields[i], expected.type},
+                       comp::CompVal{actual.value.fields[i], actual.type});
+    }
   }
 }
 
@@ -213,7 +235,7 @@ void check_int_value(const ir::Storage& storage,
 }
 
 // One checked-and-lowered package plus the fixture that owns the arenas
-// its tables point into, and the AST engine's values for the const
+// its tables point into, and the checker's values for the const
 // items the case named.
 struct Scenario {
   Fixture fixture;
@@ -225,8 +247,8 @@ struct Scenario {
   const ir::Storage* storage = nullptr;
 };
 
-// Checks `source`, evaluates each const item in `const_names` through
-// the AST engine, then lowers the same package.
+// Checks `source`, evaluates each const item in `const_names`
+// through the checker path, then lowers the same package.
 bool build_scenario(VirtualDir& dir,
                     std::string_view source,
                     std::initializer_list<std::string_view> const_names,
@@ -253,8 +275,8 @@ bool build_scenario(VirtualDir& dir,
   return true;
 }
 
-// The AST engine's value for the `index`-th const item and the IR
-// engine's for the same call carry one value.
+// The checker-side value and the lowered IR's value for the same call
+// carry one value.
 bool check_engines_agree(const Scenario& scenario,
                          std::string_view name,
                          std::initializer_list<u64> args,
@@ -1114,7 +1136,7 @@ TEST_CASE("IR interpreter agrees on a niche-carrying enum") {
 // its body was checked against declared parameters, so a reader that
 // reaches one falls back to the receiver's key instead of trusting the
 // row.
-TEST_CASE("The AST engine falls back from a definition-site method row") {
+TEST_CASE("Checker falls back from a definition-site method row") {
   VirtualDir dir;
   Fixture fixture;
   write_all(dir, {{"main.al",
@@ -1378,10 +1400,10 @@ TEST_CASE("IR interpreter copies bytes a touching range already wrote") {
   check_int_value(storage, result.value(), 0x42);
 }
 
-// The AST engine's new paths are value-observable here: a mutable
+// The comp evaluator's new paths are value-observable here: a mutable
 // receiver written back across calls, ordinary callees bound from a comp
 // context, and a field read whose type comes from the value.
-TEST_CASE("AST engine writes a mutable receiver back across calls") {
+TEST_CASE("Comp evaluator writes a mutable receiver back across calls") {
   VirtualDir dir;
   Scenario scenario;
   const bool built =
@@ -1429,7 +1451,7 @@ TEST_CASE("AST engine writes a mutable receiver back across calls") {
   check_int_value(*scenario.storage, scenario.asts[0], 10);
 }
 
-TEST_CASE("AST engine binds an ordinary callee's comp-known argument") {
+TEST_CASE("Comp evaluator binds an ordinary callee's comp-known argument") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -1448,7 +1470,7 @@ TEST_CASE("AST engine binds an ordinary callee's comp-known argument") {
   check_int_value(*scenario.storage, scenario.asts[0], 42);
 }
 
-TEST_CASE("AST engine reads a field with the value's type") {
+TEST_CASE("Comp evaluator reads a field with the value's type") {
   VirtualDir dir;
   Scenario scenario;
   const bool built = build_scenario(dir,
@@ -1468,6 +1490,38 @@ TEST_CASE("AST engine reads a field with the value's type") {
     return;
   }
   check_int_value(*scenario.storage, scenario.asts[0], 7);
+}
+
+TEST_CASE("Const IR path carries aggregates, strings and comp params") {
+  VirtualDir dir;
+  Scenario scenario;
+  const bool built =
+      build_scenario(dir,
+                     "struct Point { x: i32, y: i32 }\n"
+                     "comp fn twice(x: i32) -> i32 { ret x + x }\n"
+                     "const P: Point := Point { x: 3, y: 4 }\n"
+                     "const A: [i32; 2] := [twice(5), 7]\n"
+                     "const S: str := \"abc\"\n"
+                     "fn main() { _ := P; _ := A; _ := S }\n",
+                     {"P", "A", "S"}, scenario);
+  CHECK(built);
+  if (!built || scenario.storage == nullptr || scenario.asts.size() != 3) {
+    return;
+  }
+  CHECK(scenario.asts[0].value.tag == comp::CompValue::Tag::Struct);
+  CHECK(scenario.asts[1].value.tag == comp::CompValue::Tag::Array);
+  CHECK(scenario.asts[2].value.tag == comp::CompValue::Tag::Str);
+  if (scenario.asts[0].value.tag == comp::CompValue::Tag::Struct &&
+      scenario.asts[0].value.fields.size() == 2) {
+    CHECK(scenario.asts[0].value.fields[0].tag == comp::CompValue::Tag::Int);
+    CHECK(scenario.asts[0].value.fields[0].int_value == 3);
+  }
+  if (scenario.asts[1].value.tag == comp::CompValue::Tag::Array &&
+      scenario.asts[1].value.fields.size() == 2) {
+    CHECK(scenario.asts[1].value.fields[0].tag == comp::CompValue::Tag::Int);
+    CHECK(scenario.asts[1].value.fields[0].int_value == 10);
+  }
+  CHECK(scenario.asts[2].value.str_value == "abc");
 }
 
 }  // namespace lowering
