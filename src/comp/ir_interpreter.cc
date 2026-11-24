@@ -1474,30 +1474,43 @@ bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
     }
     return true;
   }
+  const ir::EnumType* enum_shape = nullptr;
   if (tag == TypeTag::Enum) {
+    enum_shape = &storage_.enum_types[storage_.types[type].as_enum()];
+    if (ir::enum_is_zst(storage_, type)) {
+      if (enum_shape->variants.empty()) {
+        return fail(IrRunError::Kind::Unsupported,
+                    ir::InstructionIdx(base::INVALID_IDX),
+                    "enum variant in comp evaluation");
+      }
+      out.tag = CompValue::Tag::Enum;
+      out.variant = 0;
+      return true;
+    }
     const ir::EnumNiche niche = ir::enum_niche(storage_, type);
     if (niche.has) {
       return fail(IrRunError::Kind::Unsupported,
                   ir::InstructionIdx(base::INVALID_IDX),
                   "niche enum in comp evaluation");
     }
+    const u64 tag_bytes = ir::enum_tag_width(storage_, type);
     u64 disc = 0;
-    if (!read_bytes(address, 4, ir::InstructionIdx(base::INVALID_IDX), disc)) {
+    if (!read_bytes(address, tag_bytes, ir::InstructionIdx(base::INVALID_IDX),
+                    disc)) {
       return false;
     }
-    const ir::EnumType& shape =
-        storage_.enum_types[storage_.types[type].as_enum()];
-    if (disc >= shape.variants.size()) {
+    if (disc >= enum_shape->variants.size()) {
       return fail(IrRunError::Kind::Unsupported,
                   ir::InstructionIdx(base::INVALID_IDX),
                   "enum variant in comp evaluation");
     }
     const ir::TypeIdxRange fields =
-        storage_.enum_variant_types[shape.variants[static_cast<u32>(disc)]]
+        storage_
+            .enum_variant_types[enum_shape->variants[static_cast<u32>(disc)]]
             .fields;
     const ir::TypeLayout area = ir::enum_payload_area(storage_, type, width_);
     const u64 align_mask = area.align == 0 ? 0 : area.align - 1;
-    const u64 area_at = (4 + align_mask) & ~align_mask;
+    const u64 area_at = (tag_bytes + align_mask) & ~align_mask;
     out.tag = CompValue::Tag::Enum;
     out.variant = static_cast<u32>(disc);
     for (u32 i = 0; i < fields.size(); ++i) {
@@ -1513,8 +1526,15 @@ bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
   }
   // Struct and tuple fields are laid out consecutively by field_offset.
   ir::TypeIdxRange fields;
+  const ir::TypeLayoutHints* hints = nullptr;
+  u32 hint_count = 0;
   if (tag == TypeTag::Struct) {
-    fields = storage_.struct_types[storage_.types[type].as_struct()].fields;
+    const ir::StructType& shape =
+        storage_.struct_types[storage_.types[type].as_struct()];
+    fields = shape.fields;
+    const auto [found, count] = ir::field_hints_of(storage_, shape);
+    hints = found;
+    hint_count = count;
   } else if (tag == TypeTag::Tuple) {
     fields = storage_.tuple_types[storage_.types[type].as_tuple()].elements;
   } else if (tag == TypeTag::Array) {
@@ -1537,7 +1557,8 @@ bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
                 "aggregate value in comp evaluation");
   }
   for (u32 i = 0; i < fields.size(); ++i) {
-    const u64 offset = ir::field_offset(storage_, fields, i, width_);
+    const u64 offset =
+        ir::field_offset(storage_, fields, i, width_, hints, hint_count);
     CompValue field;
     if (!read_value(fields[i], address + offset, field)) {
       return false;
