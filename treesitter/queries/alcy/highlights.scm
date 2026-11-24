@@ -104,8 +104,8 @@
 ] @comment
 (doc_comment) @comment.documentation
 
-; A `_` in a pattern is a discard rather than a name.
-(wildcard_pattern) @variable.builtin
+; A `_` in a pattern is a discard, not a name: leave it uncaptured so
+; themes render it as plain text instead of a builtin variable.
 
 ; Operators and punctuation --------------------------------------------------
 
