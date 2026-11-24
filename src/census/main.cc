@@ -1,11 +1,9 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// The compile-time evaluator against compiled packages. Lowering hands
-// its IR to the backends and to the second engine, and the
-// acceptance corpus is where the two are asked to agree. This driver
+// The compile-time evaluator against compiled packages. This driver
 // loads each package the compiler wrote in the binary IR form, runs
-// every function the engine can start, and fails while the engine
+// every function the interpreter can start, and fails while it
 // reports a compiler bug (Internal) or a refusal it has not declared. A
 // declared refusal is the boundary the corpus accepts as a program
 // property, and the per-reason census is what shows the boundary move.
@@ -140,6 +138,14 @@ bool eval_package(const char* path, Census& census) {
       case comp::IrRunError::Kind::Quota:
       case comp::IrRunError::Kind::Depth: ++census.budget; break;
       case comp::IrRunError::Kind::Overflow: ++census.overflow; break;
+      case comp::IrRunError::Kind::DivisionByZero:
+      case comp::IrRunError::Kind::OutOfBounds: {
+        const std::string_view name = strings.get(fn.meta.name);
+        std::fprintf(stderr, "%s: %.*s: source error: %.*s\n", path,
+                     static_cast<i32>(name.size()), name.data(),
+                     static_cast<i32>(error.what.size()), error.what.data());
+        break;
+      }
       case comp::IrRunError::Kind::Unsupported: {
         const std::span<const std::string_view> declared =
             comp::unsupported_refusals();

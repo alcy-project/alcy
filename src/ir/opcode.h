@@ -132,6 +132,16 @@ enum class Opcode : u8 {
   // sign bit, so it is not a subtraction from zero, which answers `+0.0`
   // where the source asks for `-0.0`.
   FNeg,
+
+  // Compile-time-only semantic opcodes. A resolved body carries none of
+  // them; the verifier rejects them in resolved bodies.
+  // A compile-time value spliced into the surrounding code. The value
+  // lives in a dedicated side table, not an operand payload, so no IR
+  // value needs a new tag.
+  CompValue,
+  // Read a byte from a compile-time string at a runtime index. Operands:
+  // the semantic string value and the index; result is a scalar byte.
+  CompStrByte,
 };
 
 constexpr const char* opcode_to_str(const Opcode opcode) {
@@ -161,6 +171,9 @@ constexpr const char* opcode_to_str(const Opcode opcode) {
     case O::FMul: return "FMul";
     case O::FDiv: return "FDiv";
     case O::FNeg: return "FNeg";
+
+    case O::CompValue: return "CompValue";
+    case O::CompStrByte: return "CompStrByte";
 
     case O::And: return "And";
     case O::Or: return "Or";

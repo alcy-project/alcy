@@ -365,7 +365,6 @@
   F(LowerInternalError, Error, Lowering, "Internal lowering error: {}") \
   F(LowerBlockReferenceEscapes, Error, Lowering, "Reference to local '{}' escapes the block that declares it") \
   F(LowerTemporaryReferenceEscapes, Error, Lowering, "A reference taken of a temporary outlives it") \
-  F(LowerCompEngineMismatch, Error, Lowering, "Internal error: the comp engines disagree on '{}'") \
   F(LowerCompOverflow, Error, Lowering, "Integer overflow in constant evaluation") \
   F(LowerCompDivisionByZero, Error, Lowering, "Division by zero in constant evaluation") \
   F(LowerCompOutOfBounds, Error, Lowering, "Index out of bounds in constant evaluation") \

@@ -73,6 +73,9 @@ enum class VerificationErrorKind : u8 {
   // A type parameter in a body the specialization pass resolved: no
   // layout answers for it, and no pass replaces it.
   MisplacedParametricType,
+  // A semantic marker in a body outside the unresolved and parametric
+  // lists: no pass will resolve it before a backend sees it.
+  MisplacedSemanticMarker,
   // An operand that names a register of another primitive type, or of
   // another value width: the register's row and the operand naming it are
   // two of the places a value's type is written, and a reader of the
@@ -136,6 +139,7 @@ constexpr std::string_view format_as(const VerificationErrorKind kind) {
     case K::MisplacedParametricDrop: return "MisplacedParametricDrop";
     case K::MisplacedParametricCall: return "MisplacedParametricCall";
     case K::MisplacedParametricType: return "MisplacedParametricType";
+    case K::MisplacedSemanticMarker: return "MisplacedSemanticMarker";
     case K::OperandTypeMismatch: return "OperandTypeMismatch";
   }
 }

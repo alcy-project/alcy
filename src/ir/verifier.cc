@@ -113,6 +113,8 @@ constexpr OperandArity operand_arity(const Opcode op) {
     case O::InsertValue: return {3, ANY_OPERANDS, true};
     case O::Br:
     case O::Call: return {1, ANY_OPERANDS, true};
+    case O::CompValue: return {1, 1, true};
+    case O::CompStrByte: return {2, 2, true};
   }
   return {};
 }
@@ -225,6 +227,79 @@ WordCount word_count(TypeTag tag) {
     return WordCount::One;
   }
   return WordCount::Unknown;
+}
+
+// A resolved body may name no semantic construct whose meaning a later
+// pass was to supply. Parametric artifacts are the first shape; this
+// helper is where further high-level markers join the check as the IR
+// grows levels. `allow_parametric` is the membership in the list of
+// bodies the specialization pass still clones.
+VerificationResult check_resolved_body(const Storage& storage,
+                                       FunctionIdx fidx,
+                                       bool allow_parametric) {
+  if (allow_parametric) {
+    return base::make_ok();
+  }
+  const Function& func = storage.functions()[fidx];
+  if (type_names_param(storage.state(), func.meta.return_type) ||
+      type_names_param(storage.state(), func.meta.owner)) {
+    return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
+  }
+  for (const TypeIdx param : func.meta.param_types) {
+    if (type_names_param(storage.state(), param)) {
+      return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
+    }
+  }
+  for (const TypeIdx generic : func.meta.generics) {
+    if (type_names_param(storage.state(), generic)) {
+      return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
+    }
+  }
+  for (const BlockIdx block_idx : func.blocks) {
+    const Block& block = storage.blocks()[block_idx];
+    if (!range_in_bounds(block.instrs.head(), block.instrs.size(),
+                         storage.instrs().size())) {
+      break;
+    }
+    if (range_in_bounds(block.block_params.head(), block.block_params.size(),
+                        storage.block_params().size())) {
+      for (const BlockParamIdx pidx : block.block_params) {
+        if (type_names_param(storage.state(),
+                             storage.block_params()[pidx].type)) {
+          return err(VerificationErrorKind::MisplacedParametricType, pidx.idx);
+        }
+      }
+    }
+    for (const InstructionIdx iidx : block.instrs) {
+      const Instruction& instr = storage.instrs()[iidx];
+      if (instr.op == Opcode::ParametricDrop) {
+        return err(VerificationErrorKind::MisplacedParametricDrop, iidx.idx);
+      }
+      switch (instr.op) {
+        case Opcode::CompValue:
+        case Opcode::CompStrByte:
+          return err(VerificationErrorKind::MisplacedSemanticMarker, iidx.idx);
+        default: break;
+      }
+      if (type_names_param(storage.state(), instr.measure)) {
+        return err(VerificationErrorKind::MisplacedParametricType, iidx.idx);
+      }
+      for (const OperandIdx operand : instr.operands) {
+        if (operand.idx >= storage.operands().size()) {
+          continue;
+        }
+        const Operand& entry = storage.operands()[operand];
+        if (entry.is<ParametricCalleeIdx>()) {
+          return err(VerificationErrorKind::MisplacedParametricCall, iidx.idx);
+        }
+        if (type_names_param(storage.state(), entry.type)) {
+          return err(VerificationErrorKind::MisplacedParametricType,
+                     operand.idx);
+        }
+      }
+    }
+  }
+  return base::make_ok();
 }
 
 }  // namespace
@@ -356,14 +431,13 @@ VerificationResult verify_storage(const Storage& storage) {
     }
   }
 
-  // Which bodies the specialization pass clones: only these carry the
-  // records it resolves, an end included.
-  std::vector<bool> parametric(storage.functions().size(), false);
+  // Bodies whose semantic markers the specialization pass still resolves.
+  std::vector<bool> unresolved(storage.functions().size(), false);
   for (const FunctionIdx fidx : storage.parametric_functions()) {
     if (fidx.idx >= storage.functions().size()) {
       return err(VerificationErrorKind::ParametricFunctionOutOfRange, fidx.idx);
     }
-    parametric[fidx.idx] = true;
+    unresolved[fidx.idx] = true;
   }
 
   for (FunctionIdx fidx(0); fidx.idx < storage.functions().size(); ++fidx) {
@@ -380,66 +454,10 @@ VerificationResult verify_storage(const Storage& storage) {
     // form waits on: an end or a callee record has no pass left that
     // would rewrite it, and a type parameter has no layout any reader
     // could answer.
-    if (!parametric[fidx.idx]) {
-      if (type_names_param(storage.state(), func.meta.return_type) ||
-          type_names_param(storage.state(), func.meta.owner)) {
-        return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
-      }
-      for (const TypeIdx param : func.meta.param_types) {
-        if (type_names_param(storage.state(), param)) {
-          return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
-        }
-      }
-      for (const TypeIdx generic : func.meta.generics) {
-        if (type_names_param(storage.state(), generic)) {
-          return err(VerificationErrorKind::MisplacedParametricType, fidx.idx);
-        }
-      }
-      for (const BlockIdx block_idx : func.blocks) {
-        const Block& block = storage.blocks()[block_idx];
-        if (!range_in_bounds(block.instrs.head(), block.instrs.size(),
-                             storage.instrs().size())) {
-          break;
-        }
-        if (range_in_bounds(block.block_params.head(),
-                            block.block_params.size(),
-                            storage.block_params().size())) {
-          for (const BlockParamIdx pidx : block.block_params) {
-            if (type_names_param(storage.state(),
-                                 storage.block_params()[pidx].type)) {
-              return err(VerificationErrorKind::MisplacedParametricType,
-                         pidx.idx);
-            }
-          }
-        }
-        for (const InstructionIdx iidx : block.instrs) {
-          const Instruction& instr = storage.instrs()[iidx];
-          if (instr.op == Opcode::ParametricDrop) {
-            return err(VerificationErrorKind::MisplacedParametricDrop,
-                       iidx.idx);
-          }
-          if (type_names_param(storage.state(), instr.measure)) {
-            return err(VerificationErrorKind::MisplacedParametricType,
-                       iidx.idx);
-          }
-          // The pass resolves a callee record into a function before
-          // any backend runs; an unresolved one is a hole.
-          for (const OperandIdx operand : instr.operands) {
-            if (operand.idx >= storage.operands().size()) {
-              continue;
-            }
-            const Operand& entry = storage.operands()[operand];
-            if (entry.is<ParametricCalleeIdx>()) {
-              return err(VerificationErrorKind::MisplacedParametricCall,
-                         iidx.idx);
-            }
-            if (type_names_param(storage.state(), entry.type)) {
-              return err(VerificationErrorKind::MisplacedParametricType,
-                         operand.idx);
-            }
-          }
-        }
-      }
+    VerificationResult resolved =
+        check_resolved_body(storage, fidx, unresolved[fidx.idx]);
+    if (resolved.is_err()) {
+      return resolved;
     }
   }
 

@@ -635,6 +635,16 @@ class TextWriter {
         write_operand(state_.operands[instr.operands.head()]);
         break;
       }
+      case O::CompValue:
+      case O::CompStrByte: {
+        write_dst(instr);
+        out_ += opcode_to_str(instr.op);
+        for (const OperandIdx operand : instr.operands) {
+          out_ += ' ';
+          write_operand(state_.operands[operand]);
+        }
+        break;
+      }
       case O::Eq: write_binary(instr, "=="); break;
       case O::Ne: write_binary(instr, "!="); break;
       case O::Le: write_binary(instr, "<="); break;

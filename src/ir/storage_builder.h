@@ -222,6 +222,40 @@ class StorageBuilder {
   }
   // Raw state for passes that query (never mutate) pre-build tables.
   const StorageState& state() const { return state_; }
+  // A point a speculative emission can return to. Const evaluation emits
+  // a synthetic function only to read a value back; rolling back to the
+  // checkpoint keeps that function out of the published artifact.
+  struct Checkpoint {
+    usize immutables = 0;
+    usize operands = 0;
+    usize instrs = 0;
+    usize registers = 0;
+    usize blocks = 0;
+    usize block_params = 0;
+    usize functions = 0;
+    usize synthetic = 0;
+  };
+  Checkpoint checkpoint() const {
+    return {state_.immutables.size(), state_.operands.size(),
+            state_.instrs.size(),     state_.registers.size(),
+            state_.blocks.size(),     state_.block_params.size(),
+            state_.functions.size(),  state_.synthetic_functions.size()};
+  }
+  void rollback(Checkpoint cp) {
+    auto pop_to = [](auto& vec, usize size) {
+      while (vec.size() > size) {
+        vec.pop_back();
+      }
+    };
+    pop_to(state_.immutables, cp.immutables);
+    pop_to(state_.operands, cp.operands);
+    pop_to(state_.instrs, cp.instrs);
+    pop_to(state_.registers, cp.registers);
+    pop_to(state_.blocks, cp.blocks);
+    pop_to(state_.block_params, cp.block_params);
+    pop_to(state_.functions, cp.functions);
+    pop_to(state_.synthetic_functions, cp.synthetic);
+  }
   // Sizes the tables a caller knows the population of before it fills
   // them. A table grown by doubling halves its own headroom: every
   // block discarded on the way is as large as the one that replaced it.
