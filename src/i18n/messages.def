@@ -608,6 +608,7 @@
   F(CliTestSuiteNotSupported, Note, Pipeline, "The `test` command tests one package; give a member's directory instead of the suite's") \
   F(CliTestTakesDirectory, Note, Pipeline, "The `test` command takes a package directory; use `check` for a file") \
   F(CliTestTargetNotRunnable, Error, Pipeline, "Cannot run tests for target '{}'; a test is a process the run starts") \
+  F(CliTestUnmeasured, Note, Pipeline, "unmeasured") \
   F(CliTimeTraceHelp, Note, Pipeline, "Time the compilation phases and report where the run went. With --json the phases are embedded in the document; on their own they are a pruned call tree.") \
   F(CliUnknownSubcommand, Note, Pipeline, "Unknown subcommand '{}'; see '{} --help'") \
   F(CliVcsHelp, Note, Pipeline, "Version control to prepare the package for: git (default) writes .gitignore, none writes no ignore file. No repository is created either way.") \

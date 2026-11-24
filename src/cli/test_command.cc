@@ -14,6 +14,7 @@
 #include "cli/logger.h"
 #include "cli/output.h"
 #include "cli/result_code.h"
+#include "cli/test_output.h"
 #include "cli/trace.h"
 #include "codegen/target.h"
 #include "diag/bag.h"
@@ -50,6 +51,7 @@ std::string_view count_word(usize count, i18n::Language language) {
 struct Progress {
   const Logger& err;
   i18n::Language language;
+  bool color;
 };
 
 // Reports one test as it finishes, from the process that watched it. The
@@ -58,23 +60,8 @@ struct Progress {
 // interleaved with the lines about it.
 void report_test(const pipeline::TestEvent& event, const void* ctx) {
   const auto& progress = *static_cast<const Progress*>(ctx);
-  std::string line;
-  switch (event.ending) {
-    case pipeline::TestEnding::Passed:
-      line = i18n::format<i18n::Key::CliTestCaseOk>(progress.language,
-                                                    event.label);
-      break;
-    case pipeline::TestEnding::Failed:
-      line = i18n::format<i18n::Key::CliTestCaseFailed>(
-          progress.language, event.label, event.code);
-      break;
-    case pipeline::TestEnding::Aborted:
-      line = i18n::format<i18n::Key::CliTestCaseAborted>(
-          progress.language, event.label, event.code);
-      break;
-  }
-  line += '\n';
-  progress.err.block(line);
+  progress.err.block(
+      render_test_case(event, progress.language, progress.color));
 }
 
 }  // namespace
@@ -211,13 +198,14 @@ i32 run_test(const CliConfig& config,
     envelope.outcome = Outcome::Listed;
     return result_code(ResultCode::Success);
   }
-  const Progress progress{err, language};
+  const Progress progress{err, language, style != term::ColorStyle::Off};
   const bool runs = !config.test_no_run;
   if (runs) {
-    err.block(i18n::format<i18n::Key::CliTestRunning>(
-                  language, chosen.size(), count_word(chosen.size(), language),
-                  built.artifact.name) +
-              '\n');
+    err.block(render_test_line(
+        i18n::format<i18n::Key::CliTestRunning>(
+            language, chosen.size(), count_word(chosen.size(), language),
+            built.artifact.name),
+        TestLineStyle::Heading, progress.color));
   }
   // A document is on standard output, so a test process's own bytes have
   // to stay off it; a run of prose sends the tests' bytes to the terminal.
@@ -251,16 +239,20 @@ i32 run_test(const CliConfig& config,
   if (done.ended_early) {
     // The run died inside a test, so the ones after it have no verdict;
     // a count of passes would read as if they all passed.
-    err.block(i18n::format<i18n::Key::CliTestStopped>(language) + '\n');
+    err.block(
+        render_test_line(i18n::format<i18n::Key::CliTestStopped>(language),
+                         TestLineStyle::Stopped, progress.color));
     return result_code(ResultCode::TestFailed);
   }
-  err.block(i18n::format<i18n::Key::CliTestPassed>(
-                language, done.passed, count_word(done.passed, language)) +
-            '\n');
+  err.block(render_test_line(
+      i18n::format<i18n::Key::CliTestPassed>(language, done.passed,
+                                             count_word(done.passed, language)),
+      TestLineStyle::Passed, progress.color));
   if (done.failed > 0) {
-    err.block(i18n::format<i18n::Key::CliTestFailed>(
-                  language, done.failed, count_word(done.failed, language)) +
-              '\n');
+    err.block(render_test_line(
+        i18n::format<i18n::Key::CliTestFailed>(
+            language, done.failed, count_word(done.failed, language)),
+        TestLineStyle::Failed, progress.color));
   }
   if (!done.ok()) {
     return result_code(ResultCode::TestFailed);

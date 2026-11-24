@@ -25,6 +25,7 @@ executable("tests") {
     "cli/parse_args_test.cc",
     "cli/parse_output_test.cc",
     "cli/suggest_test.cc",
+    "cli/test_output_test.cc",
     "cli/trace_report_test.cc",
     "cli/validate_test.cc",
     "codegen/backend_test.cc",
