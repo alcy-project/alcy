@@ -3,6 +3,7 @@
 
 #include "pipeline/test.h"
 
+#include <chrono>
 #include <optional>
 #include <span>
 #include <string>
@@ -87,14 +88,21 @@ base::Result<void, diag::Reported> execute_test(PipelineContext& ctx,
                                                 TestSummary& summary) {
   const std::string argument = std::to_string(index);
   const std::span<const std::string> argv{&argument, 1};
+  const auto started = std::chrono::steady_clock::now();
   base::Result<SpawnOutcome, diag::Reported> spawned =
       spawn_watched(ctx, exe_path, argv, options, summary);
   if (spawned.is_err()) {
     return base::make_err(diag::Reported{});
   }
+  const u64 duration_ns =
+      static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now() - started)
+                           .count());
   const SpawnOutcome ending = std::move(spawned).unwrap();
-  TestEvent event{
-      .label = label, .ending = TestEnding::Passed, .code = ending.code};
+  TestEvent event{.label = label,
+                  .ending = TestEnding::Passed,
+                  .code = ending.code,
+                  .duration_ns = duration_ns};
   if (ending.signaled) {
     event.ending = TestEnding::Aborted;
     ++summary.failed;

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -38,6 +39,10 @@ struct TestEvent {
   TestEnding ending = TestEnding::Passed;
   // The exit status, or the signal number for `Aborted`.
   i32 code = 0;
+  // How long the test's process ran. Empty when the run could not time
+  // it: a single-process run has no witness of an individual test's end,
+  // so it reports no events at all rather than events without a measure.
+  std::optional<u64> duration_ns;
 };
 
 // Reports one test as the run reaches its end. A single-process run reports
