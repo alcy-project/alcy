@@ -1,0 +1,13 @@
+[package]
+name = "two"
+version.suite = true
+license.suite = true
+
+[modules]
+include = ["main"]
+
+[dependencies]
+"alcy/std/*" = {}
+
+[[bin]]
+path = "main.al"

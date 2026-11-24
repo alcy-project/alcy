@@ -1,7 +1,7 @@
 [package]
-name = "main"
-version = "0.1.0"
-license = ""
+name = "one"
+version.suite = true
+license.suite = true
 
 [modules]
 include = ["main"]
@@ -10,5 +10,5 @@ include = ["main"]
 "alcy/std/*" = {}
 
 [[bin]]
-name = "main"
+name = "app"
 path = "main.al"

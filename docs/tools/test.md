@@ -18,7 +18,9 @@ $ alcy test [--release | --profile <NAME>] [PACKAGE-DIR]
 ```
 
 `PACKAGE-DIR` defaults to the current directory. A positional ending
-in `.al` is rejected.
+in `.al` is rejected. A suite applies to every listed member: tests run
+member by member, their counts are added into one summary, and each test
+label starts with the member's declared path (`core/cmp::less_is_lt`).
 
 ## How tests enter the program
 

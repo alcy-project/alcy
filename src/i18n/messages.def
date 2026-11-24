@@ -503,7 +503,7 @@
   F(PipelineStdIsASuite, Error, Pipeline, "The 'alcy/std' path is a suite, not a package; write \"alcy/std/*\" for every member or \"alcy/std/<package>\" for one") \
   F(PipelineStdPackageRequiresSuite, Error, Pipeline, "Package 'alcy/std/{}' requires alcy/std/{}; add it to [dependencies]") \
   F(PipelineSuiteEmpty, Error, Pipeline, "Suite '{}' lists no members") \
-  F(PipelineSuiteIsNotAProgram, Error, Pipeline, "Suite '{}' names several programs; run one member") \
+  F(PipelineSuiteNoDefaultRun, Error, Pipeline, "Suite '{}' has no default run targets; add [suite] default_run or run one member") \
   F(PipelineSuiteAlreadyHasMember, Error, Pipeline, "Suite '{}' already lists member '{}'") \
   F(PipelineSuiteHasMemberNamed, Error, Pipeline, "Suite '{}' already has a member named '{}'") \
   F(PipelineTargetOutputsCollide, Error, Pipeline, "Bin target '{}' and lib target '{}' both write to '{}'; name one of them") \
@@ -584,6 +584,7 @@
   F(CliReleaseHelp, Note, Pipeline, "Build with optimizations. The same as --profile release.") \
   F(CliReleaseWithProfile, Note, Pipeline, "`--release` is the same as `--profile release`; give one or the other") \
   F(CliRunAbout, Note, Pipeline, "Build and run a package directory") \
+  F(CliRunSuiteSummary, Note, Pipeline, "{} programs run, {} failed") \
   F(CliRunTakesDirectory, Note, Pipeline, "The `run` command takes a package directory; use `compile` for a file") \
   F(CliStdinHelp, Note, Pipeline, "Read the program from standard input instead of a file, and report against the name <stdin>. For an editor buffer that has never been saved.") \
   F(CliStdinNeedsOutput, Note, Pipeline, "Compiling from standard input needs `-o` to name the output") \
@@ -606,7 +607,6 @@
   F(CliTestSummary, Note, Pipeline, "{} {} run: {} passed, {} failed") \
   F(CliTestStopped, Note, Pipeline, "the run stopped before every test finished") \
   F(CliTestSummaryStopped, Note, Pipeline, "{} {} run: stopped early") \
-  F(CliTestSuiteNotSupported, Note, Pipeline, "The `test` command tests one package; give a member's directory instead of the suite's") \
   F(CliTestTakesDirectory, Note, Pipeline, "The `test` command takes a package directory; use `check` for a file") \
   F(CliTestTargetNotRunnable, Error, Pipeline, "Cannot run tests for target '{}'; a test is a process the run starts") \
   F(CliTestUnmeasured, Note, Pipeline, "unmeasured") \

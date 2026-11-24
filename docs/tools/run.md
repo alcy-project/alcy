@@ -32,9 +32,12 @@ Running   out/hello
 ```
 
 A `Running ...` line goes to standard error even when standard output is
-redirected, so a pipeline parses the program's output cleanly. If the
-package is a suite, nothing runs - a suite names several programs and
-one of them is not the answer.
+redirected, so a pipeline parses the program's output cleanly.
+
+A suite runs the members named by `[suite] default_run`, in declared
+order. Without that key, or with an empty list, `alcy run` stops with an
+error rather than guessing which programs you meant. Explicit member
+paths still run one program each.
 
 ## Builds the run keeps
 
@@ -42,7 +45,8 @@ one of them is not the answer.
 | --- | --- |
 | package with an entry | built, then `exec`ed |
 | library-only package | no entry, so the run fails without an artifact to point at |
-| suite | refused: a suite is not one program |
+| suite with `default_run` | each listed member's program runs in order |
+| suite without `default_run` | refused: no program was named |
 
 ## Panics
 
@@ -67,7 +71,10 @@ panic at main.al:7:5: boom
 | --- | --- |
 | 0 | the program exited with `0`. The exit code of the program itself is at the shell, not here |
 | 6 | the package was not a program `alcy run` can launch (build error, missing entry, a suite, a library) |
-| the program's own exit code | otherwise; it stands untouched |
+| the program's own exit code | otherwise; for a suite, the first failing program's code |
+
+For a suite, the runs continue after a failing program. A line on standard
+error says how many programs ran and how many failed.
 
 ## See also
 

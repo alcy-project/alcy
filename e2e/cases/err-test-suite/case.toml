@@ -1,6 +1,0 @@
-[cli]
-subcommand = "test"
-
-[cli.expect]
-exit = 4
-contains = ["The `test` command tests one package"]

@@ -130,6 +130,14 @@ name per package. Neither is required to recompile anything:
 `build`/`run`/`check`/`test` read the nearest ancestor manifest,
 or the positional directory you gave them.
 
+A positional package applies to that package. A positional suite applies
+to every listed member: `build`, `check`, `lint`, `fmt`, and `test` walk
+the members in declared order, and `test` names the member in each test
+label. `run` needs an explicit choice, because a suite does not say which
+of its programs a reader means: add `[suite] default_run` listing the
+member paths to run in order. Without it, or with an empty list, `run`
+stops rather than guessing.
+
 The trailing operand of `new` names what to create: a package name, an
 owner/name pair, or (with `--suite`) a suite name in the same grammar.
 Subdirectory paths create the directories they name; the last segment

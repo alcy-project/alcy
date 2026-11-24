@@ -36,6 +36,7 @@
 #include "pkg/manifest.h"
 #include "pkg/profile.h"
 #include "pkg/toolchain.h"
+#include "testgen/tests.h"
 
 namespace cli {
 
@@ -78,75 +79,20 @@ i32 run_test(const CliConfig& config,
   const std::string_view raw_dir = config.input.empty() ? "." : config.input;
   const i18n::Language language = config.language;
 
-  base::Result<pipeline::ManifestProbe, diag::Reported> probe =
-      pipeline::require_package_manifest(ctx, raw_dir, false);
-  if (probe.is_err()) {
+  base::Result<pipeline::TargetSet, diag::Reported> targets =
+      pipeline::resolve_targets(ctx, raw_dir, false);
+  if (targets.is_err()) {
     return failed;
   }
-  pipeline::ManifestProbe found = std::move(probe).unwrap();
-  // A suite names the packages that carry the tests rather than carrying
-  // them itself, so it is not something one run can test.
-  const std::optional<std::string_view> manifest_bytes =
-      ctx.sources.bytes(found.manifest);
-  if (manifest_bytes.has_value() &&
-      pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite) {
-    const u32 index = ctx.bag.emit<i18n::Key::CliTestSuiteNotSupported>(
-        pipeline::DiagCode::TestSuiteGiven);
-    (void)index;
-    return failed;
-  }
-  base::Result<pkg::Toolchain, diag::Reported> toolchain =
-      pipeline::load_toolchain(ctx, found.root);
-  if (toolchain.is_err()) {
-    return failed;
-  }
-  const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  // A test is a process the run starts and watches; a target that cannot
-  // start one has nothing to report tests with. Freestanding ELF targets
-  // can: their entry reads argc and argv off the initial stack.
-  // On those triples the test binary is always the kernel-only link, so
-  // the no-libc path keeps its coverage even though a hosted build now
-  // links the system C runtime by default.
+  pipeline::TargetSet chosen_targets = std::move(targets).unwrap();
+
   // A test run is the only command whose `when(testing)` gate is true.
   // Set it before any file is read so the parser drops items of every
   // other build before resolution sees them.
   ctx.testing = true;
-  ctx.freestanding = config.freestanding || tool.freestanding ||
-                     force_freestanding_elf(ctx.target.triple);
-  if (ctx.target.is_wasm() ||
-      (ctx.freestanding && !force_freestanding_elf(ctx.target.triple))) {
-    const u32 index = ctx.bag.emit<i18n::Key::CliTestTargetNotRunnable>(
-        pipeline::DiagCode::TestTargetNotRunnable, ctx.target.triple);
-    (void)index;
-    return failed;
-  }
   // The run's front half consults and stores the build's cache, so the
   // opt-out the build carries is the run's too.
   ctx.no_cache = config.no_cache;
-  // Emission and the link must agree on the link kind, so the file the
-  // link sees carries the choice this run made.
-  pkg::Toolchain link_tool = tool;
-  link_tool.freestanding = ctx.freestanding;
-  const pipeline::LinkOptions link =
-      resolve_link_options(config, link_tool, ctx.target.triple);
-  base::Result<pkg::Profiles, diag::Reported> profiles =
-      pipeline::load_profiles(ctx, found.root);
-  if (profiles.is_err()) {
-    return failed;
-  }
-  const pkg::Profiles tables = std::move(profiles).unwrap();
-  base::Result<pipeline::BuildProfile, diag::Reported> profile =
-      pipeline::resolve_profile(
-          pipeline::ProfileRequest{.name = config.profile,
-                                   .on_panic = config.on_panic,
-                                   .optimize = config.optimize,
-                                   .overflow_checks = config.overflow_checks},
-          tables, ctx.bag);
-  if (profile.is_err()) {
-    return failed;
-  }
-  const pipeline::BuildProfile selected = std::move(profile).unwrap();
-  resolve_backend_options(config, ctx, selected);
   FdSink err_sink{io::STDERR_FD};
   const Logger err{&FdSink::write, &err_sink};
   const term::ColorStyle style =
@@ -161,26 +107,119 @@ i32 run_test(const CliConfig& config,
       build_progress_observer(build_progress);
   const pipeline::BuildProgressObserver* observer =
       config.test_list ? nullptr : &build_observer;
-  const pipeline::BuildPlan plan{.profile = selected, .link = link};
+  const Progress progress{err, announce_options};
+  const bool runs = !config.test_no_run;
 
-  base::Result<pipeline::TestPackage, diag::Reported> package =
-      pipeline::resolve_test_package(ctx, found.root, found.manifest,
-                                     found.manifest_name, config.test_execution,
-                                     observer);
-  if (package.is_err()) {
-    return failed;
-  }
-  pipeline::TestPackage built = std::move(package).unwrap();
-  // The parent owns the selection: it lists the run, it names the tests the
-  // run performs, and the driver inside selects by position.
-  const std::vector<usize> chosen =
-      pipeline::filtered_tests(built.tests, config.test_filter);
-  envelope.test_count = chosen.size();
-  if (config.test_list) {
-    envelope.test_labels.reserve(chosen.size());
-    for (const usize index : chosen) {
-      envelope.test_labels.emplace_back(built.tests[index].label);
+  pipeline::TestSummary total;
+  std::string built_exe;
+  for (usize member_index = 0; member_index < chosen_targets.members.size();
+       ++member_index) {
+    const pipeline::ManifestProbe& member =
+        chosen_targets.members[member_index];
+    base::Result<pkg::Toolchain, diag::Reported> toolchain =
+        pipeline::load_toolchain(ctx, member.root);
+    if (toolchain.is_err()) {
+      return failed;
     }
+    const pkg::Toolchain tool = std::move(toolchain).unwrap();
+    // A test is a process the run starts and watches; a target that cannot
+    // start one has nothing to report tests with. Freestanding ELF targets
+    // can: their entry reads argc and argv off the initial stack.
+    ctx.freestanding = config.freestanding || tool.freestanding ||
+                       force_freestanding_elf(ctx.target.triple);
+    if (ctx.target.is_wasm() ||
+        (ctx.freestanding && !force_freestanding_elf(ctx.target.triple))) {
+      const u32 index = ctx.bag.emit<i18n::Key::CliTestTargetNotRunnable>(
+          pipeline::DiagCode::TestTargetNotRunnable, ctx.target.triple);
+      (void)index;
+      return failed;
+    }
+    pkg::Toolchain link_tool = tool;
+    link_tool.freestanding = ctx.freestanding;
+    const pipeline::LinkOptions link =
+        resolve_link_options(config, link_tool, ctx.target.triple);
+    base::Result<pkg::Profiles, diag::Reported> profiles =
+        pipeline::load_profiles(ctx, member.root);
+    if (profiles.is_err()) {
+      return failed;
+    }
+    const pkg::Profiles tables = std::move(profiles).unwrap();
+    base::Result<pipeline::BuildProfile, diag::Reported> profile =
+        pipeline::resolve_profile(
+            pipeline::ProfileRequest{.name = config.profile,
+                                     .on_panic = config.on_panic,
+                                     .optimize = config.optimize,
+                                     .overflow_checks = config.overflow_checks},
+            tables, ctx.bag);
+    if (profile.is_err()) {
+      return failed;
+    }
+    const pipeline::BuildProfile selected = std::move(profile).unwrap();
+    resolve_backend_options(config, ctx, selected);
+    const pipeline::BuildPlan plan{.profile = selected, .link = link};
+
+    base::Result<pipeline::TestPackage, diag::Reported> package =
+        pipeline::resolve_test_package(ctx, member.root, member.manifest,
+                                       member.manifest_name,
+                                       config.test_execution, observer);
+    if (package.is_err()) {
+      return failed;
+    }
+    pipeline::TestPackage built = std::move(package).unwrap();
+    // A suite's test names would collide across members, so the member's
+    // declared path becomes part of every label. A package keeps its
+    // short `<module>::<name>` labels.
+    if (chosen_targets.is_suite) {
+      const std::string prefix =
+          std::string(chosen_targets.suite.packages[member_index]) + "/";
+      for (testgen::TestCase& test_case : built.tests) {
+        test_case.label.insert(0, prefix);
+      }
+    }
+    const std::vector<usize> chosen =
+        pipeline::filtered_tests(built.tests, config.test_filter);
+    if (config.test_list) {
+      for (const usize index : chosen) {
+        envelope.test_labels.emplace_back(built.tests[index].label);
+      }
+      continue;
+    }
+    // A member with no selected tests has nothing to announce; in a
+    // suite of many packages one empty heading per member would bury the
+    // few lines that carry a verdict.
+    if (runs && (!chosen_targets.is_suite || !chosen.empty())) {
+      const std::string subject = i18n::format<i18n::Key::CliTestRunning>(
+          language, chosen.size(), count_word(chosen.size(), language),
+          built.artifact.name);
+      err.block(render_test_heading(subject, progress.options));
+    }
+    const pipeline::TestOptions options{
+        .execution = config.test_execution,
+        .build_only = config.test_no_run,
+        .report = runs ? report_test : nullptr,
+        .report_ctx = runs ? static_cast<const void*>(&progress) : nullptr,
+        .capture_output = config.json,
+    };
+    base::Result<pipeline::TestSummary, diag::Reported> summary =
+        pipeline::run_tests(ctx, {member.root, member.manifest, plan}, built,
+                            chosen, options);
+    if (summary.is_err()) {
+      return failed;
+    }
+    const pipeline::TestSummary done = std::move(summary).unwrap();
+    total.total += done.total;
+    total.passed += done.passed;
+    total.failed += done.failed;
+    total.output_bytes += done.output_bytes;
+    total.ended_early = total.ended_early || done.ended_early;
+    if (!runs) {
+      built_exe = done.exe_path;
+    }
+  }
+  envelope.trace = trace.take_events();
+  envelope.cache = ctx.cache_outcome;
+
+  if (config.test_list) {
     // The document carries a listing's labels itself, and the text report
     // is the lines a person reads. A run that printed both would put a
     // second thing on standard output beside the document.
@@ -196,49 +235,23 @@ i32 run_test(const CliConfig& config,
     envelope.outcome = Outcome::Listed;
     return result_code(ResultCode::Success);
   }
-  const Progress progress{err, announce_options};
-  const bool runs = !config.test_no_run;
-  if (runs) {
-    err.block(render_test_heading(
-        i18n::format<i18n::Key::CliTestRunning>(
-            language, chosen.size(), count_word(chosen.size(), language),
-            built.artifact.name),
-        progress.options));
-  }
-  // A document is on standard output, so a test process's own bytes have
-  // to stay off it; a run of prose sends the tests' bytes to the terminal.
-  const pipeline::TestOptions options{
-      .execution = config.test_execution,
-      .build_only = config.test_no_run,
-      .report = runs ? report_test : nullptr,
-      .report_ctx = runs ? static_cast<const void*>(&progress) : nullptr,
-      .capture_output = config.json,
-  };
-  base::Result<pipeline::TestSummary, diag::Reported> summary =
-      pipeline::run_tests(ctx, {found.root, found.manifest, plan}, built,
-                          chosen, options);
-  envelope.trace = trace.take_events();
-  envelope.cache = ctx.cache_outcome;
-  if (summary.is_err()) {
-    return failed;
-  }
-  const pipeline::TestSummary done = std::move(summary).unwrap();
+
   envelope.test_ran = true;
-  envelope.test_count = done.total;
-  envelope.test_failed = done.failed;
-  envelope.test_ended_early = done.ended_early;
-  envelope.output_bytes = done.output_bytes;
+  envelope.test_count = total.total;
+  envelope.test_failed = total.failed;
+  envelope.test_ended_early = total.ended_early;
+  envelope.output_bytes = total.output_bytes;
   if (!runs) {
     envelope.link_sdk_path = ctx.link_sdk_path;
     envelope.status = Status::Ok;
     envelope.outcome = Outcome::Built;
-    envelope.output_path = done.exe_path;
+    envelope.output_path = built_exe;
     return result_code(ResultCode::Success);
   }
   // A failed run still left counts on the envelope. The one summary
   // line is rendered at report time from those counts, so a reader who
   // tails the log sees the verdict whether the run passed or failed.
-  if (!done.ok()) {
+  if (!total.ok()) {
     return result_code(ResultCode::TestFailed);
   }
   envelope.link_sdk_path = ctx.link_sdk_path;

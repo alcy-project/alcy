@@ -1,0 +1,10 @@
+[package]
+name = "one"
+version.suite = true
+license.suite = true
+
+[modules]
+include = ["main"]
+
+[[bin]]
+path = "main.al"

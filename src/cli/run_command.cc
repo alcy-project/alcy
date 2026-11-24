@@ -5,8 +5,10 @@
 
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "cli/build_progress.h"
 #include "cli/cli_config.h"
@@ -44,12 +46,15 @@ namespace {
 struct Announcement {
   const diag::RenderOptions& options;
   const Logger& err;
+  std::string_view prefix = "";
 };
 
 void announce_exec(std::string_view program, const void* ctx) {
   const auto& a = *static_cast<const Announcement*>(ctx);
+  std::string labeled(a.prefix);
+  labeled.append(program);
   announce(a.err, i18n::text<i18n::Key::CliVerbRunning>(a.options.language),
-           program, a.options);
+           labeled, a.options);
 }
 
 }  // namespace
@@ -61,59 +66,41 @@ i32 run_run(const CliConfig& config,
   envelope.bag = &ctx.bag;
   envelope.sources = &ctx.sources;
   const i32 failed = result_code(ResultCode::RunFailed);
-  // Validation keeps single files out: `run` takes a package directory,
-  // and `compile` takes the file.
   const std::string_view raw_dir = config.input.empty() ? "." : config.input;
   const std::span<const std::string_view> args(config.program_args);
 
-  base::Result<pipeline::ManifestProbe, diag::Reported> probe =
-      pipeline::require_package_manifest(ctx, raw_dir, false);
-  if (probe.is_err()) {
+  base::Result<pipeline::TargetSet, diag::Reported> targets =
+      pipeline::resolve_targets(ctx, raw_dir, false);
+  if (targets.is_err()) {
     return failed;
   }
-  pipeline::ManifestProbe found = std::move(probe).unwrap();
-  // A suite names several programs and no single entry point, so it is
-  // not something run can execute.
-  const std::optional<std::string_view> manifest_bytes =
-      ctx.sources.bytes(found.manifest);
-  if (manifest_bytes.has_value() &&
-      pkg::probe_manifest_kind(*manifest_bytes) == pkg::ManifestKind::Suite) {
-    const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteIsNotAProgram>(
-        pipeline::DiagCode::NoTargets, found.manifest_name);
-    (void)index;
-    return failed;
+  pipeline::TargetSet chosen = std::move(targets).unwrap();
+  std::vector<pipeline::ManifestProbe> run_members;
+  std::vector<std::string> prefixes;
+  if (chosen.is_suite) {
+    if (!chosen.suite.has_default_run || chosen.suite.default_run_count == 0) {
+      const std::string suite = pipeline::suite_spelling(chosen.suite);
+      const u32 index = ctx.bag.emit<i18n::Key::PipelineSuiteNoDefaultRun>(
+          pipeline::DiagCode::NoTargets, suite);
+      (void)index;
+      return failed;
+    }
+    for (u32 i = 0; i < chosen.suite.default_run_count; ++i) {
+      const std::string_view member = chosen.suite.default_run[i];
+      for (u32 j = 0; j < chosen.suite.package_count; ++j) {
+        if (chosen.suite.packages[j] == member) {
+          run_members.push_back(chosen.members[j]);
+          prefixes.push_back(std::string(member) + "/");
+          break;
+        }
+      }
+    }
+  } else {
+    run_members = std::move(chosen.members);
+    prefixes.emplace_back();
   }
-  base::Result<pkg::Toolchain, diag::Reported> toolchain =
-      pipeline::load_toolchain(ctx, found.root);
-  if (toolchain.is_err()) {
-    return failed;
-  }
-  const pkg::Toolchain tool = std::move(toolchain).unwrap();
-  ctx.freestanding =
-      config.freestanding || tool.freestanding || ctx.freestanding;
-  // The run's front half consults and stores the build's cache, so the
-  // opt-out the build carries is the run's too.
+
   ctx.no_cache = config.no_cache;
-  const pipeline::LinkOptions link =
-      resolve_link_options(config, tool, ctx.target.triple);
-  base::Result<pkg::Profiles, diag::Reported> profiles =
-      pipeline::load_profiles(ctx, found.root);
-  if (profiles.is_err()) {
-    return failed;
-  }
-  const pkg::Profiles tables = std::move(profiles).unwrap();
-  base::Result<pipeline::BuildProfile, diag::Reported> profile =
-      pipeline::resolve_profile(
-          pipeline::ProfileRequest{.name = config.profile,
-                                   .on_panic = config.on_panic,
-                                   .optimize = config.optimize,
-                                   .overflow_checks = config.overflow_checks},
-          tables, ctx.bag);
-  if (profile.is_err()) {
-    return failed;
-  }
-  const pipeline::BuildProfile selected = std::move(profile).unwrap();
-  resolve_backend_options(config, ctx, selected);
   const term::ColorStyle style =
       term::console_color_style(term::Stream::Stderr, config.color_mode);
   const diag::RenderOptions announce_options{
@@ -122,28 +109,71 @@ i32 run_run(const CliConfig& config,
   };
   FdSink err_sink{io::STDERR_FD};
   const Logger err{&FdSink::write, &err_sink};
-  const Announcement announcement{announce_options, err};
   const BuildProgress progress{err, true, announce_options};
   const pipeline::BuildProgressObserver progress_observer =
       build_progress_observer(progress);
-  const pipeline::BuildPlan plan{.profile = selected, .link = link};
-  base::Result<pipeline::RunOutcome, diag::Reported> result =
-      pipeline::run_package(ctx, found.root, found.manifest,
-                            found.manifest_name, plan, args, announce_exec,
-                            &announcement, &progress_observer);
-  envelope.trace = trace.take_events();
-  // A run lowers through the same lifecycle a build does, so its cache
-  // outcome is the same report.
-  envelope.cache = ctx.cache_outcome;
-  if (result.is_err()) {
-    return failed;
+
+  i32 first_failure = 0;
+  u32 failed_programs = 0;
+  for (usize i = 0; i < run_members.size(); ++i) {
+    const pipeline::ManifestProbe& found = run_members[i];
+    base::Result<pkg::Toolchain, diag::Reported> toolchain =
+        pipeline::load_toolchain(ctx, found.root);
+    if (toolchain.is_err()) {
+      return failed;
+    }
+    const pkg::Toolchain tool = std::move(toolchain).unwrap();
+    // Reset per member: a toolchain choice from one suite member must
+    // not change how the next one links.
+    ctx.freestanding = config.freestanding || tool.freestanding;
+    const pipeline::LinkOptions link =
+        resolve_link_options(config, tool, ctx.target.triple);
+    base::Result<pkg::Profiles, diag::Reported> profiles =
+        pipeline::load_profiles(ctx, found.root);
+    if (profiles.is_err()) {
+      return failed;
+    }
+    const pkg::Profiles tables = std::move(profiles).unwrap();
+    base::Result<pipeline::BuildProfile, diag::Reported> profile =
+        pipeline::resolve_profile(
+            pipeline::ProfileRequest{.name = config.profile,
+                                     .on_panic = config.on_panic,
+                                     .optimize = config.optimize,
+                                     .overflow_checks = config.overflow_checks},
+            tables, ctx.bag);
+    if (profile.is_err()) {
+      return failed;
+    }
+    const pipeline::BuildProfile selected = std::move(profile).unwrap();
+    resolve_backend_options(config, ctx, selected);
+    const Announcement announcement{announce_options, err, prefixes[i]};
+    const pipeline::BuildPlan plan{.profile = selected, .link = link};
+    base::Result<pipeline::RunOutcome, diag::Reported> result =
+        pipeline::run_package(ctx, found.root, found.manifest,
+                              found.manifest_name, plan, args, announce_exec,
+                              &announcement, &progress_observer);
+    if (result.is_err()) {
+      return failed;
+    }
+    const i32 code = std::move(result).unwrap().exit_code;
+    if (code != 0) {
+      if (failed_programs == 0) {
+        first_failure = code;
+      }
+      ++failed_programs;
+    }
   }
-  // A run that reaches the program still carries the warnings the bag
-  // collected along the way, so the report is not a success-only line.
+  envelope.trace = trace.take_events();
+  envelope.cache = ctx.cache_outcome;
   envelope.link_sdk_path = ctx.link_sdk_path;
   envelope.status = Status::Ok;
   envelope.outcome = Outcome::Ran;
-  return std::move(result).unwrap().exit_code;
+  if (chosen.is_suite) {
+    err.block(i18n::format<i18n::Key::CliRunSuiteSummary>(
+                  config.language, run_members.size(), failed_programs) +
+              '\n');
+  }
+  return first_failure;
 }
 
 }  // namespace cli

@@ -1,8 +1,0 @@
-# A suite names the packages that carry tests; it does not carry them
-# itself, so `alcy test` refuses one.
-[suite]
-name = "sample"
-license = ""
-owner = "case"
-
-packages = ["main"]

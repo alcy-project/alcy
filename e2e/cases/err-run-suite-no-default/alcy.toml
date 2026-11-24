@@ -1,0 +1,7 @@
+[suite]
+name = "suite-no-default"
+owner = "acme"
+version = "1.0.0"
+license = ""
+packages = ["one"]
+default_run = []

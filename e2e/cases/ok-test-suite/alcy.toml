@@ -1,0 +1,6 @@
+[suite]
+name = "suite-tests"
+owner = "acme"
+version = "1.0.0"
+license = ""
+packages = ["one", "two"]
