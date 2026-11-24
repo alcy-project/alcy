@@ -1994,6 +1994,11 @@ ir::FunctionIdx Lowerer::fn_index(u32 mod,
   entry.ret = ret;
   entry.inst = inst;
   entry.kind = kind;
+  entry.inline_kind =
+      item.is_valid() && ast.items[item].kind == ast::ItemKind::Fn
+          ? static_cast<ir::InlineKind>(
+                ast.items[item].payload.get<ast::ItemFn>().inline_kind)
+          : ir::InlineKind::None;
   entry.owner = owner;
   if (parametric) {
     entry.parametric = true;
@@ -2058,7 +2063,8 @@ void Lowerer::reserve_function_row(const FnEntry& entry,
                 .path = intern_name(pkg.tree.modules[entry.mod]->path),
                 .kind = entry.kind,
                 .generics = generics.finish(),
-                .owner = entry.owner},
+                .owner = entry.owner,
+                .inline_kind = entry.inline_kind},
        .blocks = {}});
   DCHECK(row.idx == entry.idx.idx);
   (void)row;

@@ -1230,6 +1230,20 @@ llvm::Function* LlvmIrEmitter::create_function(
       llvm_function->addRetAttr(llvm::Attribute::NonNull);
     }
   }
+  // A source-level inline hint rides on the function, so LLVM's inliner
+  // and ThinLTO see the same policy the declaration asked for.
+  switch (function_meta.inline_kind) {
+    case ir::InlineKind::Always:
+      llvm_function->addFnAttr(llvm::Attribute::AlwaysInline);
+      break;
+    case ir::InlineKind::Hint:
+      llvm_function->addFnAttr(llvm::Attribute::InlineHint);
+      break;
+    case ir::InlineKind::Never:
+      llvm_function->addFnAttr(llvm::Attribute::NoInline);
+      break;
+    case ir::InlineKind::None: break;
+  }
   // There is no unwinding in alcy; `panic` aborts.
   llvm_function->setDoesNotThrow();
   return llvm_function;

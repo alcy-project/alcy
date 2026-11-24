@@ -86,7 +86,7 @@
   F(ParserRangeEndNeedsBound, Error, Parser, "A range end must be spelled `..<` or `..=`, bare `..` names no end") \
   F(ParserRefSelfParameter, Error, Parser, "a receiver is `self: &Self` (`mut self: &mut Self` when exclusive)") \
   F(ParserReservedName, Error, Parser, "Name `{}` is reserved for future use") \
-  F(ParserUnknownAttribute, Error, Parser, "Unknown attribute `{}`; the known attributes are `when`, `repr`, `layout`, and `test`") \
+  F(ParserUnknownAttribute, Error, Parser, "Unknown attribute `{}`; the known attributes are `when`, `repr`, `layout`, `inline`, and `test`") \
   F(ParserWhenUnknownTarget, Error, Parser, "Unknown `target` argument `{}`; the known arguments are `os`, `arch`, and `freestanding`") \
   F(ParserWhenUnknownValue, Error, Parser, "Unknown value `{}` for `target.{}`; the known values are {}") \
   F(ParserWhenNotBoolean, Error, Parser, "`when` expects a boolean expression") \
@@ -114,6 +114,9 @@
   F(ParserReturnSpelling, Error, Parser, "`ret` returns; write `ret ...`") \
   F(ParserSpecItemSpelling, Error, Parser, "`spec` declares a capability; `impl Spec for Type` opts a type in") \
   F(ParserTestMalformed, Error, Parser, "`test` takes no arguments; write `#[test]` alone") \
+  F(ParserInlineMalformed, Error, Parser, "`inline` takes one setting: `always`, `hint`, or `never`") \
+  F(ParserInlineUnknown, Error, Parser, "Unknown inline setting `{}`; the known settings are `always`, `hint`, and `never`") \
+  F(ParserInlineNotOnFunction, Error, Parser, "Inline settings apply to functions and methods") \
   F(ParserTestTakesNoArguments, Error, Parser, "a test takes no arguments") \
   F(ParserTestHasTypeParameters, Error, Parser, "a test declares no type parameters") \
   F(ParserTestOnUnsafe, Error, Parser, "a test cannot be `unsafe`; the driver calls it without an `unsafe` block") \

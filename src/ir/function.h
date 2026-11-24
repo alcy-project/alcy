@@ -22,6 +22,14 @@ enum class SymbolKind : u8 {
   Method,
 };
 
+// The optimization hint a source declaration wrote as `#[inline(...)]`.
+enum class InlineKind : u8 {
+  None,
+  Always,
+  Hint,
+  Never,
+};
+
 struct FunctionMeta {
   TypeIdx return_type;
   TypeIdxRange param_types;
@@ -37,6 +45,7 @@ struct FunctionMeta {
   // concrete instance for a generic impl. Invalid for a free function:
   // it is part of the item's identity, so the symbol must name it.
   TypeIdx owner = TypeIdx(base::INVALID_IDX);
+  InlineKind inline_kind = InlineKind::None;
 };
 
 struct Function {

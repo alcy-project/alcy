@@ -496,7 +496,8 @@ class Serializer {
       out.put_u32(string_index(meta.path));
       out.put_u32(meta.owner.idx);
       out.put_u8(static_cast<u8>(meta.kind));
-      out.zeros(3);
+      out.put_u8(static_cast<u8>(meta.inline_kind));
+      out.zeros(2);
       write_range(out, meta.generics);
       write_range(out, function.blocks);
     }

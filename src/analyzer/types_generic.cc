@@ -24,6 +24,7 @@
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
+#include "ir/function.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -1197,7 +1198,9 @@ const CheckedModule::FnSig* Checker::instantiate_fn(
                 .is_unsafe = fn_is_unsafe(item),
                 .is_comp = fn_is_comp(item),
                 .is_variadic = is_variadic,
-                .variadic_element = variadic_element},
+                .variadic_element = variadic_element,
+                .inline_kind = static_cast<ir::InlineKind>(
+                    ast.items[item].payload.get<ast::ItemFn>().inline_kind)},
                false);
   const u32 sig_index = static_cast<u32>(modules[module].functions.size()) - 1;
   // The definition-site check records under its own key: no numbering

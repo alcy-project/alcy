@@ -50,6 +50,10 @@ enum class DiagCode : u8 {
   // A `#[test]` marker takes no argument and closes on its own; its
   // spelling is separate from the `when` gate's.
   TestMalformed = 22,
+  // `#[inline(...)]` takes exactly one of always, hint, or never.
+  InlineMalformed = 23,
+  InlineUnknown = 24,
+  InlineNotOnFunction = 25,
 };
 
 }  // namespace parser

@@ -20,6 +20,7 @@
 #include "fpag/base/result.h"
 #include "fpag/debug/profiler/profiler.h"
 #include "ir/common.h"
+#include "ir/function.h"
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
@@ -120,6 +121,8 @@ struct CheckedModule {
     // `variadic_element` means untyped.
     bool is_variadic = false;
     ir::TypeIdx variadic_element = ir::TypeIdx(base::INVALID_IDX);
+    // The `#[inline(...)]` hint on the declaration.
+    ir::InlineKind inline_kind = ir::InlineKind::None;
   };
   // Lazily-instantiated generic methods append signatures during body
   // checking, so element addresses must stay stable: never

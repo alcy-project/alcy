@@ -932,6 +932,14 @@ struct ItemFnParam {
   bool is_variadic = false;
 };
 
+// The optimization hint written as `#[inline(...)]`.
+enum class InlineKind : u8 {
+  None,
+  Always,
+  Hint,
+  Never,
+};
+
 struct ItemFn {
   Ident name;
   // Generic parameters; empty for a non-generic function.
@@ -946,6 +954,8 @@ struct ItemFn {
   // A `#[test] fn`: a run gathers it as a test. Existence on a build is
   // decided by `#[when(testing)]`, not by this marker.
   bool is_test = false;
+  // The `#[inline(...)]` hint, if any.
+  InlineKind inline_kind = InlineKind::None;
 };
 
 // A compiler-provided function: signature without a body. Calls

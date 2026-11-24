@@ -144,6 +144,8 @@ class Lowerer {
     // What the symbol names. A method and an associated function share
     // an item, so the kind comes from the signature, not the item.
     ir::SymbolKind kind = ir::SymbolKind::Free;
+    // The source declaration's inline hint, carried to the symbol.
+    ir::InlineKind inline_kind = ir::InlineKind::None;
     // Type arguments of the instantiation, for the symbol.
     std::vector<ir::TypeIdx> generics;
     // The nominal a member belongs to, for the symbol.

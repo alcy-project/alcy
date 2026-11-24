@@ -4953,6 +4953,10 @@
     "named": false
   },
   {
+    "type": "always",
+    "named": false
+  },
+  {
     "type": "as",
     "named": false
   },
@@ -5019,6 +5023,10 @@
     "named": false
   },
   {
+    "type": "hint",
+    "named": false
+  },
+  {
     "type": "identifier",
     "named": true
   },
@@ -5057,6 +5065,10 @@
   },
   {
     "type": "mut",
+    "named": false
+  },
+  {
+    "type": "never",
     "named": false
   },
   {

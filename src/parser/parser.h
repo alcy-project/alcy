@@ -223,6 +223,8 @@ class Parser {
     diag::Span test_span;
     // `#[layout(...)]` settings carried to the declaration.
     ast::LayoutSpec layout;
+    // The `#[inline(...)]` hint carried to a function declaration.
+    ast::InlineKind inline_kind = ast::InlineKind::None;
 
     // Folds another attribute's contributions into these. Used both by
     // a run of attributes on one item and by a group passing its gates
@@ -246,6 +248,9 @@ class Parser {
       if (other.layout.tag_size != 0) {
         layout.tag_size = other.layout.tag_size;
       }
+      if (other.inline_kind != ast::InlineKind::None) {
+        inline_kind = other.inline_kind;
+      }
     }
   };
 
@@ -255,6 +260,7 @@ class Parser {
   // `#[repr(C)]`, starting at the first argument.
   Attributes parse_repr_attribute(diag::Span name_span);
   Attributes parse_layout_attribute(diag::Span name_span);
+  Attributes parse_inline_attribute(diag::Span name_span);
   void validate_layout(const ast::LayoutSpec& layout, diag::Span span);
   // Skips to the end of an attribute on a malformed spelling, tracking
   // nesting so an inner `]` never ends the skip.

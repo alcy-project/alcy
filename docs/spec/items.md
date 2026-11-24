@@ -99,7 +99,8 @@
 The names are a closed set, and each one names its own section or
 ruler: `when(EXPR)` on an item gates it on the build descriptor,
 `repr(C)` on a `struct` fixes its FFI layout, `layout(...)` names
-layout settings, and `test` on a `fn` marks the function a test.
+layout settings, `inline(...)` hints at inlining a function, and `test`
+on a `fn` marks the function a test.
 Other names are rejected with guidance
 naming the known set; they are not read past or remembered silently.
 An attribute sits on the line above the item; a field layout attribute sits
@@ -121,6 +122,18 @@ for its offset; the field's own type layout is unchanged. A field with
 a non-zero size must not have a natural alignment above `max_align`,
 so no unaligned access is generated; a zero-sized field is exempt.
 `min_align` above `max_align` is refused.
+
+## The `inline` attribute
+
+`#[inline(always)]`, `#[inline(hint)]`, and `#[inline(never)]` ask the
+LLVM optimizer to always inline, prefer inlining, or never inline the
+function. They apply to functions and methods only. A declaration that
+has no LLVM body — a spec method, intrinsic, `extern "C"`, or `comp fn`
+— cannot carry one.
+
+The setting is an optimization hint, not a change in meaning: a program
+behaves the same under each, though a backtrace can show different
+frames. Direct backends do no optimization and ignore the setting.
 
 ## The `when` gate
 

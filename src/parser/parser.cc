@@ -260,6 +260,9 @@ Parser::Attributes Parser::parse_attribute() {
   if (attr_name == "layout") {
     return parse_layout_attribute(name.span);
   }
+  if (attr_name == "inline") {
+    return parse_inline_attribute(name.span);
+  }
   if (attr_name != "when") {
     const u32 index = bag_.emit<i18n::Key::ParserUnknownAttribute>(
         DiagCode::UnknownAttribute, name.span, attr_name);
@@ -475,6 +478,47 @@ Parser::Attributes Parser::parse_layout_attribute(diag::Span name_span) {
     (void)index;
     synchronize_attribute();
     return out;
+  }
+  return out;
+}
+
+Parser::Attributes Parser::parse_inline_attribute(diag::Span name_span) {
+  Attributes out;
+  if (!expect(lexer::TokenKind::LParen, "`(` after `inline`")) {
+    synchronize_attribute();
+    return out;
+  }
+  const lexer::Token setting = peek();
+  if (setting.kind != lexer::TokenKind::Ident) {
+    const u32 index = bag_.emit<i18n::Key::ParserInlineMalformed>(
+        DiagCode::InlineMalformed, setting.span);
+    (void)index;
+    synchronize_attribute();
+    return out;
+  }
+  advance();
+  const std::string_view spelling =
+      bytes_.substr(setting.span.offset, setting.span.length);
+  if (spelling == "always") {
+    out.inline_kind = ast::InlineKind::Always;
+  } else if (spelling == "hint") {
+    out.inline_kind = ast::InlineKind::Hint;
+  } else if (spelling == "never") {
+    out.inline_kind = ast::InlineKind::Never;
+  } else {
+    const u32 index = bag_.emit<i18n::Key::ParserInlineUnknown>(
+        DiagCode::InlineUnknown, setting.span, spelling);
+    (void)index;
+  }
+  if (!expect(lexer::TokenKind::RParen, "`)` after `inline`")) {
+    synchronize_attribute();
+    return out;
+  }
+  if (!match(lexer::TokenKind::RBracket)) {
+    const u32 index = bag_.emit<i18n::Key::ParserInlineMalformed>(
+        DiagCode::InlineMalformed, name_span);
+    (void)index;
+    synchronize_attribute();
   }
   return out;
 }
@@ -887,6 +931,23 @@ ast::ItemIdx Parser::parse_item(Attributes attributes) {
       node.when_false = attributes.when_false;
       if (attributes.is_test && !apply_test_marker(item, node.span)) {
         return ast::ItemIdx::invalid();
+      }
+      if (attributes.inline_kind != ast::InlineKind::None) {
+        if (node.kind == ast::ItemKind::Fn) {
+          ast::ItemFn fn = node.payload.get<ast::ItemFn>();
+          if (fn.is_comp) {
+            const u32 index = bag_.emit<i18n::Key::ParserInlineNotOnFunction>(
+                DiagCode::InlineNotOnFunction, node.span);
+            (void)index;
+          } else {
+            fn.inline_kind = attributes.inline_kind;
+            node.payload.set(fn);
+          }
+        } else {
+          const u32 index = bag_.emit<i18n::Key::ParserInlineNotOnFunction>(
+              DiagCode::InlineNotOnFunction, node.span);
+          (void)index;
+        }
       }
       if ((attributes.layout.min_align != 0 ||
            attributes.layout.max_align != 0 ||
@@ -1715,6 +1776,11 @@ ast::ItemIdx Parser::parse_impl(bool is_pub) {
     if (!method.is_valid()) {
       synchronize();
       continue;
+    }
+    if (attributes.inline_kind != ast::InlineKind::None) {
+      ast::ItemFn fn = ast_.items[method].payload.get<ast::ItemFn>();
+      fn.inline_kind = attributes.inline_kind;
+      ast_.items[method].payload.set(fn);
     }
     if (!attributes.when_false) {
       methods.push_back(method);

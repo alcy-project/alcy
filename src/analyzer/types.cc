@@ -34,6 +34,7 @@
 #include "fpag/str/string_pool_id.h"
 #include "i18n/messages.h"
 #include "ir/common.h"
+#include "ir/function.h"
 #include "ir/seq_builder.h"
 #include "ir/storage.h"
 #include "ir/storage_builder.h"
@@ -2923,7 +2924,8 @@ void Checker::register_fn_signature(u32 module, ast::ItemIdx item) {
                 .is_unsafe = fn.is_unsafe,
                 .is_comp = fn.is_comp,
                 .is_variadic = is_variadic,
-                .variadic_element = variadic_element},
+                .variadic_element = variadic_element,
+                .inline_kind = static_cast<ir::InlineKind>(fn.inline_kind)},
                false);
 }
 

@@ -217,3 +217,24 @@ fn main() -> i32 { ret 0 }
     (block
       (return_expression
         (integer)))))
+
+================================================================================
+An inline attribute names one of its three settings
+================================================================================
+
+#[inline(always)]
+fn f() -> i32 { ret 1 }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (attribute
+    (identifier))
+  (function_item
+    (identifier)
+    (parameters)
+    (return_type
+      (primitive_type))
+    (block
+      (return_expression
+        (integer)))))

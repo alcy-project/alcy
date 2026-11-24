@@ -133,11 +133,12 @@ module.exports = grammar({
 
     // Attributes ------------------------------------------------------------
 
-    // The four attributes may lead an item or field and repeat; the closed set is
+    // The five attributes may lead an item or field and repeat; the closed set is
     // `#[when(EXPR)]`, which gates an item on the build context,
     // `#[repr(C)]`, which fixes a struct's layout to the platform's C,
     // `#[layout(...)]`, which names layout settings,
-    // one, and `#[test]`, which marks a function a test (grammar.ebnf,
+    // `#[inline(always|hint|never)]`, which hints at inlining, and
+    // `#[test]`, which marks a function a test (grammar.ebnf,
     // `attribute`). Word-like parts read as identifiers so the rest of
     // the language keeps its words, and the parser validates the
     // argument the way it validates an extern convention. `#[test]` takes
@@ -153,11 +154,14 @@ module.exports = grammar({
           // The repr argument is the one letter `C`.
           $._repr_argument,
           $._layout_args,
+          $._inline_arg,
         ),
         ')',
       )),
       ']',
     ),
+
+    _inline_arg: $ => choice('always', 'hint', 'never'),
 
     layout_setting: $ => seq(
       field('key', $.identifier),

@@ -186,7 +186,7 @@ TEST_CASE("An unknown attribute is refused with guidance") {
   (void)r;
   CHECK(has_message(f.bag,
                     "Unknown attribute `blorch`; the known attributes are "
-                    "`when`, `repr`, `layout`, and `test`"));
+                    "`when`, `repr`, `layout`, `inline`, and `test`"));
 }
 
 TEST_CASE("An unknown value for a known key is refused with the known set") {
@@ -462,5 +462,54 @@ TEST_CASE("Layout values and targets are validated") {
       (void)r;
       CHECK(has_message(f.bag, c.message));
     }
+  }
+}
+
+TEST_CASE("An inline attribute records its setting") {
+  struct Case {
+    std::string_view spelling;
+    ast::InlineKind kind;
+  };
+  const Case cases[] = {
+      {"always", ast::InlineKind::Always},
+      {"hint", ast::InlineKind::Hint},
+      {"never", ast::InlineKind::Never},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    const std::string source =
+        "#[inline(" + std::string(c.spelling) + ")]\n" +
+        "fn f() -> i32 { ret 1 }\nfn main() -> i32 { ret 0 }\n";
+    ParseResult r = parse_with(source, LINUX_X86_64, f);
+    CHECK(r.ok);
+    if (r.items.empty()) {
+      continue;
+    }
+    const ast::ItemFn& fn = f.ast.items[r.items[0]].payload.get<ast::ItemFn>();
+    CHECK(fn.inline_kind == c.kind);
+  }
+}
+
+TEST_CASE("An inline attribute is refused where it cannot apply") {
+  struct Case {
+    std::string_view source;
+    std::string_view message;
+  };
+  const Case cases[] = {
+      {"#[inline(nope)]\nfn f() {}\n",
+       "Unknown inline setting `nope`; the known settings are `always`, "
+       "`hint`, and `never`"},
+      {"#[inline(hint)]\nstruct S { a: u8 }\n",
+       "Inline settings apply to functions and methods"},
+      {"#[inline(always)]\ncomp fn f() -> i32 { ret 1 }\n",
+       "Inline settings apply to functions and methods"},
+  };
+  for (const Case& c : cases) {
+    Fixture f;
+    ParseResult r =
+        parse_with(std::string(c.source) + "fn main() -> i32 { ret 0 }\n",
+                   LINUX_X86_64, f);
+    (void)r;
+    CHECK(has_message(f.bag, c.message));
   }
 }

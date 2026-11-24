@@ -629,7 +629,8 @@ ir::FunctionIdx Lowerer::specialize_body(ir::FunctionIdx source_idx,
                               .path = source.meta.path,
                               .kind = source.meta.kind,
                               .generics = generics.finish(),
-                              .owner = owner};
+                              .owner = owner,
+                              .inline_kind = source.meta.inline_kind};
   const ir::FunctionIdx clone = reserve_body_function(meta);
   // Memoize before cloning: a recursive instantiation reaches its own
   // clone by key while the body is still being built.

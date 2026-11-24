@@ -1,0 +1,6 @@
+[cli]
+subcommand = "compile"
+args = ["--emit=llvm-ir"]
+
+[cli.expect]
+exit = 0

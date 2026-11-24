@@ -265,10 +265,13 @@ params_head u32, params_size u32 }`.
 **FUNCS**: `{ ret u32, params_head u32, params_size u32 }`.
 
 **FUNCTIONS**: `{ return_type u32, param_head u32, param_size u32,
-name u32, path u32, owner u32, kind u8, pad u8[3], generics_head u32,
+name u32, path u32, owner u32, kind u8, inline_kind u8, pad u8[2],
+generics_head u32,
 generics_size u32, blocks_head u32, blocks_size u32 }`. `owner` is the
 `TYPES` row of the nominal an associated function or a method is
-declared on, and `U32_MAX` for a free function.
+declared on, and `U32_MAX` for a free function. `inline_kind` is the
+source-level optimization hint: 0 for none, 1 for always, 2 for hint,
+3 for never.
 
 **BLOCKS**: `{ instrs_head u32, instrs_size u32, params_head u32,
 params_size u32 }`.

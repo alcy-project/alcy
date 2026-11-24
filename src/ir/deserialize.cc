@@ -568,6 +568,7 @@ bool read_functions(Parsed& parsed, std::span<const u8> payload) {
     u32 path = 0;
     u32 owner = 0;
     u8 kind = 0;
+    u8 inline_kind = 0;
     u8 pad = 0;
     u32 generics_head = 0;
     u32 generics_size = 0;
@@ -576,8 +577,8 @@ bool read_functions(Parsed& parsed, std::span<const u8> payload) {
     if (!cursor.read_u32(return_type) ||
         !read_range(cursor, param_head, param_size) || !cursor.read_u32(name) ||
         !cursor.read_u32(path) || !cursor.read_u32(owner) ||
-        !cursor.read_u8(kind) || !cursor.read_u8(pad) || !cursor.read_u8(pad) ||
-        !cursor.read_u8(pad) ||
+        !cursor.read_u8(kind) || !cursor.read_u8(inline_kind) ||
+        !cursor.read_u8(pad) || !cursor.read_u8(pad) ||
         !read_range(cursor, generics_head, generics_size) ||
         !read_range(cursor, blocks_head, blocks_size)) {
       return false;
@@ -590,7 +591,8 @@ bool read_functions(Parsed& parsed, std::span<const u8> payload) {
                  .kind = static_cast<SymbolKind>(kind),
                  .generics =
                      TypeIdxRange{TypeIdx(generics_head), generics_size},
-                 .owner = TypeIdx(owner)},
+                 .owner = TypeIdx(owner),
+                 .inline_kind = static_cast<InlineKind>(inline_kind)},
         .blocks = BlockIdxRange{BlockIdx(blocks_head), blocks_size},
     });
   }

@@ -3,6 +3,7 @@
 
 #include "codegen_llvm/llvm_ir_emitter.h"
 
+#include <array>
 #include <memory>
 #include <string>
 #include <utility>
@@ -1397,6 +1398,61 @@ TEST_CASE("An unchecked build emits the plain add") {
   module->print(os, nullptr);
   CHECK(ir_str.find("alcy_check_overflow") == std::string::npos);
   CHECK(ir_str.find("sadd.with.overflow") == std::string::npos);
+}
+
+TEST_CASE("Inline hints reach the emitted functions") {
+  llvm::LLVMContext context;
+  std::unique_ptr<llvm::Module> module =
+      std::make_unique<llvm::Module>("llvm_ir_emitter_inline_test", context);
+  CHECK(codegen_llvm::configure_target(*module, host_target()).is_ok());
+
+  ir::SymbolTable interner(mem::page_size());
+  const ir::TypeIdx i32 = ir::primitive_idx(ir::TypeTag::I32);
+  ir::StorageBuilder builder;
+  const std::array<std::string_view, 3> names = {"always", "hint", "never"};
+  const std::array<ir::InlineKind, 3> kinds = {
+      ir::InlineKind::Always, ir::InlineKind::Hint, ir::InlineKind::Never};
+  const std::array<llvm::Attribute::AttrKind, 3> attrs = {
+      llvm::Attribute::AlwaysInline, llvm::Attribute::InlineHint,
+      llvm::Attribute::NoInline};
+  for (usize i = 0; i < names.size(); ++i) {
+    const ir::OperandIdx returned = builder.operand(ir::Operand::from_immutable(
+        builder.immutable(ir::Immutable{.type = i32, .data = {.i32_value = 0}}),
+        i32));
+    ir::InstrSeq instrs;
+    instrs.push(builder.instr({.op = ir::Opcode::Ret,
+                               .flags = {},
+                               .dst = ir::RegisterIdx(base::INVALID_IDX),
+                               .measure = ir::TypeIdx::invalid(),
+                               .operands = {returned, 1}}));
+    const ir::BlockIdx block =
+        builder.block({.instrs = instrs.finish(), .block_params = {}});
+    builder.function({.meta = {.return_type = i32,
+                               .param_types = {},
+                               .name = interner.intern(names[i]),
+                               .path = str::EMPTY_STRING_ID,
+                               .kind = ir::SymbolKind::Free,
+                               .generics = ir::TypeIdxRange{},
+                               .inline_kind = kinds[i]},
+                      .blocks = {block, 1}});
+  }
+  LlvmIrEmitter emitter(module.get(), std::move(builder).build().unwrap(),
+                        &interner, host_target(), true);
+  std::move(emitter).emit();
+  CHECK(!llvm::verifyModule(*module));
+  usize checked = 0;
+  for (llvm::Function& function : *module) {
+    if (function.isDeclaration()) {
+      continue;
+    }
+    CHECK(checked < attrs.size());
+    if (checked >= attrs.size()) {
+      break;
+    }
+    CHECK(function.hasFnAttribute(attrs[checked]));
+    ++checked;
+  }
+  CHECK(checked == names.size());
 }
 
 }  // namespace codegen_llvm
