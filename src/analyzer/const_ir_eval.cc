@@ -1675,6 +1675,7 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
   if (!head.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
+  const bool from_range = ast.exprs[head].kind == ast::ExprKind::Range;
   std::vector<comp::CompVal> elements;
   if (ast.exprs[head].kind == ast::ExprKind::Range) {
     const ast::ExprRange& range = ast.exprs[head].payload.get<ast::ExprRange>();
@@ -1800,62 +1801,151 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
       ast.blocks[ast.exprs[body_expr].payload.get<ast::ExprBlock>().block];
 
   const u64 iterations = elements.size();
-  std::vector<ir::BlockIdx> iter_blocks;
-  iter_blocks.reserve(static_cast<usize>(iterations));
-  for (u64 i = 0; i < iterations; ++i) {
-    iter_blocks.push_back(emitter.new_block());
-  }
-  const ir::BlockIdx exit_b = emitter.new_block();
-  if (!emitter.terminated()) {
-    emitter.emit_br(iter_blocks[0], ir::OperandIdx(base::INVALID_IDX));
-  }
-  emitter.set_loop_targets(exit_b, exit_b);
-  const usize saved_bindings = emitter.value_bindings_size();
-  bool ok = true;
-  for (u64 i = 0; i < iterations; ++i) {
-    emitter.set_cur(iter_blocks[static_cast<usize>(i)]);
-    const comp::CompVal& element = elements[static_cast<usize>(i)];
-    ir::OperandIdx element_op = ir::OperandIdx(base::INVALID_IDX);
-    if (element.value.tag == comp::CompValue::Tag::Int ||
-        element.value.tag == comp::CompValue::Tag::Bool) {
-      const ir::TypeTag tag = emitter.builder().state().types[element.type].tag;
-      const ir::ImmutableIdx imm = emitter.builder().immutable(
-          {.type = element.type,
-           .data = {.u64_value =
-                        (element.value.tag == comp::CompValue::Tag::Bool
-                             ? (element.value.bool_value ? 1u : 0u)
-                             : element.value.int_value) &
-                        comp::mask(tag)}});
-      element_op = emitter.builder().operand(
-          ir::Operand::from_immutable(imm, element.type));
-    } else {
-      element_op = emitter.add_semantic(element, element.type);
+  if (!from_range) {
+    std::vector<ir::BlockIdx> iter_blocks;
+    iter_blocks.reserve(static_cast<usize>(iterations));
+    for (u64 i = 0; i < iterations; ++i) {
+      iter_blocks.push_back(emitter.new_block());
     }
-    if (bind_element) {
-      emitter.bind_value(var_name, element_op);
-    }
-    const ir::OperandIdx body_val = emit_block(
-        ast, body_block, emitter.builder().primitive(ir::TypeTag::Void),
-        emitter, ctx, params);
-    emitter.restore_value_bindings(saved_bindings);
-    if (!body_val.is_valid()) {
-      ok = false;
-      break;
-    }
+    const ir::BlockIdx exit_b = emitter.new_block();
     if (!emitter.terminated()) {
-      const ir::BlockIdx next =
-          i + 1 < iterations ? iter_blocks[static_cast<usize>(i + 1)] : exit_b;
-      emitter.emit_br(next, ir::OperandIdx(base::INVALID_IDX));
+      emitter.emit_br(iter_blocks[0], ir::OperandIdx(base::INVALID_IDX));
     }
+    emitter.set_loop_targets(exit_b, exit_b);
+    const usize saved_bindings = emitter.value_bindings_size();
+    bool ok = true;
+    for (u64 i = 0; i < iterations; ++i) {
+      emitter.set_cur(iter_blocks[static_cast<usize>(i)]);
+      const comp::CompVal& element = elements[static_cast<usize>(i)];
+      ir::OperandIdx element_op = ir::OperandIdx(base::INVALID_IDX);
+      if (element.value.tag == comp::CompValue::Tag::Int ||
+          element.value.tag == comp::CompValue::Tag::Bool) {
+        const ir::TypeTag tag =
+            emitter.builder().state().types[element.type].tag;
+        const ir::ImmutableIdx imm = emitter.builder().immutable(
+            {.type = element.type,
+             .data = {.u64_value =
+                          (element.value.tag == comp::CompValue::Tag::Bool
+                               ? (element.value.bool_value ? 1u : 0u)
+                               : element.value.int_value) &
+                          comp::mask(tag)}});
+        element_op = emitter.builder().operand(
+            ir::Operand::from_immutable(imm, element.type));
+      } else {
+        element_op = emitter.add_semantic(element, element.type);
+      }
+      if (bind_element) {
+        emitter.bind_value(var_name, element_op);
+      }
+      const ir::OperandIdx body_val = emit_block(
+          ast, body_block, emitter.builder().primitive(ir::TypeTag::Void),
+          emitter, ctx, params);
+      emitter.restore_value_bindings(saved_bindings);
+      if (!body_val.is_valid()) {
+        ok = false;
+        break;
+      }
+      if (!emitter.terminated()) {
+        const ir::BlockIdx next = i + 1 < iterations
+                                      ? iter_blocks[static_cast<usize>(i + 1)]
+                                      : exit_b;
+        emitter.emit_br(next, ir::OperandIdx(base::INVALID_IDX));
+      }
+    }
+    emitter.clear_loop_targets();
+    if (!ok) {
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
+    emitter.set_cur(exit_b);
+    return emitter.void_operand();
   }
+
+  // A range loop is a real IR loop: the index travels in a block param,
+  // the back edge spends the shared quota, and break/continue keep their
+  // ordinary targets. The expansion cap is checked once on the known count.
+  const ir::TypeIdx index_ty = elements[0].type;
+  const ir::TypeTag index_tag = emitter.builder().state().types[index_ty].tag;
+  const u64 first = elements[0].value.int_value & comp::mask(index_tag);
+  const u64 after = elements.back().value.int_value + 1;
+  const ir::BlockIdx header = emitter.new_block();
+  const ir::BlockIdx step_b = emitter.new_block();
+  const ir::BlockIdx body_b = emitter.new_block();
+  const ir::BlockIdx exit_b = emitter.new_block();
+  const ir::RegisterIdx index_reg = emitter.claim_reg(index_ty);
+  emitter.set_block_params(header, emitter.block_param(index_ty, index_reg));
+
+  const auto index_operand = [&](u64 value) {
+    const ir::ImmutableIdx imm = emitter.builder().immutable(
+        {.type = index_ty, .data = {.u64_value = value}});
+    return emitter.builder().operand(
+        ir::Operand::from_immutable(imm, index_ty));
+  };
+  const ir::OperandIdx initial = index_operand(first);
+  if (!emitter.terminated()) {
+    emitter.emit_br(header, initial);
+  }
+
+  emitter.set_cur(header);
+  const ir::OperandIdx current = emitter.builder().operand(
+      ir::Operand::from_register(index_reg, index_ty));
+  const ir::OperandIdx limit = index_operand(after);
+  const ir::RegisterIdx cond_reg =
+      emitter.claim_reg(emitter.builder().primitive(ir::TypeTag::I1));
+  ir::OperandSeq cmp_ops;
+  cmp_ops.push(current);
+  cmp_ops.push(limit);
+  const ir::InstructionIdx cmp =
+      emitter.builder().instr({.op = ir::Opcode::Lt,
+                               .flags = {},
+                               .dst = cond_reg,
+                               .measure = ir::TypeIdx::invalid(),
+                               .operands = cmp_ops.finish()});
+  emitter.builder().reg(
+      {.type = emitter.builder().primitive(ir::TypeTag::I1), .def_idx = cmp});
+  emitter.cur().push(cmp);
+  emitter.emit_cond_br(
+      emitter.builder().operand(ir::Operand::from_register(
+          cond_reg, emitter.builder().primitive(ir::TypeTag::I1))),
+      body_b, exit_b);
+
+  emitter.set_loop_targets(exit_b, step_b);
+  emitter.set_cur(body_b);
+  if (bind_element) {
+    emitter.bind_value(var_name, current);
+  }
+  const ir::OperandIdx body_val = emit_block(
+      ast, body_block, emitter.builder().primitive(ir::TypeTag::Void), emitter,
+      ctx, params);
+  const bool body_ok = body_val.is_valid();
+  if (body_ok && !emitter.terminated()) {
+    emitter.emit_br(step_b, ir::OperandIdx(base::INVALID_IDX));
+  }
+
+  emitter.set_cur(step_b);
+  const ir::OperandIdx step_current = emitter.builder().operand(
+      ir::Operand::from_register(index_reg, index_ty));
+  const ir::OperandIdx one = index_operand(1);
+  const ir::RegisterIdx next_reg = emitter.claim_reg(index_ty);
+  ir::OperandSeq add_ops;
+  add_ops.push(step_current);
+  add_ops.push(one);
+  const ir::InstructionIdx add =
+      emitter.builder().instr({.op = ir::Opcode::IntAdd,
+                               .flags = {},
+                               .dst = next_reg,
+                               .measure = index_ty,
+                               .operands = add_ops.finish()});
+  emitter.builder().reg({.type = index_ty, .def_idx = add});
+  emitter.cur().push(add);
+  emitter.emit_br(header, emitter.builder().operand(
+                              ir::Operand::from_register(next_reg, index_ty)));
   emitter.clear_loop_targets();
-  if (!ok) {
+  if (!body_ok) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
   emitter.set_cur(exit_b);
   return emitter.void_operand();
 }
-
 ir::OperandIdx emit_cast(const ast::AstArena& ast,
                          const ast::ExprCast& cast,
                          ir::TypeIdx type,
