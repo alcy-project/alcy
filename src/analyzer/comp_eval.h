@@ -25,6 +25,31 @@ namespace analyzer {
 
 struct EmitContext;
 
+// The checked module and instantiation an expression is read under.
+struct EvalSite {
+  u32 module = 0;
+  u32 inst = 0;
+};
+
+// The checked shape of a `comp fn` call's callee, for emitting a
+// synthetic IR function the interpreter can call.
+struct CompFnInfo {
+  ast::BlockIdx body = ast::BlockIdx::invalid();
+  std::vector<ast::PatternIdx> params;
+  std::vector<ir::TypeIdx> param_types;
+  ir::TypeIdx ret = ir::TypeIdx(base::INVALID_IDX);
+  // A variadic comp fn binds its trailing arguments as a shape; the
+  // fixed params bind normally.
+  bool variadic = false;
+  // The declared element type of a typed variadic, invalid when untyped.
+  ir::TypeIdx element = ir::TypeIdx(base::INVALID_IDX);
+  // A method call's receiver occupies the first parameter (`self`).
+  bool is_method = false;
+  // The module and instantiation the callee body was checked under.
+  u32 module = 0;
+  u32 inst = 0;
+};
+
 // One expression at a time spends one unit; nothing raises the quota
 // yet, so evaluation is bounded deterministically by control flow.
 inline constexpr u64 COMP_BRANCH_QUOTA = comp::COMP_BRANCH_QUOTA;
@@ -70,6 +95,21 @@ class CompEval {
                      ast::ExprIdx init,
                      u32 inst,
                      comp::CompVal& out);
+
+  // Checked-table resolution used by the synthetic IR emitter. Every
+  // method reads `site` explicitly, so the emitter does not depend on
+  // captured callbacks or evaluator state it cannot see.
+  ir::TypeIdx type_of(EvalSite site, ast::ExprIdx expr);
+  ir::TypeIdx layout_type_of(EvalSite site, ast::ExprIdx expr);
+  bool path_value(EvalSite site,
+                  comp::CompScope& scope,
+                  ast::PathIdx path,
+                  comp::CompVal& out);
+  bool comp_fn(EvalSite site, ast::ExprIdx call, CompFnInfo& info);
+  bool field_index(ir::TypeIdx type, std::string_view name, u32& index_out);
+  bool variant_index(ir::TypeIdx type, std::string_view name, u32& index_out);
+
+  EmitContext emit_context_for(EvalSite site, comp::CompScope& scope);
 
   enum class Failure : u8 {
     None,
@@ -122,9 +162,6 @@ class CompEval {
                           std::string_view name,
                           u32& index_out);
   ir::TypeIdx field_type_of(ir::TypeIdx base, u32 index, diag::Span span);
-  bool variant_index(ir::TypeIdx enum_type,
-                     std::string_view name,
-                     u32& index_out);
   std::vector<ir::TypeIdx> variant_payload(ir::TypeIdx enum_type,
                                            u32 variant) const;
 
@@ -142,11 +179,6 @@ class CompEval {
                                                   u32 inst) const;
   u32 generic_inst_index(ir::TypeIdx type) const;
   u32 callee_inst(const CheckedModule::CallTarget* target) const;
-
-  EmitContext emit_context_for(u32 mod,
-                               u32 inst,
-                               comp::CompScope& scope,
-                               ast::ExprIdx expr);
 
   ir::TypeIdx expr_type_at(u32 mod, u32 inst, ast::ExprIdx expr);
   const CheckedModule::CallTarget* call_target_at(u32 mod,

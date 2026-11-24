@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "analyzer/comp_eval.h"
 #include "analyzer/fmt.h"
 #include "ast/ast.h"
 #include "comp/comp_value.h"
@@ -34,9 +35,48 @@
 #include "text/unescape.h"
 
 namespace analyzer {
+
+EmitContext::EmitContext(CompEval& evaluator_in,
+                         comp::CompScope& scope_in,
+                         EvalSite site_in)
+    : evaluator(evaluator_in), scope(scope_in), site(site_in) {}
+
+EmitContext EmitContext::with_site(EvalSite next) const {
+  return EmitContext(evaluator, scope, next);
+}
+
+ir::TypeIdx EmitContext::ExprType::operator()(ast::ExprIdx expr) const {
+  return ctx.evaluator.type_of(ctx.site, expr);
+}
+
+ir::TypeIdx EmitContext::LayoutType::operator()(ast::ExprIdx expr) const {
+  return ctx.evaluator.layout_type_of(ctx.site, expr);
+}
+
+bool EmitContext::PathValue::operator()(ast::PathIdx path,
+                                        comp::CompVal& out) const {
+  return ctx.evaluator.path_value(ctx.site, ctx.scope, path, out);
+}
+
+bool EmitContext::CompFn::operator()(ast::ExprIdx call,
+                                     CompFnInfo& info) const {
+  return ctx.evaluator.comp_fn(ctx.site, call, info);
+}
+
+bool EmitContext::FieldIndex::operator()(ir::TypeIdx type,
+                                         std::string_view name,
+                                         u32& index) const {
+  return ctx.evaluator.field_index(type, name, index);
+}
+
+bool EmitContext::VariantIndex::operator()(ir::TypeIdx type,
+                                           std::string_view name,
+                                           u32& index) const {
+  return ctx.evaluator.variant_index(type, name, index);
+}
 namespace {
 
-using ExprTypeFn = std::function<ir::TypeIdx(ast::ExprIdx)>;
+using ExprTypeFn = EmitContext::ExprType;
 using ParamEnv = std::vector<std::pair<std::string_view, ir::OperandIdx>>;
 
 constexpr usize COMP_MAX_UNROLL = 4096;
@@ -275,16 +315,11 @@ class ConstEmitter {
     semantic_by_register_.emplace(reg.idx, index);
   }
 
-  using VariantIndexFn =
-      std::function<bool(ir::TypeIdx, std::string_view, u32&)>;
-
-  void set_variant_index_fn(VariantIndexFn fn) {
-    variant_index_fn_ = std::move(fn);
-  }
+  void set_context(const EmitContext& ctx) { context_ = &ctx; }
   bool resolve_variant_index(ir::TypeIdx type,
                              std::string_view name,
                              u32& idx) const {
-    return variant_index_fn_ && variant_index_fn_(type, name, idx);
+    return context_->resolve_variant_index(type, name, idx);
   }
 
   static constexpr u32 MAX_INLINE_DEPTH = comp::COMP_MAX_CALL_DEPTH;
@@ -417,7 +452,7 @@ class ConstEmitter {
   std::vector<comp::CompVal> semantic_values_;
   std::unordered_map<u32, u32> semantic_by_operand_;
   std::unordered_map<u32, u32> semantic_by_register_;
-  VariantIndexFn variant_index_fn_;
+  const EmitContext* context_ = nullptr;
   std::vector<std::pair<std::string_view, ir::OperandIdx>> value_bindings_;
   u32 inline_depth_ = 0;
   std::vector<std::pair<ir::BlockIdx, ir::RegisterIdx>> return_targets_;
@@ -454,8 +489,7 @@ static bool semantic_place_path(
     std::vector<u32>& indices,
     const ExprTypeFn& expr_type,
     ConstEmitter& emitter,
-    const std::function<bool(ir::TypeIdx, std::string_view, u32&)>&
-        resolve_field_index) {
+    const EmitContext::FieldIndex& resolve_field_index) {
   const ast::ExprNode& node = ast.exprs[place];
   if (node.kind == ast::ExprKind::Path) {
     const auto& segs =
@@ -545,15 +579,13 @@ ir::OperandIdx emit_block(const ast::AstArena& ast,
                           const EmitContext& ctx,
                           const ParamEnv* params) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   if (block.statements.size() == 1 && block.value.is_valid()) {
     const ast::StmtNode& stmt = ast.stmts[block.statements[0]];
@@ -902,15 +934,13 @@ ir::OperandIdx emit_range(const ast::AstArena& ast,
                           const EmitContext& ctx,
                           const ParamEnv* params) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ir::TypeTag range_tag = emitter.builder().state().types[type].tag;
   if (range_tag != ir::TypeTag::Struct) {
@@ -1045,15 +1075,13 @@ ir::OperandIdx emit_pattern_if(const ast::AstArena& ast,
                                const EmitContext& ctx,
                                const ParamEnv* params) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   if (!if_node.else_block.is_valid() &&
       emitter.builder().state().types[type].tag != ir::TypeTag::Void) {
@@ -1320,15 +1348,13 @@ ir::OperandIdx emit_str_intrinsic(const ast::AstArena& ast,
                                   const EmitContext& ctx,
                                   const ParamEnv* params) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   if (cname == "str_len" || cname == "str_byte" || cname == "str_slice") {
     if ((cname == "str_len" && call.args.size() != 1) ||
@@ -1437,15 +1463,13 @@ ir::OperandIdx emit_method_call(const ast::AstArena& ast,
                                 const EmitContext& ctx,
                                 const ParamEnv* params) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ir::TypeIdx receiver_type = expr_type(method.receiver);
   if (method.name.name == "len" && method.args.empty()) {
@@ -1599,15 +1623,13 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
                              const EmitContext& ctx,
                              const ParamEnv* params) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::StmtDecl& decl =
       ast.stmts[block.statements[0]].payload.get<ast::StmtDecl>();
@@ -1808,15 +1830,13 @@ ir::OperandIdx emit_cast(const ast::AstArena& ast,
                          const EmitContext& ctx,
                          const ParamEnv* params) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ir::OperandIdx inner =
       emit_expr(ast, cast.inner, expr_type(cast.inner), emitter, ctx, params);
@@ -1884,15 +1904,13 @@ bool semantic_pattern_matches(const ast::AstArena& ast,
                               const ParamEnv* params,
                               Bind&& bind) {
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::PatternNode& pat = ast.patterns[pattern];
   switch (pat.kind) {
@@ -1994,22 +2012,20 @@ static ir::OperandIdx emit_comp_inline(const ast::AstArena& ast,
                                        const ParamEnv* params) {
   [[maybe_unused]] const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  const std::function<bool(ast::ExprIdx, CompFnInfo&, EmitContext&)>&
-      resolve_comp_fn = ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  const EmitContext::CompFn& resolve_comp_fn = ctx.resolve_comp_fn;
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   // A comp fn call is inlined: lower the callee body's value in the
   // caller, with parameter names bound to the lowered arguments.
   CompFnInfo info;
-  EmitContext callee_ctx;
-  if (!resolve_comp_fn(expr, info, callee_ctx) || !info.body.is_valid()) {
+  if (!resolve_comp_fn(expr, info) || !info.body.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
   }
+  const EmitContext callee_ctx = ctx.with_site({info.module, info.inst});
   const bool arity_ok = info.variadic ? args.size() >= info.params.size() - 1
                                       : args.size() == info.params.size();
   if (!arity_ok || info.params.size() != info.param_types.size() ||
@@ -2088,15 +2104,13 @@ static ir::OperandIdx emit_return_expr(const ast::AstArena& ast,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprReturn& ret = node.payload.get<ast::ExprReturn>();
   if (!ret.value.is_valid()) {
@@ -2147,15 +2161,13 @@ static ir::OperandIdx emit_literal_expr(
     [[maybe_unused]] const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::Literal& literal =
       ast.literals[node.payload.get<ast::ExprLiteral>().value];
@@ -2193,14 +2205,12 @@ static ir::OperandIdx emit_call_expr(const ast::AstArena& ast,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  const ExprTypeFn& resolve_layout_type = ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  const EmitContext::LayoutType& resolve_layout_type = ctx.resolve_layout_type;
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
   const ast::ExprNode& callee = ast.exprs[call.callee];
@@ -2355,15 +2365,12 @@ static ir::OperandIdx emit_path_expr(const ast::AstArena& ast,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  const std::function<bool(ast::PathIdx, comp::CompVal&)>& resolve_path =
-      ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  const EmitContext::PathValue& resolve_path = ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::PathIdx path = node.payload.get<ast::ExprPath>().idx;
   const auto& segments = ast.paths[path].segments;
@@ -2461,15 +2468,13 @@ static ir::OperandIdx emit_binary_expr(const ast::AstArena& ast,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprBinary& bin = node.payload.get<ast::ExprBinary>();
   const ir::OperandIdx lhs =
@@ -2715,15 +2720,13 @@ static ir::OperandIdx emit_tuple_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprTuple& tup = node.payload.get<ast::ExprTuple>();
   const ir::TupleType& shape =
@@ -2774,15 +2777,13 @@ static ir::OperandIdx emit_array_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprArray& arr = node.payload.get<ast::ExprArray>();
   const ir::ArrayType& shape =
@@ -2837,15 +2838,13 @@ static ir::OperandIdx emit_struct_expr(const ast::AstArena& ast,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  const std::function<bool(ir::TypeIdx, std::string_view, u32&)>&
-      resolve_field_index = ctx.resolve_field_index;
+  const EmitContext::FieldIndex& resolve_field_index = ctx.resolve_field_index;
   const ast::ExprStruct& strukt = node.payload.get<ast::ExprStruct>();
   if (strukt.base_expr.is_valid()) {
     return ir::OperandIdx(base::INVALID_IDX);
@@ -2898,15 +2897,13 @@ static ir::OperandIdx emit_field_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  const std::function<bool(ir::TypeIdx, std::string_view, u32&)>&
-      resolve_field_index = ctx.resolve_field_index;
+  const EmitContext::FieldIndex& resolve_field_index = ctx.resolve_field_index;
   const ast::ExprField& field = node.payload.get<ast::ExprField>();
   ir::TypeIdx receiver_type = expr_type(field.receiver);
   ir::TypeTag receiver_tag = emitter.builder().state().types[receiver_type].tag;
@@ -3003,15 +3000,13 @@ static ir::OperandIdx emit_index_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprIndex& index_expr = node.payload.get<ast::ExprIndex>();
   const ir::TypeIdx receiver_type = expr_type(index_expr.receiver);
@@ -3145,15 +3140,13 @@ static ir::OperandIdx emit_block_value(const ast::AstArena& ast,
                                        const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   return emit_block(ast, ast.blocks[node.payload.get<ast::ExprBlock>().block],
                     type, emitter, ctx, params);
@@ -3167,15 +3160,13 @@ static ir::OperandIdx emit_borrow_deref_expr(const ast::AstArena& ast,
                                              const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprIdx inner = node.kind == ast::ExprKind::Borrow
                                  ? node.payload.get<ast::ExprBorrow>().inner
@@ -3191,15 +3182,13 @@ static ir::OperandIdx emit_if_expr(const ast::AstArena& ast,
                                    const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprIf& if_node = node.payload.get<ast::ExprIf>();
   const ast::Cond& cond = ast.conds[if_node.cond];
@@ -3312,15 +3301,13 @@ static ir::OperandIdx emit_break_continue_expr(
     [[maybe_unused]] const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ir::BlockIdx target = node.kind == ast::ExprKind::Break
                                   ? emitter.break_target()
@@ -3343,15 +3330,13 @@ static ir::OperandIdx emit_while_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprWhile& while_node = node.payload.get<ast::ExprWhile>();
   const ast::Cond& cond = ast.conds[while_node.cond];
@@ -3399,15 +3384,13 @@ static ir::OperandIdx emit_match_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprMatch& match_node = node.payload.get<ast::ExprMatch>();
   if (match_node.arms.empty()) {
@@ -3593,15 +3576,13 @@ static ir::OperandIdx emit_method_call_expr(const ast::AstArena& ast,
                                             const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprMethodCall& method = node.payload.get<ast::ExprMethodCall>();
   const ir::OperandIdx built =
@@ -3646,15 +3627,13 @@ static ir::OperandIdx emit_closure_expr(
     [[maybe_unused]] const ParamEnv* params) {
   [[maybe_unused]] const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   return emitter.void_operand();
 }
@@ -3667,15 +3646,13 @@ static ir::OperandIdx emit_loop_expr(const ast::AstArena& ast,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprLoop& loop_node = node.payload.get<ast::ExprLoop>();
   const ast::BlockIdx body_idx = loop_node.body;
@@ -3728,15 +3705,13 @@ static ir::OperandIdx emit_range_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   return emit_range(ast, node.payload.get<ast::ExprRange>(), type, emitter, ctx,
                     params);
@@ -3750,15 +3725,13 @@ static ir::OperandIdx emit_question_expr(const ast::AstArena& ast,
                                          const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprQuestion& question = node.payload.get<ast::ExprQuestion>();
   const ir::TypeIdx inner_type = expr_type(question.inner);
@@ -3873,15 +3846,13 @@ static ir::OperandIdx emit_cast_expr(const ast::AstArena& ast,
                                      const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   [[maybe_unused]] const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   return emit_cast(ast, node.payload.get<ast::ExprCast>(), type, emitter, ctx,
                    params);
@@ -3895,15 +3866,13 @@ static ir::OperandIdx emit_unary_expr(const ast::AstArena& ast,
                                       const ParamEnv* params) {
   const ast::ExprNode& node = ast.exprs[expr];
   const ExprTypeFn& expr_type = ctx.expr_type;
-  [[maybe_unused]] const std::function<bool(ast::PathIdx, comp::CompVal&)>&
-      resolve_path = ctx.resolve_path;
-  [[maybe_unused]] const ExprTypeFn& resolve_layout_type =
+  [[maybe_unused]] const EmitContext::PathValue& resolve_path =
+      ctx.resolve_path;
+  [[maybe_unused]] const EmitContext::LayoutType& resolve_layout_type =
       ctx.resolve_layout_type;
-  [[maybe_unused]] const std::function<bool(ast::ExprIdx, CompFnInfo&,
-                                            EmitContext&)>& resolve_comp_fn =
+  [[maybe_unused]] const EmitContext::CompFn& resolve_comp_fn =
       ctx.resolve_comp_fn;
-  [[maybe_unused]] const std::function<bool(ir::TypeIdx, std::string_view,
-                                            u32&)>& resolve_field_index =
+  [[maybe_unused]] const EmitContext::FieldIndex& resolve_field_index =
       ctx.resolve_field_index;
   const ast::ExprUnary& unary = node.payload.get<ast::ExprUnary>();
   const ir::OperandIdx inner =
@@ -4080,7 +4049,7 @@ bool evaluate_const_ir(const ast::AstArena& ast,
                        diag::Span* failure_span) {
   const ir::StorageBuilder::Checkpoint cp = builder.checkpoint();
   ConstEmitter emitter(builder, quota);
-  emitter.set_variant_index_fn(ctx.resolve_variant_index);
+  emitter.set_context(ctx);
   emitter.new_block();  // entry
   const ir::BlockIdx return_b = emitter.new_block();
   const ir::RegisterIdx return_reg = emitter.claim_reg(type);

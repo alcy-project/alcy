@@ -566,167 +566,153 @@ bool CompEval::comp_match_pattern(u32 mod,
   }
 }
 
-EmitContext CompEval::emit_context_for(u32 mod,
-                                       u32 inst,
-                                       comp::CompScope& scope,
-                                       ast::ExprIdx expr) {
-  const auto expr_type = [this, mod, inst](ast::ExprIdx sub) -> ir::TypeIdx {
-    return expr_type_at(mod, inst, sub);
-  };
-  const auto resolve_path = [this, mod, inst, &scope, expr](
-                                ast::PathIdx path,
-                                comp::CompVal& resolved) -> bool {
-    const std::span<const ast::Ident> segments = ast.paths[path].segments;
-    if (segments.size() != 1) {
-      return false;
+ir::TypeIdx CompEval::type_of(EvalSite site, ast::ExprIdx expr) {
+  return expr_type_at(site.module, site.inst, expr);
+}
+
+ir::TypeIdx CompEval::layout_type_of(EvalSite site, ast::ExprIdx expr) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  if (node.kind != ast::ExprKind::Call) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.type_args.empty()) {
+    return ir::TypeIdx(base::INVALID_IDX);
+  }
+  if (!call.args.empty()) {
+    const ir::TypeIdx measured =
+        expr_type_at(site.module, site.inst, call.args[0]);
+    if (tag_of(measured) != ir::TypeTag::Error) {
+      return measured;
     }
-    if (const comp::CompVal* bound = comp::lookup(scope, segments[0].name)) {
-      resolved = *bound;
+  }
+  const CheckedModule::CallTarget* target =
+      call_target_at(site.module, site.inst, call.callee);
+  if (target != nullptr &&
+      target->index < inputs_.modules[target->module].functions.size()) {
+    const CheckedModule::FnSig& sig =
+        inputs_.modules[target->module].functions[target->index];
+    for (const FnInstance& candidate : inputs_.fn_insts) {
+      if (candidate.item.idx == sig.item.idx && candidate.inst == sig.inst &&
+          candidate.args.size() == 1) {
+        return candidate.args[0];
+      }
+    }
+  }
+  return ir::TypeIdx(base::INVALID_IDX);
+}
+
+bool CompEval::path_value(EvalSite site,
+                          comp::CompScope& scope,
+                          ast::PathIdx path,
+                          comp::CompVal& out) {
+  const std::span<const ast::Ident> segments = ast.paths[path].segments;
+  if (segments.size() != 1) {
+    return false;
+  }
+  if (const comp::CompVal* bound = comp::lookup(scope, segments[0].name)) {
+    out = *bound;
+    return true;
+  }
+  if (const auto* info = lookup_static_in(site.module, segments[0].name)) {
+    if (info->is_const && info->init.is_valid()) {
+      if (call_depth_ >= COMP_MAX_CALL_DEPTH) {
+        return fail_budget(ast.paths[path].segments[0].span,
+                           "const evaluation is too deep");
+      }
+      CompVal value;
+      const u32 saved_inst = inst_;
+      inst_ = site.inst;
+      CompScope nested;
+      nested.frames.emplace_back();
+      ++call_depth_;
+      const bool ok = try_ir_eval(site.module, info->init, nested, value);
+      --call_depth_;
+      inst_ = saved_inst;
+      if (!ok) {
+        return false;
+      }
+      out = std::move(value);
       return true;
     }
-    if (const auto* info = lookup_static_in(mod, segments[0].name)) {
-      if (info->is_const && info->init.is_valid()) {
-        if (call_depth_ >= COMP_MAX_CALL_DEPTH) {
-          return fail_budget(ast.exprs[expr].span,
-                             "const evaluation is too deep");
-        }
-        CompVal value;
-        const u32 saved_inst = inst_;
-        inst_ = inst;
-        CompScope nested;
-        nested.frames.emplace_back();
-        ++call_depth_;
-        const bool ok = try_ir_eval(mod, info->init, nested, value);
-        --call_depth_;
-        inst_ = saved_inst;
-        if (!ok) {
-          return false;
-        }
-        resolved = std::move(value);
-        return true;
-      }
-    }
-    // A generic value parameter (e.g. `N` in `ArrayVec<T, N>`) is
-    // recorded as a splice on the path expression, not as a const item.
-    const auto found = path_splices_.find(path.idx);
-    if (found == path_splices_.end()) {
-      return false;
-    }
-    const ast::ExprIdx splice_expr(found->second);
-    const CheckedModule::ValueSplice* splice =
-        value_splice_in(mod, splice_expr, inst);
-    if (splice == nullptr) {
-      return false;
-    }
-    resolved.type = splice->type;
-    resolved.value.tag = comp::CompValue::Tag::Int;
-    resolved.value.int_value = splice->value;
-    return true;
-  };
-  const auto resolve_layout_type = [this, mod,
-                                    inst](ast::ExprIdx sub) -> ir::TypeIdx {
-    const ast::ExprNode& sub_node = ast.exprs[sub];
-    if (sub_node.kind != ast::ExprKind::Call) {
-      return ir::TypeIdx(base::INVALID_IDX);
-    }
-    const ast::ExprCall& sub_call = sub_node.payload.get<ast::ExprCall>();
-    if (sub_call.type_args.empty()) {
-      return ir::TypeIdx(base::INVALID_IDX);
-    }
-    // A measured value argument binds its own checked type.
-    if (!sub_call.args.empty()) {
-      const ir::TypeIdx measured = expr_type_at(mod, inst, sub_call.args[0]);
-      if (tag_of(measured) != ir::TypeTag::Error) {
-        return measured;
-      }
-    }
-    // A type-only intrinsic has no value argument. Its concrete binding
-    // is the fn instance keyed by the call target's item and inst, the
-    // same row the evaluator reads.
-    const CheckedModule::CallTarget* target =
-        call_target_at(mod, inst, sub_call.callee);
-    if (target != nullptr &&
-        target->index < inputs_.modules[target->module].functions.size()) {
-      const CheckedModule::FnSig& sig =
-          inputs_.modules[target->module].functions[target->index];
-      for (const FnInstance& candidate : inputs_.fn_insts) {
-        if (candidate.item.idx == sig.item.idx && candidate.inst == sig.inst &&
-            candidate.args.size() == 1) {
-          return candidate.args[0];
-        }
-      }
-    }
-    return ir::TypeIdx(base::INVALID_IDX);
-  };
-  const auto resolve_comp_fn = [this, mod, inst, &scope, expr](
-                                   ast::ExprIdx call_expr, CompFnInfo& info,
-                                   EmitContext& callee) -> bool {
-    const ast::ExprNode& call_node = ast.exprs[call_expr];
-    const bool is_method = call_node.kind == ast::ExprKind::MethodCall;
-    if (call_node.kind != ast::ExprKind::Call && !is_method) {
-      return false;
-    }
-    // For a method call the target is keyed by the whole call expression;
-    // for a plain call it is keyed by the callee expression.
-    const ast::ExprIdx target_expr =
-        is_method ? call_expr : call_node.payload.get<ast::ExprCall>().callee;
-    const CheckedModule::CallTarget* target =
-        call_target_at(mod, inst, target_expr);
-    if (target == nullptr) {
-      return false;
-    }
-    const CheckedModule& target_mod = inputs_.modules[target->module];
-    if (target->index >= target_mod.functions.size()) {
-      return false;
-    }
-    const CheckedModule::FnSig& sig = target_mod.functions[target->index];
-    if (!sig.item.is_valid()) {
-      return false;
-    }
-    const ast::ItemNode& item = ast.items[sig.item];
-    if (item.kind != ast::ItemKind::Fn) {
-      return false;
-    }
-    const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
-    if (!fn.body.is_valid()) {
-      return false;
-    }
-    info.body = fn.body;
-    info.module = target->module;
-    info.inst = callee_inst(target);
-    info.ret = sig.ret;
-    info.is_method = is_method;
-    info.variadic = !fn.params.empty() && fn.params.back().is_variadic;
-    info.element = sig.variadic_element;
-    for (usize i = 0; i < fn.params.size() && i < sig.params.size(); ++i) {
-      info.params.push_back(fn.params[i].pattern);
-      info.param_types.push_back(sig.params[i]);
-    }
-    if (info.variadic && info.params.size() < fn.params.size()) {
-      info.params.push_back(fn.params.back().pattern);
-      info.param_types.emplace_back(base::INVALID_IDX);
-    }
-    const usize arg_count =
-        is_method ? 1 + call_node.payload.get<ast::ExprMethodCall>().args.size()
-                  : call_node.payload.get<ast::ExprCall>().args.size();
-    const bool arity_ok = info.variadic ? info.params.size() - 1 <= arg_count
-                                        : info.params.size() == arg_count;
-    if (!arity_ok) {
-      return false;
-    }
-    callee = emit_context_for(info.module, info.inst, scope, expr);
-    return true;
-  };
-  return EmitContext{expr_type,
-                     resolve_path,
-                     resolve_layout_type,
-                     resolve_comp_fn,
-                     [this](ir::TypeIdx ty, std::string_view name, u32& index) {
-                       return struct_field_index(ty, name, index);
-                     },
-                     [this](ir::TypeIdx ty, std::string_view name, u32& index) {
-                       return variant_index(ty, name, index);
-                     }};
+  }
+  const auto found = path_splices_.find(path.idx);
+  if (found == path_splices_.end()) {
+    return false;
+  }
+  const ast::ExprIdx splice_expr(found->second);
+  const CheckedModule::ValueSplice* splice =
+      value_splice_in(site.module, splice_expr, site.inst);
+  if (splice == nullptr) {
+    return false;
+  }
+  out.type = splice->type;
+  out.value.tag = comp::CompValue::Tag::Int;
+  out.value.int_value = splice->value;
+  return true;
+}
+
+bool CompEval::comp_fn(EvalSite site,
+                       ast::ExprIdx call_expr,
+                       CompFnInfo& info) {
+  const ast::ExprNode& call_node = ast.exprs[call_expr];
+  const bool is_method = call_node.kind == ast::ExprKind::MethodCall;
+  if (call_node.kind != ast::ExprKind::Call && !is_method) {
+    return false;
+  }
+  const ast::ExprIdx target_expr =
+      is_method ? call_expr : call_node.payload.get<ast::ExprCall>().callee;
+  const CheckedModule::CallTarget* target =
+      call_target_at(site.module, site.inst, target_expr);
+  if (target == nullptr) {
+    return false;
+  }
+  const CheckedModule& target_mod = inputs_.modules[target->module];
+  if (target->index >= target_mod.functions.size()) {
+    return false;
+  }
+  const CheckedModule::FnSig& sig = target_mod.functions[target->index];
+  if (!sig.item.is_valid()) {
+    return false;
+  }
+  const ast::ItemNode& item = ast.items[sig.item];
+  if (item.kind != ast::ItemKind::Fn) {
+    return false;
+  }
+  const ast::ItemFn& fn = item.payload.get<ast::ItemFn>();
+  if (!fn.body.is_valid()) {
+    return false;
+  }
+  info.body = fn.body;
+  info.module = target->module;
+  info.inst = callee_inst(target);
+  info.ret = sig.ret;
+  info.is_method = is_method;
+  info.variadic = !fn.params.empty() && fn.params.back().is_variadic;
+  info.element = sig.variadic_element;
+  for (usize i = 0; i < fn.params.size() && i < sig.params.size(); ++i) {
+    info.params.push_back(fn.params[i].pattern);
+    info.param_types.push_back(sig.params[i]);
+  }
+  if (info.variadic && info.params.size() < fn.params.size()) {
+    info.params.push_back(fn.params.back().pattern);
+    info.param_types.emplace_back(base::INVALID_IDX);
+  }
+  const usize arg_count =
+      is_method ? 1 + call_node.payload.get<ast::ExprMethodCall>().args.size()
+                : call_node.payload.get<ast::ExprCall>().args.size();
+  return info.variadic ? info.params.size() - 1 <= arg_count
+                       : info.params.size() == arg_count;
+}
+
+bool CompEval::field_index(ir::TypeIdx type,
+                           std::string_view name,
+                           u32& index_out) {
+  return struct_field_index(type, name, index_out);
+}
+
+EmitContext CompEval::emit_context_for(EvalSite site, comp::CompScope& scope) {
+  return EmitContext(*this, scope, site);
 }
 
 bool CompEval::try_ir_eval(u32 mod,
@@ -743,7 +729,7 @@ bool CompEval::try_ir_eval(u32 mod,
     fail_internal(ast.exprs[expr].span, "comp operand without a type");
     return false;
   }
-  const EmitContext ctx = emit_context_for(mod, inst_, scope, expr);
+  const EmitContext ctx = emit_context_for({mod, inst_}, scope);
   comp::CompVal ir_value;
   comp::IrRunError ir_error;
   diag::Span span = ast.exprs[expr].span;
