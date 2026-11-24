@@ -42,10 +42,11 @@ constexpr u64 MEMORY_LIMIT = 1ull << 28;
 
 // A register's value: scalar bits, or the address of a memory object.
 struct Slot {
-  enum class Kind : u8 { Scalar, Address };
+  enum class Kind : u8 { Scalar, Address, Semantic };
   Kind kind = Kind::Scalar;
   u64 bits = 0;
   u64 address = 0;
+  u32 semantic_index = 0;
 };
 
 u32 int_width_bits(TypeTag tag) {
@@ -64,12 +65,18 @@ class Interpreter {
               const ir::SymbolTable& strings,
               ir::PointerWidth width,
               u64& quota,
-              u32& depth)
+              u32& depth,
+              std::span<const CompVal> comp_values,
+              u32 reg_base,
+              u32 reg_limit)
       : storage_(storage),
         strings_(strings),
         width_(width),
         quota_(quota),
-        depth_(depth) {
+        depth_(depth),
+        comp_values_(comp_values),
+        reg_base_(reg_base),
+        reg_limit_(reg_limit) {
     // Address zero is never a live object.
     memory_.push_back(0);
   }
@@ -79,7 +86,10 @@ class Interpreter {
 
  private:
   struct Frame {
+    u32 base = 0;
     std::vector<Slot> regs;
+    Slot& at(u32 idx) { return regs[idx - base]; }
+    const Slot& at(u32 idx) const { return regs[idx - base]; }
   };
 
   struct Returned {
@@ -192,6 +202,7 @@ class Interpreter {
   bool execute_call(ir::InstructionIdx instr, Frame& frame);
 
   base::Result<CompVal, IrRunError> to_result(const Returned& returned);
+  bool read_value(ir::TypeIdx type, u64 address, CompValue& out);
 
   const ir::StorageState& storage_;
   const ir::SymbolTable& strings_;
@@ -206,6 +217,9 @@ class Interpreter {
   ir::BlockIdx jump_target_ = ir::BlockIdx(base::INVALID_IDX);
   bool returned_ = false;
   Returned returned_value_;
+  std::span<const CompVal> comp_values_;
+  u32 reg_base_ = 0;
+  u32 reg_limit_ = 0;
 };
 
 bool Interpreter::alloc(ir::TypeIdx type,
@@ -354,7 +368,7 @@ bool Interpreter::resolve(const ir::Operand& operand,
                           const Frame& frame,
                           Slot& out) {
   if (operand.is<ir::RegisterIdx>()) {
-    out = frame.regs[operand.as_register().idx];
+    out = frame.at(operand.as_register().idx);
     return true;
   }
   if (operand.is<ir::ImmutableIdx>()) {
@@ -427,6 +441,10 @@ bool Interpreter::bind_slot(ir::TypeIdx type,
   if (ir::is_float_type(tag)) {
     return fail(IrRunError::Kind::Unsupported, instr,
                 "float value in comp evaluation");
+  }
+  if (from.kind == Slot::Kind::Semantic || from.kind == Slot::Kind::Address) {
+    to = from;
+    return true;
   }
   return fail(IrRunError::Kind::Unsupported, instr,
               "aggregate value in comp evaluation");
@@ -523,7 +541,8 @@ bool Interpreter::execute_function(ir::FunctionIdx function,
                 "call arity does not match parameters");
   }
   Frame frame;
-  frame.regs.resize(storage_.registers.size());
+  frame.base = reg_base_;
+  frame.regs.resize(reg_limit_ > reg_base_ ? reg_limit_ - reg_base_ : 0);
   u32 position = 0;
   for (const ir::BlockParamIdx param_id : entry.block_params) {
     const ir::BlockParam& param = storage_.block_params[param_id];
@@ -531,7 +550,7 @@ bool Interpreter::execute_function(ir::FunctionIdx function,
     if (!bind_slot(param.type, args[position], bound, at)) {
       return false;
     }
-    frame.regs[param.reg.idx] = bound;
+    frame.at(param.reg.idx) = bound;
     ++position;
   }
   ++depth_;
@@ -585,7 +604,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       if (!resolve_at(instr, 0, frame, value)) {
         return false;
       }
-      frame.regs[ins.dst.idx] = value;
+      frame.at(ins.dst.idx) = value;
       return true;
     }
     case Opcode::Drop: return true;
@@ -602,7 +621,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       if (!alloc(reg_type(ins.dst), count, instr, address)) {
         return false;
       }
-      frame.regs[ins.dst.idx] = Slot{Slot::Kind::Address, 0, address};
+      frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, address};
       return true;
     }
     case Opcode::Load: {
@@ -622,7 +641,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       if (!read(reg_type(ins.dst), pointer.address, instr, value)) {
         return false;
       }
-      frame.regs[ins.dst.idx] = value;
+      frame.at(ins.dst.idx) = value;
       return true;
     }
     case Opcode::Store: {
@@ -701,7 +720,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
                 : payload.bits > static_cast<u64>(niche.sentinel) - 1;
         disc = fieldless ? niche.fieldless : niche.carrying;
       }
-      frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, disc, 0};
+      frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, disc, 0};
       return true;
     }
     case Opcode::EnumTagSet: {
@@ -763,7 +782,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const ir::EnumNiche niche = ir::enum_niche(storage_, enum_ty);
       if (niche.has) {
         // The payload is the slot itself.
-        frame.regs[ins.dst.idx] = Slot{Slot::Kind::Address, 0, place.address};
+        frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, place.address};
         return true;
       }
       const ir::EnumType& shape =
@@ -790,7 +809,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       const u64 at =
           place.address + area_at +
           ir::field_offset(storage_, fields, static_cast<u32>(field), width_);
-      frame.regs[ins.dst.idx] = Slot{Slot::Kind::Address, 0, at};
+      frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, at};
       return true;
     }
     case Opcode::IntAdd:
@@ -845,7 +864,7 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
         if (!bind_slot(param.type, value, bound, instr)) {
           return false;
         }
-        frame.regs[param.reg.idx] = bound;
+        frame.at(param.reg.idx) = bound;
         ++position;
       }
       jumped_ = true;
@@ -924,9 +943,21 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
       return fail(IrRunError::Kind::Unsupported, instr,
                   "float arithmetic in comp evaluation");
     case Opcode::TypeSizeOf:
-    case Opcode::TypeAlignOf:
-      return fail(IrRunError::Kind::Unsupported, instr,
-                  "type query in comp evaluation");
+    case Opcode::TypeAlignOf: {
+      const ir::TypeTag measured_tag = tag_of(ins.measure);
+      if (measured_tag == ir::TypeTag::Const ||
+          measured_tag == ir::TypeTag::Param) {
+        return fail(IrRunError::Kind::Unsupported, instr,
+                    "type query in comp evaluation");
+      }
+      const ir::TypeLayout measured = layout_of(ins.measure);
+      const u64 value =
+          ins.op == ir::Opcode::TypeSizeOf ? measured.size : measured.align;
+      if (ins.dst.is_valid()) {
+        frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, value, 0};
+      }
+      return true;
+    }
     case Opcode::Switch:
       return fail(IrRunError::Kind::Unsupported, instr,
                   "switch in comp evaluation");
@@ -939,6 +970,49 @@ bool Interpreter::execute_instruction(ir::InstructionIdx instr,
     case Opcode::Fence:
       return fail(IrRunError::Kind::Unsupported, instr,
                   "fence in comp evaluation");
+    case Opcode::CompValue: {
+      u64 index = 0;
+      if (!resolve_int_at(instr, 0, frame, index) ||
+          index >= comp_values_.size()) {
+        return fail(IrRunError::Kind::Unsupported, instr,
+                    "comp value without a side-table entry");
+      }
+      if (!ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "comp value without a destination");
+      }
+      frame.at(ins.dst.idx) =
+          Slot{Slot::Kind::Semantic, 0, 0, static_cast<u32>(index)};
+      return true;
+    }
+    case Opcode::CompStrByte: {
+      if (ins.operands.size() < 2 || !ins.dst.is_valid()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "comp string byte needs a string and an index");
+      }
+      Slot string_slot;
+      if (!resolve_at(instr, 0, frame, string_slot) ||
+          string_slot.kind != Slot::Kind::Semantic ||
+          string_slot.semantic_index >= comp_values_.size()) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "comp string byte without a string value");
+      }
+      const CompValue& value = comp_values_[string_slot.semantic_index].value;
+      if (value.tag != CompValue::Tag::Str) {
+        return fail(IrRunError::Kind::Internal, instr,
+                    "comp string byte on a non-string value");
+      }
+      u64 index = 0;
+      if (!resolve_int_at(instr, 1, frame, index) ||
+          index >= value.str_value.size()) {
+        return fail(IrRunError::Kind::OutOfBounds, instr,
+                    "comp string byte index out of bounds");
+      }
+      frame.at(ins.dst.idx) = Slot{
+          Slot::Kind::Scalar,
+          static_cast<u8>(value.str_value[static_cast<usize>(index)]), 0, 0};
+      return true;
+    }
   }
   return fail(IrRunError::Kind::Internal, instr, "unknown opcode");
 }
@@ -1009,7 +1083,7 @@ bool Interpreter::execute_gep(ir::InstructionIdx instr, Frame& frame) {
                 "getelementptr through a non-aggregate in comp evaluation");
   }
   if (ins.dst.is_valid()) {
-    frame.regs[ins.dst.idx] = Slot{Slot::Kind::Address, 0, offset};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Address, 0, offset};
   }
   return true;
 }
@@ -1083,7 +1157,7 @@ bool Interpreter::execute_binary(ir::InstructionIdx instr, Frame& frame) {
     case Opcode::UintDiv:
     case Opcode::UintRem: {
       if (right == 0) {
-        return fail(IrRunError::Kind::Unsupported, instr,
+        return fail(IrRunError::Kind::DivisionByZero, instr,
                     "division by zero in comp evaluation");
       }
       if (ins.op == Opcode::UintDiv || ins.op == Opcode::UintRem) {
@@ -1108,8 +1182,7 @@ bool Interpreter::execute_binary(ir::InstructionIdx instr, Frame& frame) {
                   "opcode is not a binary operation");
   }
   if (ins.dst.is_valid()) {
-    frame.regs[ins.dst.idx] =
-        Slot{Slot::Kind::Scalar, result & int_mask(tag), 0};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, result & int_mask(tag), 0};
   }
   return true;
 }
@@ -1130,7 +1203,7 @@ bool Interpreter::execute_not(ir::InstructionIdx instr, Frame& frame) {
   }
   const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
-    frame.regs[ins.dst.idx] =
+    frame.at(ins.dst.idx) =
         Slot{Slot::Kind::Scalar, ~value.bits & int_mask(tag), 0};
   }
   return true;
@@ -1160,7 +1233,7 @@ bool Interpreter::execute_bit_reverse(ir::InstructionIdx instr, Frame& frame) {
   }
   const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
-    frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, reversed, 0};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, reversed, 0};
   }
   return true;
 }
@@ -1225,7 +1298,7 @@ bool Interpreter::execute_compare(ir::InstructionIdx instr, Frame& frame) {
                 "comparison of a non-integer in comp evaluation");
   }
   if (ins.dst.is_valid()) {
-    frame.regs[ins.dst.idx] =
+    frame.at(ins.dst.idx) =
         Slot{Slot::Kind::Scalar, static_cast<u64>(outcome ? 1 : 0), 0};
   }
   return true;
@@ -1246,7 +1319,7 @@ bool Interpreter::execute_cast(ir::InstructionIdx instr, Frame& frame) {
   const TypeTag source_tag = tag_of(source_type);
   const TypeTag target_tag = tag_of(target_type);
   if (source_tag == target_tag) {
-    frame.regs[ins.dst.idx] = source;
+    frame.at(ins.dst.idx) = source;
     return true;
   }
   if (ir::is_integer_type(source_tag) && ir::is_integer_type(target_tag)) {
@@ -1265,7 +1338,7 @@ bool Interpreter::execute_cast(ir::InstructionIdx instr, Frame& frame) {
     } else {
       bits &= int_mask(target_tag);
     }
-    frame.regs[ins.dst.idx] = Slot{Slot::Kind::Scalar, bits, 0};
+    frame.at(ins.dst.idx) = Slot{Slot::Kind::Scalar, bits, 0};
     return true;
   }
   if (ir::is_pointer_type(source_tag) && ir::is_pointer_type(target_tag)) {
@@ -1278,7 +1351,7 @@ bool Interpreter::execute_cast(ir::InstructionIdx instr, Frame& frame) {
       return fail(IrRunError::Kind::Unsupported, instr,
                   "cast of a fat reference in comp evaluation");
     }
-    frame.regs[ins.dst.idx] = source;
+    frame.at(ins.dst.idx) = source;
     return true;
   }
   if (ir::is_float_type(source_tag) || ir::is_float_type(target_tag)) {
@@ -1312,7 +1385,7 @@ bool Interpreter::execute_select(ir::InstructionIdx instr, Frame& frame) {
   }
   const ir::Instruction& ins = storage_.instrs[instr];
   if (ins.dst.is_valid()) {
-    frame.regs[ins.dst.idx] = condition.bits != 0 ? on_true : on_false;
+    frame.at(ins.dst.idx) = condition.bits != 0 ? on_true : on_false;
   }
   return true;
 }
@@ -1380,13 +1453,113 @@ bool Interpreter::execute_call(ir::InstructionIdx instr, Frame& frame) {
   jumped_ = false;
   returned_ = false;
   if (ins.dst.is_valid()) {
-    frame.regs[ins.dst.idx] = returned.slot;
+    frame.at(ins.dst.idx) = returned.slot;
   }
+  return true;
+}
+
+bool Interpreter::read_value(ir::TypeIdx type, u64 address, CompValue& out) {
+  const TypeTag tag = tag_of(type);
+  if (ir::is_integer_type(tag)) {
+    u64 bits = 0;
+    if (!read_bytes(address, layout_of(type).size,
+                    ir::InstructionIdx(base::INVALID_IDX), bits)) {
+      return false;
+    }
+    out.tag = tag == TypeTag::I1 ? CompValue::Tag::Bool : CompValue::Tag::Int;
+    if (tag == TypeTag::I1) {
+      out.bool_value = bits != 0;
+    } else {
+      out.int_value = bits & int_mask(tag);
+    }
+    return true;
+  }
+  if (tag == TypeTag::Enum) {
+    const ir::EnumNiche niche = ir::enum_niche(storage_, type);
+    if (niche.has) {
+      return fail(IrRunError::Kind::Unsupported,
+                  ir::InstructionIdx(base::INVALID_IDX),
+                  "niche enum in comp evaluation");
+    }
+    u64 disc = 0;
+    if (!read_bytes(address, 4, ir::InstructionIdx(base::INVALID_IDX), disc)) {
+      return false;
+    }
+    const ir::EnumType& shape =
+        storage_.enum_types[storage_.types[type].as_enum()];
+    if (disc >= shape.variants.size()) {
+      return fail(IrRunError::Kind::Unsupported,
+                  ir::InstructionIdx(base::INVALID_IDX),
+                  "enum variant in comp evaluation");
+    }
+    const ir::TypeIdxRange fields =
+        storage_.enum_variant_types[shape.variants[static_cast<u32>(disc)]]
+            .fields;
+    const ir::TypeLayout area = ir::enum_payload_area(storage_, type, width_);
+    const u64 align_mask = area.align == 0 ? 0 : area.align - 1;
+    const u64 area_at = (4 + align_mask) & ~align_mask;
+    out.tag = CompValue::Tag::Enum;
+    out.variant = static_cast<u32>(disc);
+    for (u32 i = 0; i < fields.size(); ++i) {
+      const u64 at =
+          address + area_at + ir::field_offset(storage_, fields, i, width_);
+      CompValue field;
+      if (!read_value(fields[i], at, field)) {
+        return false;
+      }
+      out.fields.push_back(std::move(field));
+    }
+    return true;
+  }
+  // Struct and tuple fields are laid out consecutively by field_offset.
+  ir::TypeIdxRange fields;
+  if (tag == TypeTag::Struct) {
+    fields = storage_.struct_types[storage_.types[type].as_struct()].fields;
+  } else if (tag == TypeTag::Tuple) {
+    fields = storage_.tuple_types[storage_.types[type].as_tuple()].elements;
+  } else if (tag == TypeTag::Array) {
+    // An array's fields come from its repeated element.
+    const ir::ArrayType& array =
+        storage_.array_types[storage_.types[type].as_array()];
+    for (u64 i = 0; i < array.count; ++i) {
+      CompValue element;
+      const u64 offset = i * layout_of(array.element).size;
+      if (!read_value(array.element, address + offset, element)) {
+        return false;
+      }
+      out.fields.push_back(std::move(element));
+    }
+    out.tag = CompValue::Tag::Array;
+    return true;
+  } else {
+    return fail(IrRunError::Kind::Unsupported,
+                ir::InstructionIdx(base::INVALID_IDX),
+                "aggregate value in comp evaluation");
+  }
+  for (u32 i = 0; i < fields.size(); ++i) {
+    const u64 offset = ir::field_offset(storage_, fields, i, width_);
+    CompValue field;
+    if (!read_value(fields[i], address + offset, field)) {
+      return false;
+    }
+    out.fields.push_back(std::move(field));
+  }
+  out.tag =
+      tag == TypeTag::Struct ? CompValue::Tag::Struct : CompValue::Tag::Tuple;
   return true;
 }
 
 base::Result<CompVal, IrRunError> Interpreter::to_result(
     const Returned& returned) {
+  if (returned.slot.kind == Slot::Kind::Semantic) {
+    const u32 index = returned.slot.semantic_index;
+    if (index >= comp_values_.size()) {
+      fail(IrRunError::Kind::Unsupported, ir::InstructionIdx(base::INVALID_IDX),
+           "comp value without a side-table entry");
+      return error_result();
+    }
+    return base::make_ok(comp_values_[index]);
+  }
   const TypeTag tag = tag_of(returned.type);
   CompValue value;
   if (tag == TypeTag::Void) {
@@ -1410,6 +1583,14 @@ base::Result<CompVal, IrRunError> Interpreter::to_result(
     }
     value.tag = CompValue::Tag::Int;
     value.int_value = returned.slot.bits & int_mask(tag);
+    return base::make_ok(CompVal{std::move(value), returned.type});
+  }
+  if ((tag == TypeTag::Struct || tag == TypeTag::Tuple ||
+       tag == TypeTag::Array || tag == TypeTag::Enum) &&
+      returned.slot.kind == Slot::Kind::Address) {
+    if (!read_value(returned.type, returned.slot.address, value)) {
+      return error_result();
+    }
     return base::make_ok(CompVal{std::move(value), returned.type});
   }
   if (ir::is_pointer_type(tag)) {
@@ -1436,8 +1617,13 @@ base::Result<CompVal, IrRunError> interpret_function(
     ir::FunctionIdx function,
     std::span<const CompVal> args,
     u64& quota,
-    u32& depth) {
-  Interpreter interpreter(storage, strings, width, quota, depth);
+    u32& depth,
+    std::span<const CompVal> comp_values,
+    u32 reg_base,
+    u32 reg_limit) {
+  Interpreter interpreter(
+      storage, strings, width, quota, depth, comp_values, reg_base,
+      reg_limit == 0 ? static_cast<u32>(storage.registers.size()) : reg_limit);
   return interpreter.run(function, args);
 }
 

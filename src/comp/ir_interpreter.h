@@ -17,9 +17,9 @@
 
 namespace comp {
 
-// The second engine of compile-time evaluation: runs a
-// lowered function's verified IR to a value. It is a differential
-// oracle for the AST engine first; nothing in the pipeline calls it yet.
+// The IR engine of compile-time evaluation: runs a lowered function's
+// IR to a value. The checker and lowering both call it through the
+// const IR emitter and through materialized comp functions.
 //
 // A call gets a byte-addressable frame. Registers are tagged slots -
 // scalar bits or the address of a memory object - and aggregates live
@@ -43,6 +43,10 @@ struct IrRunError {
     // runtime. The wrap operations are the program's own choice and
     // never take this path.
     Overflow,
+    // A source division or remainder by a compile-time zero.
+    DivisionByZero,
+    // A source index past the end of a fixed value.
+    OutOfBounds,
   };
 
   Kind kind = Kind::Internal;
@@ -54,8 +58,7 @@ struct IrRunError {
   std::string_view what;
 };
 
-// The control-flow budget of compile-time evaluation, shared with the
-// AST engine; the differential test pins the two together. One call and
+// The control-flow budget of compile-time evaluation. One call and
 // one loop back edge spend one unit.
 inline constexpr u64 COMP_BRANCH_QUOTA = 1'000'000;
 // Recursion beyond this depth is refused before it can exhaust the
@@ -87,13 +90,16 @@ inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
     "cast between these types in comp evaluation",
     "cast of a fat reference in comp evaluation",
     "comp argument is not an integer",
+    "comp value without a side-table entry",
     "comparison of a non-integer in comp evaluation",
     "deallocation in comp evaluation",
     "division by zero in comp evaluation",
     "element offset in comp evaluation",
+    "enum variant in comp evaluation",
     "fat reference load in comp evaluation",
     "fat reference store in comp evaluation",
     "fence in comp evaluation",
+    "high-level IR in the low-level comp interpreter",
     "float argument in comp evaluation",
     "float arithmetic in comp evaluation",
     "float cast in comp evaluation",
@@ -105,6 +111,7 @@ inline constexpr std::string_view UNSUPPORTED_REFUSALS[] = {
     "function that is not lowered yet",
     "getelementptr through a non-aggregate in comp evaluation",
     "indirect call in comp evaluation",
+    "niche enum in comp evaluation",
     "non-integer constant in comp evaluation",
     "ordering of references in comp evaluation",
     "reference argument in comp evaluation",
@@ -139,7 +146,10 @@ base::Result<CompVal, IrRunError> interpret_function(
     ir::FunctionIdx function,
     std::span<const CompVal> args,
     u64& quota,
-    u32& depth);
+    u32& depth,
+    std::span<const CompVal> comp_values = {},
+    u32 reg_base = 0,
+    u32 reg_limit = 0);
 
 inline base::Result<CompVal, IrRunError> interpret_function(
     const ir::Storage& storage,
@@ -148,9 +158,14 @@ inline base::Result<CompVal, IrRunError> interpret_function(
     ir::FunctionIdx function,
     std::span<const CompVal> args,
     u64& quota,
-    u32& depth) {
-  return interpret_function(storage.state(), strings, width, function, args,
-                            quota, depth);
+    u32& depth,
+    std::span<const CompVal> comp_values = {},
+    u32 reg_base = 0,
+    u32 reg_limit = 0) {
+  return interpret_function(
+      storage.state(), strings, width, function, args, quota, depth,
+      comp_values, reg_base,
+      reg_limit == 0 ? storage.state().registers.size() : reg_limit);
 }
 
 }  // namespace comp
