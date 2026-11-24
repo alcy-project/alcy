@@ -53,10 +53,21 @@ using LocalEnv = std::vector<std::pair<std::string_view, LocalBinding>>;
 // new blocks because the sequences are heap-owned.
 class ConstEmitter {
  public:
-  explicit ConstEmitter(ir::StorageBuilder& builder)
-      : builder_(builder), start_(builder.state().blocks.size()) {}
+  explicit ConstEmitter(ir::StorageBuilder& builder, u64& quota)
+      : builder_(builder),
+        quota_(quota),
+        start_(builder.state().blocks.size()) {}
 
   ir::StorageBuilder& builder() { return builder_; }
+
+  bool spend_quota() {
+    if (quota_ == 0) {
+      set_emit_error(EmitError::Budget);
+      return false;
+    }
+    --quota_;
+    return true;
+  }
   ir::BlockIdx start() const { return ir::BlockIdx(start_); }
 
   ir::InstrSeq& cur() { return *blocks_[current_]; }
@@ -372,6 +383,7 @@ class ConstEmitter {
 
   enum class EmitError : u8 {
     None,
+    Budget,
     OutOfBounds,
     ExpansionCap,
     Overflow,
@@ -399,6 +411,7 @@ class ConstEmitter {
 
  private:
   ir::StorageBuilder& builder_;
+  u64& quota_;
   std::vector<std::unique_ptr<ir::InstrSeq>> blocks_;
   LocalEnv locals_;
   std::vector<comp::CompVal> semantic_values_;
@@ -1639,6 +1652,9 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
     // otherwise wrap forever, and even a large bound allocates before the
     // post-loop cap check gets a chance to refuse it.
     for (u64 v = first; range.inclusive ? v <= last : v < last; ++v) {
+      if (!emitter.spend_quota()) {
+        return ir::OperandIdx(base::INVALID_IDX);
+      }
       if (elements.size() >= COMP_MAX_UNROLL) {
         emitter.set_emit_error(ConstEmitter::EmitError::ExpansionCap);
         return ir::OperandIdx(base::INVALID_IDX);
@@ -1675,6 +1691,9 @@ ir::OperandIdx emit_comp_for(const ast::AstArena& ast,
             .array_types[emitter.builder().state().types[head_type].as_array()]
             .element;
     for (const comp::CompValue& field : seq->value.fields) {
+      if (!emitter.spend_quota()) {
+        return ir::OperandIdx(base::INVALID_IDX);
+      }
       comp::CompVal item;
       item.value = field;
       item.type = element_type;
@@ -3665,9 +3684,13 @@ static ir::OperandIdx emit_loop_expr(const ast::AstArena& ast,
   // the body sees the values written by earlier passes.
   const ir::BlockIdx exit_b = emitter.new_block();
   const usize saved_bindings = emitter.value_bindings_size();
-  constexpr usize kMaxIterations = 4096;
   bool completed = false;
-  for (usize i = 0; i < kMaxIterations; ++i) {
+  for (usize i = 0; i < COMP_MAX_UNROLL; ++i) {
+    // An unrolled pass still spends one unit of the shared budget.
+    if (!emitter.spend_quota()) {
+      emitter.restore_value_bindings(saved_bindings);
+      return ir::OperandIdx(base::INVALID_IDX);
+    }
     emitter.clear_broke();
     emitter.reset_terminated();
     emitter.set_loop_targets(exit_b, ir::BlockIdx(base::INVALID_IDX));
@@ -3679,18 +3702,15 @@ static ir::OperandIdx emit_loop_expr(const ast::AstArena& ast,
       emitter.restore_value_bindings(saved_bindings);
       return ir::OperandIdx(base::INVALID_IDX);
     }
-    if (emitter.terminated()) {
+    if (emitter.terminated() || emitter.broke()) {
       // A break leaves the loop; a return propagates to the caller.
-      completed = true;
-      break;
-    }
-    if (emitter.broke()) {
       completed = true;
       break;
     }
   }
   emitter.restore_value_bindings(saved_bindings);
   if (!completed) {
+    emitter.set_emit_error(ConstEmitter::EmitError::ExpansionCap);
     return ir::OperandIdx(base::INVALID_IDX);
   }
   emitter.set_cur(exit_b);
@@ -4021,6 +4041,9 @@ comp::IrRunError emit_failure(ConstEmitter::EmitError kind,
                               std::string_view fallback) {
   const ir::InstructionIdx no_instr(base::INVALID_IDX);
   switch (kind) {
+    case ConstEmitter::EmitError::Budget:
+      return {comp::IrRunError::Kind::Quota, no_instr,
+              "comp evaluation quota exhausted"};
     case ConstEmitter::EmitError::OutOfBounds:
       return {comp::IrRunError::Kind::OutOfBounds, no_instr,
               "index out of bounds in comp evaluation"};
@@ -4053,7 +4076,7 @@ bool evaluate_const_ir(const ast::AstArena& ast,
                        comp::IrRunError* error,
                        diag::Span* failure_span) {
   const ir::StorageBuilder::Checkpoint cp = builder.checkpoint();
-  ConstEmitter emitter(builder);
+  ConstEmitter emitter(builder, quota);
   emitter.set_variant_index_fn(ctx.resolve_variant_index);
   emitter.new_block();  // entry
   const ir::BlockIdx return_b = emitter.new_block();
