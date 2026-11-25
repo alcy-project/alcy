@@ -25,6 +25,7 @@
 #include "ir/register.h"
 #include "ir/storage.h"
 #include "ir/type.h"
+#include "ir/verifier.h"
 
 namespace ir {
 
@@ -834,6 +835,282 @@ StorageBases StorageBuilder::append_reachable(
   // The interning tables describe the table that just grew.
   index_interned();
   return bases;
+}
+
+TypeIdx StorageBuilder::primitive(TypeTag tag) const {
+  DCHECK(
+      tag != TypeTag::Struct && tag != TypeTag::Array && tag != TypeTag::Enum &&
+      tag != TypeTag::Never && tag != TypeTag::Tuple && tag != TypeTag::Error &&
+      tag != TypeTag::Slice && tag != TypeTag::Func && tag != TypeTag::Const);
+  return primitive_idx(tag);
+}
+
+TypeIdx StorageBuilder::param_type(u32 index) {
+  const auto found = param_by_index_.find(index);
+  if (found != param_by_index_.end()) {
+    return found->second;
+  }
+  TypeNode node{};
+  node.tag = TypeTag::Param;
+  node.data.set(ParamIndex{index});
+  const TypeIdx idx = state_.types.emplace_back(node);
+  param_by_index_.emplace(index, idx);
+  return idx;
+}
+
+TypeIdx StorageBuilder::reserve_struct(str::StringPoolId name) {
+  TypeNode node{};
+  node.tag = TypeTag::Struct;
+  node.data.set(
+      state_.struct_types.emplace_back(StructType{.name = name,
+                                                  .fields = {TypeIdx(0), 0},
+                                                  .params = {TypeIdx(0), 0},
+                                                  .hints = {},
+                                                  .field_hints = {}}));
+  return state_.types.emplace_back(node);
+}
+
+TypeIdx StorageBuilder::slice_type(TypeIdx element) {
+  const auto fast = slice_by_element_.find(element.idx);
+  if (fast != slice_by_element_.end()) {
+    return fast->second;
+  }
+  for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size(); ++idx) {
+    const TypeNode& node = state_.types[idx];
+    if (node.tag != TypeTag::Slice) {
+      continue;
+    }
+    const SliceTypeIdx sidx = node.data.get<SliceTypeIdx>();
+    if (sidx.idx < state_.slice_types.size() &&
+        state_.slice_types[sidx].element.idx == element.idx) {
+      slice_by_element_.emplace(element.idx, idx);
+      return idx;
+    }
+  }
+  TypeNode node{};
+  node.tag = TypeTag::Slice;
+  node.data.set(state_.slice_types.emplace_back(SliceType{.element = element}));
+  const TypeIdx idx = state_.types.emplace_back(node);
+  slice_by_element_.emplace(element.idx, idx);
+  return idx;
+}
+
+TypeIdx StorageBuilder::array_type(TypeIdx element, u64 count) {
+  for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size(); ++idx) {
+    const TypeNode& node = state_.types[idx];
+    if (node.tag != TypeTag::Array) {
+      continue;
+    }
+    const ArrayTypeIdx aidx = node.data.get<ArrayTypeIdx>();
+    if (aidx.idx < state_.array_types.size() &&
+        state_.array_types[aidx].element.idx == element.idx &&
+        state_.array_types[aidx].count == count) {
+      return idx;
+    }
+  }
+  TypeNode node{};
+  node.tag = TypeTag::Array;
+  node.data.set(state_.array_types.emplace_back(
+      ArrayType{.element = element, .count = count}));
+  return state_.types.emplace_back(node);
+}
+
+TypeIdx StorageBuilder::const_type(u64 value) {
+  const auto found = const_by_value_.find(value);
+  if (found != const_by_value_.end()) {
+    return found->second;
+  }
+  TypeNode node{};
+  node.tag = TypeTag::Const;
+  node.data.set(state_.const_types.emplace_back(ConstType{.value = value}));
+  const TypeIdx idx = state_.types.emplace_back(node);
+  const_by_value_.emplace(value, idx);
+  return idx;
+}
+
+TypeIdx StorageBuilder::tuple_type(TypeIdxRange elements) {
+  const u64 key = elements_key(elements);
+  const auto found = tuple_by_key_.find(key);
+  if (found != tuple_by_key_.end()) {
+    for (const TypeIdx candidate : found->second) {
+      const TypeNode& node = state_.types[candidate];
+      const TupleTypeIdx tidx = node.data.get<TupleTypeIdx>();
+      if (tidx.idx >= state_.tuple_types.size()) {
+        continue;
+      }
+      const TupleType& tuple = state_.tuple_types[tidx];
+      if (tuple.elements.size() != elements.size()) {
+        continue;
+      }
+      bool match = true;
+      for (u32 i = 0; match && i < elements.size(); ++i) {
+        match = tuple.elements[i].idx == elements[i].idx;
+      }
+      if (match) {
+        return candidate;
+      }
+    }
+  }
+  TypeNode node{};
+  node.tag = TypeTag::Tuple;
+  // Elements are already interned; only the shape node is new.
+  TupleType tuple;
+  tuple.elements = elements;
+  node.data.set(state_.tuple_types.emplace_back(tuple));
+  const TypeIdx idx = state_.types.emplace_back(node);
+  if (found != tuple_by_key_.end()) {
+    found->second.push_back(idx);
+  } else {
+    tuple_by_key_.emplace(key, std::vector<TypeIdx>{idx});
+  }
+  return idx;
+}
+
+TypeIdx StorageBuilder::func_type(TypeIdxRange params, TypeIdx ret) {
+  TypeNode node{};
+  node.tag = TypeTag::Func;
+  FuncType func;
+  func.params = params;
+  func.ret = ret;
+  node.data.set(state_.func_types.emplace_back(func));
+  return state_.types.emplace_back(node);
+}
+
+TypeIdx StorageBuilder::never_type() {
+  if (never_.is_valid()) {
+    return never_;
+  }
+  for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size(); ++idx) {
+    if (state_.types[idx].tag == TypeTag::Never) {
+      never_ = idx;
+      return idx;
+    }
+  }
+  TypeNode node{};
+  node.tag = TypeTag::Never;
+  never_ = state_.types.emplace_back(node);
+  return never_;
+}
+
+TypeIdx StorageBuilder::error_type() {
+  if (error_.is_valid()) {
+    return error_;
+  }
+  for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size(); ++idx) {
+    if (state_.types[idx].tag == TypeTag::Error) {
+      error_ = idx;
+      return idx;
+    }
+  }
+  TypeNode node{};
+  node.tag = TypeTag::Error;
+  error_ = state_.types.emplace_back(node);
+  return error_;
+}
+
+TypeIdx StorageBuilder::reserve_enum(str::StringPoolId name) {
+  TypeNode node{};
+  node.tag = TypeTag::Enum;
+  node.data.set(state_.enum_types.emplace_back(
+      EnumType{.name = name,
+               .variants = {EnumVariantTypeIdx(0), 0},
+               .params = {TypeIdx(0), 0},
+               .hints = {}}));
+  return state_.types.emplace_back(node);
+}
+
+base::Result<VerifiedStorage, VerificationError> StorageBuilder::build(
+    StorageState* failed_out) && {
+  Storage storage(std::move(state_));
+  if (VerificationResult verified = verify_storage(storage);
+      verified.is_err()) {
+    if (failed_out != nullptr) {
+      *failed_out = std::move(storage).take_state();
+    }
+    return base::make_err(std::move(verified).unwrap_err());
+  }
+  return base::make_ok(VerifiedStorage(std::move(storage)));
+}
+
+TypeIdx StorageBuilder::pointer_type(TypeTag tag, TypeIdx pointee) {
+  std::unordered_map<u32, TypeIdx>* interned = pointer_table(tag);
+  DCHECK(interned != nullptr);
+  const auto found = interned->find(pointee.idx);
+  if (found != interned->end()) {
+    return found->second;
+  }
+  TypeNode node{};
+  node.tag = tag;
+  node.data.set(state_.ref_types.emplace_back(RefType{.pointee = pointee}));
+  const TypeIdx idx = state_.types.emplace_back(node);
+  interned->emplace(pointee.idx, idx);
+  return idx;
+}
+
+void StorageBuilder::intern_primitives() {
+  for (u32 i = 0; i < PRIMITIVE_TYPE_COUNT; ++i) {
+    TypeNode node{};
+    node.tag = static_cast<TypeTag>(i);
+    state_.types.emplace_back(node);
+  }
+  TypeNode func{};
+  func.tag = TypeTag::Function;
+  state_.types.emplace_back(func);
+  TypeNode isize{};
+  isize.tag = TypeTag::Isize;
+  state_.types.emplace_back(isize);
+  TypeNode usize{};
+  usize.tag = TypeTag::Usize;
+  state_.types.emplace_back(usize);
+}
+
+u64 StorageBuilder::elements_key(TypeIdxRange elements) {
+  u64 key = elements.size();
+  for (const TypeIdx element : elements) {
+    key ^= static_cast<u64>(element.idx) + 0x9E3779B97F4A7C15ull + (key << 6) +
+           (key >> 2);
+  }
+  return key;
+}
+
+std::unordered_map<u32, TypeIdx>* StorageBuilder::pointer_table(TypeTag tag) {
+  if (tag == TypeTag::Ref) {
+    return &ref_by_pointee_;
+  }
+  if (tag == TypeTag::MutRef) {
+    return &mut_ref_by_pointee_;
+  }
+  if (tag == TypeTag::RawPtr) {
+    return &raw_ptr_by_pointee_;
+  }
+  if (tag == TypeTag::RawMutPtr) {
+    return &raw_mut_ptr_by_pointee_;
+  }
+  return nullptr;
+}
+
+void StorageBuilder::index_interned() {
+  ref_by_pointee_.clear();
+  mut_ref_by_pointee_.clear();
+  raw_ptr_by_pointee_.clear();
+  raw_mut_ptr_by_pointee_.clear();
+  param_by_index_.clear();
+  for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size(); ++idx) {
+    const TypeNode& node = state_.types[idx];
+    if (node.tag == TypeTag::Param) {
+      param_by_index_.emplace(node.as_param().value, idx);
+      continue;
+    }
+    std::unordered_map<u32, TypeIdx>* interned = pointer_table(node.tag);
+    if (interned == nullptr) {
+      continue;
+    }
+    const RefTypeIdx ridx = node.data.get<RefTypeIdx>();
+    if (ridx.idx >= state_.ref_types.size()) {
+      continue;
+    }
+    interned->emplace(state_.ref_types[ridx].pointee.idx, idx);
+  }
 }
 
 }  // namespace ir

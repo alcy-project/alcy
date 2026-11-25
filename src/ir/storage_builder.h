@@ -254,14 +254,7 @@ class StorageBuilder {
   // Returns the pre-interned node for a non-composite tag. O(1), no
   // allocation. Struct, Array, Enum, Never, Tuple, Error, and Const
   // nodes are created via their factories instead.
-  TypeIdx primitive(TypeTag tag) const {
-    DCHECK(tag != TypeTag::Struct && tag != TypeTag::Array &&
-           tag != TypeTag::Enum && tag != TypeTag::Never &&
-           tag != TypeTag::Tuple && tag != TypeTag::Error &&
-           tag != TypeTag::Slice && tag != TypeTag::Func &&
-           tag != TypeTag::Const);
-    return primitive_idx(tag);
-  }
+  TypeIdx primitive(TypeTag tag) const;
 
   TypeIdx struct_type(str::StringPoolId name,
                       TypeIdxRange fields,
@@ -280,33 +273,12 @@ class StorageBuilder {
   // The type of a type parameter, by its index in the item it belongs
   // to. Parameters intern like any other type: one parameter is one
   // node, so a body that names it twice names the same type.
-  TypeIdx param_type(u32 index) {
-    const auto found = param_by_index_.find(index);
-    if (found != param_by_index_.end()) {
-      return found->second;
-    }
-    TypeNode node{};
-    node.tag = TypeTag::Param;
-    node.data.set(ParamIndex{index});
-    const TypeIdx idx = state_.types.emplace_back(node);
-    param_by_index_.emplace(index, idx);
-    return idx;
-  }
+  TypeIdx param_type(u32 index);
 
   // Reserves an empty nominal node that re-entrant references resolve
   // to; fill_struct/fill_enum complete it. Placeholders are valid, so
   // error paths need no cleanup.
-  TypeIdx reserve_struct(str::StringPoolId name) {
-    TypeNode node{};
-    node.tag = TypeTag::Struct;
-    node.data.set(
-        state_.struct_types.emplace_back(StructType{.name = name,
-                                                    .fields = {TypeIdx(0), 0},
-                                                    .params = {TypeIdx(0), 0},
-                                                    .hints = {},
-                                                    .field_hints = {}}));
-    return state_.types.emplace_back(node);
-  }
+  TypeIdx reserve_struct(str::StringPoolId name);
 
   void fill_struct(TypeIdx idx,
                    TypeIdxRange fields,
@@ -334,69 +306,14 @@ class StorageBuilder {
   // factory minted or found itself; a summary merge appends carried
   // types past it, so the table stays the source of truth and a miss
   // falls back to one scan, which repopulates the map.
-  TypeIdx slice_type(TypeIdx element) {
-    const auto fast = slice_by_element_.find(element.idx);
-    if (fast != slice_by_element_.end()) {
-      return fast->second;
-    }
-    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag != TypeTag::Slice) {
-        continue;
-      }
-      const SliceTypeIdx sidx = node.data.get<SliceTypeIdx>();
-      if (sidx.idx < state_.slice_types.size() &&
-          state_.slice_types[sidx].element.idx == element.idx) {
-        slice_by_element_.emplace(element.idx, idx);
-        return idx;
-      }
-    }
-    TypeNode node{};
-    node.tag = TypeTag::Slice;
-    node.data.set(
-        state_.slice_types.emplace_back(SliceType{.element = element}));
-    const TypeIdx idx = state_.types.emplace_back(node);
-    slice_by_element_.emplace(element.idx, idx);
-    return idx;
-  }
+  TypeIdx slice_type(TypeIdx element);
 
-  TypeIdx array_type(TypeIdx element, u64 count) {
-    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag != TypeTag::Array) {
-        continue;
-      }
-      const ArrayTypeIdx aidx = node.data.get<ArrayTypeIdx>();
-      if (aidx.idx < state_.array_types.size() &&
-          state_.array_types[aidx].element.idx == element.idx &&
-          state_.array_types[aidx].count == count) {
-        return idx;
-      }
-    }
-    TypeNode node{};
-    node.tag = TypeTag::Array;
-    node.data.set(state_.array_types.emplace_back(
-        ArrayType{.element = element, .count = count}));
-    return state_.types.emplace_back(node);
-  }
+  TypeIdx array_type(TypeIdx element, u64 count);
 
   // A compile-time value argument, interned by value so identical
   // arguments share one type index and type equality stays index
   // equality for the generic argument lists that hold them.
-  TypeIdx const_type(u64 value) {
-    const auto found = const_by_value_.find(value);
-    if (found != const_by_value_.end()) {
-      return found->second;
-    }
-    TypeNode node{};
-    node.tag = TypeTag::Const;
-    node.data.set(state_.const_types.emplace_back(ConstType{.value = value}));
-    const TypeIdx idx = state_.types.emplace_back(node);
-    const_by_value_.emplace(value, idx);
-    return idx;
-  }
+  TypeIdx const_type(u64 value);
 
   // Structural interning: identical pointer shapes share one index, so type
   // equality is index equality. A pointer used to find its shape by scanning
@@ -414,91 +331,17 @@ class StorageBuilder {
     return pointer_type(is_mut ? TypeTag::RawMutPtr : TypeTag::RawPtr, pointee);
   }
 
-  TypeIdx tuple_type(TypeIdxRange elements) {
-    const u64 key = elements_key(elements);
-    const auto found = tuple_by_key_.find(key);
-    if (found != tuple_by_key_.end()) {
-      for (const TypeIdx candidate : found->second) {
-        const TypeNode& node = state_.types[candidate];
-        const TupleTypeIdx tidx = node.data.get<TupleTypeIdx>();
-        if (tidx.idx >= state_.tuple_types.size()) {
-          continue;
-        }
-        const TupleType& tuple = state_.tuple_types[tidx];
-        if (tuple.elements.size() != elements.size()) {
-          continue;
-        }
-        bool match = true;
-        for (u32 i = 0; match && i < elements.size(); ++i) {
-          match = tuple.elements[i].idx == elements[i].idx;
-        }
-        if (match) {
-          return candidate;
-        }
-      }
-    }
-    TypeNode node{};
-    node.tag = TypeTag::Tuple;
-    // Elements are already interned; only the shape node is new.
-    TupleType tuple;
-    tuple.elements = elements;
-    node.data.set(state_.tuple_types.emplace_back(tuple));
-    const TypeIdx idx = state_.types.emplace_back(node);
-    if (found != tuple_by_key_.end()) {
-      found->second.push_back(idx);
-    } else {
-      tuple_by_key_.emplace(key, std::vector<TypeIdx>{idx});
-    }
-    return idx;
-  }
+  TypeIdx tuple_type(TypeIdxRange elements);
 
   // Appends a function shape over `params` and `ret`. A signature does
   // not intern here: callers pass copies so the shape's ranges outlive
   // their resolution, and two signatures over one shape are compared
   // structurally by the analyzer, not by this index.
-  TypeIdx func_type(TypeIdxRange params, TypeIdx ret) {
-    TypeNode node{};
-    node.tag = TypeTag::Func;
-    FuncType func;
-    func.params = params;
-    func.ret = ret;
-    node.data.set(state_.func_types.emplace_back(func));
-    return state_.types.emplace_back(node);
-  }
+  TypeIdx func_type(TypeIdxRange params, TypeIdx ret);
 
-  TypeIdx never_type() {
-    if (never_.is_valid()) {
-      return never_;
-    }
-    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
-         ++idx) {
-      if (state_.types[idx].tag == TypeTag::Never) {
-        never_ = idx;
-        return idx;
-      }
-    }
-    TypeNode node{};
-    node.tag = TypeTag::Never;
-    never_ = state_.types.emplace_back(node);
-    return never_;
-  }
+  TypeIdx never_type();
 
-  TypeIdx error_type() {
-    if (error_.is_valid()) {
-      return error_;
-    }
-    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
-         ++idx) {
-      if (state_.types[idx].tag == TypeTag::Error) {
-        error_ = idx;
-        return idx;
-      }
-    }
-    TypeNode node{};
-    node.tag = TypeTag::Error;
-    error_ = state_.types.emplace_back(node);
-    return error_;
-  }
+  TypeIdx error_type();
 
   EnumVariantTypeIdx enum_variant(str::StringPoolId name, TypeIdxRange fields) {
     return state_.enum_variant_types.emplace_back(
@@ -506,16 +349,7 @@ class StorageBuilder {
   }
 
   // Reserves a nominal node for recursive types; see reserve_struct.
-  TypeIdx reserve_enum(str::StringPoolId name) {
-    TypeNode node{};
-    node.tag = TypeTag::Enum;
-    node.data.set(state_.enum_types.emplace_back(
-        EnumType{.name = name,
-                 .variants = {EnumVariantTypeIdx(0), 0},
-                 .params = {TypeIdx(0), 0},
-                 .hints = {}}));
-    return state_.types.emplace_back(node);
-  }
+  TypeIdx reserve_enum(str::StringPoolId name);
 
   void fill_enum(TypeIdx idx,
                  EnumVariantTypeIdxRange variants,
@@ -557,111 +391,29 @@ class StorageBuilder {
   // `failed_out` is given, the unverified tables move there so a reader
   // that only needs type display can still use them.
   base::Result<VerifiedStorage, VerificationError> build(
-      StorageState* failed_out = nullptr) && {
-    Storage storage(std::move(state_));
-    if (VerificationResult verified = verify_storage(storage);
-        verified.is_err()) {
-      if (failed_out != nullptr) {
-        *failed_out = std::move(storage).take_state();
-      }
-      return base::make_err(std::move(verified).unwrap_err());
-    }
-    return base::make_ok(VerifiedStorage(std::move(storage)));
-  }
+      StorageState* failed_out = nullptr) &&;
 
  private:
-  TypeIdx pointer_type(TypeTag tag, TypeIdx pointee) {
-    std::unordered_map<u32, TypeIdx>* interned = pointer_table(tag);
-    DCHECK(interned != nullptr);
-    const auto found = interned->find(pointee.idx);
-    if (found != interned->end()) {
-      return found->second;
-    }
-    TypeNode node{};
-    node.tag = tag;
-    node.data.set(state_.ref_types.emplace_back(RefType{.pointee = pointee}));
-    const TypeIdx idx = state_.types.emplace_back(node);
-    interned->emplace(pointee.idx, idx);
-    return idx;
-  }
+  TypeIdx pointer_type(TypeTag tag, TypeIdx pointee);
 
   // Pre-interns every non-composite tag so primitive() resolves without a
   // table lookup. Only the default constructor does this; a builder created
   // from an existing state assumes its table is already populated.
-  void intern_primitives() {
-    for (u32 i = 0; i < PRIMITIVE_TYPE_COUNT; ++i) {
-      TypeNode node{};
-      node.tag = static_cast<TypeTag>(i);
-      state_.types.emplace_back(node);
-    }
-    TypeNode func{};
-    func.tag = TypeTag::Function;
-    state_.types.emplace_back(func);
-    TypeNode isize{};
-    isize.tag = TypeTag::Isize;
-    state_.types.emplace_back(isize);
-    TypeNode usize{};
-    usize.tag = TypeTag::Usize;
-    state_.types.emplace_back(usize);
-  }
+  void intern_primitives();
 
   // A tuple's elements as one key. The count leads so that a prefix cannot
   // collide with the longer shape by construction, and the elements are
   // combined in order; two shapes that still collide share a bucket and the
   // comparison above tells them apart.
-  static u64 elements_key(TypeIdxRange elements) {
-    u64 key = elements.size();
-    for (const TypeIdx element : elements) {
-      key ^= static_cast<u64>(element.idx) + 0x9E3779B97F4A7C15ull +
-             (key << 6) + (key >> 2);
-    }
-    return key;
-  }
+  static u64 elements_key(TypeIdxRange elements);
 
   // The interning table of a pointer kind, or null for every other tag.
-  std::unordered_map<u32, TypeIdx>* pointer_table(TypeTag tag) {
-    if (tag == TypeTag::Ref) {
-      return &ref_by_pointee_;
-    }
-    if (tag == TypeTag::MutRef) {
-      return &mut_ref_by_pointee_;
-    }
-    if (tag == TypeTag::RawPtr) {
-      return &raw_ptr_by_pointee_;
-    }
-    if (tag == TypeTag::RawMutPtr) {
-      return &raw_mut_ptr_by_pointee_;
-    }
-    return nullptr;
-  }
+  std::unordered_map<u32, TypeIdx>* pointer_table(TypeTag tag);
 
   // Fills the interning tables from a type table this builder did not fill
   // itself. The scan is the shape lookup used to make, so the first node of a
   // shape is the one a later pointer interns to.
-  void index_interned() {
-    ref_by_pointee_.clear();
-    mut_ref_by_pointee_.clear();
-    raw_ptr_by_pointee_.clear();
-    raw_mut_ptr_by_pointee_.clear();
-    param_by_index_.clear();
-    for (TypeIdx idx(PRE_INTERNED_COUNT); idx.idx < state_.types.size();
-         ++idx) {
-      const TypeNode& node = state_.types[idx];
-      if (node.tag == TypeTag::Param) {
-        param_by_index_.emplace(node.as_param().value, idx);
-        continue;
-      }
-      std::unordered_map<u32, TypeIdx>* interned = pointer_table(node.tag);
-      if (interned == nullptr) {
-        continue;
-      }
-      const RefTypeIdx ridx = node.data.get<RefTypeIdx>();
-      if (ridx.idx >= state_.ref_types.size()) {
-        continue;
-      }
-      interned->emplace(state_.ref_types[ridx].pointee.idx, idx);
-    }
-  }
+  void index_interned();
 
   StorageState state_;
 
