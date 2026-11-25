@@ -180,7 +180,7 @@ TEST_CASE("Completion offers associated functions after a generic qualifier") {
   CHECK(find_item(list, "new") != nullptr);
 }
 
-TEST_CASE("Completion filters associated functions by the type argument") {
+TEST_CASE("Completion offers declared associated functions for a qualifier") {
   const Document boolean("file:///main.al", "alcy", 1,
                          "fn main() -> i32 {\n"
                          "  v := Vec::<bool>::\n"
@@ -190,7 +190,16 @@ TEST_CASE("Completion filters associated functions by the type argument") {
   const text::JsonValue for_bool =
       completion_items(boolean, boolean_analysis, Position{1, 20});
   CHECK(find_item(for_bool, "new") != nullptr);
-  CHECK(find_item(for_bool, "from_slice") == nullptr);
+  CHECK(find_item(for_bool, "zeros") != nullptr);
+  const text::JsonValue* slice = find_item(for_bool, "from_slice");
+  CHECK(slice != nullptr);
+  if (slice != nullptr) {
+    const text::JsonValue* detail = slice->find("detail");
+    CHECK(detail != nullptr);
+    if (detail != nullptr) {
+      CHECK(detail->as_string().find("Vec<u8>") == std::string::npos);
+    }
+  }
 
   const Document bytes("file:///main.al", "alcy", 2,
                        "fn main() -> i32 {\n"

@@ -597,6 +597,104 @@ std::string_view nominal_name(const pipeline::PipelineContext& context,
 // Associated functions and variant constructors the typed qualifier
 // names. A qualifier such as `Vec::<i32>::` still reads as `Vec` here:
 // the arguments do not change which declarations are candidates.
+std::string_view written_type(const pipeline::PipelineContext& context,
+                              ast::TypeIdx type) {
+  if (type == ast::TypeIdx::invalid()) {
+    return {};
+  }
+  const diag::Span span = context.ast.types[type].span;
+  const std::optional<std::string_view> source =
+      context.sources.bytes(span.file);
+  if (!source.has_value() || span.offset + span.length > source->size()) {
+    return {};
+  }
+  return source->substr(span.offset, span.length);
+}
+
+std::string_view bound_name(const ast::AstArena& ast, ast::PatternIdx pattern) {
+  if (pattern == ast::PatternIdx::invalid()) {
+    return {};
+  }
+  const ast::PatternNode& node = ast.patterns[pattern];
+  if (node.kind == ast::PatternKind::Ident) {
+    return node.payload.ident.name.name;
+  }
+  if (node.kind == ast::PatternKind::MutIdent) {
+    return node.payload.mut_ident.name.name;
+  }
+  return {};
+}
+
+// The signature as written, for a declaration the checker has not had
+// to instantiate. A bounded impl's rows are created on demand, so the
+// AST is the only place an unused associated function is visible.
+std::string written_signature(const pipeline::PipelineContext& context,
+                              ast::ItemIdx item) {
+  const ast::ItemFn& fn = context.ast.items[item].payload.get<ast::ItemFn>();
+  std::string out = "(";
+  bool first = true;
+  for (const ast::ItemFnParam& param : fn.params) {
+    if (!first) {
+      out += ", ";
+    }
+    first = false;
+    const std::string_view name = bound_name(context.ast, param.pattern);
+    if (!name.empty()) {
+      out += name;
+      out += ": ";
+    }
+    out += written_type(context, param.type);
+  }
+  out += ')';
+  const std::string_view result = written_type(context, fn.return_type);
+  if (!result.empty()) {
+    out += " -> ";
+    out += result;
+  }
+  return out;
+}
+
+// Associated functions declared for the nominated type, including
+// those whose impl has not been instantiated in the buffer.
+void collect_declared_methods(const pipeline::PipelineContext& context,
+                              std::string_view name,
+                              std::vector<Item>* out) {
+  context.ast.items.for_each_node([&](ast::ItemIdx index) {
+    const ast::ItemNode& item = context.ast.items[index];
+    if (item.kind != ast::ItemKind::Impl) {
+      return;
+    }
+    const ast::ItemImpl& impl = item.payload.get<ast::ItemImpl>();
+    if (impl.type == ast::TypeIdx::invalid()) {
+      return;
+    }
+    const ast::TypeNode& self = context.ast.types[impl.type];
+    if (self.kind != ast::TypeKind::Path) {
+      return;
+    }
+    const ast::TypePath& path = self.payload.get<ast::TypePath>();
+    if (path.path == ast::PathIdx::invalid() ||
+        context.ast.paths[path.path].segments.empty() ||
+        context.ast.paths[path.path].segments.back().name != name) {
+      return;
+    }
+    for (const ast::ItemIdx method : impl.methods) {
+      const ast::ItemNode& node = context.ast.items[method];
+      if (node.kind != ast::ItemKind::Fn) {
+        continue;
+      }
+      const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+      if (!fn.params.empty() &&
+          bound_name(context.ast, fn.params[0].pattern) == "self") {
+        continue;
+      }
+      out->push_back(Item{std::string(fn.name.name),
+                          written_signature(context, method), method,
+                          CompletionItemKind::Method, "", true});
+    }
+  });
+}
+
 void collect_qualified(const DocumentAnalysis& analysis,
                        std::string_view qualifier,
                        std::string_view spelling,
@@ -653,6 +751,9 @@ void collect_qualified(const DocumentAnalysis& analysis,
                                method.item),
                method.item, CompletionItemKind::Method, "", true});
     }
+  }
+  collect_declared_methods(context, name, out);
+  for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
       if (info.name != name) {
         continue;
