@@ -17,6 +17,7 @@
 #include "codegen/backend.h"
 #include "codegen/diag_code.h"
 #include "codegen/riscv64/isa.h"
+#include "codegen/riscv64/materialize.h"
 #include "codegen/riscv64/minst.h"
 #include "codegen/riscv64/rodata.h"
 #include "diag/bag.h"
@@ -259,11 +260,7 @@ class Selector {
       push(make_inst(MOp::Addi, 8, Operand{out}, base, Operand{Imm{disp}}));
       return;
     }
-    const i64 hi = upper20(disp);
-    const i64 lo = lower12(disp);
-    push(make_inst(MOp::Lui, 8, Operand{temp}, Operand{Imm{hi << 12}}));
-    push(make_inst(MOp::Addi, 8, Operand{temp}, Operand{temp},
-                   Operand{Imm{lo}}));
+    emit_materialize(body_, temp, disp);
     push(make_inst(MOp::Add, 8, Operand{out}, base, Operand{temp}));
   }
 
@@ -1412,8 +1409,7 @@ bool Selector::emit_inner(const ir::Instruction& instr,
       MInst at_convert = make_inst(MOp::Nop, 8);
       at_convert.label = not_nan;
       push(at_convert);
-      push(make_inst(MOp::Fcvt, w, Operand{integer}, *value,
-                     Operand{Imm{static_cast<i64>(mode)}}));
+      push(make_inst(MOp::Fcvt, w, Operand{integer}, *value, Operand{mode}));
       if (bits < 64) {
         // edge = 1 << (bits-1); max = edge-1 for signed, 2*edge-1 unsigned.
         push(make_inst(MOp::Addi, 8, Operand{scratch}, Operand{ZERO},
@@ -1474,8 +1470,7 @@ bool Selector::emit_inner(const ir::Instruction& instr,
       const FcvtMode mode =
           src_tag == ir::TypeTag::F64 ? FcvtMode::F64ToF32 : FcvtMode::F32ToF64;
       push(make_inst(MOp::Fcvt, dst_tag == ir::TypeTag::F32 ? 4 : 8,
-                     dst_of(instr), *value,
-                     Operand{Imm{static_cast<i64>(mode)}}));
+                     dst_of(instr), *value, Operand{mode}));
       return true;
     }
     if (!src_float && dst_float) {
@@ -1493,7 +1488,7 @@ bool Selector::emit_inner(const ir::Instruction& instr,
       const Reg integer = T0;
       emit_move(Operand{integer}, *value);
       push(make_inst(MOp::Fcvt, w, dst_of(instr), Operand{integer},
-                     Operand{Imm{static_cast<i64>(mode)}}));
+                     Operand{mode}));
       return true;
     }
     // Pointers and integers of the same width are the same bits; narrow

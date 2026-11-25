@@ -317,9 +317,10 @@ Encoded encode(const Body& body) {
         break;
       }
       case MOp::Fcvt: {
-        const FcvtMode mode = inst.count > 2
-                                  ? static_cast<FcvtMode>(imm(inst.at(2)))
-                                  : FcvtMode::F64ToI64;
+        const FcvtMode mode =
+            inst.count > 2 && std::holds_alternative<FcvtMode>(inst.at(2))
+                ? std::get<FcvtMode>(inst.at(2))
+                : FcvtMode::F64ToI64;
         u32 funct7 = 0;
         u32 funct3 = 0;
         u32 rs2 = 0;

@@ -21,112 +21,18 @@ constexpr Reg FLOAT_SCRATCH[] = {Reg::F0, Reg::F1, Reg::F2, Reg::F3,
                                  Reg::F4, Reg::F5, Reg::F6, Reg::F7};
 
 bool writes_result(const MOp op) {
-  switch (op) {
-    case MOp::Lui:
-    case MOp::Auipc:
-    case MOp::Jal:
-    case MOp::Jalr:
-    case MOp::Lbu:
-    case MOp::Lb:
-    case MOp::Lh:
-    case MOp::Lhu:
-    case MOp::Lw:
-    case MOp::Lwu:
-    case MOp::Ld:
-    case MOp::Addi:
-    case MOp::Slti:
-    case MOp::Sltiu:
-    case MOp::Xori:
-    case MOp::Ori:
-    case MOp::Andi:
-    case MOp::Slli:
-    case MOp::Srli:
-    case MOp::Srai:
-    case MOp::Add:
-    case MOp::Sub:
-    case MOp::Slt:
-    case MOp::Sltu:
-    case MOp::Xor:
-    case MOp::Or:
-    case MOp::And:
-    case MOp::Sll:
-    case MOp::Srl:
-    case MOp::Sra:
-    case MOp::Mul:
-    case MOp::Mulh:
-    case MOp::Mulhu:
-    case MOp::Div:
-    case MOp::Divu:
-    case MOp::Rem:
-    case MOp::Remu:
-    case MOp::Fadd:
-    case MOp::Fsub:
-    case MOp::Fmul:
-    case MOp::Fdiv:
-    case MOp::Feq:
-    case MOp::Flt:
-    case MOp::Fle:
-    case MOp::Fcvt:
-    case MOp::Fmov:
-    case MOp::Fneg:
-    case MOp::Flw:
-    case MOp::Fld:
-    case MOp::Addr:
-    case MOp::LoadAddr: return true;
-    default: return false;
-  }
+  return op_traits(op).writes_result;
 }
 
 bool is_float_op(const MOp op) {
-  switch (op) {
-    case MOp::Fadd:
-    case MOp::Fsub:
-    case MOp::Fmul:
-    case MOp::Fdiv:
-    case MOp::Feq:
-    case MOp::Flt:
-    case MOp::Fle:
-    case MOp::Fcvt:
-    case MOp::Fmov:
-    case MOp::Fneg:
-    case MOp::Flw:
-    case MOp::Fld:
-    case MOp::Fsw:
-    case MOp::Fsd: return true;
-    default: return false;
-  }
+  return op_traits(op).is_float;
+}
+
+bool needs_register_operands(const MOp op) {
+  return op_traits(op).needs_register_operands;
 }
 
 }  // namespace
-
-bool needs_register_operands(const MOp op) {
-  switch (op) {
-    case MOp::Sub:
-    case MOp::Sll:
-    case MOp::Srl:
-    case MOp::Sra:
-    case MOp::Slt:
-    case MOp::Sltu:
-    case MOp::Div:
-    case MOp::Divu:
-    case MOp::Rem:
-    case MOp::Remu:
-    case MOp::Mul:
-    case MOp::Mulh:
-    case MOp::Mulhu:
-    case MOp::Fadd:
-    case MOp::Fsub:
-    case MOp::Fmul:
-    case MOp::Fdiv:
-    case MOp::Beq:
-    case MOp::Bne:
-    case MOp::Blt:
-    case MOp::Bge:
-    case MOp::Bltu:
-    case MOp::Bgeu: return true;
-    default: return false;
-  }
-}
 
 void allocate(Body& body, const Frame& frame) {
   std::vector<MInst> out;

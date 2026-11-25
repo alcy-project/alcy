@@ -43,24 +43,6 @@ struct SlotRef {
   i32 offset = 0;
 };
 
-using Operand = std::
-    variant<std::monostate, VReg, Reg, Imm, Mem, Label, SymbolRef, SlotRef>;
-
-// Branch conditions, named by their RISC-V suffix.
-enum class Cond : u8 { Eq, Ne, Lt, Ge, Ltu, Geu };
-
-constexpr Cond negate(const Cond cond) {
-  switch (cond) {
-    case Cond::Eq: return Cond::Ne;
-    case Cond::Ne: return Cond::Eq;
-    case Cond::Lt: return Cond::Ge;
-    case Cond::Ge: return Cond::Lt;
-    case Cond::Ltu: return Cond::Geu;
-    case Cond::Geu: return Cond::Ltu;
-  }
-  return Cond::Eq;
-}
-
 // The conversion an Fcvt instruction performs. Its numeric value is the
 // tag carried in the instruction's third operand.
 enum class FcvtMode : u8 {
@@ -79,6 +61,31 @@ enum class FcvtMode : u8 {
   I64ToF32,
   I32ToF32,
 };
+
+using Operand = std::variant<std::monostate,
+                             VReg,
+                             Reg,
+                             Imm,
+                             Mem,
+                             Label,
+                             SymbolRef,
+                             SlotRef,
+                             FcvtMode>;
+
+// Branch conditions, named by their RISC-V suffix.
+enum class Cond : u8 { Eq, Ne, Lt, Ge, Ltu, Geu };
+
+constexpr Cond negate(const Cond cond) {
+  switch (cond) {
+    case Cond::Eq: return Cond::Ne;
+    case Cond::Ne: return Cond::Eq;
+    case Cond::Lt: return Cond::Ge;
+    case Cond::Ge: return Cond::Lt;
+    case Cond::Ltu: return Cond::Geu;
+    case Cond::Geu: return Cond::Ltu;
+  }
+  return Cond::Eq;
+}
 
 enum class MOp : u8 {
   Lui,
@@ -151,6 +158,83 @@ enum class MOp : u8 {
   Ecall,
   Nop,
 };
+
+// The allocator's three questions about an opcode, answered in one
+// table so adding an opcode cannot leave the answers out of step.
+struct OpTraits {
+  bool writes_result = false;
+  bool is_float = false;
+  bool needs_register_operands = false;
+};
+
+constexpr OpTraits op_traits(const MOp op) {
+  switch (op) {
+    case MOp::Lui:
+    case MOp::Auipc:
+    case MOp::Jal:
+    case MOp::Jalr:
+    case MOp::Lbu:
+    case MOp::Lb:
+    case MOp::Lh:
+    case MOp::Lhu:
+    case MOp::Lw:
+    case MOp::Lwu:
+    case MOp::Ld:
+    case MOp::Addr:
+    case MOp::LoadAddr: return {.writes_result = true};
+    case MOp::Addi:
+    case MOp::Slti:
+    case MOp::Sltiu:
+    case MOp::Xori:
+    case MOp::Ori:
+    case MOp::Andi:
+    case MOp::Slli:
+    case MOp::Srli:
+    case MOp::Srai:
+    case MOp::Add:
+    case MOp::Xor:
+    case MOp::Or:
+    case MOp::And: return {.writes_result = true};
+    case MOp::Sub:
+    case MOp::Sll:
+    case MOp::Srl:
+    case MOp::Sra:
+    case MOp::Slt:
+    case MOp::Sltu:
+    case MOp::Div:
+    case MOp::Divu:
+    case MOp::Rem:
+    case MOp::Remu:
+    case MOp::Mul:
+    case MOp::Mulh:
+    case MOp::Mulhu:
+      return {.writes_result = true, .needs_register_operands = true};
+    case MOp::Fadd:
+    case MOp::Fsub:
+    case MOp::Fmul:
+    case MOp::Fdiv:
+      return {.writes_result = true,
+              .is_float = true,
+              .needs_register_operands = true};
+    case MOp::Feq:
+    case MOp::Flt:
+    case MOp::Fle:
+    case MOp::Fcvt:
+    case MOp::Fmov:
+    case MOp::Fneg:
+    case MOp::Flw:
+    case MOp::Fld: return {.writes_result = true, .is_float = true};
+    case MOp::Fsw:
+    case MOp::Fsd: return {.is_float = true};
+    case MOp::Beq:
+    case MOp::Bne:
+    case MOp::Blt:
+    case MOp::Bge:
+    case MOp::Bltu:
+    case MOp::Bgeu: return {.needs_register_operands = true};
+    default: return {};
+  }
+}
 
 struct MInst {
   MOp op = MOp::Nop;
