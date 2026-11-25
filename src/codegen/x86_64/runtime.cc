@@ -676,6 +676,13 @@ Body build_file_size() {
   body.insts.push_back(make_jcc(Cond::B, Operand{Label{ok}}));
   body.insts.push_back(
       make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{Imm{-1}}));
+  // Restore the saved callee registers before the early return.
+  mov(MOp::Mov, Operand{Reg::R13},
+      Operand{Mem{
+          .base = Reg::Rbp, .index = std::nullopt, .scale = 1, .disp = -16}});
+  mov(MOp::Mov, Operand{Reg::R12},
+      Operand{Mem{
+          .base = Reg::Rbp, .index = std::nullopt, .scale = 1, .disp = -8}});
   body.insts.push_back(make_inst(MOp::Ret, 8));
   MInst joined = make_inst(MOp::Nop, 8);
   joined.label = ok;
