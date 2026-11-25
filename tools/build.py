@@ -8,9 +8,37 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from utils.paths import project_root_dir
 from utils.source import source_extensions
+
+
+def shared_llvm_dir(mode: str, target_os: str) -> str:
+    """The pinned LLVM install shared between worktrees, when available.
+
+    An explicit `--llvm-dir` wins. This helper is only asked for a path
+    when the caller did not name one. A failure to populate the cache is
+    not a build failure: GN falls back to its own per-worktree setup.
+    """
+    tools_dir = str(Path(__file__).resolve().parent)
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    try:
+        from llvm import cache
+        from utils.config import get_llvm_fork_tag
+
+        tag = get_llvm_fork_tag()
+        triple = (
+            "wasm32-unknown-emscripten"
+            if "emscripten" in target_os
+            else cache.host_triple()
+        )
+        build_type = "Debug" if mode == "debug" else "Release"
+        found = cache.resolve(tag, triple, build_type)
+        return str(found) if found is not None else ""
+    except ImportError, OSError, ValueError:
+        return ""
 
 
 def update_compdb(build_dir) -> bool:
@@ -53,6 +81,7 @@ def build(
     fast: bool = False,
     gn_args_extra: str = "",
     llvm_dir: str = "",
+    llvm_cache: bool = True,
     debug_info: str = "line",
     sanitizer: str = "address",
     env: dict[str, str] | None = None,
@@ -70,10 +99,15 @@ def build(
     # Inert in release, where no sanitizer is added; forwarded for the same
     # reason as the debug information.
     gn_args += f' alcy_sanitizer="{sanitizer}"'
+    if not llvm_dir and llvm_cache:
+        llvm_dir = shared_llvm_dir(mode, target_os)
     if llvm_dir:
         # A preinstalled LLVM prefix instead of the tag artifact.
-        # Absolute, because gn resolves it from the build directory.
-        gn_args += f' llvm_install_dir="{os.path.abspath(llvm_dir)}"'
+        # Absolute and forward-slashed, because gn resolves it from the
+        # build directory and treats backslashes as string escapes on
+        # Windows.
+        prefix = os.path.abspath(llvm_dir).replace(os.sep, "/")
+        gn_args += f' llvm_install_dir="{prefix}"'
     if target_os:
         gn_args += f' target_os="{target_os}"'
     if target_cpu:
@@ -179,6 +213,12 @@ def main():
         "instead of downloading the fork's tag artifact",
     )
     parser.add_argument(
+        "--no-llvm-cache",
+        action="store_true",
+        help="Keep LLVM inside this worktree instead of sharing the pinned "
+        "install through the OS cache. Also respects ALCY_LLVM_CACHE=0",
+    )
+    parser.add_argument(
         "--debug-info",
         default="line",
         choices=["line", "full"],
@@ -225,6 +265,7 @@ def main():
         args.fast,
         args.gn_args_extra,
         args.llvm_dir,
+        llvm_cache=not args.no_llvm_cache,
         debug_info=args.debug_info,
         sanitizer=args.sanitizer,
     )

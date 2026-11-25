@@ -157,6 +157,20 @@ selects. A package may override only the three built-in keys in the
 built-in tables; a table of its own may use them with their own values,
 or derive ones it names from defaults.
 
+## Where LLVM lives
+
+A local build downloads the pinned fork artifact once and keeps it in
+the OS cache, under `~/.cache/alcy/llvm` on Linux,
+`~/Library/Caches/alcy/llvm` on macOS, and `%LOCALAPPDATA%\alcy\llvm`
+on Windows (`XDG_CACHE_HOME` overrides the first). The cache key is the
+repo's `llvm_fork_tag`, the host triple, and debug/release, so branches
+that pin different LLVM builds never share an install. Deleting the
+cache is safe; the next build downloads it again.
+
+`--no-llvm-cache` or `ALCY_LLVM_CACHE=0` keeps the old per-worktree
+install under `out/third_party/llvm` instead. An explicit `--llvm-dir`
+always wins over the shared cache.
+
 ## Examples
 
 ```console
