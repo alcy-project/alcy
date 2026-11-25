@@ -90,11 +90,7 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree_unoptimized(
 // one with no middle end - see the same optimized IR.
 base::Result<void, diag::Reported> optimize_package(
     PipelineContext& ctx,
-    lowering::LoweredPackage& package,
-    bool optimize) {
-  if (!optimize) {
-    return base::make_ok();
-  }
+    lowering::LoweredPackage& package) {
   base::Result<ir::VerifiedStorage, ir::VerificationError> optimized =
       opt::optimize(std::move(package.storage));
   if (optimized.is_err()) {
@@ -121,7 +117,7 @@ base::Result<lowering::LoweredPackage, diag::Reported> compile_tree(
     return base::make_err(diag::Reported{});
   }
   lowering::LoweredPackage lowered = std::move(package).unwrap();
-  if (optimize_package(ctx, lowered, plan.profile.optimize).is_err() ||
+  if ((plan.profile.optimize && optimize_package(ctx, lowered).is_err()) ||
       ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
@@ -1113,7 +1109,8 @@ base::Result<std::string, diag::Reported> emit_target(
       // the entry the miss stores into.
     }
   }
-  if (optimize_package(ctx, lowered, plan.profile.optimize).is_err() ||
+
+  if ((plan.profile.optimize && optimize_package(ctx, lowered).is_err()) ||
       ctx.bag.has_errors()) {
     return base::make_err(diag::Reported{});
   }
