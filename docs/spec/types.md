@@ -87,7 +87,10 @@
   argument, and generic code that wants one spells a borrow (`&[T]`).
 - There is no owned unsized value: `Box<[T]>`, `Box<str>`, and a
   future `Box<dyn>` have no spelling. The types that own
-  runtime-length data are `Vec<T>` and `String`.
+  runtime-length data are `Vec<T>` and `String`. `Vec::zeros(n)`
+  fills a new vector through `memset` and is bounded by
+  `T: Copy + Zeroable`: a reference or an enum cannot be filled
+  with zero bytes safely.
 
 ## Slices
 

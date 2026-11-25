@@ -489,6 +489,18 @@ impl<T> Vec<T> {
 // Equality has to exist for `contains` to compare elements, so the
 // method sits in a block that says so: `v.contains(&x)` on a
 // `Vec<Plain>` names `Plain` at the call rather than a line in here
+impl<T: Copy + Zeroable> Vec<T> {
+  // A new vector of `n` zeroed elements. The bounds make the fill
+  // safe: a `Copy` value is its bytes, and a `Zeroable` type spells a
+  // valid value when those bytes are all zero.
+  pub fn zeros(n: usize) -> Vec<T> {
+    mut out := Vec::<T>::with_capacity(n)
+    unsafe { memset(elem_ptr(out.buf, 0), 0u8, n) }
+    unsafe { out.set_len(n) }
+    ret out
+  }
+}
+
 impl<T: PartialEq> Vec<T> {
   // Whether some element equals `value`, compared the way `==`
   // compares two elements.
@@ -884,6 +896,25 @@ impl<T: PartialEq> PartialEq for Vec<T> {
     assert(value(&v, 0) == 1, "the element held stays first")
     assert(value(&v, 1) == 2, "the added elements follow in order")
     assert(value(&v, 2) == 3, "and end the vec")
+  }
+
+  #[test] fn zeros_fills_every_element_with_zero() {
+    v := Vec::<i32>::zeros(4)
+    assert(v.len() == 4, "one zero per requested element")
+    assert(value(&v, 0) == 0, "the first element is zero")
+    assert(value(&v, 3) == 0, "and so is the last")
+  }
+
+  #[test] fn zeros_of_zero_indices_is_empty() {
+    v := Vec::<i32>::zeros(0)
+    assert(v.is_empty(), "no element is filled")
+  }
+
+  #[test] fn zeros_accepts_bool_and_char() {
+    flags := Vec::<bool>::zeros(2)
+    assert(!flags[0], "all-zero bytes spell false")
+    chars := Vec::<char>::zeros(2)
+    assert(chars[1] == '\0', "all-zero bytes spell the NUL scalar")
   }
 
   #[test] fn from_fn_builds_one_element_per_index() {
