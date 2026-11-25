@@ -317,77 +317,78 @@ Encoded encode(const Body& body) {
         break;
       }
       case MOp::Fcvt: {
-        // Operand 2 tags: 0=f64->i64, 1=f32->i64, 2=i64->f64, 3=i32->f64.
-        const i64 mode = inst.count > 2 ? imm(inst.at(2)) : 0;
+        const FcvtMode mode = inst.count > 2
+                                  ? static_cast<FcvtMode>(imm(inst.at(2)))
+                                  : FcvtMode::F64ToI64;
         u32 funct7 = 0;
         u32 funct3 = 0;
         u32 rs2 = 0;
         switch (mode) {
-          case 0:
+          case FcvtMode::F64ToI64:
             funct7 = 0x61;
             funct3 = 1;  // rtz: truncate toward zero
             rs2 = 2;
             break;  // fcvt.l.d
-          case 1:
+          case FcvtMode::F32ToI64:
             funct7 = 0x60;
             funct3 = 1;
             rs2 = 2;
             break;  // fcvt.l.s
-          case 2:
+          case FcvtMode::I64ToF64:
             funct7 = 0x69;
             funct3 = 7;
             rs2 = 2;
             break;  // fcvt.d.l
-          case 3:
+          case FcvtMode::I32ToF64:
             funct7 = 0x69;
             funct3 = 0;
             break;  // fcvt.d.w
-          case 4:
+          case FcvtMode::F64ToIU64:
             funct7 = 0x61;
             funct3 = 1;
             rs2 = 3;
             break;  // fcvt.lu.d
-          case 5:
+          case FcvtMode::F32ToIU64:
             funct7 = 0x60;
             funct3 = 1;
             rs2 = 3;
             break;  // fcvt.lu.s
-          case 6:
+          case FcvtMode::F64ToF32:
             funct7 = 0x20;
             funct3 = 7;
             rs2 = 1;
             break;  // fcvt.s.d
-          case 7:
+          case FcvtMode::F32ToF64:
             funct7 = 0x21;
             funct3 = 0;
             rs2 = 0;
             break;  // fcvt.d.s
-          case 8:
+          case FcvtMode::IU64ToF64:
             funct7 = 0x69;
             funct3 = 7;
             rs2 = 3;
             break;  // fcvt.d.lu
-          case 9:
+          case FcvtMode::IU32ToF64:
             funct7 = 0x69;
             funct3 = 0;
             rs2 = 1;
             break;  // fcvt.d.wu
-          case 10:
+          case FcvtMode::IU64ToF32:
             funct7 = 0x68;
             funct3 = 7;
             rs2 = 3;
             break;  // fcvt.s.lu
-          case 11:
+          case FcvtMode::IU32ToF32:
             funct7 = 0x68;
             funct3 = 7;
             rs2 = 1;
             break;  // fcvt.s.wu
-          case 12:
+          case FcvtMode::I64ToF32:
             funct7 = 0x68;
             funct3 = 7;
             rs2 = 2;
             break;  // fcvt.s.l
-          case 13:
+          case FcvtMode::I32ToF32:
             funct7 = 0x68;
             funct3 = 7;
             rs2 = 0;

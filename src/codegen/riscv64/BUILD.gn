@@ -9,9 +9,13 @@ source_set("riscv64") {
     "backend.h",
     "encoder.cc",
     "encoder.h",
+    "entry.cc",
+    "entry.h",
     "frame.cc",
     "frame.h",
+    "isa.cc",
     "isa.h",
+    "minst.cc",
     "minst.h",
     "rodata.cc",
     "rodata.h",
@@ -19,6 +23,8 @@ source_set("riscv64") {
     "runtime.h",
     "selector.cc",
     "selector.h",
+    "tables.cc",
+    "tables.h",
   ]
   deps = [
     "//src:base_modules",

@@ -49,6 +49,37 @@ using Operand = std::
 // Branch conditions, named by their RISC-V suffix.
 enum class Cond : u8 { Eq, Ne, Lt, Ge, Ltu, Geu };
 
+constexpr Cond negate(const Cond cond) {
+  switch (cond) {
+    case Cond::Eq: return Cond::Ne;
+    case Cond::Ne: return Cond::Eq;
+    case Cond::Lt: return Cond::Ge;
+    case Cond::Ge: return Cond::Lt;
+    case Cond::Ltu: return Cond::Geu;
+    case Cond::Geu: return Cond::Ltu;
+  }
+  return Cond::Eq;
+}
+
+// The conversion an Fcvt instruction performs. Its numeric value is the
+// tag carried in the instruction's third operand.
+enum class FcvtMode : u8 {
+  F64ToI64,
+  F32ToI64,
+  I64ToF64,
+  I32ToF64,
+  F64ToIU64,
+  F32ToIU64,
+  F64ToF32,
+  F32ToF64,
+  IU64ToF64,
+  IU32ToF64,
+  IU64ToF32,
+  IU32ToF32,
+  I64ToF32,
+  I32ToF32,
+};
+
 enum class MOp : u8 {
   Lui,
   Auipc,
@@ -165,8 +196,12 @@ inline MInst make_inst(const MOp op,
   return inst;
 }
 
-inline MInst make_branch(const Cond cond, Operand target) {
-  MInst inst = make_inst(MOp::Beq, 8, target);
+inline MInst make_branch(const Cond cond,
+                         const u8 width,
+                         Operand lhs,
+                         Operand rhs,
+                         Operand target) {
+  MInst inst = make_inst(MOp::Beq, width, lhs, rhs, target);
   inst.cond = cond;
   return inst;
 }

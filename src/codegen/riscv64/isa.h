@@ -9,6 +9,25 @@ namespace codegen::riscv64 {
 
 constexpr u8 GPR_COUNT = 32;
 
+// RISC-V immediate arithmetic, shared by the selector, allocator and
+// backend. `upper20` rounds toward zero in the sign-extended sense, so
+// `lower12` always fits a 12-bit addi.
+constexpr bool fits_i12(const i64 value) {
+  return value >= -2048 && value <= 2047;
+}
+constexpr bool fits_s21(const i64 value) {
+  return value >= -1048576 && value <= 1048575;
+}
+constexpr i64 upper20(const i64 value) {
+  return value >= 0 ? (value + 2048) / 4096 : -((-value + 2047) / 4096);
+}
+constexpr i64 lower12(const i64 value) {
+  return value - upper20(value) * 4096;
+}
+constexpr i64 upper20_shifted(const i64 value) {
+  return upper20(value) << 12;
+}
+
 // One register file in numeric order: x0-x31 then f0-f31. The ABI names
 // below are aliases; the encoder only reads the number.
 enum class Reg : u8 {

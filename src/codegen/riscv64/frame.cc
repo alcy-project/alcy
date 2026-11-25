@@ -20,9 +20,9 @@ Frame layout_frame(const Body& body) {
     frame.vreg_disp[at] = static_cast<i32>(cursor);
     cursor += size;
   }
-  // Words for ra, the frame pointer, s0, and the callee-saved scratch
-  // registers the backend borrows; the frame stays 16-byte aligned.
-  cursor += 72;
+  // Words for the caller's registers the backend borrows; the frame
+  // stays 16-byte aligned.
+  cursor += SAVE_AREA_BYTES;
   frame.size = static_cast<u32>((cursor + 15) & ~15ull);
   return frame;
 }

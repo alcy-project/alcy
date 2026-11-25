@@ -147,13 +147,13 @@ void allocate(Body& body, const Frame& frame) {
   // Use a caller-saved scratch: X24 is callee-saved and is itself saved
   // through this helper in the prologue.
   constexpr Reg kAddr = Reg::X29;
-  const auto fits = [](i64 disp) { return disp >= -2048 && disp <= 2047; };
+  const auto fits = fits_i12;
   const auto address = [&](i64 disp) -> Mem {
     if (fits(disp)) {
       return Mem{.base = RegRef{Reg::X2}, .disp = static_cast<i32>(disp)};
     }
-    const i64 hi = disp >= 0 ? (disp + 2048) / 4096 : -((-disp + 2047) / 4096);
-    const i64 lo = disp - hi * 4096;
+    const i64 hi = upper20(disp);
+    const i64 lo = lower12(disp);
     emit(make_inst(MOp::Lui, 8, Operand{kAddr}, Operand{Imm{hi << 12}}));
     push(make_inst(MOp::Addi, 8, Operand{kAddr}, Operand{kAddr},
                    Operand{Imm{lo}}));
@@ -186,8 +186,8 @@ void allocate(Body& body, const Frame& frame) {
   // 12-bit immediate; materialize it into a scratch with lui/addi.
   const bool big_frame = frame.size > 2047;
   if (big_frame) {
-    const i64 hi = (static_cast<i64>(frame.size) + 2048) / 4096;
-    const i64 lo = static_cast<i64>(frame.size) - hi * 4096;
+    const i64 hi = upper20(static_cast<i64>(frame.size));
+    const i64 lo = lower12(static_cast<i64>(frame.size));
     push(make_inst(MOp::Lui, 8, Operand{T0}, Operand{Imm{hi << 12}}));
     push(make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0}, Operand{Imm{lo}}));
     push(make_inst(MOp::Sub, 8, Operand{Reg::X2}, Operand{Reg::X2},
@@ -196,22 +196,17 @@ void allocate(Body& body, const Frame& frame) {
     push(make_inst(MOp::Addi, 8, Operand{Reg::X2}, Operand{Reg::X2},
                    Operand{Imm{-static_cast<i64>(frame.size)}}));
   }
-  push(make_inst(MOp::Sd, 8, Operand{RA}, address(frame.size - 8)));
-  push(make_inst(MOp::Sd, 8, Operand{S1}, address(frame.size - 16)));
-  push(make_inst(MOp::Sd, 8, Operand{S0}, address(frame.size - 24)));
-  push(make_inst(MOp::Sd, 8, Operand{Reg::X22}, address(frame.size - 32)));
-  push(make_inst(MOp::Sd, 8, Operand{Reg::X23}, address(frame.size - 40)));
-  push(make_inst(MOp::Sd, 8, Operand{Reg::X24}, address(frame.size - 48)));
-  push(make_inst(MOp::Sd, 8, Operand{Reg::X25}, address(frame.size - 56)));
-  push(make_inst(MOp::Sd, 8, Operand{Reg::X26}, address(frame.size - 64)));
-  push(make_inst(MOp::Sd, 8, Operand{Reg::X27}, address(frame.size - 72)));
-  const i64 fp_disp = static_cast<i64>(frame.size) - 16;
-  if (fp_disp >= -2048 && fp_disp <= 2047) {
+  for (u32 i = 0; i < std::size(SAVED_REGS); ++i) {
+    push(make_inst(MOp::Sd, 8, Operand{SAVED_REGS[i]},
+                   address(save_disp(frame.size, i))));
+  }
+  const i64 fp_disp = save_disp(frame.size, 1);
+  if (fits_i12(fp_disp)) {
     push(make_inst(MOp::Addi, 8, Operand{S1}, Operand{Reg::X2},
                    Operand{Imm{fp_disp}}));
   } else {
-    const i64 hi = (fp_disp + 2048) / 4096;
-    const i64 lo = fp_disp - hi * 4096;
+    const i64 hi = upper20(fp_disp);
+    const i64 lo = lower12(fp_disp);
     push(make_inst(MOp::Lui, 8, Operand{T0}, Operand{Imm{hi << 12}}));
     push(make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0}, Operand{Imm{lo}}));
     push(make_inst(MOp::Add, 8, Operand{S1}, Operand{Reg::X2}, Operand{T0}));
@@ -242,15 +237,14 @@ void allocate(Body& body, const Frame& frame) {
       // first emitted word so a jump cannot skip the lui/addi prefix.
       const u32 label = pending_label;
       pending_label = MInst::NO_LABEL;
-      if (disp >= -2048 && disp <= 2047) {
+      if (fits_i12(disp)) {
         MInst addr = make_inst(MOp::Addi, 8, Operand{into}, Operand{Reg::X2},
                                Operand{Imm{disp}});
         addr.label = label;
         push(addr);
       } else {
-        const i64 hi =
-            disp >= 0 ? (disp + 2048) / 4096 : -((-disp + 2047) / 4096);
-        const i64 lo = disp - hi * 4096;
+        const i64 hi = upper20(disp);
+        const i64 lo = lower12(disp);
         MInst hi_inst =
             make_inst(MOp::Lui, 8, Operand{into}, Operand{Imm{hi << 12}});
         hi_inst.label = label;
@@ -276,11 +270,11 @@ void allocate(Body& body, const Frame& frame) {
       if (const Imm* value = std::get_if<Imm>(&operand); value != nullptr) {
         // A store's value sits at operand 0 and must be a register.
         if (at == 0 || immediates_seen > 0 || all_register ||
-            value->value < -2048 || value->value > 2047) {
+            !fits_i12(value->value)) {
           const Reg into = pool[next++ % pool_size];
           const i64 v = value->value;
           const auto imm32 = [&](const Reg dst, const i32 word) {
-            if (word >= -2048 && word <= 2047) {
+            if (fits_i12(word)) {
               emit(make_inst(MOp::Addi, 8, Operand{dst}, Operand{ZERO},
                              Operand{Imm{word}}));
               return;
@@ -385,18 +379,13 @@ void allocate(Body& body, const Frame& frame) {
   if (body.uses_sret) {
     push(make_inst(MOp::Ld, 8, Operand{S0}, address(frame.size - 24)));
   }
-  push(make_inst(MOp::Ld, 8, Operand{RA}, address(frame.size - 8)));
-  push(make_inst(MOp::Ld, 8, Operand{S1}, address(frame.size - 16)));
-  push(make_inst(MOp::Ld, 8, Operand{S0}, address(frame.size - 24)));
-  push(make_inst(MOp::Ld, 8, Operand{Reg::X22}, address(frame.size - 32)));
-  push(make_inst(MOp::Ld, 8, Operand{Reg::X23}, address(frame.size - 40)));
-  push(make_inst(MOp::Ld, 8, Operand{Reg::X24}, address(frame.size - 48)));
-  push(make_inst(MOp::Ld, 8, Operand{Reg::X25}, address(frame.size - 56)));
-  push(make_inst(MOp::Ld, 8, Operand{Reg::X26}, address(frame.size - 64)));
-  push(make_inst(MOp::Ld, 8, Operand{Reg::X27}, address(frame.size - 72)));
+  for (u32 i = 0; i < std::size(SAVED_REGS); ++i) {
+    push(make_inst(MOp::Ld, 8, Operand{SAVED_REGS[i]},
+                   address(save_disp(frame.size, i))));
+  }
   if (big_frame) {
-    const i64 hi = (static_cast<i64>(frame.size) + 2048) / 4096;
-    const i64 lo = static_cast<i64>(frame.size) - hi * 4096;
+    const i64 hi = upper20(static_cast<i64>(frame.size));
+    const i64 lo = lower12(static_cast<i64>(frame.size));
     push(make_inst(MOp::Lui, 8, Operand{T0}, Operand{Imm{hi << 12}}));
     push(make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0}, Operand{Imm{lo}}));
     push(make_inst(MOp::Add, 8, Operand{Reg::X2}, Operand{Reg::X2},

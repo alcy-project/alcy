@@ -3,6 +3,7 @@
 
 #include "pipeline/backend_emit.h"
 
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -101,17 +102,22 @@ codegen::Backend select_backend(const codegen::Target& target,
   // direct backend: it writes the final object without LLVM.
   // An optimized build keeps LLVM, which still carries the release
   // pipeline.
-  const bool native_debug =
-      !optimize && (backend_supports(codegen::Backend::DirectX86_64,
-                                     codegen::OutputKind::Object, target) ||
-                    backend_supports(codegen::Backend::DirectRiscv64,
-                                     codegen::OutputKind::Object, target));
+  constexpr codegen::Backend kNativeDirect[] = {codegen::Backend::DirectRiscv64,
+                                                codegen::Backend::DirectX86_64};
+  const auto direct = [&]() -> std::optional<codegen::Backend> {
+    if (optimize) {
+      return std::nullopt;
+    }
+    for (const codegen::Backend candidate : kNativeDirect) {
+      if (backend_supports(candidate, codegen::OutputKind::Object, target)) {
+        return candidate;
+      }
+    }
+    return std::nullopt;
+  };
+  const auto native = direct();
   const codegen::Backend preferred =
-      native_debug ? (backend_supports(codegen::Backend::DirectRiscv64,
-                                       codegen::OutputKind::Object, target)
-                          ? codegen::Backend::DirectRiscv64
-                          : codegen::Backend::DirectX86_64)
-                   : codegen::default_backend(target);
+      native.has_value() ? *native : codegen::default_backend(target);
   const auto usable = [&](codegen::Backend backend) {
     if (!codegen::backend_available(backend)) {
       return false;

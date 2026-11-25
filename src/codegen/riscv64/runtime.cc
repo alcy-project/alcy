@@ -6,9 +6,11 @@
 #include <string>
 #include <string_view>
 
+#include "codegen/riscv64/frame.h"
 #include "codegen/riscv64/isa.h"
 #include "codegen/riscv64/minst.h"
 #include "codegen/riscv64/rodata.h"
+#include "debug/dcheck.h"
 
 namespace codegen::riscv64::runtime {
 namespace {
@@ -22,6 +24,8 @@ constexpr i64 SYS_EXIT = 93;
 constexpr i64 SYS_MUNMAP = 215;
 constexpr i64 SYS_MMAP = 222;
 
+enum class FileOp : u8 { Size, Read, Write };
+
 constexpr i64 MAP_PRIVATE_ANON = 0x22;
 constexpr i64 PROT_READ_WRITE = 3;
 
@@ -34,18 +38,43 @@ void ecall(Body& body, const i64 number) {
 // Write a (ptr, len) string to `descriptor`; a0=ptr, a1=len on entry.
 Body build_write(const i64 descriptor) {
   Body body;
-  // On entry a0=ptr, a1=len. The syscall wants a0=fd, a1=ptr, a2=len.
+  // The syscall may consume fewer bytes than asked for. Keep the cursor
+  // and the remaining count outside the argument registers it overwrites.
   body.insts.push_back(
       make_inst(MOp::Addi, 8, Operand{T0}, Operand{A0}, Operand{Imm{0}}));
   body.insts.push_back(
       make_inst(MOp::Addi, 8, Operand{T1}, Operand{A1}, Operand{Imm{0}}));
+  body.insts.push_back(make_inst(MOp::Addi, 8, Operand{T2}, Operand{ZERO},
+                                 Operand{Imm{descriptor}}));
+  const u32 loop = body.label_count++;
+  const u32 done = body.label_count++;
+  MInst at_loop = make_inst(MOp::Nop, 8);
+  at_loop.label = loop;
+  body.insts.push_back(at_loop);
+  MInst empty =
+      make_inst(MOp::Beq, 8, Operand{T1}, Operand{ZERO}, Operand{Label{done}});
+  empty.cond = Cond::Eq;
+  body.insts.push_back(empty);
   body.insts.push_back(
-      make_inst(MOp::Addi, 8, Operand{A2}, Operand{T1}, Operand{Imm{0}}));
+      make_inst(MOp::Addi, 8, Operand{A0}, Operand{T2}, Operand{Imm{0}}));
   body.insts.push_back(
       make_inst(MOp::Addi, 8, Operand{A1}, Operand{T0}, Operand{Imm{0}}));
-  body.insts.push_back(make_inst(MOp::Addi, 8, Operand{A0}, Operand{ZERO},
-                                 Operand{Imm{descriptor}}));
+  body.insts.push_back(
+      make_inst(MOp::Addi, 8, Operand{A2}, Operand{T1}, Operand{Imm{0}}));
   ecall(body, SYS_WRITE);
+  MInst failed =
+      make_inst(MOp::Blt, 8, Operand{A0}, Operand{ZERO}, Operand{Label{done}});
+  failed.cond = Cond::Lt;
+  body.insts.push_back(failed);
+  body.insts.push_back(
+      make_inst(MOp::Add, 8, Operand{T0}, Operand{T0}, Operand{A0}));
+  body.insts.push_back(
+      make_inst(MOp::Sub, 8, Operand{T1}, Operand{T1}, Operand{A0}));
+  body.insts.push_back(
+      make_inst(MOp::Jal, 8, Operand{ZERO}, Operand{Label{loop}}));
+  MInst at_done = make_inst(MOp::Nop, 8);
+  at_done.label = done;
+  body.insts.push_back(at_done);
   return body;
 }
 
@@ -88,7 +117,7 @@ Body build_alloc(RoData& rodata) {
   body.insts.push_back(at_failed);
   constexpr std::string_view kMessage = "panic: allocation failed\n";
   const u32 message_id = static_cast<u32>(body.symbols.size());
-  body.symbols.push_back(rodata.intern(kMessage));
+  body.symbols.push_back(rodata.name(rodata.intern(kMessage)));
   body.insts.push_back(make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0},
                                  Operand{SymbolRef{message_id}}));
   body.insts.push_back(
@@ -131,7 +160,7 @@ Body build_dealloc() {
 
 // Intern a byte string under a name the runtime body can reference.
 SymbolRef text(Body& body, RoData& rodata, const std::string_view bytes) {
-  const std::string& symbol = rodata.intern(bytes);
+  const std::string& symbol = rodata.name(rodata.intern(bytes));
   for (u32 at = 0; at < body.symbols.size(); ++at) {
     if (body.symbols[at] == symbol) {
       return SymbolRef{at};
@@ -228,9 +257,9 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
                              Operand{Label{finish}});
   too_deep.cond = Cond::Ge;
   body.insts.push_back(too_deep);
-  body.insts.push_back(
-      make_inst(MOp::Ld, 8, Operand{pc},
-                Operand{Mem{.base = RegRef{cursor}, .disp = 8}}));
+  body.insts.push_back(make_inst(
+      MOp::Ld, 8, Operand{pc},
+      Operand{Mem{.base = RegRef{cursor}, .disp = RETURN_ADDR_DISP}}));
   body.insts.push_back(
       make_inst(MOp::Sub, 8, Operand{pc}, Operand{pc}, Operand{base}));
   MInst no_pc = make_inst(MOp::Beq, 8, Operand{pc}, Operand{ZERO},
@@ -348,7 +377,7 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
   write_text(body, newline, 1);
   body.insts.push_back(
       make_inst(MOp::Ld, 8, Operand{previous},
-                Operand{Mem{.base = RegRef{cursor}, .disp = 0}}));
+                Operand{Mem{.base = RegRef{cursor}, .disp = PREV_FP_DISP}}));
   MInst bad_chain = make_inst(MOp::Bgeu, 8, Operand{cursor}, Operand{previous},
                               Operand{Label{finish}});
   bad_chain.cond = Cond::Geu;
@@ -432,7 +461,7 @@ Body build_syscall(const i64 number) {
 // in a0/a1 and the buffer as (ptr, len) in a2/a3. A small frame holds a
 // NUL-terminated path copy, a stat buffer and the saved buffer arguments;
 // every displacement stays inside a signed 12-bit immediate.
-Body build_file(const i64 op) {
+Body build_file(const FileOp op) {
   Body body;
   constexpr Reg cursor = Reg::X22;
   constexpr Reg bound = Reg::X23;
@@ -505,7 +534,7 @@ Body build_file(const i64 op) {
   addi(A7, ZERO, SYS_OPENAT);
   addi(A0, ZERO, -100);  // AT_FDCWD
   addi(A1, SP, 0);       // the path copy
-  addi(A2, ZERO, op == 2 ? 0x241 : 0);
+  addi(A2, ZERO, op == FileOp::Write ? 0x241 : 0);
   addi(A3, ZERO, 0644);
   body.insts.push_back(make_inst(MOp::Ecall, 8));
   addi(fd, A0, 0);
@@ -516,14 +545,14 @@ Body build_file(const i64 op) {
   is_error.cond = Cond::Geu;
   body.insts.push_back(is_error);
 
-  if (op == 0) {
+  if (op == FileOp::Size) {
     addi(A7, ZERO, SYS_FSTAT);
     addi(A0, fd, 0);
     addi(A1, SP, 512);
     body.insts.push_back(make_inst(MOp::Ecall, 8));
     ld(result, 560);  // st_size is 48 bytes into the kernel's struct stat
   } else {
-    addi(A7, ZERO, op == 1 ? SYS_READ : SYS_WRITE);
+    addi(A7, ZERO, op == FileOp::Read ? SYS_READ : SYS_WRITE);
     addi(A0, fd, 0);
     ld(A1, 752);
     ld(A2, 744);
@@ -677,65 +706,62 @@ Body build_arg_count() {
   return body;
 }
 
+using Builder = Body (*)(RoData&, bool);
+
+struct RuntimeEntry {
+  std::string_view name;
+  Builder build;
+};
+
+// One table holds the names this runtime answers and the bodies behind
+// them, so `defines` and `build` cannot disagree about what it carries.
+constexpr RuntimeEntry RUNTIME[] = {
+    {"alcy_print", [](RoData&, bool) { return build_write(1); }},
+    {"alcy_println", [](RoData&, bool) { return build_write(1); }},
+    {"alcy_eprint", [](RoData&, bool) { return build_write(2); }},
+    {"alcy_eprintln", [](RoData&, bool) { return build_write(2); }},
+    {"alcy_alloc", [](RoData& rodata, bool) { return build_alloc(rodata); }},
+    {"alcy_dealloc", [](RoData&, bool) { return build_dealloc(); }},
+    {"alcy_panic",
+     [](RoData& rodata, bool backtrace) {
+       return build_panic(rodata, backtrace);
+     }},
+    {"alcy_arg_count", [](RoData&, bool) { return build_arg_count(); }},
+    {"alcy_arg", [](RoData&, bool) { return build_arg(); }},
+    {"alcy_sys_write", [](RoData&, bool) { return build_syscall(SYS_WRITE); }},
+    {"alcy_sys_read", [](RoData&, bool) { return build_syscall(SYS_READ); }},
+    {"alcy_error_kind", [](RoData&, bool) { return build_error_kind(); }},
+    {"alcy_file_size", [](RoData&, bool) { return build_file(FileOp::Size); }},
+    {"alcy_read_file_into",
+     [](RoData&, bool) { return build_file(FileOp::Read); }},
+    {"alcy_write_file",
+     [](RoData&, bool) { return build_file(FileOp::Write); }},
+    {"memcpy", [](RoData&, bool) { return build_memcpy(); }},
+};
+
+const RuntimeEntry* find(const std::string_view name) {
+  for (const RuntimeEntry& entry : RUNTIME) {
+    if (entry.name == name) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
 }  // namespace
 
 bool defines(const std::string_view name) {
-  return name == "alcy_print" || name == "alcy_println" ||
-         name == "alcy_eprint" || name == "alcy_eprintln" ||
-         name == "alcy_alloc" || name == "alcy_dealloc" ||
-         name == "alcy_panic" || name == "alcy_arg_count" ||
-         name == "alcy_arg" || name == "alcy_sys_write" ||
-         name == "alcy_sys_read" || name == "alcy_error_kind" ||
-         name == "alcy_file_size" || name == "alcy_read_file_into" ||
-         name == "alcy_write_file" || name == "memcpy";
+  return find(name) != nullptr;
 }
 
-Body build(const std::string_view name, RoData& rodata, bool backtrace) {
-  if (name == "alcy_print" || name == "alcy_println") {
-    return build_write(1);
+Body build(const std::string_view name, RoData& rodata, const bool backtrace) {
+  const RuntimeEntry* entry = find(name);
+  DCHECK_MSG(entry != nullptr,
+             "the runtime was asked for a name it does not define");
+  if (entry == nullptr) {
+    return Body{};
   }
-  if (name == "alcy_eprint" || name == "alcy_eprintln") {
-    return build_write(2);
-  }
-  if (name == "alcy_alloc") {
-    return build_alloc(rodata);
-  }
-  if (name == "alcy_dealloc") {
-    return build_dealloc();
-  }
-  if (name == "alcy_panic") {
-    return build_panic(rodata, backtrace);
-  }
-  if (name == "alcy_arg_count") {
-    return build_arg_count();
-  }
-  if (name == "alcy_arg") {
-    return build_arg();
-  }
-  if (name == "alcy_sys_write") {
-    // The IR signature is (fd, ptr, len); those are already in a0/a1/a2
-    // for the Linux write syscall.
-    return build_syscall(SYS_WRITE);
-  }
-  if (name == "alcy_sys_read") {
-    return build_syscall(SYS_READ);
-  }
-  if (name == "alcy_error_kind") {
-    return build_error_kind();
-  }
-  if (name == "alcy_file_size") {
-    return build_file(0);
-  }
-  if (name == "alcy_read_file_into") {
-    return build_file(1);
-  }
-  if (name == "alcy_write_file") {
-    return build_file(2);
-  }
-  if (name == "memcpy") {
-    return build_memcpy();
-  }
-  return Body{};
+  return entry->build(rodata, backtrace);
 }
 
 }  // namespace codegen::riscv64::runtime

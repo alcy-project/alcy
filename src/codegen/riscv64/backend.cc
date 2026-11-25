@@ -18,12 +18,14 @@
 #include "codegen/reachability.h"
 #include "codegen/riscv64/allocator.h"
 #include "codegen/riscv64/encoder.h"
+#include "codegen/riscv64/entry.h"
 #include "codegen/riscv64/frame.h"
 #include "codegen/riscv64/isa.h"
 #include "codegen/riscv64/minst.h"
 #include "codegen/riscv64/rodata.h"
 #include "codegen/riscv64/runtime.h"
 #include "codegen/riscv64/selector.h"
+#include "codegen/riscv64/tables.h"
 #include "codegen/target.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -83,14 +85,14 @@ void widen_far_jumps(Body& body) {
       if (delta >= -limit && delta <= limit) {
         continue;
       }
-      const i64 hi = ((delta + 2048) >> 12) << 12;
+      const i64 hi = upper20_shifted(delta);
       const i64 lo = delta - hi;
       if (branch) {
         const u32 skip = body.label_count++;
         MInst near = inst;
         // The short branch must skip the indirect jump when the original
         // condition is false; take it when the condition holds.
-        near.cond = static_cast<Cond>(static_cast<u8>(inst.cond) ^ 1);
+        near.cond = negate(inst.cond);
         near.ops[label_op] = Operand{Label{skip}};
         body.insts[i] = near;
         MInst auipc = make_inst(MOp::Auipc, 8, Operand{T0}, Operand{Imm{hi}});
@@ -119,22 +121,22 @@ void widen_far_jumps(Body& body) {
 base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     codegen::EmitRequest request) {
   ir::Storage storage = std::move(request.storage).unwrap();
-  std::optional<ir::FunctionIdx> entry;
+  std::optional<ir::FunctionIdx> entry_index;
   for (const ir::FunctionIdx index : storage.functions().idx_range()) {
     const ir::Function& function = storage.functions()[index];
     if (function.meta.kind == ir::SymbolKind::Free &&
         request.strings->get(function.meta.name) == "main") {
-      entry = index;
+      entry_index = index;
       break;
     }
   }
-  if (!entry.has_value()) {
+  if (!entry_index.has_value()) {
     return base::make_err(codegen::EmitError::Unsupported);
   }
 
   // Only functions reachable from main are emitted, and parametric
   // bodies have no layout until instantiated, so they are excluded.
-  std::vector<ir::FunctionIdx> roots{*entry};
+  std::vector<ir::FunctionIdx> roots{*entry_index};
   const std::vector<bool> reachable = codegen::reachable_functions(
       storage, std::span(roots.data(), roots.size()));
   std::vector<bool> parametric(storage.functions().size(), false);
@@ -150,18 +152,8 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     Body body;
   };
   std::vector<Selected> functions;
-  struct BtFunction {
-    i64 offset = 0;
-    u64 size = 0;
-    std::string name;
-  };
-  std::vector<BtFunction> bt_functions;
-  struct BtSite {
-    i64 offset = 0;
-    std::string site;
-  };
-  std::vector<BtSite> bt_sites;
-  const bool backtrace = request.options.backtrace;
+  BacktraceTables tables;
+  tables.enabled = request.options.backtrace;
   for (const ir::FunctionIdx index : storage.functions().idx_range()) {
     if (!reachable[index.idx] || parametric[index.idx]) {
       continue;
@@ -198,13 +190,13 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     }
     body.insts = std::move(expanded);
     widen_far_jumps(body);
-    if (backtrace) {
-      bt_functions.push_back(BtFunction{
+    if (tables.enabled) {
+      tables.functions.push_back(BacktraceEntry{
           0, 0,
           std::string(
               request.strings->get(storage.functions()[index].meta.name))});
       for (const Body::CallSite& call : body.call_sites) {
-        bt_sites.push_back(BtSite{0, call.site});
+        tables.sites.push_back(BacktraceEntry{0, 0, call.site});
       }
     }
     functions.push_back(Selected{index.idx, false, std::move(body)});
@@ -221,7 +213,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     }
   }
   for (const std::string& name : runtime_names) {
-    Body body = runtime::build(name, rodata, backtrace);
+    Body body = runtime::build(name, rodata, tables.enabled);
     allocate(body, layout_frame(body));
     functions.push_back(Selected{0, true, std::move(body)});
     functions.back().body.symbols.push_back(name);
@@ -242,114 +234,22 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
         offsets[symbol] = base_of[f];
       }
     }
-    if (!functions[f].is_runtime && functions[f].index == entry->idx) {
+    if (!functions[f].is_runtime && functions[f].index == entry_index->idx) {
       offsets["main"] = base_of[f];
     }
   }
 
-  // Determine main's result convention before the entry is laid out.
-  const ir::Function& entry_function = storage.functions()[*entry];
-  const ir::TypeIdx result_type = entry_function.meta.return_type;
-  const ir::TypeTag result_tag = storage.types()[result_type.idx].tag;
-  const bool returns_aggregate =
-      result_tag == ir::TypeTag::Struct || result_tag == ir::TypeTag::Array ||
-      result_tag == ir::TypeTag::Enum || result_tag == ir::TypeTag::Tuple;
-  const bool returns_enum = result_tag == ir::TypeTag::Enum;
-  i64 sret_bytes = 0;
-  if (returns_aggregate) {
-    const u64 raw = storage.layout_of(result_type, request.target.width).size;
-    sret_bytes = static_cast<i64>((raw + 15) & ~15ull);
-  }
-  constexpr std::string_view kErr = "main returned Err\n";
-  std::optional<u32> err_index;
-  if (returns_enum) {
-    const std::string& name = rodata.intern(kErr);
-    err_index = static_cast<u32>(&name - rodata.names().data());
-  }
-
   const i64 start_at = at;
+  EntryBody entry = build_entry(storage.functions()[*entry_index], storage,
+                                request.target.width, rodata);
 
-  // Build the entry instructions first so rodata can be placed after
-  // exactly the words the wrapper emits.
-  std::vector<MInst> wrapper;
-  // Read the entry stack before any reservation moves sp.
-  wrapper.push_back(make_inst(MOp::Ld, 8, Operand{Reg::X21},
-                              Operand{Mem{.base = RegRef{SP}, .disp = 0}}));
-  wrapper.push_back(
-      make_inst(MOp::Addi, 8, Operand{Reg::X4}, Operand{SP}, Operand{Imm{8}}));
-  if (sret_bytes > 0) {
-    if (sret_bytes <= 2047) {
-      wrapper.push_back(make_inst(MOp::Addi, 8, Operand{SP}, Operand{SP},
-                                  Operand{Imm{-sret_bytes}}));
-    } else {
-      const i64 hi = (sret_bytes + 2048) / 4096;
-      const i64 lo = sret_bytes - hi * 4096;
-      wrapper.push_back(
-          make_inst(MOp::Lui, 8, Operand{T0}, Operand{Imm{hi << 12}}));
-      wrapper.push_back(
-          make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0}, Operand{Imm{lo}}));
-      wrapper.push_back(
-          make_inst(MOp::Sub, 8, Operand{SP}, Operand{SP}, Operand{T0}));
-    }
-    wrapper.push_back(
-        make_inst(MOp::Addi, 8, Operand{A0}, Operand{SP}, Operand{Imm{0}}));
-  }
-  // Terminate the backtrace frame chain at the process entry.
-  wrapper.push_back(
-      make_inst(MOp::Addi, 8, Operand{S1}, Operand{ZERO}, Operand{Imm{0}}));
-  const u32 call_at = static_cast<u32>(wrapper.size());
-  wrapper.push_back(make_inst(MOp::Jal, 8, Operand{RA}, Operand{Imm{0}}));
-  u32 entry_labels = 0;
-  std::optional<u32> message_at;
-  if (returns_enum) {
-    const u8 width = ir::enum_tag_width(storage.state(), result_type);
-    const MOp load = width == 1   ? MOp::Lbu
-                     : width == 2 ? MOp::Lhu
-                     : width == 4 ? MOp::Lwu
-                                  : MOp::Ld;
-    wrapper.push_back(make_inst(load, width, Operand{T1},
-                                Operand{Mem{.base = RegRef{SP}, .disp = 0}}));
-    const u32 ok = entry_labels++;
-    const u32 exit_label = entry_labels++;
-    MInst branch =
-        make_inst(MOp::Beq, 8, Operand{T1}, Operand{ZERO}, Operand{Label{ok}});
-    branch.cond = Cond::Eq;
-    wrapper.push_back(branch);
-    // Err: print the reason to stderr, then exit with status one.
-    message_at = static_cast<u32>(wrapper.size());
-    wrapper.push_back(make_inst(MOp::Auipc, 8, Operand{A1}, Operand{Imm{0}}));
-    wrapper.push_back(
-        make_inst(MOp::Addi, 8, Operand{A1}, Operand{A1}, Operand{Imm{0}}));
-    wrapper.push_back(
-        make_inst(MOp::Addi, 8, Operand{A7}, Operand{ZERO}, Operand{Imm{64}}));
-    wrapper.push_back(
-        make_inst(MOp::Addi, 8, Operand{A0}, Operand{ZERO}, Operand{Imm{2}}));
-    wrapper.push_back(make_inst(MOp::Addi, 8, Operand{A2}, Operand{ZERO},
-                                Operand{Imm{static_cast<i64>(kErr.size())}}));
-    wrapper.push_back(make_inst(MOp::Ecall, 8));
-    wrapper.push_back(
-        make_inst(MOp::Addi, 8, Operand{A0}, Operand{ZERO}, Operand{Imm{1}}));
-    wrapper.push_back(
-        make_inst(MOp::Jal, 8, Operand{ZERO}, Operand{Label{exit_label}}));
-    MInst at_ok = make_inst(MOp::Nop, 8);
-    at_ok.label = ok;
-    wrapper.push_back(at_ok);
-    wrapper.push_back(
-        make_inst(MOp::Addi, 8, Operand{A0}, Operand{ZERO}, Operand{Imm{0}}));
-    MInst at_exit = make_inst(MOp::Nop, 8);
-    at_exit.label = exit_label;
-    wrapper.push_back(at_exit);
-  }
-  wrapper.push_back(
-      make_inst(MOp::Addi, 8, Operand{A7}, Operand{ZERO}, Operand{Imm{93}}));
-  wrapper.push_back(make_inst(MOp::Ecall, 8));
   for (u32 f = 0, b = 0; f < functions.size(); ++f) {
     if (functions[f].is_runtime) {
       continue;
     }
-    if (b < bt_functions.size()) {
-      bt_functions[b].offset = base_of[f];
-      bt_functions[b].size =
+    if (b < tables.functions.size()) {
+      tables.functions[b].offset = base_of[f];
+      tables.functions[b].size =
           static_cast<u64>(functions[f].body.insts.size()) * 4;
       ++b;
     }
@@ -358,46 +258,40 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
   // Now that function offsets are known, resolve the entry's call.
   {
     const i64 target = offsets.at("main");
-    const i64 here = start_at + static_cast<i64>(call_at) * 4;
+    const i64 here = start_at + static_cast<i64>(entry.call_at) * 4;
     const i64 jump = target - here;
-    if (jump >= -1048576 && jump <= 1048575) {
-      wrapper[call_at].ops[1] = Operand{Imm{jump}};
+    if (fits_s21(jump)) {
+      entry.insts[entry.call_at].ops[1] = Operand{Imm{jump}};
     } else {
-      const i64 hi =
-          jump >= 0 ? (jump + 2048) / 4096 : -((-jump + 2047) / 4096);
-      const i64 lo = jump - hi * 4096;
-      wrapper[call_at] =
+      const i64 hi = upper20(jump);
+      const i64 lo = lower12(jump);
+      entry.insts[entry.call_at] =
           make_inst(MOp::Auipc, 8, Operand{T0}, Operand{Imm{hi << 12}});
       MInst jump_reg =
           make_inst(MOp::Jalr, 8, Operand{RA}, Operand{T0}, Operand{Imm{lo}});
-      wrapper.insert(wrapper.begin() + call_at + 1, jump_reg);
-      if (message_at.has_value()) {
-        ++*message_at;
+      entry.insts.insert(entry.insts.begin() + entry.call_at + 1, jump_reg);
+      if (entry.message_at.has_value()) {
+        ++*entry.message_at;
       }
     }
   }
-  const u64 entry_bytes = static_cast<u64>(wrapper.size()) * 4;
+  const u64 entry_bytes = static_cast<u64>(entry.insts.size()) * 4;
   const u64 table_start = (static_cast<u64>(at) + entry_bytes + 7) & ~7ull;
   u64 after_table = table_start;
-  if (backtrace) {
-    for (const BtFunction& function : bt_functions) {
-      after_table += 32 + ((function.name.size() + 7) & ~7ull);
-    }
-    after_table += 32;
+  u64 sites_start = table_start;
+  if (tables.enabled) {
     offsets["alcy_bt_text_base"] = 0;
     offsets["alcy_bt_funcs_array"] = static_cast<i64>(table_start);
-    const u64 sites_start = after_table;
-    for (const BtSite& site : bt_sites) {
-      after_table += 32 + ((site.site.size() + 7) & ~7ull);
-    }
-    after_table += 32;
+    after_table += tables.functions_size();
+    sites_start = after_table;
     offsets["alcy_bt_sites_array"] = static_cast<i64>(sites_start);
+    after_table += tables.sites_size();
   }
 
   // String literals live at the end of .text so their byte offsets are
   // in the same address space as the code that names them.
   if (!rodata.names().empty()) {
-    u64 rodata_at = backtrace
+    u64 rodata_at = tables.enabled
                         ? after_table
                         : (static_cast<u64>(at) + entry_bytes + 7) & ~7ull;
     for (u32 i = 0; i < rodata.names().size(); ++i) {
@@ -406,12 +300,12 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     }
   }
 
-  if (message_at.has_value() && err_index.has_value()) {
-    const i64 here = start_at + static_cast<i64>(*message_at) * 4;
-    const i64 delta = offsets[rodata.names()[*err_index]] - here;
-    const i64 hi = ((delta + 2048) >> 12) << 12;
-    wrapper[*message_at].ops[1] = Operand{Imm{hi}};
-    wrapper[*message_at + 1].ops[2] = Operand{Imm{delta - hi}};
+  if (entry.message_at.has_value() && entry.err_index.has_value()) {
+    const i64 here = start_at + static_cast<i64>(*entry.message_at) * 4;
+    const i64 delta = offsets[rodata.names()[*entry.err_index]] - here;
+    const i64 hi = upper20_shifted(delta);
+    entry.insts[*entry.message_at].ops[1] = Operand{Imm{hi}};
+    entry.insts[*entry.message_at + 1].ops[2] = Operand{Imm{delta - hi}};
   }
 
   // A call's SymbolRef names a function in its own body's table. Rewrite
@@ -437,7 +331,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
             functions[f].body.insts[i - 1].op == MOp::Auipc) {
           const i64 auipc_at = here - 4;
           const i64 delta = found->second - auipc_at;
-          const i64 hi = ((delta + 2048) >> 12) << 12;
+          const i64 hi = upper20_shifted(delta);
           const i64 lo = delta - hi;
           MInst& hi_inst = functions[f].body.insts[i - 1];
           for (Operand& hi_op : hi_inst.ops) {
@@ -487,7 +381,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
                        selected.body.insts.end());
   }
   whole.label_count = label_base;
-  for (MInst& inst : wrapper) {
+  for (MInst& inst : entry.insts) {
     if (inst.label != MInst::NO_LABEL) {
       inst.label += label_base;
     }
@@ -497,17 +391,18 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
       }
     }
   }
-  whole.label_count = label_base + entry_labels;
-  whole.insts.insert(whole.insts.end(), wrapper.begin(), wrapper.end());
+  whole.label_count = label_base + entry.labels;
+  whole.insts.insert(whole.insts.end(), entry.insts.begin(), entry.insts.end());
   Encoded code = encode(whole);
   for (u32 fi = 0, si = 0; fi < functions.size(); ++fi) {
     for (const Body::CallSite& call : functions[fi].body.call_sites) {
-      if (si >= bt_sites.size()) {
+      if (si >= tables.sites.size()) {
         break;
       }
       const u32 label = call.label + function_label_base[fi];
       if (label < code.label_offsets.size()) {
-        bt_sites[si].offset = static_cast<i64>(code.label_offsets[label]) + 4;
+        tables.sites[si].offset =
+            static_cast<i64>(code.label_offsets[label]) + 4;
       }
       ++si;
     }
@@ -520,67 +415,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
                        .exec = true,
                        .alloc = true,
                        .bits = true};
-  const auto put_u64 = [&](u64 value) {
-    for (u32 at = 0; at < 8; ++at) {
-      text.bytes.push_back(static_cast<u8>(value >> (at * 8)));
-    }
-  };
-  if (backtrace) {
-    while (text.bytes.size() < table_start) {
-      text.bytes.push_back(0);
-    }
-    for (const BtFunction& function : bt_functions) {
-      put_u64(static_cast<u64>(function.offset));
-      put_u64(function.size);
-      put_u64(function.name.size());
-      put_u64(0);
-      text.bytes.insert(text.bytes.end(), function.name.begin(),
-                        function.name.end());
-      while (text.bytes.size() % 8 != 0) {
-        text.bytes.push_back(0);
-      }
-    }
-    put_u64(0xffffffffffffffffull);
-    for (u32 i = 0; i < 3; ++i) {
-      put_u64(0);
-    }
-    object.symbols.push_back(object::Symbol{
-        .name = "alcy_bt_funcs_array",
-        .section = 0,
-        .offset = table_start,
-        .size = text.bytes.size() - table_start,
-        .bind = object::SymbolBind::Local,
-        .type = object::SymbolType::Object,
-    });
-  }
-  if (backtrace) {
-    const u64 sites_start = static_cast<u64>(offsets.at("alcy_bt_sites_array"));
-    while (text.bytes.size() < sites_start) {
-      text.bytes.push_back(0);
-    }
-    for (const BtSite& site : bt_sites) {
-      put_u64(static_cast<u64>(site.offset));
-      put_u64(0);
-      put_u64(site.site.size());
-      put_u64(0);
-      text.bytes.insert(text.bytes.end(), site.site.begin(), site.site.end());
-      while (text.bytes.size() % 8 != 0) {
-        text.bytes.push_back(0);
-      }
-    }
-    put_u64(0xffffffffffffffffull);
-    for (u32 i = 0; i < 3; ++i) {
-      put_u64(0);
-    }
-    object.symbols.push_back(object::Symbol{
-        .name = "alcy_bt_sites_array",
-        .section = 0,
-        .offset = sites_start,
-        .size = text.bytes.size() - sites_start,
-        .bind = object::SymbolBind::Local,
-        .type = object::SymbolType::Object,
-    });
-  }
+  emit_tables(tables, table_start, sites_start, text.bytes, object);
   for (const std::string& bytes : rodata.bytes()) {
     while (text.bytes.size() % 8 != 0) {
       text.bytes.push_back(0);
@@ -599,7 +434,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
       .name = "_start",
       .section = 0,
       .offset = static_cast<u64>(start_at),
-      .size = static_cast<u64>(wrapper.size() * 4),
+      .size = static_cast<u64>(entry.insts.size() * 4),
       .bind = object::SymbolBind::Global,
       .type = object::SymbolType::Func,
   });

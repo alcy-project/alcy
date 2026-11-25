@@ -132,7 +132,7 @@ class Selector {
         const u64 bits = value.as_u64_bits(tag);
         const u32 bytes = tag == ir::TypeTag::F32 ? 4 : 8;
         const std::string data(reinterpret_cast<const char*>(&bits), bytes);
-        const SymbolRef symbol = string_ref(rodata_.intern(data));
+        const SymbolRef symbol = string_ref(rodata_.name(rodata_.intern(data)));
         // Materialize the literal through fixed integer/float scratch
         // registers so the allocator does not mistake the address temp
         // for a floating-point slot.
@@ -255,12 +255,12 @@ class Selector {
     } else if (const Reg* reg = std::get_if<Reg>(&place)) {
       base = Operand{*reg};
     }
-    if (disp >= -2048 && disp <= 2047) {
+    if (fits_i12(disp)) {
       push(make_inst(MOp::Addi, 8, Operand{out}, base, Operand{Imm{disp}}));
       return;
     }
-    const i64 hi = disp >= 0 ? (disp + 2048) / 4096 : -((-disp + 2047) / 4096);
-    const i64 lo = disp - hi * 4096;
+    const i64 hi = upper20(disp);
+    const i64 lo = lower12(disp);
     push(make_inst(MOp::Lui, 8, Operand{temp}, Operand{Imm{hi << 12}}));
     push(make_inst(MOp::Addi, 8, Operand{temp}, Operand{temp},
                    Operand{Imm{lo}}));
@@ -413,6 +413,7 @@ class Selector {
   ir::InstructionIdx current_instr_idx_ = ir::InstructionIdx::invalid();
   Body body_;
   std::unordered_map<u32, u32> vregs_;
+  std::unordered_map<std::string, u32> symbol_ids_;
   std::unordered_set<u32> alloca_storage_;
   std::unordered_set<u32> alloca_regs_;
   std::unordered_map<u32, ir::TypeIdx> pointee_of_vreg_;
@@ -571,7 +572,7 @@ i64 int_bits_of(const ir::TypeTag tag) {
 
 void Selector::emit_panic_call(const std::string_view message,
                                const str::StringPoolId site) {
-  const SymbolRef text = string_ref(rodata_.intern(message));
+  const SymbolRef text = string_ref(rodata_.name(rodata_.intern(message)));
   push(make_inst(MOp::LoadAddr, 8, Operand{A0}, Operand{text}));
   emit_move(Operand{A1}, Operand{Imm{static_cast<i64>(message.size())}});
   if (site == str::EMPTY_STRING_ID) {
@@ -579,7 +580,7 @@ void Selector::emit_panic_call(const std::string_view message,
     emit_move(Operand{A3}, Operand{ZERO});
   } else {
     const std::string_view where = strings_.get(site);
-    const SymbolRef name = string_ref(rodata_.intern(where));
+    const SymbolRef name = string_ref(rodata_.name(rodata_.intern(where)));
     push(make_inst(MOp::LoadAddr, 8, Operand{A2}, Operand{name}));
     emit_move(Operand{A3}, Operand{Imm{static_cast<i64>(where.size())}});
   }
@@ -802,7 +803,8 @@ bool Selector::emit_inner(const ir::Instruction& instr,
           const ir::Immutable& imm =
               storage_.immutables()[at(instr, 0).as_immutable()];
           const std::string_view text = strings_.get(imm.data.str_id_value);
-          const SymbolRef symbol = string_ref(rodata_.intern(text));
+          const SymbolRef symbol =
+              string_ref(rodata_.name(rodata_.intern(text)));
           push(make_inst(MOp::LoadAddr, 8, Operand{A0}, Operand{symbol}));
           emit_move(Operand{A1}, Operand{Imm{static_cast<i64>(text.size())}});
         } else if (passage_of(at(instr, 0).type) == Passage::TwoWord &&
@@ -1089,7 +1091,7 @@ bool Selector::emit_inner(const ir::Instruction& instr,
         storage_.types()[value_op.type.idx].tag == ir::TypeTag::Str) {
       const ir::Immutable& imm = storage_.immutables()[value_op.as_immutable()];
       const std::string_view text = strings_.get(imm.data.str_id_value);
-      const SymbolRef symbol = string_ref(rodata_.intern(text));
+      const SymbolRef symbol = string_ref(rodata_.name(rodata_.intern(text)));
       const Operand dst = place_of(at(instr, 1));
       // The allocator cannot materialize a SymbolRef as a store value;
       // materialize the literal's address into a scratch register first.
@@ -1141,7 +1143,7 @@ bool Selector::emit_inner(const ir::Instruction& instr,
           storage_.immutables()[at(instr, 1).as_immutable()];
       const u64 which = idx.as_u64_integer(storage_.types()[idx.type.idx].tag);
       if (which == 0) {
-        const SymbolRef symbol = string_ref(rodata_.intern(text));
+        const SymbolRef symbol = string_ref(rodata_.name(rodata_.intern(text)));
         push(make_inst(MOp::LoadAddr, 8, dst_of(instr), Operand{symbol}));
       } else {
         emit_move(dst_of(instr), Operand{Imm{static_cast<i64>(text.size())}});
@@ -1384,7 +1386,11 @@ bool Selector::emit_inner(const ir::Instruction& instr,
       // maps NaN to zero. Convert to a 64-bit integer first, then clamp.
       const u8 w = src_tag == ir::TypeTag::F32 ? 4 : 8;
       const bool uns = ir::is_unsigned_integer_type(dst_tag);
-      const i64 mode = (src_tag == ir::TypeTag::F32 ? 1 : 0) + (uns ? 4 : 0);
+      const FcvtMode mode =
+          uns ? (src_tag == ir::TypeTag::F32 ? FcvtMode::F32ToIU64
+                                             : FcvtMode::F64ToIU64)
+              : (src_tag == ir::TypeTag::F32 ? FcvtMode::F32ToI64
+                                             : FcvtMode::F64ToI64);
       const u32 bits =
           static_cast<u32>(
               storage_.layout_of(storage_.registers()[instr.dst].type, width_)
@@ -1407,7 +1413,7 @@ bool Selector::emit_inner(const ir::Instruction& instr,
       at_convert.label = not_nan;
       push(at_convert);
       push(make_inst(MOp::Fcvt, w, Operand{integer}, *value,
-                     Operand{Imm{mode}}));
+                     Operand{Imm{static_cast<i64>(mode)}}));
       if (bits < 64) {
         // edge = 1 << (bits-1); max = edge-1 for signed, 2*edge-1 unsigned.
         push(make_inst(MOp::Addi, 8, Operand{scratch}, Operand{ZERO},
@@ -1465,9 +1471,11 @@ bool Selector::emit_inner(const ir::Instruction& instr,
     }
     if (src_float && dst_float && src_tag != dst_tag) {
       // Widen or narrow between f32 and f64.
-      const i64 mode = src_tag == ir::TypeTag::F64 ? 6 : 7;
+      const FcvtMode mode =
+          src_tag == ir::TypeTag::F64 ? FcvtMode::F64ToF32 : FcvtMode::F32ToF64;
       push(make_inst(MOp::Fcvt, dst_tag == ir::TypeTag::F32 ? 4 : 8,
-                     dst_of(instr), *value, Operand{Imm{mode}}));
+                     dst_of(instr), *value,
+                     Operand{Imm{static_cast<i64>(mode)}}));
       return true;
     }
     if (!src_float && dst_float) {
@@ -1475,14 +1483,17 @@ bool Selector::emit_inner(const ir::Instruction& instr,
       const bool uns = ir::is_unsigned_integer_type(src_tag);
       const u64 bits = storage_.layout_of(at(instr, 0).type, width_).size * 8;
       const bool wide = bits > 32;
-      const i64 mode = dst_tag == ir::TypeTag::F32
-                           ? (uns ? (wide ? 10 : 11) : (wide ? 12 : 13))
-                           : (uns ? (wide ? 8 : 9) : (wide ? 2 : 3));
+      const FcvtMode mode =
+          dst_tag == ir::TypeTag::F32
+              ? (uns ? (wide ? FcvtMode::IU64ToF32 : FcvtMode::IU32ToF32)
+                     : (wide ? FcvtMode::I64ToF32 : FcvtMode::I32ToF32))
+              : (uns ? (wide ? FcvtMode::IU64ToF64 : FcvtMode::IU32ToF64)
+                     : (wide ? FcvtMode::I64ToF64 : FcvtMode::I32ToF64));
       const u8 w = dst_tag == ir::TypeTag::F32 ? 4 : 8;
       const Reg integer = T0;
       emit_move(Operand{integer}, *value);
       push(make_inst(MOp::Fcvt, w, dst_of(instr), Operand{integer},
-                     Operand{Imm{mode}}));
+                     Operand{Imm{static_cast<i64>(mode)}}));
       return true;
     }
     // Pointers and integers of the same width are the same bits; narrow
@@ -1722,13 +1733,14 @@ bool Selector::emit_inner(const ir::Instruction& instr,
 }
 
 SymbolRef Selector::string_ref(const std::string& symbol) {
-  for (u32 at = 0; at < body_.symbols.size(); ++at) {
-    if (body_.symbols[at] == symbol) {
-      return SymbolRef{at};
-    }
+  const auto found = symbol_ids_.find(symbol);
+  if (found != symbol_ids_.end()) {
+    return SymbolRef{found->second};
   }
+  const u32 at = static_cast<u32>(body_.symbols.size());
   body_.symbols.push_back(symbol);
-  return SymbolRef{static_cast<u32>(body_.symbols.size() - 1)};
+  symbol_ids_.emplace(body_.symbols.back(), at);
+  return SymbolRef{at};
 }
 
 bool Selector::unsupported(const diag::Span span, const std::string_view what) {
@@ -1803,7 +1815,7 @@ bool Selector::emit_call(const ir::Instruction& instr, const diag::Span span) {
       if (arg.is<ir::ImmutableIdx>() && tag == ir::TypeTag::Str) {
         const ir::Immutable& imm = storage_.immutables()[arg.as_immutable()];
         const std::string_view text = strings_.get(imm.data.str_id_value);
-        const SymbolRef symbol = string_ref(rodata_.intern(text));
+        const SymbolRef symbol = string_ref(rodata_.name(rodata_.intern(text)));
         push(make_inst(MOp::LoadAddr, 8, Operand{ARG_REGS[next_arg++]},
                        Operand{symbol}));
         emit_move(Operand{ARG_REGS[next_arg++]},

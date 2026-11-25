@@ -11,17 +11,16 @@
 
 namespace codegen::riscv64 {
 
-const std::string& RoData::intern(const std::string_view bytes) {
-  std::string key(bytes);
-  const auto found = index_.find(key);
+u32 RoData::intern(const std::string_view bytes) {
+  const auto found = index_.find(bytes);
   if (found != index_.end()) {
-    return names_[found->second];
+    return found->second;
   }
   const u32 at = static_cast<u32>(names_.size());
   names_.push_back("alcy.str." + std::to_string(at));
   bytes_.emplace_back(bytes);
-  index_.emplace(std::move(key), at);
-  return names_.back();
+  index_.emplace(bytes_.back(), at);
+  return at;
 }
 
 }  // namespace codegen::riscv64
