@@ -35,8 +35,8 @@ enum class Backend : u8 { None, Llvm, DirectWasm, DirectX86_64, DirectRiscv64 };
 enum class OutputKind : u8 { Object, Module, Text, Bitcode, Assembly };
 
 // Which spelling an assembly output uses. The direct x86_64 backend
-// prints either form; the LLVM backend prints its own assembly and
-// ignores this choice.
+// prints either form; LLVM and the riscv64 backend print their own
+// assembly and ignore this choice.
 enum class AsmSyntax : u8 { Att, Intel };
 
 // Why an emission failed. Anything finer lives in the bag the request

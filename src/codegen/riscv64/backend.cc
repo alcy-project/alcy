@@ -24,6 +24,7 @@
 #include "codegen/riscv64/frame.h"
 #include "codegen/riscv64/isa.h"
 #include "codegen/riscv64/minst.h"
+#include "codegen/riscv64/printer.h"
 #include "codegen/riscv64/rodata.h"
 #include "codegen/riscv64/runtime.h"
 #include "codegen/riscv64/selector.h"
@@ -39,7 +40,8 @@ namespace codegen::riscv64 {
 
 bool Riscv64::supports(const codegen::OutputKind kind,
                        const codegen::Target& target) {
-  return kind == codegen::OutputKind::Object &&
+  return (kind == codegen::OutputKind::Object ||
+          kind == codegen::OutputKind::Assembly) &&
          target.triple.rfind("riscv64", 0) == 0 &&
          target.triple.find("linux") != std::string::npos;
 }
@@ -152,6 +154,7 @@ bool widen_far_jumps(Body& body) {
 base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     codegen::EmitRequest request) {
   ir::Storage storage = std::move(request.storage).unwrap();
+  const bool want_assembly = request.kind == codegen::OutputKind::Assembly;
   std::vector<bool> parametric(storage.functions().size(), false);
   for (const ir::FunctionIdx index : storage.parametric_functions()) {
     parametric[index.idx] = true;
@@ -408,6 +411,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
   }
 
   std::vector<u32> function_label_base(functions.size(), 0);
+  std::vector<PrintedBody> printed;
   Body whole;
   u32 label_base = 0;
   for (u32 fi = 0; fi < functions.size(); ++fi) {
@@ -436,6 +440,18 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
         }
       }
     }
+    if (want_assembly) {
+      printed.push_back(PrintedBody{
+          functions[fi].is_runtime
+              ? functions[fi].body.symbols.back()
+              : std::string(request.strings->get(
+                    storage.functions()[functions[fi].index].meta.name)),
+          functions[fi].body,
+          functions[fi].is_runtime ? object::SymbolBind::Local
+                                   : object::SymbolBind::Global,
+          static_cast<u64>(base_of[fi]),
+          static_cast<u64>(functions[fi].body.insts.size() * 4)});
+    }
     whole.insts.insert(whole.insts.end(), selected.body.insts.begin(),
                        selected.body.insts.end());
   }
@@ -451,6 +467,13 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     }
   }
   whole.label_count = label_base + entry.labels;
+  if (want_assembly && request.emit_entry) {
+    Body entry_body;
+    entry_body.insts = entry.insts;
+    printed.push_back(PrintedBody{
+        "_start", entry_body, object::SymbolBind::Global,
+        static_cast<u64>(start_at), static_cast<u64>(entry.insts.size() * 4)});
+  }
   whole.insts.insert(whole.insts.end(), entry.insts.begin(), entry.insts.end());
   Encoded code = encode(whole);
   for (u32 fi = 0, si = 0; fi < functions.size(); ++fi) {
@@ -523,6 +546,10 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     }
   }
   object.sections.push_back(std::move(text));
+  if (want_assembly) {
+    const std::string asm_text = print_assembly(object, printed);
+    return base::make_ok(std::vector<u8>(asm_text.begin(), asm_text.end()));
+  }
   return base::make_ok(object::write_elf64(object, object::Machine::Riscv64));
 }
 

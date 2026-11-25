@@ -19,6 +19,8 @@ source_set("riscv64") {
     "materialize.h",
     "minst.cc",
     "minst.h",
+    "printer.cc",
+    "printer.h",
     "rodata.h",
     "runtime.cc",
     "runtime.h",
