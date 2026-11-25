@@ -441,16 +441,17 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
       }
     }
     if (want_assembly) {
-      printed.push_back(PrintedBody{
+      const std::string symbol =
           functions[fi].is_runtime
               ? functions[fi].body.symbols.back()
-              : std::string(request.strings->get(
-                    storage.functions()[functions[fi].index].meta.name)),
-          functions[fi].body,
-          functions[fi].is_runtime ? object::SymbolBind::Local
-                                   : object::SymbolBind::Global,
-          static_cast<u64>(base_of[fi]),
-          static_cast<u64>(functions[fi].body.insts.size() * 4)});
+              : codegen::linkable_name(storage.functions()[functions[fi].index],
+                                       storage, *request.strings);
+      printed.push_back(
+          PrintedBody{symbol, functions[fi].body,
+                      functions[fi].is_runtime ? object::SymbolBind::Local
+                                               : object::SymbolBind::Global,
+                      static_cast<u64>(base_of[fi]),
+                      static_cast<u64>(functions[fi].body.insts.size() * 4)});
     }
     whole.insts.insert(whole.insts.end(), selected.body.insts.begin(),
                        selected.body.insts.end());
