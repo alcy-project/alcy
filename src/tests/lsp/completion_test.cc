@@ -180,6 +180,29 @@ TEST_CASE("Completion offers associated functions after a generic qualifier") {
   CHECK(find_item(list, "new") != nullptr);
 }
 
+TEST_CASE("Completion filters associated functions by the type argument") {
+  const Document boolean("file:///main.al", "alcy", 1,
+                         "fn main() -> i32 {\n"
+                         "  v := Vec::<bool>::\n"
+                         "  ret 0\n"
+                         "}\n");
+  const DocumentAnalysis boolean_analysis(boolean);
+  const text::JsonValue for_bool =
+      completion_items(boolean, boolean_analysis, Position{1, 20});
+  CHECK(find_item(for_bool, "new") != nullptr);
+  CHECK(find_item(for_bool, "from_slice") == nullptr);
+
+  const Document bytes("file:///main.al", "alcy", 2,
+                       "fn main() -> i32 {\n"
+                       "  v := Vec::<u8>::\n"
+                       "  ret 0\n"
+                       "}\n");
+  const DocumentAnalysis bytes_analysis(bytes);
+  const text::JsonValue for_bytes =
+      completion_items(bytes, bytes_analysis, Position{1, 18});
+  CHECK(find_item(for_bytes, "from_slice") != nullptr);
+}
+
 TEST_CASE("Completion inserts a variant after a generic qualifier") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn main() -> i32 {\n"

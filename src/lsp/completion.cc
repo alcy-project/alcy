@@ -431,6 +431,156 @@ void collect(const DocumentAnalysis& analysis,
   }
 }
 
+// The primitive spellings a qualifier can name directly. A type the
+// checker would resolve through a scope is looked up in the checked
+// package's named types below.
+std::optional<ir::TypeIdx> primitive_of(std::string_view spelling) {
+  using T = ir::TypeTag;
+  const std::pair<std::string_view, T> spells[] = {
+      {"bool", T::I1},     {"i8", T::I8},   {"i16", T::I16},
+      {"i32", T::I32},     {"i64", T::I64}, {"u8", T::U8},
+      {"u16", T::U16},     {"u32", T::U32}, {"u64", T::U64},
+      {"f32", T::F32},     {"f64", T::F64}, {"char", T::Char},
+      {"rune", T::Rune},   {"str", T::Str}, {"isize", T::Isize},
+      {"usize", T::Usize},
+  };
+  for (const auto& [name, tag] : spells) {
+    if (spelling == name) {
+      return ir::primitive_idx(tag);
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<ir::TypeIdx> resolve_type_spelling(
+    const analyzer::CheckedPackage& package,
+    std::string_view spelling) {
+  if (const std::optional<ir::TypeIdx> primitive = primitive_of(spelling);
+      primitive.has_value()) {
+    return primitive;
+  }
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::NamedType& named : module.types) {
+      if (named.name == spelling) {
+        return named.type;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+// Top-level arguments of `Name::<A, B>`. A nested argument cannot be
+// resolved by name alone, so the caller keeps the wider candidate set
+// rather than dropping applicable methods.
+std::optional<std::vector<std::string_view>> type_arguments(
+    std::string_view qualifier) {
+  const usize open = qualifier.find('<');
+  if (open == std::string_view::npos || !qualifier.ends_with('>')) {
+    return std::vector<std::string_view>{};
+  }
+  std::vector<std::string_view> args;
+  usize begin = open + 1;
+  u32 depth = 0;
+  for (usize i = begin; i + 1 < qualifier.size(); ++i) {
+    const char c = qualifier[i];
+    if (c == '<') {
+      ++depth;
+    } else if (c == '>') {
+      if (depth == 0) {
+        return std::nullopt;
+      }
+      --depth;
+    } else if (c == ',' && depth == 0) {
+      args.push_back(qualifier.substr(begin, i - begin));
+      begin = i + 1;
+    }
+  }
+  args.push_back(qualifier.substr(begin, qualifier.size() - 1 - begin));
+  return args;
+}
+
+// The arguments a method's receiver was instantiated with, or nothing
+// for a receiver that declares none.
+ir::TypeIdxRange nominal_arguments(const ir::StorageState& state,
+                                   ir::TypeIdx type) {
+  const ir::TypeNode& node = state.types[type];
+  if (node.tag == ir::TypeTag::Struct) {
+    return state.struct_types[node.as_struct()].params;
+  }
+  if (node.tag == ir::TypeTag::Enum) {
+    return state.enum_types[node.as_enum()].params;
+  }
+  return {};
+}
+
+// The builder interns a primitive more than once under different
+// instantiations, so identical spellings need not share an index.
+// Compare the shape instead: tags for scalars, names and arguments for
+// nominals, and the pointee behind each pointer kind.
+bool same_type(const ir::StorageState& state,
+               ir::TypeIdx left,
+               ir::TypeIdx right) {
+  if (left.idx == right.idx) {
+    return true;
+  }
+  const ir::TypeNode& a = state.types[left];
+  const ir::TypeNode& b = state.types[right];
+  if (a.tag != b.tag) {
+    return false;
+  }
+  using T = ir::TypeTag;
+  switch (a.tag) {
+    case T::Ref:
+    case T::MutRef:
+    case T::RawPtr:
+    case T::RawMutPtr:
+      return same_type(state, state.ref_types[a.as_ref()].pointee,
+                       state.ref_types[b.as_ref()].pointee);
+    case T::Struct: {
+      const ir::StructType& x = state.struct_types[a.as_struct()];
+      const ir::StructType& y = state.struct_types[b.as_struct()];
+      if (x.name != y.name || x.params.size() != y.params.size()) {
+        return false;
+      }
+      for (usize i = 0; i < x.params.size(); ++i) {
+        if (!same_type(state, x.params[i], y.params[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case T::Enum: {
+      const ir::EnumType& x = state.enum_types[a.as_enum()];
+      const ir::EnumType& y = state.enum_types[b.as_enum()];
+      if (x.name != y.name || x.params.size() != y.params.size()) {
+        return false;
+      }
+      for (usize i = 0; i < x.params.size(); ++i) {
+        if (!same_type(state, x.params[i], y.params[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    default: return a.tag < T::Struct || a.tag == T::Param;
+  }
+}
+
+bool arguments_match(const ir::StorageState& state,
+                     ir::TypeIdx type,
+                     std::span<const ir::TypeIdx> wanted) {
+  const ir::TypeIdxRange actual = nominal_arguments(state, type);
+  if (actual.size() != wanted.size()) {
+    return false;
+  }
+  for (usize i = 0; i < actual.size(); ++i) {
+    if (!same_type(state, actual[i], wanted[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::string_view nominal_name(const pipeline::PipelineContext& context,
                               const ir::StorageState& state,
                               ir::TypeIdx type) {
@@ -462,11 +612,38 @@ void collect_qualified(const DocumentAnalysis& analysis,
     name.remove_suffix(1);
   }
 
+  // A qualifier that spells arguments matches the receiver's arguments
+  // by type identity, not by display text. Definition-site rows still
+  // name every parameter and apply to each instantiation.
+  std::optional<std::vector<ir::TypeIdx>> wanted;
+  const std::optional<std::vector<std::string_view>> spelled =
+      type_arguments(qualifier);
+  if (spelled.has_value() && !spelled->empty()) {
+    wanted.emplace();
+    bool resolved_all = true;
+    for (const std::string_view argument : *spelled) {
+      const std::optional<ir::TypeIdx> type =
+          resolve_type_spelling(package, argument);
+      if (!type.has_value()) {
+        resolved_all = false;
+        break;
+      }
+      wanted->push_back(*type);
+    }
+    if (!resolved_all) {
+      wanted.reset();
+    }
+  }
+
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
       if (!method.item.is_valid() ||
           method.receiver != analyzer::CheckedModule::ReceiverKind::None ||
           nominal_name(context, state, method.self_type) != name) {
+        continue;
+      }
+      if (wanted.has_value() && method.method_inst != analyzer::PARAM_INST &&
+          !arguments_match(state, method.self_type, *wanted)) {
         continue;
       }
       out->push_back(
