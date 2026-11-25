@@ -1,0 +1,12 @@
+[cli]
+subcommand = "build"
+args = [
+  "--target=riscv64-unknown-linux-gnu",
+  "--backend=direct-riscv64",
+  "--freestanding",
+  "--emit=object",
+]
+
+[cli.expect]
+exit = 3
+stderr_contains = ["a call with more than eight integer arguments", "main.al:8:7"]

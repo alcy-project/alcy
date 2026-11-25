@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "codegen/riscv64/minst.h"
+#include "codegen/rodata.h"
 #include "fpag/base/numeric.h"
 #include "ir/common.h"
 #include "ir/function.h"
@@ -15,8 +16,6 @@
 #include "ir/type.h"
 
 namespace codegen::riscv64 {
-
-class RoData;
 
 // The entry wrapper and the positions the backend patches once function
 // and rodata offsets are known.
