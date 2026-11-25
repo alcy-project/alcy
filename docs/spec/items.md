@@ -27,7 +27,12 @@
   are what bind those parameters, so a parameter the target never names
   leaves the block with nothing to specialize on and is an error.
 - A `spec` declares a capability as method signatures, and
-  `impl S for T` opts one type in. Specs live in the type namespace:
+  `impl S for T` opts one type in. An `intrinsic spec` is the
+  exception: the compiler owns the capability, no `impl` may name
+  it, and a witness is synthesized from the target's structure.
+  `core` declares `Copy` (a value's bytes can be copied) and
+  `Zeroable` (all-zero bytes spell a valid value) this way. Specs
+  live in the type namespace:
   `use` imports them and a prelude facade re-exports core's, which is
   what puts a spec's methods on a call — dispatch tries inherent
   methods first, then the in-scope spec impls. Coherence is global

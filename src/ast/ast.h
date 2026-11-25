@@ -1051,8 +1051,11 @@ struct SpecMethod {
 
 // A named set of method signatures: `spec Iterator<T>`. Method
 // signatures are data, not items, so no pass visits them as bodies.
+// An intrinsic spec is compiler-owned: no impl may name it, and its
+// witnesses are synthesized from the target's structure.
 struct ItemSpec {
   Ident name;
+  bool is_intrinsic = false;
   std::span<const GenericParam> params;
   // The super-spec this one refines (`spec Eq: PartialEq`), as a path
   // type, or an invalid index when absent..

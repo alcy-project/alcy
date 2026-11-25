@@ -56,6 +56,42 @@ bool Checker::is_copy(ir::TypeIdx type) {
     // parameter's type has no copy to ask about.
     return true;
   }
+  if (tag_of(type) == ir::TypeTag::Param) {
+    // A parameter stands for a type the body has not specialized. The
+    // declared `T: Copy` bound is what settles the question here: the
+    // structural walk of `Param` alone cannot answer it.
+    const u32 spec = copy_spec();
+    if (spec == U32_MAX) {
+      return false;
+    }
+    const ast::GenericParam* declared =
+        param_at(builder.types()[type.idx].as_param().value);
+    if (declared == nullptr) {
+      return false;
+    }
+    const std::string_view name = specs[spec].name;
+    for (ast::TypeIdx annotation : declared->bounds) {
+      if (ast.types[annotation].kind != ast::TypeKind::Path) {
+        continue;
+      }
+      const ast::TypePath& path =
+          ast.types[annotation].payload.get<ast::TypePath>();
+      const auto segments = ast.paths[path.path].segments;
+      if (!segments.empty() && segments.back().name == name) {
+        return true;
+      }
+    }
+    if (declared->type.is_valid() &&
+        ast.types[declared->type].kind == ast::TypeKind::Path) {
+      const ast::TypePath& path =
+          ast.types[declared->type].payload.get<ast::TypePath>();
+      const auto segments = ast.paths[path.path].segments;
+      if (!segments.empty() && segments.back().name == name) {
+        return true;
+      }
+    }
+    return false;
+  }
   // The drop walk answers whether a value of the type runs code when it
   // ends, and a type that does is move-only. A repeat literal asks
   // before the drop phase runs, so the walk fills in what it needs.
@@ -488,6 +524,14 @@ u32 Checker::fn_spec() const {
   return operator_spec("Fn");
 }
 
+u32 Checker::copy_spec() const {
+  return operator_spec("Copy");
+}
+
+u32 Checker::zeroable_spec() const {
+  return operator_spec("Zeroable");
+}
+
 u32 Checker::fmt_spec(std::string_view name) const {
   for (u32 i = 0; i < static_cast<u32>(specs.size()); ++i) {
     if (specs[i].name == name && tree.is_staged_item("fmt", specs[i].item)) {
@@ -822,6 +866,35 @@ bool Checker::implements_spec(ir::TypeIdx type,
   // recorded one or a function view's own. `P` is the parameters as
   // one tuple, and a single non-tuple argument reads as the one
   // parameter, so `Fn<i32, R>` and `Fn<(i32,), R>` agree.
+  if (spec == copy_spec()) {
+    // The witness is the structural answer the drop and layout walks
+    // already give; no impl record exists for an intrinsic spec.
+    return is_copy(origin);
+  }
+  if (spec == zeroable_spec()) {
+    // All-zero bytes spell a valid value for exactly these primitives.
+    // The list is the compiler's knowledge of their representation,
+    // not an impl a package can write.
+    using T = ir::TypeTag;
+    switch (tag_of(origin)) {
+      case T::I1:
+      case T::I8:
+      case T::I16:
+      case T::I32:
+      case T::I64:
+      case T::U8:
+      case T::U16:
+      case T::U32:
+      case T::U64:
+      case T::Isize:
+      case T::Usize:
+      case T::F32:
+      case T::F64:
+      case T::Char:
+      case T::Rune: return true;
+      default: return false;
+    }
+  }
   if (spec == fn_spec()) {
     if (spec_args.size() != 2) {
       return false;
@@ -1403,6 +1476,14 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
     return;
   }
   const u32 spec_index = static_cast<u32>(spec_entry - specs.data());
+  const ast::ItemSpec& declaration =
+      ast.items[spec_entry->item].payload.get<ast::ItemSpec>();
+  if (declaration.is_intrinsic) {
+    const u32 index = bag.emit<i18n::Key::AnalyzerIntrinsicSpecImpl>(
+        DiagCode::InvalidOperation, spec_node.span, spec_entry->name);
+    (void)index;
+    return;
+  }
   // : a spec its package seals to a suite may be implemented
   // only by that package or by a package of that suite. The manifest
   // name list is the seal; the reserved implementing-side key that
@@ -1445,7 +1526,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       }
     }
   }
-  const ast::ItemSpec& declaration =
+  const ast::ItemSpec& spec_declaration =
       ast.items[spec_entry->item].payload.get<ast::ItemSpec>();
   const ast::TypeNode& target_node = ast.types[impl.type];
   // A scalar target carries no parameters, so an impl naming any is the
@@ -1461,10 +1542,11 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
   std::vector<ir::TypeIdx> spec_args;
   {
     const ast::TypePath& spec_path = spec_node.payload.get<ast::TypePath>();
-    if (spec_path.args.size() != declaration.params.size()) {
+    if (spec_path.args.size() != spec_declaration.params.size()) {
       const u32 index = bag.emit<i18n::Key::AnalyzerTypeArityMismatch>(
           DiagCode::ArityMismatch, spec_node.span, spec_entry->name,
-          declaration.params.size(), declaration.params.size() == 1 ? "" : "s");
+          spec_declaration.params.size(),
+          spec_declaration.params.size() == 1 ? "" : "s");
       (void)index;
       return;
     }
@@ -1712,7 +1794,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
         method_node.payload.get<ast::ItemFn>().name.name;
     bool declared = false;
     bool arity_ok = true;
-    for (const ast::SpecMethod& method : declaration.methods) {
+    for (const ast::SpecMethod& method : spec_declaration.methods) {
       if (method.name.name != name) {
         continue;
       }
@@ -1738,7 +1820,7 @@ void Checker::register_spec_impl(u32 module, ast::ItemIdx item) {
       return;
     }
   }
-  for (const ast::SpecMethod& method : declaration.methods) {
+  for (const ast::SpecMethod& method : spec_declaration.methods) {
     bool implemented = false;
     for (ast::ItemIdx method_item : impl.methods) {
       if (ast.items[method_item].payload.get<ast::ItemFn>().name.name ==

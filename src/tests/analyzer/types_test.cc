@@ -4457,6 +4457,32 @@ TEST_CASE("Check refuses a sealed spec implementation outside its package") {
         "outside needs the [spec] implement key");
 }
 
+TEST_CASE("Check refuses an implementation of an intrinsic spec") {
+  VirtualDir dir;
+  const bool setup =
+      write_all(dir, {{"core.al", "pub intrinsic spec Copy {}\n"},
+                      {"main.al",
+                       "struct Tag {\n  n: i32,\n}\n"
+                       "impl Copy for Tag {\n}\n"
+                       "fn main() -> i32 {\n  ret 0\n}\n"}});
+  CHECK(setup);
+  if (!setup) {
+    return;
+  }
+  Fixture f;
+  const CheckOutcome result =
+      check_case(dir, "main.al", {"main.al"}, f, ir::PointerWidth::W64,
+                 {{"core", "core.al"}});
+  CHECK(!result.package.has_value());
+  CHECK(f.bag.has_errors());
+  CHECK(f.bag.size() == 1);
+  if (f.bag.size() != 1) {
+    return;
+  }
+  CHECK(f.bag.at(0)->message ==
+        "Spec 'Copy' is compiler-owned; it cannot be implemented");
+}
+
 TEST_CASE("Check admits a sealed spec implementation from the same suite") {
   VirtualDir dir;
   const bool setup = write_all(

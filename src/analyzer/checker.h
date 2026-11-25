@@ -1303,6 +1303,12 @@ class Checker {
   // the way the operators are, so a closure's implementation is known
   // by identity and needs no `use`.
   u32 fn_spec() const;
+  // The compiler-owned value-property specs `core` declares. Their
+  // witnesses are synthesized from the type's structure: Copy means a
+  // bitwise copy is safe, Zeroable means all-zero bytes spell a valid
+  // value. Both are intrinsic specs, so no impl can name them.
+  u32 copy_spec() const;
+  u32 zeroable_spec() const;
   // Whether `declared` is `required` or refines it through the super
   // chain: a bound on a refined spec provides the refined ones' methods.
   bool spec_refines(u32 declared, u32 required) const;

@@ -117,7 +117,9 @@ one, and an expanded function's declared body never runs. A typed variadic with
 no collected arguments needs its type argument spelled explicitly.
 
 A `spec` declares a named capability as `;`-terminated method
-signatures, with no bodies. A spec may refine another: `spec Eq:
+signatures, with no bodies. An `intrinsic spec` is compiler-owned:
+no `impl` may name it, and the checker synthesizes witnesses from
+the target type's structure. A spec may refine another: `spec Eq:
 PartialEq` says every implementation of `Eq` also needs an
 implementation of `PartialEq` for the same target, the super must
 resolve to a spec in scope, and the chain must not cycle. Generic

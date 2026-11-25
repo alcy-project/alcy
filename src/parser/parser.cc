@@ -1021,6 +1021,16 @@ ast::ItemIdx Parser::parse_item(Attributes attributes) {
     case lexer::TokenKind::Fn:
       return finish(parse_fn(is_pub, is_unsafe, is_comp));
     case lexer::TokenKind::Intrinsic:
+      // `intrinsic` marks a compiler-owned declaration. It prefixes
+      // either a function signature or a spec; the token after it
+      // decides which.
+      if (peek_kind(1) == lexer::TokenKind::Spec) {
+        if (!only_functions()) {
+          return finish(ast::ItemIdx::invalid());
+        }
+        return finish(parse_spec(is_pub, /*keyword_consumed=*/false,
+                                 /*is_intrinsic=*/true));
+      }
       return finish(parse_intrinsic_fn(is_pub, is_unsafe));
     case lexer::TokenKind::Extern: {
       only_functions();
@@ -1823,8 +1833,13 @@ bool Parser::parse_spec_method(ast::SpecMethod& method) {
   return true;
 }
 
-ast::ItemIdx Parser::parse_spec(bool is_pub, bool keyword_consumed) {
+ast::ItemIdx Parser::parse_spec(bool is_pub,
+                                bool keyword_consumed,
+                                bool is_intrinsic) {
   const usize mark = pos_;
+  if (is_intrinsic && !expect(lexer::TokenKind::Intrinsic, "`intrinsic`")) {
+    return ast::ItemIdx::invalid();
+  }
   if (!keyword_consumed && !expect(lexer::TokenKind::Spec, "spec")) {
     return ast::ItemIdx::invalid();
   }
@@ -1874,6 +1889,7 @@ ast::ItemIdx Parser::parse_spec(bool is_pub, bool keyword_consumed) {
   node.is_pub = is_pub;
   node.payload.set(ast::ItemSpec{
       .name = std::move(name).unwrap(),
+      .is_intrinsic = is_intrinsic,
       .params = ast::copy_to_arena(ast_.spans, params),
       .super = super,
       .methods = ast::copy_to_arena(ast_.spans, methods),

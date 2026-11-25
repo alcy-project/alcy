@@ -13,7 +13,15 @@
   shared references (`&T`) are `Copy`; exclusive references (`&mut T`)
   are move-only. No syntax exists to declare or suppress `Copy`. A
   declared destructor is the one exception: it makes the type
-  move-only, whatever its fields are.
+  move-only, whatever its fields are. `core` declares the intrinsic
+  spec `Copy` so a bound can name this property: the witness is the
+  structural answer, not an `impl` a package writes. A parameter
+  bounded by `Copy` satisfies it in a generic body.
+- `Zeroable` is another intrinsic spec in `core`: all-zero bytes spell
+  a valid value. The compiler grants it to `bool`, the integer and
+  float widths, `char` and `rune`, and no other type. It is what lets
+  `Vec::zeros` fill storage with `memset` safely. A refinement that
+  proves the property for a user type may widen the set later.
 
 ## Movability
 

@@ -353,7 +353,9 @@ class Parser {
   ast::ItemIdx parse_struct(bool is_pub, const Attributes& attrs);
   ast::ItemIdx parse_enum(bool is_pub, const Attributes& attrs);
   ast::ItemIdx parse_impl(bool is_pub);
-  ast::ItemIdx parse_spec(bool is_pub, bool keyword_consumed = false);
+  ast::ItemIdx parse_spec(bool is_pub,
+                          bool keyword_consumed = false,
+                          bool is_intrinsic = false);
   bool parse_fn_signature(FnSignature& signature,
                           bool keyword_consumed = false);
   bool parse_spec_method(ast::SpecMethod& method);
