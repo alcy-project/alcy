@@ -609,7 +609,6 @@ Body build_memcpy() {
 
 Body build_error_kind() {
   Body body;
-  // Map Linux errno numbers to the portable kinds the std asks for.
   // Linux errno numbers mapped to the portable codes lib/std/sys names.
   constexpr i64 kErrEintr = 4;
   constexpr i64 kErrEagain = 11;
@@ -645,6 +644,9 @@ Body build_error_kind() {
     at_next.label = next;
     body.insts.push_back(at_next);
   }
+  // An unmapped errno is Other (0), as the portable interface specifies.
+  body.insts.push_back(
+      make_inst(MOp::Addi, 8, Operand{A0}, Operand{ZERO}, Operand{Imm{0}}));
   MInst at_done = make_inst(MOp::Nop, 8);
   at_done.label = done;
   body.insts.push_back(at_done);

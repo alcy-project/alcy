@@ -342,7 +342,6 @@ Body build_error_kind() {
     i32 number;
     i32 kind;
   };
-  // Linux errno numbers mapped to the portable codes lib/std/sys names.
   constexpr i64 kErrEintr = 4;
   constexpr i64 kErrEagain = 11;
   constexpr i64 kErrEnoent = 2;
