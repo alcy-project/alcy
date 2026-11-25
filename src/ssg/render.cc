@@ -604,9 +604,36 @@ std::string render_tree_index(const std::vector<DocPage>& pages,
   out += "      <h1>" + label + "</h1>\n      <ol>\n";
   for (const DocPage& page : pages) {
     out += "        <li><a href=\"" + relative_route(route, page.route) +
-           "\">" + escape_html(page.title) + "</a></li>\n";
+           "\">" + escape_html(page.title) + "</a>";
+    const std::vector<GuideSection> sections = sections_of(page.blocks);
+    if (!sections.empty()) {
+      out += "<span class=\"index-sections\">";
+      usize shown = 0;
+      for (const GuideSection& section : sections) {
+        if (shown++ != 0) {
+          out += " / ";
+        }
+        std::string preview = section.text;
+        std::erase(preview, '`');
+        out += escape_html(preview);
+        if (shown == 3) {
+          break;
+        }
+      }
+      out += "</span>";
+    }
+    out += "</li>\n";
   }
-  out += "      </ol>\n    </main>\n\n";
+  out += "      </ol>\n";
+  if (!tree.continues_into_segment.empty()) {
+    const std::string target = prefix_of(catalog, language) +
+                               std::string(tree.continues_into_segment) +
+                               "/index.html";
+    out += "      <p class=\"index-continues\"><a href=\"" +
+           relative_route(route, target) + "\">" + t("site.next") + " " +
+           MIDDLE_DOT + " " + t(tree.continues_into_label_key) + "</a></p>\n";
+  }
+  out += "    </main>\n\n";
   out += "    " + footer(stamp) + "\n\n";
   out += "    <script type=\"module\" src=\"" + assets +
          "shared/shell.js\"></script>\n";

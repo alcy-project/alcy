@@ -480,13 +480,48 @@ body.site {
 /* The guide's contents page at `/guide/`. */
 
 .guide-contents ol {
-  max-width: 40ch;
-  padding-left: 20px;
-  line-height: 1.9;
+  max-width: 52ch;
+  padding-left: 24px;
+  line-height: 1.5;
+}
+
+.guide-contents li {
+  margin-bottom: 12px;
+}
+
+.guide-contents li::marker {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .guide-contents a {
+  color: var(--fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.guide-contents a:hover {
   color: var(--accent);
+  text-decoration: underline;
+}
+
+.guide-contents .index-sections {
+  display: block;
+  margin-top: 2px;
+  color: var(--fg-faint);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.guide-contents .index-continues {
+  margin: 20px 0 0;
+}
+
+.guide-contents .index-continues a {
+  color: var(--fg-soft);
+  font-weight: 400;
 }
 
 /* The guide: contents beside the article, then the previous/next pager. */
