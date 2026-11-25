@@ -99,6 +99,54 @@ const char* fcvt_mnemonic(const FcvtMode mode) {
   return "fcvt.l.d";
 }
 
+struct AluName {
+  const char* reg = nullptr;
+  const char* imm = nullptr;
+};
+
+// The two spellings of an integer ALU op. A null `imm` means the encoder
+// has no immediate form for it, so the register form is always used.
+constexpr AluName alu_name(const MOp op) {
+  switch (op) {
+    case MOp::Add:
+    case MOp::Addi: return {"add", "addi"};
+    case MOp::Sub: return {"sub", "addi"};
+    case MOp::Sll:
+    case MOp::Slli: return {"sll", "slli"};
+    case MOp::Slt:
+    case MOp::Slti: return {"slt", "slti"};
+    case MOp::Sltu:
+    case MOp::Sltiu: return {"sltu", "sltiu"};
+    case MOp::Xor:
+    case MOp::Xori: return {"xor", "xori"};
+    case MOp::Srl:
+    case MOp::Srli: return {"srl", "srli"};
+    case MOp::Sra:
+    case MOp::Srai: return {"sra", "srai"};
+    case MOp::Or:
+    case MOp::Ori: return {"or", "ori"};
+    case MOp::And:
+    case MOp::Andi: return {"and", "andi"};
+    case MOp::Mul: return {"mul", nullptr};
+    case MOp::Mulh: return {"mulh", nullptr};
+    case MOp::Mulhu: return {"mulhu", nullptr};
+    case MOp::Div: return {"div", nullptr};
+    case MOp::Divu: return {"divu", nullptr};
+    case MOp::Rem: return {"rem", nullptr};
+    case MOp::Remu: return {"remu", nullptr};
+    default: return {};
+  }
+}
+
+// The encoder's `reg()` maps a non-register operand to x0; print the same
+// register so the source assembles to the same instruction.
+std::string reg_or_zero(const Operand& op) {
+  if (const Reg* reg = std::get_if<Reg>(&op)) {
+    return reg_name(*reg);
+  }
+  return "zero";
+}
+
 std::string reg_ref_name(const RegRef& ref) {
   if (const Reg* reg = std::get_if<Reg>(&ref)) {
     return reg_name(*reg);
@@ -213,111 +261,82 @@ std::string instruction(const MInst& inst,
     case MOp::Fsw:
     case MOp::Fsd:
       return std::string(store_mnemonic(inst.op)) + " " + a(0) + ", " + a(1);
-    case MOp::Addi:
-    case MOp::Slti:
-    case MOp::Sltiu:
-    case MOp::Xori:
-    case MOp::Ori:
-    case MOp::Andi:
-    case MOp::Slli:
-    case MOp::Srli:
-    case MOp::Srai: {
-      const char* mnemonic = inst.op == MOp::Addi    ? "addi"
-                             : inst.op == MOp::Slti  ? "slti"
-                             : inst.op == MOp::Sltiu ? "sltiu"
-                             : inst.op == MOp::Xori  ? "xori"
-                             : inst.op == MOp::Ori   ? "ori"
-                             : inst.op == MOp::Andi  ? "andi"
-                             : inst.op == MOp::Slli  ? "slli"
-                             : inst.op == MOp::Srli  ? "srli"
-                                                     : "srai";
-      return std::string(mnemonic) + " " + a(0) + ", " + a(1) + ", " + a(2);
-    }
     case MOp::Add:
-    case MOp::Sub: {
-      // The encoder folds an immediate operand into the I-type form;
-      // there is no `subi`, so subtraction adds the negated immediate.
-      const Imm* imm = nullptr;
-      const Operand* source = nullptr;
-      if (inst.count > 1 && std::get_if<Imm>(&inst.at(1)) != nullptr) {
-        imm = &std::get<Imm>(inst.at(1));
-        if (inst.count > 2) {
-          source = &inst.at(2);
-        }
-      } else if (inst.count > 2 && std::get_if<Imm>(&inst.at(2)) != nullptr) {
-        imm = &std::get<Imm>(inst.at(2));
-        source = &inst.at(1);
-      }
-      if (imm == nullptr || source == nullptr) {
-        return (inst.op == MOp::Add ? "add " : "sub ") + a(0) + ", " + a(1) +
-               ", " + a(2);
-      }
-      const i64 value = inst.op == MOp::Sub ? -imm->value : imm->value;
-      return "addi " + a(0) + ", " + operand(*source, body, label_prefix) +
-             ", " + std::to_string(value);
-    }
+    case MOp::Sub:
+    case MOp::Addi:
     case MOp::Slt:
+    case MOp::Slti:
     case MOp::Sltu:
+    case MOp::Sltiu:
     case MOp::Xor:
+    case MOp::Xori:
     case MOp::Or:
+    case MOp::Ori:
     case MOp::And:
+    case MOp::Andi:
     case MOp::Sll:
+    case MOp::Slli:
     case MOp::Srl:
+    case MOp::Srli:
     case MOp::Sra:
+    case MOp::Srai:
     case MOp::Mul:
     case MOp::Mulh:
     case MOp::Mulhu:
     case MOp::Div:
     case MOp::Divu:
     case MOp::Rem:
-    case MOp::Remu:
+    case MOp::Remu: {
+      const AluName name = alu_name(inst.op);
+      const AluOperands alu = alu_operands(inst);
+      if (alu.immediate != nullptr && name.imm != nullptr) {
+        const i64 value = std::get<Imm>(*alu.immediate).value;
+        // There is no subi: subtraction adds the negated immediate.
+        const i64 encoded = inst.op == MOp::Sub ? -value : value;
+        return std::string(name.imm) + " " + a(0) + ", " +
+               reg_or_zero(*alu.rs1) + ", " + std::to_string(encoded);
+      }
+      return std::string(name.reg) + " " + a(0) + ", " + reg_or_zero(*alu.rs1) +
+             ", " + reg_or_zero(*alu.rs2);
+    }
     case MOp::Fadd:
     case MOp::Fsub:
     case MOp::Fmul:
     case MOp::Fdiv:
     case MOp::Feq:
     case MOp::Flt:
-    case MOp::Fle:
-    case MOp::Fmov: {
-      const char* mnemonic = inst.op == MOp::Add     ? "add"
-                             : inst.op == MOp::Sub   ? "sub"
-                             : inst.op == MOp::Slt   ? "slt"
-                             : inst.op == MOp::Sltu  ? "sltu"
-                             : inst.op == MOp::Xor   ? "xor"
-                             : inst.op == MOp::Or    ? "or"
-                             : inst.op == MOp::And   ? "and"
-                             : inst.op == MOp::Sll   ? "sll"
-                             : inst.op == MOp::Srl   ? "srl"
-                             : inst.op == MOp::Sra   ? "sra"
-                             : inst.op == MOp::Mul   ? "mul"
-                             : inst.op == MOp::Mulh  ? "mulh"
-                             : inst.op == MOp::Mulhu ? "mulhu"
-                             : inst.op == MOp::Div   ? "div"
-                             : inst.op == MOp::Divu  ? "divu"
-                             : inst.op == MOp::Rem   ? "rem"
-                             : inst.op == MOp::Remu  ? "remu"
-                             : inst.op == MOp::Fadd  ? "fadd"
-                             : inst.op == MOp::Fsub  ? "fsub"
-                             : inst.op == MOp::Fmul  ? "fmul"
-                             : inst.op == MOp::Fdiv  ? "fdiv"
-                             : inst.op == MOp::Feq   ? "feq"
-                             : inst.op == MOp::Flt   ? "flt"
-                             : inst.op == MOp::Fle   ? "fle"
-                                                     : "fsgnj";
+    case MOp::Fle: {
+      const bool compare =
+          inst.op == MOp::Feq || inst.op == MOp::Flt || inst.op == MOp::Fle;
+      const char* mnemonic = inst.op == MOp::Fadd   ? "fadd"
+                             : inst.op == MOp::Fsub ? "fsub"
+                             : inst.op == MOp::Fmul ? "fmul"
+                             : inst.op == MOp::Fdiv ? "fdiv"
+                             : inst.op == MOp::Feq  ? "feq"
+                             : inst.op == MOp::Flt  ? "flt"
+                                                    : "fle";
       std::string text = std::string(mnemonic);
-      if (inst.width == 4 && mnemonic[0] == 'f') {
-        text += ".s";
-      } else if (inst.width == 8 && mnemonic[0] == 'f') {
-        text += ".d";
-      }
-      return text + " " + a(0) + ", " + a(1) + ", " + a(2);
+      text += inst.width == 4 ? ".s" : ".d";
+      // The encoder selects RNE (funct3=0). GNU as defaults to the
+      // dynamic mode, so ask for RNE explicitly to match the object.
+      return text + " " + a(0) + ", " + a(1) + ", " + a(2) +
+             (compare ? "" : ", rne");
     }
+    case MOp::Fmov:
+      // The encoder uses the same register for both source operands;
+      // there is no third operand to print.
+      return std::string(inst.width == 4 ? "fsgnj.s " : "fsgnj.d ") + a(0) +
+             ", " + a(1) + ", " + a(1);
     case MOp::Fcvt: {
       const FcvtMode mode =
           inst.count > 2 && std::holds_alternative<FcvtMode>(inst.at(2))
               ? std::get<FcvtMode>(inst.at(2))
               : FcvtMode::F64ToI64;
-      return std::string(fcvt_mnemonic(mode)) + " " + a(0) + ", " + a(1);
+      const bool to_int =
+          mode == FcvtMode::F64ToI64 || mode == FcvtMode::F32ToI64 ||
+          mode == FcvtMode::F64ToIU64 || mode == FcvtMode::F32ToIU64;
+      return std::string(fcvt_mnemonic(mode)) + " " + a(0) + ", " + a(1) +
+             (to_int ? ", rtz" : "");
     }
     case MOp::Fneg:
       return std::string(inst.width == 4 ? "fneg.s " : "fneg.d ") + a(0) +
@@ -392,6 +411,7 @@ std::string print_assembly(const object::Object& object,
   // not to relax them into two-byte compressed forms, which would shift
   // every PC-relative offset the backend resolved against the object.
   out += "\t.option norvc\n";
+  out += "\t.option norelax\n";
   out += "\t.text\n";
   out += "\t.section .text,\"ax\",@progbits\n";
   out += "\t.balign 16\n";

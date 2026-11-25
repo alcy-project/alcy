@@ -158,7 +158,7 @@ u32 alu_funct(const MOp op, u32& funct7) {
     case MOp::Andi: return 7;
     case MOp::Mul: funct7 = 1; return 0;
     case MOp::Mulh: funct7 = 1; return 1;
-    case MOp::Mulhu: funct7 = 1; return 2;
+    case MOp::Mulhu: funct7 = 1; return 3;
     case MOp::Div: funct7 = 1; return 4;
     case MOp::Divu: funct7 = 1; return 5;
     case MOp::Rem: funct7 = 1; return 6;
@@ -417,16 +417,10 @@ Encoded encode(const Body& body) {
       default: {
         u32 funct7 = 0;
         const u32 funct3 = alu_funct(inst.op, funct7);
-        const Operand* immediate = nullptr;
-        if (inst.count > 1 && std::holds_alternative<Imm>(inst.at(1))) {
-          immediate = &inst.at(1);
-        } else if (inst.count > 2 && std::holds_alternative<Imm>(inst.at(2))) {
-          immediate = &inst.at(2);
-        }
+        const AluOperands alu = alu_operands(inst);
+        const Operand* immediate = alu.immediate;
         if (immediate != nullptr) {
-          const u32 rs1 = immediate == &inst.at(1) && inst.count > 2
-                              ? reg(inst.at(2))
-                              : reg(inst.at(1));
+          const u32 rs1 = reg(*alu.rs1);
           // There is no subi: subtract by adding the negated immediate.
           const i32 value =
               inst.op == MOp::Sub ? -imm(*immediate) : imm(*immediate);
@@ -441,8 +435,8 @@ Encoded encode(const Body& body) {
           word = i_type(encoded, rs1, funct3, reg(inst.at(0)), OP_IMM);
         } else {
           // Three-operand RISC-V: rd is operand 0, the sources are 1/2.
-          const u32 rs1 = reg(inst.count > 2 ? inst.at(1) : inst.at(0));
-          const u32 rs2 = reg(inst.count > 2 ? inst.at(2) : inst.at(1));
+          const u32 rs1 = reg(*alu.rs1);
+          const u32 rs2 = reg(*alu.rs2);
           word = r_type(funct7, rs2, rs1, funct3, reg(inst.at(0)), OP);
         }
         break;

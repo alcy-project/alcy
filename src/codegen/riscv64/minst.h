@@ -248,6 +248,33 @@ struct MInst {
   const Operand& at(const u32 index) const { return ops[index]; }
 };
 
+// The operands an ALU instruction encodes: an immediate form uses
+// `immediate` and `rs1`, the register form uses `rs1` and `rs2`. The
+// encoder and printer share this so both choose the same form.
+struct AluOperands {
+  const Operand* immediate = nullptr;
+  const Operand* rs1 = nullptr;
+  const Operand* rs2 = nullptr;
+};
+
+inline AluOperands alu_operands(const MInst& inst) {
+  AluOperands result;
+  if (inst.count > 1 && std::holds_alternative<Imm>(inst.at(1))) {
+    result.immediate = &inst.at(1);
+  } else if (inst.count > 2 && std::holds_alternative<Imm>(inst.at(2))) {
+    result.immediate = &inst.at(2);
+  }
+  if (result.immediate != nullptr) {
+    result.rs1 = result.immediate == &inst.at(1) && inst.count > 2
+                     ? &inst.at(2)
+                     : &inst.at(1);
+  } else {
+    result.rs1 = inst.count > 2 ? &inst.at(1) : &inst.at(0);
+    result.rs2 = inst.count > 2 ? &inst.at(2) : &inst.at(1);
+  }
+  return result;
+}
+
 inline MInst make_inst(const MOp op, const u8 width) {
   MInst inst;
   inst.op = op;

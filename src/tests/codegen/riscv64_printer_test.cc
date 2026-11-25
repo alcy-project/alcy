@@ -62,6 +62,37 @@ TEST_CASE("The riscv64 printer writes fixed-width instructions") {
   CHECK(contains(text, "\t.size fn, .-fn\n"));
 }
 
+TEST_CASE("The riscv64 printer folds immediates into ALU forms") {
+  Body body;
+  body.insts.push_back(
+      make_inst(MOp::And, 8, Operand{T0}, Operand{Imm{32}}, Operand{T1}));
+  body.insts.push_back(
+      make_inst(MOp::Mulhu, 8, Operand{T0}, Operand{T1}, Operand{T2}));
+  body.insts.push_back(
+      make_inst(MOp::Fmov, 8, Operand{Reg::F10}, Operand{Reg::F6}));
+  body.insts.push_back(make_inst(MOp::Fmul, 8, Operand{Reg::F10},
+                                 Operand{Reg::F6}, Operand{Reg::F7}));
+  body.insts.push_back(make_inst(MOp::Fcvt, 8, Operand{T0}, Operand{Reg::F6},
+                                 Operand{FcvtMode::F64ToI64}));
+  object::Object object = text_object(body.insts.size() * 4);
+  for (u32 i = 0; i < body.insts.size(); ++i) {
+    object.symbols.push_back(object::Symbol{.name = "fn",
+                                            .section = 0,
+                                            .offset = static_cast<u64>(i) * 4,
+                                            .size = 4,
+                                            .bind = object::SymbolBind::Local,
+                                            .type = object::SymbolType::Func});
+  }
+  std::vector<PrintedBody> bodies{PrintedBody{
+      "fn", body, object::SymbolBind::Local, 0, body.insts.size() * 4}};
+  const std::string text = print_assembly(object, bodies);
+  CHECK(contains(text, "\tandi t0, t1, 32\n"));
+  CHECK(contains(text, "\tmulhu t0, t1, t2\n"));
+  CHECK(contains(text, "\tfsgnj.d f10, f6, f6\n"));
+  CHECK(contains(text, "\tfmul.d f10, f6, f7, rne\n"));
+  CHECK(contains(text, "\tfcvt.l.d t0, f6, rtz\n"));
+}
+
 TEST_CASE("The riscv64 printer names a resolved jump target") {
   Body body;
   MInst jump = make_inst(MOp::Jal, 8, Operand{RA}, Operand{Imm{-16}});
