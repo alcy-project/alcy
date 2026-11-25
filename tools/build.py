@@ -6,6 +6,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -99,7 +100,10 @@ def build(
     # Inert in release, where no sanitizer is added; forwarded for the same
     # reason as the debug information.
     gn_args += f' alcy_sanitizer="{sanitizer}"'
-    if not llvm_dir and llvm_cache:
+    # A build with no LLVM backend never imports llvm.gni, so passing
+    # llvm_install_dir would warn that the argument has no effect.
+    no_llvm = re.search(r"alcy_backends\s*=\s*\[\s*\]", gn_args_extra)
+    if not llvm_dir and llvm_cache and no_llvm is None:
         llvm_dir = shared_llvm_dir(mode, target_os)
     if llvm_dir:
         # A preinstalled LLVM prefix instead of the tag artifact.
