@@ -14,8 +14,9 @@ namespace codegen::riscv64 {
 // The frame pointer names the slot holding the caller's frame pointer;
 // the word above it holds the return address. Both the prologue and the
 // panic-time walk read these offsets, so they live here.
-constexpr Reg SAVED_REGS[] = {RA,       S1,       S0,       Reg::X22, Reg::X23,
-                              Reg::X24, Reg::X25, Reg::X26, Reg::X27};
+constexpr Reg SAVED_REGS[] = {RA,       S1,       S0,       Reg::X18, Reg::X19,
+                              Reg::X20, Reg::X21, Reg::X22, Reg::X23, Reg::X24,
+                              Reg::X25, Reg::X26, Reg::X27};
 constexpr u32 SAVE_AREA_BYTES = sizeof(SAVED_REGS) * 8;
 constexpr i64 PREV_FP_DISP = 0;
 constexpr i64 RETURN_ADDR_DISP = 8;
