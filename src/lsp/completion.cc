@@ -42,6 +42,9 @@ struct Item {
   // A variant is shown by its short name but inserted qualified, as the
   // language requires at a use site.
   std::string insert_text;
+  // The item was matched to the qualifier the buffer already typed, so
+  // it stays eligible after `Type::` even though it is a method.
+  bool qualified = false;
 };
 
 std::string_view prefix_at(std::string_view text, usize offset) {
@@ -51,7 +54,8 @@ std::string_view prefix_at(std::string_view text, usize offset) {
     // A qualified name is one prefix: replacing only its last segment
     // would double the qualifier for a variant item's insert text.
     const bool word = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                      (c >= '0' && c <= '9') || c == '_' || c == ':';
+                      (c >= '0' && c <= '9') || c == '_' || c == ':' ||
+                      c == '<' || c == '>' || c == ',';
     if (!word) {
       break;
     }
@@ -427,6 +431,69 @@ void collect(const DocumentAnalysis& analysis,
   }
 }
 
+std::string_view nominal_name(const pipeline::PipelineContext& context,
+                              const ir::StorageState& state,
+                              ir::TypeIdx type) {
+  const ir::TypeNode& node = state.types[type];
+  if (node.tag == ir::TypeTag::Struct) {
+    return context.strings.get(state.struct_types[node.as_struct()].name);
+  }
+  if (node.tag == ir::TypeTag::Enum) {
+    return context.strings.get(state.enum_types[node.as_enum()].name);
+  }
+  return {};
+}
+
+// Associated functions and variant constructors the typed qualifier
+// names. A qualifier such as `Vec::<i32>::` still reads as `Vec` here:
+// the arguments do not change which declarations are candidates.
+void collect_qualified(const DocumentAnalysis& analysis,
+                       std::string_view qualifier,
+                       std::string_view spelling,
+                       std::vector<Item>* out) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const ir::StorageState& state = analysis.types();
+  const usize generic = qualifier.find('<');
+  std::string_view name = qualifier.substr(0, generic);
+  // `Vec::<i32>::` spells the module-style `::` before the argument
+  // list; the type name itself ends at `Vec`.
+  while (!name.empty() && name.back() == ':') {
+    name.remove_suffix(1);
+  }
+
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
+      if (!method.item.is_valid() ||
+          method.receiver != analyzer::CheckedModule::ReceiverKind::None ||
+          nominal_name(context, state, method.self_type) != name) {
+        continue;
+      }
+      out->push_back(
+          Item{std::string(method.name),
+               function_detail(context, state, method.params, method.ret,
+                               variadic_param_name(context, method.item),
+                               method.item),
+               method.item, CompletionItemKind::Method, "", true});
+    }
+    for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
+      if (info.name != name) {
+        continue;
+      }
+      for (const std::string_view variant : info.variants) {
+        Item item{std::string(variant),
+                  std::string(spelling) + std::string(variant),
+                  ast::ItemIdx::invalid(),
+                  CompletionItemKind::EnumMember,
+                  "",
+                  true};
+        item.insert_text = item.detail;
+        out->push_back(std::move(item));
+      }
+    }
+  }
+}
+
 bool starts_with(std::string_view value, std::string_view prefix) {
   return value.size() >= prefix.size() &&
          value.compare(0, prefix.size(), prefix) == 0;
@@ -440,17 +507,31 @@ text::JsonValue completion_items(const Document& document,
   const usize offset = document.index().byte_offset(document.text(), position);
   const std::string_view prefix = prefix_at(document.text(), offset);
   const usize qualifier_end = prefix.rfind("::");
-  const std::string_view name_prefix = qualifier_end == std::string_view::npos
-                                           ? prefix
-                                           : prefix.substr(qualifier_end + 2);
+  const bool qualified = qualifier_end != std::string_view::npos;
+  const std::string_view qualifier =
+      qualified ? prefix.substr(0, qualifier_end) : std::string_view{};
+  const std::string_view spelling =
+      qualified ? prefix.substr(0, qualifier_end + 2) : std::string_view{};
+  const std::string_view name_prefix =
+      qualified ? prefix.substr(qualifier_end + 2) : prefix;
   const usize prefix_start = offset - prefix.size();
   const bool after_dot =
       prefix_start > 0 && document.text()[prefix_start - 1] == '.';
 
   std::vector<Item> items;
   if (analysis.ok()) {
-    collect_locals(analysis, document.text(), offset, &items);
-    collect(analysis, analysis.package(), visible_names(analysis), &items);
+    std::vector<Item> matched;
+    if (qualified) {
+      collect_qualified(analysis, qualifier, spelling, &matched);
+    }
+    if (!matched.empty()) {
+      items = std::move(matched);
+    } else {
+      if (!qualified) {
+        collect_locals(analysis, document.text(), offset, &items);
+      }
+      collect(analysis, analysis.package(), visible_names(analysis), &items);
+    }
   }
   for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {
     if (keyword.category != lexer::KeywordCategory::Keyword) {
@@ -463,7 +544,10 @@ text::JsonValue completion_items(const Document& document,
 
   std::sort(items.begin(), items.end(),
             [](const Item& left, const Item& right) {
-              return left.label < right.label;
+              if (left.label != right.label) {
+                return left.label < right.label;
+              }
+              return left.qualified && !right.qualified;
             });
   items.erase(std::unique(items.begin(), items.end(),
                           [](const Item& left, const Item& right) {
@@ -476,9 +560,16 @@ text::JsonValue completion_items(const Document& document,
     if (!starts_with(item.label, name_prefix)) {
       continue;
     }
-    // After a receiver's dot only methods can apply; everywhere else a
-    // method name is not in scope. Keep both lists tight.
-    if (after_dot != (item.kind == CompletionItemKind::Method)) {
+    // After a receiver's dot only methods can apply. After `Type::`, a
+    // method or a variant is a candidate only when it matched the type
+    // the buffer already spelled.
+    if (qualified) {
+      if ((item.kind == CompletionItemKind::Method ||
+           item.kind == CompletionItemKind::EnumMember) &&
+          !item.qualified) {
+        continue;
+      }
+    } else if (after_dot != (item.kind == CompletionItemKind::Method)) {
       continue;
     }
     text::JsonValue entry = text::JsonValue::make_object();
