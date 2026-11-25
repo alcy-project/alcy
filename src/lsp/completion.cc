@@ -825,6 +825,202 @@ void collect_declared_methods(
   });
 }
 
+std::unordered_map<ast::ItemIdx, ast::ItemIdx, ItemIdxHash> impl_index(
+    const pipeline::PipelineContext& context) {
+  std::unordered_map<ast::ItemIdx, ast::ItemIdx, ItemIdxHash> result;
+  context.ast.items.for_each_node([&](ast::ItemIdx index) {
+    const ast::ItemNode& item = context.ast.items[index];
+    if (item.kind != ast::ItemKind::Impl) {
+      return;
+    }
+    for (const ast::ItemIdx method :
+         item.payload.get<ast::ItemImpl>().methods) {
+      result.emplace(method, index);
+    }
+  });
+  return result;
+}
+
+// The word immediately before a dot. An unfinished member access is
+// not checked as an expression, so its name is all the parser leaves.
+std::string_view word_before(std::string_view text, usize offset) {
+  usize end = offset;
+  while (end > 0 && text[end - 1] == ' ') {
+    --end;
+  }
+  usize start = end;
+  while (start > 0) {
+    const char c = text[start - 1];
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '_') {
+      --start;
+    } else {
+      break;
+    }
+  }
+  return text.substr(start, end - start);
+}
+
+std::optional<ir::TypeIdx> receiver_type(const DocumentAnalysis& analysis,
+                                         std::string_view text,
+                                         usize offset) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const source::FileId root = analysis.root();
+  // `offset` is the start of the member being typed; the dot is just
+  // before it and the receiver ends there.
+  const std::string_view spelling = word_before(text, offset - 1);
+  if (!spelling.empty()) {
+    std::unordered_map<ast::PatternIdx, ast::ExprIdx, PatternIdxHash> inits;
+    context.ast.stmts.for_each_node([&](ast::StmtIdx index) {
+      const ast::StmtNode& statement = context.ast.stmts[index];
+      if (statement.kind != ast::StmtKind::Decl ||
+          statement.span.file != root) {
+        return;
+      }
+      const ast::StmtDecl& declaration = statement.payload.get<ast::StmtDecl>();
+      if (declaration.pattern != ast::PatternIdx::invalid()) {
+        inits.emplace(declaration.pattern, declaration.init);
+      }
+    });
+    std::optional<ir::TypeIdx> found;
+    context.ast.patterns.for_each_node([&](ast::PatternIdx index) {
+      if (found.has_value()) {
+        return;
+      }
+      const ast::PatternNode& node = context.ast.patterns[index];
+      std::string_view name;
+      if (node.kind == ast::PatternKind::Ident) {
+        name = node.payload.ident.name.name;
+      } else if (node.kind == ast::PatternKind::MutIdent) {
+        name = node.payload.mut_ident.name.name;
+      } else {
+        return;
+      }
+      if (name != spelling || node.payload.ident.name.span.file != root) {
+        return;
+      }
+      const auto init = inits.find(index);
+      if (init == inits.end() || init->second == ast::ExprIdx::invalid()) {
+        return;
+      }
+      found = checked_expr_type(package, init->second);
+    });
+    if (found.has_value()) {
+      return found;
+    }
+  }
+  // A receiver that is not a plain name, such as a call's result,
+  // still has an expression span the checker may have typed.
+  if (offset >= 2) {
+    // A member access follows the expression that ends at the dot.
+    // Looking by containment would pick a desugared loop expression
+    // that happens to overlap the same byte.
+    const usize dot = offset - 1;
+    std::optional<ast::ExprIdx> receiver;
+    usize closest = 0;
+    usize longest = 0;
+    context.ast.exprs.for_each_node([&](ast::ExprIdx index) {
+      const diag::Span span = context.ast.exprs[index].span;
+      const usize end = span.offset + span.length;
+      // A parenthesized receiver leaves a closer between its last
+      // expression and the dot; a call leaves the call's own closer.
+      if (span.file != root || end > dot || dot - end > 2) {
+        return;
+      }
+      if (!receiver.has_value() || end > closest ||
+          (end == closest && span.length > longest)) {
+        receiver = index;
+        closest = end;
+        longest = span.length;
+      }
+    });
+    if (receiver.has_value()) {
+      return checked_expr_type(package, *receiver);
+    }
+  }
+  return std::nullopt;
+}
+
+// Methods a receiver of `type` can name, from the checked method table
+// and from declarations whose impl was never instantiated. An editor
+// completion must not offer every method name in the package: a dot
+// names one receiver, whose module need not be imported by name.
+void collect_receiver_methods(const DocumentAnalysis& analysis,
+                              ir::TypeIdx type,
+                              std::vector<Item>* out) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const ir::StorageState& state = analysis.types();
+  const std::string_view name = nominal_name(context, state, type);
+  const ir::TypeIdxRange spelled = nominal_arguments(state, type);
+  std::optional<std::vector<ir::TypeIdx>> wanted;
+  wanted.emplace();
+  for (const ir::TypeIdx argument : spelled) {
+    wanted->push_back(argument);
+  }
+  const auto impls = impl_index(context);
+
+  for (const analyzer::CheckedModule& module : package.modules) {
+    for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
+      if (!method.item.is_valid() ||
+          method.receiver == analyzer::CheckedModule::ReceiverKind::None ||
+          nominal_name(context, state, method.self_type) != name) {
+        continue;
+      }
+      if (method.method_inst != analyzer::PARAM_INST &&
+          !same_type(state, method.self_type, type)) {
+        continue;
+      }
+      const auto owner = impls.find(method.item);
+      if (owner != impls.end() &&
+          !bounds_ok(context, package, state, owner->second, wanted)) {
+        continue;
+      }
+      out->push_back(
+          Item{std::string(method.name),
+               function_detail(context, state, method.params, method.ret,
+                               variadic_param_name(context, method.item),
+                               method.item),
+               method.item, CompletionItemKind::Method, "", true});
+    }
+  }
+
+  context.ast.items.for_each_node([&](ast::ItemIdx index) {
+    const ast::ItemNode& item = context.ast.items[index];
+    if (item.kind != ast::ItemKind::Impl ||
+        !bounds_ok(context, package, state, index, wanted)) {
+      return;
+    }
+    const ast::ItemImpl& impl = item.payload.get<ast::ItemImpl>();
+    if (impl.type == ast::TypeIdx::invalid() ||
+        context.ast.types[impl.type].kind != ast::TypeKind::Path) {
+      return;
+    }
+    const ast::TypePath& path =
+        context.ast.types[impl.type].payload.get<ast::TypePath>();
+    if (path.path == ast::PathIdx::invalid() ||
+        context.ast.paths[path.path].segments.empty() ||
+        context.ast.paths[path.path].segments.back().name != name) {
+      return;
+    }
+    for (const ast::ItemIdx method : impl.methods) {
+      const ast::ItemNode& node = context.ast.items[method];
+      if (node.kind != ast::ItemKind::Fn) {
+        continue;
+      }
+      const ast::ItemFn& fn = node.payload.get<ast::ItemFn>();
+      if (fn.params.empty() ||
+          bound_name(context.ast, fn.params[0].pattern) != "self") {
+        continue;
+      }
+      out->push_back(Item{std::string(fn.name.name),
+                          written_signature(context, method), method,
+                          CompletionItemKind::Method, "", true, true});
+    }
+  });
+}
+
 void collect_qualified(const DocumentAnalysis& analysis,
                        std::string_view qualifier,
                        std::string_view spelling,
@@ -863,17 +1059,7 @@ void collect_qualified(const DocumentAnalysis& analysis,
     }
   }
 
-  std::unordered_map<ast::ItemIdx, ast::ItemIdx, ItemIdxHash> impl_of;
-  context.ast.items.for_each_node([&](ast::ItemIdx index) {
-    const ast::ItemNode& item = context.ast.items[index];
-    if (item.kind != ast::ItemKind::Impl) {
-      return;
-    }
-    for (const ast::ItemIdx method :
-         item.payload.get<ast::ItemImpl>().methods) {
-      impl_of.emplace(method, index);
-    }
-  });
+  const auto impl_of = impl_index(context);
 
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
@@ -945,21 +1131,32 @@ text::JsonValue completion_items(const Document& document,
 
   std::vector<Item> items;
   if (analysis.ok()) {
-    std::vector<Item> matched;
-    if (qualified) {
-      collect_qualified(analysis, qualifier, spelling, &matched);
-    }
-    if (!matched.empty()) {
-      items = std::move(matched);
-    } else {
-      if (!qualified) {
-        collect_locals(analysis, document.text(), offset, &items);
+    if (after_dot) {
+      // The name before the dot has a checked type; only its methods
+      // can follow. A method declared in another module is still a
+      // candidate, but the receiver decides which ones.
+      const std::optional<ir::TypeIdx> receiver =
+          receiver_type(analysis, document.text(), prefix_start);
+      if (receiver.has_value()) {
+        collect_receiver_methods(analysis, *receiver, &items);
       }
-      collect(analysis, analysis.package(), visible_names(analysis), &items);
+    } else {
+      std::vector<Item> matched;
+      if (qualified) {
+        collect_qualified(analysis, qualifier, spelling, &matched);
+      }
+      if (!matched.empty()) {
+        items = std::move(matched);
+      } else {
+        if (!qualified) {
+          collect_locals(analysis, document.text(), offset, &items);
+        }
+        collect(analysis, analysis.package(), visible_names(analysis), &items);
+      }
     }
   }
-  // A qualifier names a type or a module, not a keyword.
-  if (!qualified) {
+  // Neither a qualifier nor a receiver dot names a keyword.
+  if (!qualified && !after_dot) {
     for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {
       if (keyword.category != lexer::KeywordCategory::Keyword) {
         continue;

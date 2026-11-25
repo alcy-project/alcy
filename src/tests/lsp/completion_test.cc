@@ -253,6 +253,22 @@ TEST_CASE("Completion inserts a variant after a generic qualifier") {
   }
 }
 
+TEST_CASE("Completion after a dot offers only the receiver's methods") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() -> i32 {\n"
+                          "  a := Vec::<i32>::new()\n"
+                          "  a.\n"
+                          "  ret 0\n"
+                          "}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{2, 4});
+  CHECK(find_item(list, "push") != nullptr);
+  CHECK(find_item(list, "stdin") == nullptr);
+  CHECK(find_item(list, "file_name") == nullptr);
+  CHECK(find_item(list, "fn") == nullptr);
+}
+
 TEST_CASE("Completion offers locals and parameters with their types") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn use_it(v: i32) -> i32 {\n"
