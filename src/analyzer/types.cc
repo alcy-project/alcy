@@ -5481,7 +5481,18 @@ base::Result<CheckedPackage, diag::Reported> check_package(
   }
   package.spec_impls.reserve(checker.spec_impls.size());
   for (const SpecImplEntry& impl : checker.spec_impls) {
-    package.spec_impls.push_back({impl.spec, impl.item});
+    CheckedPackage::SpecImplDecl published{impl.spec, impl.item};
+    if (impl.target.is_primitive) {
+      published.primitive = impl.target.primitive;
+    } else if (impl.target.nominal < checker.nominals.size()) {
+      published.nominal = checker.nominals[impl.target.nominal].item;
+      for (const SpecTarget::Arg& arg : impl.target.args) {
+        if (arg.is_param || arg.shape != ast::TypeIdx::invalid()) {
+          published.generic = true;
+        }
+      }
+    }
+    package.spec_impls.push_back(published);
   }
   // Generic instantiations lower as ordinary nominals; publish their
   // field or variant names under the defining module for lowering

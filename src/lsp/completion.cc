@@ -209,6 +209,10 @@ struct PatternIdxHash {
   usize operator()(ast::PatternIdx index) const { return index.idx; }
 };
 
+struct ItemIdxHash {
+  usize operator()(ast::ItemIdx index) const { return index.idx; }
+};
+
 bool span_contains(diag::Span span, usize offset) {
   return span.offset <= offset && offset < span.offset + span.length;
 }
@@ -600,6 +604,121 @@ std::string_view nominal_name(const pipeline::PipelineContext& context,
 // Associated functions and variant constructors the typed qualifier
 // names. A qualifier such as `Vec::<i32>::` still reads as `Vec` here:
 // the arguments do not change which declarations are candidates.
+std::optional<u32> spec_index(const analyzer::CheckedPackage& package,
+                              std::string_view name) {
+  for (u32 i = 0; i < package.specs.size(); ++i) {
+    if (package.specs[i].name == name) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+// Whether a published spec implementation covers the given type. A
+// generic target that names a declaration covers any instantiation of
+// it; a primitive target has to match the concrete type.
+bool implements_spec(const pipeline::PipelineContext& context,
+                     const analyzer::CheckedPackage& package,
+                     const ir::StorageState& state,
+                     ir::TypeIdx type,
+                     std::string_view spec_name) {
+  const std::optional<u32> index = spec_index(package, spec_name);
+  if (!index.has_value()) {
+    return false;
+  }
+  // The compiler owns these two: no impl record exists for them.
+  if (spec_name == "Copy") {
+    return ir::is_copy_type(state, type, package.needs_drop,
+                            package.not_movable);
+  }
+  if (spec_name == "Zeroable") {
+    using T = ir::TypeTag;
+    switch (state.types[type].tag) {
+      case T::I1:
+      case T::I8:
+      case T::I16:
+      case T::I32:
+      case T::I64:
+      case T::U8:
+      case T::U16:
+      case T::U32:
+      case T::U64:
+      case T::Isize:
+      case T::Usize:
+      case T::F32:
+      case T::F64:
+      case T::Char:
+      case T::Rune: return true;
+      default: return false;
+    }
+  }
+  const std::string_view nominal = nominal_name(context, state, type);
+  for (const analyzer::CheckedPackage::SpecImplDecl& impl :
+       package.spec_impls) {
+    if (impl.spec != *index) {
+      continue;
+    }
+    if (impl.primitive != ir::TypeIdx::invalid() &&
+        same_type(state, impl.primitive, type)) {
+      return true;
+    }
+    if (impl.nominal.is_valid() && !nominal.empty() &&
+        context.ast.items[impl.nominal].name() == nominal) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::vector<std::string_view> spec_bounds(
+    const pipeline::PipelineContext& context,
+    const ast::GenericParam& param) {
+  std::vector<std::string_view> names;
+  const auto add = [&](ast::TypeIdx type) {
+    if (type == ast::TypeIdx::invalid() ||
+        context.ast.types[type].kind != ast::TypeKind::Path) {
+      return;
+    }
+    const ast::TypePath& path =
+        context.ast.types[type].payload.get<ast::TypePath>();
+    if (path.path != ast::PathIdx::invalid() &&
+        !context.ast.paths[path.path].segments.empty()) {
+      names.push_back(context.ast.paths[path.path].segments.back().name);
+    }
+  };
+  add(param.type);
+  for (const ast::TypeIdx bound : param.bounds) {
+    add(bound);
+  }
+  return names;
+}
+
+// An impl whose bounds the typed arguments cannot satisfy contributes
+// no candidates. When an argument cannot be resolved, keep the
+// declaration: a missing answer is not proof the bound fails.
+bool bounds_ok(const pipeline::PipelineContext& context,
+               const analyzer::CheckedPackage& package,
+               const ir::StorageState& state,
+               ast::ItemIdx impl_item,
+               const std::optional<std::vector<ir::TypeIdx>>& wanted) {
+  const ast::ItemImpl& impl =
+      context.ast.items[impl_item].payload.get<ast::ItemImpl>();
+  if (impl.params.empty() || !wanted.has_value()) {
+    return true;
+  }
+  for (usize i = 0; i < impl.params.size(); ++i) {
+    if (i >= wanted->size()) {
+      return true;
+    }
+    for (const std::string_view bound : spec_bounds(context, impl.params[i])) {
+      if (!implements_spec(context, package, state, (*wanted)[i], bound)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 std::string_view written_type(const pipeline::PipelineContext& context,
                               ast::TypeIdx type) {
   if (type == ast::TypeIdx::invalid()) {
@@ -659,12 +778,20 @@ std::string written_signature(const pipeline::PipelineContext& context,
 
 // Associated functions declared for the nominated type, including
 // those whose impl has not been instantiated in the buffer.
-void collect_declared_methods(const pipeline::PipelineContext& context,
-                              std::string_view name,
-                              std::vector<Item>* out) {
+void collect_declared_methods(
+    const DocumentAnalysis& analysis,
+    std::string_view name,
+    const std::optional<std::vector<ir::TypeIdx>>& wanted,
+    std::vector<Item>* out) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const ir::StorageState& state = analysis.types();
   context.ast.items.for_each_node([&](ast::ItemIdx index) {
     const ast::ItemNode& item = context.ast.items[index];
     if (item.kind != ast::ItemKind::Impl) {
+      return;
+    }
+    if (!bounds_ok(context, package, state, index, wanted)) {
       return;
     }
     const ast::ItemImpl& impl = item.payload.get<ast::ItemImpl>();
@@ -736,6 +863,18 @@ void collect_qualified(const DocumentAnalysis& analysis,
     }
   }
 
+  std::unordered_map<ast::ItemIdx, ast::ItemIdx, ItemIdxHash> impl_of;
+  context.ast.items.for_each_node([&](ast::ItemIdx index) {
+    const ast::ItemNode& item = context.ast.items[index];
+    if (item.kind != ast::ItemKind::Impl) {
+      return;
+    }
+    for (const ast::ItemIdx method :
+         item.payload.get<ast::ItemImpl>().methods) {
+      impl_of.emplace(method, index);
+    }
+  });
+
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
       if (!method.item.is_valid() ||
@@ -747,6 +886,11 @@ void collect_qualified(const DocumentAnalysis& analysis,
           !arguments_match(state, method.self_type, *wanted)) {
         continue;
       }
+      const auto owner = impl_of.find(method.item);
+      if (owner != impl_of.end() &&
+          !bounds_ok(context, package, state, owner->second, wanted)) {
+        continue;
+      }
       out->push_back(
           Item{std::string(method.name),
                function_detail(context, state, method.params, method.ret,
@@ -755,7 +899,7 @@ void collect_qualified(const DocumentAnalysis& analysis,
                method.item, CompletionItemKind::Method, "", true});
     }
   }
-  collect_declared_methods(context, name, out);
+  collect_declared_methods(analysis, name, wanted, out);
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
       if (info.name != name) {

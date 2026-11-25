@@ -517,9 +517,16 @@ struct CheckedPackage {
   };
   std::vector<SpecDecl> specs;
   // One spec implementation block: the spec it implements and its item.
+  // A primitive target carries its type; a nominal target carries the
+  // declaration, with `generic` set when the target spells an impl
+  // parameter. Enough for an editor to ask whether a type implements a
+  // spec without holding the checker's scope.
   struct SpecImplDecl {
     u32 spec = NO_SPEC;
     ast::ItemIdx item = ast::ItemIdx::invalid();
+    ir::TypeIdx primitive = ir::TypeIdx::invalid();
+    ast::ItemIdx nominal = ast::ItemIdx::invalid();
+    bool generic = false;
   };
   std::vector<SpecImplDecl> spec_impls;
 };

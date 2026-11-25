@@ -217,6 +217,22 @@ TEST_CASE("Completion offers declared associated functions for a qualifier") {
   CHECK(find_item(for_bytes, "from_slice") != nullptr);
 }
 
+TEST_CASE("Completion hides an impl whose bounds the type does not meet") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "struct Plain {\n"
+                          "  x: i32,\n"
+                          "}\n"
+                          "fn main() -> i32 {\n"
+                          "  v := Vec::<Plain>::\n"
+                          "  ret 0\n"
+                          "}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{4, 21});
+  CHECK(find_item(list, "new") != nullptr);
+  CHECK(find_item(list, "zeros") == nullptr);
+}
+
 TEST_CASE("Completion inserts a variant after a generic qualifier") {
   const Document document("file:///main.al", "alcy", 1,
                           "fn main() -> i32 {\n"
