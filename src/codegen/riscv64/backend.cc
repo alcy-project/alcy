@@ -209,7 +209,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
   };
   std::vector<Selected> functions;
   BacktraceTables tables;
-  tables.enabled = request.emit_entry && request.options.backtrace;
+  tables.enabled = request.options.backtrace;
   for (const ir::FunctionIdx index : storage.functions().idx_range()) {
     if (!reachable[index.idx] || parametric[index.idx]) {
       continue;

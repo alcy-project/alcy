@@ -246,6 +246,7 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
   const u32 site_advance = body.label_count++;
   const u32 print_newline = body.label_count++;
   const u32 skip_print = body.label_count++;
+  const u32 no_match = body.label_count++;
   const u32 finish = body.label_count++;
   body.insts.push_back(
       make_inst(MOp::Addi, 8, Operand{cursor}, Operand{S1}, Operand{Imm{0}}));
@@ -281,11 +282,11 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
       make_inst(MOp::Ld, 8, Operand{length},
                 Operand{Mem{.base = RegRef{table}, .disp = 16}}));
   MInst at_end = make_inst(MOp::Beq, 8, Operand{start}, Operand{sentinel},
-                           Operand{Label{skip_print}});
+                           Operand{Label{no_match}});
   at_end.cond = Cond::Eq;
   body.insts.push_back(at_end);
   MInst too_high = make_inst(MOp::Bltu, 8, Operand{pc}, Operand{start},
-                             Operand{Label{skip_print}});
+                             Operand{Label{no_match}});
   too_high.cond = Cond::Ltu;
   body.insts.push_back(too_high);
   body.insts.push_back(
@@ -376,6 +377,9 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
   at_frame_next.label = skip_print;
   body.insts.push_back(at_frame_next);
   write_text(body, newline, 1);
+  MInst at_no_match = make_inst(MOp::Nop, 8);
+  at_no_match.label = no_match;
+  body.insts.push_back(at_no_match);
   body.insts.push_back(
       make_inst(MOp::Ld, 8, Operand{previous},
                 Operand{Mem{.base = RegRef{cursor}, .disp = PREV_FP_DISP}}));
@@ -445,7 +449,7 @@ Body build_panic(RoData& rodata, bool backtrace) {
     emit_backtrace_walk(body, rodata);
   }
   body.insts.push_back(
-      make_inst(MOp::Addi, 8, Operand{A0}, Operand{ZERO}, Operand{Imm{101}}));
+      make_inst(MOp::Addi, 8, Operand{A0}, Operand{ZERO}, Operand{Imm{1}}));
   ecall(body, SYS_EXIT);
   return body;
 }
