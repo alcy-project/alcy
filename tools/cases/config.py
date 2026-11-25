@@ -33,7 +33,7 @@ EXPECT_KEYS = frozenset(
         "walk_stderr_contains",
     }
 )
-SWEEP_KEYS = frozenset({"sanitize", "wasm"})
+SWEEP_KEYS = frozenset({"sanitize", "wasm", "qemu"})
 
 
 class CaseError(Exception):
@@ -69,6 +69,7 @@ class ProgramStep:
     expect: Expect | None = None
     skip_sanitize: str = ""
     skip_wasm: str = ""
+    skip_qemu: str = ""
 
 
 @dataclass(frozen=True)
@@ -182,6 +183,7 @@ def read_case(path: Path) -> Case:
             expect=_expect(f"{config}: [program]", step.get("expect")),
             skip_sanitize=skip.get("sanitize", ""),
             skip_wasm=skip.get("wasm", ""),
+            skip_qemu=skip.get("qemu", ""),
         )
 
     if cli is None and program is None:

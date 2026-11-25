@@ -33,6 +33,13 @@ WASM_TARGET = "wasm32-unknown-emscripten"
 WASM_BACKEND = "direct-wasm"
 WASM_MODULE = "main.wasm"
 
+# A riscv64 freestanding program is emitted as an object, linked with the
+# system clang/lld, and run under qemu-user. The backend is young, so a
+# case that names a skip in case.toml is reported as a note, not a failure.
+RISCV_TARGET = "riscv64-unknown-linux-gnu"
+RISCV_BACKEND = "direct-riscv64"
+QEMU = shutil.which("qemu-riscv64")
+
 # Bun runs the module against WASI. Without it the differential cannot
 # happen, which is a refusal for the same reason as a missing clang.
 WASM_INTERPRETER = shutil.which("bun")
@@ -83,6 +90,7 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         cwd=work,
         env=run_environment(),
     )
@@ -92,7 +100,12 @@ def build_sanitized(alcy: Path, work: Path, is_package: bool, exe: Path, args):
     mark_instrumentable(ir)
     link = [SYSTEM_CLANG, "-x", "ir", str(ir), *SANITIZERS, "-o", str(exe)]
     proc = subprocess.run(
-        link, capture_output=True, text=True, encoding="utf-8", cwd=work
+        link,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=work,
     )
     if proc.returncode != 0:
         return proc, "clang could not compile the generated IR"
@@ -342,6 +355,11 @@ def run(
             return None, step.skip_wasm
         if WASM_INTERPRETER is None:
             return False, "bun is not on PATH, so the module cannot be run"
+    if mode == "qemu":
+        if step.skip_qemu:
+            return None, step.skip_qemu
+        if QEMU is None or SYSTEM_CLANG is None:
+            return False, "qemu-riscv64 and clang are needed for a qemu run"
     sanitize = mode == "sanitized"
     if sanitize:
         if step.skip_sanitize:
@@ -356,7 +374,11 @@ def run(
     # The walk is a property of the runtime the program runs on. The
     # direct wasm backend writes the message and its site and exits, so a
     # module owes no frame even on a host whose frame pointer is a chain.
-    if expect is not None and host_walks_frames() and mode != "wasm":
+    if (
+        expect is not None
+        and mode != "wasm"
+        and (mode == "qemu" or host_walks_frames())
+    ):
         stderr_contains += list(expect.walk_stderr_contains)
 
     is_package = (work / "alcy.toml").is_file()
@@ -389,6 +411,7 @@ def run(
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
             cwd=work,
             env=env,
         )
@@ -410,12 +433,78 @@ def run(
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
+                errors="replace",
                 cwd=work,
                 input=expected_input,
                 env=env,
             )
         except OSError as e:
             return False, f"cannot run '{WASM_MODULE}': {e}"
+    elif mode == "qemu":
+        # The riscv64 backend emits a freestanding object; the system
+        # linker and qemu-user supply the rest.
+        obj = work / "main_rv.o"
+        exe = work / "main_rv"
+        proc = subprocess.run(
+            [
+                str(alcy),
+                command,
+                target,
+                *extra_args,
+                f"--target={RISCV_TARGET}",
+                f"--backend={RISCV_BACKEND}",
+                "--freestanding",
+                "--emit=object",
+                "-o",
+                str(obj),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=work,
+            env=env,
+        )
+        if proc.returncode != 0:
+            return False, (
+                f"alcy {command} for riscv64 failed: exit={proc.returncode}\n"
+                f"--- build stdout ---\n{proc.stdout}"
+                f"--- build stderr ---\n{proc.stderr}"
+            )
+        proc = subprocess.run(
+            [
+                SYSTEM_CLANG,
+                "--target=riscv64-unknown-linux-gnu",
+                "-fuse-ld=lld",
+                "-nostdlib",
+                "-static",
+                "-Wl,-e,_start",
+                str(obj),
+                "-o",
+                str(exe),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=work,
+        )
+        if proc.returncode != 0:
+            return False, f"clang could not link the riscv64 object: {proc.stderr}"
+        try:
+            proc = subprocess.run(
+                [QEMU, str(exe)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=work,
+                input=expected_input,
+                env=env,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "qemu-riscv64 timed out"
     else:
         if sanitize:
             proc, why = build_sanitized(
@@ -432,6 +521,7 @@ def run(
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
+                errors="replace",
                 cwd=work,
                 env=env,
             )
@@ -466,6 +556,7 @@ def run(
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
+                errors="replace",
                 cwd=work,
                 input=expected_input,
                 env=run_env,

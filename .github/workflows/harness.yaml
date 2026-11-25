@@ -24,6 +24,11 @@ on:
         type: boolean
         required: false
         default: false
+      qemu:
+        description: "Whether the check runs riscv64 programs under qemu-user"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -72,6 +77,13 @@ jobs:
         run: |
           py=$(command -v python3 || command -v python)
           echo "bun=$("$py" tools/config_values.py --get bun_version)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup qemu-user
+        if: inputs.qemu
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user
 
       - name: Setup Bun
         if: inputs.bun

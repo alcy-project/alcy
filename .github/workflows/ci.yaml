@@ -419,11 +419,16 @@ jobs:
           - name: Wasm Programs
             command: uv run ./tools/check_cases.py --steps=program --mode=wasm --build-subdir=build
             bun: true
+          - name: Riscv64 Programs
+            command: uv run ./tools/check_cases.py --steps=program --mode=qemu --build-subdir=build
+            bun: false
+            qemu: true
     uses: ./.github/workflows/harness.yaml
     with:
       name: ${{ matrix.name }}
       command: ${{ matrix.command }}
       bun: ${{ matrix.bun }}
+      qemu: ${{ matrix.qemu }}
 
   # The engine is built and run, and what comes out is checked for shape:
   # every case present, every sample counted, a clock named, a figure

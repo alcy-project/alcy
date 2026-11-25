@@ -47,7 +47,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=("native", "sanitized", "wasm"),
+        choices=("native", "sanitized", "wasm", "qemu"),
         default="native",
         help="how a program step is built and executed",
     )
@@ -79,6 +79,10 @@ def main() -> int:
         return log.die("a sanitized run needs clang on PATH")
     if args.mode == "wasm" and not shutil_which("bun"):
         return log.die("a wasm run needs bun on PATH")
+    if args.mode == "qemu" and not (
+        shutil_which("qemu-riscv64") and shutil_which("clang")
+    ):
+        return log.die("a qemu run needs qemu-riscv64 and clang on PATH")
 
     names = {name.strip() for name in args.cases.split(",") if name.strip()} or None
     # A freestanding program owns its entry and links no C runtime.
