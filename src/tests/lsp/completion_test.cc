@@ -189,7 +189,12 @@ TEST_CASE("Completion offers declared associated functions for a qualifier") {
   const DocumentAnalysis boolean_analysis(boolean);
   const text::JsonValue for_bool =
       completion_items(boolean, boolean_analysis, Position{1, 20});
-  CHECK(find_item(for_bool, "new") != nullptr);
+  CHECK(find_item(for_bool, "fn") == nullptr);
+  const text::JsonValue* make = find_item(for_bool, "new");
+  CHECK(make != nullptr);
+  if (make != nullptr) {
+    CHECK(make->find("detail")->as_string() == "() -> Vec<T>");
+  }
   CHECK(find_item(for_bool, "zeros") != nullptr);
   const text::JsonValue* slice = find_item(for_bool, "from_slice");
   CHECK(slice != nullptr);

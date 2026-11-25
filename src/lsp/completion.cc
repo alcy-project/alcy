@@ -45,6 +45,9 @@ struct Item {
   // The item was matched to the qualifier the buffer already typed, so
   // it stays eligible after `Type::` even though it is a method.
   bool qualified = false;
+  // The signature came from the declaration rather than a specialization
+  // another call happened to create.
+  bool declared = false;
 };
 
 std::string_view prefix_at(std::string_view text, usize offset) {
@@ -690,7 +693,7 @@ void collect_declared_methods(const pipeline::PipelineContext& context,
       }
       out->push_back(Item{std::string(fn.name.name),
                           written_signature(context, method), method,
-                          CompletionItemKind::Method, "", true});
+                          CompletionItemKind::Method, "", true, true});
     }
   });
 }
@@ -811,13 +814,16 @@ text::JsonValue completion_items(const Document& document,
       collect(analysis, analysis.package(), visible_names(analysis), &items);
     }
   }
-  for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {
-    if (keyword.category != lexer::KeywordCategory::Keyword) {
-      continue;
+  // A qualifier names a type or a module, not a keyword.
+  if (!qualified) {
+    for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {
+      if (keyword.category != lexer::KeywordCategory::Keyword) {
+        continue;
+      }
+      items.push_back(Item{std::string(keyword.spelling), "",
+                           ast::ItemIdx::invalid(), CompletionItemKind::Keyword,
+                           ""});
     }
-    items.push_back(Item{std::string(keyword.spelling), "",
-                         ast::ItemIdx::invalid(), CompletionItemKind::Keyword,
-                         ""});
   }
 
   std::sort(items.begin(), items.end(),
@@ -825,7 +831,10 @@ text::JsonValue completion_items(const Document& document,
               if (left.label != right.label) {
                 return left.label < right.label;
               }
-              return left.qualified && !right.qualified;
+              if (left.qualified != right.qualified) {
+                return left.qualified && !right.qualified;
+              }
+              return left.declared && !right.declared;
             });
   items.erase(std::unique(items.begin(), items.end(),
                           [](const Item& left, const Item& right) {
