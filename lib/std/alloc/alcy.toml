@@ -17,3 +17,4 @@ export = ["prelude", "box", "collect", "heap", "vec"]
 
 [dependencies]
 "alcy/std/core" = {}
+"alcy/std/sort" = {}

@@ -16,5 +16,6 @@ export = ["prelude", "env"]
 [dependencies]
 "alcy/std/core" = {}
 "alcy/std/alloc" = {}
+"alcy/std/sort" = {}
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}

@@ -198,6 +198,14 @@ peripheral work lives in `backlog.md`. The language record lives in
   system can express them as methods; that door is named, not
   promised.
 
+- [x] Sorting as its own package.
+
+  `sort` holds algorithms over `&mut [T]`, depending only on `core` so
+  a baremetal selection can leave it out. `Vec::sort` and `sort_by`
+  stay as methods on the container and delegate to it; the dependency
+  runs `alloc -> sort -> core` with no cycle. Each alternative sort
+  becomes a module of this package, selected explicitly by path.
+
 - [x] Bytes-first input.
   Over `sys` and `Parse`: `io::BufReader` (one-call `fill`,
   `read_byte`, `read_line` with the CRLF rule and no UTF-8 validation,

@@ -21,6 +21,7 @@ export = ["prelude"]
 "alcy/std/io" = {}
 "alcy/std/path" = {}
 "alcy/std/alloc" = {}
+"alcy/std/sort" = {}
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}
 "alcy/std/text" = {}

@@ -179,18 +179,7 @@ impl<T> Vec<T> {
   // order and equal elements keep theirs. Elements move by swapping
   // through the buffer, so a move-only `T` never copies.
   pub fn sort_by(mut self: &mut Self, less: (&T, &T) -> bool) {
-    mut i := 1 as usize
-    while i < self.len {
-      mut j := i
-      while j > 0 {
-        if !less(&self[j], &self[j - 1]) {
-          break
-        }
-        self.swap(j - 1, j)
-        j = j - 1
-      }
-      i = i + 1
-    }
+    sort::sorting::sort_by(self.as_mut_slice(), less)
   }
 
   // A left fold: `acc` starts the state and `step` carries it across
@@ -522,18 +511,7 @@ impl<T: PartialEq> Vec<T> {
 // `PartialOrd` sorts through `sort_by`.
 impl<T: Ord> Vec<T> {
   pub fn sort(mut self: &mut Self) {
-    mut i := 1 as usize
-    while i < self.len {
-      mut j := i
-      while j > 0 {
-        if !self[j].cmp(&self[j - 1]).is_lt() {
-          break
-        }
-        self.swap(j - 1, j)
-        j = j - 1
-      }
-      i = i + 1
-    }
+    sort::sorting::sort(self.as_mut_slice())
   }
 }
 

@@ -11,6 +11,7 @@ include = ["main"]
 "alcy/std/alloc" = {}
 "alcy/std/collections" = {}
 "alcy/std/hash" = {}
+"alcy/std/sort" = {}
 "alcy/std/text" = {}
 "alcy/std/unicode" = {}
 

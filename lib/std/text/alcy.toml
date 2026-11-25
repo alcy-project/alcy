@@ -19,4 +19,5 @@ export = ["prelude", "string"]
 [dependencies]
 "alcy/std/core" = {}
 "alcy/std/alloc" = {}
+"alcy/std/sort" = {}
 "alcy/std/unicode" = {}

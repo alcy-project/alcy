@@ -19,6 +19,7 @@ export = ["prelude", "args", "file", "print", "reader", "scanner"]
 "alcy/std/core" = {}
 "alcy/std/sys" = {}
 "alcy/std/alloc" = {}
+"alcy/std/sort" = {}
 "alcy/std/arch" = {}
 "alcy/std/fmt" = {}
 "alcy/std/text" = {}

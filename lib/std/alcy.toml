@@ -14,6 +14,7 @@ packages = [
   "alloc",
   "hash",
   "collections",
+  "sort",
   "atomic",
   "sync",
   "io",
