@@ -413,7 +413,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
       // A variant past the first is an error: the status is one and
       // the reason goes to stderr, the same as the other backends.
       constexpr std::string_view kError = "main returned Err\n";
-      const std::string& message = rodata.intern(kError);
+      const std::string& message = rodata.name(rodata.intern(kError));
       const u32 message_id = static_cast<u32>(wrapper.symbols.size());
       wrapper.symbols.push_back(message);
       wrapper.insts.push_back(make_inst(MOp::Mov, 4, Operand{Reg::Rax},
@@ -519,7 +519,7 @@ base::Result<std::vector<u8>, codegen::EmitError> X8664::emit(
     put_u64(0);
   };
   const auto put_text = [&](std::string_view text_bytes) {
-    const std::string& name = rodata.intern(text_bytes);
+    const std::string& name = rodata.name(rodata.intern(text_bytes));
     object.relocations.push_back(object::Relocation{
         .section = section,
         .offset = text.bytes.size(),

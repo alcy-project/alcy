@@ -20,7 +20,6 @@ source_set("x86_64") {
     "minst.h",
     "printer.cc",
     "printer.h",
-    "rodata.cc",
     "rodata.h",
     "runtime.cc",
     "runtime.h",

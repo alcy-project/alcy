@@ -1,15 +1,12 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "codegen/riscv64/rodata.h"
+#include "codegen/rodata.h"
 
 #include <string>
 #include <string_view>
-#include <utility>
 
-#include "fpag/base/numeric.h"
-
-namespace codegen::riscv64 {
+namespace codegen {
 
 u32 RoData::intern(const std::string_view bytes) {
   const auto found = index_.find(bytes);
@@ -23,4 +20,4 @@ u32 RoData::intern(const std::string_view bytes) {
   return at;
 }
 
-}  // namespace codegen::riscv64
+}  // namespace codegen

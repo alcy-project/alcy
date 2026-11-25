@@ -10,6 +10,8 @@ source_set("codegen") {
     "function_symbols.h",
     "reachability.cc",
     "reachability.h",
+    "rodata.cc",
+    "rodata.h",
     "target.cc",
     "target.h",
   ]

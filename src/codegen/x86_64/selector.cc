@@ -415,8 +415,8 @@ std::optional<Operand> Selector::operand_of(const ir::Operand& op) {
     if (tag == ir::TypeTag::Str) {
       // A string literal is the two words its reference carries, and
       // the data section holds the bytes once.
-      return Operand{
-          string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)))};
+      return Operand{string_ref(
+          rodata_.name(rodata_.intern(strings_.get(imm.data.str_id_value))))};
     }
     if (is_float(tag)) {
       // The IEEE bits of a float literal are the bytes the read-only
@@ -424,7 +424,7 @@ std::optional<Operand> Selector::operand_of(const ir::Operand& op) {
       const u64 bits = imm.as_u64_bits(tag);
       const u32 bytes = tag == ir::TypeTag::F32 ? 4 : 8;
       const std::string data(reinterpret_cast<const char*>(&bits), bytes);
-      return Operand{string_ref(rodata_.intern(data))};
+      return Operand{string_ref(rodata_.name(rodata_.intern(data)))};
     }
   }
   if (op.is<ir::FunctionIdx>()) {
@@ -696,7 +696,7 @@ bool Selector::receive_parameters(const ir::Block& entry) {
 
 void Selector::emit_panic_call(const std::string_view message,
                                const str::StringPoolId site) {
-  const SymbolRef text = string_ref(rodata_.intern(message));
+  const SymbolRef text = string_ref(rodata_.name(rodata_.intern(message)));
   push(make_inst(MOp::Mov, 8, Operand{Reg::Rdi}, Operand{text}));
   push(make_inst(MOp::Mov, 8, Operand{Reg::Rsi},
                  Operand{Imm{static_cast<i64>(message.size())}}));
@@ -705,7 +705,7 @@ void Selector::emit_panic_call(const std::string_view message,
     push(make_inst(MOp::Xor, 8, Operand{Reg::Rcx}, Operand{Reg::Rcx}));
   } else {
     const std::string_view where = strings_.get(site);
-    const SymbolRef name = string_ref(rodata_.intern(where));
+    const SymbolRef name = string_ref(rodata_.name(rodata_.intern(where)));
     push(make_inst(MOp::Mov, 8, Operand{Reg::Rdx}, Operand{name}));
     push(make_inst(MOp::Mov, 8, Operand{Reg::Rcx},
                    Operand{Imm{static_cast<i64>(where.size())}}));
@@ -916,7 +916,8 @@ std::optional<bool> Selector::emit_control(const ir::Instruction& instr,
               return false;
             }
             const std::string_view bytes = strings_.get(imm.data.str_id_value);
-            const SymbolRef text = string_ref(rodata_.intern(bytes));
+            const SymbolRef text =
+                string_ref(rodata_.name(rodata_.intern(bytes)));
             push(make_inst(MOp::Mov, 8, Operand{Reg::Rax}, Operand{text}));
             push(make_inst(MOp::Mov, 8, Operand{Reg::Rdx},
                            Operand{Imm{static_cast<i64>(bytes.size())}}));
@@ -1174,7 +1175,8 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
             const ir::Immutable& imm =
                 storage_.immutables()[value.as_immutable()];
             const std::string_view text = strings_.get(imm.data.str_id_value);
-            const SymbolRef bytes = string_ref(rodata_.intern(text));
+            const SymbolRef bytes =
+                string_ref(rodata_.name(rodata_.intern(text)));
             push(make_inst(MOp::Mov, 8,
                            Operand{Mem{.base = VReg{dst},
                                        .index = std::nullopt,
@@ -1459,8 +1461,8 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
             storage_.immutables()[operand_at(instr, 1).as_immutable()];
         const u64 which =
             index_imm.as_u64_integer(storage_.types()[index_imm.type.idx].tag);
-        const SymbolRef symbol =
-            string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)));
+        const SymbolRef symbol = string_ref(
+            rodata_.name(rodata_.intern(strings_.get(imm.data.str_id_value))));
         if (which == 0) {
           push(make_inst(MOp::Mov, 8, dst_reg_operand(instr), Operand{symbol}));
         } else {
@@ -1672,7 +1674,7 @@ bool Selector::emit_arithmetic(const ir::Instruction& instr,
       const u8 w = width_of(dst_value_tag(instr));
       const u64 sign = w == 4 ? 0x80000000ULL : 0x8000000000000000ULL;
       const std::string mask(reinterpret_cast<const char*>(&sign), w);
-      const SymbolRef mask_ref = string_ref(rodata_.intern(mask));
+      const SymbolRef mask_ref = string_ref(rodata_.name(rodata_.intern(mask)));
       const std::optional<Operand> src = scalar_of(operand_at(instr, 0), span);
       if (!src.has_value()) {
         return false;
@@ -2173,8 +2175,8 @@ bool Selector::emit_call(const ir::Instruction& instr,
         if (!value.is<ir::RegisterIdx>()) {
           const ir::Immutable& imm =
               storage_.immutables()[value.as_immutable()];
-          const SymbolRef bytes =
-              string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)));
+          const SymbolRef bytes = string_ref(rodata_.name(
+              rodata_.intern(strings_.get(imm.data.str_id_value))));
           spill(Operand{bytes});
           spill(Operand{Imm{
               static_cast<i64>(strings_.get(imm.data.str_id_value).size())}});
@@ -2187,8 +2189,8 @@ bool Selector::emit_call(const ir::Instruction& instr,
       }
       if (!value.is<ir::RegisterIdx>()) {
         const ir::Immutable& imm = storage_.immutables()[value.as_immutable()];
-        const SymbolRef bytes =
-            string_ref(rodata_.intern(strings_.get(imm.data.str_id_value)));
+        const SymbolRef bytes = string_ref(
+            rodata_.name(rodata_.intern(strings_.get(imm.data.str_id_value))));
         push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
                        Operand{bytes}));
         push(make_inst(MOp::Mov, 8, Operand{ARG_REGS[next_register++]},
