@@ -202,6 +202,27 @@ TEST_CASE("Hover shows parameter modifiers") {
   }
 }
 
+TEST_CASE("Hover on an unbound generic type shows no layout") {
+  const std::optional<std::string> markdown = hover(
+      "enum Maybe<T> {\n"
+      "  Some(T),\n"
+      "  None,\n"
+      "}\n"
+      "fn wrap<T>(x: T) -> Maybe<T> {\n"
+      "  ret Maybe::Some(x)\n"
+      "}\n"
+      "fn use_it<T>(x: T) -> i32 {\n"
+      "  y := wrap(x)\n"
+      "  ret 0\n"
+      "}\n",
+      8, 13);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("Maybe") != std::string::npos);
+    CHECK(markdown->find("size ") == std::string::npos);
+  }
+}
+
 TEST_CASE("Hover off every node answers nothing") {
   const std::optional<std::string> markdown =
       hover("struct Mix {\n  // just a note\n  a: u8,\n}\n", 1, 6);

@@ -3,10 +3,12 @@
 
 #include "lsp/hover.h"
 
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "analyzer/resolve.h"
 #include "analyzer/types.h"
@@ -130,14 +132,74 @@ std::string doc_markdown(std::string_view source,
   return out;
 }
 
+// Whether a layout would walk a type parameter or a const argument. The
+// layout engine has no answer for either until an instantiation binds it,
+// and a hover inside a generic body can name a type that holds one.
+bool has_unbound(const ir::StorageState& state,
+                 ir::TypeIdx type,
+                 std::vector<u32>& stack) {
+  if (!type.is_valid()) {
+    return false;
+  }
+  const ir::TypeNode& node = state.types[type];
+  using T = ir::TypeTag;
+  const auto any_unbound = [&](ir::TypeIdxRange fields) {
+    for (const ir::TypeIdx field : fields) {
+      if (has_unbound(state, field, stack)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  switch (node.tag) {
+    case T::Param:
+    case T::Const: return true;
+    case T::Array: {
+      const ir::ArrayType& array = state.array_types[node.as_array()];
+      // An empty array keeps its element's alignment without laying it
+      // out, so the engine can answer even when the element is unbound.
+      return array.count != 0 && has_unbound(state, array.element, stack);
+    }
+    case T::Struct:
+    case T::Tuple:
+    case T::Enum: {
+      if (std::find(stack.begin(), stack.end(), type.idx) != stack.end()) {
+        return false;
+      }
+      stack.push_back(type.idx);
+      bool unbound = false;
+      if (node.tag == T::Struct) {
+        unbound = any_unbound(state.struct_types[node.as_struct()].fields);
+      } else if (node.tag == T::Tuple) {
+        unbound = any_unbound(state.tuple_types[node.as_tuple()].elements);
+      } else {
+        for (const ir::EnumVariantTypeIdx variant :
+             state.enum_types[node.as_enum()].variants) {
+          if (any_unbound(state.enum_variant_types[variant].fields)) {
+            unbound = true;
+            break;
+          }
+        }
+      }
+      stack.pop_back();
+      return unbound;
+    }
+    // A reference and a function value have a fixed width whatever their
+    // parameter holds, so their layout is known even in a generic body.
+    default: return false;
+  }
+}
+
 // One line naming a type's size and alignment, or nothing for a type
 // that has no layout until an argument is known.
 std::string layout_line(const pipeline::PipelineContext& context,
                         const ir::StorageState& state,
                         ir::TypeIdx type) {
-  const ir::TypeNode& node = state.types[type];
-  if (node.tag == ir::TypeTag::Param || node.tag == ir::TypeTag::Const ||
-      node.tag == ir::TypeTag::Error) {
+  if (state.types[type].tag == ir::TypeTag::Error) {
+    return {};
+  }
+  std::vector<u32> stack;
+  if (has_unbound(state, type, stack)) {
     return {};
   }
   const ir::TypeLayout layout =
