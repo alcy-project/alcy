@@ -43,13 +43,13 @@ own assembly; both ignore the flag.
 - **Debug and release can produce different text.** A native unoptimized
   build selects `direct-x86_64` or `direct-riscv64`, while an optimized build
   selects LLVM.
-  The two write different assembly and different object bytes for the
+  These write different assembly and different object bytes for the
   same source, just as different optimization levels do. Pin `--backend`
   when the text or bytes have to stay comparable across builds; a test
   that compares generated assembly must name its backend. The riscv64
   printer emits fixed-width instructions with `.option norvc`, so its
-  `.s` assembles to the same bytes as its object.
-- **Assembly is equivalent, not identical.** The direct backend's `.s`
+  `.s` assembles to the same instructions as its object.
+- **Assembly is equivalent, not identical.** The direct x86_64 backend's `.s`
   assembles to the same program as its object, but not to the same bytes.
   LLVM's own printer includes directives such as `.file` and
   `.prefalign`; those need LLVM's integrated assembler, which `clang -c`

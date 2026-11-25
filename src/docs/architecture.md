@@ -62,8 +62,8 @@ principles:
 
 alcy is a statically-typed programming language with ownership-based memory
 management. The reference compiler is written in C++20. It lowers alcy source
-code to LLVM IR for optimized builds, and to its own x86_64 objects for native
-debug builds on Linux, with no LLVM in the path.
+code to LLVM IR for optimized builds, and to its own x86_64 and riscv64
+objects for native debug builds on Linux, with no LLVM in the path.
 
 The scope is a single-threaded batch compiler: given source files, it
 produces an executable.

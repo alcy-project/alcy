@@ -79,8 +79,7 @@ enum class Machine : u8 { X86_64 = 62, Riscv64 = 243 };
 [[nodiscard]] std::vector<u8> write_elf64(const Object& object,
                                           Machine machine);
 
-// The x86-64 spelling kept for the one backend that writes its objects
-// itself today.
+// The x86-64 spelling used by the x86_64 backend.
 [[nodiscard]] std::vector<u8> write_elf64_x86_64(const Object& object);
 
 }  // namespace codegen::object

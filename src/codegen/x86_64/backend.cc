@@ -41,8 +41,6 @@
 
 namespace codegen::x86_64 {
 
-namespace {}  // namespace
-
 bool X8664::supports(const codegen::OutputKind kind,
                      const codegen::Target& target) {
   return (kind == codegen::OutputKind::Object ||
