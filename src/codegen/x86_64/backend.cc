@@ -14,6 +14,7 @@
 
 #include "codegen/backend.h"
 #include "codegen/diag_code.h"
+#include "codegen/function_symbols.h"
 #include "codegen/object/elf64.h"
 #include "codegen/reachability.h"
 #include "codegen/target.h"
@@ -37,61 +38,10 @@
 #include "ir/storage.h"
 #include "ir/symbol_table.h"
 #include "ir/type.h"
-#include "symbol/mangle.h"
 
 namespace codegen::x86_64 {
 
-namespace {
-
-// The name a dependent links against for an exported function: the
-// same mangling every other backend gives the IR signature.
-std::string linkable_name(const ir::Function& function,
-                          const ir::Storage& storage,
-                          const ir::SymbolTable& strings) {
-  symbol::Signature signature;
-  signature.path = std::string(strings.get(function.meta.path));
-  signature.name = std::string(strings.get(function.meta.name));
-  signature.owner = function.meta.owner;
-  switch (function.meta.kind) {
-    case ir::SymbolKind::Free:
-      signature.kind = symbol::Signature::Kind::Free;
-      break;
-    case ir::SymbolKind::Assoc:
-      signature.kind = symbol::Signature::Kind::Assoc;
-      break;
-    case ir::SymbolKind::Method:
-      signature.kind = symbol::Signature::Kind::Method;
-      break;
-    default: break;
-  }
-  const ir::TypeIdxRange generics = function.meta.generics;
-  signature.generics.reserve(generics.size());
-  for (u32 i = 0; i < generics.size(); ++i) {
-    signature.generics.emplace_back(generics.head().idx + i);
-  }
-  return symbol::mangle(signature, storage, strings);
-}
-
-// Whether this function is the program's entry: a free, argumentless
-// `main`, the same test the analyzer applies.
-bool is_entry_candidate(const ir::Storage& storage,
-                        const ir::SymbolTable& strings,
-                        const ir::Function& function) {
-  if (function.meta.kind != ir::SymbolKind::Free) {
-    return false;
-  }
-  if (strings.get(function.meta.name) != "main") {
-    return false;
-  }
-  if (!function.meta.param_types.empty()) {
-    return false;
-  }
-  const ir::TypeTag tag = storage.types()[function.meta.return_type.idx].tag;
-  return tag == ir::TypeTag::Void || tag == ir::TypeTag::I32 ||
-         tag == ir::TypeTag::Enum;
-}
-
-}  // namespace
+namespace {}  // namespace
 
 bool X8664::supports(const codegen::OutputKind kind,
                      const codegen::Target& target) {

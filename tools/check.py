@@ -60,6 +60,11 @@ def main() -> int:
         "roughly doubles their runtime)",
     )
     parser.add_argument(
+        "--no-qemu",
+        action="store_true",
+        help="skip the riscv64 program cases (needs clang and qemu-user)",
+    )
+    parser.add_argument(
         "--no-coverage",
         action="store_true",
         help="skip the coverage ratchet (needs llvm-cov, and rebuilds the "
@@ -290,6 +295,20 @@ def main() -> int:
             f"--build-subdir={debug_subdir}",
             "--steps=program",
             "--mode=sanitized",
+        )
+
+    if not args.no_qemu:
+        # The riscv64 direct backend is a fourth lowering of the same exe
+        # cases: freestanding objects linked by clang and run under qemu.
+        if shutil.which("clang") is None:
+            refuse("clang", "pass --no-qemu to skip")
+        if shutil.which("qemu-riscv64") is None:
+            refuse("qemu-riscv64", "install qemu-user or pass --no-qemu")
+        tool(
+            "check_cases.py",
+            f"--build-subdir={debug_subdir}",
+            "--steps=program",
+            "--mode=qemu",
         )
 
     if not args.no_wasm:

@@ -6,6 +6,8 @@ source_set("codegen") {
     "backend.cc",
     "backend.h",
     "diag_code.h",
+    "function_symbols.cc",
+    "function_symbols.h",
     "reachability.cc",
     "reachability.h",
     "target.cc",
@@ -16,6 +18,7 @@ source_set("codegen") {
     "//src/diag",
     "//src/ir",
     "//src/overlay",
+    "//src/symbol",
   ]
   configs += [ "//src:alcy_config" ]
 }

@@ -441,23 +441,33 @@ def run(
         except OSError as e:
             return False, f"cannot run '{WASM_MODULE}': {e}"
     elif mode == "qemu":
-        # The riscv64 backend emits a freestanding object; the system
-        # linker and qemu-user supply the rest.
-        obj = work / "main_rv.o"
+        # The backend owns the freestanding entry; the CLI's linker driver
+        # supplies the system linker, so this exercises the same emission
+        # path an executable build uses.
         exe = work / "main_rv"
+        link_args = [
+            f"--target={RISCV_TARGET}",
+            "-fuse-ld=lld",
+            "-nostdlib",
+            "-static",
+            "-Wl,-e,_start",
+        ]
+        argv = [
+            str(alcy),
+            command,
+            target,
+            *extra_args,
+            f"--target={RISCV_TARGET}",
+            f"--backend={RISCV_BACKEND}",
+            "--freestanding",
+            "--emit=executable",
+            f"--linker={SYSTEM_CLANG}",
+            *(f"--link-args={arg}" for arg in link_args),
+            "-o",
+            str(exe),
+        ]
         proc = subprocess.run(
-            [
-                str(alcy),
-                command,
-                target,
-                *extra_args,
-                f"--target={RISCV_TARGET}",
-                f"--backend={RISCV_BACKEND}",
-                "--freestanding",
-                "--emit=object",
-                "-o",
-                str(obj),
-            ],
+            argv,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -471,26 +481,6 @@ def run(
                 f"--- build stdout ---\n{proc.stdout}"
                 f"--- build stderr ---\n{proc.stderr}"
             )
-        proc = subprocess.run(
-            [
-                SYSTEM_CLANG,
-                "--target=riscv64-unknown-linux-gnu",
-                "-fuse-ld=lld",
-                "-nostdlib",
-                "-static",
-                "-Wl,-e,_start",
-                str(obj),
-                "-o",
-                str(exe),
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=work,
-        )
-        if proc.returncode != 0:
-            return False, f"clang could not link the riscv64 object: {proc.stderr}"
         try:
             proc = subprocess.run(
                 [QEMU, str(exe)],

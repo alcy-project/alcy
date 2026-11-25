@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "codegen/backend.h"
+#include "codegen/diag_code.h"
+#include "codegen/function_symbols.h"
 #include "codegen/object/elf64.h"
 #include "codegen/reachability.h"
 #include "codegen/riscv64/allocator.h"
@@ -27,6 +29,8 @@
 #include "codegen/riscv64/selector.h"
 #include "codegen/riscv64/tables.h"
 #include "codegen/target.h"
+#include "diag/span.h"
+#include "i18n/messages.h"
 #include "ir/common.h"
 #include "ir/function.h"
 #include "ir/storage.h"
@@ -40,10 +44,18 @@ bool Riscv64::supports(const codegen::OutputKind kind,
          target.triple.find("linux") != std::string::npos;
 }
 
-// Widen a jal whose label target is past the 21-bit reach. Call this
-// after LoadAddr expansion, which inserts words and changes distances.
-void widen_far_jumps(Body& body) {
-  for (u32 pass = 0; pass < 32; ++pass) {
+// Widen out-of-range branches and jumps to an auipc/jalr pair. Inserting
+// words moves every later label, so widen to a fixed point and patch the
+// indirect jumps only after the final layout is known. A marker label on
+// each widened jalr pairs it with the label it jumps to.
+bool widen_far_jumps(Body& body) {
+  struct Widened {
+    u32 marker = 0;
+    u32 target = 0;
+  };
+  std::vector<Widened> widened;
+  const u32 max_passes = static_cast<u32>(body.insts.size()) + 8;
+  for (u32 pass = 0; pass < max_passes; ++pass) {
     u32 max_label = body.label_count;
     for (const MInst& inst : body.insts) {
       if (inst.label != MInst::NO_LABEL) {
@@ -60,7 +72,7 @@ void widen_far_jumps(Body& body) {
       }
       byte_at += 4;
     }
-    bool widened = false;
+    bool changed = false;
     for (u32 i = 0; i < body.insts.size(); ++i) {
       MInst& inst = body.insts[i];
       const bool branch = inst.op == MOp::Beq || inst.op == MOp::Bne ||
@@ -75,7 +87,8 @@ void widen_far_jumps(Body& body) {
           !has_label[label->id]) {
         continue;
       }
-      const u64 target = label_at[label->id];
+      const u32 target_label = label->id;
+      const u64 target = label_at[target_label];
       const u64 auipc_at = static_cast<u64>(branch ? i + 1 : i) * 4;
       const u64 inserted = branch ? 12 : 4;
       const i64 shift = target >= auipc_at ? static_cast<i64>(inserted) : 0;
@@ -87,62 +100,102 @@ void widen_far_jumps(Body& body) {
       }
       const i64 hi = upper20_shifted(delta);
       const i64 lo = delta - hi;
+      const u32 marker = body.label_count++;
       if (branch) {
         const u32 skip = body.label_count++;
         MInst near = inst;
-        // The short branch must skip the indirect jump when the original
-        // condition is false; take it when the condition holds.
         near.cond = negate(inst.cond);
         near.ops[label_op] = Operand{Label{skip}};
         body.insts[i] = near;
         MInst auipc = make_inst(MOp::Auipc, 8, Operand{T0}, Operand{Imm{hi}});
         MInst jalr = make_inst(MOp::Jalr, 8, Operand{ZERO}, Operand{T0},
                                Operand{Imm{lo}});
+        jalr.label = marker;
         MInst at_skip = make_inst(MOp::Nop, 8);
         at_skip.label = skip;
         body.insts.insert(body.insts.begin() + i + 1, {auipc, jalr, at_skip});
+        i += 3;
       } else {
         MInst auipc = make_inst(MOp::Auipc, 8, Operand{T0}, Operand{Imm{hi}});
         auipc.label = inst.label;
         MInst jalr =
             make_inst(MOp::Jalr, 8, inst.at(0), Operand{T0}, Operand{Imm{lo}});
+        jalr.label = marker;
         body.insts[i] = auipc;
         body.insts.insert(body.insts.begin() + i + 1, jalr);
+        ++i;
       }
-      widened = true;
-      break;
+      widened.push_back(Widened{marker, target_label});
+      changed = true;
     }
-    if (!widened) {
-      break;
+    if (!changed) {
+      for (const Widened& item : widened) {
+        u32 at = 0;
+        while (at < body.insts.size() && body.insts[at].label != item.marker) {
+          ++at;
+        }
+        if (at == 0 || at >= body.insts.size() || !has_label[item.target]) {
+          return false;
+        }
+        const i64 delta = static_cast<i64>(label_at[item.target]) -
+                          (static_cast<i64>(label_at[item.marker]) - 4);
+        const i64 hi = upper20_shifted(delta);
+        body.insts[at - 1].ops[1] = Operand{Imm{hi}};
+        body.insts[at].ops[2] = Operand{Imm{delta - hi}};
+      }
+      return true;
     }
   }
+  return false;
 }
 
 base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     codegen::EmitRequest request) {
   ir::Storage storage = std::move(request.storage).unwrap();
-  std::optional<ir::FunctionIdx> entry_index;
-  for (const ir::FunctionIdx index : storage.functions().idx_range()) {
-    const ir::Function& function = storage.functions()[index];
-    if (function.meta.kind == ir::SymbolKind::Free &&
-        request.strings->get(function.meta.name) == "main") {
-      entry_index = index;
-      break;
-    }
-  }
-  if (!entry_index.has_value()) {
-    return base::make_err(codegen::EmitError::Unsupported);
-  }
-
-  // Only functions reachable from main are emitted, and parametric
-  // bodies have no layout until instantiated, so they are excluded.
-  std::vector<ir::FunctionIdx> roots{*entry_index};
-  const std::vector<bool> reachable = codegen::reachable_functions(
-      storage, std::span(roots.data(), roots.size()));
   std::vector<bool> parametric(storage.functions().size(), false);
   for (const ir::FunctionIdx index : storage.parametric_functions()) {
     parametric[index.idx] = true;
   }
+
+  // A binary roots reachability at its entry; a library roots it at the
+  // functions its surface names, or at every free function when no
+  // surface was requested.
+  std::optional<ir::FunctionIdx> entry_index;
+  std::vector<ir::FunctionIdx> roots;
+  if (request.emit_entry) {
+    for (const ir::FunctionIdx index : storage.functions().idx_range()) {
+      if (codegen::is_entry_candidate(storage, *request.strings,
+                                      storage.functions()[index])) {
+        entry_index = index;
+        break;
+      }
+    }
+    if (!entry_index.has_value()) {
+      (void)request.bag->emit<i18n::Key::CodegenRiscv64Unsupported>(
+          codegen::DiagCode::Unsupported, diag::Span{}, "main");
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
+    roots.push_back(*entry_index);
+  } else {
+    for (const ir::FunctionIdx index : storage.functions().idx_range()) {
+      if (storage.functions()[index].meta.kind == ir::SymbolKind::Free &&
+          !parametric[index.idx]) {
+        roots.push_back(index);
+      }
+    }
+    if (request.exported_functions.has_value()) {
+      const auto& surface = *request.exported_functions;
+      roots.erase(std::remove_if(roots.begin(), roots.end(),
+                                 [&](const ir::FunctionIdx index) {
+                                   return std::find(surface.begin(),
+                                                    surface.end(),
+                                                    index) == surface.end();
+                                 }),
+                  roots.end());
+    }
+  }
+  const std::vector<bool> reachable = codegen::reachable_functions(
+      storage, std::span(roots.data(), roots.size()));
 
   RoData rodata;
 
@@ -153,7 +206,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
   };
   std::vector<Selected> functions;
   BacktraceTables tables;
-  tables.enabled = request.options.backtrace;
+  tables.enabled = request.emit_entry && request.options.backtrace;
   for (const ir::FunctionIdx index : storage.functions().idx_range()) {
     if (!reachable[index.idx] || parametric[index.idx]) {
       continue;
@@ -189,7 +242,9 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
       }
     }
     body.insts = std::move(expanded);
-    widen_far_jumps(body);
+    if (!widen_far_jumps(body)) {
+      return base::make_err(codegen::EmitError::Unsupported);
+    }
     if (tables.enabled) {
       tables.functions.push_back(BacktraceEntry{
           0, 0,
@@ -234,14 +289,18 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
         offsets[symbol] = base_of[f];
       }
     }
-    if (!functions[f].is_runtime && functions[f].index == entry_index->idx) {
+    if (!functions[f].is_runtime && entry_index.has_value() &&
+        functions[f].index == entry_index->idx) {
       offsets["main"] = base_of[f];
     }
   }
 
   const i64 start_at = at;
-  EntryBody entry = build_entry(storage.functions()[*entry_index], storage,
-                                request.target.width, rodata);
+  EntryBody entry;
+  if (request.emit_entry) {
+    entry = build_entry(storage.functions()[*entry_index], storage,
+                        request.target.width, rodata);
+  }
 
   for (u32 f = 0, b = 0; f < functions.size(); ++f) {
     if (functions[f].is_runtime) {
@@ -256,7 +315,7 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
   }
 
   // Now that function offsets are known, resolve the entry's call.
-  {
+  if (request.emit_entry) {
     const i64 target = offsets.at("main");
     const i64 here = start_at + static_cast<i64>(entry.call_at) * 4;
     const i64 jump = target - here;
@@ -422,22 +481,47 @@ base::Result<std::vector<u8>, codegen::EmitError> Riscv64::emit(
     }
     text.bytes.insert(text.bytes.end(), bytes.begin(), bytes.end());
   }
-  object.symbols.push_back(object::Symbol{
-      .name = "main",
-      .section = 0,
-      .offset = static_cast<u64>(offsets.at("main")),
-      .size = static_cast<u64>(start_at - offsets.at("main")),
-      .bind = object::SymbolBind::Global,
-      .type = object::SymbolType::Func,
-  });
-  object.symbols.push_back(object::Symbol{
-      .name = "_start",
-      .section = 0,
-      .offset = static_cast<u64>(start_at),
-      .size = static_cast<u64>(entry.insts.size() * 4),
-      .bind = object::SymbolBind::Global,
-      .type = object::SymbolType::Func,
-  });
+  if (request.emit_entry) {
+    const u64 main_at = static_cast<u64>(offsets.at("main"));
+    object.symbols.push_back(object::Symbol{
+        .name = "main",
+        .section = 0,
+        .offset = main_at,
+        .size = static_cast<u64>(start_at) - main_at,
+        .bind = object::SymbolBind::Global,
+        .type = object::SymbolType::Func,
+    });
+    object.symbols.push_back(object::Symbol{
+        .name = "_start",
+        .section = 0,
+        .offset = static_cast<u64>(start_at),
+        .size = static_cast<u64>(entry.insts.size() * 4),
+        .bind = object::SymbolBind::Global,
+        .type = object::SymbolType::Func,
+    });
+  } else if (request.exported_functions.has_value()) {
+    const auto& surface = *request.exported_functions;
+    for (u32 f = 0; f < functions.size(); ++f) {
+      if (functions[f].is_runtime ||
+          std::find(surface.begin(), surface.end(),
+                    ir::FunctionIdx{functions[f].index}) == surface.end()) {
+        continue;
+      }
+      const u64 size = f + 1 < functions.size()
+                           ? static_cast<u64>(base_of[f + 1] - base_of[f])
+                           : static_cast<u64>(at - base_of[f]);
+      object.symbols.push_back(object::Symbol{
+          .name =
+              codegen::linkable_name(storage.functions()[functions[f].index],
+                                     storage, *request.strings),
+          .section = 0,
+          .offset = static_cast<u64>(base_of[f]),
+          .size = size,
+          .bind = object::SymbolBind::Global,
+          .type = object::SymbolType::Func,
+      });
+    }
+  }
   object.sections.push_back(std::move(text));
   return base::make_ok(object::write_elf64(object, object::Machine::Riscv64));
 }

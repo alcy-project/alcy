@@ -78,7 +78,8 @@ compiler is called and what it should answer, and `[program]` says what
 the program it builds should answer. A case may carry either or both.
 `check_cases.py` runs the steps a caller selects; `--mode=sanitized`,
 `--mode=wasm`, and `--mode=qemu` ask the same program step of a different
-lowering or target. The
+lowering or target. `check.py` runs the qemu mode too; pass `--no-qemu`
+when clang or qemu-user is unavailable. The
 cases a wasm run cannot hold name the reason in
 `[program.sweep.wasm] skip`, so a refusal is a decision beside the case
 rather than a list elsewhere.
