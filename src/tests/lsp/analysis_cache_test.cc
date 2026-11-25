@@ -24,7 +24,7 @@ TEST_CASE("A cache answers every version of a document") {
   const Document broken("file:///main.al", "alcy", 2, "fn main( -> i32 {\n}\n");
   AnalysisCache cache;
   CHECK(cache.analysis_for(valid).ok());
-  CHECK(!cache.analysis_for(broken).ok());
+  CHECK(cache.analysis_for(broken).ok());
 }
 
 TEST_CASE("A standalone edit rebuilds even with an unchanged version") {
@@ -35,7 +35,7 @@ TEST_CASE("A standalone edit rebuilds even with an unchanged version") {
   AnalysisCache cache;
   CHECK(cache.analysis_for(before).ok());
   cache.invalidate(before);
-  CHECK(!cache.analysis_for(after).ok());
+  CHECK(cache.analysis_for(after).ok());
 }
 
 TEST_CASE("An untitled buffer keeps its own standalone signature") {
@@ -47,7 +47,7 @@ TEST_CASE("An untitled buffer keeps its own standalone signature") {
                        "fn main() -> i32 {\n  ret 0\n}\n");
   AnalysisCache cache;
   CHECK(cache.analysis_for(first).ok());
-  CHECK(!cache.analysis_for(edited).ok());
+  CHECK(cache.analysis_for(edited).ok());
   CHECK(cache.analysis_for(other).ok());
 }
 

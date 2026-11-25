@@ -223,6 +223,20 @@ TEST_CASE("Hover on an unbound generic type shows no layout") {
   }
 }
 
+TEST_CASE("Hover keeps a binding's type when another function is unfinished") {
+  const std::optional<std::string> markdown = hover(
+      "fn main() -> i32 {\n"
+      "  apple := 1\n"
+      "  ret apple\n"
+      "}\n"
+      "fn broken( {\n",
+      1, 2);
+  CHECK(markdown.has_value());
+  if (markdown.has_value()) {
+    CHECK(markdown->find("i32") != std::string::npos);
+  }
+}
+
 TEST_CASE("Hover off every node answers nothing") {
   const std::optional<std::string> markdown =
       hover("struct Mix {\n  // just a note\n  a: u8,\n}\n", 1, 6);

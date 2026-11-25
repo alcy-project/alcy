@@ -31,6 +31,7 @@
 #include "lsp/workspace.h"
 #include "path/path.h"
 #include "pipeline/artifact.h"
+#include "pipeline/emit_mode.h"
 #include "pipeline/frontend.h"
 #include "pipeline/pipeline_context.h"
 #include "pipeline/std_select.h"
@@ -126,10 +127,15 @@ void analyze_standalone(PackageAnalysis& out,
   const source::FileId file =
       out.context.sources.add_virtual(focus_uri, focus->text);
   out.files_by_uri[std::string(focus_uri)] = file;
+  analyzer::ModuleTree recovered;
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
       pipeline::front_end_root(out.context, file,
-                               pipeline::full_std_selection());
-  if (tree.is_err() || out.context.bag.has_errors()) {
+                               pipeline::full_std_selection(), &recovered);
+  // A buffer being edited is often mid-statement. Resolution reports the
+  // error and still knows the items it did parse, so editor features can
+  // answer from that tree instead of going dark until every brace closes.
+  const bool usable = tree.is_ok() || !recovered.modules.empty();
+  if (!usable) {
     return;
   }
   linter::LintConfig config{};
@@ -138,7 +144,11 @@ void analyze_standalone(PackageAnalysis& out,
   if (loaded.is_ok()) {
     config = std::move(loaded).unwrap();
   }
-  check_tree(out, std::move(tree).unwrap(), config);
+  if (tree.is_ok()) {
+    check_tree(out, std::move(tree).unwrap(), config);
+  } else {
+    check_tree(out, recovered, config);
+  }
 }
 
 void analyze_package(PackageAnalysis& out,
@@ -180,14 +190,20 @@ void analyze_package(PackageAnalysis& out,
     return;
   }
   const pipeline::ManifestProbe manifest = std::move(probe).unwrap();
+  std::vector<pipeline::Artifact> recovered;
   base::Result<std::vector<pipeline::Artifact>, diag::Reported> resolved =
-      pipeline::resolve_artifacts(out.context, root, manifest.manifest,
-                                  manifest.manifest_name,
-                                  pipeline::ArtifactScope::All);
-  if (resolved.is_err()) {
+      pipeline::resolve_artifacts(
+          out.context, root, manifest.manifest, manifest.manifest_name,
+          pipeline::ArtifactScope::All, nullptr, pipeline::EmitMode::Executable,
+          nullptr, &recovered);
+  std::vector<pipeline::Artifact> artifacts;
+  if (!recovered.empty()) {
+    artifacts = std::move(recovered);
+  } else if (resolved.is_ok()) {
+    artifacts = std::move(resolved).unwrap();
+  } else {
     return;
   }
-  std::vector<pipeline::Artifact> artifacts = std::move(resolved).unwrap();
   for (pipeline::Artifact& artifact : artifacts) {
     check_tree(out, artifact.tree, config);
   }

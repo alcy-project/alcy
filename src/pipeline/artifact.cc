@@ -375,7 +375,8 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
     std::string_view member,
     EmitMode mode,
     source::FileId manifest_file,
-    std::optional<CachedFrontBuild>* cached_out) {
+    std::optional<CachedFrontBuild>* cached_out,
+    bool tolerate_errors = false) {
   // Path dependencies load first: a dependency's own manifest names
   // standard-library members, and the selection below covers the
   // whole closure rather than this manifest alone.
@@ -553,7 +554,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
   }
   base::Result<ParsedFiles, diag::Reported> parse_result =
       parse_files(ctx, parse_ids);
-  if (parse_result.is_err() || ctx.bag.has_errors()) {
+  if (parse_result.is_err() || (ctx.bag.has_errors() && !tolerate_errors)) {
     return base::make_err(diag::Reported{});
   }
   PackageSources sources;
@@ -569,7 +570,7 @@ base::Result<PackageSources, diag::Reported> collect_package_sources(
                                                  "frontend");
         return select_modules(ctx, manifest, root, found.files);
       }();
-  if (selection_inputs.is_err() || ctx.bag.has_errors()) {
+  if (selection_inputs.is_err() || (ctx.bag.has_errors() && !tolerate_errors)) {
     return base::make_err(diag::Reported{});
   }
   sources.selection = std::move(selection_inputs).unwrap();
@@ -709,7 +710,8 @@ base::Result<Artifact, diag::Reported> resolve_target(
     const PackageSources& sources,
     std::string_view target_path,
     std::string_view target_name,
-    ArtifactKind kind) {
+    ArtifactKind kind,
+    analyzer::ModuleTree* recovered_out) {
   const path::Path target_file_path = root.join(target_path);
   source::FileId root_file = source::UNKNOWN_FILE;
   for (const ParsedFile& file : sources.parsed.files) {
@@ -787,11 +789,15 @@ base::Result<Artifact, diag::Reported> resolve_target(
   base::Result<analyzer::ModuleTree, diag::Reported> tree = [&] {
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-tree",
                                              "frontend");
-    return analyzer::resolve_modules(
-        root_file, modules, manifest.name, ctx.ast, ctx.bag, sources.prelude,
-        std_hints(), sources.dependencies, sources.policies, ctx.profiler);
+    return analyzer::resolve_modules(root_file, modules, manifest.name, ctx.ast,
+                                     ctx.bag, sources.prelude, std_hints(),
+                                     sources.dependencies, sources.policies,
+                                     ctx.profiler, recovered_out);
   }();
   if (tree.is_err() || ctx.bag.has_errors()) {
+    if (tree.is_ok() && recovered_out != nullptr) {
+      *recovered_out = std::move(tree).unwrap();
+    }
     return base::make_err(diag::Reported{});
   }
   Artifact target;
@@ -912,7 +918,8 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     ArtifactScope scope,
     std::string* package_name_out,
     EmitMode mode,
-    std::optional<CachedFrontBuild>* cached_out) {
+    std::optional<CachedFrontBuild>* cached_out,
+    std::vector<Artifact>* recovered_out) {
   PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "targets", "frontend");
   base::Result<LoadedPackage, diag::Reported> loaded =
       load_package(ctx, root, manifest_file, manifest_name);
@@ -938,8 +945,9 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
   }
   base::Result<PackageSources, diag::Reported> sources =
       collect_package_sources(ctx, root, package.manifest, {}, mode,
-                              manifest_file, cached_out);
-  if (sources.is_err() || ctx.bag.has_errors()) {
+                              manifest_file, cached_out,
+                              recovered_out != nullptr);
+  if (sources.is_err() || (ctx.bag.has_errors() && recovered_out == nullptr)) {
     return base::make_err(diag::Reported{});
   }
   const PackageSources collected = std::move(sources).unwrap();
@@ -977,10 +985,21 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
   const auto add =
       [&](std::string_view path, std::string_view name,
           ArtifactKind kind) -> base::Result<void, diag::Reported> {
-    base::Result<Artifact, diag::Reported> target = resolve_target(
-        ctx, root, package.manifest, collected, path, name, kind);
+    analyzer::ModuleTree recovered_tree;
+    base::Result<Artifact, diag::Reported> target =
+        resolve_target(ctx, root, package.manifest, collected, path, name, kind,
+                       &recovered_tree);
     if (target.is_err() || ctx.bag.has_errors()) {
-      return base::make_err(diag::Reported{});
+      if (recovered_out == nullptr || recovered_tree.modules.empty()) {
+        return base::make_err(diag::Reported{});
+      }
+      Artifact partial;
+      partial.tree = recovered_tree;
+      partial.file_count = collected.file_count;
+      partial.name = name.empty() ? package.manifest.name : name;
+      partial.kind = kind;
+      recovered_out->push_back(std::move(partial));
+      return base::make_ok();
     }
     targets.push_back(std::move(target).unwrap());
     return base::make_ok();

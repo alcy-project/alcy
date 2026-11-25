@@ -90,6 +90,7 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     std::span<const analyzer::ModuleInput> prelude = {},
     std::span<const analyzer::StdHint> std_hints = {},
     std::span<const analyzer::DependencyPackage> dependencies = {},
-    std::span<const analyzer::PackagePolicy> package_policies = {});
+    std::span<const analyzer::PackagePolicy> package_policies = {},
+    analyzer::ModuleTree* recovered_out = nullptr);
 
 }  // namespace pipeline

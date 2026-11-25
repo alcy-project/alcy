@@ -247,7 +247,8 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     std::span<const analyzer::ModuleInput> prelude,
     std::span<const analyzer::StdHint> std_hints,
     std::span<const analyzer::DependencyPackage> dependencies,
-    std::span<const analyzer::PackagePolicy> package_policies) {
+    std::span<const analyzer::PackagePolicy> package_policies,
+    analyzer::ModuleTree* recovered_out) {
   std::vector<source::FileId> files;
   files.reserve(modules.size() + prelude.size());
   for (const analyzer::ModuleInput& input : modules) {
@@ -295,9 +296,10 @@ base::Result<analyzer::ModuleTree, diag::Reported> resolve_inputs(
     parsed_dependencies.push_back(analyzer::DependencyPackage{
         dependency.identity, dependency.exports, parsed});
   }
-  return analyzer::resolve_modules(
-      root, parsed_modules, package_name, ctx.ast, ctx.bag, parsed_prelude,
-      std_hints, parsed_dependencies, package_policies, ctx.profiler);
+  return analyzer::resolve_modules(root, parsed_modules, package_name, ctx.ast,
+                                   ctx.bag, parsed_prelude, std_hints,
+                                   parsed_dependencies, package_policies,
+                                   ctx.profiler, recovered_out);
 }
 
 }  // namespace pipeline

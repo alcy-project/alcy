@@ -1205,11 +1205,15 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     std::span<const StdHint> std_hints,
     std::span<const DependencyPackage> dependencies,
     std::span<const PackagePolicy> package_policies,
-    debug::Profiler* profiler) {
+    debug::Profiler* profiler,
+    ModuleTree* recovered_out) {
   Resolver resolver{ast, bag, profiler};
   ModuleTree tree = resolver.run(root, modules, package_name, prelude,
                                  std_hints, dependencies, package_policies);
   if (bag.has_errors()) {
+    if (recovered_out != nullptr) {
+      *recovered_out = tree;
+    }
     return base::make_err(diag::Reported{});
   }
   return base::make_ok(tree);

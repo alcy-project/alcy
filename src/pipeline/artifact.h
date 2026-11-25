@@ -166,7 +166,8 @@ base::Result<std::vector<Artifact>, diag::Reported> resolve_artifacts(
     ArtifactScope scope,
     std::string* package_name_out = nullptr,
     EmitMode mode = EmitMode::Executable,
-    std::optional<CachedFrontBuild>* cached_out = nullptr);
+    std::optional<CachedFrontBuild>* cached_out = nullptr,
+    std::vector<Artifact>* recovered_out = nullptr);
 
 // A package resolved for testing: the module tree a test run enters
 // through, and the tests the tree's driver calls, in the order the driver

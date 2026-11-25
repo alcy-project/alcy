@@ -171,11 +171,11 @@ TEST_CASE("Declarations and mutable bindings carry modifiers") {
   CHECK(modifier_at(immutable_tokens, 1, 2) == 3);  // x: declaration + readonly
 }
 
-TEST_CASE("A comment is classified even when analysis fails") {
+TEST_CASE("A comment is classified even when the buffer has syntax errors") {
   const Document document("file:///broken.al", "alcy", 1,
                           "// note\nfn main( -> i32 {\n}\n");
   const DocumentAnalysis analysis(document);
-  CHECK(!analysis.ok());
+  CHECK(analysis.ok());
   const std::vector<Decoded> tokens =
       decode(semantic_tokens(document, analysis));
   CHECK(type_at(tokens, 0, 0) == 13);  // the comment

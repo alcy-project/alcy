@@ -74,6 +74,7 @@ bool has_free_main(const PipelineContext& ctx,
 base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PipelineContext& ctx,
     source::FileId root,
-    const StdSelection& selection);
+    const StdSelection& selection,
+    analyzer::ModuleTree* recovered_out = nullptr);
 
 }  // namespace pipeline

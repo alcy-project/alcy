@@ -168,6 +168,27 @@ TEST_CASE("Completion offers a method after a receiver dot") {
   }
 }
 
+TEST_CASE("Completion survives an unfinished member access") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "struct Foo {\n"
+                          "  x: i32,\n"
+                          "}\n"
+                          "impl Foo {\n"
+                          "  fn bar(self: Foo) -> i32 {\n"
+                          "    ret self.x\n"
+                          "  }\n"
+                          "}\n"
+                          "fn main() -> i32 {\n"
+                          "  mut f := Foo{x: 1}\n"
+                          "  f.\n"
+                          "  ret 0\n"
+                          "}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{10, 4});
+  CHECK(find_item(list, "bar") != nullptr);
+}
+
 TEST_CASE("Qualified variant completion replaces the whole path") {
   const Document document("file:///main.al", "alcy", 1,
                           "enum Option {\n  Some,\n  None,\n}\n"

@@ -117,7 +117,8 @@ base::Result<FrontendOutput, diag::Reported> run_frontend(
 base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PipelineContext& ctx,
     source::FileId root,
-    const StdSelection& selection) {
+    const StdSelection& selection,
+    analyzer::ModuleTree* recovered_out) {
   // A file that is one of the suite's own sources is checked as the member
   // it is: its path within the package names the modules above it, so the
   // tree hangs off the package the source belongs to instead of holding a
@@ -163,7 +164,7 @@ base::Result<analyzer::ModuleTree, diag::Reported> front_end_root(
     PROFILE_SCOPE_WITH_CATEGORY_AND_PROFILER(ctx.profiler, "resolve-tree",
                                              "frontend");
     return resolve_inputs(ctx, root, {&single_input, 1}, "", prelude,
-                          std_hints(), {}, policies);
+                          std_hints(), {}, policies, recovered_out);
   }();
 }
 

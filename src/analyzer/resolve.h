@@ -380,7 +380,9 @@ inline void emit_unresolved(diag::DiagBag& bag,
 // produces exactly this input.
 //
 // A profiler, when one is given, records the walk's stages and one scope per
-// module as they run.
+// module as they run. A caller that can work with a partially resolved tree
+// (an editor) receives it through `recovered_out` when reported errors make
+// the result an error; the result still says error so a compiler stops.
 base::Result<ModuleTree, diag::Reported> resolve_modules(
     source::FileId root,
     std::span<const ParsedModule> modules,
@@ -391,7 +393,8 @@ base::Result<ModuleTree, diag::Reported> resolve_modules(
     std::span<const StdHint> std_hints = {},
     std::span<const DependencyPackage> dependencies = {},
     std::span<const PackagePolicy> package_policies = {},
-    debug::Profiler* profiler = nullptr);
+    debug::Profiler* profiler = nullptr,
+    ModuleTree* recovered_out = nullptr);
 
 // A `use` or a qualified path that reaches `module_path` in the
 // package the root `root` opens, seen from `from_module`. A path

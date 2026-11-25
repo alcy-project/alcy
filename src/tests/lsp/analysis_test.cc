@@ -361,10 +361,10 @@ TEST_CASE("Workspace symbols search files the client has not opened") {
 TEST_CASE("Cross-file references survive equal spans in two files") {
   Fixture f;
   std::string main_source =
-      "pub fn main_fn() -> i32 { ret 0 }\n"
+      "use package::helper::main_fn;\n"
       "fn m() -> i32 { ret main_fn() }\n";
   std::string helper_source =
-      "use package::main::main_fn;\n"
+      "pub fn main_fn() -> i32 { ret 0 }\n"
       "fn h() -> i32 { ret main_fn() }\n";
   const usize main_at = main_source.rfind("main_fn");
   const usize helper_at = helper_source.rfind("main_fn");
