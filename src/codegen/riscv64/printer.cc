@@ -336,7 +336,7 @@ std::string instruction(const MInst& inst,
           mode == FcvtMode::F64ToI64 || mode == FcvtMode::F32ToI64 ||
           mode == FcvtMode::F64ToIU64 || mode == FcvtMode::F32ToIU64;
       return std::string(fcvt_mnemonic(mode)) + " " + a(0) + ", " + a(1) +
-             (to_int ? ", rtz" : "");
+             (to_int ? ", rtz" : ", rne");
     }
     case MOp::Fneg:
       return std::string(inst.width == 4 ? "fneg.s " : "fneg.d ") + a(0) +

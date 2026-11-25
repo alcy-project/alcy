@@ -337,7 +337,7 @@ Encoded encode(const Body& body) {
             break;  // fcvt.l.s
           case FcvtMode::I64ToF64:
             funct7 = 0x69;
-            funct3 = 7;
+            funct3 = 0;
             rs2 = 2;
             break;  // fcvt.d.l
           case FcvtMode::I32ToF64:
@@ -356,7 +356,7 @@ Encoded encode(const Body& body) {
             break;  // fcvt.lu.s
           case FcvtMode::F64ToF32:
             funct7 = 0x20;
-            funct3 = 7;
+            funct3 = 0;
             rs2 = 1;
             break;  // fcvt.s.d
           case FcvtMode::F32ToF64:
@@ -366,7 +366,7 @@ Encoded encode(const Body& body) {
             break;  // fcvt.d.s
           case FcvtMode::IU64ToF64:
             funct7 = 0x69;
-            funct3 = 7;
+            funct3 = 0;
             rs2 = 3;
             break;  // fcvt.d.lu
           case FcvtMode::IU32ToF64:
@@ -376,22 +376,22 @@ Encoded encode(const Body& body) {
             break;  // fcvt.d.wu
           case FcvtMode::IU64ToF32:
             funct7 = 0x68;
-            funct3 = 7;
+            funct3 = 0;
             rs2 = 3;
             break;  // fcvt.s.lu
           case FcvtMode::IU32ToF32:
             funct7 = 0x68;
-            funct3 = 7;
+            funct3 = 0;
             rs2 = 1;
             break;  // fcvt.s.wu
           case FcvtMode::I64ToF32:
             funct7 = 0x68;
-            funct3 = 7;
+            funct3 = 0;
             rs2 = 2;
             break;  // fcvt.s.l
           case FcvtMode::I32ToF32:
             funct7 = 0x68;
-            funct3 = 7;
+            funct3 = 0;
             rs2 = 0;
             break;  // fcvt.s.w
           default: break;

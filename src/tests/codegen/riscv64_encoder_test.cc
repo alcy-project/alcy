@@ -55,7 +55,7 @@ TEST_CASE("integer to double conversions use the double format") {
   const Encoded from_long =
       encode_one(make_inst(MOp::Fcvt, 8, Operand{Reg::F0}, Operand{RA},
                            Operand{FcvtMode::I64ToF64}));
-  CHECK(equals(from_long.bytes, {0x53, 0xf0, 0x20, 0xd2}));
+  CHECK(equals(from_long.bytes, {0x53, 0x80, 0x20, 0xd2}));
   const Encoded from_word =
       encode_one(make_inst(MOp::Fcvt, 8, Operand{Reg::F0}, Operand{RA},
                            Operand{FcvtMode::I32ToF64}));

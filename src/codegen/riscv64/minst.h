@@ -268,6 +268,9 @@ inline AluOperands alu_operands(const MInst& inst) {
     result.rs1 = result.immediate == &inst.at(1) && inst.count > 2
                      ? &inst.at(2)
                      : &inst.at(1);
+    // The register form is unreachable here, but keep both source pointers
+    // valid so a caller cannot dereference a null rs2.
+    result.rs2 = result.rs1;
   } else {
     result.rs1 = inst.count > 2 ? &inst.at(1) : &inst.at(0);
     result.rs2 = inst.count > 2 ? &inst.at(2) : &inst.at(1);
