@@ -1,0 +1,11 @@
+[cli]
+subcommand = "compile"
+args = [
+  "--target=riscv64-unknown-linux-gnu",
+  "--backend=direct-riscv64",
+  "--freestanding",
+  "--emit=asm",
+]
+
+[cli.expect]
+exit = 0
