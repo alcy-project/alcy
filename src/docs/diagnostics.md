@@ -45,7 +45,7 @@ the component every consumer of the front end reports through.
 | `H` | pkg | `src/pkg` | |
 | `I` | pipeline | `src/pipeline` | |
 | `J` | codegen_llvm | `src/codegen_llvm` | reserved |
-| `K` | codegen | x86_64/wasm native backends | `CodegenX86Unsupported`, `CodegenWasmUnsupported` |
+| `K` | codegen | x86_64/wasm/riscv64 native backends | `CodegenX86Unsupported`, `CodegenWasmUnsupported`, `CodegenRiscv64Unsupported` |
 | `L` | lint | `linter/` | one per rule, plus the config file's own two |
 
 `E`, `N` and `W` are not in the table because they are the severity

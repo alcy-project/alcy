@@ -75,8 +75,8 @@ In scope:
 - IR construction.
 - Name resolution, type checking, and ownership checking.
 - A linear single-pass compilation pipeline.
-- LLVM IR emission and object-file generation, plus a direct x86_64
-  object emitter for native debug builds on Linux.
+- LLVM IR emission and object-file generation, plus direct x86_64 and
+  riscv64 object emitters for native debug builds on Linux.
 
 Deliberately out of scope:
 
@@ -204,6 +204,7 @@ state between stages beyond the data explicitly passed along.
 | `codegen_llvm`            | Emits LLVM IR from analyzed IR, and the module to an object, textual IR, or bitcode. `Target` says what it builds for.                                | Local API buffers only.                                                         |
 | `codegen/wasm`            | alcy's own wasm emitter: verified IR in, a final WASI module out, no LLVM or linker behind it. Reached with `--backend=direct-wasm`.                  | The module is built in memory, one pass.                                        |
 | `codegen/x86_64`          | alcy's own x86_64 emitter: verified IR in, an ELF64 object out, no LLVM behind it. The native debug default; `--backend=direct-x86_64`.               | One object in memory, emitted in one pass.                                      |
+| `codegen/riscv64`         | alcy's own riscv64 emitter: verified IR in, an ELF64 object out, no LLVM behind it. The riscv64 debug default; `--backend=direct-riscv64`.             | One object in memory, emitted in one pass.                                      |
 | `diag`                    | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                                       | Zero heap allocation on hot paths; message bytes use an injected arena.         |
 | `i18n`                    | Stands for `internationalization`. The languages the compiler reports in, and the catalog that holds every message it can print.                      | Catalog strings are static; the cli owns the composed copies.                   |
 | `text`                    | Text primitives shared across stages: escape decoding for string literals, and JSON reading and writing.                                              | Owned strings; cold paths only.                                                 |
@@ -241,6 +242,7 @@ flowchart TD
         codegen --> codegen_llvm
         codegen --> codegen_wasm[codegen/wasm]
         codegen --> codegen_x86[codegen/x86_64]
+        codegen --> codegen_riscv64[codegen/riscv64]
         codegen_llvm --> llvm
     end
 
@@ -451,7 +453,8 @@ Source bytes
    │
    ├─▶ [ codegen_llvm ]   -> LLVM IR / object code
    ├─▶ [ codegen/wasm ]   -> a final WASI module
-   └─▶ [ codegen/x86_64 ] -> an ELF64 object, no LLVM
+   ├─▶ [ codegen/x86_64 ] -> an ELF64 object, no LLVM
+   └─▶ [ codegen/riscv64 ] -> an ELF64 object, no LLVM
 ```
 
 A stage never calls the one that follows it: `pipeline` calls each in turn,
@@ -489,8 +492,8 @@ that happens to read them.
    `alcy_dealloc`, `alcy_print`, `alcy_println`, `alcy_panic`, and
    `alcy_sys_write`, over libc — is defined in that same module, so a build
    spawns no compiler for it and it is optimized with the program. The
-   direct x86_64 backend writes the object itself for native debug builds,
-   with its own runtime and ELF writer.
+   direct x86_64 and riscv64 backends write the object themselves for
+   native debug builds, with their own runtimes and the shared ELF writer.
 
 A test run walks the same stages over a different tree, and it is the only mode
 in which the items a stage reads are not the ones the package's files declare.

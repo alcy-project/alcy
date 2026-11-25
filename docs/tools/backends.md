@@ -10,6 +10,7 @@ and the differences a script or a test has to account for.
 | Target and profile | Backend |
 | --- | --- |
 | Native x86_64 Linux, unoptimized (the default debug build) | `direct-x86_64` |
+| Native riscv64 Linux, unoptimized (the default debug build) | `direct-riscv64` |
 | Any other native target, and optimized builds | `llvm` |
 | A wasm target | `direct-wasm` |
 
@@ -20,13 +21,13 @@ and ignore `--backend`.
 
 ## What each backend writes
 
-| Output kind | `llvm` | `direct-x86_64` | `direct-wasm` |
-| --- | --- | --- | --- |
-| `executable` | object, then the system linker | object, then the system linker | final WASI module |
-| `object` | relocatable object | relocatable ELF64 object | - |
-| `asm` | textual assembly | textual assembly, AT&T or Intel | rejected, see below |
-| `llvm-ir`, `llvm-bc` | textual IR / bitcode | - | - |
-| `ir`, `ir-bc` | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline |
+| Output kind | `llvm` | `direct-x86_64` | `direct-riscv64` | `direct-wasm` |
+| --- | --- | --- | --- | --- |
+| `executable` | object, then the system linker | object, then the system linker | object, then the system linker (freestanding) | final WASI module |
+| `object` | relocatable object | relocatable ELF64 object | relocatable ELF64 object | - |
+| `asm` | textual assembly | textual assembly, AT&T or Intel | rejected | rejected, see below |
+| `llvm-ir`, `llvm-bc` | textual IR / bitcode | - | - | - |
+| `ir`, `ir-bc` | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline |
 
 `--emit=asm` writes one assembly source per target, with a `.s`
 suffix. It replaces an unnamed output's suffix like the other modes; it
@@ -39,7 +40,8 @@ selects Intel syntax. LLVM prints its own assembly and ignores the flag.
 ## Consequences of the choice
 
 - **Debug and release can produce different text.** A native unoptimized
-  build selects `direct-x86_64`, while an optimized build selects LLVM.
+  build selects `direct-x86_64` or `direct-riscv64`, while an optimized build
+  selects LLVM.
   The two write different assembly and different object bytes for the
   same source, just as different optimization levels do. Pin `--backend`
   when the text or bytes have to stay comparable across builds; a test
@@ -49,6 +51,9 @@ selects Intel syntax. LLVM prints its own assembly and ignores the flag.
   LLVM's own printer includes directives such as `.file` and
   `.prefalign`; those need LLVM's integrated assembler, which `clang -c`
   provides. The direct backend's output targets GNU `as`.
+- **The riscv64 backend links freestanding executables through the system
+  linker.** Its program cases are linked without a C runtime and run under
+  qemu-user with `--mode=qemu` in the case harness.
 - **wasm has no assembly form.** `--emit=asm` with a wasm target is
   refused with a diagnostic. Use `--emit=executable` for a WASI module.
 

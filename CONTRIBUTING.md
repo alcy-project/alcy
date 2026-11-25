@@ -76,8 +76,9 @@ Acceptance cases live in `e2e/cases/<name>/` and `e2e/wasm/<name>/`.
 Each directory holds its sources and a `case.toml`: `[cli]` says how the
 compiler is called and what it should answer, and `[program]` says what
 the program it builds should answer. A case may carry either or both.
-`check_cases.py` runs the steps a caller selects; `--mode=sanitized` and
-`--mode=wasm` ask the same program step of a different lowering. The
+`check_cases.py` runs the steps a caller selects; `--mode=sanitized`,
+`--mode=wasm`, and `--mode=qemu` ask the same program step of a different
+lowering or target. The
 cases a wasm run cannot hold name the reason in
 `[program.sweep.wasm] skip`, so a refusal is a decision beside the case
 rather than a list elsewhere.

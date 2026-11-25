@@ -4,7 +4,8 @@
 
 - **Host:** Linux (`x86_64`), macOS (`aarch64`), Windows (`x64`).
 - **Targets:** Native binaries (LLVM, or `direct-x86_64` for x86_64 Linux
-  debug), WASI (`--backend=direct-wasm`), `wasm32-unknown-emscripten`.
+  debug and `direct-riscv64` for riscv64 Linux debug), WASI
+  (`--backend=direct-wasm`), `wasm32-unknown-emscripten`.
   Freestanding builds need no `libc` (see `README.md`, "What alcy is", and
   `docs/spec/ffi.md`).
 
