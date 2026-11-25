@@ -5,7 +5,7 @@
 // The grammar wasm and queries are built into the site by
 // `tools/site.py`; nothing here runs the compiler. The classes and the
 // HTML runs are `../shared/highlight.js`; this module only owns the
-// binding, the parser, and the incremental tree.
+// binding and the parser.
 
 import { renderHighlightedHtml } from "../shared/highlight.js";
 import { Parser, Language, Query } from "./vendor/web-tree-sitter.js";
@@ -47,7 +47,10 @@ export async function createHighlighter({
 
   return {
     highlight(text: string): string {
-      const tree = parser.parse(text, previousTree ?? undefined);
+      // Reuse of the previous tree would need the edit ranges applied to
+      // it first; without them its nodes point at the old text and the
+      // captures land on the wrong spans.
+      const tree = parser.parse(text);
       const captures = query.captures(tree.rootNode);
       previousTree?.delete();
       previousTree = tree;
