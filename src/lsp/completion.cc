@@ -27,6 +27,7 @@
 #include "lsp/document.h"
 #include "lsp/protocol.h"
 #include "pipeline/pipeline_context.h"
+#include "source/source.h"
 #include "text/json.h"
 
 namespace lsp {
@@ -197,6 +198,146 @@ std::string doc_text(const DocumentAnalysis& analysis, ast::ItemIdx item) {
   return text;
 }
 
+struct PatternIdxHash {
+  usize operator()(ast::PatternIdx index) const { return index.idx; }
+};
+
+bool span_contains(diag::Span span, usize offset) {
+  return span.offset <= offset && offset < span.offset + span.length;
+}
+
+// The blocks and items a binding can belong to. A parameter's name sits
+// before its function's body block, so the item's own span is a scope too.
+std::vector<diag::Span> scope_spans(const pipeline::PipelineContext& context,
+                                    source::FileId root) {
+  std::vector<diag::Span> scopes;
+  context.ast.blocks.for_each_node([&](ast::BlockIdx index) {
+    const diag::Span span = context.ast.blocks[index].span;
+    if (span.file == root && span.length != 0) {
+      scopes.push_back(span);
+    }
+  });
+  context.ast.items.for_each_node([&](ast::ItemIdx index) {
+    const diag::Span span = context.ast.items[index].span;
+    if (span.file == root && span.length != 0) {
+      scopes.push_back(span);
+    }
+  });
+  return scopes;
+}
+
+// A binding belongs to the cursor's scope when the smallest scope that
+// holds its name also holds the cursor. A local in a block that already
+// closed is outside, while one in an enclosing block is inside.
+bool in_scope_of(const std::vector<diag::Span>& scopes,
+                 diag::Span name,
+                 usize offset) {
+  const diag::Span* best = nullptr;
+  for (const diag::Span& span : scopes) {
+    if (!span_contains(span, name.offset) ||
+        (best != nullptr && span.length >= best->length)) {
+      continue;
+    }
+    best = &span;
+  }
+  return best != nullptr && span_contains(*best, offset);
+}
+
+// Locals the checker never tables: statement bindings, parameters and
+// pattern bindings in the scope the cursor sits in.
+void collect_locals(const DocumentAnalysis& analysis,
+                    std::string_view source,
+                    usize offset,
+                    std::vector<Item>* out) {
+  const pipeline::PipelineContext& context = analysis.context();
+  const analyzer::CheckedPackage& package = analysis.package();
+  const ir::StorageState& state = analysis.types();
+  const source::FileId root = analysis.root();
+  const std::vector<diag::Span> scopes = scope_spans(context, root);
+
+  std::unordered_map<ast::PatternIdx, ast::ExprIdx, PatternIdxHash>
+      init_by_pattern;
+  context.ast.stmts.for_each_node([&](ast::StmtIdx index) {
+    const ast::StmtNode& statement = context.ast.stmts[index];
+    if (statement.kind != ast::StmtKind::Decl || statement.span.file != root) {
+      return;
+    }
+    const ast::StmtDecl& declaration = statement.payload.get<ast::StmtDecl>();
+    if (declaration.pattern != ast::PatternIdx::invalid()) {
+      init_by_pattern.emplace(declaration.pattern, declaration.init);
+    }
+  });
+
+  std::unordered_map<ast::PatternIdx, std::string_view, PatternIdxHash>
+      param_types;
+  context.ast.items.for_each_node([&](ast::ItemIdx index) {
+    const ast::ItemNode& item = context.ast.items[index];
+    if (item.span.file != root || item.kind != ast::ItemKind::Fn) {
+      return;
+    }
+    for (const ast::ItemFnParam& param :
+         item.payload.get<ast::ItemFn>().params) {
+      if (param.pattern == ast::PatternIdx::invalid() ||
+          param.type == ast::TypeIdx::invalid()) {
+        continue;
+      }
+      const diag::Span span = context.ast.types[param.type].span;
+      if (span.offset + span.length <= source.size()) {
+        param_types.emplace(param.pattern,
+                            source.substr(span.offset, span.length));
+      }
+    }
+  });
+
+  context.ast.patterns.for_each_node([&](ast::PatternIdx index) {
+    const ast::PatternNode& node = context.ast.patterns[index];
+    diag::Span name;
+    std::string_view spelling;
+    if (node.kind == ast::PatternKind::Ident) {
+      name = node.payload.ident.name.span;
+      spelling = node.payload.ident.name.name;
+    } else if (node.kind == ast::PatternKind::MutIdent) {
+      name = node.payload.mut_ident.name.span;
+      spelling = node.payload.mut_ident.name.name;
+    } else {
+      return;
+    }
+    // The `for` desugar names its cursor `_it` at the loop keyword.
+    if (name.file != root || name.offset >= offset ||
+        spelling.starts_with("_it") || !in_scope_of(scopes, name, offset)) {
+      return;
+    }
+    std::string detail;
+    const auto init = init_by_pattern.find(index);
+    if (init != init_by_pattern.end() &&
+        init->second != ast::ExprIdx::invalid()) {
+      if (const std::optional<ir::TypeIdx> type =
+              checked_expr_type(package, init->second);
+          type.has_value()) {
+        detail = ir::type_display(state, context.strings, *type);
+      }
+    }
+    if (detail.empty()) {
+      const auto param = param_types.find(index);
+      if (param != param_types.end()) {
+        detail = std::string(param->second);
+      }
+    }
+    out->push_back(Item{std::string(spelling), std::move(detail),
+                        ast::ItemIdx::invalid(), CompletionItemKind::Variable,
+                        ""});
+  });
+}
+
+bool has_label(const std::vector<Item>& items, std::string_view label) {
+  for (const Item& item : items) {
+    if (item.label == label) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void collect(const DocumentAnalysis& analysis,
              const analyzer::CheckedPackage& package,
              const VisibleNames& visible,
@@ -208,6 +349,9 @@ void collect(const DocumentAnalysis& analysis,
                         CompletionItemKind kind) {
     for (const std::string_view label :
          visible_labels(visible, module, declared)) {
+      if (has_label(*out, label)) {
+        continue;
+      }
       out->push_back(
           Item{std::string(label), std::string(detail), item, kind, ""});
     }
@@ -265,6 +409,9 @@ void collect(const DocumentAnalysis& analysis,
       // declaration name would be unresolved at the use site.
       const std::string qualifier(labels.front());
       for (const std::string_view variant : info.variants) {
+        if (has_label(*out, variant)) {
+          continue;
+        }
         Item item{std::string(variant), qualifier + "::" + std::string(variant),
                   ast::ItemIdx::invalid(), CompletionItemKind::EnumMember, ""};
         item.insert_text = item.detail;
@@ -302,6 +449,7 @@ text::JsonValue completion_items(const Document& document,
 
   std::vector<Item> items;
   if (analysis.ok()) {
+    collect_locals(analysis, document.text(), offset, &items);
     collect(analysis, analysis.package(), visible_names(analysis), &items);
   }
   for (const lexer::KeywordInfo& keyword : lexer::keyword_infos()) {

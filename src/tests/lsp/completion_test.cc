@@ -168,6 +168,34 @@ TEST_CASE("Completion offers a method after a receiver dot") {
   }
 }
 
+TEST_CASE("Completion offers locals and parameters with their types") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn use_it(v: i32) -> i32 {\n"
+                          "  apple := 1\n"
+                          "  w := v\n"
+                          "  ret apple\n"
+                          "}\n"
+                          "fn main() -> i32 {\n"
+                          "  banana := 2\n"
+                          "  ret use_it(banana)\n"
+                          "}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{3, 2});
+  for (const char* name : {"apple", "v", "w"}) {
+    const text::JsonValue* item = find_item(list, name);
+    CHECK(item != nullptr);
+    if (item != nullptr) {
+      const text::JsonValue* detail = item->find("detail");
+      CHECK(detail != nullptr);
+      if (detail != nullptr) {
+        CHECK(detail->as_string() == "i32");
+      }
+    }
+  }
+  CHECK(find_item(list, "banana") == nullptr);
+}
+
 TEST_CASE("Completion survives an unfinished member access") {
   const Document document("file:///main.al", "alcy", 1,
                           "struct Foo {\n"
