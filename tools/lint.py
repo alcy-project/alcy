@@ -258,6 +258,26 @@ def create_commands(
     return commands
 
 
+def llvm_is_preinstalled(build_dir: Path) -> bool:
+    """Whether GN configured an existing LLVM prefix instead of setup_llvm.
+
+    A non-empty `llvm_install_dir` removes the setup target from the ninja
+    graph, so running it is an error rather than a saved step. The GN
+    arguments the build just wrote are the authority on which case this
+    build directory is in.
+    """
+    arguments = build_dir / "args.gn"
+    if not arguments.is_file():
+        return False
+    for line in arguments.read_text().splitlines():
+        line = line.strip()
+        if not line.startswith("llvm_install_dir") or "=" not in line:
+            continue
+        value = line.split("=", 1)[1].strip().strip("\"'")
+        return bool(value)
+    return False
+
+
 def parse_shard(spec: str) -> tuple[int, int]:
     """The k of n share this run lints, from a "k/n" spelling."""
     try:
@@ -326,9 +346,10 @@ def lint_files(
 
     failed = False
     build_dir = out_dir / build_subdir
-    ret = subprocess.run(["ninja", "-C", build_dir, "setup_llvm"]).returncode
-    if ret != 0:
-        return -2
+    if not llvm_is_preinstalled(build_dir):
+        ret = subprocess.run(["ninja", "-C", build_dir, "setup_llvm"]).returncode
+        if ret != 0:
+            return -2
     timing.mark("setup_llvm")
 
     target_dirs = []
