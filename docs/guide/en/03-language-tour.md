@@ -269,7 +269,10 @@ that is not `Copy`, so this is the way to fill a vector with owned text
 or other values that cannot be repeated from one source:
 
 ```alcy
-labels := Vec::<String>::from_fn(3, (i: usize) -> format("v{}", i))
+fn main() {
+  labels := Vec::<String>::from_fn(3, (i: usize) -> format("v{}", i))
+  println("{}", labels.len())
+}
 ```
 
 `at` takes a `usize` and hands back an `Option<&T>`, so an index that
