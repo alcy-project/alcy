@@ -25,7 +25,7 @@ and ignore `--backend`.
 | --- | --- | --- | --- | --- |
 | `executable` | object, then the system linker | object, then the system linker | object, then the system linker (freestanding) | final WASI module |
 | `object` | relocatable object | relocatable ELF64 object | relocatable ELF64 object | - |
-| `asm` | textual assembly | textual assembly, AT&T or Intel | rejected | rejected, see below |
+| `asm` | textual assembly | textual assembly, AT&T or Intel | textual RISC-V assembly | rejected, see below |
 | `llvm-ir`, `llvm-bc` | textual IR / bitcode | - | - | - |
 | `ir`, `ir-bc` | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline | alcy IR, written by the pipeline |
 
@@ -34,8 +34,9 @@ suffix. It replaces an unnamed output's suffix like the other modes; it
 stops before linking. `-j` does not split an assembly output, the same
 as `--emit=llvm-ir`.
 
-The direct backend writes AT&T syntax by default; `--asm-syntax=intel`
-selects Intel syntax. LLVM prints its own assembly and ignores the flag.
+The direct x86_64 backend writes AT&T syntax by default; `--asm-syntax=intel`
+selects Intel syntax. RISC-V has one assembly spelling, and LLVM prints its
+own assembly; both ignore the flag.
 
 ## Consequences of the choice
 
@@ -45,7 +46,9 @@ selects Intel syntax. LLVM prints its own assembly and ignores the flag.
   The two write different assembly and different object bytes for the
   same source, just as different optimization levels do. Pin `--backend`
   when the text or bytes have to stay comparable across builds; a test
-  that compares generated assembly must name its backend.
+  that compares generated assembly must name its backend. The riscv64
+  printer emits fixed-width instructions with `.option norvc`, so its
+  `.s` assembles to the same bytes as its object.
 - **Assembly is equivalent, not identical.** The direct backend's `.s`
   assembles to the same program as its object, but not to the same bytes.
   LLVM's own printer includes directives such as `.file` and

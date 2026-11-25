@@ -204,7 +204,7 @@ state between stages beyond the data explicitly passed along.
 | `codegen_llvm`            | Emits LLVM IR from analyzed IR, and the module to an object, textual IR, or bitcode. `Target` says what it builds for.                                | Local API buffers only.                                                         |
 | `codegen/wasm`            | alcy's own wasm emitter: verified IR in, a final WASI module out, no LLVM or linker behind it. Reached with `--backend=direct-wasm`.                  | The module is built in memory, one pass.                                        |
 | `codegen/x86_64`          | alcy's own x86_64 emitter: verified IR in, an ELF64 object out, no LLVM behind it. The native debug default; `--backend=direct-x86_64`.               | One object in memory, emitted in one pass.                                      |
-| `codegen/riscv64`         | alcy's own riscv64 emitter: verified IR in, an ELF64 object out, no LLVM behind it. The riscv64 debug default; `--backend=direct-riscv64`.             | One object in memory, emitted in one pass.                                      |
+| `codegen/riscv64`         | alcy's own riscv64 emitter: verified IR in, an ELF64 object or assembly out, no LLVM behind it. The riscv64 debug default; `--backend=direct-riscv64`.   | One object in memory, emitted in one pass.                                      |
 | `diag`                    | Stands for `diagnostic`. Source spans, diagnostics, arena-backed bags, and the fmtlib renderer.                                                       | Zero heap allocation on hot paths; message bytes use an injected arena.         |
 | `i18n`                    | Stands for `internationalization`. The languages the compiler reports in, and the catalog that holds every message it can print.                      | Catalog strings are static; the cli owns the composed copies.                   |
 | `text`                    | Text primitives shared across stages: escape decoding for string literals, and JSON reading and writing.                                              | Owned strings; cold paths only.                                                 |
@@ -454,7 +454,7 @@ Source bytes
    ├─▶ [ codegen_llvm ]   -> LLVM IR / object code
    ├─▶ [ codegen/wasm ]   -> a final WASI module
    ├─▶ [ codegen/x86_64 ] -> an ELF64 object, no LLVM
-   └─▶ [ codegen/riscv64 ] -> an ELF64 object, no LLVM
+   └─▶ [ codegen/riscv64 ] -> an ELF64 object or assembly, no LLVM
 ```
 
 A stage never calls the one that follows it: `pipeline` calls each in turn,

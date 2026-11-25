@@ -53,7 +53,7 @@ tools, so a build with no LLVM still answers either.
 | --- | --- | --- | --- |
 | `-o`, `--output` | path | (per table) | Literal output path. With `--stdin`, required |
 | `--emit` | `executable`, `object`, `asm`, `llvm-ir`, `llvm-bc`, `ir`, `ir-bc` | `executable` | Artifact kind to write; replaces, never appends an extension |
-| `--asm-syntax` | `att`, `intel` | `att` | The spelling `--emit=asm` writes. LLVM prints its own assembly and ignores it |
+| `--asm-syntax` | `att`, `intel` | `att` | The spelling `--emit=asm` writes. LLVM and the riscv64 backend print their own assembly and ignore it |
 | `--backend` | `llvm`, `direct-wasm`, `direct-x86_64`, `direct-riscv64` | native x86_64 Linux debug: `direct-x86_64`, riscv64 debug: `direct-riscv64`; otherwise `llvm` | Which backend writes the code. See [Backends and output formats](backends.md) |
 | `--target` | `<triple>` | `host` | The machine to build for |
 | `--linker` | driver | system default | System linker driver for executable builds |
