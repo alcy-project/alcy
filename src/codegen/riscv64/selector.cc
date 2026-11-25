@@ -1382,17 +1382,21 @@ bool Selector::emit_inner(const ir::Instruction& instr,
       // A float-to-integer cast saturates to the destination's range and
       // maps NaN to zero. Convert to a 64-bit integer first, then clamp.
       const u8 w = src_tag == ir::TypeTag::F32 ? 4 : 8;
-      const bool uns = ir::is_unsigned_integer_type(dst_tag);
+      const bool is_bool = dst_tag == ir::TypeTag::I1;
+      const bool uns = is_bool || ir::is_unsigned_integer_type(dst_tag);
       const FcvtMode mode =
           uns ? (src_tag == ir::TypeTag::F32 ? FcvtMode::F32ToIU64
                                              : FcvtMode::F64ToIU64)
               : (src_tag == ir::TypeTag::F32 ? FcvtMode::F32ToI64
                                              : FcvtMode::F64ToI64);
       const u32 bits =
-          static_cast<u32>(
-              storage_.layout_of(storage_.registers()[instr.dst].type, width_)
-                  .size) *
-          8;
+          is_bool
+              ? 1
+              : static_cast<u32>(
+                    storage_
+                        .layout_of(storage_.registers()[instr.dst].type, width_)
+                        .size) *
+                    8;
       constexpr Reg integer = Reg::X18;  // outside the allocator pool
       constexpr Reg scratch = Reg::X19;
       constexpr Reg edge = Reg::X20;

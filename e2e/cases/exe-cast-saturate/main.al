@@ -86,5 +86,12 @@ fn main() -> i32 {
   if (18446744073709551615u64 as f64) != 18446744073709551615.0f64 {
     ret 23
   }
+  // A float cast to bool saturates to zero or one, not the byte range.
+  if (200.0f64 as bool) != true {
+    ret 24
+  }
+  if ((-200.0f64) as bool) != false {
+    ret 25
+  }
   ret 0
 }
