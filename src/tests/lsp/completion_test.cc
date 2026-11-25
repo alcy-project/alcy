@@ -217,6 +217,27 @@ TEST_CASE("Completion offers declared associated functions for a qualifier") {
   CHECK(find_item(for_bytes, "from_slice") != nullptr);
 }
 
+TEST_CASE(
+    "Completion keeps the qualifier when inserting an associated function") {
+  const Document document("file:///main.al", "alcy", 1,
+                          "fn main() -> i32 {\n"
+                          "  v := Vec::<i32>::z\n"
+                          "  ret 0\n"
+                          "}\n");
+  const DocumentAnalysis analysis(document);
+  const text::JsonValue list =
+      completion_items(document, analysis, Position{1, 20});
+  const text::JsonValue* zeros = find_item(list, "zeros");
+  CHECK(zeros != nullptr);
+  if (zeros != nullptr) {
+    const text::JsonValue* edit = zeros->find("textEdit");
+    CHECK(edit != nullptr);
+    if (edit != nullptr) {
+      CHECK(edit->find("newText")->as_string() == "Vec::<i32>::zeros");
+    }
+  }
+}
+
 TEST_CASE("Completion hides an impl whose bounds the type does not meet") {
   const Document document("file:///main.al", "alcy", 1,
                           "struct Plain {\n"

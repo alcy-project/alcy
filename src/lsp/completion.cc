@@ -794,6 +794,7 @@ std::string written_signature(const pipeline::PipelineContext& context,
 void collect_declared_methods(
     const DocumentAnalysis& analysis,
     std::string_view name,
+    std::string_view spelling,
     const std::optional<std::vector<ir::TypeIdx>>& wanted,
     std::vector<Item>* out) {
   const pipeline::PipelineContext& context = analysis.context();
@@ -831,9 +832,10 @@ void collect_declared_methods(
           bound_name(context.ast, fn.params[0].pattern) == "self") {
         continue;
       }
-      out->push_back(Item{std::string(fn.name.name),
-                          written_signature(context, method), method,
-                          CompletionItemKind::Method, "", true, true});
+      out->push_back(
+          Item{std::string(fn.name.name), written_signature(context, method),
+               method, CompletionItemKind::Method,
+               std::string(spelling) + std::string(fn.name.name), true, true});
     }
   });
 }
@@ -1094,10 +1096,11 @@ void collect_qualified(const DocumentAnalysis& analysis,
                function_detail(context, state, method.params, method.ret,
                                variadic_param_name(context, method.item),
                                method.item),
-               method.item, CompletionItemKind::Method, "", true});
+               method.item, CompletionItemKind::Method,
+               std::string(spelling) + std::string(method.name), true});
     }
   }
-  collect_declared_methods(analysis, name, wanted, out);
+  collect_declared_methods(analysis, name, spelling, wanted, out);
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
       if (info.name != name) {
