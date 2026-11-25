@@ -142,6 +142,7 @@ struct NameCollector {
     const ast::PatternNode& pat = ast.patterns[pat_idx];
     switch (pat.kind) {
       case ast::PatternKind::Wildcard:
+      case ast::PatternKind::Name:
       case ast::PatternKind::Literal:
       case ast::PatternKind::Range: break;
       case ast::PatternKind::Ident: {

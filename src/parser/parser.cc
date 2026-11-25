@@ -1273,6 +1273,41 @@ ast::ItemIdx Parser::parse_fn(bool is_pub,
   return ast_.items.push_back(node);
 }
 
+// Marks a declaration head so a bare name in it binds even before name
+// resolution. Nested patterns inherit the role: `(x, y) := p` binds
+// both names, and `Some(x) := p` still names a refutable constructor.
+void mark_binding_context(ast::AstArena& ast, ast::PatternIdx pattern) {
+  if (!pattern.is_valid() || ast.exhausted()) {
+    return;
+  }
+  ast::PatternNode& node = ast.patterns[pattern];
+  if (node.binding_context) {
+    return;
+  }
+  node.binding_context = true;
+  switch (node.kind) {
+    case ast::PatternKind::Or:
+      for (ast::PatternIdx alt : node.payload.or_pat.alternatives) {
+        mark_binding_context(ast, alt);
+      }
+      break;
+    case ast::PatternKind::Tuple:
+      for (ast::PatternIdx element : node.payload.tuple.elements) {
+        mark_binding_context(ast, element);
+      }
+      break;
+    case ast::PatternKind::Struct:
+      for (const ast::FieldPattern& field : node.payload.strukt.fields) {
+        mark_binding_context(ast, field.pattern);
+      }
+      break;
+    case ast::PatternKind::Ref:
+      mark_binding_context(ast, node.payload.ref.inner);
+      break;
+    default: break;
+  }
+}
+
 bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
   if (!check(lexer::TokenKind::RParen)) {
     while (true) {
@@ -1291,21 +1326,31 @@ bool Parser::parse_fn_params(std::vector<ast::ItemFnParam>& params) {
         if (!pattern.is_valid()) {
           return false;
         }
+        mark_binding_context(ast_, pattern);
         type = ref_self_type(is_mut, amp.span);
       } else {
         pattern = parse_pattern();
         if (!pattern.is_valid()) {
           return false;
         }
+        mark_binding_context(ast_, pattern);
         if (!expect(lexer::TokenKind::Colon, "`:`")) {
           return false;
         }
         if (check(lexer::TokenKind::DotDot)) {
           // `args: ..` collects the call's remaining arguments; the
           // name binds them and only the compiler expands the call.
-          if (ast_.patterns[pattern].kind != ast::PatternKind::Ident) {
+          ast::PatternNode& named = ast_.patterns[pattern];
+          if (named.kind == ast::PatternKind::Name &&
+              ast_.paths[named.payload.name.path].segments.size() == 1) {
+            const ast::Ident only =
+                ast_.paths[named.payload.name.path].segments[0];
+            named.kind = ast::PatternKind::Ident;
+            named.payload.ident = ast::PatternIdent{.name = only};
+          }
+          if (named.kind != ast::PatternKind::Ident) {
             const u32 index = bag_.emit<i18n::Key::ParserVariadicParameter>(
-                DiagCode::UnexpectedToken, ast_.patterns[pattern].span);
+                DiagCode::UnexpectedToken, named.span);
             (void)index;
             return false;
           }
@@ -2428,6 +2473,7 @@ ast::StmtIdx Parser::parse_stmt() {
     if (!pattern.is_valid()) {
       return ast::StmtIdx::invalid();
     }
+    mark_binding_context(ast_, pattern);
     ast::TypeIdx type = ast::TypeIdx::invalid();
     if (match(lexer::TokenKind::Colon)) {
       type = parse_closed_type();

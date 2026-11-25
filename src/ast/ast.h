@@ -277,6 +277,10 @@ enum class PatternKind : u8 {
   Wildcard,
   Ident,
   MutIdent,
+  // A bare name whose meaning is decided by resolution: a unit variant
+  // when it names one, a binding otherwise. Parsing does not look at
+  // the name's spelling.
+  Name,
   Literal,
   Range,
   Tuple,
@@ -302,6 +306,10 @@ struct PatternRange {
   LiteralIdx start = LiteralIdx::invalid();
   LiteralIdx end = LiteralIdx::invalid();
   bool inclusive = true;
+};
+
+struct PatternName {
+  PathIdx path;
 };
 
 struct PatternTuple {
@@ -334,6 +342,7 @@ union PatternPayload {
   PatternPayload() {}
   PatternIdent ident;
   PatternIdent mut_ident;
+  PatternName name;
   PatternLiteral literal;
   PatternRange range;
   PatternTuple tuple;
@@ -353,6 +362,9 @@ struct PatternNode {
   // the item pattern must match every item, so a refutable one is a
   // check-time error rather than a filter.
   bool for_pattern = false;
+  // Set by the parser for declaration heads (locals, parameters, `for`),
+  // where a bare name is a binding rather than a unit variant.
+  bool binding_context = false;
 };
 
 struct WildcardPattern : Pattern {};

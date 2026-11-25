@@ -746,6 +746,7 @@ void Lowerer::bind_pattern(ast::PatternIdx pattern, Val init) {
   const ast::PatternNode& node = ast.patterns[pattern];
   switch (node.kind) {
     case ast::PatternKind::Range: failed = true; return;
+    case ast::PatternKind::Name:
     case ast::PatternKind::Wildcard:
       // A wildcard binding of a droppable place discards it by ending
       // it, so a destructured field nothing binds still runs its
@@ -5006,6 +5007,7 @@ bool Lowerer::pattern_bindable(ast::PatternIdx pattern) const {
   switch (node.kind) {
     case ast::PatternKind::Wildcard:
     case ast::PatternKind::Ident:
+    case ast::PatternKind::Name:
     case ast::PatternKind::MutIdent: return true;
     case ast::PatternKind::Range:
     case ast::PatternKind::Literal: return false;
@@ -5101,6 +5103,7 @@ void Lowerer::lower_arm_test(ast::PatternIdx pattern,
       switch_to(body_block);
       return;
     case ast::PatternKind::Ident:
+    case ast::PatternKind::Name:
     case ast::PatternKind::MutIdent: {
       if (arm_borrowed_) {
         // A field behind a reference is borrowed, not moved: the

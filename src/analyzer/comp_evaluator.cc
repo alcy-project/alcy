@@ -366,6 +366,11 @@ bool CompEvaluator::comp_bind_pattern(u32 mod,
     case ast::PatternKind::Ident:
       scope.frames.back().emplace_back(node.payload.ident.name.name, value);
       return true;
+    case ast::PatternKind::Name: {
+      const ast::Path& path = ast.paths[node.payload.name.path];
+      scope.frames.back().emplace_back(path.segments.back().name, value);
+      return true;
+    }
     case ast::PatternKind::MutIdent:
       scope.frames.back().emplace_back(node.payload.mut_ident.name.name, value);
       return true;
@@ -437,6 +442,18 @@ bool CompEvaluator::comp_match_pattern(u32 mod,
     case ast::PatternKind::Ident:
     case ast::PatternKind::MutIdent:
       return comp_bind_pattern(mod, pattern, value, scope, span);
+    case ast::PatternKind::Name: {
+      const ast::Path& path = ast.paths[node.payload.name.path];
+      if (path.segments.empty() || value.value.tag != CompValue::Tag::Enum) {
+        return false;
+      }
+      u32 variant = 0;
+      if (!variant_index(value.type, path.segments.back().name, variant) ||
+          variant != value.value.variant) {
+        return false;
+      }
+      return variant_payload(value.type, variant).empty();
+    }
     case ast::PatternKind::Range: {
       if (value.value.tag != CompValue::Tag::Int) {
         return false;

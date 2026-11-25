@@ -385,6 +385,10 @@ class Desugarer {
     const ast::PatternNode& node = ast.patterns[pattern];
     switch (node.kind) {
       case ast::PatternKind::Wildcard: break;
+      case ast::PatternKind::Name:
+        // A qualified bare name names a variant; the parser makes every
+        // single-segment binding an Ident already.
+        break;
       case ast::PatternKind::Ident: {
         ast::PatternNode& target = ast.patterns[pattern];
         target.payload.ident.name.name =

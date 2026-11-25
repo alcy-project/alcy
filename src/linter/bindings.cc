@@ -121,6 +121,12 @@ class Analyzer {
         declare(node.payload.ident.name.name, node.payload.ident.name.span,
                 false, is_param);
         break;
+      case K::Name: {
+        const ast::Path& path = ctx_.ast.paths[node.payload.name.path];
+        declare(path.segments.back().name, path.segments.back().span, false,
+                is_param);
+        break;
+      }
       case K::MutIdent:
         declare(node.payload.mut_ident.name.name,
                 node.payload.mut_ident.name.span, true, is_param);

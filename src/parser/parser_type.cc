@@ -587,21 +587,6 @@ ast::PatternIdx Parser::parse_primary_pattern() {
   if (!path.is_valid()) {
     return ast::PatternIdx::invalid();
   }
-  const std::span<const ast::Ident> segments = ast_.paths[path].segments;
-  // A lone lowercase identifier binds a variable; anything else names a
-  // unit variant (uppercase `None`, qualified `Option::None`). Name
-  // resolution refines this, but the parser must commit to a shape.
-  if (segments.size() == 1) {
-    const std::string_view name = segments[0].name;
-    if (!name.empty() &&
-        (name.front() == '_' || (name.front() >= 'a' && name.front() <= 'z'))) {
-      ast::PatternNode node;
-      node.kind = ast::PatternKind::Ident;
-      node.span = span_from(mark);
-      node.payload.ident.name = segments[0];
-      return ast_.patterns.push_back(node);
-    }
-  }
   if (match(lexer::TokenKind::LParen)) {
     std::vector<ast::PatternIdx> elements;
     if (!check(lexer::TokenKind::RParen)) {
@@ -668,12 +653,21 @@ ast::PatternIdx Parser::parse_primary_pattern() {
     node.payload.strukt.fields = ast::copy_to_arena(ast_.spans, fields);
     return ast_.patterns.push_back(node);
   }
-  // A bare path is a unit-variant pattern.
+  const std::span<const ast::Ident> segments = ast_.paths[path].segments;
+  // A single identifier is a binding, whatever its first letter. A
+  // qualified bare path keeps its spelling until resolution decides
+  // whether it names a unit variant.
+  if (segments.size() == 1) {
+    ast::PatternNode node;
+    node.kind = ast::PatternKind::Ident;
+    node.span = span_from(mark);
+    node.payload.ident.name = segments[0];
+    return ast_.patterns.push_back(node);
+  }
   ast::PatternNode node;
-  node.kind = ast::PatternKind::Tuple;
+  node.kind = ast::PatternKind::Name;
   node.span = span_from(mark);
-  node.payload.tuple.path = path;
-  node.payload.tuple.elements = {};
+  node.payload.name.path = path;
   return ast_.patterns.push_back(node);
 }
 

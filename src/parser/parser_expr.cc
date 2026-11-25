@@ -1132,6 +1132,7 @@ ast::ExprIdx Parser::parse_for(bool is_comp) {
   if (!pattern.is_valid()) {
     return ast::ExprIdx::invalid();
   }
+  mark_binding_context(ast_, pattern);
   if (!expect(lexer::TokenKind::In, "`in`")) {
     return ast::ExprIdx::invalid();
   }

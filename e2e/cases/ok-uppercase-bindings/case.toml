@@ -1,0 +1,5 @@
+[cli]
+subcommand = "run"
+
+[cli.expect]
+exit = 10

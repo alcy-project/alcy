@@ -284,6 +284,7 @@ void walk_pattern(LintContext& ctx,
     case K::Wildcard:
     case K::Range:
     case K::Ident:
+    case K::Name:
     case K::MutIdent:
     case K::Literal: break;
     case K::Tuple: {

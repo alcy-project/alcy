@@ -115,6 +115,7 @@ bool verify_pattern_children(const PatternNode& node, const AstArena& arena) {
     case PatternKind::Wildcard:
     case PatternKind::Ident:
     case PatternKind::MutIdent: return true;
+    case PatternKind::Name: return bound(node.payload.name.path, arena.paths);
     case PatternKind::Literal: {
       const PatternLiteral literal = node.payload.literal;
       return bound(literal.value, arena.literals);

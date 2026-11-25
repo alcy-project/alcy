@@ -21,6 +21,10 @@
 
 namespace parser {
 
+// Marks a declaration head and its nested patterns so a bare name in it
+// binds before name resolution can tell it from a unit variant.
+void mark_binding_context(ast::AstArena& ast, ast::PatternIdx pattern);
+
 // A function signature without its body, shared by `fn` items and
 // spec method signatures (`fn f(...) -> T;`).
 struct FnSignature {

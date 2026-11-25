@@ -51,6 +51,11 @@ void Checker::collect_pattern_idents(ast::PatternIdx pattern,
       out.push_back(ast.patterns[pattern].payload.ident.name.name);
       return;
     }
+    case ast::PatternKind::Name: {
+      const ast::PathIdx path = ast.patterns[pattern].payload.name.path;
+      out.push_back(ast.paths[path].segments.back().name);
+      return;
+    }
     case ast::PatternKind::MutIdent: {
       out.push_back(ast.patterns[pattern].payload.mut_ident.name.name);
       return;
@@ -162,6 +167,70 @@ bool Checker::bind_pattern(u32 module,
       check_literal(node.payload.literal.value, &type);
       return true;
     }
+    case ast::PatternKind::Name: {
+      const ast::PathIdx path = node.payload.name.path;
+      if (node.binding_context) {
+        const ast::Ident only = ast.paths[path].segments.back();
+        ast::PatternNode& mutable_node = ast.patterns[pattern];
+        mutable_node.kind = ast::PatternKind::Ident;
+        mutable_node.payload.ident = ast::PatternIdent{.name = only};
+        return bind_pattern(module, pattern, type, by_ref, own_fn);
+      }
+      PathValue resolved;
+      if (resolve_variant_path(module, path, resolved)) {
+        if (resolved.kind != PathValue::Kind::TupleVariant) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerNotTupleVariant>(
+              DiagCode::TypeMismatch, node.span);
+          (void)index;
+          bind_error_idents(module, pattern);
+          return true;
+        }
+        std::vector<ir::TypeIdx> payloads;
+        if (!is_error(resolved.type)) {
+          unify(type, resolved.type, node.span, "unit variant pattern");
+          payloads = variant_payloads(resolved, type, node.span);
+        } else {
+          const GenericInstance* instance =
+              generic_instance_for(nominal_index(resolved.enom), type);
+          if (instance == nullptr) {
+            const u32 index =
+                bag.emit<i18n::Key::AnalyzerVariantNotInMatchedType>(
+                    DiagCode::TypeMismatch, node.span);
+            (void)index;
+            bind_error_idents(module, pattern);
+            return true;
+          }
+          const GenericScope kept = push_generic_scope(*instance);
+          payloads = variant_payloads(resolved, type, node.span);
+          pop_generic_scope(kept);
+        }
+        if (!payloads.empty()) {
+          const u32 index = bag.emit<i18n::Key::AnalyzerVariantFieldArity>(
+              DiagCode::ArityError, node.span, 0, "s", payloads.size());
+          (void)index;
+          bind_error_idents(module, pattern);
+          return true;
+        }
+        // Lowering reads the shape the name resolved to, not the name
+        // itself: make the resolution visible in the tree.
+        ast::PatternNode& mutable_node = ast.patterns[pattern];
+        mutable_node.kind = ast::PatternKind::Tuple;
+        mutable_node.payload.tuple =
+            ast::PatternTuple{.path = path, .elements = {}};
+        return true;
+      }
+      const ast::Path& name_path = ast.paths[path];
+      if (name_path.segments.size() == 1) {
+        ast::PatternNode& mutable_node = ast.patterns[pattern];
+        mutable_node.kind = ast::PatternKind::Ident;
+        mutable_node.payload.ident =
+            ast::PatternIdent{.name = name_path.segments[0]};
+        return bind_pattern(module, pattern, type, by_ref, own_fn);
+      }
+      bind_error_idents(module, pattern);
+      return true;
+    }
+
     case ast::PatternKind::Tuple: {
       if (node.payload.tuple.path.is_valid()) {
         PathValue resolved;
@@ -3050,9 +3119,9 @@ void Checker::check_cond(u32 module, ast::CondIdx cond, bool& binds) {
     const ir::TypeIdx init = check_expr(module, node.init, nullptr);
     scopes.emplace_back();
     binds = true;
-    // The form exists for a refutable pattern: an identifier or a
-    // wildcard always matches, so the branch would enter whatever the
-    // initializer holds.
+    // Resolution can turn a bare name into a binding, so ask for the
+    // pattern's shape after binding rather than before it.
+    bind_pattern(module, node.pattern, init);
     const ast::PatternKind condition_kind = ast.patterns[node.pattern].kind;
     if (condition_kind == ast::PatternKind::Ident ||
         condition_kind == ast::PatternKind::MutIdent ||
@@ -3061,7 +3130,6 @@ void Checker::check_cond(u32 module, ast::CondIdx cond, bool& binds) {
           DiagCode::InvalidOperation, ast.patterns[node.pattern].span);
       (void)index;
     }
-    bind_pattern(module, node.pattern, init);
     if (verify_comp_known && !comp_checked_in_scope(node.init) &&
         !expr_comp_known(module, node.init)) {
       const u32 index = bag.emit<i18n::Key::AnalyzerCompConditionInitializer>(
@@ -3280,6 +3348,15 @@ bool Checker::pattern_is_wildcard(ir::TypeIdx type, ast::PatternIdx pattern) {
       if (tag_of(type) == ir::TypeTag::Enum &&
           spells_fieldless_variant(
               type, ast.patterns[pattern].payload.ident.name.name)) {
+        return false;
+      }
+      return true;
+    }
+    case ast::PatternKind::Name: {
+      const ast::PathIdx path = ast.patterns[pattern].payload.name.path;
+      if (tag_of(type) == ir::TypeTag::Enum &&
+          spells_fieldless_variant(type,
+                                   ast.paths[path].segments.back().name)) {
         return false;
       }
       return true;
@@ -3797,6 +3874,15 @@ void Checker::mark_variant_covered(
           covered[i] = true;
           return;
         }
+      }
+      return;
+    }
+    case ast::PatternKind::Name: {
+      const ast::PathIdx path = node.payload.name.path;
+      const std::string_view name = ast.paths[path].segments.back().name;
+      const u32 index = variant_index_of(item, variants, name);
+      if (index != base::INVALID_IDX) {
+        covered[index] = true;
       }
       return;
     }
