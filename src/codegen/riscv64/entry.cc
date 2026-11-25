@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "codegen/riscv64/isa.h"
+#include "codegen/riscv64/materialize.h"
 #include "codegen/riscv64/minst.h"
 #include "codegen/riscv64/rodata.h"
 #include "ir/common.h"
@@ -24,10 +25,7 @@ EntryBody build_entry(const ir::Function& function,
   const ir::TypeIdx result_type = function.meta.return_type;
   const ir::TypeTag result_tag = storage.types()[result_type.idx].tag;
   entry.returns_enum = result_tag == ir::TypeTag::Enum;
-  const bool returns_aggregate =
-      result_tag == ir::TypeTag::Struct || result_tag == ir::TypeTag::Array ||
-      entry.returns_enum || result_tag == ir::TypeTag::Tuple;
-  if (returns_aggregate) {
+  if (entry.returns_enum) {
     const u64 raw = storage.layout_of(result_type, width).size;
     entry.sret_bytes = static_cast<i64>((raw + 15) & ~15ull);
   }
@@ -47,12 +45,7 @@ EntryBody build_entry(const ir::Function& function,
       wrapper.push_back(make_inst(MOp::Addi, 8, Operand{SP}, Operand{SP},
                                   Operand{Imm{-entry.sret_bytes}}));
     } else {
-      const i64 hi = upper20(entry.sret_bytes);
-      const i64 lo = lower12(entry.sret_bytes);
-      wrapper.push_back(
-          make_inst(MOp::Lui, 8, Operand{T0}, Operand{Imm{hi << 12}}));
-      wrapper.push_back(
-          make_inst(MOp::Addi, 8, Operand{T0}, Operand{T0}, Operand{Imm{lo}}));
+      emit_materialize(wrapper, T0, entry.sret_bytes);
       wrapper.push_back(
           make_inst(MOp::Sub, 8, Operand{SP}, Operand{SP}, Operand{T0}));
     }
