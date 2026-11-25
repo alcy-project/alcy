@@ -1,11 +1,11 @@
 // Copyright 2026 The Alcy Project Authors
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// `alcy/std/sort`: sorting over borrowed slices.
+// `alcy/std/sort`: a stable sort over borrowed slices.
 //
-// The sort is stable: equal elements keep the order they had. It works
-// on any writable slice and takes the order as a predicate, so it
-// needs no container and no `Ord` bound.
+// Insertion sort keeps equal elements in their original order. It
+// works on any writable slice and takes the order as a predicate, so
+// it needs no container and no `Ord` bound.
 
 use core::cmp::Ordering;
 use core::mem::read;
