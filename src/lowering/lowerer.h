@@ -1051,6 +1051,9 @@ class Lowerer {
   Val lower_memcopy_intrinsic(ast::ExprIdx expr,
                               const analyzer::CheckedModule::FnSig& sig,
                               const std::vector<ir::TypeIdx>& type_args);
+  Val lower_memset_intrinsic(ast::ExprIdx expr,
+                             const analyzer::CheckedModule::FnSig& sig,
+                             const std::vector<ir::TypeIdx>& type_args);
   Val lower_drop_in_place_intrinsic(ast::ExprIdx expr,
                                     const analyzer::CheckedModule::FnSig& sig,
                                     const std::vector<ir::TypeIdx>& type_args);

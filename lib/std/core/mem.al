@@ -3,7 +3,27 @@
 
 // `alcy/std/core`: memory and the size of a type.
 
+// A value whose bytes can be copied to a new place and used there.
+// The witness is structural: primitives, shared references and
+// aggregates of copyable fields are copyable; a destructor, an
+// anchor, or an exclusive reference takes it away. The compiler owns
+// the spec, so no `impl` may name it.
+pub intrinsic spec Copy {
+};
+
+// A value whose all-zero bytes spell a valid value. The witness is
+// the set of primitives whose representation the compiler knows:
+// bool, the integer and float widths, char and rune. A reference,
+// an enum or a user type cannot be filled with zeros safely.
+pub intrinsic spec Zeroable {
+};
+
 pub unsafe intrinsic fn memcopy<T>(dst: &mut T, src: &T, n: usize);
+
+// Fills `count` elements of uninitialized storage with `byte`. The
+// caller must ensure the bytes spell valid T values before reading
+// them through `uninit_assume`, the same contract `alloc` carries.
+pub unsafe intrinsic fn memset<T>(dst: &mut MaybeUninit<T>, byte: u8, count: usize);
 
 // Raw pointer offset. The count is signed so one spelling moves both
 // ways, and the result is in bounds exactly when the caller keeps it

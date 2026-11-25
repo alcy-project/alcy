@@ -2066,6 +2066,9 @@ Val Lowerer::lower_intrinsic_call(ast::ExprIdx expr,
   if (name == "memcopy") {
     return lower_memcopy_intrinsic(expr, sig, type_args);
   }
+  if (name == "memset") {
+    return lower_memset_intrinsic(expr, sig, type_args);
+  }
   if (name == "drop_in_place") {
     return lower_drop_in_place_intrinsic(expr, sig, type_args);
   }
@@ -2260,6 +2263,46 @@ Val Lowerer::lower_memcopy_intrinsic(
   }
   emit_void(ir::Opcode::Memcopy,
             {use_value(dst), use_value(src), use_value(len)});
+  return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
+}
+
+Val Lowerer::lower_memset_intrinsic(
+    ast::ExprIdx expr,
+    const analyzer::CheckedModule::FnSig& /*sig*/,
+    const std::vector<ir::TypeIdx>& type_args) {
+  const ast::ExprNode& node = ast.exprs[expr];
+  const ast::ExprCall& call = node.payload.get<ast::ExprCall>();
+  if (call.args.size() != 3 || type_args.size() != 1) {
+    internal(node.span, "intrinsic arity");
+    return Val{size_one, error_type(), false, false};
+  }
+  Val dst = lower_expr(call.args[0], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val byte = lower_expr(call.args[1], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  Val count = lower_expr(call.args[2], nullptr);
+  if (failed || terminated_cur()) {
+    return stopped_value();
+  }
+  // The intrinsic counts elements; the opcode fills bytes. The layout
+  // of the element type answers the conversion at compile time.
+  const ir::RegisterIdx width =
+      emit_type_query(ir::Opcode::TypeSizeOf, type_args[0]);
+  if (failed) {
+    return stopped_value();
+  }
+  const ir::RegisterIdx bytes =
+      emit(ir::Opcode::IntMul, usize_type(),
+           {use_value(count), to_operand(width, usize_type())});
+  if (failed) {
+    return stopped_value();
+  }
+  emit_void(ir::Opcode::Memset,
+            {use_value(dst), use_value(byte), to_operand(bytes, usize_type())});
   return Val{size_one, builder.primitive(ir::TypeTag::Void), false, false};
 }
 
