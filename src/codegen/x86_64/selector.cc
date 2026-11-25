@@ -1413,9 +1413,12 @@ std::optional<bool> Selector::emit_memory(const ir::Instruction& instr,
       return true;
     }
     case O::Memset: {
-      // operands = [dst, value, len].
+      // operands = [dst, value, len]. `rep stosb` reads the fill byte
+      // from AL and the count from RCX. Loading a computed count into
+      // RCX uses RAX as a scratch, which would clobber AL, so the fill
+      // byte is installed last.
       DCHECK(count == 3);
-      for (const u32 which : {0u, 1u, 2u}) {
+      for (const u32 which : {0u, 2u, 1u}) {
         const std::optional<Operand> side =
             scalar_of(operand_at(instr, which), span);
         if (!side.has_value()) {
