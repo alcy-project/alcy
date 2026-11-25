@@ -102,6 +102,22 @@ void check_tree(PackageAnalysis& out,
   if (!features.has_value()) {
     return;
   }
+  for (const analyzer::CheckedModule& module : features->modules) {
+    for (const analyzer::CheckedModule::ExprType& entry : module.expr_types) {
+      if (!entry.expr.is_valid()) {
+        continue;
+      }
+      const auto found = out.expr_types.find(entry.expr.idx);
+      if (found == out.expr_types.end()) {
+        out.expr_types.emplace(
+            entry.expr.idx, PackageAnalysis::ExprTypeEntry{
+                                entry.type, entry.inst == analyzer::NO_INST});
+      } else if (entry.inst == analyzer::NO_INST &&
+                 !found->second.unspecialized) {
+        found->second = {entry.type, true};
+      }
+    }
+  }
   const usize index = out.checked.size();
   for (const analyzer::ModuleNode* module : features->tree.modules) {
     if (module->file != source::UNKNOWN_FILE) {
@@ -127,6 +143,7 @@ void analyze_standalone(PackageAnalysis& out,
   const source::FileId file =
       out.context.sources.add_virtual(focus_uri, focus->text);
   out.files_by_uri[std::string(focus_uri)] = file;
+  out.uri_by_file[file] = std::string(focus_uri);
   analyzer::ModuleTree recovered;
   base::Result<analyzer::ModuleTree, diag::Reported> tree =
       pipeline::front_end_root(out.context, file,
@@ -164,6 +181,7 @@ void analyze_package(PackageAnalysis& out,
     const source::FileId file =
         out.context.sources.add_virtual(*path, buffer.text);
     out.files_by_uri[std::string(buffer.uri)] = file;
+    out.uri_by_file[file] = std::string(buffer.uri);
   }
   if (!out.files_by_uri.contains(std::string(focus_uri))) {
     const workspace::BufferView* focus = find_buffer(buffers, focus_uri);
@@ -175,6 +193,7 @@ void analyze_package(PackageAnalysis& out,
     const source::FileId file =
         out.context.sources.add_virtual(name, focus->text);
     out.files_by_uri[std::string(focus_uri)] = file;
+    out.uri_by_file[file] = std::string(focus_uri);
   }
 
   linter::LintConfig config{};
@@ -363,10 +382,9 @@ std::string_view variadic_param_element(
 
 std::optional<std::string> uri_of_file(const DocumentAnalysis& analysis,
                                        source::FileId file) {
-  for (const auto& [uri, id] : analysis.owner().files_by_uri) {
-    if (id == file) {
-      return uri;
-    }
+  const auto found = analysis.owner().uri_by_file.find(file);
+  if (found != analysis.owner().uri_by_file.end()) {
+    return found->second;
   }
   const std::optional<std::string_view> name =
       analysis.context().sources.name(file);
@@ -431,27 +449,13 @@ std::optional<text::JsonValue> location_json(const DocumentAnalysis& analysis,
   return lsp::location_json(*uri, *text, span, encoding, cache);
 }
 
-std::optional<ir::TypeIdx> checked_expr_type(
-    const analyzer::CheckedPackage& package,
-    ast::ExprIdx expr) {
-  for (const analyzer::CheckedModule& module : package.modules) {
-    if (const analyzer::CheckedModule::ExprType* entry =
-            module.expr_type_of(expr, analyzer::NO_INST)) {
-      return entry->type;
-    }
+std::optional<ir::TypeIdx> checked_expr_type(const PackageAnalysis& owner,
+                                             ast::ExprIdx expr) {
+  const auto found = owner.expr_types.find(expr.idx);
+  if (found == owner.expr_types.end()) {
+    return std::nullopt;
   }
-  std::optional<ir::TypeIdx> fallback;
-  for (const analyzer::CheckedModule& module : package.modules) {
-    for (const analyzer::CheckedModule::ExprType& entry : module.expr_types) {
-      if (entry.expr != expr) {
-        continue;
-      }
-      if (!fallback.has_value()) {
-        fallback = entry.type;
-      }
-    }
-  }
-  return fallback;
+  return found->second.type;
 }
 
 }  // namespace lsp

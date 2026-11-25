@@ -50,10 +50,22 @@ struct PackageAnalysis {
   // Type tables recovered from a failed lowering, aligned with `checked`.
   // Presence means lowering ran and failed; absence means it did not run.
   std::vector<std::optional<ir::StorageState>> recovered;
+  // Expression to the type the checker recorded, built once with the
+  // analysis. Features ask about expressions in loops, so walking every
+  // module's type table per question made one hover or completion grow
+  // with the size of the whole package.
+  struct ExprTypeEntry {
+    ir::TypeIdx type;
+    bool unspecialized = false;
+  };
+  std::unordered_map<u32, ExprTypeEntry> expr_types;
   // Source file to the checked package that holds it.
   std::unordered_map<source::FileId, usize> package_of;
   // Open buffer URI to the source file registered for its text.
   std::unordered_map<std::string, source::FileId> files_by_uri;
+  // The reverse of `files_by_uri`, so a location can name its file
+  // without scanning every open buffer and copying a URI per span.
+  std::unordered_map<source::FileId, std::string> uri_by_file;
   path::Path root = path::Path::from_native(".").unwrap();
   std::string fingerprint;
   PositionEncoding encoding = PositionEncoding::Utf16;
@@ -160,8 +172,7 @@ std::string_view variadic_param_element(
 // The type the checker recorded for an expression, if it recorded one.
 // An entry exists once per instantiation; the declaration's own entry is
 // the one a query without a call site wants.
-std::optional<ir::TypeIdx> checked_expr_type(
-    const analyzer::CheckedPackage& package,
-    ast::ExprIdx expr);
+std::optional<ir::TypeIdx> checked_expr_type(const PackageAnalysis& owner,
+                                             ast::ExprIdx expr);
 
 }  // namespace lsp

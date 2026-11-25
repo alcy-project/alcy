@@ -83,25 +83,28 @@ void PositionIndex::apply(std::string_view text,
   const i64 delta = static_cast<i64>(new_len) - static_cast<i64>(end - start);
   const usize scan_end = start + new_len;
 
-  std::vector<u32> next;
-  next.reserve(line_starts_.size());
-  for (const u32 line_start : line_starts_) {
-    if (line_start > lo) {
-      break;
-    }
-    next.push_back(line_start);
+  usize first = 0;
+  while (first < line_starts_.size() && line_starts_[first] <= lo) {
+    ++first;
   }
+  usize last = first;
+  while (last < line_starts_.size() && line_starts_[last] <= end) {
+    ++last;
+  }
+  std::vector<u32> inserted;
   for (usize i = lo; i < scan_end && i < text.size(); ++i) {
     if (line_starts_after(text, i)) {
-      next.push_back(static_cast<u32>(i + 1));
+      inserted.push_back(static_cast<u32>(i + 1));
     }
   }
-  for (const u32 line_start : line_starts_) {
-    if (line_start > end) {
-      next.push_back(static_cast<u32>(static_cast<i64>(line_start) + delta));
-    }
+  line_starts_.erase(line_starts_.begin() + static_cast<isize>(first),
+                     line_starts_.begin() + static_cast<isize>(last));
+  line_starts_.insert(line_starts_.begin() + static_cast<isize>(first),
+                      inserted.begin(), inserted.end());
+  for (usize i = first + inserted.size(); i < line_starts_.size(); ++i) {
+    line_starts_[i] =
+        static_cast<u32>(static_cast<i64>(line_starts_[i]) + delta);
   }
-  line_starts_ = std::move(next);
 }
 
 usize PositionIndex::byte_offset(std::string_view text,

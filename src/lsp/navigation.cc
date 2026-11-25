@@ -208,7 +208,7 @@ std::optional<diag::Span> type_definition_at(const Document& document,
           innermost_expr(context, offset, root);
       expr.has_value()) {
     if (const std::optional<ir::TypeIdx> type =
-            checked_expr_type(package, *expr);
+            checked_expr_type(analysis.owner(), *expr);
         type.has_value()) {
       const std::optional<diag::Span> declaration =
           declaration_of_type(context, package, analysis.types(), root, *type);

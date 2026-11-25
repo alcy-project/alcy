@@ -329,7 +329,7 @@ std::optional<ir::TypeIdx> local_binding_type(const DocumentAnalysis& analysis,
         continue;
       }
       if (const std::optional<ir::TypeIdx> type =
-              checked_expr_type(package, *expr);
+              checked_expr_type(analysis.owner(), *expr);
           type.has_value()) {
         return type;
       }
@@ -472,7 +472,7 @@ std::optional<std::string> hover_markdown(const Document& document,
       binding.has_value()) {
     if (binding->init != ast::ExprIdx::invalid()) {
       if (const std::optional<ir::TypeIdx> type =
-              checked_expr_type(package, binding->init);
+              checked_expr_type(analysis.owner(), binding->init);
           type.has_value()) {
         return type_markdown(context, state, *type);
       }
@@ -514,7 +514,8 @@ std::optional<std::string> hover_markdown(const Document& document,
   if (const std::optional<ast::ExprIdx> expr =
           innermost_expr(context, offset, root);
       expr.has_value()) {
-    const std::optional<ir::TypeIdx> type = checked_expr_type(package, *expr);
+    const std::optional<ir::TypeIdx> type =
+        checked_expr_type(analysis.owner(), *expr);
     if (type.has_value()) {
       return type_markdown(context, state, *type);
     }

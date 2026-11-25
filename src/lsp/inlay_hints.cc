@@ -60,7 +60,6 @@ std::string_view param_name(const ast::AstArena& ast,
 void collect_binding_hints(const DocumentAnalysis& analysis,
                            std::vector<Hint>* out) {
   const pipeline::PipelineContext& context = analysis.context();
-  const analyzer::CheckedPackage& package = analysis.package();
   const ir::StorageState& state = analysis.types();
   const source::FileId root = analysis.root();
   context.ast.stmts.for_each_node([&](const ast::StmtIdx index) {
@@ -83,7 +82,7 @@ void collect_binding_hints(const DocumentAnalysis& analysis,
       return;
     }
     const std::optional<ir::TypeIdx> type =
-        checked_expr_type(package, declaration.init);
+        checked_expr_type(analysis.owner(), declaration.init);
     if (!type.has_value()) {
       return;
     }

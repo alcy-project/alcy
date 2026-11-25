@@ -261,7 +261,6 @@ void collect_locals(const DocumentAnalysis& analysis,
                     usize offset,
                     std::vector<Item>* out) {
   const pipeline::PipelineContext& context = analysis.context();
-  const analyzer::CheckedPackage& package = analysis.package();
   const ir::StorageState& state = analysis.types();
   const source::FileId root = analysis.root();
   const std::vector<diag::Span> scopes = scope_spans(context, root);
@@ -323,7 +322,7 @@ void collect_locals(const DocumentAnalysis& analysis,
     if (init != init_by_pattern.end() &&
         init->second != ast::ExprIdx::invalid()) {
       if (const std::optional<ir::TypeIdx> type =
-              checked_expr_type(package, init->second);
+              checked_expr_type(analysis.owner(), init->second);
           type.has_value()) {
         detail = ir::type_display(state, context.strings, *type);
       }
@@ -340,40 +339,47 @@ void collect_locals(const DocumentAnalysis& analysis,
   });
 }
 
-bool has_label(const std::vector<Item>& items, std::string_view label) {
-  for (const Item& item : items) {
-    if (item.label == label) {
-      return true;
-    }
-  }
-  return false;
+bool starts_with(std::string_view value, std::string_view prefix) {
+  return value.size() >= prefix.size() &&
+         value.compare(0, prefix.size(), prefix) == 0;
 }
 
 void collect(const DocumentAnalysis& analysis,
              const analyzer::CheckedPackage& package,
              const VisibleNames& visible,
+             std::string_view name_prefix,
              std::vector<Item>* out) {
   const pipeline::PipelineContext& context = analysis.context();
   const ir::StorageState& state = analysis.types();
-  const auto emit = [&](u32 module, ast::ItemIdx item,
-                        std::string_view declared, std::string_view detail,
-                        CompletionItemKind kind) {
+  std::unordered_set<std::string> seen;
+  for (const Item& item : *out) {
+    seen.insert(item.label);
+  }
+  const auto emit = [&]<typename Detail>(u32 module, ast::ItemIdx item,
+                                         std::string_view declared,
+                                         const Detail& make_detail,
+                                         CompletionItemKind kind) {
     for (const std::string_view label :
          visible_labels(visible, module, declared)) {
-      if (has_label(*out, label)) {
+      if (!starts_with(label, name_prefix) ||
+          seen.contains(std::string(label))) {
         continue;
       }
-      out->push_back(
-          Item{std::string(label), std::string(detail), item, kind, ""});
+      seen.insert(std::string(label));
+      out->push_back(Item{std::string(label), make_detail(), item, kind, ""});
     }
   };
   for (const analyzer::CheckedModule& module : package.modules) {
     for (const analyzer::CheckedModule::FnSig& fn : module.functions) {
-      emit(module.module, fn.item, fn.name,
-           function_detail(context, state, fn.params, fn.ret,
-                           variadic_param_name(context, fn.item), fn.item),
-           fn.is_method ? CompletionItemKind::Method
-                        : CompletionItemKind::Function);
+      emit(
+          module.module, fn.item, fn.name,
+          [&] {
+            return function_detail(context, state, fn.params, fn.ret,
+                                   variadic_param_name(context, fn.item),
+                                   fn.item);
+          },
+          fn.is_method ? CompletionItemKind::Method
+                       : CompletionItemKind::Function);
     }
     for (const analyzer::CheckedModule::MethodInfo& method : module.methods) {
       // The definition-site check registers rows for a parameter's
@@ -382,11 +388,14 @@ void collect(const DocumentAnalysis& analysis,
       if (!method.item.is_valid()) {
         continue;
       }
-      emit(module.module, method.item, method.name,
-           function_detail(context, state, method.params, method.ret,
-                           variadic_param_name(context, method.item),
-                           method.item),
-           CompletionItemKind::Method);
+      emit(
+          module.module, method.item, method.name,
+          [&] {
+            return function_detail(context, state, method.params, method.ret,
+                                   variadic_param_name(context, method.item),
+                                   method.item);
+          },
+          CompletionItemKind::Method);
     }
     for (const analyzer::CheckedModule::NamedType& named : module.types) {
       const ir::TypeNode& type = state.types[named.type];
@@ -406,10 +415,11 @@ void collect(const DocumentAnalysis& analysis,
           }
         }
       }
-      emit(module.module, declaration, named.name,
-           ir::type_display(state, context.strings, named.type),
-           type.tag == ir::TypeTag::Enum ? CompletionItemKind::Enum
-                                         : CompletionItemKind::Struct);
+      emit(
+          module.module, declaration, named.name,
+          [&] { return ir::type_display(state, context.strings, named.type); },
+          type.tag == ir::TypeTag::Enum ? CompletionItemKind::Enum
+                                        : CompletionItemKind::Struct);
     }
     for (const analyzer::CheckedModule::EnumInfo& info : module.enums) {
       const auto labels = visible_labels(visible, module.module, info.name);
@@ -420,9 +430,11 @@ void collect(const DocumentAnalysis& analysis,
       // declaration name would be unresolved at the use site.
       const std::string qualifier(labels.front());
       for (const std::string_view variant : info.variants) {
-        if (has_label(*out, variant)) {
+        if (!starts_with(variant, name_prefix) ||
+            seen.contains(std::string(variant))) {
           continue;
         }
+        seen.insert(std::string(variant));
         Item item{std::string(variant), qualifier + "::" + std::string(variant),
                   ast::ItemIdx::invalid(), CompletionItemKind::EnumMember, ""};
         item.insert_text = item.detail;
@@ -430,10 +442,11 @@ void collect(const DocumentAnalysis& analysis,
       }
     }
     for (const analyzer::CheckedModule::StaticInfo& info : module.statics) {
-      emit(module.module, info.item, info.name,
-           ir::type_display(state, context.strings, info.type),
-           info.is_const ? CompletionItemKind::Constant
-                         : CompletionItemKind::Variable);
+      emit(
+          module.module, info.item, info.name,
+          [&] { return ir::type_display(state, context.strings, info.type); },
+          info.is_const ? CompletionItemKind::Constant
+                        : CompletionItemKind::Variable);
     }
   }
 }
@@ -865,7 +878,6 @@ std::optional<ir::TypeIdx> receiver_type(const DocumentAnalysis& analysis,
                                          std::string_view text,
                                          usize offset) {
   const pipeline::PipelineContext& context = analysis.context();
-  const analyzer::CheckedPackage& package = analysis.package();
   const source::FileId root = analysis.root();
   // `offset` is the start of the member being typed; the dot is just
   // before it and the receiver ends there.
@@ -904,7 +916,7 @@ std::optional<ir::TypeIdx> receiver_type(const DocumentAnalysis& analysis,
       if (init == inits.end() || init->second == ast::ExprIdx::invalid()) {
         return;
       }
-      found = checked_expr_type(package, init->second);
+      found = checked_expr_type(analysis.owner(), init->second);
     });
     if (found.has_value()) {
       return found;
@@ -936,7 +948,7 @@ std::optional<ir::TypeIdx> receiver_type(const DocumentAnalysis& analysis,
       }
     });
     if (receiver.has_value()) {
-      return checked_expr_type(package, *receiver);
+      return checked_expr_type(analysis.owner(), *receiver);
     }
   }
   return std::nullopt;
@@ -1105,11 +1117,6 @@ void collect_qualified(const DocumentAnalysis& analysis,
   }
 }
 
-bool starts_with(std::string_view value, std::string_view prefix) {
-  return value.size() >= prefix.size() &&
-         value.compare(0, prefix.size(), prefix) == 0;
-}
-
 }  // namespace
 
 text::JsonValue completion_items(const Document& document,
@@ -1151,7 +1158,8 @@ text::JsonValue completion_items(const Document& document,
         if (!qualified) {
           collect_locals(analysis, document.text(), offset, &items);
         }
-        collect(analysis, analysis.package(), visible_names(analysis), &items);
+        collect(analysis, analysis.package(), visible_names(analysis),
+                name_prefix, &items);
       }
     }
   }
