@@ -27,6 +27,14 @@ constexpr i64 SYS_MMAP = 222;
 enum class FileOp : u8 { Size, Read, Write };
 
 constexpr i64 MAP_PRIVATE_ANON = 0x22;
+constexpr i64 FILE_FRAME_BYTES = 768;
+constexpr i64 FILE_RA_SLOT = 760;
+constexpr i64 FILE_ARG0_SLOT = 752;
+constexpr i64 FILE_ARG1_SLOT = 744;
+constexpr i64 FILE_PATH_MAX = 511;
+constexpr i64 STAT_SIZE_OFFSET = 560;
+constexpr i64 FILE_MODE = 0644;
+constexpr i64 O_WRONLY_CREAT_TRUNC = 0x241;
 constexpr i64 PROT_READ_WRITE = 3;
 
 void ecall(Body& body, const i64 number) {
@@ -214,7 +222,6 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
   constexpr Reg name = Reg::X23;
   constexpr Reg length = Reg::X24;
   constexpr Reg previous = Reg::X25;
-  constexpr Reg depth = Reg::X26;
   constexpr Reg sentinel = Reg::X27;
 
   const u32 table_id = static_cast<u32>(body.symbols.size());
@@ -242,8 +249,6 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
   const u32 finish = body.label_count++;
   body.insts.push_back(
       make_inst(MOp::Addi, 8, Operand{cursor}, Operand{S1}, Operand{Imm{0}}));
-  body.insts.push_back(
-      make_inst(MOp::Addi, 8, Operand{depth}, Operand{ZERO}, Operand{Imm{0}}));
   body.insts.push_back(make_inst(MOp::Addi, 8, Operand{sentinel}, Operand{ZERO},
                                  Operand{Imm{-1}}));
   MInst at_frame = make_inst(MOp::Nop, 8);
@@ -253,10 +258,6 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
       make_inst(MOp::Auipc, 8, Operand{table}, Operand{Imm{0}}));
   body.insts.push_back(make_inst(MOp::Addi, 8, Operand{table}, Operand{table},
                                  Operand{SymbolRef{table_id}}));
-  MInst too_deep = make_inst(MOp::Bge, 8, Operand{depth}, Operand{Imm{16}},
-                             Operand{Label{finish}});
-  too_deep.cond = Cond::Ge;
-  body.insts.push_back(too_deep);
   body.insts.push_back(make_inst(
       MOp::Ld, 8, Operand{pc},
       Operand{Mem{.base = RegRef{cursor}, .disp = RETURN_ADDR_DISP}}));
@@ -385,8 +386,6 @@ void emit_backtrace_walk(Body& body, RoData& rodata) {
   body.insts.push_back(make_inst(MOp::Addi, 8, Operand{cursor},
                                  Operand{previous}, Operand{Imm{0}}));
   body.insts.push_back(
-      make_inst(MOp::Addi, 8, Operand{depth}, Operand{depth}, Operand{Imm{1}}));
-  body.insts.push_back(
       make_inst(MOp::Jal, 8, Operand{ZERO}, Operand{Label{frame_loop}}));
   MInst at_finish = make_inst(MOp::Nop, 8);
   at_finish.label = finish;
@@ -492,18 +491,18 @@ Body build_file(const FileOp op) {
     body.insts.push_back(inst);
   };
 
-  addi(SP, SP, -768);
-  sd(RA, 760);
-  sd(A2, 752);
-  sd(A3, 744);
-  // Clamp the path to the 511 bytes the frame leaves for it.
-  addi(bound, ZERO, 511);
+  addi(SP, SP, -FILE_FRAME_BYTES);
+  sd(RA, FILE_RA_SLOT);
+  sd(A2, FILE_ARG0_SLOT);
+  sd(A3, FILE_ARG1_SLOT);
+  // Clamp the path to the FILE_PATH_MAX bytes the frame leaves for it.
+  addi(bound, ZERO, FILE_PATH_MAX);
   const u32 fits = body.label_count++;
   MInst too_long = make_inst(MOp::Bltu, 8, Operand{A1}, Operand{bound},
                              Operand{Label{fits}});
   too_long.cond = Cond::Ltu;
   body.insts.push_back(too_long);
-  addi(A1, ZERO, 511);
+  addi(A1, ZERO, FILE_PATH_MAX);
   at(fits);
 
   const u32 copy = body.label_count++;
@@ -534,8 +533,8 @@ Body build_file(const FileOp op) {
   addi(A7, ZERO, SYS_OPENAT);
   addi(A0, ZERO, -100);  // AT_FDCWD
   addi(A1, SP, 0);       // the path copy
-  addi(A2, ZERO, op == FileOp::Write ? 0x241 : 0);
-  addi(A3, ZERO, 0644);
+  addi(A2, ZERO, op == FileOp::Write ? O_WRONLY_CREAT_TRUNC : 0);
+  addi(A3, ZERO, FILE_MODE);
   body.insts.push_back(make_inst(MOp::Ecall, 8));
   addi(fd, A0, 0);
   const u32 failed = body.label_count++;
@@ -550,12 +549,12 @@ Body build_file(const FileOp op) {
     addi(A0, fd, 0);
     addi(A1, SP, 512);
     body.insts.push_back(make_inst(MOp::Ecall, 8));
-    ld(result, 560);  // st_size is 48 bytes into the kernel's struct stat
+    ld(result, STAT_SIZE_OFFSET);
   } else {
     addi(A7, ZERO, op == FileOp::Read ? SYS_READ : SYS_WRITE);
     addi(A0, fd, 0);
-    ld(A1, 752);
-    ld(A2, 744);
+    ld(A1, FILE_ARG0_SLOT);
+    ld(A2, FILE_ARG1_SLOT);
     body.insts.push_back(make_inst(MOp::Ecall, 8));
     addi(result, A0, 0);
   }
@@ -570,7 +569,7 @@ Body build_file(const FileOp op) {
   addi(A0, ZERO, -1);
   at(finish);
   // allocate() owns the entry prologue/epilogue; only undo this frame.
-  addi(SP, SP, 768);
+  addi(SP, SP, FILE_FRAME_BYTES);
   return body;
 }
 
@@ -611,10 +610,25 @@ Body build_memcpy() {
 Body build_error_kind() {
   Body body;
   // Map Linux errno numbers to the portable kinds the std asks for.
+  // Linux errno numbers mapped to the portable codes lib/std/sys names.
+  constexpr i64 kErrEintr = 4;
+  constexpr i64 kErrEagain = 11;
+  constexpr i64 kErrEnoent = 2;
+  constexpr i64 kErrEacces = 13;
+  constexpr i64 kErrEpipe = 32;
+  constexpr i64 kErrEinval = 22;
+  constexpr i64 INTERRUPTED = 1;
+  constexpr i64 WOULD_BLOCK = 2;
+  constexpr i64 NOT_FOUND = 3;
+  constexpr i64 PERMISSION_DENIED = 4;
+  constexpr i64 BROKEN_PIPE = 5;
+  constexpr i64 INVALID_INPUT = 6;
   constexpr struct {
     i64 number;
     i64 kind;
-  } mappings[] = {{4, 1}, {11, 2}, {2, 3}, {13, 4}, {32, 5}, {22, 6}};
+  } mappings[] = {{kErrEintr, INTERRUPTED}, {kErrEagain, WOULD_BLOCK},
+                  {kErrEnoent, NOT_FOUND},  {kErrEacces, PERMISSION_DENIED},
+                  {kErrEpipe, BROKEN_PIPE}, {kErrEinval, INVALID_INPUT}};
   const u32 done = body.label_count++;
   for (const auto& mapping : mappings) {
     const u32 next = body.label_count++;

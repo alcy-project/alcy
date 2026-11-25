@@ -101,7 +101,7 @@ void emit_write(Body& body,
 
 // The bytes one write needs, under a name the data section answers to.
 SymbolRef text(Body& body, RoData& rodata, const std::string_view bytes) {
-  const std::string& symbol = rodata.intern(bytes);
+  const std::string& symbol = rodata.name(rodata.intern(bytes));
   for (u32 at = 0; at < body.symbols.size(); ++at) {
     if (body.symbols[at] == symbol) {
       return SymbolRef{at};
@@ -342,8 +342,23 @@ Body build_error_kind() {
     i32 number;
     i32 kind;
   };
-  constexpr Mapping mappings[] = {{4, 1},  {11, 2}, {2, 3},
-                                  {13, 4}, {32, 5}, {22, 6}};
+  // Linux errno numbers mapped to the portable codes lib/std/sys names.
+  constexpr i64 kErrEintr = 4;
+  constexpr i64 kErrEagain = 11;
+  constexpr i64 kErrEnoent = 2;
+  constexpr i64 kErrEacces = 13;
+  constexpr i64 kErrEpipe = 32;
+  constexpr i64 kErrEinval = 22;
+  constexpr i64 INTERRUPTED = 1;
+  constexpr i64 WOULD_BLOCK = 2;
+  constexpr i64 NOT_FOUND = 3;
+  constexpr i64 PERMISSION_DENIED = 4;
+  constexpr i64 BROKEN_PIPE = 5;
+  constexpr i64 INVALID_INPUT = 6;
+  constexpr Mapping mappings[] = {
+      {kErrEintr, INTERRUPTED}, {kErrEagain, WOULD_BLOCK},
+      {kErrEnoent, NOT_FOUND},  {kErrEacces, PERMISSION_DENIED},
+      {kErrEpipe, BROKEN_PIPE}, {kErrEinval, INVALID_INPUT}};
   for (const Mapping& mapping : mappings) {
     body.insts.push_back(make_inst(MOp::Cmp, 4, Operand{Reg::Rdi},
                                    Operand{Imm{mapping.number}}));
