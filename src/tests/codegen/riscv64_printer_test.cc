@@ -157,4 +157,42 @@ TEST_CASE("The riscv64 printer replaces colons in symbol names") {
   CHECK(contains(text, "_A1f0_4_main:\n"));
 }
 
+TEST_CASE("The riscv64 printer writes data sections and every branch") {
+  object::Object object = text_object(0);
+  object.sections.push_back(object::Section{
+      .name = ".rodata",
+      .bytes = std::vector<u8>{0xde, 0xad},
+      .align = 4,
+      .alloc = true,
+      .bits = true,
+  });
+  object.symbols.push_back(object::Symbol{.name = "str",
+                                          .section = 1,
+                                          .offset = 0,
+                                          .size = 2,
+                                          .bind = object::SymbolBind::Local,
+                                          .type = object::SymbolType::Object});
+  const std::vector<PrintedBody> none;
+  const std::string data = print_assembly(object, none);
+  CHECK(contains(data, "\t.section .rodata,\"a\",@progbits\n"));
+  CHECK(contains(data, "\t.balign 4\n"));
+  CHECK(contains(data, "\t.byte 0xde, 0xad\n"));
+
+  Body body;
+  MInst bne =
+      make_inst(MOp::Bne, 8, Operand{T0}, Operand{T1}, Operand{Label{0}});
+  bne.cond = Cond::Ne;
+  body.insts.push_back(bne);
+  MInst bltu =
+      make_inst(MOp::Bltu, 8, Operand{T0}, Operand{T1}, Operand{Label{0}});
+  bltu.cond = Cond::Ltu;
+  body.insts.push_back(bltu);
+  object::Object code = text_object(8);
+  std::vector<PrintedBody> bodies{
+      PrintedBody{"fn", body, object::SymbolBind::Local, 0, 8}};
+  const std::string text = print_assembly(code, bodies);
+  CHECK(contains(text, "\tbne t0, t1, fn..L0\n"));
+  CHECK(contains(text, "\tbltu t0, t1, fn..L0\n"));
+}
+
 }  // namespace codegen::riscv64

@@ -112,6 +112,29 @@ TEST_CASE("The printer labels data sections with their symbols") {
   CHECK(contains(text, "\t.byte 0xde, 0xad\n"));
 }
 
+TEST_CASE("The printer writes relocated data as symbolic quads") {
+  object::Object object = text_object(24);
+  object.relocations.push_back(object::Relocation{
+      .section = 0,
+      .offset = 0,
+      .kind = object::RelocKind::Abs64,
+      .symbol = "foreign",
+      .addend = 8,
+  });
+  object.relocations.push_back(object::Relocation{
+      .section = 0,
+      .offset = 8,
+      .kind = object::RelocKind::Abs64,
+      .symbol = "other",
+      .addend = -4,
+  });
+  const std::vector<PrintedBody> none;
+  const std::string text = print_assembly(object, none);
+  CHECK(contains(text, "\t.quad foreign + 8\n"));
+  CHECK(contains(text, "\t.quad other - 4\n"));
+  CHECK(contains(text, "\t.byte "));
+}
+
 TEST_CASE("The Intel printer writes destination-first operands") {
   Body body;
   body.symbols.push_back("callee");

@@ -605,6 +605,39 @@ TEST_CASE("A build writes assembly where it was asked for one") {
     CHECK(text->find("main") != std::string::npos);
   }
 }
+TEST_CASE("A direct backend writes assembly for its target") {
+  struct Case {
+    codegen::Backend backend;
+    codegen::Target target;
+    const char* needle;
+  };
+  const Case cases[] = {
+      {codegen::Backend::DirectX86_64,
+       codegen::Target{"x86_64-unknown-linux-gnu", ir::PointerWidth::W64},
+       ".text"},
+      {codegen::Backend::DirectRiscv64,
+       codegen::Target{"riscv64-unknown-linux-gnu", ir::PointerWidth::W64},
+       ".option norvc"},
+  };
+  for (const Case& test : cases) {
+    io::TempDir dir = io::TempDir::create_unique("alcy_direct_asm_test_");
+    CHECK(dir.write_file("main.al", PROGRAM));
+    PipelineContext ctx{i18n::Language::EnUs};
+    ctx.backend = test.backend;
+    ctx.target = test.target;
+    const std::string asm_path = dir.join("out.s");
+    base::Result<std::string, diag::Reported> built =
+        build_single_file(ctx, dir.join("main.al"), asm_path, BuildPlan{},
+                          EmitMode::Asm, pipeline::full_std_selection());
+    CHECK(built.is_ok());
+    const std::optional<std::string> text = io::read_file(asm_path);
+    CHECK(text.has_value());
+    if (text.has_value()) {
+      CHECK(text->find(test.needle) != std::string::npos);
+      CHECK(text->find("main") != std::string::npos);
+    }
+  }
+}
 #endif  // !BUILD_FLAG(IS_OS_ASMJS)
 
 TEST_CASE("A wasm target refuses assembly output") {

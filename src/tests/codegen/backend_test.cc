@@ -29,7 +29,8 @@ namespace codegen {
 
 TEST_CASE("Backend names round-trip") {
   for (const Backend backend :
-       {Backend::Llvm, Backend::DirectWasm, Backend::DirectX86_64}) {
+       {Backend::Llvm, Backend::DirectWasm, Backend::DirectX86_64,
+        Backend::DirectRiscv64}) {
     const std::optional<Backend> found =
         backend_from_name(backend_name(backend));
     CHECK(found.has_value());
@@ -162,6 +163,50 @@ TEST_CASE("The default backend answers what the request asks for") {
   CHECK(select_backend(native, codegen::OutputKind::Object, false) ==
         codegen::Backend::DirectX86_64);
   CHECK(select_backend(native, codegen::OutputKind::Object, true) ==
+        codegen::Backend::Llvm);
+#endif
+}
+
+TEST_CASE("Every backend answers the kinds its implementation supports") {
+  const codegen::Target wasm{"wasm32-unknown-emscripten",
+                             ir::PointerWidth::W32};
+  const codegen::Target x86{"x86_64-unknown-linux-gnu", ir::PointerWidth::W64};
+  const codegen::Target riscv{"riscv64-unknown-linux-gnu",
+                              ir::PointerWidth::W64};
+  constexpr codegen::OutputKind kinds[] = {
+      codegen::OutputKind::Object, codegen::OutputKind::Module,
+      codegen::OutputKind::Text, codegen::OutputKind::Bitcode,
+      codegen::OutputKind::Assembly};
+  for (const codegen::OutputKind kind : kinds) {
+    CHECK(!backend_supports(codegen::Backend::None, kind, x86));
+    CHECK(backend_supports(codegen::Backend::DirectWasm, kind, wasm) ==
+          (kind == codegen::OutputKind::Module));
+    CHECK(backend_supports(codegen::Backend::DirectX86_64, kind, x86) ==
+          (kind == codegen::OutputKind::Object ||
+           kind == codegen::OutputKind::Assembly));
+    CHECK(backend_supports(codegen::Backend::DirectRiscv64, kind, riscv) ==
+          (kind == codegen::OutputKind::Object ||
+           kind == codegen::OutputKind::Assembly));
+    CHECK(!backend_supports(codegen::Backend::DirectWasm, kind, x86));
+    CHECK(!backend_supports(codegen::Backend::DirectX86_64, kind, riscv));
+    CHECK(!backend_supports(codegen::Backend::DirectRiscv64, kind, x86));
+  }
+}
+
+TEST_CASE("The native debug backend follows the target and output kind") {
+  const codegen::Target x86{"x86_64-unknown-linux-gnu", ir::PointerWidth::W64};
+  const codegen::Target riscv{"riscv64-unknown-linux-gnu",
+                              ir::PointerWidth::W64};
+  CHECK(select_backend(x86, codegen::OutputKind::Object, false) ==
+        codegen::Backend::DirectX86_64);
+  CHECK(select_backend(x86, codegen::OutputKind::Assembly, false) ==
+        codegen::Backend::DirectX86_64);
+  CHECK(select_backend(riscv, codegen::OutputKind::Object, false) ==
+        codegen::Backend::DirectRiscv64);
+  CHECK(select_backend(riscv, codegen::OutputKind::Assembly, false) ==
+        codegen::Backend::DirectRiscv64);
+#if ALCY_BACKEND_LLVM
+  CHECK(select_backend(riscv, codegen::OutputKind::Object, true) ==
         codegen::Backend::Llvm);
 #endif
 }
