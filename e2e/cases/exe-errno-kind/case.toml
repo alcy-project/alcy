@@ -1,0 +1,5 @@
+[program.expect]
+exit = 0
+
+[program.sweep.wasm]
+skip = "WASI errno numbers map to different portable kinds"

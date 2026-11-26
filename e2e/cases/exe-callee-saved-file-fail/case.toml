@@ -1,0 +1,5 @@
+[program.expect]
+exit = 0
+
+[program.sweep.wasm]
+skip = "file reads, which the backend declines"

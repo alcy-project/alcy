@@ -1,0 +1,3 @@
+[program.expect]
+exit = "non-zero"
+stderr_contains = ["shift out of range"]
