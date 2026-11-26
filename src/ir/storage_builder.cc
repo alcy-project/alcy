@@ -7,6 +7,7 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -855,6 +856,7 @@ TypeIdx StorageBuilder::param_type(u32 index) {
   node.data.set(ParamIndex{index});
   const TypeIdx idx = state_.types.emplace_back(node);
   param_by_index_.emplace(index, idx);
+  record_intern(InternKind::Param, index, idx);
   return idx;
 }
 
@@ -884,6 +886,7 @@ TypeIdx StorageBuilder::slice_type(TypeIdx element) {
     if (sidx.idx < state_.slice_types.size() &&
         state_.slice_types[sidx].element.idx == element.idx) {
       slice_by_element_.emplace(element.idx, idx);
+      record_intern(InternKind::Slice, element.idx, idx);
       return idx;
     }
   }
@@ -892,6 +895,7 @@ TypeIdx StorageBuilder::slice_type(TypeIdx element) {
   node.data.set(state_.slice_types.emplace_back(SliceType{.element = element}));
   const TypeIdx idx = state_.types.emplace_back(node);
   slice_by_element_.emplace(element.idx, idx);
+  record_intern(InternKind::Slice, element.idx, idx);
   return idx;
 }
 
@@ -925,6 +929,7 @@ TypeIdx StorageBuilder::const_type(u64 value) {
   node.data.set(state_.const_types.emplace_back(ConstType{.value = value}));
   const TypeIdx idx = state_.types.emplace_back(node);
   const_by_value_.emplace(value, idx);
+  record_intern(InternKind::Const, value, idx);
   return idx;
 }
 
@@ -963,6 +968,7 @@ TypeIdx StorageBuilder::tuple_type(TypeIdxRange elements) {
   } else {
     tuple_by_key_.emplace(key, std::vector<TypeIdx>{idx});
   }
+  record_intern(InternKind::Tuple, key, idx);
   return idx;
 }
 
@@ -989,6 +995,7 @@ TypeIdx StorageBuilder::never_type() {
   TypeNode node{};
   node.tag = TypeTag::Never;
   never_ = state_.types.emplace_back(node);
+  record_intern(InternKind::Never, 0, never_);
   return never_;
 }
 
@@ -1005,6 +1012,7 @@ TypeIdx StorageBuilder::error_type() {
   TypeNode node{};
   node.tag = TypeTag::Error;
   error_ = state_.types.emplace_back(node);
+  record_intern(InternKind::Error, 0, error_);
   return error_;
 }
 
@@ -1044,6 +1052,11 @@ TypeIdx StorageBuilder::pointer_type(TypeTag tag, TypeIdx pointee) {
   node.data.set(state_.ref_types.emplace_back(RefType{.pointee = pointee}));
   const TypeIdx idx = state_.types.emplace_back(node);
   interned->emplace(pointee.idx, idx);
+  const InternKind kind = tag == TypeTag::Ref      ? InternKind::Ref
+                          : tag == TypeTag::MutRef ? InternKind::MutRef
+                          : tag == TypeTag::RawPtr ? InternKind::RawPtr
+                                                   : InternKind::RawMutPtr;
+  record_intern(kind, pointee.idx, idx);
   return idx;
 }
 
@@ -1089,48 +1102,69 @@ std::unordered_map<u32, TypeIdx>* StorageBuilder::pointer_table(TypeTag tag) {
   return nullptr;
 }
 
-void StorageBuilder::prune_interned(u32 keep_before) {
-  const auto stale = [keep_before](TypeIdx idx) {
-    return idx.idx >= keep_before;
-  };
-  const auto prune_map = [&stale](auto& map) {
-    for (auto it = map.begin(); it != map.end();) {
-      if (stale(it->second)) {
-        it = map.erase(it);
-      } else {
-        ++it;
-      }
+void StorageBuilder::record_intern(InternKind kind, u64 key, TypeIdx idx) {
+  intern_log_.push_back({kind, key, idx});
+}
+
+void StorageBuilder::undo_interned(const Checkpoint& cp) {
+  const auto drop = [](auto& map, u64 key, TypeIdx idx) {
+    using Map = std::remove_reference_t<decltype(map)>;
+    const auto found = map.find(static_cast<typename Map::key_type>(key));
+    if (found != map.end() && found->second == idx) {
+      map.erase(found);
     }
   };
-  prune_map(ref_by_pointee_);
-  prune_map(mut_ref_by_pointee_);
-  prune_map(raw_ptr_by_pointee_);
-  prune_map(raw_mut_ptr_by_pointee_);
-  prune_map(param_by_index_);
-  prune_map(slice_by_element_);
-  prune_map(const_by_value_);
-  for (auto it = tuple_by_key_.begin(); it != tuple_by_key_.end();) {
-    auto& candidates = it->second;
-    for (auto candidate = candidates.begin(); candidate != candidates.end();) {
-      if (stale(*candidate)) {
-        candidate = candidates.erase(candidate);
-      } else {
-        ++candidate;
+  while (intern_log_.size() > cp.intern_log) {
+    const InternEntry entry = intern_log_.back();
+    intern_log_.pop_back();
+    switch (entry.kind) {
+      case InternKind::Ref: drop(ref_by_pointee_, entry.key, entry.idx); break;
+      case InternKind::MutRef:
+        drop(mut_ref_by_pointee_, entry.key, entry.idx);
+        break;
+      case InternKind::RawPtr:
+        drop(raw_ptr_by_pointee_, entry.key, entry.idx);
+        break;
+      case InternKind::RawMutPtr:
+        drop(raw_mut_ptr_by_pointee_, entry.key, entry.idx);
+        break;
+      case InternKind::Param:
+        drop(param_by_index_, entry.key, entry.idx);
+        break;
+      case InternKind::Slice:
+        drop(slice_by_element_, entry.key, entry.idx);
+        break;
+      case InternKind::Const:
+        drop(const_by_value_, entry.key, entry.idx);
+        break;
+      case InternKind::Tuple: {
+        const auto found = tuple_by_key_.find(entry.key);
+        if (found != tuple_by_key_.end()) {
+          auto& candidates = found->second;
+          for (auto it = candidates.begin(); it != candidates.end(); ++it) {
+            if (*it == entry.idx) {
+              candidates.erase(it);
+              break;
+            }
+          }
+          if (candidates.empty()) {
+            tuple_by_key_.erase(found);
+          }
+        }
+        break;
       }
+      case InternKind::Never:
+        if (never_ == entry.idx) {
+          never_ = TypeIdx::invalid();
+        }
+        break;
+      case InternKind::Error:
+        if (error_ == entry.idx) {
+          error_ = TypeIdx::invalid();
+        }
+        break;
     }
-    if (candidates.empty()) {
-      it = tuple_by_key_.erase(it);
-    } else {
-      ++it;
-    }
   }
-  if (never_.is_valid() && stale(never_)) {
-    never_ = TypeIdx::invalid();
-  }
-  if (error_.is_valid() && stale(error_)) {
-    error_ = TypeIdx::invalid();
-  }
-  state_.names_param_memo.resize(keep_before);
 }
 
 void StorageBuilder::index_interned() {

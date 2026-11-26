@@ -244,6 +244,7 @@ class StorageBuilder {
     usize tuple_types = 0;
     usize func_types = 0;
     usize const_types = 0;
+    usize intern_log = 0;
   };
   Checkpoint checkpoint() const {
     return {state_.immutables.size(),
@@ -263,7 +264,8 @@ class StorageBuilder {
             state_.enum_variant_types.size(),
             state_.tuple_types.size(),
             state_.func_types.size(),
-            state_.const_types.size()};
+            state_.const_types.size(),
+            intern_log_.size()};
   }
   void rollback(Checkpoint cp) {
     auto pop_to = [](auto& vec, usize size) {
@@ -295,7 +297,8 @@ class StorageBuilder {
     // Layout hints are left alone: a struct reserved before the
     // checkpoint can gain hints after it, and its live type still names
     // those rows.
-    prune_interned(static_cast<u32>(cp.types));
+    undo_interned(cp);
+    state_.names_param_memo.resize(cp.types);
   }
   // Sizes the tables a caller knows the population of before it fills
   // them. A table grown by doubling halves its own headroom: every
@@ -490,7 +493,25 @@ class StorageBuilder {
   // later request interns to. Rollback calls this after dropping the
   // speculative types; import calls it after adopting a type table.
   void index_interned();
-  void prune_interned(u32 keep_before);
+  enum class InternKind : u8 {
+    Ref,
+    MutRef,
+    RawPtr,
+    RawMutPtr,
+    Param,
+    Slice,
+    Tuple,
+    Const,
+    Never,
+    Error,
+  };
+  struct InternEntry {
+    InternKind kind;
+    u64 key;
+    TypeIdx idx;
+  };
+  void record_intern(InternKind kind, u64 key, TypeIdx idx);
+  void undo_interned(const Checkpoint& cp);
 
   StorageState state_;
 
@@ -512,6 +533,7 @@ class StorageBuilder {
   // value asks for its signature's shape once per call site.
   std::unordered_map<u64, std::vector<TypeIdx>> tuple_by_key_;
   std::unordered_map<u64, TypeIdx> const_by_value_;
+  std::vector<InternEntry> intern_log_;
   // Parameter shapes by the index their node carries. A parameter type is
   // asked for once per type argument of an item, and it used to be found by
   // scanning every type in the package.

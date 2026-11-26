@@ -104,6 +104,7 @@ SHAPES = [
     "closure",
     "print",
     "comp",
+    "compir",
     "wide",
     "arms",
     "args",
@@ -343,6 +344,38 @@ pub fn use{i}(k: i32) -> i32 {{
   ret total
 }}
 """
+    if shape == "compir":
+        return f"""// One synthetic IR per module, carrying an indexed loop, a pooled
+// string slice and a payload enum match: the paths the comp shape does
+// not exercise.
+enum E{i} {{
+  Some(i32),
+  None,
+}}
+
+comp fn pick{i}(n: i32) -> i32 {{
+  ret comp {{
+    match E{i}::Some(n) {{
+      E{i}::Some(v) => v,
+      E{i}::None => 0,
+    }}
+  }}
+}}
+
+comp fn run{i}(n: i32) -> i32 {{
+  mut total := n
+  comp for j in 0..<8 {{
+    total += j
+  }}
+  mut s := comp {{ str_slice("abcdef", 1usize, 4usize) }}
+  total += str_len(s) as i32
+  ret total + pick{i}(n)
+}}
+
+pub fn use{i}(k: i32) -> i32 {{
+  ret run{i}(k)
+}}
+"""
     if shape == "arms":
         variants = ",\n".join(f"  v{j}(i32)" for j in range(ARMS_WIDTH))
         arms = "\n".join(
@@ -418,6 +451,7 @@ def main_source(
             "drop": "  total = total + m{i}::describe{i}(m{i}::make{i}({k}))",
             "generic": "  total = total + m{i}::use{i}({k})",
             "comp": "  total = total + m{i}::use{i}({k})",
+            "compir": "  total = total + m{i}::use{i}({k})",
             "adapt": "  total = total + m{i}::run{i}({k})",
             "closure": "  total = total + m{i}::run{i}({k})",
             "print": "  total = total + m{i}::say{i}({k})",
