@@ -300,9 +300,19 @@ a scope, then a subject, then a body.
 ```
 
 The type says what kind of change this is, so a reader can filter the log before
-reading any of it. The standard types are `feat` for a new capability, `fix` for
-a correction, `refactor` for a change that neither adds nor repairs behaviour,
-`perf`, `test`, `docs`, `build`, `ci`, `chore`, and `style`.
+reading any of it:
+
+- `feat`: a new capability
+- `fix`: a correction to behaviour that already exists
+- `refactor`: a change that neither adds nor repairs behaviour
+- `perf`: faster or leaner without a behaviour change
+- `test`: tests only
+- `docs`: documentation only
+- `build`: the build system or dependencies
+- `ci`: CI configuration
+- `chore`: maintenance that changes no product behaviour
+- `style`: formatting only - whitespace, line breaks, and names that do not
+  change what the program does
 
 The scope is the module or area the change belongs to, and it is encouraged:
 `fix(borrow)`, `feat(cli)`, `refactor(diag)`, `build(deps)`, `ci(wasm)`. It
@@ -322,10 +332,11 @@ line of the body, and never exceed 100. The target is what `git log`
 renders well; the cap is what the standard commitlint configuration
 enforces, so a written rule and a future check cannot disagree.
 
-A `feat` or `fix` may carry a `BREAKING CHANGE:` footer, one per blank line
-after the body, for a change that invalidates previous behaviour. The tree is
-young enough that none has been needed yet, which is a reason to be sure before
-spending the one.
+A breaking change invalidates previous behaviour. Mark it with `!` after the
+type or scope (`feat!: ...`, `feat(cli)!: ...`), with a `BREAKING CHANGE:`
+footer one blank line after the body, or with both. The footer names what
+callers must change. The tree is young enough that none has been needed yet,
+which is a reason to be sure before spending the one.
 
 The body is optional and says why. A commit that needs more than a handful of
 lines has a message that is too long: put the reasoning in a comment, a test, or

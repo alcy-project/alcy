@@ -29,7 +29,7 @@ TYPES = (
     "style",
 )
 
-SUBJECT = re.compile(rf"^({'|'.join(TYPES)})(\([a-z0-9_-]+\))?: (.+)$")
+SUBJECT = re.compile(rf"^({'|'.join(TYPES)})(\([a-z0-9_-]+\))?!?: (.+)$")
 
 # Git writes these itself; a hook that rejects them breaks merges and
 # autosquash rather than helping the message.
@@ -39,9 +39,22 @@ TARGET = 72
 CAP = 100
 
 
+def message_lines(text: str) -> list[str]:
+    """The lines Git keeps: no template comments, nothing after scissors."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            if ">8" in line:
+                break
+            continue
+        lines.append(line)
+    return lines
+
+
 def check(text: str) -> list[str]:
     """Returns the problems with `text`, empty when it is acceptable."""
-    lines = text.splitlines()
+    lines = message_lines(text)
     if not lines or not lines[0].strip():
         return ["the message has no subject"]
 
@@ -53,7 +66,7 @@ def check(text: str) -> list[str]:
     match = SUBJECT.match(subject)
     if match is None:
         problems.append(
-            f"subject must be '<type>(<scope>): <subject>' with one of: "
+            f"subject must be '<type>(<scope>)!?: <subject>' with one of: "
             f"{', '.join(TYPES)}"
         )
         description = subject
@@ -91,6 +104,16 @@ SELF_TESTS = (
     ("fix: Capitalised subject\n", 1),
     ("feat(census): " + "x" * 100 + "\n", 1),
     ("fix: " + "x" * 71 + "\n\n" + "y" * 101 + "\n", 1),
+    ("feat!: drop the old flag\n", 0),
+    ("feat(cli)!: change the interface\n", 0),
+    ("feat!(cli): bad marker\n", 1),
+    ("fix: keep it\n\n# " + "x" * 120 + "\n", 0),
+    (
+        "fix: keep it\n\n# ------------------------ >8 ------------------------\n"
+        + "y" * 120
+        + "\n",
+        0,
+    ),
     ("\n", 1),
 )
 
